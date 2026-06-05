@@ -1,4 +1,4 @@
-calib/preview*.png
-calib/params.json
+preview*.png
+params.json
 __pycache__/
 *.pyc
