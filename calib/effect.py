@@ -1,42 +1,49 @@
 """
-Halation + bloom effect engine — numpy reimplementation of the GLSL math.
+Halation + bloom engine v4 — measurement-derived, linear-light.
 
-This is intentionally the SAME pipeline as the shader so converged
-parameters transplant directly into chromasmith's GLSL:
+Model derived directly from Dehancer target pixels:
+  * Halo strength ordering large-area > compact-dot >> thin-line is
+    reproduced by AREA-normalized (energy-conserving) blur of a strongly
+    NON-LINEAR emission: emit = brightness_gate * lum^P * red_gate.
+      - lum^P (high P): pure white (lum=1) stays full; dimmer reds (the
+        thin line, lum~0.46) get crushed -> tiny halo. White dot halates,
+        red line barely does, exactly like the target.
+      - red_gate = clamp(R - kb*max(G,B)): passes white & red, kills
+        cyan/blue (which show ~zero halation in the target).
+  * Halo TINT is the fixed film backing colour (warm orange), not the
+    source colour — a white dot produces an ORANGE halo in the target.
+  * screen() composite in LINEAR light: bright cores stay unchanged
+    (screen(white,x)=white) so large white bars don't blow out.
 
-  1. source detect : max-channel threshold -> film-color tint
-  2. two-stage blur: small normalized "expand" gaussian (turns 1px lines
-     into a few-px band) THEN wide normalized "glow" gaussian.
-     Both normalized => energy-conserving => large sources never blow up,
-     thin lines survive because the expand pass gives them width first.
-  3. composite     : screen() into dark surround + subtractive inner warm.
+Bloom: neutral tint, its own threshold/power/sigma; subtle, large-area only.
 
-All tunables live in Params so the optimizer can search them.
+Area-normalized blur => for halation/bloom sigmas (~8-13px) the 3-sigma
+kernel fits in +/-48 taps, so the GLSL uses a dense 1:1 kernel (no pixel
+stepping, no grid artefacts) and transplants 1:1.
 """
 import numpy as np
+from scipy.ndimage import gaussian_filter
 from dataclasses import dataclass, asdict
+
+LUM = np.array([0.2126, 0.7152, 0.0722])
 
 
 @dataclass
 class Params:
-    # --- source detection ---
-    thr: float = 0.55        # max-channel threshold (0..1)
-    knee: float = 0.06       # smoothstep width above thr
-    # film penetration tint (R deep, G mid, B shallow)
-    film_r: float = 1.00
-    film_g: float = 0.33
-    film_b: float = 0.26
-    # --- blur (in pixels, at native chart resolution) ---
-    sigma_expand: float = 3.0
-    sigma_glow: float = 7.0
-    # --- composite gains ---
-    gain: float = 1.0        # overall glow strength into surround
-    inner_warm: float = 0.0  # subtractive warming of near-white interiors
+    thr: float = 0.30        # brightness gate (linear lum)
+    knee: float = 0.20
+    power: float = 4.0       # brightness nonlinearity
+    bluesupp: float = 0.5    # red_gate: R - bluesupp*max(G,B)
+    film_r: float = 1.00     # halo tint (warm backing)
+    film_g: float = 0.40
+    film_b: float = 0.15
+    sigma: float = 10.0      # halo sigma px (native res)
+    gain: float = 6.0        # reflectance (area-norm needs gain >> 1)
 
     def vec(self):
-        return np.array([self.thr, self.knee, self.film_r, self.film_g,
-                         self.film_b, self.sigma_expand, self.sigma_glow,
-                         self.gain, self.inner_warm], float)
+        return np.array([self.thr, self.knee, self.power, self.bluesupp,
+                         self.film_r, self.film_g, self.film_b,
+                         self.sigma, self.gain], float)
 
     @staticmethod
     def from_vec(v):
@@ -46,80 +53,63 @@ class Params:
         return asdict(self)
 
 
-def _gauss1d(sigma):
-    if sigma < 0.3:
-        return np.array([1.0])
-    r = max(1, int(round(sigma * 3)))
-    x = np.arange(-r, r + 1)
-    k = np.exp(-(x * x) / (2 * sigma * sigma))
-    return k / k.sum()
+def s2l(c):
+    c = np.clip(c, 0, 1)
+    return np.where(c <= 0.04045, c/12.92, ((c+0.055)/1.055)**2.4)
 
-
-def _sep_blur(img, sigma):
-    """Separable normalized gaussian. img: HxWxC float."""
-    k = _gauss1d(sigma)
-    if k.size == 1:
-        return img.copy()
-    out = img
-    # horizontal then vertical, reflect padding
-    out = _conv_axis(out, k, axis=1)
-    out = _conv_axis(out, k, axis=0)
-    return out
-
-
-def _conv_axis(img, k, axis):
-    r = k.size // 2
-    pad = [(0, 0), (0, 0), (0, 0)]
-    pad[axis] = (r, r)
-    p = np.pad(img, pad, mode='reflect')
-    acc = np.zeros_like(img)
-    for i, w in enumerate(k):
-        sl = [slice(None)] * 3
-        sl[axis] = slice(i, i + img.shape[axis])
-        acc += w * p[tuple(sl)]
-    return acc
-
+def l2s(c):
+    c = np.clip(c, 0, 1)
+    return np.where(c <= 0.0031308, c*12.92, 1.055*c**(1/2.4)-0.055)
 
 def smoothstep(a, b, x):
     t = np.clip((x - a) / (b - a + 1e-9), 0, 1)
     return t * t * (3 - 2 * t)
 
-
 def screen(a, b):
     return 1 - (1 - a) * (1 - b)
 
 
-def apply_effect(src, p: Params):
-    """
-    src: HxWx3 float in 0..1 (clean / no-effect image).
-    returns HxWx3 float 0..1 with halation+bloom applied.
-    """
-    src = np.clip(src, 0, 1)
-    maxc = src.max(axis=2, keepdims=True)
-    hi = smoothstep(p.thr, p.thr + p.knee, maxc)          # HxWx1 weight
-    film = np.array([p.film_r, p.film_g, p.film_b])[None, None, :]
-    # energy injected at the source, tinted by film penetration
-    emit = src * hi * film
-    # two-stage normalized blur
-    emit = _sep_blur(emit, p.sigma_expand)
-    glow = _sep_blur(emit, p.sigma_glow) * p.gain
-    # composite: screen glow into the surround (cannot brighten white)
-    res = screen(src, glow)
-    if p.inner_warm > 0:
-        # subtractive amber shift on near-white interiors only
-        nearwhite = smoothstep(0.75, 0.95, maxc) * (1 - hi * 0)
-        w = glow[:, :, 0:1] * p.inner_warm * nearwhite
-        res = res + w * np.array([0.0, -0.18, -0.30])[None, None, :]
-    return np.clip(res, 0, 1)
+def emit_halation(lin, p):
+    lum = lin @ LUM
+    bright = smoothstep(p.thr, p.thr + p.knee, lum)
+    redgate = np.clip((lin[..., 0] - p.bluesupp * np.maximum(lin[..., 1], lin[..., 2]))
+                      / (1.0 - p.bluesupp + 1e-6), 0, 1)
+    return bright * np.power(np.clip(lum, 0, 1), p.power) * redgate   # HxW scalar
 
 
-def apply_passes(src, passes):
-    """Apply a sequence of effect passes (e.g. [bloom, halation]).
+def emit_bloom(lin, p):
+    # LUMINANCE-gated (not max-channel): only bright *white* areas bloom,
+    # saturated colours (lower luminance) do not -> matches target.
+    lum = lin @ LUM
+    bright = smoothstep(p.thr, p.thr + p.knee, lum)
+    return bright * np.power(np.clip(lum, 0, 1), p.power)             # HxW scalar
 
-    Each pass reads the running composite as its source, so bloom feeds
-    halation exactly like Dehancer's non-linear interaction.
-    """
-    res = np.clip(src, 0, 1)
-    for p in passes:
-        res = apply_effect(res, p)
-    return res
+
+def area_blur(scalar, sigma):
+    if sigma < 0.3:
+        return scalar.copy()
+    return gaussian_filter(scalar, sigma, mode='constant')            # area-normalized
+
+
+def apply_halation(src_srgb, p):
+    lin = s2l(src_srgb)
+    g = area_blur(emit_halation(lin, p), p.sigma) * p.gain
+    tint = np.array([p.film_r, p.film_g, p.film_b])
+    glow = g[..., None] * tint[None, None, :]
+    return l2s(np.clip(screen(lin, glow), 0, 1))
+
+
+def apply_bloom(src_srgb, p):
+    lin = s2l(src_srgb)
+    g = area_blur(emit_bloom(lin, p), p.sigma) * p.gain
+    glow = g[..., None] * np.ones(3)[None, None, :]
+    return l2s(np.clip(screen(lin, glow), 0, 1))
+
+
+def apply_both(src_srgb, pblm, phal):
+    lin = s2l(src_srgb)
+    gb = area_blur(emit_bloom(lin, pblm), pblm.sigma) * pblm.gain
+    lin = np.clip(screen(lin, gb[..., None] * np.ones(3)), 0, 1)
+    gh = area_blur(emit_halation(lin, phal), phal.sigma) * phal.gain
+    tint = np.array([phal.film_r, phal.film_g, phal.film_b])
+    return l2s(np.clip(screen(lin, gh[..., None] * tint), 0, 1))
