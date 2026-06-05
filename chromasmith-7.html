@@ -255,13 +255,15 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
       </div>
       <!-- BORDERS -->
       <div class="fx-ctrl">
-        <div class="fx-ctrl-title">Borders</div>
+        <div class="fx-ctrl-title">Borders <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
+        <div class="fx-fields" id="ff-borders">
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:8px">Inner border</div>
         <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
         <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Outer border</div>
         <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
         <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
+        </div>
       </div>
       <!-- QUICK ENABLE -->
       <div class="fx-ctrl">
@@ -774,6 +776,7 @@ function getFXParams(){return{
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),type:parseFloat(document.getElementById('sel-grain-t').value)},
   halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),color:document.getElementById('cl-hal').value},
   bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value),radius:parseFloat(document.getElementById('sl-bloom-r').value),color:document.getElementById('cl-bloom').value},
+  bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
   b1:{thickness:parseFloat(document.getElementById('sl-b1-t').value),color:document.getElementById('cl-b1').value},
   b2:{thickness:parseFloat(document.getElementById('sl-b2-t').value),color:document.getElementById('cl-b2').value},
 };}
@@ -796,7 +799,7 @@ async function exportFX(){
   const P=getFXParams();
   FX.render(P,fxImg.width,fxImg.height);
   const{px,w,h}=FX.getPixels();
-  const b1t=Math.round(w*P.b1.thickness/100),b2t=Math.round(w*P.b2.thickness/100);
+  const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
   const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
   const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
   const ctx=ec.getContext('2d');
@@ -814,7 +817,7 @@ async function exportFX(){
 // QUICK ACTIONS
 // ═══════════════════════════
 function enableAll(){
-  ['grain','hal','bloom'].forEach(name=>{
+  ['grain','hal','bloom','borders'].forEach(name=>{
     const tg=document.getElementById(`tg-${name}`);
     if(!tg.classList.contains('on')){
       tg.classList.add('on');
