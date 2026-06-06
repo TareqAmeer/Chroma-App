@@ -1,25 +1,20 @@
 """
-Halation + bloom engine v4 — measurement-derived, linear-light.
+Halation + bloom engine v5 — warm-line-corrected, measurement-derived.
 
-Model derived directly from Dehancer target pixels:
-  * Halo strength ordering large-area > compact-dot >> thin-line is
-    reproduced by AREA-normalized (energy-conserving) blur of a strongly
-    NON-LINEAR emission: emit = brightness_gate * lum^P * red_gate.
-      - lum^P (high P): pure white (lum=1) stays full; dimmer reds (the
-        thin line, lum~0.46) get crushed -> tiny halo. White dot halates,
-        red line barely does, exactly like the target.
-      - red_gate = clamp(R - kb*max(G,B)): passes white & red, kills
-        cyan/blue (which show ~zero halation in the target).
-  * Halo TINT is the fixed film backing colour (warm orange), not the
-    source colour — a white dot produces an ORANGE halo in the target.
-  * screen() composite in LINEAR light: bright cores stay unchanged
-    (screen(white,x)=white) so large white bars don't blow out.
+Key insight from v5 calibration:
+  * emit = smoothstep(thr, thr+knee, lum) * max(R - bs*max(G,B), 0)^P
+  * The UNNORMALIZED red surplus (NOT divided by 1-bs) is critical:
+      - warm line (R=1, G=0.63, B=0.31): surplus=0.70 → emits ~4.5× white
+      - white dot  (R=G=B=1):           surplus=0.15 → emits 1× reference
+      - thin red   (R=1, G=0.31, B=0.31): lum=0.28 < thr=0.35 → suppressed
+    This reproduces the empirically-measured 4.5× ratio of warm-line vs
+    white-dot effective glow amplitude in the Dehancer targets.
+  * power=1.0 on the surplus (no lum^P beyond the threshold gate)
+  * thr=0.35 with knee=0.12: warm line (lum=0.47) passes, thin red (lum=0.28)
+    is gated out, matching the near-zero glow on the thin red test line.
 
-Bloom: neutral tint, its own threshold/power/sigma; subtle, large-area only.
-
-Area-normalized blur => for halation/bloom sigmas (~8-13px) the 3-sigma
-kernel fits in +/-48 taps, so the GLSL uses a dense 1:1 kernel (no pixel
-stepping, no grid artefacts) and transplants 1:1.
+Bloom: lum-gated (no red-surplus), separate thr/power/sigma.
+Area-normalized blur, dense 1:1 kernel for clean GLSL transplant.
 """
 import numpy as np
 from scipy.ndimage import gaussian_filter
@@ -30,15 +25,15 @@ LUM = np.array([0.2126, 0.7152, 0.0722])
 
 @dataclass
 class Params:
-    thr: float = 0.30        # brightness gate (linear lum)
-    knee: float = 0.20
-    power: float = 4.0       # brightness nonlinearity
-    bluesupp: float = 0.5    # red_gate: R - bluesupp*max(G,B)
+    thr: float = 0.35        # brightness gate (linear lum) — suppresses thin-red (lum=0.28)
+    knee: float = 0.12
+    power: float = 1.0       # power on red_surplus (1.0 = linear)
+    bluesupp: float = 0.85   # unnorm surplus: R - bs*max(G,B); white→0.15, warm→0.70
     film_r: float = 1.00     # halo tint (warm backing)
-    film_g: float = 0.40
-    film_b: float = 0.15
-    sigma: float = 10.0      # halo sigma px (native res)
-    gain: float = 6.0        # reflectance (area-norm needs gain >> 1)
+    film_g: float = 0.25
+    film_b: float = 0.05
+    sigma: float = 7.0       # halo sigma px (native res)
+    gain: float = 7.0        # gain on blurred surplus
 
     def vec(self):
         return np.array([self.thr, self.knee, self.power, self.bluesupp,
@@ -72,9 +67,9 @@ def screen(a, b):
 def emit_halation(lin, p):
     lum = lin @ LUM
     bright = smoothstep(p.thr, p.thr + p.knee, lum)
-    redgate = np.clip((lin[..., 0] - p.bluesupp * np.maximum(lin[..., 1], lin[..., 2]))
-                      / (1.0 - p.bluesupp + 1e-6), 0, 1)
-    return bright * np.power(np.clip(lum, 0, 1), p.power) * redgate   # HxW scalar
+    # Unnormalized red surplus: warm sources emit more than white (warm~0.70 vs white~0.15)
+    red_surplus = np.clip(lin[..., 0] - p.bluesupp * np.maximum(lin[..., 1], lin[..., 2]), 0, None)
+    return bright * np.power(red_surplus, p.power)                     # HxW scalar
 
 
 def emit_bloom(lin, p):

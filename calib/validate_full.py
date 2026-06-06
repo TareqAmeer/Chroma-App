@@ -17,8 +17,9 @@ both = np.asarray(Image.open(os.path.join(ROOT,'dehancer h 70 b 40.JPG')).conver
 def P(a,y,x): return a[y-1:y+2,x-1:x+2].mean(axis=(0,1))
 
 # (name, y, x) measured glow points  (x=1800 is inside the 100% bar)
-PTS = [('W100 dot +8',110,156),('zone2 bar -2',418,1800),
-       ('zone2 bar -12',408,1800),('zone7 line +3',2803,1200)]
+# zone7 WARM line at y=2680 (R=1,G=0.627,B=0.314); measuring dy+1 and dy-1
+PTS = [('W100 dot +8',110,158),('zone2 bar -2',418,1800),
+       ('zone7 warm +1',2681,1200),('zone7 warm -1',2679,1200)]
 
 def check(render, tgt, label):
     print(f'  {label}: R render|tgt   G render|tgt')
@@ -26,8 +27,8 @@ def check(render, tgt, label):
         r=P(render,y,x); t=P(tgt,y,x)
         print(f'    {nm:15s} {r[0]:.3f}|{t[0]:.3f}   {r[1]:.2f}|{t[1]:.2f}')
 
-HAL = Params(thr=0.08, knee=0.12, power=3.0, bluesupp=0.85,
-             film_r=1.0, film_g=0.25, film_b=0.05, sigma=8.0, gain=1.5)
+HAL = Params(thr=0.35, knee=0.12, power=1.0, bluesupp=0.85,
+             film_r=1.0, film_g=0.25, film_b=0.05, sigma=7.0, gain=7.0)
 BLM = Params(thr=0.10, knee=0.15, power=5.0, bluesupp=0.0,
              film_r=1.0, film_g=1.0, film_b=1.0, sigma=12.0, gain=0.19)
 
