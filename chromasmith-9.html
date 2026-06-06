@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHROMASMITH</title>
+<style>
+:root{--bg:#0a0a0d;--sur:#111118;--sur2:#18181f;--bdr:#252530;--acc:#d4903a;--acc2:#4a9ddc;--txt:#f0ece2;--mut:#8a8680;--ok:#52c97a;--err:#e05454;--r:8px;--mono:ui-monospace,Menlo,'Courier New',monospace;--serif:Palatino,'Palatino Linotype',Georgia,serif;--sans:-apple-system,'Helvetica Neue',sans-serif}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:14px;line-height:1.5}
+header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{font-family:var(--serif);font-size:20px;letter-spacing:.12em;color:var(--acc);font-style:italic}
+.logo span{color:var(--mut);font-size:11px;font-family:var(--mono);letter-spacing:.05em;font-style:normal;margin-left:12px}
+.badge{font-family:var(--mono);font-size:10px;color:var(--ok);background:rgba(82,201,122,.1);border:1px solid rgba(82,201,122,.25);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
+.tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto}
+.tab{padding:12px 18px;font-size:11px;letter-spacing:.07em;font-family:var(--mono);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s;text-transform:uppercase;white-space:nowrap}
+.tab:hover{color:var(--txt)}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
+main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:14px}
+.ctitle{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.ctitle::after{content:'';flex:1;height:1px;background:var(--bdr)}
+.cver{font-family:var(--mono);font-size:11px;color:var(--acc);background:rgba(212,144,58,.12);border:1px solid rgba(212,144,58,.25);padding:2px 8px;border-radius:3px;margin-left:auto}
+.dg2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all .15s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.dz:hover,.dz.over{border-color:var(--acc);background:rgba(212,144,58,.05)}.dz.loaded{border-style:solid;border-color:var(--ok);background:rgba(82,201,122,.05)}
+.dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-ic{font-size:18px;color:var(--mut)}.dz.loaded .dz-ic{color:var(--ok)}
+.dz-lb{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+.dz-sb{font-size:11px;color:var(--mut);margin-top:1px}
+.dz-fn{font-family:var(--mono);font-size:10px;color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;padding:9px 16px;border-radius:5px;border:1px solid;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:disabled{opacity:.3;cursor:not-allowed}
+.bpri{background:var(--acc);border-color:var(--acc);color:#000;font-weight:600}.bpri:not(:disabled):hover{background:#e8a54a}
+.bsec{background:transparent;border-color:var(--acc2);color:var(--acc2)}.bsec:not(:disabled):hover{background:rgba(74,157,220,.1)}
+.bgh{background:transparent;border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt)}
+.bdot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.pb{height:3px;background:var(--bdr);border-radius:2px;margin-top:10px;overflow:hidden;display:none}
+.pf{height:100%;background:var(--acc);border-radius:2px;transition:width .25s;width:0%}
+.vrow{display:flex;gap:8px;align-items:center;margin-top:10px}
+.vlb{font-family:var(--mono);font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.vinput{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px 10px;color:var(--txt);font-family:var(--mono);font-size:11px;width:180px}
+.vinput:focus{outline:none;border-color:var(--acc)}
+.step-card{border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:12px;overflow:hidden}
+.step-hdr{background:var(--sur2);padding:9px 14px;display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px}
+.step-badge{background:rgba(212,144,58,.15);border:1px solid rgba(212,144,58,.3);color:var(--acc);padding:2px 8px;border-radius:3px;font-size:10px}
+.step-body{padding:14px}
+.sum-box{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;margin-top:12px}
+.sum-title{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
+.sum-list{list-style:none;display:flex;flex-direction:column;gap:4px}
+.sum-list li{font-size:12px;color:var(--txt);display:flex;align-items:baseline;gap:8px}
+.sum-list li::before{content:'→';font-family:var(--mono);color:var(--acc);flex-shrink:0;font-size:10px}
+.sliders-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+.sl-outer{position:relative;overflow:hidden;border-radius:var(--r);background:#000;cursor:col-resize;user-select:none}
+.sl-ca{display:block;width:100%;height:auto}
+.sl-cb{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.sl-line{position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.8);transform:translateX(-50%);pointer-events:none}
+.sl-knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:col-resize;box-shadow:0 2px 10px rgba(0,0,0,.6)}
+.sl-lbl{position:absolute;bottom:7px;background:rgba(0,0,0,.65);color:#fff;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;pointer-events:none;letter-spacing:.04em}
+.sl-ll{left:7px}.sl-lr{right:7px}
+.sl-cap{font-family:var(--mono);font-size:10px;color:var(--mut);text-align:center;padding:3px 0 9px;letter-spacing:.05em;text-transform:uppercase}
+.sl-ph{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:28px 16px;text-align:center;color:var(--mut);font-size:12px;min-height:100px;display:flex;align-items:center;justify-content:center}
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-top:8px}
+.si{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px 9px}
+.sk{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+.sv{font-family:var(--mono);font-size:13px;color:var(--txt);margin-top:1px}
+.sv.pos{color:#7ec8a0}.sv.neg{color:#e08080}
+.hsl-t{width:100%;border-collapse:collapse;margin-top:7px;font-family:var(--mono);font-size:11px}
+.hsl-t th{text-align:left;color:var(--mut);font-weight:normal;padding:3px 7px;border-bottom:1px solid var(--bdr);font-size:9px;letter-spacing:.07em;text-transform:uppercase}
+.hsl-t td{padding:3px 7px;border-bottom:1px solid rgba(37,37,48,.5)}
+.hsl-t tr:last-child td{border-bottom:none}
+.div-sep{display:flex;align-items:center;gap:9px;margin:16px 0 12px;font-family:var(--mono);font-size:10px;color:var(--mut);letter-spacing:.07em;text-transform:uppercase}
+.div-sep::before,.div-sep::after{content:'';flex:1;height:1px;background:var(--bdr)}
+.opt-dz{border-style:dashed;opacity:.7}
+/* FX TAB */
+.fx-layout{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+.fx-panel{display:flex;flex-direction:column;gap:10px}
+.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:14px}
+.fx-ctrl-title{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.fx-toggle{width:32px;height:18px;border-radius:9px;background:var(--bdr);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.fx-toggle.on{background:var(--acc)}
+.fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .2s}
+.fx-toggle.on::after{left:16px}
+.fx-fields{display:none;margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.fx-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fx-label{font-size:11px;color:var(--mut);flex-shrink:0;width:80px}
+.fx-slider{flex:1;accent-color:var(--acc);cursor:pointer}
+.fx-val{font-family:var(--mono);font-size:10px;color:var(--acc);width:36px;text-align:right;flex-shrink:0}
+.fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
+.fx-select{background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:4px 8px;color:var(--txt);font-family:var(--mono);font-size:10px;flex:1;cursor:pointer}
+.fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
+#fx-canvas{display:block;max-width:100%;height:auto}
+.fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px}
+#log-area{background:var(--sur);border-top:1px solid var(--bdr);padding:9px 22px;max-height:120px;overflow-y:auto;position:sticky;bottom:0}
+.ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
+.lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
+.lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
+@media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Chromasmith <span>colour calibration</span></div>
+  <div class="badge">● OFFLINE</div>
+</header>
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('match')">Match &amp; Refine</div>
+  <div class="tab" onclick="switchTab('copy')">Colour Copy</div>
+  <div class="tab" onclick="switchTab('x2l')">XMP → LUT</div>
+  <div class="tab" onclick="switchTab('fx')">Effects &amp; Export</div>
+</div>
+<main>
+<!-- MATCH & REFINE -->
+<div class="panel active" id="panel-match">
+  <div class="card" id="setup-card">
+    <div class="ctitle">Step 1 — drop images to start</div>
+    <div class="dg2">
+      <div class="dz" id="dz-before" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'before')">
+        <input type="file" accept="image/*" onchange="fi(event,'before')">
+        <div class="dz-ic">◧</div><div class="dz-lb">Before / Original</div>
+        <div class="dz-sb">Ungraded flat image</div><div class="dz-fn" id="fn-before"></div>
+      </div>
+      <div class="dz" id="dz-target" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'target')">
+        <input type="file" accept="image/*" onchange="fi(event,'target')">
+        <div class="dz-ic">◨</div><div class="dz-lb">After / Target</div>
+        <div class="dz-sb">Graded Lightroom result</div><div class="dz-fn" id="fn-target"></div>
+      </div>
+    </div>
+    <div class="div-sep">Optional starting point</div>
+    <div class="dz opt-dz" id="dz-start" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'start')">
+      <input type="file" accept=".cube,.xmp" onchange="fi(event,'start')">
+      <div class="dz-ic">⬡</div><div class="dz-lb">Starting LUT (.cube) or Preset (.xmp)</div>
+      <div class="dz-sb">Optional — helps bootstrap the look</div><div class="dz-fn" id="fn-start"></div>
+    </div>
+    <div class="vrow">
+      <div class="vlb">Name</div>
+      <input class="vinput" id="match-name" value="my_look" placeholder="my_look">
+    </div>
+    <div class="btn-row">
+      <button class="btn bpri" id="btn-start" disabled onclick="startMatch()"><span class="bdot"></span>Generate LUT &amp; XMP</button>
+    </div>
+    <div class="pb" id="pb-s"><div class="pf" id="pf-s"></div></div>
+  </div>
+  <div id="step-history"></div>
+</div>
+<!-- COLOUR COPY -->
+<div class="panel" id="panel-copy">
+  <div class="card">
+    <div class="ctitle">Colour Copy — match tones from a reference image</div>
+    <div class="dg2">
+      <div class="dz" id="dz-cp-src" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'cp-src')">
+        <input type="file" accept="image/*" onchange="fi(event,'cp-src')">
+        <div class="dz-ic">◧</div><div class="dz-lb">Source image</div>
+        <div class="dz-sb">Photo to apply the grade to</div><div class="dz-fn" id="fn-cp-src"></div>
+      </div>
+      <div class="dz" id="dz-cp-ref" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'cp-ref')">
+        <input type="file" accept="image/*" onchange="fi(event,'cp-ref')">
+        <div class="dz-ic">◨</div><div class="dz-lb">Reference image</div>
+        <div class="dz-sb">Photo with the look you want to copy</div><div class="dz-fn" id="fn-cp-ref"></div>
+      </div>
+    </div>
+    <div class="vrow">
+      <div class="vlb">Name</div>
+      <input class="vinput" id="cp-name" value="colour_copy" placeholder="colour_copy">
+      <div class="vlb" id="cp-ver" style="color:var(--acc)">v1.0</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn bpri" id="btn-cp" disabled onclick="runColourCopy('lut')"><span class="bdot"></span>Download .cube LUT</button>
+      <button class="btn bsec" id="btn-cp-xmp" disabled onclick="runColourCopy('xmp')"><span class="bdot"></span>Download .xmp Preset</button>
+    </div>
+    <div class="pb" id="pb-cp"><div class="pf" id="pf-cp"></div></div>
+    <div class="sum-box" id="cp-sum" style="display:none">
+      <div class="sum-title">Grade characteristics copied</div>
+      <ul class="sum-list" id="cp-sum-list"></ul>
+    </div>
+  </div>
+</div>
+<!-- XMP → LUT -->
+<div class="panel" id="panel-x2l">
+  <div class="card">
+    <div class="ctitle">Blind XMP → LUT conversion</div>
+    <div class="dz" id="dz-xmp" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'xmp')">
+      <input type="file" accept=".xmp" onchange="fi(event,'xmp')">
+      <div class="dz-ic">⬡</div><div class="dz-lb">.xmp Lightroom preset</div>
+      <div class="dz-sb">Drag &amp; drop or click</div><div class="dz-fn" id="fn-xmp"></div>
+    </div>
+    <div id="xmp-parsed" style="display:none">
+      <div class="sg" id="xmp-grid"></div>
+      <div id="xmp-hsl-wrap" style="display:none;margin-top:8px">
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:5px">HSL Adjustments</div>
+        <table class="hsl-t"><thead><tr><th>Colour</th><th>Hue</th><th>Sat</th><th>Lum</th></tr></thead><tbody id="xmp-hsl-tb"></tbody></table>
+      </div>
+    </div>
+    <div class="vrow">
+      <div class="vlb">Name</div>
+      <input class="vinput" id="xmp-oname" value="converted" placeholder="converted">
+      <div class="vlb" id="xmp-ver" style="color:var(--acc)">v1.0</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn bpri" id="btn-xdl" disabled onclick="dlBlind()"><span class="bdot"></span>Download .cube LUT</button>
+    </div>
+    <div class="pb" id="pb-xmp"><div class="pf" id="pf-xmp"></div></div>
+  </div>
+</div>
+<!-- EFFECTS & EXPORT -->
+<div class="panel" id="panel-fx">
+  <div class="fx-layout">
+    <div class="fx-panel">
+      <div class="fx-ctrl">
+        <div class="ctitle" style="margin-bottom:10px">Image Input</div>
+        <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
+          <input type="file" accept="image/*" onchange="fi(event,'fx-img')">
+          <div class="dz-ic">◧</div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
+        </div>
+        <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-lut')">
+          <input type="file" accept=".cube" onchange="fi(event,'fx-lut')">
+          <div class="dz-ic">⬡</div><div class="dz-lb">Apply LUT (optional)</div><div class="dz-fn" id="fn-fx-lut"></div>
+        </div>
+      </div>
+      <!-- GRAIN -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
+        <div class="fx-fields" id="ff-grain">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-a">30</div></div>
+          <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="5" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">5</div></div>
+          <div class="fx-row"><div class="fx-label">Character</div>
+            <select class="fx-select" id="sel-grain-t" onchange="fxUpdate()">
+              <option value="0">Fine / Classic 35mm</option>
+              <option value="1">Medium / Pushed Film</option>
+              <option value="2">Heavy / Grainy</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <!-- HALATION -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
+        <div class="fx-fields" id="ff-hal">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-a">70</div></div>
+          <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="1" max="60" value="28" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">28</div></div>
+          <div class="fx-row"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-hal" value="#d42200" oninput="fxUpdate()"><div style="font-size:10px;color:var(--mut);font-family:var(--mono)">Red/orange fringe</div></div>
+        </div>
+      </div>
+      <!-- BLOOM -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
+        <div class="fx-fields" id="ff-bloom">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-a">40</div></div>
+          <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="30" max="95" value="70" id="sl-bloom-th" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-th">70%</div></div>
+          <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="1" max="60" value="25" id="sl-bloom-r" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-r">25</div></div>
+          <div class="fx-row"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-bloom" value="#fffef0" oninput="fxUpdate()"><div style="font-size:10px;color:var(--mut);font-family:var(--mono)">Glow tint</div></div>
+        </div>
+      </div>
+      <!-- BORDERS -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Borders <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
+        <div class="fx-fields" id="ff-borders">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:8px">Inner border</div>
+        <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Outer border</div>
+        <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
+        </div>
+      </div>
+      <!-- QUICK ENABLE -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Quick Actions</div>
+        <div class="btn-row">
+          <button class="btn bpri" onclick="enableAll()"><span class="bdot"></span>Enable All FX</button>
+          <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
+        </div>
+      </div>
+      <!-- EXPORT -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Export</div>
+        <div class="vrow">
+          <div class="vlb">Filename</div>
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
+          <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn bpri" id="btn-fx-export" disabled onclick="exportFX()"><span class="bdot"></span>Export JPEG</button>
+        </div>
+      </div>
+    </div>
+    <!-- PREVIEW -->
+    <div>
+      <div class="fx-canvas-wrap" id="fx-wrap">
+        <div class="fx-no-img" id="fx-no-img">Drop an image to start</div>
+        <canvas id="fx-canvas"></canvas>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--mut);text-align:center;margin-top:6px" id="fx-info"></div>
+    </div>
+  </div>
+</div>
+</main>
+<div id="log-area"></div>
+<script>
+// ═══════════════════════════
+// COLOUR MATH
+// ═══════════════════════════
+const s2l=v=>{v=Math.max(0,Math.min(1,v));return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)};
+const l2s=v=>{v=Math.max(0,Math.min(1,v));return v<=.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-.055};
+function r2hsv(r,g,b){const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;const s=mx>0?d/mx:0,v=mx;if(d>0){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=(h/6+1)%1}return[h,s,v]}
+function hsv2r(h,s,v){const i=Math.floor(h*6)%6,f=h*6-Math.floor(h*6),p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);return[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][Math.max(0,Math.min(5,i))]}
+const sat=(r,g,b)=>{const mx=Math.max(r,g,b);return mx>0?(mx-Math.min(r,g,b))/mx:0};
+const lum=(r,g,b)=>0.2126*r+0.7152*g+0.0722*b;
+function gm(v,c,w){return Math.exp(-Math.pow(v-c,2)/(2*w*w))}
+function contrast(v,c,p=.18){const e=1e-9;return v<=p?p*Math.pow(Math.max(v/p,e),1-c*.25):1-(1-p)*Math.pow(Math.max((1-v)/(1-p),e),1-c*.25)}
+function applyHSL(r,g,b,hA,sA,lA){
+  const[h,s,v]=r2hsv(r,g,b),C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],CE=[0,30/360,60/360,120/360,180/360,220/360,280/360,320/360],LS=[.05,.05,.09,.11,.12,.12,.11,.09];
+  let dh=0,ds=0,dv=0;
+  for(let i=0;i<8;i++){let df=Math.abs(h-CE[i]);if(df>.5)df=1-df;const w=Math.max(0,1-Math.pow(df/.075,2))*Math.min(1,s*3);dh+=w*(hA[C[i]]||0)/360;ds+=w*((sA[C[i]]||0)/100)*.55;dv+=w*((lA[C[i]]||0)/100)*LS[i]}
+  return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
+}
+function applyGrade(r,g,b,s){
+  let R=s2l(r),G=s2l(g),B=s2l(b);const es=Math.pow(2,s.exposure*.75);
+  R=Math.min(1,R*es);G=Math.min(1,G*es);B=Math.min(1,B*es);
+  const c=s.contrast/100;R=contrast(R,c);G=contrast(G,c);B=contrast(B,c);
+  R=l2s(R);G=l2s(G);B=l2s(B);
+  const lv=lum(R,G,B),adj=(s.shadows/200)*.30*gm(lv,.22,.18)+(s.highlights/200)*.33*gm(lv,.82,.14)+(s.whites/200)*.18*gm(lv,.92,.10)+(s.blacks/200)*.20*gm(lv,.08,.10);
+  R=Math.max(0,Math.min(1,R+adj));G=Math.max(0,Math.min(1,G+adj));B=Math.max(0,Math.min(1,B+adj));
+  return applyHSL(R,G,B,s.hue,s.sat,s.lum);
+}
+
+// ═══════════════════════════
+// LUT OPS
+// ═══════════════════════════
+const SZ=33,S2=SZ*SZ;
+const li=(r,g,b)=>(r*S2+g*SZ+b)*3;
+function sampleLUT(lut,r,g,b){
+  const sc=SZ-1,ri=r*sc,gi=g*sc,bi=b*sc;
+  const r0=Math.min(ri|0,sc-1),g0=Math.min(gi|0,sc-1),b0=Math.min(bi|0,sc-1);
+  const rf=ri-r0,gf=gi-g0,bf=bi-b0;
+  let or=0,og=0,ob=0;
+  for(let dr=0;dr<2;dr++)for(let dg=0;dg<2;dg++)for(let db=0;db<2;db++){
+    const w=(dr?rf:1-rf)*(dg?gf:1-gf)*(db?bf:1-bf),i=li(r0+dr,g0+dg,b0+db);
+    or+=lut[i]*w;og+=lut[i+1]*w;ob+=lut[i+2]*w;
+  }return[or,og,ob];
+}
+function writeCube(lut,title){
+  const L=[`TITLE "${title}"`,`LUT_3D_SIZE ${SZ}`,``];
+  for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);L.push(`${lut[i].toFixed(6)} ${lut[i+1].toFixed(6)} ${lut[i+2].toFixed(6)}`)}
+  return L.join('\n');
+}
+function parseCube(txt){
+  const lut=new Float32Array(SZ*SZ*SZ*3);
+  const lines=txt.split('\n').filter(l=>l.trim()&&!l.startsWith('#')&&!l.startsWith('TITLE')&&!l.startsWith('LUT_'));
+  let n=0;for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){if(n>=lines.length)break;const p=lines[n++].trim().split(/\s+/),i=li(r,g,b);lut[i]=parseFloat(p[0]);lut[i+1]=parseFloat(p[1]);lut[i+2]=parseFloat(p[2])}
+  return lut;
+}
+function identLUT(){const l=new Float32Array(SZ*SZ*SZ*3);for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const i=li(r,g,b);l[i]=r/32;l[i+1]=g/32;l[i+2]=b/32}return l}
+function applyLUTtoPx(px,lut){
+  const o=new Uint8ClampedArray(px.length);
+  for(let i=0;i<px.length;i+=4){const[r2,g2,b2]=sampleLUT(lut,px[i]/255,px[i+1]/255,px[i+2]/255);o[i]=r2*255+.5|0;o[i+1]=g2*255+.5|0;o[i+2]=b2*255+.5|0;o[i+3]=px[i+3]}
+  return o;
+}
+
+// ═══════════════════════════
+// XMP PARSER
+// ═══════════════════════════
+function parseXMP(txt){
+  const g=(a,d=0)=>{const m=txt.match(new RegExp(`crs:${a}\\s*=\\s*"([^"]+)"`));return m?parseFloat(m[1]):d};
+  const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],hue={},sat={},lum_={};
+  C.forEach(c=>{hue[c]=g(`HueAdjustment${c}`);sat[c]=g(`SaturationAdjustment${c}`);lum_[c]=g(`LuminanceAdjustment${c}`)});
+  return{exposure:g('Exposure2012'),contrast:g('Contrast2012'),highlights:g('Highlights2012'),shadows:g('Shadows2012'),whites:g('Whites2012'),blacks:g('Blacks2012'),vibrance:g('Vibrance'),saturation:g('Saturation'),hue,sat,lum:lum_};
+}
+
+// ═══════════════════════════
+// IMG LOADING
+// ═══════════════════════════
+function loadImg(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=e.target.result};r.onerror=rej;r.readAsDataURL(file)})}
+function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
+function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
+
+// ═══════════════════════════
+// EMPIRICAL MATCH
+// ═══════════════════════════
+async function buildCorrLUT(srcPx,dstPx,w,h,pfId,p0=10,p1=75){
+  const N=w*h,acc=new Float64Array(SZ*SZ*SZ*3),cnt=new Int32Array(SZ*SZ*SZ);
+  for(let i=0;i<N;i++){const p=i*4,sr=Math.min(srcPx[p]/255*32+.5|0,32),sg=Math.min(srcPx[p+1]/255*32+.5|0,32),sb=Math.min(srcPx[p+2]/255*32+.5|0,32);const idx=sr*S2+sg*SZ+sb;acc[idx*3]+=dstPx[p]/255;acc[idx*3+1]+=dstPx[p+1]/255;acc[idx*3+2]+=dstPx[p+2]/255;cnt[idx]++}
+  const lut=new Float32Array(SZ*SZ*SZ*3),pop=new Uint8Array(SZ*SZ*SZ);let pc=0;
+  for(let i=0;i<SZ*SZ*SZ;i++){if(cnt[i]>0){lut[i*3]=acc[i*3]/cnt[i];lut[i*3+1]=acc[i*3+1]/cnt[i];lut[i*3+2]=acc[i*3+2]/cnt[i];pop[i]=1;pc++}}
+  log(`Populated ${pc}/${SZ*SZ*SZ} cells`);setP(pfId,(p0+p1)/2);await yd();
+  await propFill(lut,pop,pfId,(p0+p1)/2,p1);
+  for(let i=0;i<SZ*SZ*SZ;i++){if(pop[i]===1){lut[i*3]=acc[i*3]/cnt[i];lut[i*3+1]=acc[i*3+1]/cnt[i];lut[i*3+2]=acc[i*3+2]/cnt[i]}}
+  return lut;
+}
+async function propFill(lut,pop,pfId,p0,p1){
+  const f=new Uint8Array(pop);let ch=true,it=0;
+  while(ch&&it<SZ*2){ch=false;it++;const tf=[];
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(f[idx])continue;let sr=0,sg=0,sb=0,c=0;
+      for(const[dr,dg,db] of[[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]]){const nr=r+dr,ng=g+dg,nb=b+db;if(nr<0||nr>=SZ||ng<0||ng>=SZ||nb<0||nb>=SZ)continue;const ni=nr*S2+ng*SZ+nb;if(f[ni]){sr+=lut[ni*3];sg+=lut[ni*3+1];sb+=lut[ni*3+2];c++}}
+      if(c>0){tf.push(idx,sr/c,sg/c,sb/c);ch=true}}
+    for(let i=0;i<tf.length;i+=4){const idx=tf[i];lut[idx*3]=tf[i+1];lut[idx*3+1]=tf[i+2];lut[idx*3+2]=tf[i+3];f[idx]=1}
+    if(it%4===0){setP(pfId,p0+(p1-p0)*(it/(SZ*2)));await yd()}}
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(!f[idx]){lut[idx*3]=r/32;lut[idx*3+1]=g/32;lut[idx*3+2]=b/32}}
+}
+async function composeLUTs(corr,base,pfId,p0=78,p1=100){
+  const fin=new Float32Array(SZ*SZ*SZ*3);
+  for(let r=0;r<SZ;r++){for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[br,bg,bb]=sampleLUT(base,r/32,g/32,b/32),[cr,cg,cb]=sampleLUT(corr,br,bg,bb),i=li(r,g,b);fin[i]=Math.max(0,Math.min(1,cr));fin[i+1]=Math.max(0,Math.min(1,cg));fin[i+2]=Math.max(0,Math.min(1,cb))}
+  if(r%8===7){setP(pfId,p0+(p1-p0)*(r/32));await yd()}}
+  setP(pfId,p1);return fin;
+}
+
+// ═══════════════════════════
+// CHANGE ANALYSIS
+// ═══════════════════════════
+function analyzeChanges(oldLUT,newLUT){
+  const B=[];
+  const npts=[[.1,.1,.1],[.25,.25,.25],[.5,.5,.5],[.75,.75,.75]];
+  let dl=0;npts.forEach(([r,g,b])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);dl+=lum(nr,ng,nb)-lum(or,og,ob)});dl=dl/npts.length*255;
+  if(Math.abs(dl)>1.5)B.push(`Overall brightness ${dl>0?'increased':'decreased'} by ${Math.abs(dl).toFixed(0)} levels`);
+  const[or0,og0,ob0]=sampleLUT(oldLUT,0,0,0),[nr0,ng0,nb0]=sampleLUT(newLUT,0,0,0);const bl=(lum(nr0,ng0,nb0)-lum(or0,og0,ob0))*255;
+  if(Math.abs(bl)>2)B.push(`Black point ${bl>0?'lifted — shadows more faded':'deepened'} by ${Math.abs(bl).toFixed(0)} levels`);
+  const[or1,og1,ob1]=sampleLUT(oldLUT,1,1,1),[nr1,ng1,nb1]=sampleLUT(newLUT,1,1,1);const hl=(lum(nr1,ng1,nb1)-lum(or1,og1,ob1))*255;
+  if(Math.abs(hl)>2)B.push(`Highlights ${hl<0?'pulled down':'boosted'} by ${Math.abs(hl).toFixed(0)} levels`);
+  [[.15,.15,.15,'Shadows'],[.5,.5,.5,'Midtones']].forEach(([r,g,b,nm])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);const sw=((nr-nb)-(or-ob))*255;if(Math.abs(sw)>2)B.push(`${nm} ${sw>0?'warmed':'cooled'} by ${Math.abs(sw).toFixed(0)} levels`)});
+  [['Reds/skin',.7,.4,.3],['Oranges',.7,.5,.2],['Greens',.3,.6,.3],['Teals',.2,.55,.55],['Blues',.2,.35,.7],['Purples',.5,.3,.6]].forEach(([nm,r,g,b])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);const ds=(sat(nr,ng,nb)-sat(or,og,ob))*100;if(Math.abs(ds)>2.5)B.push(`${nm} saturation ${ds>0?'increased':'decreased'} by ${Math.abs(ds).toFixed(0)}%`)});
+  return B.length>0?B:['Minimal changes across all test points'];
+}
+
+// ═══════════════════════════
+// XMP DERIVATION
+// ═══════════════════════════
+async function deriveXMP(srcPx,dstPx,w,h,name,pfId){
+  const NB=18,step=255/NB,curves={R:[],G:[],B:[]};
+  for(const[ci,ch] of[[0,'R'],[1,'G'],[2,'B']]){
+    const acc=new Float64Array(NB),cnt=new Int32Array(NB);
+    for(let i=0;i<w*h;i++){const sv=srcPx[i*4+ci],bin=Math.min(NB-1,sv/step|0);acc[bin]+=dstPx[i*4+ci];cnt[bin]++}
+    const xs=[],ys=[];for(let i=0;i<NB;i++){xs.push(Math.round(i*step+step/2));ys.push(cnt[i]>8?acc[i]/cnt[i]:xs[xs.length-1])}
+    for(let i=1;i<ys.length;i++)if(ys[i]<ys[i-1])ys[i]=ys[i-1];
+    const sm=ys.map((y,i)=>(ys[Math.max(0,i-1)]+2*y+ys[Math.min(NB-1,i+1)])/4);
+    const pts=[];for(let i=0;i<13;i++){const si=Math.min(NB-1,Math.round(i*(NB-1)/12));pts.push([Math.min(255,Math.round(xs[si])),Math.max(0,Math.min(255,Math.round(sm[si])))])}
+    pts[0][0]=0;pts[12][0]=255;for(let i=1;i<pts.length;i++)if(pts[i][0]<=pts[i-1][0])pts[i][0]=pts[i-1][0]+1;
+    curves[ch]=pts;
+  }
+  const lc=curves.R.map(([x,y],i)=>[(x+curves.G[i][0]+curves.B[i][0])/3,(y+curves.G[i][1]+curves.B[i][1])/3]);
+  const mi=lc[6][0],mo=lc[6][1],expE=Math.round((Math.log2(mo/Math.max(mi,1)))*4)/4;
+  const hiE=Math.round((lc[12][1]-lc[12][0])/255*-80),shE=Math.round((lc[1][1]-lc[1][0])/255*80);
+  setP(pfId,90);await yd();
+  const uid=Array.from({length:32},()=>'0123456789ABCDEF'[Math.random()*16|0]).join('');
+  const seq=pts=>pts.map(([x,y])=>`\n     <rdf:li>${x}, ${y}</rdf:li>`).join('');
+  const xmp=`<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal" crs:UUID="${uid}" crs:SupportsAmount2="True" crs:SupportsColor="True"
+    crs:SupportsHighDynamicRange="True" crs:SupportsNormalDynamicRange="True"
+    crs:SupportsSceneReferred="True" crs:SupportsOutputReferred="True"
+    crs:Version="16.0" crs:ProcessVersion="11.0" crs:WhiteBalance="As Shot"
+    crs:Exposure2012="${expE>0?'+':''}${expE}"
+    crs:Contrast2012="0" crs:Highlights2012="${hiE>0?'+':''}${Math.min(100,Math.max(-100,hiE))}"
+    crs:Shadows2012="${shE>0?'+':''}${Math.min(100,Math.max(-100,shE))}"
+    crs:Whites2012="0" crs:Blacks2012="0" crs:Vibrance="0" crs:Saturation="0"
+    crs:ToneCurveName2012="Custom" crs:HasSettings="True">
+   <crs:Name><rdf:Alt><rdf:li xml:lang="x-default">${name}</rdf:li></rdf:Alt></crs:Name>
+   <crs:Group><rdf:Alt><rdf:li xml:lang="x-default">User Presets</rdf:li></rdf:Alt></crs:Group>
+   <crs:ToneCurvePV2012><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red><rdf:Seq>${seq(curves.R)}\n    </rdf:Seq></crs:ToneCurvePV2012Red>
+   <crs:ToneCurvePV2012Green><rdf:Seq>${seq(curves.G)}\n    </rdf:Seq></crs:ToneCurvePV2012Green>
+   <crs:ToneCurvePV2012Blue><rdf:Seq>${seq(curves.B)}\n    </rdf:Seq></crs:ToneCurvePV2012Blue>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>`;
+  setP(pfId,100);return xmp;
+}
+
+// ═══════════════════════════
+// COLOUR COPY (histogram match)
+// ═══════════════════════════
+function histMatch(srcPx,refPx,sN,rN){
+  const sH=[[],[],[]], rH=[[],[],[]], SZ3=SZ*SZ*SZ;
+  for(let c=0;c<3;c++){sH[c]=new Float64Array(256);rH[c]=new Float64Array(256)}
+  for(let i=0;i<sN;i++){const p=i*4;for(let c=0;c<3;c++)sH[c][srcPx[p+c]]++}
+  for(let i=0;i<rN;i++){const p=i*4;for(let c=0;c<3;c++)rH[c][refPx[p+c]]++}
+  const maps=sH.map((sh,ci)=>{
+    const rh=rH[ci];
+    const scdf=new Float64Array(256),rcdf=new Float64Array(256);
+    let ss=0,rs=0;for(let i=0;i<256;i++){ss+=sh[i];scdf[i]=ss/sN;rs+=rh[i];rcdf[i]=rs/rN}
+    const map=new Uint8Array(256);
+    for(let s=0;s<256;s++){let best=0,bd=2;for(let r=0;r<256;r++){const d=Math.abs(scdf[s]-rcdf[r]);if(d<bd){bd=d;best=r}}map[s]=best}
+    return map;
+  });
+  const lut=new Float32Array(SZ3*3);
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+    const i=li(r,g,b);
+    lut[i]=maps[0][Math.min(255,Math.round(r/32*255))]/255;
+    lut[i+1]=maps[1][Math.min(255,Math.round(g/32*255))]/255;
+    lut[i+2]=maps[2][Math.min(255,Math.round(b/32*255))]/255;
+  }
+  return lut;
+}
+async function runColourCopy(type){
+  if(!ST.cpSrcFile||!ST.cpRefFile)return;
+  const btn=document.getElementById(type==='lut'?'btn-cp':'btn-cp-xmp');btn.disabled=true;
+  showPB('pb-cp');log('Running colour copy…','info');
+  try{
+    const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
+    const{px:sPx,w:sw,h:sh}=getPx(sImg);const{px:rPx,w:rw,h:rh}=getPx(rImg);
+    log('Matching histograms per channel…');setP('pf-cp',30);await yd();
+    const lut=histMatch(sPx,rPx,sw*sh,rw*rh);
+    setP('pf-cp',70);
+    const name=document.getElementById('cp-name').value||'colour_copy';
+    const ver=`v${ST.cpVer.toFixed(1)}`;
+    if(type==='lut'){
+      dl(writeCube(lut,`${name} ${ver}`),`${name}_${ver}.cube`);
+      log(`Downloaded ${name}_${ver}.cube`,'ok');
+    } else {
+      log('Deriving XMP…');
+      const tPx=resizePx(rImg,sw,sh);
+      const xmp=await deriveXMP(sPx,tPx,sw,sh,`${name} ${ver}`,'pf-cp');
+      dl(xmp,`${name}_${ver}.xmp`,'text/xml');
+      log(`Downloaded ${name}_${ver}.xmp`,'ok');
+    }
+    const summary=analyzeChanges(identLUT(),lut);
+    document.getElementById('cp-sum').style.display='block';
+    document.getElementById('cp-sum-list').innerHTML=summary.map(s=>`<li>${s}</li>`).join('');
+    ST.cpVer+=.1;document.getElementById('cp-ver').textContent=`v${ST.cpVer.toFixed(1)}`;
+    setP('pf-cp',100);
+  }catch(e){log('Error: '+e.message,'err');console.error(e)}
+  btn.disabled=false;setTimeout(()=>hidePB('pb-cp'),800);
+}
+
+// ═══════════════════════════
+// BLIND LUT
+// ═══════════════════════════
+async function genBlindLUT(settings,pfId){
+  const lut=new Float32Array(SZ*SZ*SZ*3);
+  for(let r=0;r<SZ;r++){for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[or,og,ob]=applyGrade(r/32,g/32,b/32,settings),i=li(r,g,b);lut[i]=or;lut[i+1]=og;lut[i+2]=ob}
+  if(r%5===4){setP(pfId,r/32*100);await yd()}}
+  setP(pfId,100);return lut;
+}
+
+// ═══════════════════════════
+// WEBGL FX RENDERER
+// ═══════════════════════════
+class FXR{
+  constructor(){
+    this.cv=document.getElementById('fx-canvas')||document.createElement('canvas');
+    this.gl=this.cv.getContext('webgl2',{preserveDrawingBuffer:true,antialias:false,premultipliedAlpha:false})||this.cv.getContext('experimental-webgl2',{preserveDrawingBuffer:true});
+    this.ok=!!this.gl;if(!this.ok)return;
+    this.progs={};this.fbs={};this.txs={};this.imgTx=null;this.lutTx=null;this.w=0;this.h=0;
+    this._setupQuad();this._compileAll();
+  }
+  _setupQuad(){const gl=this.gl,b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);this.qb=b}
+  _sh(t,src){const gl=this.gl,s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){const e=gl.getShaderInfoLog(s);console.error('GLSL compile error:',e);log('Shader error: '+e.split('\n')[0],'err');}return s}
+  _prog(vs,fs){const gl=this.gl,p=gl.createProgram();gl.attachShader(p,this._sh(gl.VERTEX_SHADER,vs));gl.attachShader(p,this._sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS)){const e=gl.getProgramInfoLog(p);console.error('GLSL link error:',e);log('Link error: '+e,'err');}return p}
+  _compileAll(){
+    const VS=`#version 300 es\nin vec2 a;out vec2 uv;\nvoid main(){uv=a*.5+.5;gl_Position=vec4(a,0,1);}`;
+    this.progs.lut=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler3D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
+void main(){vec4 c=texture(img,uv);
+if(useLut>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(lut3,c.rgb*sc+of).rgb;}o=c;}`);
+    this.progs.hi=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform float thr,mode;uniform vec3 tint;uniform vec2 texSz;
+void main(){
+  vec3 c=texture(img,uv).rgb;
+  float lu=dot(c,vec3(.2126,.7152,.0722));
+  if(mode<0.5){
+    // HALATION SOURCE — high-contrast edge detection.
+    // Sample 8 neighbours; source only fires where THIS pixel is brighter than surroundings.
+    // Uniform highlights (no adjacent dark) produce minimal halation, matching Dehancer.
+    float minN=1.0;
+    for(int dx=-1;dx<=1;dx++)for(int dy=-1;dy<=1;dy++){
+      if(dx==0&&dy==0)continue;
+      vec3 ns=texture(img,uv+vec2(float(dx),float(dy))*texSz*2.0).rgb;
+      minN=min(minN,dot(ns,vec3(.2126,.7152,.0722)));
+    }
+    float edgeFactor=clamp((lu-minN)*2.5,0.,1.);
+    // Threshold at 0.60: only Zone 6-7 highlights (Dehancer-calibrated)
+    float w=pow(max(0.,lu-0.60)/0.40,1.3)*(0.25+edgeFactor*0.75);
+    // Luminous warm amber — Dehancer fringe reads as a light warm lift, not dark orange
+    vec3 warm=vec3(1.,.62,.20);
+    o=vec4(warm*w,1.);
+  } else if(mode<1.5){
+    // RED SCATTER SOURCE — physically: red penetrates deepest into emulsion base.
+    // Edge-aware: only fire where red channel is much higher than neighbours.
+    float minR=1.0;
+    for(int dx=-1;dx<=1;dx++)for(int dy=-1;dy<=1;dy++){
+      if(dx==0&&dy==0)continue;
+      minR=min(minR,texture(img,uv+vec2(float(dx),float(dy))*texSz*3.0).r);
+    }
+    float rEdge=max(0.,c.r-max(minR,0.25));
+    float w=pow(max(0.,c.r-0.65)/0.35,1.2)*clamp(rEdge*3.5,0.,1.);
+    o=vec4(w,w*0.28,w*0.04,1.); // red + moderate green → warm orange-red scatter
+  } else {
+    // BLOOM SOURCE — pure luminance threshold, soft top ramp
+    float hi=smoothstep(thr,thr+0.06,lu);
+    o=vec4(vec3(lu*hi),1.);
+  }
+}`);
+    this.progs.blur=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform vec2 dir;uniform float sig;
+void main(){vec4 s=vec4(0);float t=0.;int r=min(int(sig*3.),24);
+for(int i=-24;i<=24;i++){if(abs(i)>r)continue;float w=exp(-float(i*i)/(2.*sig*sig));s+=texture(img,uv+dir*float(i))*w;t+=w;}
+o=t>0.?s/t:vec4(0);}`);
+    this.progs.comp=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D base,ht,hw,blm;
+uniform float halA,blmA,grA,grSz,grT,seed;
+float h21(vec2 p){p=fract(p*vec2(127.1,311.7));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+void main(){
+vec3 res=texture(base,uv).rgb,blmV=texture(blm,uv).rgb;
+if(halA>0.){
+  vec3 innerGlow=texture(ht,uv).rgb;
+  vec4 outerSpread=texture(hw,uv);
+  float baseLu=dot(res,vec3(.2126,.7152,.0722));
+  // DENSITY MODEL: halation scatters into UNEXPOSED (dark) regions.
+  // Already-bright pixels receive negligible additional scatter — preserves highlights/midtones.
+  // Calibrated: at halA=0.70, black pixel adjacent to white source lifts to ~0.20-0.25 (matching Dehancer)
+  float density=pow(1.0-baseLu,1.3);
+  vec3 hal=innerGlow*1.0+vec3(outerSpread.r*1.2,outerSpread.g*0.35,outerSpread.b*0.05);
+  res+=hal*halA*density*0.28;
+  res=clamp(res,0.,1.);
+}
+if(blmA>0.){
+  float b=blmV.r;
+  float baseLu=dot(res,vec3(.2126,.7152,.0722));
+  // SAVE-HIGHLIGHTS / diffusion model:
+  // Bloom contribution compresses toward zero as base approaches white.
+  // Dense at the brightest core, trails off through the diffusion radius.
+  // Calibrated: bloom at 40% should give a soft halo, not blow out adjacent areas
+  float bloomContrib=b*blmA*0.55;
+  float saveHL=1.0-smoothstep(0.70,1.0,baseLu+bloomContrib*0.4);
+  res+=vec3(bloomContrib)*saveHL;
+  res=clamp(res,0.,1.);
+}
+if(grA>0.){
+  float lu=dot(res,vec3(.2126,.7152,.0722));
+  // Bell-curve mask peaks at ~45% luminance.
+  // Fine mode (grT=0, ISO 50): no shadow floor — slow film has negligible shadow grain.
+  // Medium/heavy modes: small floor to keep shadow texture.
+  float shadowFloor=grT>0.5?0.04:0.0;
+  float msk=clamp(4.*lu*(1.-lu)*.95+shadowFloor,0.,1.);
+  vec2 gc=uv/max(grSz,.0001)+vec2(seed);float g=h21(gc)-.5;
+  float rm=grT*.20; // fine: rm=0 → neutral grain; medium/heavy: warm character
+  float gr=g+(h21(gc+vec2(.13,.29))-.5)*rm;
+  float gg=g+(h21(gc+vec2(.47,.71))-.5)*rm*.88;
+  float gb=g+(h21(gc+vec2(.83,.19))-.5)*rm*.72;
+  if(grT>.5){
+    float cl=(h21(gc*.18+vec2(.5))-.5)*.55;
+    float cl2=(h21(gc*.06+vec2(.3))-.5)*.25;
+    gr+=cl+cl2;gg+=cl*.65+cl2;gb+=cl*.5+cl2*1.8;
+  }
+  res+=vec3(gr,gg,gb)*grA*.24*msk;
+}
+o=vec4(clamp(res,0.,1.),1.);}`);}
+  _initBufs(w,h){if(this.w===w&&this.h===h)return;const gl=this.gl;
+    this.cv.width=w;this.cv.height=h;
+    Object.values(this.fbs).forEach(f=>gl.deleteFramebuffer(f));
+    Object.values(this.txs).forEach(t=>gl.deleteTexture(t));
+    this.fbs={};this.txs={};
+    ['lut','hs','ht_h','ht_v','hs2','hw_h','hw_v','bs','bh','bv'].forEach(n=>{
+      const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      this.txs[n]=t;const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);this.fbs[n]=f;
+    });this.w=w;this.h=h;
+  }
+  setImage(img){const gl=this.gl;if(this.imgTx)gl.deleteTexture(this.imgTx);
+    this.imgTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.imgTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    this.imgW=img.naturalWidth||img.width;this.imgH=img.naturalHeight||img.height;
+  if (!this.lutTx) {
+    this.lutTx = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D, this.lutTx);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    
+    // 2x2x2 neutral passthrough LUT data
+    const idData = new Uint8Array([
+      0,0,0,255,   255,0,0,255,   0,255,0,255,   255,255,0,255,
+      0,0,255,255, 255,0,255,255, 0,255,255,255, 255,255,255,255
+    ]);
+    
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 2, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, idData);
+  }
+  }
+  setLUT(lut){const gl=this.gl;if(this.lutTx)gl.deleteTexture(this.lutTx);
+    const d=new Uint8Array(SZ*SZ*SZ*3);
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+      const s=li(r,g,b),ds=(b*S2+g*SZ+r)*3;
+      d[ds]=lut[s]*255+.5|0;d[ds+1]=lut[s+1]*255+.5|0;d[ds+2]=lut[s+2]*255+.5|0;
+    }
+    this.lutTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_3D,this.lutTx);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB8,SZ,SZ,SZ,0,gl.RGB,gl.UNSIGNED_BYTE,d);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
+  }
+  _pass(prog,fb,uniforms,bindings){
+    const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,this.w,this.h);gl.useProgram(prog);
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    Object.entries(uniforms).forEach(([k,v])=>{
+    const loc = gl.getUniformLocation(prog,k);
+
+    if (Array.isArray(v)) {
+        if (v.length === 2) gl.uniform2f(loc, v[0], v[1]);
+        else if (v.length === 3) gl.uniform3f(loc, v[0], v[1], v[2]);
+    } else if (Number.isInteger(v)) {
+        gl.uniform1i(loc, v);
+    } else {
+        gl.uniform1f(loc, v);
+    }
+});   // <-- this was lost
+
+gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);
+const al=gl.getAttribLocation(prog,'a');
+gl.enableVertexAttribArray(al);
+gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);
+gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+  render(P,w,h){const gl=this.gl;this._initBufs(w,h);
+    const iw=1/w,ih=1/h;
+    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0},[[0,'img',false],[1,'',true]]);
+        const hc=hexRGB(P.halation.color);
+    const halAmt=P.halation.enabled?P.halation.amount/100:0;
+    // Sigma calibrated to Dehancer: inner tight orange glow, outer wide red scatter
+    // Inner: ~0.5% of image width per unit halation; outer: ~1.1% (Dehancer Zone 4 calibrated)
+    const hst=P.halation.enabled?Math.max(3,halAmt*0.005*this.w):.1;
+    const hsw=P.halation.enabled?Math.max(8,halAmt*0.011*this.w):.1;
+    // Inner halation: edge-detected bright source → tight warm blur
+    this._pass(this.progs.hi,this.fbs.hs,{img:0,thr:0,tint:hc,mode:0,texSz:[iw,ih]},[[0,'lut',false]]);
+    this._pass(this.progs.blur,this.fbs.ht_h,{img:0,dir:[iw,0],sig:hst},[[0,'hs',false]]);
+    this._pass(this.progs.blur,this.fbs.ht_v,{img:0,dir:[0,ih],sig:hst},[[0,'ht_h',false]]);
+    // Outer red scatter: edge-detected R source → wide blur
+    this._pass(this.progs.hi,this.fbs.hs2,{img:0,thr:0,tint:hc,mode:1,texSz:[iw,ih]},[[0,'lut',false]]);
+    this._pass(this.progs.blur,this.fbs.hw_h,{img:0,dir:[iw,0],sig:hsw},[[0,'hs2',false]]);
+    this._pass(this.progs.blur,this.fbs.hw_v,{img:0,dir:[0,ih],sig:hsw},[[0,'hw_h',false]]);
+    const bt=P.bloom.enabled?P.bloom.threshold/100:.999;
+    const bc=hexRGB(P.bloom.color);
+    this._pass(this.progs.hi,this.fbs.bs,{img:0,thr:bt,tint:bc,mode:2,texSz:[iw,ih]},[[0,'lut',false]]);
+    // Bloom: sigma scales with amount; Dehancer bloom is relatively tight at centre
+    const bsg=P.bloom.enabled?Math.max(5,0.006*this.w*P.bloom.amount/50):.1;
+    this._pass(this.progs.blur,this.fbs.bh,{img:0,dir:[iw,0],sig:bsg},[[0,'bs',false]]);
+    this._pass(this.progs.blur,this.fbs.bv,{img:0,dir:[0,ih],sig:bsg},[[0,'bh',false]]);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);gl.useProgram(this.progs.comp);
+    [['base','lut'],['ht','ht_v'],['hw','hw_v'],['blm','bv']].forEach(([u,n],i)=>{gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,this.txs[n]);const l=gl.getUniformLocation(this.progs.comp,u);if(l)gl.uniform1i(l,i)});
+    const cp=this.progs.comp,ul=k=>gl.getUniformLocation(cp,k);
+    gl.uniform1f(ul('halA'),P.halation.enabled?P.halation.amount/100:0);
+    gl.uniform1f(ul('blmA'),P.bloom.enabled?P.bloom.amount/100:0);
+    gl.uniform1f(ul('grA'),P.grain.enabled?P.grain.amount/100:0);
+    gl.uniform1f(ul('grSz'),P.grain.enabled?P.grain.size/500:1);
+    gl.uniform1f(ul('grT'),P.grain.type);
+    gl.uniform1f(ul('seed'),Math.random()*100);
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);const al=gl.getAttribLocation(cp,'a');gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+  getPixels(){const gl=this.gl,px=new Uint8Array(this.w*this.h*4);
+    gl.readPixels(0,0,this.w,this.h,gl.RGBA,gl.UNSIGNED_BYTE,px);
+    const row=this.w*4,tmp=new Uint8Array(row);
+    for(let y=0;y<this.h>>1;y++){const y2=this.h-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row)}
+    return{px,w:this.w,h:this.h};
+  }
+}
+function hexRGB(h){return[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255]}
+const FX=new FXR();
+
+// ═══════════════════════════
+// FX UI
+// ═══════════════════════════
+const fxState={grain:{enabled:false,amount:30,size:5,type:0},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null};
+let fxImg=null,fxTimer=null,fxVersion=1.0;
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate()}
+function fxUpdate(){
+  ['grain-a','grain-sz','hal-a','hal-r','bloom-a','bloom-th','bloom-r','b1-t','b2-t'].forEach(id=>{
+    const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
+    if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id==='bloom-th')txt=v+'%';else if(id.endsWith('-t'))txt=v+'%';vl.textContent=txt}
+  });
+  clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
+}
+function getFXParams(){return{
+  lut:fxState.lut,
+  grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),type:parseFloat(document.getElementById('sel-grain-t').value)},
+  halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),color:document.getElementById('cl-hal').value},
+  bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value),radius:parseFloat(document.getElementById('sl-bloom-r').value),color:document.getElementById('cl-bloom').value},
+  bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
+  b1:{thickness:parseFloat(document.getElementById('sl-b1-t').value),color:document.getElementById('cl-b1').value},
+  b2:{thickness:parseFloat(document.getElementById('sl-b2-t').value),color:document.getElementById('cl-b2').value},
+};}
+function renderPreview(){
+  if(!fxImg||!FX.ok)return;
+  const wrap=document.getElementById('fx-wrap');
+  const maxW=Math.min(900,wrap.clientWidth||900);
+  const sc=Math.min(1,maxW/fxImg.width);
+  const pw=fxImg.width*sc|0,ph=fxImg.height*sc|0;
+  const P=getFXParams();
+  FX.render(P,pw,ph);
+  const dc=document.getElementById('fx-canvas');
+  FX.cv.style.display='block';document.getElementById('fx-no-img').style.display='none';
+  document.getElementById('fx-info').textContent=`Preview ${pw}×${ph} — export will be at full ${fxImg.width}×${fxImg.height}`;
+  document.getElementById('btn-fx-export').disabled=false;
+}
+async function exportFX(){
+  if(!fxImg){log('No image loaded','warn');return}
+  log('Rendering full resolution…','info');
+  const P=getFXParams();
+  FX.render(P,fxImg.width,fxImg.height);
+  const{px,w,h}=FX.getPixels();
+  const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
+  const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
+  const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
+  const ctx=ec.getContext('2d');
+  ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
+  ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
+  const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+  tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
+  ctx.drawImage(tmp,b1t+b2t,b1t+b2t);
+  const fname=document.getElementById('fx-fname').value||'photo';
+  const ver=`v${fxVersion.toFixed(1)}`;
+  ec.toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${fname}_${ver}.jpg`;document.body.appendChild(a);a.click();document.body.removeChild(a);log(`Exported ${fname}_${ver}.jpg`,'ok');fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`},'image/jpeg',1.0);
+}
+
+// ═══════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════
+function enableAll(){
+  ['grain','hal','bloom','borders'].forEach(name=>{
+    const tg=document.getElementById(`tg-${name}`);
+    if(!tg.classList.contains('on')){
+      tg.classList.add('on');
+      const ff=document.getElementById(`ff-${name}`);
+      if(ff)ff.style.display='flex';
+    }
+  });
+  fxUpdate();
+  log('Grain, Halation, Bloom and Borders enabled','ok');
+}
+
+function generateTestPhoto(){
+  const W=1400,H=1050;
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#050508';ctx.fillRect(0,0,W,H);
+
+  // — Zone 1: white point sources on black (halation/bloom test) —
+  const pts=[
+    {x:.08,y:.10,r:2,b:1.0},{x:.20,y:.10,r:3,b:1.0},{x:.33,y:.10,r:1.5,b:.85},
+    {x:.46,y:.10,r:4,b:1.0},{x:.59,y:.10,r:2,b:.75},{x:.72,y:.10,r:3,b:.95},{x:.86,y:.10,r:2,b:1.0}
+  ];
+  pts.forEach(({x,y,r,b})=>{
+    const bv=Math.round(b*255),cx=x*W,cy=y*H;
+    const grd=ctx.createRadialGradient(cx,cy,0,cx,cy,r*12);
+    grd.addColorStop(0,`rgb(${bv},${bv},${bv})`);
+    grd.addColorStop(.25,`rgba(${bv},${bv},${bv},.6)`);
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grd;ctx.beginPath();ctx.arc(cx,cy,r*12,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=`rgb(${bv},${bv},${bv})`;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+  });
+
+  // — Zone 2: coloured bright point sources —
+  const cpts=[
+    {x:.08,y:.24,col:'#ff1500'},{x:.22,y:.24,col:'#ff7700'},{x:.36,y:.24,col:'#f5e800'},
+    {x:.50,y:.24,col:'#00d435'},{x:.64,y:.24,col:'#0077ff'},{x:.78,y:.24,col:'#cc00ee'}
+  ];
+  cpts.forEach(({x,y,col})=>{
+    const cx=x*W,cy=y*H;
+    const grd=ctx.createRadialGradient(cx,cy,0,cx,cy,22);
+    grd.addColorStop(0,col);grd.addColorStop(.5,col+'88');grd.addColorStop(1,col+'00');
+    ctx.fillStyle=grd;ctx.beginPath();ctx.arc(cx,cy,22,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(cx,cy,2.5,0,Math.PI*2);ctx.fill();
+  });
+
+  // — Zone 3: grey ramp (grain test) —
+  const ry=H*.36,rh=H*.13;
+  for(let i=0;i<16;i++){
+    const v=Math.round(Math.pow(i/15,2.2)*255);
+    ctx.fillStyle=`rgb(${v},${v},${v})`;
+    ctx.fillRect(i*W/16,ry,W/16+1,rh);
+  }
+  // Labels
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.font='bold 11px monospace';
+  for(let i=0;i<16;i+=3){
+    const v=Math.round(Math.pow(i/15,2.2)*255);
+    ctx.fillText(v,i*W/16+3,ry+rh-4);
+  }
+
+  // — Zone 4: saturated colour patches —
+  const py=H*.52,ph=H*.12;
+  ['#bb0000','#dd4400','#999900','#006622','#003d99','#440099','#880044','#777777'].forEach((col,i)=>{
+    ctx.fillStyle=col;ctx.fillRect(i*W/8,py,W/8+1,ph);
+  });
+
+  // — Zone 5: bright rectangle / window test (bloom + halation boundary) —
+  const wy=H*.68;
+  ctx.fillStyle='#111114';ctx.fillRect(0,wy,W,H*.18);
+  // Bright white panel
+  ctx.fillStyle='#ffffff';ctx.fillRect(W*.04,wy+H*.02,W*.10,H*.13);
+  // Near-white
+  ctx.fillStyle='#e0e0e0';ctx.fillRect(W*.18,wy+H*.02,W*.10,H*.13);
+  // 80% grey
+  ctx.fillStyle='#cccccc';ctx.fillRect(W*.32,wy+H*.02,W*.10,H*.13);
+  // Window-like: bright interior
+  ctx.fillStyle='#f8f8ee';ctx.fillRect(W*.55,wy+H*.01,W*.14,H*.15);
+  ctx.fillStyle='#222226';
+  ctx.fillRect(W*.557,wy+H*.015,W*.025,H*.14);
+  ctx.fillRect(W*.59,wy+H*.015,W*.025,H*.14);
+  ctx.fillRect(W*.555,wy+H*.08,W*.145,H*.008);
+
+  // — Zone 6: single-pixel lines (sharpness/grain interaction) —
+  const ly=H*.88;
+  ctx.fillStyle='#111114';ctx.fillRect(0,ly,W,H*.10);
+  [1,2,4,8,16].forEach((gap,i)=>{
+    const sx=W*.04+i*(W*.17);
+    for(let x=sx;x<sx+W*.14;x+=gap*2){
+      ctx.fillStyle='#ffffff';ctx.fillRect(x,ly+H*.01,gap,H*.075);
+    }
+  });
+
+  return c;
+}
+
+async function loadTestPhoto(){
+  const tc=generateTestPhoto();
+  const img=new Image();
+  img.onload=()=>{
+    fxImg=img;FX.setImage(img);
+    const dz=document.getElementById('dz-fx-img');if(dz)dz.classList.add('loaded');
+    const fn=document.getElementById('fn-fx-img');if(fn)fn.textContent='test-photo.png';
+    document.getElementById('btn-fx-export').disabled=false;
+    renderPreview();log('Test photo loaded — grain/halation/bloom test chart','ok');
+  };
+  img.src=tc.toDataURL('image/png');
+}
+
+// ═══════════════════════════
+// SLIDER COMPONENT
+// ═══════════════════════════
+class ImgSlider{
+  constructor(wrap,la,lb){this.wrap=wrap;this.pct=50;this._id=Math.random().toString(36).slice(2);this._init(la,lb)}
+  _init(la,lb){this.wrap.innerHTML=`<div class="sl-outer" id="so${this._id}"><canvas class="sl-ca" id="ca${this._id}"></canvas><canvas class="sl-cb" id="cb${this._id}"></canvas><div class="sl-line" id="sl${this._id}"></div><div class="sl-knob" id="sk${this._id}">⇔</div><span class="sl-lbl sl-ll">${la}</span><span class="sl-lbl sl-lr">${lb}</span></div><div class="sl-cap">${la} ↔ ${lb}</div>`;
+  this.outer=document.getElementById('so'+this._id);this.ca=document.getElementById('ca'+this._id);this.cb=document.getElementById('cb'+this._id);this.line=document.getElementById('sl'+this._id);this.knob=document.getElementById('sk'+this._id);this._bind()}
+  setImages(pxA,pxB,w,h){this.ca.width=w;this.ca.height=h;this.ca.style.width='100%';this.ca.style.height='auto';this.cb.width=w;this.cb.height=h;this.cb.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%';this.ca.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pxA),w,h),0,0);this.cb.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pxB),w,h),0,0);this._upd(50)}
+  _upd(p){this.pct=p;this.cb.style.clipPath=`inset(0 0 0 ${p}%)`;this.line.style.left=p+'%';this.knob.style.left=p+'%'}
+  _bind(){const mv=e=>{if(!this.drag)return;const r=this.outer.getBoundingClientRect(),cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;this._upd(Math.max(0,Math.min(100,cx/r.width*100)))};this.outer.addEventListener('mousedown',()=>this.drag=true);this.outer.addEventListener('touchstart',()=>this.drag=true,{passive:true});window.addEventListener('mousemove',mv);window.addEventListener('touchmove',mv,{passive:true});window.addEventListener('mouseup',()=>this.drag=false);window.addEventListener('touchend',()=>this.drag=false)}
+}
+
+// ═══════════════════════════
+// WORKFLOW STATE
+// ═══════════════════════════
+const ST={beforeFile:null,targetFile:null,startFile:null,startType:null,baseName:'my_look',beforeImg:null,targetImg:null,history:[],cpSrcFile:null,cpRefFile:null,cpVer:1.0,xmpV:1.0};
+const SL={};
+function getNextVer(){return`v1.${ST.history.length}`}
+function getCurVer(){return ST.history.length>0?`v1.${ST.history.length-1}`:'—'}
+
+async function startMatch(){
+  if(!ST.beforeFile||!ST.targetFile)return;
+  const btn=document.getElementById('btn-start');btn.disabled=true;
+  ST.baseName=document.getElementById('match-name').value||'my_look';
+  showPB('pb-s');log('Starting initial match…','info');
+  try{
+    ST.beforeImg=await loadImg(ST.beforeFile);ST.targetImg=await loadImg(ST.targetFile);
+    const{px:bPx,w,h}=getPx(ST.beforeImg);const tPx=resizePx(ST.targetImg,w,h);
+    let base=identLUT();
+    if(ST.startFile){if(ST.startType==='lut'){base=parseCube(ST.startFile);log('Starting LUT applied')}else{base=await genBlindLUT(parseXMP(ST.startFile),'pf-s');log('Starting XMP converted')}}
+    const minePx=applyLUTtoPx(bPx,base);
+    const corr=await buildCorrLUT(minePx,tPx,w,h,'pf-s',20,75);
+    const finalLUT=await composeLUTs(corr,base,'pf-s',75,88);
+    setP('pf-s',88);
+    const finalXMP=await deriveXMP(bPx,tPx,w,h,`${ST.baseName} ${getNextVer()}`,'pf-s');
+    const summary=analyzeChanges(identLUT(),finalLUT);
+    ST.history.push({ver:getNextVer(),lut:finalLUT,xmp:finalXMP,summary,deviceFile:null});
+    setP('pf-s',100);log(`${getNextVer()} ready`,'ok');
+    renderHistory();await genStepPrev(ST.history.length-1);
+  }catch(e){log('Error: '+e.message,'err');console.error(e)}
+  btn.disabled=false;setTimeout(()=>hidePB('pb-s'),800);
+}
+async function processRef(idx){
+  const item=ST.history[idx];if(!item?.deviceFile)return;
+  const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=true;
+  const pfId=`pf-ref-${idx}`;showPB(`pb-ref-${idx}`);
+  log(`Refining ${item.ver} → ${getNextVer()}…`,'info');
+  try{
+    const devImg=await loadImg(item.deviceFile);
+    const{px:dPx,w,h}=getPx(devImg);const tPx=resizePx(ST.targetImg,w,h);
+    const corr=await buildCorrLUT(dPx,tPx,w,h,pfId,10,75);
+    const refined=await composeLUTs(corr,item.lut,pfId,75,88);
+    setP(pfId,88);
+    const{px:bPx,w:bw,h:bh}=getPx(ST.beforeImg);
+    const bTx=resizePx(ST.targetImg,bw,bh);
+    const xmp=await deriveXMP(bPx,bTx,bw,bh,`${ST.baseName} ${getNextVer()}`,pfId);
+    const summary=analyzeChanges(item.lut,refined);
+    ST.history.push({ver:getNextVer(),lut:refined,xmp,summary,deviceFile:null,prevVer:item.ver});
+    setP(pfId,100);log(`${getNextVer()} ready`,'ok');
+    renderHistory();await genStepPrev(ST.history.length-1);
+  }catch(e){log('Error: '+e.message,'err');console.error(e)}
+  setTimeout(()=>hidePB(`pb-ref-${idx}`),800);
+}
+async function genStepPrev(idx){
+  const item=ST.history[idx];if(!item)return;
+  log(`Generating preview for ${item.ver}…`);
+  const{px:bPx,w,h}=getPx(ST.beforeImg,900);
+  const tPx=resizePx(ST.targetImg,w,h);
+  const oPx=applyLUTtoPx(bPx,item.lut);
+  item.bPx=bPx;item.tPx=tPx;item.oPx=oPx;item.pw=w;item.ph=h;
+  const sbf=SL[`${idx}-bf`],stf=SL[`${idx}-tf`];
+  if(sbf)sbf.setImages(bPx,oPx,w,h);if(stf)stf.setImages(tPx,oPx,w,h);
+  log(`Preview ready for ${item.ver}`,'ok');
+}
+function renderHistory(){
+  const hist=document.getElementById('step-history');hist.innerHTML='';
+  ST.history.forEach((item,idx)=>hist.appendChild(mkStepCard(item,idx)));
+  hist.appendChild(mkRefCard(ST.history.length-1));
+}
+function mkStepCard(item,idx){
+  const card=document.createElement('div');card.className='step-card';
+  card.innerHTML=`<div class="step-hdr"><span class="step-badge">${item.ver}</span><span style="color:var(--mut);font-size:10px">${item.prevVer?`Refinement ${item.prevVer} → ${item.ver}`:'Initial Match'} — ${ST.baseName}</span></div>`;
+  const body=document.createElement('div');body.className='step-body';
+  body.innerHTML=`<div class="sliders-row"><div id="sbf-${idx}"></div><div id="stf-${idx}"></div></div>`;
+  const sumHTML=item.summary.map(s=>`<li>${s}</li>`).join('');
+  body.innerHTML+=`<div class="sum-box"><div class="sum-title">${item.prevVer?`Changes ${item.prevVer} → ${item.ver}`:'What this version does'}</div><ul class="sum-list">${sumHTML}</ul></div>`;
+  body.innerHTML+=`<div class="btn-row" style="margin-top:12px"><button class="btn bpri" onclick="dlItem(${idx},'lut')"><span class="bdot"></span>Download .cube ${item.ver}</button><button class="btn bsec" onclick="dlItem(${idx},'xmp')"><span class="bdot"></span>Download .xmp ${item.ver}</button></div>`;
+  card.appendChild(body);
+  setTimeout(()=>{
+    const wbf=document.getElementById(`sbf-${idx}`),wtf=document.getElementById(`stf-${idx}`);
+    if(wbf){SL[`${idx}-bf`]=new ImgSlider(wbf,'Before','Final');if(item.bPx)SL[`${idx}-bf`].setImages(item.bPx,item.oPx,item.pw,item.ph);else wbf.innerHTML=`<div class="sl-ph">Generating preview…</div>`}
+    if(wtf){SL[`${idx}-tf`]=new ImgSlider(wtf,'Target','Final');if(item.tPx)SL[`${idx}-tf`].setImages(item.tPx,item.oPx,item.pw,item.ph);else wtf.innerHTML=`<div class="sl-ph">Generating preview…</div>`}
+  },60);
+  return card;
+}
+function mkRefCard(prevIdx){
+  const card=document.createElement('div');card.className='card';
+  const nv=getNextVer();
+  card.innerHTML=`<div class="ctitle">Refinement ${getCurVer()} → ${nv}<div class="cver">${nv}</div></div>
+  <div class="dz" id="dz-dev-${prevIdx}" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'dev-${prevIdx}')">
+    <input type="file" accept="image/*" onchange="fi(event,'dev-${prevIdx}')">
+    <div class="dz-ic">◧</div><div class="dz-lb">Device output for ${getCurVer()}</div>
+    <div class="dz-sb">Photo from Lumix Lab with ${getCurVer()} applied</div><div class="dz-fn" id="fn-dev-${prevIdx}"></div>
+  </div>
+  <div class="btn-row"><button class="btn bpri" id="btn-ref-${prevIdx}" disabled onclick="processRef(${prevIdx})"><span class="bdot"></span>Process → ${nv}</button></div>
+  <div class="pb" id="pb-ref-${prevIdx}"><div class="pf" id="pf-ref-${prevIdx}"></div></div>`;
+  return card;
+}
+
+// ═══════════════════════════
+// DOWNLOAD
+// ═══════════════════════════
+function dl(content,fname,mime='application/octet-stream'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a)}
+function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.baseName}_${item.ver}`;if(t==='lut'){dl(writeCube(item.lut,n),`${n}.cube`);log(`Downloaded ${n}.cube`,'ok')}else{dl(item.xmp,`${n}.xmp`,'text/xml');log(`Downloaded ${n}.xmp`,'ok')}}
+async function dlBlind(){if(!window._xp)return;const btn=document.getElementById('btn-xdl');btn.disabled=true;showPB('pb-xmp');log('Generating blind LUT…','info');
+  try{const lut=await genBlindLUT(window._xp,'pf-xmp');const n=document.getElementById('xmp-oname').value||'converted';const ver=`v${ST.xmpV.toFixed(1)}`;dl(writeCube(lut,`${n} ${ver}`),`${n}_${ver}.cube`);log(`Downloaded ${n}_${ver}.cube`,'ok');ST.xmpV+=.1;document.getElementById('xmp-ver').textContent=`v${ST.xmpV.toFixed(1)}`}
+  catch(e){log('Error: '+e.message,'err')}
+  btn.disabled=false;setTimeout(()=>hidePB('pb-xmp'),800);
+}
+
+// ═══════════════════════════
+// FILE HANDLING
+// ═══════════════════════════
+function dzo(e,el){e.preventDefault();el.classList.add('over')}function dzl(el){el.classList.remove('over')}
+function dzd(e,t){e.preventDefault();e.currentTarget.classList.remove('over');const f=e.dataTransfer.files[0];if(f)hf(f,t)}
+function fi(e,t){const f=e.target.files[0];if(f)hf(f,t)}
+async function hf(file,type){
+  log(`Loaded: ${file.name}`);
+  if(type==='before'){ST.beforeFile=file;setDZ('dz-before','fn-before',file.name);chkStart()}
+  else if(type==='target'){ST.targetFile=file;setDZ('dz-target','fn-target',file.name);chkStart()}
+  else if(type==='start'){const ext=file.name.split('.').pop().toLowerCase();if(ext==='cube'){ST.startFile=await file.text();ST.startType='lut'}else{ST.startFile=await file.text();ST.startType='xmp'}setDZ('dz-start','fn-start',file.name)}
+  else if(type==='cp-src'){ST.cpSrcFile=file;setDZ('dz-cp-src','fn-cp-src',file.name);chkCP()}
+  else if(type==='cp-ref'){ST.cpRefFile=file;setDZ('dz-cp-ref','fn-cp-ref',file.name);chkCP()}
+  else if(type==='xmp'){const txt=await file.text();window._xp=parseXMP(txt);setDZ('dz-xmp','fn-xmp',file.name);showXP(window._xp);document.getElementById('btn-xdl').disabled=false;document.getElementById('xmp-oname').value=file.name.replace(/\.xmp$/i,'');log('XMP parsed','ok')}
+  else if(type==='fx-img'){fxImg=await loadImg(file);FX.setImage(fxImg);setDZ('dz-fx-img','fn-fx-img',file.name);renderPreview()}
+  else if(type==='fx-lut'){const txt=await file.text();const lut=parseCube(txt);FX.setLUT(lut);fxState.lut=lut;setDZ('dz-fx-lut','fn-fx-lut',file.name);renderPreview();log('LUT loaded for FX')}
+  else if(type.startsWith('dev-')){const idx=parseInt(type.split('-')[1]);if(ST.history[idx]){ST.history[idx].deviceFile=file;setDZ(`dz-dev-${idx}`,`fn-dev-${idx}`,file.name);const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=false}}
+}
+function chkStart(){document.getElementById('btn-start').disabled=!(ST.beforeFile&&ST.targetFile)}
+function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok}
+function setDZ(dzId,fnId,name){const dz=document.getElementById(dzId);if(dz)dz.classList.add('loaded');const fn=document.getElementById(fnId);if(fn)fn.textContent=name}
+function showXP(s){
+  const wp=document.getElementById('xmp-parsed');wp.style.display='block';
+  const gr=document.getElementById('xmp-grid');gr.innerHTML='';
+  [['Exposure',s.exposure],['Contrast',s.contrast],['Highlights',s.highlights],['Shadows',s.shadows],['Whites',s.whites],['Blacks',s.blacks]].forEach(([k,v])=>{const d=document.createElement('div');d.className='si';d.innerHTML=`<div class="sk">${k}</div><div class="sv ${v>0?'pos':v<0?'neg':''}">${v>0?'+':''}${v}</div>`;gr.appendChild(d)});
+  const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'];
+  if(C.some(c=>s.hue[c]||s.sat[c]||s.lum[c])){document.getElementById('xmp-hsl-wrap').style.display='block';const tb=document.getElementById('xmp-hsl-tb');tb.innerHTML='';C.forEach(c=>{if(!s.hue[c]&&!s.sat[c]&&!s.lum[c])return;const tr=document.createElement('tr');const f=v=>`<td style="color:${v>0?'#7ec8a0':v<0?'#e08080':'var(--mut)'}">${v>0?'+':''}${v}</td>`;tr.innerHTML=`<td style="color:var(--mut)">${c}</td>${f(s.hue[c])}${f(s.sat[c])}${f(s.lum[c])}`;tb.appendChild(tr)})}
+}
+
+// ═══════════════════════════
+// UI UTILS
+// ═══════════════════════════
+function yd(){return new Promise(r=>setTimeout(r,0))}
+function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Math.round(v)+'%'}
+function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
+function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
+function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${msg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
+function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['match','copy','x2l','fx'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active')}
+
+// WebGL2 check with helpful diagnosis
+(function(){
+  const tc=document.createElement('canvas');
+  const gl2=tc.getContext('webgl2');
+  if(!gl2){
+    log('⚠ WebGL2 not available. In Safari: Settings → Advanced → enable WebGL. In Chrome: should work by default.','warn');
+  } else {
+    const ext=gl2.getExtension('EXT_color_buffer_float');
+    log('WebGL2 ready'+(ext?' + float buffers':''),'ok');
+  }
+})();
+if(!FX.ok)log('FX renderer failed to initialise — check console for details','warn');
+log('Chromasmith ready — all processing runs locally in your browser','ok');
+</script>
+</body>
+</html>

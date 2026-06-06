@@ -1,0 +1,4 @@
+preview*.png
+params.json
+__pycache__/
+*.pyc
