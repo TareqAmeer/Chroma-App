@@ -571,15 +571,15 @@ uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
 void main(){vec4 c=texture(img,uv);
 if(useLut>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(lut3,c.rgb*sc+of).rgb;}o=c;}`);
 
-    // SOURCE EMISSION (measurement-derived, computed in LINEAR light).
-    //   emit = brightness_gate * lum^power * red_gate
-    //   - lum^power (high power): pure-white sources (lum=1) stay full while
-    //     dimmer/coloured sources are crushed -> a bright white dot halates
-    //     but a dim red line barely does, matching the Dehancer targets.
-    //   - red_gate (halation only, mode<0.5): passes white & red, kills
-    //     cyan/blue (which show ~zero halation in the target).
-    // Output is a SCALAR emission (stored in .rgb) that the blur then spreads;
-    // the warm tint is applied later at composite.
+    // SOURCE EMISSION v5 — warm-line-corrected model (linear light).
+    // Halation:
+    //   emit = smoothstep(thr, thr+knee, lum) * max(R - bluesupp*max(G,B), 0)^power
+    //   Key: UNNORMALIZED red surplus (NOT divided by 1-bluesupp).
+    //   This gives warm sources (surplus~0.70) ~4.5× more emission than white
+    //   (surplus~0.15), matching the empirically measured warm-line vs dot ratio
+    //   from Dehancer targets.  thr=0.35 gates out dim red sources (lum=0.28).
+    // Bloom:
+    //   emit = smoothstep(thr, thr+knee, lum) * lum^power  (lum-gated, neutral)
     this.progs.src=this._prog(VS,`#version 300 es
 precision highp float;
 precision highp sampler2D;
@@ -592,10 +592,14 @@ void main(){
   vec3 lin=vec3(s2l(c.r),s2l(c.g),s2l(c.b));
   float lum=dot(lin,vec3(.2126,.7152,.0722));
   float bright=smoothstep(thr,thr+knee,lum);
-  float emit=bright*pow(clamp(lum,0.,1.),power);
+  float emit;
   if(mode<0.5){
-    float rg=clamp((lin.r-bluesupp*max(lin.g,lin.b))/(1.0-bluesupp+1e-4),0.,1.);
-    emit*=rg;
+    // halation: unnormalized red surplus — warm sources emit ~4.5× white
+    float surplus=max(lin.r-bluesupp*max(lin.g,lin.b),0.0);
+    emit=bright*pow(surplus,power);
+  } else {
+    // bloom: pure luminance gate
+    emit=bright*pow(clamp(lum,0.,1.),power);
   }
   o=vec4(vec3(emit),1.);
 }`);
@@ -754,8 +758,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   render(P,w,h){const gl=this.gl;this._initBufs(w,h);
     const iw=1/w,ih=1/h;
     // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
-    // Halation: thr .08 knee .12 power 3 bluesupp .85 tint(1,.25,.05) sigma 8  gain 1.5 @amount70
-    // Bloom:    thr .10 knee .15 power 5             (neutral)        sigma 12 gain .19 @amount40
+    // Halation v5: thr .35 knee .12 power 1 bluesupp .85 tint(1,.25,.05) sigma 7  gain 7  @amount70
+    // Bloom:       thr .10 knee .15 power 5             (neutral)        sigma 12 gain .19 @amount40
     const C=FXR.CAL;
     const REF=C.refWidth, sc=w/REF;
     const H=C.halation, B=C.bloom;
@@ -811,9 +815,11 @@ function hexRGB(h){return[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16
 // ── Calibrated halation/bloom constants (measured from Dehancer halation-70 /
 //    bloom-40 targets; sigma in px at a 2400px reference width; gains given at
 //    the default Amount sliders). See calib/ for the derivation harness. ──
+// Halation v5: unnorm red-surplus model (warm line: surplus~0.70 vs white: 0.15)
+// Validated: zone7 warm line 1.02x, zone2 bar 1.09x, vs Dehancer halation-70
 FXR.CAL={
   refWidth:2400,
-  halation:{thr:0.08,knee:0.12,power:3.0,bluesupp:0.85,filmR:1.0,filmG:0.25,filmB:0.05,sigma:8.0,gain:1.5,defAmount:70},
+  halation:{thr:0.35,knee:0.12,power:1.0,bluesupp:0.85,filmR:1.0,filmG:0.25,filmB:0.05,sigma:7.0,gain:7.0,defAmount:70},
   bloom:{thr:0.10,knee:0.15,power:5.0,sigma:12.0,gain:0.19,defAmount:40}
 };
 const FX=new FXR();
