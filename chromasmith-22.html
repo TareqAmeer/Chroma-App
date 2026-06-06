@@ -593,9 +593,10 @@ void main(){
   float lum=dot(lin,vec3(.2126,.7152,.0722));
   float bright=smoothstep(thr,thr+knee,lum);
   if(mode<0.5){
-    // halation: unnormalized red surplus — warm sources emit ~3.5× white
-    float surplus=max(lin.r-bluesupp*max(lin.g,lin.b),0.0);
-    float emit=bright*pow(surplus,power);
+    // halation: brightness-gated R+G emission. Blue (lum=0.072) never passes
+    // the luminance gate. All other bright sources (red, green, cyan, purple,
+    // white) emit proportionally. Red-surplus model gated out green/cyan/white.
+    float emit=bright*clamp(lin.r+0.5*lin.g,0.0,1.0);
     o=vec4(vec3(emit),1.);  // scalar emit replicated to RGB for triple-sigma blur
   } else {
     // bloom: lum-gated source COLOR — bloom carries hue of source light
