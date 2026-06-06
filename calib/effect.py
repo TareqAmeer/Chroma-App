@@ -25,15 +25,15 @@ LUM = np.array([0.2126, 0.7152, 0.0722])
 
 @dataclass
 class Params:
-    thr: float = 0.35        # brightness gate (linear lum) — suppresses thin-red (lum=0.28)
-    knee: float = 0.12
+    thr: float = 0.330       # brightness gate — suppresses thin-red (lum=0.28)
+    knee: float = 0.141
     power: float = 1.0       # power on red_surplus (1.0 = linear)
-    bluesupp: float = 0.85   # unnorm surplus: R - bs*max(G,B); white→0.15, warm→0.70
+    bluesupp: float = 0.806  # unnorm surplus: R - bs*max(G,B); white→0.19, warm→0.70
     film_r: float = 1.00     # halo tint (warm backing)
     film_g: float = 0.25
     film_b: float = 0.05
-    sigma: float = 7.0       # halo sigma px (native res)
-    gain: float = 7.0        # gain on blurred surplus
+    sigma: float = 5.17      # halo sigma px (native res)
+    gain: float = 4.98       # gain on blurred surplus
 
     def vec(self):
         return np.array([self.thr, self.knee, self.power, self.bluesupp,

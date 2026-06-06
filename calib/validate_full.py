@@ -27,8 +27,8 @@ def check(render, tgt, label):
         r=P(render,y,x); t=P(tgt,y,x)
         print(f'    {nm:15s} {r[0]:.3f}|{t[0]:.3f}   {r[1]:.2f}|{t[1]:.2f}')
 
-HAL = Params(thr=0.35, knee=0.12, power=1.0, bluesupp=0.85,
-             film_r=1.0, film_g=0.25, film_b=0.05, sigma=7.0, gain=7.0)
+HAL = Params(thr=0.330, knee=0.141, power=1.0, bluesupp=0.806,
+             film_r=1.0, film_g=0.25, film_b=0.05, sigma=5.17, gain=4.98)
 BLM = Params(thr=0.10, knee=0.15, power=5.0, bluesupp=0.0,
              film_r=1.0, film_g=1.0, film_b=1.0, sigma=12.0, gain=0.19)
 
