@@ -39,15 +39,18 @@ CROPS = {
 
 # vec order: thr,knee,power,bluesupp,film_r,film_g,film_b,sigma,gain
 # sigma searched in FULL-res px; effect runs at work-res so /SCALE.
-BOUNDS = [(0.05, 0.60),   # thr
-          (0.02, 0.40),   # knee
-          (1.0, 8.0),     # power
+# power is FORCED high: the brightness nonlinearity is the only thing that
+# separates the bright white dot (lum=1) from the dimmer red line (lum~0.46)
+# -> dot halates, thin line stays ~dark, matching the measured targets.
+BOUNDS = [(0.08, 0.35),   # thr
+          (0.05, 0.40),   # knee
+          (3.0, 7.0),     # power  (forced nonlinear)
           (0.0, 1.0),     # bluesupp
           (0.60, 1.00),   # film_r
           (0.10, 0.70),   # film_g
           (0.00, 0.50),   # film_b
-          (4.0, 30.0),    # sigma (full-res px)
-          (0.5, 40.0)]    # gain (area-norm needs >>1)
+          (5.0, 18.0),    # sigma (full-res px)
+          (2.0, 30.0)]    # gain (area-norm needs >>1)
 
 
 def load(path, ref):
@@ -69,18 +72,26 @@ def zone_boost(shape):
     return m
 
 
-def fit(base, tgt, init, applier, label, bounds=None):
+def fit(base, tgt, init, applier, label, bounds=None, gt=None):
     """Loss lives ONLY where light changed — penalises missed glow AND spurious
-    glow, with negligible weight on flat areas (no dilution -> no zeroing)."""
+    glow, with negligible weight on flat areas (no dilution -> no zeroing).
+    gt: list of (y,x,tval) measured anchor points (work-res) pinned hard."""
     bounds = bounds or BOUNDS
     dt = np.abs(tgt - base).max(axis=2)        # where the target changed
     boost = zone_boost(base.shape)
+    gt = gt or []
 
     def loss(v):
         out = applier(base, to_work(Params.from_vec(v)))
         do = np.abs(out - base).max(axis=2)    # where WE changed
         w = ((np.maximum(dt, do) + 0.01) * boost)[..., None]
-        return (((out - tgt) ** 2) * w).sum() / w.sum()
+        spatial = (((out - tgt) ** 2) * w).sum() / w.sum()
+        # hard anchors at measured points (3x3 mean), strongly weighted
+        gpen = 0.0
+        for y, x, tv in gt:
+            rv = out[y-1:y+2, x-1:x+2, 0].mean()
+            gpen += (rv - tv) ** 2
+        return spatial + 0.5 * gpen
 
     best = None
     for s0 in (8, 16):
@@ -148,16 +159,24 @@ def main():
     thal = load(T_HAL, ref); tblm = load(T_BLM, ref)
     print(f'work res {ref[0]}x{ref[1]}')
 
-    hal = fit(base, thal, Params(thr=0.30, power=4, bluesupp=0.5,
-              film_r=1.0, film_g=0.4, film_b=0.12, sigma=10, gain=8),
-              apply_halation, 'halation')
+    # measured anchor points at WORK res (y,x,target R of glow)
+    S = SCALE
+    hal_gt = [(110//S, 156//S, 0.247),   # W100 dot +8px
+              (418//S, 1120//S, 0.847),  # zone2 100% bar -2px
+              (2803//S, 1200//S, 0.027)] # zone7 red line +3px (must stay ~dark)
+    hal = fit(base, thal, Params(thr=0.20, knee=0.2, power=4, bluesupp=0.5,
+              film_r=1.0, film_g=0.4, film_b=0.12, sigma=9, gain=8),
+              apply_halation, 'halation', gt=hal_gt)
     rh = apply_halation(base, to_work(hal)); report_zones(base, rh, thal, 'halation')
     save_validation(base, rh, thal, 'val_halation.png')
     point_report(apply_halation(base_full, hal), 'halation full-res')
 
-    blm = fit(base, tblm, Params(thr=0.35, power=4, bluesupp=0.0,
-              film_r=1.0, film_g=1.0, film_b=1.0, sigma=12, gain=4),
-              apply_bloom, 'bloom')
+    blm_gt = [(110//S, 156//S, 0.012),   # W100 dot ~ no bloom
+              (418//S, 1120//S, 0.196),  # zone2 100% bar -2px neutral grey glow
+              (2803//S, 1200//S, 0.0)]   # zone7 line ~ no bloom
+    blm = fit(base, tblm, Params(thr=0.20, knee=0.2, power=4, bluesupp=0.0,
+              film_r=1.0, film_g=1.0, film_b=1.0, sigma=10, gain=4),
+              apply_bloom, 'bloom', gt=blm_gt)
     rb = apply_bloom(base, to_work(blm)); report_zones(base, rb, tblm, 'bloom')
     save_validation(base, rb, tblm, 'val_bloom.png')
 
