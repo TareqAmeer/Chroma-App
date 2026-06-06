@@ -1,20 +1,23 @@
 """
-Halation + bloom engine v5 — warm-line-corrected, measurement-derived.
+Halation + bloom engine v6 — channel-split halation, source-coloured bloom.
 
-Key insight from v5 calibration:
-  * emit = smoothstep(thr, thr+knee, lum) * max(R - bs*max(G,B), 0)^P
-  * The UNNORMALIZED red surplus (NOT divided by 1-bs) is critical:
-      - warm line (R=1, G=0.63, B=0.31): surplus=0.70 → emits ~4.5× white
-      - white dot  (R=G=B=1):           surplus=0.15 → emits 1× reference
-      - thin red   (R=1, G=0.31, B=0.31): lum=0.28 < thr=0.35 → suppressed
-    This reproduces the empirically-measured 4.5× ratio of warm-line vs
-    white-dot effective glow amplitude in the Dehancer targets.
-  * power=1.0 on the surplus (no lum^P beyond the threshold gate)
-  * thr=0.35 with knee=0.12: warm line (lum=0.47) passes, thin red (lum=0.28)
-    is gated out, matching the near-zero glow on the thin red test line.
+Key changes from v5:
+  Halation:
+    * Replace single-sigma blur + tint with THREE independent channel blurs.
+      σ_R=6.14 >> σ_G=2.62 >> σ_B=1.0 px (at 2400px reference width).
+      The warm backing colour emerges from physics: red spreads wider than
+      green which spreads wider than blue — no tint constant needed.
+    * gain_R=6.89, gain_G=0.109, gain_B=0.0 — measured from Dehancer 2× PNG
+      halation render via linear-domain Gaussian fit on warm/white line tails.
 
-Bloom: lum-gated (no red-surplus), separate thr/power/sigma.
-Area-normalized blur, dense 1:1 kernel for clean GLSL transplant.
+  Bloom:
+    * Emit is now source-coloured: gate × lin.rgb (not gate × scalar).
+      Confirmed by: white bar → neutral bloom, warm bar → warm-tinted bloom.
+    * σ=12.42px, gain=0.111 from erfc fit on 100% white bar horizontal edge.
+
+  Emission (halation, unnormalized red surplus):
+    emit = smoothstep(thr, thr+knee, lum) × max(R − bs·max(G,B), 0)^power
+    warm line: emit≈0.717, white line: emit≈0.194 → ratio ≈3.7×  (≈Dehancer)
 """
 import numpy as np
 from scipy.ndimage import gaussian_filter
@@ -24,28 +27,30 @@ LUM = np.array([0.2126, 0.7152, 0.0722])
 
 
 @dataclass
-class Params:
-    thr: float = 0.330       # brightness gate — suppresses thin-red (lum=0.28)
+class HalParams:
+    thr: float = 0.330
     knee: float = 0.141
-    power: float = 1.0       # power on red_surplus (1.0 = linear)
-    bluesupp: float = 0.806  # unnorm surplus: R - bs*max(G,B); white→0.19, warm→0.70
-    film_r: float = 1.00     # halo tint (warm backing)
-    film_g: float = 0.25
-    film_b: float = 0.05
-    sigma: float = 5.17      # halo sigma px (native res)
-    gain: float = 4.98       # gain on blurred surplus
+    power: float = 1.0
+    bluesupp: float = 0.806
+    sigma_r: float = 6.14   # px at 2400px reference
+    sigma_g: float = 2.62
+    sigma_b: float = 1.0
+    gain_r: float = 6.89
+    gain_g: float = 0.109
+    gain_b: float = 0.0
 
-    def vec(self):
-        return np.array([self.thr, self.knee, self.power, self.bluesupp,
-                         self.film_r, self.film_g, self.film_b,
-                         self.sigma, self.gain], float)
+    def dict(self): return asdict(self)
 
-    @staticmethod
-    def from_vec(v):
-        return Params(*[float(x) for x in v])
 
-    def dict(self):
-        return asdict(self)
+@dataclass
+class BlmParams:
+    thr: float = 0.10
+    knee: float = 0.15
+    power: float = 5.0
+    sigma: float = 12.42
+    gain: float = 0.111
+
+    def dict(self): return asdict(self)
 
 
 def s2l(c):
@@ -67,44 +72,58 @@ def screen(a, b):
 def emit_halation(lin, p):
     lum = lin @ LUM
     bright = smoothstep(p.thr, p.thr + p.knee, lum)
-    # Unnormalized red surplus: warm sources emit more than white (warm~0.70 vs white~0.15)
     red_surplus = np.clip(lin[..., 0] - p.bluesupp * np.maximum(lin[..., 1], lin[..., 2]), 0, None)
-    return bright * np.power(red_surplus, p.power)                     # HxW scalar
+    return bright * np.power(red_surplus, p.power)   # HxW scalar
 
 
 def emit_bloom(lin, p):
-    # LUMINANCE-gated (not max-channel): only bright *white* areas bloom,
-    # saturated colours (lower luminance) do not -> matches target.
     lum = lin @ LUM
     bright = smoothstep(p.thr, p.thr + p.knee, lum)
-    return bright * np.power(np.clip(lum, 0, 1), p.power)             # HxW scalar
+    gate = bright * np.power(np.clip(lum, 0, 1), p.power)
+    return gate[..., None] * lin                     # HxW×3 source-coloured
 
 
-def area_blur(scalar, sigma):
+def area_blur(arr, sigma):
     if sigma < 0.3:
-        return scalar.copy()
-    return gaussian_filter(scalar, sigma, mode='constant')            # area-normalized
+        return arr.copy()
+    return gaussian_filter(arr, sigma, mode='constant')
 
 
-def apply_halation(src_srgb, p):
+def apply_halation(src_srgb, p, amount=1.0):
     lin = s2l(src_srgb)
-    g = area_blur(emit_halation(lin, p), p.sigma) * p.gain
-    tint = np.array([p.film_r, p.film_g, p.film_b])
-    glow = g[..., None] * tint[None, None, :]
+    e = emit_halation(lin, p)
+    # Per-channel blur at independent sigmas → warm backing emerges from physics
+    glow = np.stack([
+        area_blur(e, p.sigma_r) * p.gain_r * amount,
+        area_blur(e, p.sigma_g) * p.gain_g * amount,
+        area_blur(e, p.sigma_b) * p.gain_b * amount,
+    ], axis=-1)
     return l2s(np.clip(screen(lin, glow), 0, 1))
 
 
-def apply_bloom(src_srgb, p):
+def apply_bloom(src_srgb, p, amount=1.0):
     lin = s2l(src_srgb)
-    g = area_blur(emit_bloom(lin, p), p.sigma) * p.gain
-    glow = g[..., None] * np.ones(3)[None, None, :]
+    e_rgb = emit_bloom(lin, p)   # HxW×3 source-coloured
+    # Same sigma for all channels (bloom is symmetric / achromatic spreading)
+    glow = np.stack([
+        area_blur(e_rgb[..., i], p.sigma) for i in range(3)
+    ], axis=-1) * p.gain * amount
     return l2s(np.clip(screen(lin, glow), 0, 1))
 
 
-def apply_both(src_srgb, pblm, phal):
+def apply_both(src_srgb, bp, hp, amount_bloom=1.0, amount_hal=1.0):
     lin = s2l(src_srgb)
-    gb = area_blur(emit_bloom(lin, pblm), pblm.sigma) * pblm.gain
-    lin = np.clip(screen(lin, gb[..., None] * np.ones(3)), 0, 1)
-    gh = area_blur(emit_halation(lin, phal), phal.sigma) * phal.gain
-    tint = np.array([phal.film_r, phal.film_g, phal.film_b])
-    return l2s(np.clip(screen(lin, gh[..., None] * tint), 0, 1))
+    # Bloom first
+    e_bloom = emit_bloom(lin, bp)
+    g_bloom = np.stack([
+        area_blur(e_bloom[..., i], bp.sigma) for i in range(3)
+    ], axis=-1) * bp.gain * amount_bloom
+    lin = np.clip(screen(lin, g_bloom), 0, 1)
+    # Halation on top
+    e_hal = emit_halation(lin, hp)
+    g_hal = np.stack([
+        area_blur(e_hal, hp.sigma_r) * hp.gain_r * amount_hal,
+        area_blur(e_hal, hp.sigma_g) * hp.gain_g * amount_hal,
+        area_blur(e_hal, hp.sigma_b) * hp.gain_b * amount_hal,
+    ], axis=-1)
+    return l2s(np.clip(screen(lin, g_hal), 0, 1))
