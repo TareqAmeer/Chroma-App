@@ -1,0 +1,15 @@
+{
+  "powL": 3.9247,
+  "kW": 1.0028,
+  "kC": 0.8860,
+  "aG": 0.1972,
+  "bB": 0.9691,
+  "bP": 2.10,
+  "gainR": 1.2380,
+  "gainG": 0.0958,
+  "gainB": 0.0,
+  "sigmaR": 15.0466,
+  "sigmaG": 7.5234,
+  "sigmaB": 2.2570,
+  "_note": "Committed v22.1b constants (2x-image sigmas; divide by 2 for the HTML 1x ref). Run through halmodel.render_rule = asymmetric+magenta emit (bB asymmetric blue-suppress + bP*min(R,B) purple driver) + high-pass glow (apply_halation highpass=True default). Matches FXR.CAL.halation in chromasmith-22.html. bP=2.10 added to close the purple gap-strength shortfall (0.187->0.327, target 0.325) -- validated bit-identical on every other color via calib/scorecard.py (1 FAIL->0 FAIL)."
+}
