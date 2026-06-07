@@ -593,10 +593,10 @@ void main(){
   float lum=dot(lin,vec3(.2126,.7152,.0722));
   float bright=smoothstep(thr,thr+knee,lum);
   if(mode<0.5){
-    // halation: brightness-gated R+G emission. Blue (lum=0.072) never passes
-    // the luminance gate. All other bright sources (red, green, cyan, purple,
-    // white) emit proportionally. Red-surplus model gated out green/cyan/white.
-    float emit=bright*clamp(lin.r+0.5*lin.g,0.0,1.0);
+    // halation: lum-gated R-betaB*B emission. Cool/blue suppressed.
+    // gainG=0.05: G-channel spread is a subtle warm fringe only.
+    
+    float emit=bright*clamp(lin.r-bluesupp*lin.b,0.0,1.0);
     o=vec4(vec3(emit),1.);  // scalar emit replicated to RGB for triple-sigma blur
   } else {
     // bloom: lum-gated source COLOR — bloom carries hue of source light
@@ -854,9 +854,9 @@ FXR.CAL={
   //   gains measured from Dehancer 2x PNG halation render (linear-domain Gaussian fit).
   // v21: bloom now carries source colour (gate × lin.rgb, not gate × scalar).
   //   σ_bloom=12.42px, gain=0.111 from erfc edge fit on 100% white bar.
-  halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.806,
+  halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.5,
             sigmaR:6.14,sigmaG:2.62,sigmaB:1.0,
-            gainR:1.50,gainG:0.50,gainB:0.0,defAmount:70},
+            gainR:1.50,gainG:0.05,gainB:0.0,defAmount:70},
   bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40}
 };
 const FX=new FXR();
