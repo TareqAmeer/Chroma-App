@@ -14,9 +14,11 @@ BASE_PATH = os.path.join(ROOT, 'IMG_5774_2x.PNG')
 HAL_PATH  = os.path.join(ROOT, 'dehancer halation x2.png')
 BLM_PATH  = os.path.join(ROOT, 'dehancer bloom x2.png')
 
-# Committed chromasmith-22 params; sigmas scaled to 4800px image
-HAL = dict(thr=0.10, knee=0.141, sigma_r=6.14*2, sigma_g=2.62*2, sigma_b=1.0*2,
-           gain_r=1.50, gain_g=0.05, gain_b=0.0)
+# Committed chromasmith-22 params (v22 rule-based emission model); sigmas scaled
+# to the 4800px (2x) image. See FXR.CAL.halation in chromasmith-22.html / CLAUDE.md.
+HAL = dict(thr=0.10, knee=0.141, sigma_r=7.5233*2, sigma_g=3.7617*2, sigma_b=1.1285*2,
+           gain_r=1.2380, gain_g=0.0958, gain_b=0.0,
+           powL=3.9247, kW=1.0028, kC=0.8860, aG=0.1972, bB=0.9691, bP=2.10)
 BLM = dict(thr=0.10, knee=0.15, power=1.0, sigma=12.42*2, gain=0.111)
 LUM = np.array([0.2126, 0.7152, 0.0722])
 
@@ -48,11 +50,31 @@ def apply_halation_crop(crop, p=HAL):
     lin = s2l(crop)
     lum = lin @ LUM
     bright = smoothstep(p['thr'], p['thr']+p['knee'], lum)
-    emit = bright * np.clip(lin[...,0] - 0.5*lin[...,2], 0, 1)  # R - 0.5*B: cool/blue suppressed
+    # v22 rule-based emission: bright-neutral (lum^powL) + saturation/warmth term.
+    # Matches FXR.CAL.halation / GLSL src shader in chromasmith-22.html.
+    sat = lin.max(-1) - lin.min(-1)
+    white = np.clip(lum, 0, 1)**p['powL']
+    # ASYMMETRIC blue suppression: bB discounts only the blue EXCESS over red
+    # (max(B-R,0)) -- fixes purple (R~=B) collapsing to ~0 emission under the
+    # old symmetric "R - bB*B" form. See chromasmith-22.html GLSL comment.
+    blue_excess = np.clip(lin[...,2] - lin[...,0], 0, None)
+    # MAGENTA/PURPLE DRIVER (v22.1b): +bP*min(R,B). Even with the asymmetric fix,
+    # this chart's purple (200,0,200) has R==B exactly so blue_excess=0 and bB has
+    # no effect on it -- it still under-halated (0.187 vs Dehancer 0.325). min(R,B)
+    # is provably zero whenever either channel is zero (inert for red/orange/
+    # yellow/green/cyan/blue), only activating where R and B are both present.
+    magenta = np.minimum(lin[...,0], lin[...,2])
+    color = sat * np.clip(lin[...,0] + p['aG']*lin[...,1] - p['bB']*blue_excess + p.get('bP',0.0)*magenta, 0, None)
+    emit = bright * (p['kW']*white + p['kC']*color)
+    # HIGH-PASS GLOW: keep only the part of the blur that spread beyond local
+    # emission (max(blur(emit)-emit,0)). Nulls flat-block interiors (no red->orange
+    # self-flood) while preserving gap/edge halo. emit_c clamps to [0,1] to match
+    # the 8-bit hsrc texture in chromasmith-22.html's composite shader.
+    emit_c = np.clip(emit, 0, 1)
     glow = np.stack([
-        gauss_blur(emit, p['sigma_r']) * p['gain_r'],
-        gauss_blur(emit, p['sigma_g']) * p['gain_g'],
-        gauss_blur(emit, p['sigma_b']) * p['gain_b'],
+        np.clip(gauss_blur(emit, p['sigma_r']) - emit_c, 0, None) * p['gain_r'],
+        np.clip(gauss_blur(emit, p['sigma_g']) - emit_c, 0, None) * p['gain_g'],
+        np.clip(gauss_blur(emit, p['sigma_b']) - emit_c, 0, None) * p['gain_b'],
     ], axis=-1)
     return l2s(np.clip(screen(lin, glow), 0, 1))
 

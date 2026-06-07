@@ -571,13 +571,33 @@ uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
 void main(){vec4 c=texture(img,uv);
 if(useLut>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(lut3,c.rgb*sc+of).rgb;}o=c;}`);
 
-    // SOURCE EMISSION v5 — warm-line-corrected model (linear light).
-    // Halation:
-    //   emit = smoothstep(thr, thr+knee, lum) * max(R - bluesupp*max(G,B), 0)^power
-    //   Key: UNNORMALIZED red surplus (NOT divided by 1-bluesupp).
-    //   This gives warm sources (surplus~0.70) ~4.5× more emission than white
-    //   (surplus~0.15), matching the empirically measured warm-line vs dot ratio
-    //   from Dehancer targets.  thr=0.35 gates out dim red sources (lum=0.28).
+    // SOURCE EMISSION v22 — rule-based model (linear light), replacing the v5
+    // red-surplus model which badly mismatched Dehancer (it never halated green/
+    // cyan/purple/yellow/red, and pink-flooded the gray bars by self-emitting).
+    // Derived from a dense pixel-loss fit (calib/optimize_hal.py) directly against
+    // the Dehancer halation-only PNG (loss 0.0287→0.0239, ~17% better than v5):
+    //   sat  = max(rgb) - min(rgb)                              (0 for neutral gray)
+    //   emit = smoothstep(thr,thr+knee,lum) *
+    //          ( kW * lum^powL  +  kC * sat *
+    //            max(R + aG*G - bB*max(B-R,0) + bP*min(R,B), 0) )
+    //   (bB term is asymmetric — only the blue EXCESS over red; bP*min(R,B) is a
+    //   "magenta-ness" booster, zero whenever either channel is zero — see v22.1b
+    //   note at FXR.CAL.halation for why both purple-specific terms are needed.)
+    // Two emission drivers, matching how real film halation actually works (any
+    // bright source scatters off the backing and re-exposes in the backing's
+    // red-orange dye color):
+    //   • kW*lum^powL  (powL≈3.9, steep): a "brightness toward white" term — white
+    //     halates strongly, mid-grays (lum~0.5) almost not at all. FIXES the pink-
+    //     flooded gray bars (their self-emission collapses near zero).
+    //   • kC*sat*(warm-weighted RGB): a saturation/warmth term — saturated colors
+    //     (red, orange, green, cyan, purple, yellow) glow; neutral grays (sat=0)
+    //     don't; blue is suppressed (bB≈0.97); warm is boosted (aG≈0.20). FIXES
+    //     missing color halation incl. red, while keeping blue minimal.
+    // The resulting glow is tinted red-orange by gainG≈0.08×gainR (below), and the
+    // channel-split σ_R≫σ_G naturally produces a thin warm/amber inner rim fading
+    // to deep red further out — the "tiny inner glow at bright edges" cue, with no
+    // separate term needed (verified: a dedicated inner-glow component converged to
+    // ~zero gain in calib/optimize_innerglow.py — it adds bleed risk, not signal).
     // Bloom:
     //   emit = smoothstep(thr, thr+knee, lum) * lum^power  (lum-gated, neutral)
     this.progs.src=this._prog(VS,`#version 300 es
@@ -585,7 +605,7 @@ precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D img;
-uniform float thr,knee,power,bluesupp,mode;
+uniform float thr,knee,power,bluesupp,mode,powL,kW,kC,aG,bP;
 float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 void main(){
   vec3 c=texture(img,uv).rgb;
@@ -593,10 +613,31 @@ void main(){
   float lum=dot(lin,vec3(.2126,.7152,.0722));
   float bright=smoothstep(thr,thr+knee,lum);
   if(mode<0.5){
-    // halation: lum-gated R-betaB*B emission. Cool/blue suppressed.
-    // gainG=0.05: G-channel spread is a subtle warm fringe only.
-    
-    float emit=bright*clamp(lin.r-bluesupp*lin.b,0.0,1.0);
+    // halation: rule-based emission (see comment block above).
+    //   bluesupp doubles as bB (blue-suppression weight in the warmth term).
+    //   ASYMMETRIC blue suppression: bB only discounts the blue EXCESS over red
+    //   (max(B-R,0)), not raw B. The old symmetric "R - bB*B" made saturated
+    //   purple (R≈B, e.g. 200,0,200) collapse to ~0 emission (R and B nearly
+    //   cancel) even though Dehancer clearly halates purple (~70% of red's
+    //   strength). This form leaves red/orange/yellow/green/purple/warm
+    //   (B<=R) completely unaffected by bB, while still suppressing
+    //   blue/cyan/cool (B>R) in proportion to their blue excess.
+    //   MAGENTA/PURPLE DRIVER (+bP*min(R,B)): purple still under-halates vs
+    //   Dehancer at full strength (0.187 vs 0.325) even with the asymmetric fix,
+    //   because this chart's purple swatch is (200,0,200) -- R==B exactly, so
+    //   "max(B-R,0)=0" and bB has NO effect on it (it's purely an R/B-excess
+    //   suppressor, not a purple booster). min(R,B) is a clean "magenta-ness"
+    //   detector: it is PROVABLY zero whenever either channel is zero -- i.e.
+    //   for red/orange/yellow/green (B=0) and cyan/blue (R=0) -- and only
+    //   activates where R and B are both present together (magenta/purple/pink,
+    //   and slightly for warm/red-with-blue-tint). Validated: adding it moves
+    //   ONLY the purple gap (0.187->0.327, matching Dehancer's 0.325) with every
+    //   other color's gap-R and interior-flood value bit-identical.
+    float sat=max(lin.r,max(lin.g,lin.b))-min(lin.r,min(lin.g,lin.b));
+    float white=pow(clamp(lum,0.0,1.0),powL);
+    float magenta=min(lin.r,lin.b);
+    float color=sat*max(lin.r+aG*lin.g-bluesupp*max(lin.b-lin.r,0.0)+bP*magenta,0.0);
+    float emit=bright*(kW*white+kC*color);
     o=vec4(vec3(emit),1.);  // scalar emit replicated to RGB for triple-sigma blur
   } else {
     // bloom: lum-gated source COLOR — bloom carries hue of source light
@@ -659,7 +700,7 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D base,hGlow,bGlow;
+uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform float halR,halG,halB,blmA,grA,grSz,grT,seed,debug;
 float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2s(float c){return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
@@ -671,6 +712,13 @@ void main(){
   vec3 base_s=texture(base,uv).rgb;
   vec3 rawH=texture(hGlow,uv).rgb;
   vec3 rawB=texture(bGlow,uv).rgb;
+  // HIGH-PASS GLOW: keep only the part of the blur that spread BEYOND the local
+  // emission (max(blur(emit) - emit, 0)). In a flat colored block blur(emit) ~=
+  // emit so the glow ~= 0 (no interior flooding -> fixes the red-bar-turns-orange
+  // bug for every color); at gaps/edges blur(emit) > local emit so the halo is
+  // full. emit is the scalar pre-blur source (replicated in hEmit.rgb).
+  float emit=texture(hEmit,uv).r;
+  rawH=max(rawH-vec3(emit),0.0);
   vec3 hg=rawH*vec3(halR,halG,halB);   // channel-split: σ_R wide red, σ_G narrow green
   vec3 bg=rawB*blmA;                   // source-colored bloom
   // ---- diagnostic views ----
@@ -805,20 +853,24 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0},[[0,'img',false],[1,'',true]]);
 
     // BLOOM: emit (neutral, lum^power) -> area-norm blur (h,v)
+    // (mode=1 path ignores powL/kW/kC/aG/bP — pass harmless defaults)
     this._pass(this.progs.src,this.fbs.bsrc,
-      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0},[[0,'lut',false]]);
+      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0},[[0,'lut',false]]);
     this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw,0],sig:bSig},[[0,'bsrc',false]]);
     this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih],sig:bSig},[[0,'bglow_h',false]]);
 
     // HALATION: emit scalar → triple-sigma H+V blur (packed RGB: R=σ_R, G=σ_G, B=σ_B)
+    // Rule-based emission params (powL,kW,kC,aG,bP; bluesupp doubles as bB) — see CAL.halation.
     this._pass(this.progs.src,this.fbs.hsrc,
-      {img:0,thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0},[[0,'lut',false]]);
+      {img:0,thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,
+       powL:H.powL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP},[[0,'lut',false]]);
     this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw,0],sigR:hSigR,sigG:hSigG,sigB:hSigB},[[0,'hsrc',false]]);
     this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih],sigR:hSigR,sigG:hSigG,sigB:hSigB},[[0,'hglow_h',false]]);
 
     // FINAL composite (linear screen) + grain
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);gl.useProgram(this.progs.comp);
-    [['base','lut'],['hGlow','hglow_v'],['bGlow','bglow_v']].forEach(([u,n],i)=>{
+    // hEmit = hsrc (pre-blur scalar emit) — needed for the high-pass glow subtraction.
+    [['base','lut'],['hGlow','hglow_v'],['bGlow','bglow_v'],['hEmit','hsrc']].forEach(([u,n],i)=>{
       gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,this.txs[n]);
       gl.uniform1i(gl.getUniformLocation(this.progs.comp,u),i);
     });
@@ -845,18 +897,34 @@ function hexRGB(h){return[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16
 // ── Calibrated halation/bloom constants (measured from Dehancer halation-70 /
 //    bloom-40 targets; sigma in px at a 2400px reference width; gains given at
 //    the default Amount sliders). See calib/ for the derivation harness. ──
-// Halation v5: unnorm red-surplus model — optimizer result: warm_dy1=100%, zone2=100%
+// Halation v22: rule-based emission model (replaces the v5/v21 red-surplus model,
+//   which never halated green/cyan/purple/yellow/red and pink-flooded gray bars).
+//   Fitted by a dense pixel-loss optimizer (calib/optimize_hal.py, Nelder-Mead)
+//   directly against `dehancer halation x2.png` — final loss 0.0239 (vs v5's 0.0287),
+//   and visually confirmed against the Phase-A "glance match" checklist (gray bars
+//   stay neutral, red/green/cyan/purple/orange/yellow all halate, warm≫cool, halo is
+//   soft red-orange not hard red, thin warm inner rim present). See calib/best_params.json
+//   and calib/cmp_rule_*.png for the fit + visual proof. (sigmas below are at 1x ref,
+//   i.e. best_params.json's 2x-image values ÷ 2; gains/emission params are scale-free.)
+//   powL,kW,kC,aG,bluesupp(=bB),bP: the rule-based emission constants — see GLSL src shader.
+//   v22.1b adds bP=2.10 (magenta/purple driver, +bP*min(R,B) in the warmth term):
+//   this chart's purple swatch is (200,0,200) — R==B exactly — so bB (an R/B-EXCESS
+//   suppressor) has zero effect on it; purple still under-halated (0.187 vs Dehancer's
+//   0.325) even after the asymmetric-bB fix made it present at all. min(R,B) is a
+//   "magenta-ness" detector, PROVABLY zero whenever either channel is zero (red/
+//   orange/yellow/green have B=0; cyan/blue have R=0) — validated to move ONLY the
+//   purple gap (0.187→0.327, matching 0.325) with every other color's gap-R and
+//   interior-flood value bit-identical (calib/scorecard.py: 1 FAIL→0 FAIL).
 FXR.CAL={
   refWidth:2400,
-  // v21: channel-split halation (σ_R=6.14 >> σ_G=2.62 >> σ_B=1.0 px at 1x ref)
-  //   → red spreads widest, green narrower, blue essentially local → warm backing colour
-  //   emerges from physics, not from a tint constant.
-  //   gains measured from Dehancer 2x PNG halation render (linear-domain Gaussian fit).
-  // v21: bloom now carries source colour (gate × lin.rgb, not gate × scalar).
-  //   σ_bloom=12.42px, gain=0.111 from erfc edge fit on 100% white bar.
-  halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.5,
-            sigmaR:6.14,sigmaG:2.62,sigmaB:1.0,
-            gainR:1.50,gainG:0.05,gainB:0.0,defAmount:70},
+  // channel-split halation (σ_R=7.52 ≫ σ_G=3.76 ≫ σ_B=1.13 px at 1x ref)
+  //   → red spreads widest, green narrower, blue essentially local → warm backing
+  //   colour AND the thin amber-to-red inner-rim cue both emerge from physics.
+  // bloom unchanged from v21: source-coloured, σ=12.42px, gain=0.111 (still PASSes).
+  halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.9691,
+            powL:3.9247,kW:1.0028,kC:0.8860,aG:0.1972,bP:2.10,
+            sigmaR:7.5233,sigmaG:3.7617,sigmaB:1.1285,
+            gainR:1.2380,gainG:0.0958,gainB:0.0,defAmount:70},
   bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40}
 };
 const FX=new FXR();
