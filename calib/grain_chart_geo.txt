@@ -1,0 +1,22 @@
+# grain-test-2x.png  (4800, 3600)
+# name x0 y0 x1 y1 note
+matrix.origin  120  120  4280  1920  rows=['R', 'G', 'B', 'C', 'M', 'Y', 'SkinLt', 'SkinMid', 'SkinDk', 'Gray18', 'Cine25', 'Cine75'] cols(luma)=[0.0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0] cell=520x150 gap=8
+profile.Shadow10  126  1960  765  2190  (26, 26, 26)
+profile.Gray18  777  1960  1416  2190  (118, 118, 118)
+profile.Gray50  1428  1960  2067  2190  (188, 188, 188)
+profile.SkinMid  2079  1960  2718  2190  (224, 172, 138)
+profile.PureR  2730  1960  3369  2190  (255, 0, 0)
+profile.PureG  3381  1960  4020  2190  (0, 255, 0)
+profile.PureB  4032  1960  4671  2190  (0, 0, 255)
+chroma.R  0  2230  4800  2350  0->255 R, sample any x for that exposure
+chroma.G  0  2350  4800  2470  0->255 G
+chroma.B  0  2470  4800  2590  0->255 B
+ramp.linear  0  2630  4800  2740  gray 0->255 linear
+ramp.log  0  2740  4800  2850  gray 0->255 log (toe/shoulder)
+checker.4px  120  2890  1640  3170  cell=4px hi=200 lo=56
+checker.16px  1700  2890  3220  3170  cell=16px hi=200 lo=56
+checker.64px  3280  2890  4680  3170  cell=64px hi=200 lo=56
+siemens.400  230  3210  570  3550  gray=255 spokes=48
+siemens.1200  1030  3210  1370  3550  gray=128 spokes=48
+siemens.2000  1830  3210  2170  3550  gray=188 spokes=48
+siemens.2800  2630  3210  2970  3550  gray=188 spokes=48

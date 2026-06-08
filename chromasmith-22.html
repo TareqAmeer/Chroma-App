@@ -16,6 +16,7 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .tab{padding:12px 18px;font-size:11px;letter-spacing:.07em;font-family:var(--mono);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s;text-transform:uppercase;white-space:nowrap}
 .tab:hover{color:var(--txt)}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
 main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
+main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .panel{display:none}.panel.active{display:block}
 .card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:14px}
 .ctitle{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:14px;display:flex;align-items:center;gap:8px}
@@ -75,15 +76,17 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
 .div-sep::before,.div-sep::after{content:'';flex:1;height:1px;background:var(--bdr)}
 .opt-dz{border-style:dashed;opacity:.7}
 /* FX TAB */
-.fx-layout{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
-.fx-panel{display:flex;flex-direction:column;gap:10px}
-.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:14px}
-.fx-ctrl-title{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.fx-layout{display:grid;grid-template-columns:640px 1fr;gap:16px;align-items:start}
+.fx-panel{column-count:2;column-gap:10px}
+.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:10px;break-inside:avoid;margin-bottom:10px}
+#panel-fx .dz{min-height:54px;padding:11px 14px}
+#panel-fx .dz-ic{font-size:16px}
+.fx-ctrl-title{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
 .fx-toggle{width:32px;height:18px;border-radius:9px;background:var(--bdr);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
 .fx-toggle.on{background:var(--acc)}
 .fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .2s}
 .fx-toggle.on::after{left:16px}
-.fx-fields{display:none;margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.fx-fields{display:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .fx-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .fx-label{font-size:11px;color:var(--mut);flex-shrink:0;width:80px}
 .fx-slider{flex:1;accent-color:var(--acc);cursor:pointer}
@@ -93,7 +96,7 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
 #fx-canvas{display:block;max-width:100%;height:auto}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px}
-#log-area{background:var(--sur);border-top:1px solid var(--bdr);padding:9px 22px;max-height:120px;overflow-y:auto;position:sticky;bottom:0}
+#log-area{background:var(--sur);border-top:1px solid var(--bdr);padding:7px 22px;max-height:66px;overflow-y:auto;position:sticky;bottom:0}
 .ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
@@ -106,14 +109,14 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
   <div class="badge">● OFFLINE</div>
 </header>
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('match')">Match &amp; Refine</div>
+  <div class="tab active" onclick="switchTab('fx')">Effects &amp; Export</div>
+  <div class="tab" onclick="switchTab('match')">Match &amp; Refine</div>
   <div class="tab" onclick="switchTab('copy')">Colour Copy</div>
   <div class="tab" onclick="switchTab('x2l')">XMP → LUT</div>
-  <div class="tab" onclick="switchTab('fx')">Effects &amp; Export</div>
 </div>
 <main>
 <!-- MATCH & REFINE -->
-<div class="panel active" id="panel-match">
+<div class="panel" id="panel-match">
   <div class="card" id="setup-card">
     <div class="ctitle">Step 1 — drop images to start</div>
     <div class="dg2">
@@ -205,13 +208,13 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
   </div>
 </div>
 <!-- EFFECTS & EXPORT -->
-<div class="panel" id="panel-fx">
+<div class="panel active" id="panel-fx">
   <div class="fx-layout">
     <div class="fx-panel">
       <div class="fx-ctrl">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
-          <input type="file" accept="image/*" onchange="fi(event,'fx-img')">
+          <input type="file" accept="image/*" multiple onchange="fi(event,'fx-img')">
           <div class="dz-ic">◧</div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
         <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-lut')">
@@ -295,7 +298,7 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
         <div class="btn-row">
-          <button class="btn bpri" id="btn-fx-export" disabled onclick="exportFX()"><span class="bdot"></span>Export JPEG</button>
+          <button class="btn bpri" id="btn-fx-export" disabled onclick="exportFX()"><span class="bdot"></span>Export</button>
         </div>
       </div>
     </div>
@@ -933,7 +936,154 @@ const FX=new FXR();
 // FX UI
 // ═══════════════════════════
 const fxState={grain:{enabled:false,amount:30,size:5,type:0},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null};
-let fxImg=null,fxTimer=null,fxVersion=1.0;
+let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[];
+// ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
+// Cameras/Lightroom often write resolution into Exif IFD0 (XResolution/
+// ResolutionUnit tags), NOT a JFIF APP0 segment — readDPI must check both,
+// and exportFX must splice the original metadata segments back in (canvas
+// toBlob() re-encodes from scratch and silently drops Exif/ICC/IPTC/XMP).
+function exifRes(b,i){ // i = index of the 0xFF marker byte of an Exif APP1 segment
+  try{
+    const base=i+4+6,le=b[base]===0x49; // 'Exif\0\0' then TIFF header ('II'=LE,'MM'=BE)
+    const r16=o=>le?(b[o]|b[o+1]<<8):((b[o]<<8)|b[o+1]);
+    const r32=o=>le?((b[o]|b[o+1]<<8|b[o+2]<<16|b[o+3]<<24)>>>0):(((b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0);
+    const ifd=base+r32(base+4),n=r16(ifd);
+    let x=null,u=2;
+    for(let e=0;e<n;e++){
+      const eo=ifd+2+e*12,t=r16(eo);
+      if(t===0x011A){const vo=base+r32(eo+8);x=r32(vo)/Math.max(1,r32(vo+4));} // XResolution (RATIONAL)
+      else if(t===0x0128)u=r16(eo+8); // ResolutionUnit: 1=none 2=inch 3=cm
+    }
+    return x==null?null:(u===3?Math.round(x*2.54):Math.round(x));
+  }catch(e){return null}
+}
+function readDPI(b,ext){
+  try{
+    if(ext==='png'){
+      let i=8;
+      while(i<b.length-12){
+        const len=((b[i]<<24)|(b[i+1]<<16)|(b[i+2]<<8)|b[i+3])>>>0;
+        const type=String.fromCharCode(b[i+4],b[i+5],b[i+6],b[i+7]);
+        if(type==='pHYs'){const ppu=((b[i+8]<<24)|(b[i+9]<<16)|(b[i+10]<<8)|b[i+11])>>>0;return b[i+16]===1?Math.round(ppu*0.0254):72;}
+        if(type==='IDAT'||type==='IEND')break;
+        i+=12+len;
+      }
+    }else{ // JPEG: prefer JFIF APP0 density, fall back to Exif IFD0 XResolution
+      let i=2,jfif=null,exif=null;
+      while(i<b.length-1){
+        if(b[i]!==0xFF){i++;continue;}
+        const m=b[i+1];
+        if(m===0xD8||m===0x01||(m>=0xD0&&m<=0xD7)){i+=2;continue;}
+        if(m===0xDA||m===0xD9)break;
+        const len=(b[i+2]<<8)|b[i+3];
+        if(m===0xE0&&b[i+4]===0x4A&&b[i+5]===0x46&&b[i+6]===0x49&&b[i+7]===0x46){ // 'JFIF'
+          const u=b[i+11],xd=(b[i+12]<<8)|b[i+13];jfif=u===1?xd:u===2?Math.round(xd*2.54):null;
+        }
+        if(m===0xE1&&b[i+4]===0x45&&b[i+5]===0x78&&b[i+6]===0x69&&b[i+7]===0x66)exif=exifRes(b,i); // 'Exif'
+        i+=2+len;
+      }
+      if(jfif)return jfif;
+      if(exif)return exif;
+    }
+  }catch(e){}
+  return 72;
+}
+function crc32(buf){let crc=~0;for(let i=0;i<buf.length;i++){crc^=buf[i];for(let k=0;k<8;k++)crc=(crc>>>1)^(0xEDB88320&-(crc&1));}return ~crc>>>0;}
+// ── splice the source's metadata segments/chunks into the freshly-encoded export ──
+function jpegMetaSegs(b){ // APPn (0xE0-0xEF) + COM (0xFE) segments before SOS, in order
+  const segs=[];let i=2;
+  while(i<b.length-1){
+    if(b[i]!==0xFF){i++;continue;}
+    const m=b[i+1];
+    if(m===0xD8||m===0x01||(m>=0xD0&&m<=0xD7)){i+=2;continue;}
+    if(m===0xDA||m===0xD9)break;
+    const len=(b[i+2]<<8)|b[i+3];
+    if((m>=0xE0&&m<=0xEF)||m===0xFE)segs.push(b.subarray(i,i+2+len));
+    i+=2+len;
+  }
+  return segs;
+}
+function injectMetadataJPEG(out,src){
+  try{
+    const metas=jpegMetaSegs(src);
+    if(!metas.length)return out;
+    // drop whatever leading APPn segments the re-encoder wrote (e.g. a bare JFIF), keep the rest
+    let cut=2,i=2;
+    while(i<out.length-1){
+      if(out[i]!==0xFF){i++;continue;}
+      const m=out[i+1];
+      if(!((m>=0xE0&&m<=0xEF)||m===0xFE))break;
+      const len=(out[i+2]<<8)|out[i+3];i+=2+len;cut=i;
+    }
+    let total=2;for(const s of metas)total+=s.length;
+    const tail=out.subarray(cut),res=new Uint8Array(total+tail.length);
+    res.set(out.subarray(0,2),0); // SOI
+    let off=2;for(const s of metas){res.set(s,off);off+=s.length;}
+    res.set(tail,off);
+    return res;
+  }catch(e){return out}
+}
+function pngMetaChunks(b){ // ancillary chunks worth preserving: iCCP, eXIf, tEXt/zTXt/iTXt
+  const KEEP=new Set(['iCCP','eXIf','tEXt','zTXt','iTXt','pHYs']);
+  const chunks=[];let i=8;
+  while(i<b.length-12){
+    const len=((b[i]<<24)|(b[i+1]<<16)|(b[i+2]<<8)|b[i+3])>>>0;
+    const type=String.fromCharCode(b[i+4],b[i+5],b[i+6],b[i+7]);
+    if(type==='IDAT'||type==='IEND')break;
+    if(KEEP.has(type))chunks.push(b.subarray(i,i+12+len));
+    i+=12+len;
+  }
+  return chunks;
+}
+function injectMetadataPNG(out,src){
+  try{
+    const metas=pngMetaChunks(src).filter(c=>String.fromCharCode(c[4],c[5],c[6],c[7])!=='pHYs'); // pHYs handled by injectDPI
+    if(!metas.length)return out;
+    let total=0;for(const c of metas)total+=c.length;
+    const res=new Uint8Array(out.length+total);
+    res.set(out.subarray(0,33),0); // sig(8)+IHDR(25)
+    let off=33;for(const c of metas){res.set(c,off);off+=c.length;}
+    res.set(out.subarray(33),off);
+    return res;
+  }catch(e){return out}
+}
+function injectMetadata(out,src,ext){return ext==='png'?injectMetadataPNG(out,src):injectMetadataJPEG(out,src);}
+function injectDPI(b,ext,dpi){
+  dpi=Math.max(1,Math.round(dpi||72));
+  if(ext==='png'){
+    const ppm=Math.round(dpi/0.0254);
+    const chunk=new Uint8Array(21),cdv=new DataView(chunk.buffer);
+    cdv.setUint32(0,9);chunk.set([0x70,0x48,0x59,0x73],4); // 'pHYs'
+    cdv.setUint32(8,ppm);cdv.setUint32(12,ppm);chunk[16]=1;
+    cdv.setUint32(17,crc32(chunk.subarray(4,17)));
+    const out=new Uint8Array(b.length+21); // insert after sig(8)+IHDR(25)=33
+    out.set(b.subarray(0,33),0);out.set(chunk,33);out.set(b.subarray(33),54);
+    return out;
+  }else{ // JPEG: patch APP0 density in place (only fires if a JFIF segment is present)
+    if(b[2]===0xFF&&b[3]===0xE0&&b[4]===0x4A&&b[5]===0x46&&b[6]===0x49&&b[7]===0x46){const out=b.slice();out[13]=1;out[14]=(dpi>>8)&0xFF;out[15]=dpi&0xFF;out[16]=(dpi>>8)&0xFF;out[17]=dpi&0xFF;return out;}
+    return b;
+  }
+}
+async function loadFXImages(fileList){
+  const files=[...fileList].filter(f=>f.type.startsWith('image/'));
+  if(!files.length)return;
+  fxImages=[];
+  for(const file of files){
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';
+    const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
+    const img=await loadImg(file);
+    fxImages.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes});
+  }
+  fxImg=fxImages[0].img;FX.setImage(fxImg);
+  const n=files.length;
+  setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — preview: ${files[0].name}`:files[0].name);
+  document.getElementById('fx-fname').value=fxImages[0].name;
+  const btn=document.getElementById('btn-fx-export');btn.disabled=false;
+  btn.innerHTML=`<span class="bdot"></span>Export${n>1?` All (${n})`:''}`;
+  renderPreview();
+  log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
+}
 function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate()}
 function fxUpdate(){
   ['grain-a','grain-sz','hal-a','hal-r','bloom-a','bloom-th','bloom-r','b1-t','b2-t'].forEach(id=>{
@@ -966,23 +1116,40 @@ function renderPreview(){
   document.getElementById('btn-fx-export').disabled=false;
 }
 async function exportFX(){
-  if(!fxImg){log('No image loaded','warn');return}
-  log('Rendering full resolution…','info');
+  if(!fxImages.length){log('No image loaded','warn');return}
   const P=getFXParams();
-  FX.render(P,fxImg.width,fxImg.height);
-  const{px,w,h}=FX.getPixels();
-  const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
-  const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
-  const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
-  const ctx=ec.getContext('2d');
-  ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
-  ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-  const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
-  tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
-  ctx.drawImage(tmp,b1t+b2t,b1t+b2t);
-  const fname=document.getElementById('fx-fname').value||'photo';
   const ver=`v${fxVersion.toFixed(1)}`;
-  ec.toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${fname}_${ver}.jpg`;document.body.appendChild(a);a.click();document.body.removeChild(a);log(`Exported ${fname}_${ver}.jpg`,'ok');fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`},'image/jpeg',1.0);
+  const single=fxImages.length===1;
+  for(let idx=0;idx<fxImages.length;idx++){
+    const it=fxImages[idx];
+    log(`Rendering ${idx+1}/${fxImages.length}: ${it.name}…`,'info');
+    FX.setImage(it.img);
+    const iw=it.img.naturalWidth||it.img.width,ih=it.img.naturalHeight||it.img.height;
+    FX.render(P,iw,ih);
+    const{px,w,h}=FX.getPixels();
+    const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
+    const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
+    const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
+    const ctx=ec.getContext('2d');
+    ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
+    ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
+    const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+    tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
+    ctx.drawImage(tmp,b1t+b2t,b1t+b2t);
+    const isPng=it.ext==='png',mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
+    const blob=await new Promise(r=>ec.toBlob(r,mime,1.0));
+    let out=new Uint8Array(await blob.arrayBuffer());
+    if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP the re-encode dropped
+    out=injectDPI(out,outExt,it.dpi); // ensure density chunk matches source DPI (covers sources with no embedded metadata)
+    const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
+    const fn=`${base}_${ver}.${outExt}`;
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:mime}));a.download=fn;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    log(`Exported ${fn} (${it.dpi} DPI)`,'ok');
+    if(idx<fxImages.length-1)await new Promise(r=>setTimeout(r,450));
+  }
+  FX.setImage(fxImg);renderPreview();
+  fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
 }
 
 // ═══════════════════════════
@@ -1089,9 +1256,11 @@ async function loadTestPhoto(){
   const img=new Image();
   img.onload=()=>{
     fxImg=img;FX.setImage(img);
+    fxImages=[{img,name:'test-photo',ext:'png',dpi:72}];
     const dz=document.getElementById('dz-fx-img');if(dz)dz.classList.add('loaded');
     const fn=document.getElementById('fn-fx-img');if(fn)fn.textContent='test-photo.png';
-    document.getElementById('btn-fx-export').disabled=false;
+    document.getElementById('fx-fname').value='test-photo';
+    const eb=document.getElementById('btn-fx-export');eb.disabled=false;eb.innerHTML='<span class="bdot"></span>Export';
     renderPreview();log('Test photo loaded — grain/halation/bloom test chart','ok');
   };
   img.src=tc.toDataURL('image/png');
@@ -1226,8 +1395,8 @@ async function dlBlind(){if(!window._xp)return;const btn=document.getElementById
 // FILE HANDLING
 // ═══════════════════════════
 function dzo(e,el){e.preventDefault();el.classList.add('over')}function dzl(el){el.classList.remove('over')}
-function dzd(e,t){e.preventDefault();e.currentTarget.classList.remove('over');const f=e.dataTransfer.files[0];if(f)hf(f,t)}
-function fi(e,t){const f=e.target.files[0];if(f)hf(f,t)}
+function dzd(e,t){e.preventDefault();e.currentTarget.classList.remove('over');if(t==='fx-img'){loadFXImages(e.dataTransfer.files);return}const f=e.dataTransfer.files[0];if(f)hf(f,t)}
+function fi(e,t){if(t==='fx-img'){loadFXImages(e.target.files);return}const f=e.target.files[0];if(f)hf(f,t)}
 async function hf(file,type){
   log(`Loaded: ${file.name}`);
   if(type==='before'){ST.beforeFile=file;setDZ('dz-before','fn-before',file.name);chkStart()}
@@ -1259,7 +1428,7 @@ function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Ma
 function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
 function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
 function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${msg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
-function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['match','copy','x2l','fx'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active')}
+function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','x2l'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active')}
 
 // WebGL2 check with helpful diagnosis
 (function(){
