@@ -845,6 +845,7 @@ precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform float halR,halG,halB,blmA,grA,grSz,grT,seed,debug;
+uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
 float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2s(float c){return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
 vec3 S2L(vec3 c){return vec3(s2l(c.r),s2l(c.g),s2l(c.b));}
@@ -880,7 +881,8 @@ void main(){
     float lu=dot(res,vec3(.2126,.7152,.0722));
     float sf=grT>.5?.04:0.;
     float msk=clamp(4.*lu*(1.-lu)*.95+sf,0.,1.);
-    vec2 gc=uv/max(grSz,.0001)+vec2(seed);float g=h21(gc)-.5;
+    vec2 guv=uvOff+uv*uvScale; // global image uv (identity when not tiling)
+    vec2 gc=guv/max(grSz,.0001)+vec2(seed);float g=h21(gc)-.5;
     float rm=grT*.20;
     float gr=g+(h21(gc+vec2(.13,.29))-.5)*rm;
     float gg=g+(h21(gc+vec2(.47,.71))-.5)*rm*.88;
@@ -891,20 +893,30 @@ void main(){
   o=vec4(clamp(res,0.,1.),1.);
 }`);
   }
-  _initBufs(w,h){if(this.w===w&&this.h===h)return;const gl=this.gl;
+  _allocTex(n,tw,th){const gl=this.gl;
+    const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,tw,th,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    this.txs[n]=t;const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);this.fbs[n]=f;
+  }
+  // glowScale (gs) downsamples ONLY the halation/bloom blur buffers. The blur is
+  // low-frequency, so computing it at 1/gs resolution and bilinearly upsampling in the
+  // composite is visually identical — but cuts the 6 scratch buffers to 1/gs² of their
+  // memory. The full-res `lut` base + the full-res composite/grain are untouched, so the
+  // EXPORTED IMAGE stays at native resolution. This is what lets a 24MP photo export on
+  // iOS (≈860MB → ≈430MB of GPU memory at gs=2) without the tab being killed.
+  _initBufs(w,h,gs){gs=gs||1;if(this.w===w&&this.h===h&&this.gs===gs)return;const gl=this.gl;
     this.cv.width=w;this.cv.height=h;
     Object.values(this.fbs).forEach(f=>gl.deleteFramebuffer(f));
     Object.values(this.txs).forEach(t=>gl.deleteTexture(t));
     this.fbs={};this.txs={};
-    // lut grade; bloom src+blur (h/v); halation src+blur (h/v)
-    ['lut','bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>{
-      const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-      this.txs[n]=t;const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);this.fbs[n]=f;
-    });this.w=w;this.h=h;
+    const w2=Math.max(1,Math.ceil(w/gs)),h2=Math.max(1,Math.ceil(h/gs));
+    this._allocTex('lut',w,h);                                            // full-res graded base
+    this._allocTex('hemitF',w,h);                                         // FULL-res halation emit (for a sharp high-pass)
+    ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2)); // reduced-res glow
+    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.gs=gs;
   }
   setImage(img){const gl=this.gl;if(this.imgTx)gl.deleteTexture(this.imgTx);
     this.imgTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.imgTx);
@@ -943,8 +955,8 @@ void main(){
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
   }
-  _pass(prog,fb,uniforms,bindings){
-    const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,this.w,this.h);gl.useProgram(prog);
+  _pass(prog,fb,uniforms,bindings,vp){
+    const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
     bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
@@ -972,13 +984,19 @@ gl.enableVertexAttribArray(al);
 gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);
 gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
-  render(P,w,h){const gl=this.gl;this._initBufs(w,h);
-    const iw=1/w,ih=1/h;
+  // opts.glowScale (gs): downsample factor for the halation/bloom blur buffers (1 = full,
+  //   2 = half-res glow → ~4× less scratch memory, visually identical).
+  // opts.scOverride: force the sigma-scale (=fullImageWidth/REF) — used by the tiled path so
+  //   a tile blurs with the WHOLE image's radius, not the tile's.
+  // opts.uvOff/uvScale: map this render's local uv → global image uv (grain continuity for tiles).
+  render(P,w,h,opts){const gl=this.gl;const gs=(opts&&opts.glowScale)||1;this._initBufs(w,h,gs);
+    const w2=this.w2,h2=this.h2;
+    const iw2=1/w2,ih2=1/h2;          // texel step in the REDUCED-res glow buffers
     // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
     // Halation v6: channel-split σ_R=6.14 σ_G=2.62 σ_B=1.0 px; gain_R=6.89 gain_G=0.109 @amount70
     // Bloom v6:    source-coloured; σ=12.42 gain=0.111 @amount40
     const C=FXR.CAL;
-    const REF=C.refWidth, sc=w/REF;
+    const REF=C.refWidth, sc=(opts&&opts.scOverride)||(w/REF);
     const H=C.halation, B=C.bloom;
     // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
     const dbg=P.debug||0;
@@ -991,29 +1009,38 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const hSigB=Math.max(0.2,hSigR*(H.sigmaB/H.sigmaR));
     const bSig=Math.max(0.5, (P.bloom.radius? P.bloom.radius : B.sigma)*sc);
     const bThr=(P.bloom.threshold!=null)?P.bloom.threshold:B.thr;
+    // Glow runs in the reduced buffers: each reduced texel spans `gs` full-res pixels, so the
+    // blur sigma must be divided by gs to keep the SAME spatial spread (and it costs fewer taps).
+    const RG=[w2,h2]; // reduced viewport for every emit/blur pass
+    const hSigR2=Math.max(0.4,hSigR/gs),hSigG2=Math.max(0.3,hSigG/gs),hSigB2=Math.max(0.2,hSigB/gs),bSig2=Math.max(0.4,bSig/gs);
 
-    // Pass 1: LUT grade -> lut (sRGB)
+    // Pass 1: LUT grade -> lut (sRGB), at FULL resolution (this is the export base)
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0},[[0,'img',false],[1,'',true]]);
 
-    // BLOOM: emit (neutral, lum^power) -> area-norm blur (h,v)
+    // BLOOM: emit (neutral, lum^power) -> area-norm blur (h,v) — all at REDUCED res
     // (mode=1 path ignores powL/kW/kC/aG/bP — pass harmless defaults)
     this._pass(this.progs.src,this.fbs.bsrc,
-      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0},[[0,'lut',false]]);
-    this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw,0],sig:bSig},[[0,'bsrc',false]]);
-    this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih],sig:bSig},[[0,'bglow_h',false]]);
+      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0},[[0,'lut',false]],RG);
+    this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2},[[0,'bsrc',false]],RG);
+    this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2},[[0,'bglow_h',false]],RG);
 
-    // HALATION: emit scalar → triple-sigma H+V blur (packed RGB: R=σ_R, G=σ_G, B=σ_B)
-    // Rule-based emission params (powL,kW,kC,aG,bP; bluesupp doubles as bB) — see CAL.halation.
-    this._pass(this.progs.src,this.fbs.hsrc,
-      {img:0,thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,
-       powL:H.powL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP},[[0,'lut',false]]);
-    this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw,0],sigR:hSigR,sigG:hSigG,sigB:hSigB},[[0,'hsrc',false]]);
-    this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih],sigR:hSigR,sigG:hSigG,sigB:hSigB},[[0,'hglow_h',false]]);
+    // HALATION emit (rule-based; powL,kW,kC,aG,bP; bluesupp doubles as bB — see CAL.halation).
+    // The emit is generated TWICE: full-res into hemitF (used for the high-pass subtraction, which
+    // must be sharp so flat interiors null exactly and edges stay crisp) and reduced into hsrc
+    // (the input to the wide blur, where reduced res is invisible). gs=1 makes them identical.
+    const emitU={img:0,thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,powL:H.powL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP};
+    this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
+    this._pass(this.progs.src,this.fbs.hsrc,emitU,[[0,'lut',false]],RG);  // reduced res (blur input)
+    this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hsrc',false]],RG);
+    this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hglow_h',false]],RG);
 
-    // FINAL composite (linear screen) + grain
-    gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);gl.useProgram(this.progs.comp);
+    // FINAL composite (linear screen) + grain — FULL resolution; samples the reduced glow
+    // buffers with LINEAR filtering → free bilinear upscale of the (smooth) glow.
+    const outFb=(opts&&opts.outFb!==undefined)?opts.outFb:null;
+    const ovp=(opts&&opts.outVp)||[w,h];
+    gl.bindFramebuffer(gl.FRAMEBUFFER,outFb);gl.viewport(0,0,ovp[0],ovp[1]);gl.useProgram(this.progs.comp);
     // hEmit = hsrc (pre-blur scalar emit) — needed for the high-pass glow subtraction.
-    [['base','lut'],['hGlow','hglow_v'],['bGlow','bglow_v'],['hEmit','hsrc']].forEach(([u,n],i)=>{
+    [['base','lut'],['hGlow','hglow_v'],['bGlow','bglow_v'],['hEmit','hemitF']].forEach(([u,n],i)=>{
       gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,this.txs[n]);
       gl.uniform1i(gl.getUniformLocation(this.progs.comp,u),i);
     });
@@ -1025,8 +1052,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1f(ul('grA'),P.grain.enabled?P.grain.amount/100:0);
     gl.uniform1f(ul('grSz'),P.grain.enabled?P.grain.size/500:1);
     gl.uniform1f(ul('grT'),P.grain.type);
-    gl.uniform1f(ul('seed'),Math.random()*100);
+    gl.uniform1f(ul('seed'),(opts&&opts.seed!=null)?opts.seed:Math.random()*100);
     gl.uniform1f(ul('debug'),P.debug||0);
+    const uvOff=(opts&&opts.uvOff)||[0,0],uvScale=(opts&&opts.uvScale)||[1,1];
+    gl.uniform2f(ul('uvOff'),uvOff[0],uvOff[1]);gl.uniform2f(ul('uvScale'),uvScale[0],uvScale[1]);
     gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);const al=gl.getAttribLocation(cp,'a');gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
   getPixels(){const gl=this.gl,px=new Uint8Array(this.w*this.h*4);
@@ -1272,25 +1301,74 @@ function renderPreview(){
   const sc=Math.min(1,maxW/fxImg.width);
   const pw=fxImg.width*sc|0,ph=fxImg.height*sc|0;
   const P=getFXParams();
-  FX.render(P,pw,ph);
+  FX.render(P,pw,ph,{glowScale:fxGlowScale()}); // same glow scale the export will use → faithful preview
   const dc=document.getElementById('fx-canvas');
   FX.cv.style.display='block';document.getElementById('fx-no-img').style.display='none';
   document.getElementById('fx-info').textContent=`Preview ${pw}×${ph} — export will be at full ${fxImg.width}×${fxImg.height}`;
   document.getElementById('btn-fx-export').disabled=false;
 }
-// Memory-constrained = touch device (iPhone/iPad). The FX pipeline holds 7 full-res RGBA8
-// textures + readback + 2 export canvases; at 24 MP that's ~0.9 GB and iOS Safari kills the
-// tab (the "crash"/reload + "stuck on 3rd"). Cap the WORKING resolution on such devices only —
-// desktop (where the user says it already works) stays effectively uncapped.
+// Memory-constrained = touch device (iPhone/iPad). The FX pipeline's scratch buffers are the
+// problem at high MP, NOT the output size — so we keep FULL native resolution and instead
+// (1) compute the halation/bloom blur at reduced res (glowScale=2 → ~4× less scratch memory),
+// and (2) for very large images, render in tiles so peak memory stays bounded. Desktop (where
+// the user says it already works) keeps glowScale=1 / never tiles → byte-identical to before.
 function isMemoryConstrained(){
   const coarse=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
   const iOS=/iP(hone|ad|od)/.test(navigator.platform)||(/Mac/.test(navigator.platform)&&navigator.maxTouchPoints>1);
   const lowMem=typeof navigator.deviceMemory==='number'&&navigator.deviceMemory<=4;
   return iOS||lowMem||coarse;
 }
-function exportPixelBudget(){return isMemoryConstrained()?8e6:undefined;} // ~8 MP on phones; uncapped on desktop
-// Draw a source (img/ImageBitmap/canvas) down to a target canvas — used to honour the budget.
-function downscaleSource(src,sw,sh,tw,th){const c=document.createElement('canvas');c.width=tw;c.height=th;c.getContext('2d').drawImage(src,0,0,tw,th);return c;}
+function fxGlowScale(){return isMemoryConstrained()?2:1;}           // 2× reduced glow on phones
+function shouldTile(w,h){return isMemoryConstrained()?w*h>40e6:w*h>80e6;} // tile only the very large
+// Produce the processed FULL-RES image as a canvas (no borders). Picks tiled vs single-shot.
+async function processToCanvas(P,src,iw,ih){
+  if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih);
+  FX.setImage(src);
+  FX.render(P,iw,ih,{glowScale:fxGlowScale()});
+  const{px,w,h}=FX.getPixels();
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
+  return c;
+}
+// TILED full-res render: process the image in overlapping tiles so peak GPU memory stays tiny
+// and CONSTANT regardless of resolution. Each tile is processed with a halo wide enough for the
+// blur kernel (≥3σ), then only its central region is kept — so seams are mathematically invisible.
+// Grain is applied in a single final full-res pass (continuous by construction, no per-tile seams).
+async function renderTiled(P,src,iw,ih){
+  const REF=FXR.CAL.refWidth,sc=iw/REF;
+  const H=FXR.CAL.halation,B=FXR.CAL.bloom;
+  const maxSig=Math.max((P.halation&&P.halation.radius||H.sigmaR)*sc,(P.bloom&&P.bloom.radius||B.sigma)*sc);
+  const halo=Math.ceil(maxSig*3)+16;                 // neighbourhood the blur needs on every side
+  const TILE=1024;
+  const out=document.createElement('canvas');out.width=iw;out.height=ih;const octx=out.getContext('2d');
+  const Pglow=Object.assign({},P,{grain:Object.assign({},P.grain,{enabled:false})}); // grain done later, full-res
+  let tiles=0;const total=Math.ceil(iw/TILE)*Math.ceil(ih/TILE);
+  for(let ty=0;ty<ih;ty+=TILE)for(let tx=0;tx<iw;tx+=TILE){
+    const tw=Math.min(TILE,iw-tx),th=Math.min(TILE,ih-ty);
+    const sx=Math.max(0,tx-halo),sy=Math.max(0,ty-halo),ex=Math.min(iw,tx+tw+halo),ey=Math.min(ih,ty+th+halo);
+    const rw=ex-sx,rh=ey-sy;
+    const tileSrc=document.createElement('canvas');tileSrc.width=rw;tileSrc.height=rh;
+    tileSrc.getContext('2d').drawImage(src,sx,sy,rw,rh,0,0,rw,rh);
+    FX.setImage(tileSrc);
+    FX.render(Pglow,rw,rh,{glowScale:1,scOverride:sc}); // tile is small → full glow is cheap; sc from WHOLE image
+    const{px}=FX.getPixels();
+    const rc=document.createElement('canvas');rc.width=rw;rc.height=rh;
+    rc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),rw,rh),0,0);
+    octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th); // keep only the central (halo-free) region
+    tileSrc.width=tileSrc.height=rc.width=rc.height=0;
+    tiles++;log(`  tile ${tiles}/${total}`,'info');
+    await new Promise(r=>requestAnimationFrame(r));
+  }
+  // Final full-res grain pass over the assembled image (skips halation/bloom; tiny glow buffers).
+  if(P.grain&&P.grain.enabled){
+    FX.setImage(out);
+    const Pg=Object.assign({},P,{lut:null,halation:Object.assign({},P.halation,{enabled:false}),bloom:Object.assign({},P.bloom,{enabled:false}),debug:0});
+    FX.render(Pg,iw,ih,{glowScale:64}); // glowScale huge → glow buffers ≈1px; grain on; global uv
+    const{px}=FX.getPixels();
+    out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),iw,ih),0,0);
+  }
+  return out;
+}
 async function exportFX(){
   if(!fxImages.length){log('No image loaded','warn');return}
   const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
@@ -1299,44 +1377,31 @@ async function exportFX(){
     const P=getFXParams();
     const ver=`v${fxVersion.toFixed(1)}`;
     const single=fxImages.length===1;
-    const budget=exportPixelBudget();
     const results=[];
-    // ── Phase 1: render every image to bytes (no share yet) ──
+    // ── Phase 1: render every image to bytes at FULL resolution (no share yet) ──
     for(let idx=0;idx<fxImages.length;idx++){
       const it=fxImages[idx];
-      const iw0=it.img.naturalWidth||it.img.width,ih0=it.img.naturalHeight||it.img.height;
-      let src=it.img,iw=iw0,ih=ih0;
-      if(budget&&iw0*ih0>budget){ // cap working resolution to fit device memory
-        const k=Math.sqrt(budget/(iw0*ih0));iw=Math.max(1,Math.round(iw0*k));ih=Math.max(1,Math.round(ih0*k));
-        src=downscaleSource(it.img,iw0,ih0,iw,ih);
-        log(`Rendering ${idx+1}/${fxImages.length}: ${it.name} at ${iw}×${ih} (scaled from ${iw0}×${ih0} to fit this device)`,'info');
-      }else{
-        log(`Rendering ${idx+1}/${fxImages.length}: ${it.name} at ${iw}×${ih}…`,'info');
-      }
+      const iw=it.img.naturalWidth||it.img.width,ih=it.img.naturalHeight||it.img.height;
+      log(`Rendering ${idx+1}/${fxImages.length}: ${it.name} at ${iw}×${ih}${shouldTile(iw,ih)?' (tiled)':''}…`,'info');
       await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
-      FX.setImage(src);
-      FX.render(P,iw,ih);
-      const{px,w,h}=FX.getPixels();
+      const proc=await processToCanvas(P,it.img,iw,ih);   // full-res processed image (no border)
+      const w=proc.width,h=proc.height;
       const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
       const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
       const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
       const ctx=ec.getContext('2d');
       ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
       ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-      const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
-      tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
-      ctx.drawImage(tmp,b1t+b2t,b1t+b2t);
+      ctx.drawImage(proc,b1t+b2t,b1t+b2t);
       const isPng=it.ext==='png',mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
       const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:0.95));
-      if(!blob){log(`Export failed encoding ${it.name} (image too large for this device)`,'err');continue;}
+      if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');continue;}
       let out=new Uint8Array(await blob.arrayBuffer());
       if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
       out=injectDPI(out,outExt,it.dpi);
       const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
       results.push({content:out,fname:`${base}_${ver}.${outExt}`,mime});
-      // free the big intermediates promptly (helps iOS reclaim before the next image)
-      ec.width=ec.height=tmp.width=tmp.height=0;
-      if(src!==it.img&&src.width){src.width=src.height=0;}
+      ec.width=ec.height=proc.width=proc.height=0; // free big intermediates promptly
       log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
     }
     // ── Phase 2: save all at once (one share sheet → Save to Photos) ──
@@ -1686,7 +1751,7 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+((e.reaso
     const gl=FX.ok&&FX.gl, maxTex=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):'?';
     const mem=typeof navigator.deviceMemory==='number'?navigator.deviceMemory+'GB':'n/a';
     const share=(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],'t.jpg',{type:'image/jpeg'})]}))?'yes':'no';
-    log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · ${isMemoryConstrained()?`memory-safe export (≤${(exportPixelBudget()/1e6)|0}MP)`:'full-res export'}`,'info');
+    log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
   }catch(e){}
 })();
 log('Chromasmith ready — all processing runs locally in your browser','ok');
