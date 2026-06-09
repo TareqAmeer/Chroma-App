@@ -12,8 +12,8 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .logo{font-family:var(--serif);font-size:20px;letter-spacing:.12em;color:var(--acc);font-style:italic}
 .logo span{color:var(--mut);font-size:11px;font-family:var(--mono);letter-spacing:.05em;font-style:normal;margin-left:12px}
 .badge{font-family:var(--mono);font-size:10px;color:var(--ok);background:rgba(82,201,122,.1);border:1px solid rgba(82,201,122,.25);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
-.tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto}
-.tab{padding:12px 18px;font-size:11px;letter-spacing:.07em;font-family:var(--mono);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s;text-transform:uppercase;white-space:nowrap}
+.tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto;touch-action:pan-x;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.tab{flex:0 0 auto;padding:12px 18px;font-size:11px;letter-spacing:.07em;font-family:var(--mono);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s;text-transform:uppercase;white-space:nowrap}
 .tab:hover{color:var(--txt)}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
 main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
 main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
@@ -100,7 +100,13 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
-@media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}}
+@media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}
+  main,main:has(#panel-fx.active){padding-left:14px;padding-right:14px}
+  .tabs{padding:0 12px}
+  .btn{min-height:44px}
+  .fx-slider{height:28px}
+  #fx-fname{width:auto!important;flex:1}
+  .btn-row{flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -222,6 +228,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           <div class="dz-ic">⬡</div><div class="dz-lb">Apply LUT (optional)</div><div class="dz-fn" id="fn-fx-lut"></div>
         </div>
       </div>
+      <!-- QUICK ENABLE -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Quick Actions</div>
+        <div class="btn-row">
+          <button class="btn bpri" onclick="enableAll()"><span class="bdot"></span>Enable All FX</button>
+          <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
+        </div>
+      </div>
       <!-- GRAIN -->
       <div class="fx-ctrl">
         <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
@@ -281,14 +295,6 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Isolate a single shader pass to debug the match</div>
       </div>
-      <!-- QUICK ENABLE -->
-      <div class="fx-ctrl">
-        <div class="fx-ctrl-title">Quick Actions</div>
-        <div class="btn-row">
-          <button class="btn bpri" onclick="enableAll()"><span class="bdot"></span>Enable All FX</button>
-          <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
-        </div>
-      </div>
       <!-- EXPORT -->
       <div class="fx-ctrl">
         <div class="fx-ctrl-title">Export</div>
@@ -332,14 +338,46 @@ function applyHSL(r,g,b,hA,sA,lA){
   for(let i=0;i<8;i++){let df=Math.abs(h-CE[i]);if(df>.5)df=1-df;const w=Math.max(0,1-Math.pow(df/.075,2))*Math.min(1,s*3);dh+=w*(hA[C[i]]||0)/360;ds+=w*((sA[C[i]]||0)/100)*.55;dv+=w*((lA[C[i]]||0)/100)*LS[i]}
   return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
 }
-function applyGrade(r,g,b,s){
+// Color Grading (3-way) — equiluminant hue/sat rotation + independent luminance
+// offset. The chroma "tint" is a triad of cosines spaced 120° apart, which sums to
+// zero by construction (cos θ + cos(θ−120°) + cos(θ+120°) ≡ 0) — i.e. it is
+// PROVABLY luminance-neutral: rotating hue/raising sat can never shift overall
+// brightness, only the explicit `l` term can. This fully decouples (h,s) from l,
+// so deriveXMP's inverse is an exact closed-form projection (no joint nonlinear
+// solve, no cross-talk — contrast with the old hsv2r-based tint, whose mean shifts
+// with hue and silently leaked into the fitted Luminance values). Zones weighted by
+// CURRENT (post-tone, pre-CG) luminance lv0. cg={shadow,mid,high}{h,s,l},
+// h:0-360 s:0-100 l:-100..100. CG_ZONES centers/widths shared with the deriver.
+const CG_K=0.6,CG_ZONES=[['shadow',.20,.18],['mid',.50,.20],['high',.82,.16]];
+function cgTint(hueDeg,satPct){
+  const th=hueDeg*Math.PI/180,m=(satPct/100)*CG_K*.5;
+  return[m*Math.cos(th),m*Math.cos(th-2*Math.PI/3),m*Math.cos(th+2*Math.PI/3)];
+}
+function applyCG(R,G,B,lv0,cg){
+  if(!cg)return[R,G,B];
+  for(const[zn,zc,zw] of CG_ZONES){const z=cg[zn];if(!z)continue;const w=gm(lv0,zc,zw);
+    if(z.s){const[tr,tg,tb]=cgTint(z.h||0,z.s);R+=w*tr;G+=w*tg;B+=w*tb}
+    if(z.l){const lo=w*(z.l/100)*.5;R+=lo;G+=lo;B+=lo}}
+  return[Math.max(0,Math.min(1,R)),Math.max(0,Math.min(1,G)),Math.max(0,Math.min(1,B))];
+}
+// Tone-only stage (exposure/contrast/shadows/highlights/whites/blacks) — split out
+// of applyGrade so deriveXMP can replay EXACTLY this stage (with its own derived
+// Exposure/Highlights/Shadows numbers) to get the same `graded(src)` baseline that
+// HSL/CG actually receive as input — measuring color/lum deltas against raw src
+// would misattribute the global tonal shift as a per-band/per-zone color effect.
+function applyTone(r,g,b,s){
   let R=s2l(r),G=s2l(g),B=s2l(b);const es=Math.pow(2,s.exposure*.75);
   R=Math.min(1,R*es);G=Math.min(1,G*es);B=Math.min(1,B*es);
   const c=s.contrast/100;R=contrast(R,c);G=contrast(G,c);B=contrast(B,c);
   R=l2s(R);G=l2s(G);B=l2s(B);
   const lv=lum(R,G,B),adj=(s.shadows/200)*.30*gm(lv,.22,.18)+(s.highlights/200)*.33*gm(lv,.82,.14)+(s.whites/200)*.18*gm(lv,.92,.10)+(s.blacks/200)*.20*gm(lv,.08,.10);
-  R=Math.max(0,Math.min(1,R+adj));G=Math.max(0,Math.min(1,G+adj));B=Math.max(0,Math.min(1,B+adj));
-  return applyHSL(R,G,B,s.hue,s.sat,s.lum);
+  return[Math.max(0,Math.min(1,R+adj)),Math.max(0,Math.min(1,G+adj)),Math.max(0,Math.min(1,B+adj))];
+}
+function applyGrade(r,g,b,s){
+  let[R,G,B]=applyTone(r,g,b,s);
+  const lv0=lum(R,G,B);
+  [R,G,B]=applyHSL(R,G,B,s.hue,s.sat,s.lum);
+  return applyCG(R,G,B,lv0,s.cg);
 }
 
 // ═══════════════════════════
@@ -382,7 +420,8 @@ function parseXMP(txt){
   const g=(a,d=0)=>{const m=txt.match(new RegExp(`crs:${a}\\s*=\\s*"([^"]+)"`));return m?parseFloat(m[1]):d};
   const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],hue={},sat={},lum_={};
   C.forEach(c=>{hue[c]=g(`HueAdjustment${c}`);sat[c]=g(`SaturationAdjustment${c}`);lum_[c]=g(`LuminanceAdjustment${c}`)});
-  return{exposure:g('Exposure2012'),contrast:g('Contrast2012'),highlights:g('Highlights2012'),shadows:g('Shadows2012'),whites:g('Whites2012'),blacks:g('Blacks2012'),vibrance:g('Vibrance'),saturation:g('Saturation'),hue,sat,lum:lum_};
+  const cg={shadow:{h:g('ColorGradeShadowHue'),s:g('ColorGradeShadowSat'),l:g('ColorGradeShadowLum')},mid:{h:g('ColorGradeMidtoneHue'),s:g('ColorGradeMidtoneSat'),l:g('ColorGradeMidtoneLum')},high:{h:g('ColorGradeHighlightHue'),s:g('ColorGradeHighlightSat'),l:g('ColorGradeHighlightLum')}};
+  return{exposure:g('Exposure2012'),contrast:g('Contrast2012'),highlights:g('Highlights2012'),shadows:g('Shadows2012'),whites:g('Whites2012'),blacks:g('Blacks2012'),vibrance:g('Vibrance'),saturation:g('Saturation'),hue,sat,lum:lum_,cg};
 }
 
 // ═══════════════════════════
@@ -442,24 +481,108 @@ function analyzeChanges(oldLUT,newLUT){
 // ═══════════════════════════
 // XMP DERIVATION
 // ═══════════════════════════
-async function deriveXMP(srcPx,dstPx,w,h,name,pfId){
-  const NB=18,step=255/NB,curves={R:[],G:[],B:[]};
-  for(const[ci,ch] of[[0,'R'],[1,'G'],[2,'B']]){
-    const acc=new Float64Array(NB),cnt=new Int32Array(NB);
-    for(let i=0;i<w*h;i++){const sv=srcPx[i*4+ci],bin=Math.min(NB-1,sv/step|0);acc[bin]+=dstPx[i*4+ci];cnt[bin]++}
-    const xs=[],ys=[];for(let i=0;i<NB;i++){xs.push(Math.round(i*step+step/2));ys.push(cnt[i]>8?acc[i]/cnt[i]:xs[xs.length-1])}
-    for(let i=1;i<ys.length;i++)if(ys[i]<ys[i-1])ys[i]=ys[i-1];
-    const sm=ys.map((y,i)=>(ys[Math.max(0,i-1)]+2*y+ys[Math.min(NB-1,i+1)])/4);
-    const pts=[];for(let i=0;i<13;i++){const si=Math.min(NB-1,Math.round(i*(NB-1)/12));pts.push([Math.min(255,Math.round(xs[si])),Math.max(0,Math.min(255,Math.round(sm[si])))])}
-    pts[0][0]=0;pts[12][0]=255;for(let i=1;i<pts.length;i++)if(pts[i][0]<=pts[i-1][0])pts[i][0]=pts[i-1][0]+1;
-    curves[ch]=pts;
+// Weighted-least-squares solve for small NxN systems (Gauss-Jordan, partial pivot,
+// multiple RHS at once). Needed because the HSL hue-bands / CG luminance-zones are
+// OVERLAPPING basis functions — naive per-band weighted averages are biased
+// estimators when bands overlap (cross-talk), and that bias gets amplified ~10-20x
+// by the small Luminance scale LS[k]. A proper regression removes the cross-talk.
+function solveLinSys(A,bs){
+  const n=A.length,k=bs.length;
+  const M=A.map((row,i)=>row.concat(bs.map(b=>b[i])));
+  for(let col=0;col<n;col++){
+    let piv=col;for(let r=col+1;r<n;r++)if(Math.abs(M[r][col])>Math.abs(M[piv][col]))piv=r;
+    if(piv!==col){const t=M[col];M[col]=M[piv];M[piv]=t}
+    const d=M[col][col]||1e-12;
+    for(let c=col;c<n+k;c++)M[col][c]/=d;
+    for(let r=0;r<n;r++){if(r===col)continue;const f=M[r][col];if(f===0)continue;for(let c=col;c<n+k;c++)M[r][c]-=f*M[col][c]}
   }
-  const lc=curves.R.map(([x,y],i)=>[(x+curves.G[i][0]+curves.B[i][0])/3,(y+curves.G[i][1]+curves.B[i][1])/3]);
+  const sols=[];for(let j=0;j<k;j++){const v=new Array(n);for(let i=0;i<n;i++)v[i]=M[i][n+j];sols.push(v)}
+  return sols;
+}
+async function deriveXMP(srcPx,dstPx,w,h,name,pfId){
+  const N=w*h,clm=(v,a,b)=>Math.max(a,Math.min(b,v));
+  // ── A. LIGHT: single luminance tone curve (lum(src) -> lum(achieved)) ──
+  const NB=18,step=255/NB,acc=new Float64Array(NB),cnt=new Int32Array(NB);
+  for(let i=0;i<N;i++){const p=i*4;const sl=lum(srcPx[p],srcPx[p+1],srcPx[p+2]),dl=lum(dstPx[p],dstPx[p+1],dstPx[p+2]),bin=Math.min(NB-1,sl/step|0);acc[bin]+=dl;cnt[bin]++}
+  const xs=[],ys=[];for(let i=0;i<NB;i++){xs.push(Math.round(i*step+step/2));ys.push(cnt[i]>8?acc[i]/cnt[i]:xs[xs.length-1])}
+  for(let i=1;i<ys.length;i++)if(ys[i]<ys[i-1])ys[i]=ys[i-1];
+  const sm=ys.map((y,i)=>(ys[Math.max(0,i-1)]+2*y+ys[Math.min(NB-1,i+1)])/4);
+  const lc=[];for(let i=0;i<13;i++){const si=Math.min(NB-1,Math.round(i*(NB-1)/12));lc.push([Math.min(255,Math.round(xs[si])),Math.max(0,Math.min(255,Math.round(sm[si])))])}
+  lc[0][0]=0;lc[12][0]=255;for(let i=1;i<lc.length;i++)if(lc[i][0]<=lc[i-1][0])lc[i][0]=lc[i-1][0]+1;
   const mi=lc[6][0],mo=lc[6][1],expE=Math.round((Math.log2(mo/Math.max(mi,1)))*4)/4;
   const hiE=Math.round((lc[12][1]-lc[12][0])/255*-80),shE=Math.round((lc[1][1]-lc[1][0])/255*80);
   setP(pfId,90);await yd();
+  // ── Precompute graded(src): replay the SAME tone-only stage (exposure/shadows/
+  // highlights, the numbers just derived above) that the emitted XMP's sliders will
+  // apply — and that parseXMP->applyGrade actually feeds into HSL/Color-Grading.
+  // Measuring deltas against raw src (instead of this) would misattribute the global
+  // tonal shift as a per-band/per-zone color or luminance effect — exactly the bug
+  // that produced a uniform positive bias across every fitted Luminance value.
+  const toneS={exposure:expE,contrast:0,shadows:clm(shE,-100,100),highlights:clm(hiE,-100,100),whites:0,blacks:0};
+  const gR=new Float32Array(N),gG=new Float32Array(N),gB=new Float32Array(N),gLv=new Float32Array(N);
+  for(let i=0;i<N;i++){const p=i*4,[tr,tg,tb]=applyTone(srcPx[p]/255,srcPx[p+1]/255,srcPx[p+2]/255,toneS);gR[i]=tr;gG[i]=tg;gB[i]=tb;gLv[i]=lum(tr,tg,tb)}
+  // ── B. NEUTRAL CAST: Color Grading 3-way — closed-form inverse of the equiluminant
+  // cosine-triad tint (see cgTint). The forward model is LINEAR in the per-zone RGB
+  // delta Dz=(Dr,Dg,Db): achieved = graded + Σ_z w_z(lv0)·Dz. Solve that 3x3 weighted
+  // least-squares system directly (3 RHS = ΔR,ΔG,ΔB; same normal-equations machinery
+  // as before removes cross-talk between overlapping zones), then decompose Dz EXACTLY
+  // — no fitting needed for the decomposition itself:
+  //   • l = mean(Dr,Dg,Db): the cosine triad is zero-mean by construction, so the
+  //     explicit `lo` term is the ONLY thing that can move the mean — no chroma/lum
+  //     coupling, unlike the old hsv2r tint whose mean drifted with hue.
+  //   • (h,s) from the now-zero-mean chroma vector (Dz − l·[1,1,1]) by projecting onto
+  //     the cosine basis: a = m·cos θ, b = m·cos(θ−120°) ⇒ closed-form θ, m via the
+  //     standard two-component projection (atan2/hypot), since cos(θ−120°) expands to
+  //     −½cos θ + (√3/2)sin θ.
+  const ZN=CG_ZONES.length,SQ3=Math.sqrt(3);
+  const Acg=Array.from({length:ZN},()=>new Array(ZN).fill(0));
+  const bR=new Array(ZN).fill(0),bG=new Array(ZN).fill(0),bB=new Array(ZN).fill(0);
+  for(let i=0;i<N;i++){const p=i*4,r=gR[i],g=gG[i],b=gB[i];
+    if(sat(r,g,b)>=.08)continue;
+    const lv0=gLv[i],wz=CG_ZONES.map(z=>gm(lv0,z[1],z[2]));
+    const dR=dstPx[p]/255-r,dG=dstPx[p+1]/255-g,dB=dstPx[p+2]/255-b;
+    for(let zi=0;zi<ZN;zi++){for(let zj=0;zj<ZN;zj++)Acg[zi][zj]+=wz[zi]*wz[zj];
+      bR[zi]+=wz[zi]*dR;bG[zi]+=wz[zi]*dG;bB[zi]+=wz[zi]*dB}}
+  for(let zi=0;zi<ZN;zi++)Acg[zi][zi]+=1e-6;
+  const[Dr,Dg,Db]=solveLinSys(Acg,[bR,bG,bB]);
+  const cg={};
+  for(let zi=0;zi<ZN;zi++){const zn=CG_ZONES[zi][0],mean=(Dr[zi]+Dg[zi]+Db[zi])/3;
+    const a=Dr[zi]-mean,b=Dg[zi]-mean;                       // chroma comps; c=−(a+b) exactly
+    const sinPart=(2*b+a)/SQ3,m=Math.sqrt(a*a+sinPart*sinPart);
+    const hueDeg=(Math.atan2(sinPart,a)*180/Math.PI%360+360)%360;
+    cg[zn]={h:Math.round(hueDeg)%360,s:clm(Math.round(m/(CG_K*.5)*100),0,100),l:clm(Math.round(mean/.5*100),-100,100)};}
+  // ── C/D. RESIDUAL HSL: subtract castEffect (mirrors applyCG with the just-fit cg
+  // and graded-luminance zone weights), then weighted least-squares over 8 bands.
+  // Same cross-talk issue as CG (band kernels overlap by design — see applyHSL), and
+  // here too a biased per-band average would get amplified by the small LS[k] divisor.
+  const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],CE=[0,30/360,60/360,120/360,180/360,220/360,280/360,320/360],LS=[.05,.05,.09,.11,.12,.12,.11,.09];
+  const NHB=C.length;
+  const Ahsl=Array.from({length:NHB},()=>new Array(NHB).fill(0));
+  const bH=new Array(NHB).fill(0),bS=new Array(NHB).fill(0),bV=new Array(NHB).fill(0);
+  for(let i=0;i<N;i++){const p=i*4,r=gR[i],g=gG[i],b=gB[i],ssat=sat(r,g,b);
+    if(ssat<.08)continue;
+    const lv0=gLv[i];let R=dstPx[p]/255,G=dstPx[p+1]/255,B=dstPx[p+2]/255;
+    for(const[zn,zc,zw] of CG_ZONES){const wz=gm(lv0,zc,zw),zz=cg[zn];
+      if(zz.s){const[tr,tg,tb]=cgTint(zz.h,zz.s);R-=wz*tr;G-=wz*tg;B-=wz*tb}
+      if(zz.l){const lo=wz*zz.l/100*.5;R-=lo;G-=lo;B-=lo}}
+    R=clm(R,0,1);G=clm(G,0,1);B=clm(B,0,1);
+    const[sh,ssv,sv]=r2hsv(r,g,b),[dh2,dsv,dvv]=r2hsv(R,G,B);
+    let dHue=dh2-sh;if(dHue>.5)dHue-=1;if(dHue<-.5)dHue+=1;const dSat=dsv-ssv,dVal=dvv-sv;
+    const wk=new Array(NHB);
+    for(let k=0;k<NHB;k++){let df=Math.abs(sh-CE[k]);if(df>.5)df=1-df;wk[k]=Math.max(0,1-Math.pow(df/.075,2))*Math.min(1,ssv*3)}
+    for(let ki=0;ki<NHB;ki++){for(let kj=0;kj<NHB;kj++)Ahsl[ki][kj]+=wk[ki]*wk[kj];
+      bH[ki]+=wk[ki]*dHue;bS[ki]+=wk[ki]*dSat;bV[ki]+=wk[ki]*dVal}}
+  for(let ki=0;ki<NHB;ki++)Ahsl[ki][ki]+=1e-6;
+  const[betaH,betaS,betaV]=solveLinSys(Ahsl,[bH,bS,bV]);
+  const hA=[],sA=[],lA=[];
+  for(let k=0;k<NHB;k++){hA.push(clm(Math.round(betaH[k]*360),-100,100));sA.push(clm(Math.round(betaS[k]/.55*100),-100,100));lA.push(clm(Math.round(betaV[k]/LS[k]*100),-100,100))}
+  setP(pfId,95);await yd();
+  // ── E. EMIT ──
   const uid=Array.from({length:32},()=>'0123456789ABCDEF'[Math.random()*16|0]).join('');
   const seq=pts=>pts.map(([x,y])=>`\n     <rdf:li>${x}, ${y}</rdf:li>`).join('');
+  const hslStr=C.map((c,i)=>`crs:HueAdjustment${c}="${hA[i]}" crs:SaturationAdjustment${c}="${sA[i]}" crs:LuminanceAdjustment${c}="${lA[i]}"`).join('\n    ');
+  const Z=cg.shadow,M=cg.mid,Hi=cg.high;
+  const cgStr=`crs:ColorGradeShadowHue="${Z.h}" crs:ColorGradeShadowSat="${Z.s}" crs:ColorGradeShadowLum="${Z.l}"\n    crs:ColorGradeMidtoneHue="${M.h}" crs:ColorGradeMidtoneSat="${M.s}" crs:ColorGradeMidtoneLum="${M.l}"\n    crs:ColorGradeHighlightHue="${Hi.h}" crs:ColorGradeHighlightSat="${Hi.s}" crs:ColorGradeHighlightLum="${Hi.l}"\n    crs:ColorGradeGlobalHue="0" crs:ColorGradeGlobalSat="0" crs:ColorGradeGlobalLum="0" crs:ColorGradeBlending="50"`;
   const xmp=`<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
@@ -471,13 +594,15 @@ async function deriveXMP(srcPx,dstPx,w,h,name,pfId){
     crs:Contrast2012="0" crs:Highlights2012="${hiE>0?'+':''}${Math.min(100,Math.max(-100,hiE))}"
     crs:Shadows2012="${shE>0?'+':''}${Math.min(100,Math.max(-100,shE))}"
     crs:Whites2012="0" crs:Blacks2012="0" crs:Vibrance="0" crs:Saturation="0"
+    ${hslStr}
+    ${cgStr}
     crs:ToneCurveName2012="Custom" crs:HasSettings="True">
    <crs:Name><rdf:Alt><rdf:li xml:lang="x-default">${name}</rdf:li></rdf:Alt></crs:Name>
    <crs:Group><rdf:Alt><rdf:li xml:lang="x-default">User Presets</rdf:li></rdf:Alt></crs:Group>
-   <crs:ToneCurvePV2012><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012>
-   <crs:ToneCurvePV2012Red><rdf:Seq>${seq(curves.R)}\n    </rdf:Seq></crs:ToneCurvePV2012Red>
-   <crs:ToneCurvePV2012Green><rdf:Seq>${seq(curves.G)}\n    </rdf:Seq></crs:ToneCurvePV2012Green>
-   <crs:ToneCurvePV2012Blue><rdf:Seq>${seq(curves.B)}\n    </rdf:Seq></crs:ToneCurvePV2012Blue>
+   <crs:ToneCurvePV2012><rdf:Seq>${seq(lc)}\n    </rdf:Seq></crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Red>
+   <crs:ToneCurvePV2012Green><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Green>
+   <crs:ToneCurvePV2012Blue><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Blue>
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>`;
@@ -1143,8 +1268,7 @@ async function exportFX(){
     out=injectDPI(out,outExt,it.dpi); // ensure density chunk matches source DPI (covers sources with no embedded metadata)
     const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
     const fn=`${base}_${ver}.${outExt}`;
-    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:mime}));a.download=fn;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    await saveFile(out,fn,mime);
     log(`Exported ${fn} (${it.dpi} DPI)`,'ok');
     if(idx<fxImages.length-1)await new Promise(r=>setTimeout(r,450));
   }
@@ -1372,8 +1496,8 @@ function mkRefCard(prevIdx){
   card.innerHTML=`<div class="ctitle">Refinement ${getCurVer()} → ${nv}<div class="cver">${nv}</div></div>
   <div class="dz" id="dz-dev-${prevIdx}" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'dev-${prevIdx}')">
     <input type="file" accept="image/*" onchange="fi(event,'dev-${prevIdx}')">
-    <div class="dz-ic">◧</div><div class="dz-lb">Device output for ${getCurVer()}</div>
-    <div class="dz-sb">Photo from Lumix Lab with ${getCurVer()} applied</div><div class="dz-fn" id="fn-dev-${prevIdx}"></div>
+    <div class="dz-ic">◧</div><div class="dz-lb">Rendered output for ${getCurVer()}</div>
+    <div class="dz-sb">Lumix Lab (.cube) or Lightroom (.xmp) export with ${getCurVer()} applied</div><div class="dz-fn" id="fn-dev-${prevIdx}"></div>
   </div>
   <div class="btn-row"><button class="btn bpri" id="btn-ref-${prevIdx}" disabled onclick="processRef(${prevIdx})"><span class="bdot"></span>Process → ${nv}</button></div>
   <div class="pb" id="pb-ref-${prevIdx}"><div class="pf" id="pf-ref-${prevIdx}"></div></div>`;
@@ -1383,7 +1507,14 @@ function mkRefCard(prevIdx){
 // ═══════════════════════════
 // DOWNLOAD
 // ═══════════════════════════
-function dl(content,fname,mime='application/octet-stream'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a)}
+// Share-first save: on iOS (where <a download> just reloads) use the share sheet → "Save Image" to Photos; desktop falls back to a normal download.
+async function saveFile(content,fname,mime='application/octet-stream'){
+  try{const file=new File([content],fname,{type:mime});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
+  catch(e){if(e&&e.name==='AbortError')return} // user dismissed the share sheet
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+function dl(content,fname,mime='application/octet-stream'){saveFile(content,fname,mime)}
 function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.baseName}_${item.ver}`;if(t==='lut'){dl(writeCube(item.lut,n),`${n}.cube`);log(`Downloaded ${n}.cube`,'ok')}else{dl(item.xmp,`${n}.xmp`,'text/xml');log(`Downloaded ${n}.xmp`,'ok')}}
 async function dlBlind(){if(!window._xp)return;const btn=document.getElementById('btn-xdl');btn.disabled=true;showPB('pb-xmp');log('Generating blind LUT…','info');
   try{const lut=await genBlindLUT(window._xp,'pf-xmp');const n=document.getElementById('xmp-oname').value||'converted';const ver=`v${ST.xmpV.toFixed(1)}`;dl(writeCube(lut,`${n} ${ver}`),`${n}_${ver}.cube`);log(`Downloaded ${n}_${ver}.cube`,'ok');ST.xmpV+=.1;document.getElementById('xmp-ver').textContent=`v${ST.xmpV.toFixed(1)}`}
