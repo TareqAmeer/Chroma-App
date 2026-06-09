@@ -12,8 +12,8 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .logo{font-family:var(--serif);font-size:20px;letter-spacing:.12em;color:var(--acc);font-style:italic}
 .logo span{color:var(--mut);font-size:11px;font-family:var(--mono);letter-spacing:.05em;font-style:normal;margin-left:12px}
 .badge{font-family:var(--mono);font-size:10px;color:var(--ok);background:rgba(82,201,122,.1);border:1px solid rgba(82,201,122,.25);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
-.tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto}
-.tab{padding:12px 18px;font-size:11px;letter-spacing:.07em;font-family:var(--mono);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s;text-transform:uppercase;white-space:nowrap}
+.tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto;touch-action:pan-x;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.tab{flex:0 0 auto;padding:12px 18px;font-size:11px;letter-spacing:.07em;font-family:var(--mono);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s;text-transform:uppercase;white-space:nowrap}
 .tab:hover{color:var(--txt)}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
 main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
 main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
@@ -100,7 +100,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
-@media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}}
+@media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}
+  .fx-panel{column-count:1}
+  main,main:has(#panel-fx.active){padding-left:14px;padding-right:14px}
+  .tabs{padding:0 12px}
+  .btn{min-height:44px}
+  .fx-slider{height:28px}
+  #fx-fname{width:auto!important;flex:1}
+  .btn-row{flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -222,6 +229,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           <div class="dz-ic">⬡</div><div class="dz-lb">Apply LUT (optional)</div><div class="dz-fn" id="fn-fx-lut"></div>
         </div>
       </div>
+      <!-- QUICK ENABLE -->
+      <div class="fx-ctrl">
+        <div class="fx-ctrl-title">Quick Actions</div>
+        <div class="btn-row">
+          <button class="btn bpri" onclick="enableAll()"><span class="bdot"></span>Enable All FX</button>
+          <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
+        </div>
+      </div>
       <!-- GRAIN -->
       <div class="fx-ctrl">
         <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
@@ -280,14 +295,6 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           </select>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Isolate a single shader pass to debug the match</div>
-      </div>
-      <!-- QUICK ENABLE -->
-      <div class="fx-ctrl">
-        <div class="fx-ctrl-title">Quick Actions</div>
-        <div class="btn-row">
-          <button class="btn bpri" onclick="enableAll()"><span class="bdot"></span>Enable All FX</button>
-          <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
-        </div>
       </div>
       <!-- EXPORT -->
       <div class="fx-ctrl">
@@ -1262,8 +1269,7 @@ async function exportFX(){
     out=injectDPI(out,outExt,it.dpi); // ensure density chunk matches source DPI (covers sources with no embedded metadata)
     const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
     const fn=`${base}_${ver}.${outExt}`;
-    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:mime}));a.download=fn;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    await saveFile(out,fn,mime);
     log(`Exported ${fn} (${it.dpi} DPI)`,'ok');
     if(idx<fxImages.length-1)await new Promise(r=>setTimeout(r,450));
   }
@@ -1502,7 +1508,14 @@ function mkRefCard(prevIdx){
 // ═══════════════════════════
 // DOWNLOAD
 // ═══════════════════════════
-function dl(content,fname,mime='application/octet-stream'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a)}
+// Share-first save: on iOS (where <a download> just reloads) use the share sheet → "Save Image" to Photos; desktop falls back to a normal download.
+async function saveFile(content,fname,mime='application/octet-stream'){
+  try{const file=new File([content],fname,{type:mime});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
+  catch(e){if(e&&e.name==='AbortError')return} // user dismissed the share sheet
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+function dl(content,fname,mime='application/octet-stream'){saveFile(content,fname,mime)}
 function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.baseName}_${item.ver}`;if(t==='lut'){dl(writeCube(item.lut,n),`${n}.cube`);log(`Downloaded ${n}.cube`,'ok')}else{dl(item.xmp,`${n}.xmp`,'text/xml');log(`Downloaded ${n}.xmp`,'ok')}}
 async function dlBlind(){if(!window._xp)return;const btn=document.getElementById('btn-xdl');btn.disabled=true;showPB('pb-xmp');log('Generating blind LUT…','info');
   try{const lut=await genBlindLUT(window._xp,'pf-xmp');const n=document.getElementById('xmp-oname').value||'converted';const ver=`v${ST.xmpV.toFixed(1)}`;dl(writeCube(lut,`${n} ${ver}`),`${n}_${ver}.cube`);log(`Downloaded ${n}_${ver}.cube`,'ok');ST.xmpV+=.1;document.getElementById('xmp-ver').textContent=`v${ST.xmpV.toFixed(1)}`}
