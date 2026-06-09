@@ -7,6 +7,8 @@
 <style>
 :root{--bg:#0a0a0d;--sur:#111118;--sur2:#18181f;--bdr:#252530;--acc:#d4903a;--acc2:#4a9ddc;--txt:#f0ece2;--mut:#8a8680;--ok:#52c97a;--err:#e05454;--r:8px;--mono:ui-monospace,Menlo,'Courier New',monospace;--serif:Palatino,'Palatino Linotype',Georgia,serif;--sans:-apple-system,'Helvetica Neue',sans-serif}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{max-width:100%;overflow-x:hidden}
+canvas,img,video,select,input{max-width:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:14px;line-height:1.5}
 header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px}
 .logo{font-family:var(--serif);font-size:20px;letter-spacing:.12em;color:var(--acc);font-style:italic}
@@ -101,6 +103,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
 @media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}
+  .fx-panel{column-count:1}
   main,main:has(#panel-fx.active){padding-left:14px;padding-right:14px}
   .tabs{padding:0 12px}
   .btn{min-height:44px}
@@ -427,7 +430,19 @@ function parseXMP(txt){
 // ═══════════════════════════
 // IMG LOADING
 // ═══════════════════════════
-function loadImg(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=e.target.result};r.onerror=rej;r.readAsDataURL(file)})}
+// Load to a bitmap with EXIF orientation BAKED INTO PIXELS, identically on every browser.
+// createImageBitmap(...,{imageOrientation:'from-image'}) guarantees upright pixels on
+// iOS Safari and Chrome alike; the legacy Image()+dataURL path (whose canvas auto-orient
+// behavior differs per browser) is only a fallback for engines without the option.
+async function loadImg(file){
+  try{
+    if('createImageBitmap' in window){
+      const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});
+      if(bmp&&bmp.width)return bmp;
+    }
+  }catch(e){/* fall back below */}
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=e.target.result};r.onerror=rej;r.readAsDataURL(file)});
+}
 function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
 function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
 
@@ -1128,9 +1143,32 @@ function jpegMetaSegs(b){ // APPn (0xE0-0xEF) + COM (0xFE) segments before SOS, 
   }
   return segs;
 }
+// Pixels are baked upright at load (loadImg). The source EXIF still says e.g. Orientation=6,
+// so copying it verbatim makes viewers rotate already-upright pixels. Force Orientation→1.
+// Returns the same segment unchanged unless it's an APP1/Exif segment carrying a 0x0112 tag.
+function neutralizeExifOrientation(seg){
+  try{
+    if(seg[0]!==0xFF||seg[1]!==0xE1)return seg; // not APP1
+    if(!(seg[4]===0x45&&seg[5]===0x78&&seg[6]===0x69&&seg[7]===0x66))return seg; // not 'Exif'
+    const t=10; // TIFF header starts after 'Exif\0\0'
+    const le=seg[t]===0x49&&seg[t+1]===0x49; // 'II' little-endian, else 'MM' big-endian
+    const u16=o=>le?(seg[o]|(seg[o+1]<<8)):((seg[o]<<8)|seg[o+1]);
+    const u32=o=>le?(seg[o]|(seg[o+1]<<8)|(seg[o+2]<<16)|(seg[o+3]<<24))>>>0:((seg[o]<<24)|(seg[o+1]<<16)|(seg[o+2]<<8)|seg[o+3])>>>0;
+    const ifd0=t+u32(t+4), n=u16(ifd0);
+    for(let e=0;e<n;e++){
+      const off=ifd0+2+e*12;
+      if(u16(off)===0x0112){ // Orientation tag → SHORT value lives in first 2 bytes of value field
+        const copy=seg.slice(); const vo=off+8;
+        if(le){copy[vo]=1;copy[vo+1]=0;}else{copy[vo]=0;copy[vo+1]=1;}
+        return copy;
+      }
+    }
+  }catch(e){}
+  return seg;
+}
 function injectMetadataJPEG(out,src){
   try{
-    const metas=jpegMetaSegs(src);
+    const metas=jpegMetaSegs(src).map(neutralizeExifOrientation);
     if(!metas.length)return out;
     // drop whatever leading APPn segments the re-encoder wrote (e.g. a bare JFIF), keep the rest
     let cut=2,i=2;
@@ -1240,40 +1278,76 @@ function renderPreview(){
   document.getElementById('fx-info').textContent=`Preview ${pw}×${ph} — export will be at full ${fxImg.width}×${fxImg.height}`;
   document.getElementById('btn-fx-export').disabled=false;
 }
+// Memory-constrained = touch device (iPhone/iPad). The FX pipeline holds 7 full-res RGBA8
+// textures + readback + 2 export canvases; at 24 MP that's ~0.9 GB and iOS Safari kills the
+// tab (the "crash"/reload + "stuck on 3rd"). Cap the WORKING resolution on such devices only —
+// desktop (where the user says it already works) stays effectively uncapped.
+function isMemoryConstrained(){
+  const coarse=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
+  const iOS=/iP(hone|ad|od)/.test(navigator.platform)||(/Mac/.test(navigator.platform)&&navigator.maxTouchPoints>1);
+  const lowMem=typeof navigator.deviceMemory==='number'&&navigator.deviceMemory<=4;
+  return iOS||lowMem||coarse;
+}
+function exportPixelBudget(){return isMemoryConstrained()?8e6:undefined;} // ~8 MP on phones; uncapped on desktop
+// Draw a source (img/ImageBitmap/canvas) down to a target canvas — used to honour the budget.
+function downscaleSource(src,sw,sh,tw,th){const c=document.createElement('canvas');c.width=tw;c.height=th;c.getContext('2d').drawImage(src,0,0,tw,th);return c;}
 async function exportFX(){
   if(!fxImages.length){log('No image loaded','warn');return}
-  const P=getFXParams();
-  const ver=`v${fxVersion.toFixed(1)}`;
-  const single=fxImages.length===1;
-  for(let idx=0;idx<fxImages.length;idx++){
-    const it=fxImages[idx];
-    log(`Rendering ${idx+1}/${fxImages.length}: ${it.name}…`,'info');
-    FX.setImage(it.img);
-    const iw=it.img.naturalWidth||it.img.width,ih=it.img.naturalHeight||it.img.height;
-    FX.render(P,iw,ih);
-    const{px,w,h}=FX.getPixels();
-    const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
-    const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
-    const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
-    const ctx=ec.getContext('2d');
-    ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
-    ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-    const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
-    tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
-    ctx.drawImage(tmp,b1t+b2t,b1t+b2t);
-    const isPng=it.ext==='png',mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
-    const blob=await new Promise(r=>ec.toBlob(r,mime,1.0));
-    let out=new Uint8Array(await blob.arrayBuffer());
-    if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP the re-encode dropped
-    out=injectDPI(out,outExt,it.dpi); // ensure density chunk matches source DPI (covers sources with no embedded metadata)
-    const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
-    const fn=`${base}_${ver}.${outExt}`;
-    await saveFile(out,fn,mime);
-    log(`Exported ${fn} (${it.dpi} DPI)`,'ok');
-    if(idx<fxImages.length-1)await new Promise(r=>setTimeout(r,450));
+  const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
+  const prompt=document.getElementById('fx-save-prompt');if(prompt)prompt.innerHTML='';
+  try{
+    const P=getFXParams();
+    const ver=`v${fxVersion.toFixed(1)}`;
+    const single=fxImages.length===1;
+    const budget=exportPixelBudget();
+    const results=[];
+    // ── Phase 1: render every image to bytes (no share yet) ──
+    for(let idx=0;idx<fxImages.length;idx++){
+      const it=fxImages[idx];
+      const iw0=it.img.naturalWidth||it.img.width,ih0=it.img.naturalHeight||it.img.height;
+      let src=it.img,iw=iw0,ih=ih0;
+      if(budget&&iw0*ih0>budget){ // cap working resolution to fit device memory
+        const k=Math.sqrt(budget/(iw0*ih0));iw=Math.max(1,Math.round(iw0*k));ih=Math.max(1,Math.round(ih0*k));
+        src=downscaleSource(it.img,iw0,ih0,iw,ih);
+        log(`Rendering ${idx+1}/${fxImages.length}: ${it.name} at ${iw}×${ih} (scaled from ${iw0}×${ih0} to fit this device)`,'info');
+      }else{
+        log(`Rendering ${idx+1}/${fxImages.length}: ${it.name} at ${iw}×${ih}…`,'info');
+      }
+      await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
+      FX.setImage(src);
+      FX.render(P,iw,ih);
+      const{px,w,h}=FX.getPixels();
+      const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
+      const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
+      const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
+      const ctx=ec.getContext('2d');
+      ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
+      ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
+      const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+      tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
+      ctx.drawImage(tmp,b1t+b2t,b1t+b2t);
+      const isPng=it.ext==='png',mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
+      const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:0.95));
+      if(!blob){log(`Export failed encoding ${it.name} (image too large for this device)`,'err');continue;}
+      let out=new Uint8Array(await blob.arrayBuffer());
+      if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
+      out=injectDPI(out,outExt,it.dpi);
+      const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
+      results.push({content:out,fname:`${base}_${ver}.${outExt}`,mime});
+      // free the big intermediates promptly (helps iOS reclaim before the next image)
+      ec.width=ec.height=tmp.width=tmp.height=0;
+      if(src!==it.img&&src.width){src.width=src.height=0;}
+      log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
+    }
+    // ── Phase 2: save all at once (one share sheet → Save to Photos) ──
+    if(results.length)await saveFiles(results);
+    FX.setImage(fxImg);renderPreview();
+    fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
+  }catch(e){
+    log('Export error: '+(e&&e.message||e),'err');console.error(e);
+  }finally{
+    if(btn)btn.disabled=false; // re-enable for another export
   }
-  FX.setImage(fxImg);renderPreview();
-  fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
 }
 
 // ═══════════════════════════
@@ -1508,11 +1582,41 @@ function mkRefCard(prevIdx){
 // DOWNLOAD
 // ═══════════════════════════
 // Share-first save: on iOS (where <a download> just reloads) use the share sheet → "Save Image" to Photos; desktop falls back to a normal download.
+function anchorDownload(content,fname,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);}
 async function saveFile(content,fname,mime='application/octet-stream'){
   try{const file=new File([content],fname,{type:mime});
     if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
   catch(e){if(e&&e.name==='AbortError')return} // user dismissed the share sheet
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);
+  anchorDownload(content,fname,mime);
+}
+// Save MANY files at once. iOS share() needs a live user-activation, which a long multi-image
+// render consumes — so try one combined share() inline, and if it rejects, surface a one-tap
+// button that re-enters share() under a fresh gesture (instead of silently dribbling files to
+// Downloads one-by-one, the bug the user hit). Desktop just downloads each file.
+async function saveFiles(items){ // items: [{content,fname,mime}]
+  if(!items.length)return;
+  const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
+  const canShare=navigator.canShare&&navigator.canShare({files});
+  if(canShare){
+    try{await navigator.share({files,title:'Chromasmith export'});return}
+    catch(e){
+      if(e&&e.name==='AbortError')return; // user cancelled — done, don't also download
+      // activation expired (NotAllowedError) → offer an explicit tap to re-share
+      showSaveButton(files,items);
+      return;
+    }
+  }
+  items.forEach(it=>anchorDownload(it.content,it.fname,it.mime)); // desktop path
+}
+function showSaveButton(files,items){
+  const host=document.getElementById('fx-save-prompt')||(()=>{const d=document.createElement('div');d.id='fx-save-prompt';d.style.cssText='margin:10px 0';const ex=document.getElementById('btn-fx-export');ex&&ex.parentNode.appendChild(d);return d})();
+  host.innerHTML='';
+  const b=document.createElement('button');b.className='btn bpri';b.style.width='100%';
+  b.innerHTML=`<span class="bdot"></span>Tap to save ${items.length} photo${items.length>1?'s':''} to Photos`;
+  b.onclick=async()=>{try{await navigator.share({files,title:'Chromasmith export'});host.innerHTML='';log('Saved to Photos','ok');}
+    catch(e){if(e&&e.name==='AbortError')return;items.forEach(it=>anchorDownload(it.content,it.fname,it.mime));host.innerHTML='';log('Saved via download','ok');}};
+  host.appendChild(b);
+  log(`Tap "Save ${items.length} photo${items.length>1?'s':''}" to add to your library`,'info');
 }
 function dl(content,fname,mime='application/octet-stream'){saveFile(content,fname,mime)}
 function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.baseName}_${item.ver}`;if(t==='lut'){dl(writeCube(item.lut,n),`${n}.cube`);log(`Downloaded ${n}.cube`,'ok')}else{dl(item.xmp,`${n}.xmp`,'text/xml');log(`Downloaded ${n}.xmp`,'ok')}}
@@ -1573,6 +1677,18 @@ function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classLi
   }
 })();
 if(!FX.ok)log('FX renderer failed to initialise — check console for details','warn');
+// Surface otherwise-silent runtime failures (esp. on iOS, where a thrown error or rejected
+// promise during export just looks like the page "reloading") into the on-page log.
+window.addEventListener('error',e=>{try{log('JS error: '+(e.message||e.type)+(e.filename?` @${(e.lineno||'?')}`:''),'err')}catch(_){}});
+window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+((e.reason&&e.reason.message)||e.reason||'promise rejection'),'err')}catch(_){}});
+(function(){ // device diagnostics — lets the user report what their iPhone actually does
+  try{
+    const gl=FX.ok&&FX.gl, maxTex=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):'?';
+    const mem=typeof navigator.deviceMemory==='number'?navigator.deviceMemory+'GB':'n/a';
+    const share=(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],'t.jpg',{type:'image/jpeg'})]}))?'yes':'no';
+    log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · ${isMemoryConstrained()?`memory-safe export (≤${(exportPixelBudget()/1e6)|0}MP)`:'full-res export'}`,'info');
+  }catch(e){}
+})();
 log('Chromasmith ready — all processing runs locally in your browser','ok');
 </script>
 </body>
