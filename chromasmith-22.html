@@ -430,19 +430,13 @@ function parseXMP(txt){
 // ═══════════════════════════
 // IMG LOADING
 // ═══════════════════════════
-// Load to a bitmap with EXIF orientation BAKED INTO PIXELS, identically on every browser.
-// createImageBitmap(...,{imageOrientation:'from-image'}) guarantees upright pixels on
-// iOS Safari and Chrome alike; the legacy Image()+dataURL path (whose canvas auto-orient
-// behavior differs per browser) is only a fallback for engines without the option.
-async function loadImg(file){
-  try{
-    if('createImageBitmap' in window){
-      const bmp=await createImageBitmap(file,{imageOrientation:'from-image'});
-      if(bmp&&bmp.width)return bmp;
-    }
-  }catch(e){/* fall back below */}
-  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=e.target.result};r.onerror=rej;r.readAsDataURL(file)});
-}
+// Decode via <img> + object URL. Every modern browser auto-applies EXIF orientation when
+// decoding an <img> (CSS image-orientation:from-image is the default), and WebGL honors
+// UNPACK_FLIP_Y_WEBGL for <img> sources. A createImageBitmap version was tried and REVERTED:
+// browsers IGNORE UNPACK_FLIP_Y for ImageBitmap uploads (and Safari ignores
+// imageOrientation:'from-image'), so both the preview and the export came out rotated/flipped.
+// Object URL instead of FileReader dataURL avoids the ~33% base64 memory overhead on big photos.
+function loadImg(file){return new Promise((res,rej)=>{const url=URL.createObjectURL(file);const i=new Image();i.onload=()=>{URL.revokeObjectURL(url);res(i)};i.onerror=e=>{URL.revokeObjectURL(url);rej(e)};i.src=url})}
 function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
 function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
 
@@ -1017,20 +1011,30 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Pass 1: LUT grade -> lut (sRGB), at FULL resolution (this is the export base)
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0},[[0,'img',false],[1,'',true]]);
 
-    // BLOOM: emit (neutral, lum^power) -> area-norm blur (h,v) — all at REDUCED res
+    // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
+    // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
+    // threshold smoothstep is nonlinear, so a 1–2px bright line averaged with its dark
+    // neighbours falls below thr and emits NOTHING — fine-line halation vanished on phones
+    // (gs=2). emit-then-downsample is linear in the emission, so thin-line energy survives.
+    // The downsample is the normalized blur prog with dir=[0,0]: every tap lands on the same
+    // uv, weights cancel → an exact bilinear-filtered copy (at gs=1 it's an EXACT copy, so
+    // desktop output is byte-identical to before).
+    const DS={img:0,dir:[0,0],sig:1};
+    // BLOOM: emit (neutral, lum^power) FULL-res → hemitF (scratch) → downsample → blur (h,v)
     // (mode=1 path ignores powL/kW/kC/aG/bP — pass harmless defaults)
-    this._pass(this.progs.src,this.fbs.bsrc,
-      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0},[[0,'lut',false]],RG);
+    this._pass(this.progs.src,this.fbs.hemitF,
+      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0},[[0,'lut',false]]);
+    this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
     this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2},[[0,'bsrc',false]],RG);
     this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2},[[0,'bglow_h',false]],RG);
 
     // HALATION emit (rule-based; powL,kW,kC,aG,bP; bluesupp doubles as bB — see CAL.halation).
-    // The emit is generated TWICE: full-res into hemitF (used for the high-pass subtraction, which
-    // must be sharp so flat interiors null exactly and edges stay crisp) and reduced into hsrc
-    // (the input to the wide blur, where reduced res is invisible). gs=1 makes them identical.
+    // Full-res into hemitF (kept for the composite's high-pass subtraction, which must be
+    // sharp so flat interiors null exactly), then downsampled into hsrc (the wide-blur input).
+    // NOTE: this overwrites the bloom emit in hemitF — bloom is done with it by here.
     const emitU={img:0,thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,powL:H.powL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP};
     this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
-    this._pass(this.progs.src,this.fbs.hsrc,emitU,[[0,'lut',false]],RG);  // reduced res (blur input)
+    this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
     this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hsrc',false]],RG);
     this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hglow_h',false]],RG);
 
@@ -1319,7 +1323,9 @@ function isMemoryConstrained(){
   return iOS||lowMem||coarse;
 }
 function fxGlowScale(){return isMemoryConstrained()?2:1;}           // 2× reduced glow on phones
-function shouldTile(w,h){return isMemoryConstrained()?w*h>40e6:w*h>80e6;} // tile only the very large
+// Tile aggressively on phones: the single-shot path needs ~4 full-res GPU buffers, which is
+// what was killing the tab on 24–48MP iPhone photos. Tiles keep peak memory small & constant.
+function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}
 // Produce the processed FULL-RES image as a canvas (no borders). Picks tiled vs single-shot.
 async function processToCanvas(P,src,iw,ih){
   if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih);
@@ -1327,13 +1333,18 @@ async function processToCanvas(P,src,iw,ih){
   FX.render(P,iw,ih,{glowScale:fxGlowScale()});
   const{px,w,h}=FX.getPixels();
   const c=document.createElement('canvas');c.width=w;c.height=h;
-  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),w,h),0,0);
+  // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
+  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
   return c;
 }
 // TILED full-res render: process the image in overlapping tiles so peak GPU memory stays tiny
 // and CONSTANT regardless of resolution. Each tile is processed with a halo wide enough for the
 // blur kernel (≥3σ), then only its central region is kept — so seams are mathematically invisible.
-// Grain is applied in a single final full-res pass (continuous by construction, no per-tile seams).
+// Grain runs INSIDE each tile via the composite's uvOff/uvScale (local→global uv) + a fixed
+// seed: the hash is deterministic in global uv, so overlapping tiles produce identical grain —
+// seamless by construction. (The old design did grain as a final FULL-RES FX pass over the
+// assembled image, which allocated ~4 full-res GPU buffers and was exactly what crashed the
+// tab on large iPhone photos — the very thing tiling exists to avoid.)
 async function renderTiled(P,src,iw,ih){
   const REF=FXR.CAL.refWidth,sc=iw/REF;
   const H=FXR.CAL.halation,B=FXR.CAL.bloom;
@@ -1341,7 +1352,7 @@ async function renderTiled(P,src,iw,ih){
   const halo=Math.ceil(maxSig*3)+16;                 // neighbourhood the blur needs on every side
   const TILE=1024;
   const out=document.createElement('canvas');out.width=iw;out.height=ih;const octx=out.getContext('2d');
-  const Pglow=Object.assign({},P,{grain:Object.assign({},P.grain,{enabled:false})}); // grain done later, full-res
+  const seed=Math.random()*100; // ONE seed for every tile → continuous grain across seams
   let tiles=0;const total=Math.ceil(iw/TILE)*Math.ceil(ih/TILE);
   for(let ty=0;ty<ih;ty+=TILE)for(let tx=0;tx<iw;tx+=TILE){
     const tw=Math.min(TILE,iw-tx),th=Math.min(TILE,ih-ty);
@@ -1350,22 +1361,17 @@ async function renderTiled(P,src,iw,ih){
     const tileSrc=document.createElement('canvas');tileSrc.width=rw;tileSrc.height=rh;
     tileSrc.getContext('2d').drawImage(src,sx,sy,rw,rh,0,0,rw,rh);
     FX.setImage(tileSrc);
-    FX.render(Pglow,rw,rh,{glowScale:1,scOverride:sc}); // tile is small → full glow is cheap; sc from WHOLE image
+    // uv origin is bottom-left (texture uploaded flipped), so global v of this tile's bottom
+    // row (image row ey-1) is (ih-ey)/ih.
+    FX.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
+      uvOff:[sx/iw,(ih-ey)/ih],uvScale:[rw/iw,rh/ih]});
     const{px}=FX.getPixels();
     const rc=document.createElement('canvas');rc.width=rw;rc.height=rh;
-    rc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),rw,rh),0,0);
+    rc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),rw,rh),0,0);
     octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th); // keep only the central (halo-free) region
     tileSrc.width=tileSrc.height=rc.width=rc.height=0;
     tiles++;log(`  tile ${tiles}/${total}`,'info');
     await new Promise(r=>requestAnimationFrame(r));
-  }
-  // Final full-res grain pass over the assembled image (skips halation/bloom; tiny glow buffers).
-  if(P.grain&&P.grain.enabled){
-    FX.setImage(out);
-    const Pg=Object.assign({},P,{lut:null,halation:Object.assign({},P.halation,{enabled:false}),bloom:Object.assign({},P.bloom,{enabled:false}),debug:0});
-    FX.render(Pg,iw,ih,{glowScale:64}); // glowScale huge → glow buffers ≈1px; grain on; global uv
-    const{px}=FX.getPixels();
-    out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px),iw,ih),0,0);
   }
   return out;
 }
@@ -1387,12 +1393,18 @@ async function exportFX(){
       const proc=await processToCanvas(P,it.img,iw,ih);   // full-res processed image (no border)
       const w=proc.width,h=proc.height;
       const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
-      const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
-      const ec=document.createElement('canvas');ec.width=tw;ec.height=th;
-      const ctx=ec.getContext('2d');
-      ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
-      ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-      ctx.drawImage(proc,b1t+b2t,b1t+b2t);
+      // Only allocate a second full-res canvas when borders actually need one; free `proc`
+      // BEFORE encoding so at most one full-res canvas is alive at toBlob time.
+      let ec=proc;
+      if(b1t||b2t){
+        const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
+        ec=document.createElement('canvas');ec.width=tw;ec.height=th;
+        const ctx=ec.getContext('2d');
+        ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
+        ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
+        ctx.drawImage(proc,b1t+b2t,b1t+b2t);
+        proc.width=proc.height=0;
+      }
       const isPng=it.ext==='png',mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
       const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:0.95));
       if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');continue;}
@@ -1401,7 +1413,7 @@ async function exportFX(){
       out=injectDPI(out,outExt,it.dpi);
       const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
       results.push({content:out,fname:`${base}_${ver}.${outExt}`,mime});
-      ec.width=ec.height=proc.width=proc.height=0; // free big intermediates promptly
+      ec.width=ec.height=0; // free big intermediates promptly
       log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
     }
     // ── Phase 2: save all at once (one share sheet → Save to Photos) ──
@@ -1646,11 +1658,15 @@ function mkRefCard(prevIdx){
 // ═══════════════════════════
 // DOWNLOAD
 // ═══════════════════════════
-// Share-first save: on iOS (where <a download> just reloads) use the share sheet → "Save Image" to Photos; desktop falls back to a normal download.
+// Share-first save: ONLY on touch/iOS devices (where <a download> just reloads) use the
+// share sheet → "Save Image" to Photos. Desktop ALWAYS plain-downloads — navigator.canShare
+// is true on desktop Chrome/Safari too, so gating on canShare alone hijacked desktop exports
+// into the share path (and its "Tap to save" fallback button). Gate on the device instead.
+function useShareSheet(){return isMemoryConstrained()} // same touch/iOS predicate
 function anchorDownload(content,fname,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);}
 async function saveFile(content,fname,mime='application/octet-stream'){
   try{const file=new File([content],fname,{type:mime});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
+    if(useShareSheet()&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
   catch(e){if(e&&e.name==='AbortError')return} // user dismissed the share sheet
   anchorDownload(content,fname,mime);
 }
@@ -1661,7 +1677,7 @@ async function saveFile(content,fname,mime='application/octet-stream'){
 async function saveFiles(items){ // items: [{content,fname,mime}]
   if(!items.length)return;
   const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
-  const canShare=navigator.canShare&&navigator.canShare({files});
+  const canShare=useShareSheet()&&navigator.canShare&&navigator.canShare({files});
   if(canShare){
     try{await navigator.share({files,title:'Chromasmith export'});return}
     catch(e){
