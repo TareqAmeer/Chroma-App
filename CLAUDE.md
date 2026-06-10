@@ -3,6 +3,11 @@
 ## Goal
 Calibrate `chromasmith-22.html`'s halation/bloom WebGL effect to match Dehancer film emulation reference PNGs — close enough to be indistinguishable **at a glance**, then refined numerically.
 
+## ⚠️ Build stamp
+`chromasmith-22.html` has a `const BUILD='YYYY-MM-DDx'` near the top of its `<script>`
+(shown in the header + startup log so users can spot a stale GitHub Pages/Safari cache).
+**Bump it in every session that edits the file.**
+
 ## Repo
 `/Users/tareqameer/Documents/GitHub/Chroma-App/`
 Active branch: `claude/magical-fermat-VIryB`

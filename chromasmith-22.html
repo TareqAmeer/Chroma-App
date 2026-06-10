@@ -114,7 +114,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 </head>
 <body>
 <header>
-  <div class="logo">Chromasmith <span>colour calibration</span></div>
+  <div class="logo">Chromasmith <span>colour calibration</span><span id="build-stamp"></span></div>
   <div class="badge">● OFFLINE</div>
 </header>
 <div class="tabs">
@@ -306,6 +306,15 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="98" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">98</div></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Format</div>
+          <select class="fx-select" id="sel-exp-fmt">
+            <option value="auto">Auto (match source)</option>
+            <option value="jpg">JPG</option>
+            <option value="png">PNG (lossless)</option>
+          </select>
+        </div>
+        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">JPG is never fully lossless, even at 100. PNG is lossless but files are much larger.</div>
         <div class="btn-row">
           <button class="btn bpri" id="btn-fx-export" disabled onclick="exportFX()"><span class="bdot"></span>Export</button>
         </div>
@@ -324,6 +333,10 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 </main>
 <div id="log-area"></div>
 <script>
+// BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
+// (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
+const BUILD='2026-06-10a';
+document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
 // ═══════════════════════════
@@ -1275,6 +1288,7 @@ async function loadFXImages(fileList){
   const n=files.length;
   setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — preview: ${files[0].name}`:files[0].name);
   document.getElementById('fx-fname').value=fxImages[0].name;
+  fxVersion=1.0;document.getElementById('fx-ver').textContent='v1.0'; // fresh input → version restarts
   const btn=document.getElementById('btn-fx-export');btn.disabled=false;
   btn.innerHTML=`<span class="bdot"></span>Export${n>1?` All (${n})`:''}`;
   renderPreview();
@@ -1405,8 +1419,11 @@ async function exportFX(){
         ctx.drawImage(proc,b1t+b2t,b1t+b2t);
         proc.width=proc.height=0;
       }
-      const isPng=it.ext==='png',mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
-      const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:0.95));
+      const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+      const isPng=fmt==='auto'?it.ext==='png':fmt==='png';
+      const mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
+      const q=parseFloat((document.getElementById('sl-exp-q')||{}).value||98)/100;
+      const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q));
       if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');continue;}
       let out=new Uint8Array(await blob.arrayBuffer());
       if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
@@ -1770,7 +1787,7 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+((e.reaso
     log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
   }catch(e){}
 })();
-log('Chromasmith ready — all processing runs locally in your browser','ok');
+log(`Chromasmith ready (build ${BUILD}) — all processing runs locally in your browser`,'ok');
 </script>
 </body>
 </html>
