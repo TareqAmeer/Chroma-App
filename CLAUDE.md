@@ -3,6 +3,13 @@
 ## Goal
 Calibrate `chromasmith-22.html`'s halation/bloom WebGL effect to match Dehancer film emulation reference PNGs — close enough to be indistinguishable **at a glance**, then refined numerically.
 
+## 📌 Deferred: RAW (Panasonic RW2) input support
+User wants to test this later. Approach: LibRaw compiled to WASM (e.g. npm `libraw-wasm`
+or `libraw.js`), ~2–3MB added to the page (base64-embed to keep the single-file/offline
+property). Caveats to tell the user again: raw demosaic/WB/color-matrix rendering will NOT
+match Lightroom's; decode is seconds-slow on phones. TIFF support (UTIF, embedded
+2026-06-10b) already covers lossless Lightroom exports.
+
 ## ⚠️ Build stamp
 `chromasmith-22.html` has a `const BUILD='YYYY-MM-DDx'` near the top of its `<script>`
 (shown in the header + startup log so users can spot a stale GitHub Pages/Safari cache).
