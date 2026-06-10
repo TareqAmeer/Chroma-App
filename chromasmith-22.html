@@ -2008,7 +2008,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-10b';
+const BUILD='2026-06-10c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -2631,7 +2631,13 @@ void main(){
       d[ds]=lut[s]*255+.5|0;d[ds+1]=lut[s+1]*255+.5|0;d[ds+2]=lut[s+2]*255+.5|0;
     }
     this.lutTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_3D,this.lutTx);
+    // RGB8/UNSIGNED_BYTE at width 33 → rows are 33*3=99 bytes. WebGL's default
+    // UNPACK_ALIGNMENT is 4, which expects rows padded to 100 and reads past our
+    // buffer → texImage3D throws INVALID_OPERATION, leaving the LUT texture incomplete
+    // (every sample reads black → blank preview AND export). Force tight packing.
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
     gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB8,SZ,SZ,SZ,0,gl.RGB,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
   }
@@ -2930,6 +2936,59 @@ function injectMetadataPNG(out,src){
   }catch(e){return out}
 }
 function injectMetadata(out,src,ext){return ext==='png'?injectMetadataPNG(out,src):injectMetadataJPEG(out,src);}
+// ── ICC embedding (for TIFF sources, whose profile can't be spliced from the source bytes) ──
+const _crcTab=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+function crc32(bytes){let c=0xFFFFFFFF;for(let i=0;i<bytes.length;i++)c=_crcTab[(c^bytes[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function pngChunk(type,data){ // type: 4-char string; data: Uint8Array
+  const len=data.length,out=new Uint8Array(12+len);
+  out[0]=(len>>>24)&255;out[1]=(len>>>16)&255;out[2]=(len>>>8)&255;out[3]=len&255;
+  for(let i=0;i<4;i++)out[4+i]=type.charCodeAt(i);
+  out.set(data,8);
+  const crc=crc32(out.subarray(4,8+len));
+  out[8+len]=(crc>>>24)&255;out[9+len]=(crc>>>16)&255;out[10+len]=(crc>>>8)&255;out[11+len]=crc&255;
+  return out;
+}
+function pngSpliceAfterIHDR(out,chunk){ // sig(8)+IHDR(25) = 33 bytes
+  const res=new Uint8Array(out.length+chunk.length);
+  res.set(out.subarray(0,33),0);res.set(chunk,33);res.set(out.subarray(33),33+chunk.length);
+  return res;
+}
+async function deflateZlib(bytes){ // zlib-wrapped deflate via native CompressionStream
+  if(typeof CompressionStream==='undefined')throw new Error('no CompressionStream');
+  const cs=new CompressionStream('deflate'); // 'deflate' = zlib (with header/adler32), what iCCP needs
+  const w=cs.writable.getWriter();w.write(bytes);w.close();
+  const buf=await new Response(cs.readable).arrayBuffer();
+  return new Uint8Array(buf);
+}
+// Embed an ICC profile into already-encoded PNG/JPEG bytes. Returns a (possibly new) Uint8Array.
+async function embedICC(out,icc,ext){
+  if(!icc||!icc.length)return out;
+  try{
+    if(ext==='png'){
+      try{
+        const comp=await deflateZlib(icc);
+        // iCCP: profile name + 0 + compression method(0) + zlib datastream
+        const name='ICC',data=new Uint8Array(name.length+2+comp.length);
+        for(let i=0;i<name.length;i++)data[i]=name.charCodeAt(i);
+        data[name.length]=0;data[name.length+1]=0;data.set(comp,name.length+2);
+        return pngSpliceAfterIHDR(out,pngChunk('iCCP',data));
+      }catch(e){ // fallback: sRGB chunk (rendering intent 0) — correct for our sRGB TIFF decodes
+        return pngSpliceAfterIHDR(out,pngChunk('sRGB',new Uint8Array([0])));
+      }
+    } else { // JPEG: APP2 ICC_PROFILE segment (single chunk 1/1; profiles here are <64KB)
+      const sig='ICC_PROFILE\0',hdr=new Uint8Array(sig.length+2);
+      for(let i=0;i<sig.length;i++)hdr[i]=sig.charCodeAt(i);
+      hdr[sig.length]=1;hdr[sig.length+1]=1; // seq 1 of 1
+      const payload=new Uint8Array(hdr.length+icc.length);payload.set(hdr,0);payload.set(icc,hdr.length);
+      const segLen=payload.length+2; // length field includes its own 2 bytes
+      const seg=new Uint8Array(4+payload.length);
+      seg[0]=0xFF;seg[1]=0xE2;seg[2]=(segLen>>8)&255;seg[3]=segLen&255;seg.set(payload,4);
+      const res=new Uint8Array(out.length+seg.length);
+      res.set(out.subarray(0,2),0);res.set(seg,2);res.set(out.subarray(2),2+seg.length); // after SOI
+      return res;
+    }
+  }catch(e){return out}
+}
 function injectDPI(b,ext,dpi){
   dpi=Math.max(1,Math.round(dpi||72));
   if(ext==='png'){
@@ -3015,7 +3074,10 @@ async function loadTiff(file){
   // DPI from TIFF tags: t282=XResolution (RATIONAL), t296=ResolutionUnit (2=inch, 3=cm)
   let dpi=72;const xr=ifds[0].t282,un=ifds[0].t296;
   if(xr&&xr.length){const v=xr[0];if(v>0)dpi=(un&&un[0]===3)?Math.round(v*2.54):Math.round(v);}
-  return{canvas:c,dpi};
+  // Embedded ICC profile (tag 34675) — carry it through so the export can be tagged with
+  // the source colour space; otherwise an untagged file looks "off" on wide-gamut displays.
+  const icc=ifds[0].t34675?new Uint8Array(ifds[0].t34675):null;
+  return{canvas:c,dpi,icc};
 }
 async function loadFXImages(fileList){
   const files=[...fileList].filter(f=>f.type.startsWith('image/')||isTiffFile(f)); // TIFF mime is often empty on drop
@@ -3025,8 +3087,8 @@ async function loadFXImages(fileList){
     const bytes=new Uint8Array(await file.arrayBuffer());
     let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
     if(isTiffFile(file)){
-      const{canvas,dpi}=await loadTiff(file);
-      fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null}); // no meta re-injection from TIFF bytes
+      const{canvas,dpi,icc}=await loadTiff(file);
+      fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately
       continue;
     }
     const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
@@ -3179,6 +3241,7 @@ async function exportFX(){
       if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');continue;}
       let out=new Uint8Array(await blob.arrayBuffer());
       if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
+      if(it.icc)out=await embedICC(out,it.icc,outExt); // TIFF source: re-embed its ICC (no source bytes to splice from)
       out=injectDPI(out,outExt,it.dpi);
       const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
       results.push({content:out,fname:`${base}_${ver}.${outExt}`,mime});
