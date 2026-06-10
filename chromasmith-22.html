@@ -2024,7 +2024,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-10e';
+const BUILD='2026-06-10f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -3124,7 +3124,7 @@ async function loadRw2(file){
   const c=document.createElement('canvas');c.width=w;c.height=h;
   c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
   log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — LibRaw render, not Lightroom-matched`,'ok');
-  return{canvas:c,dpi:72,ms:dt};
+  return{canvas:c,dpi:240,ms:dt}; // RW2 carries no resolution tags; 240 = Lightroom's export default
 }
 async function loadFXImages(fileList){
   const files=[...fileList].filter(f=>f.type.startsWith('image/')||isTiffFile(f)||isRw2File(f)); // TIFF/RW2 mime is often empty on drop
