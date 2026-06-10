@@ -2008,7 +2008,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-10c';
+const BUILD='2026-06-10d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -3072,8 +3072,10 @@ async function loadTiff(file){
   const c=document.createElement('canvas');c.width=ifds[0].width;c.height=ifds[0].height;
   c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer),c.width,c.height),0,0);
   // DPI from TIFF tags: t282=XResolution (RATIONAL), t296=ResolutionUnit (2=inch, 3=cm)
+  // UTIF returns RATIONAL tags as nested [num,den] pairs, e.g. t282 = [[240,1]] — unpack
+  // before comparing (a bare xr[0] is the array [240,1], which fails `>0` → silent 72 default).
   let dpi=72;const xr=ifds[0].t282,un=ifds[0].t296;
-  if(xr&&xr.length){const v=xr[0];if(v>0)dpi=(un&&un[0]===3)?Math.round(v*2.54):Math.round(v);}
+  if(xr&&xr.length){const rv=xr[0],v=Array.isArray(rv)?(rv[1]?rv[0]/rv[1]:rv[0]):rv;if(v>0)dpi=(un&&un[0]===3)?Math.round(v*2.54):Math.round(v);}
   // Embedded ICC profile (tag 34675) — carry it through so the export can be tagged with
   // the source colour space; otherwise an untagged file looks "off" on wide-gamut displays.
   const icc=ifds[0].t34675?new Uint8Array(ifds[0].t34675):null;
