@@ -3,12 +3,26 @@
 ## Goal
 Calibrate `chromasmith-22.html`'s halation/bloom WebGL effect to match Dehancer film emulation reference PNGs — close enough to be indistinguishable **at a glance**, then refined numerically.
 
-## 📌 Deferred: RAW (Panasonic RW2) input support
-User wants to test this later. Approach: LibRaw compiled to WASM (e.g. npm `libraw-wasm`
-or `libraw.js`), ~2–3MB added to the page (base64-embed to keep the single-file/offline
-property). Caveats to tell the user again: raw demosaic/WB/color-matrix rendering will NOT
-match Lightroom's; decode is seconds-slow on phones. TIFF support (UTIF, embedded
-2026-06-10b) already covers lossless Lightroom exports.
+## ✅ RW2 (Panasonic RAW) input — SHIPPED 2026-06-10e
+Decoder: `libraw-wasm@1.1.2`, vendored at `vendor/libraw/{index.js,worker.js,libraw.wasm}`
+(sha512-verified against the npm registry tarball). Lazy `import()` on first RW2 load.
+Its wasm uses **SharedArrayBuffer** → needs cross-origin isolation (COOP/COEP), which
+GitHub Pages can't set via headers → solved with **`coi-serviceworker.min.js`** (MIT,
+gzuidhof v0.1.7, repo root), registered as the first `<head>` script; it auto-reloads
+the page once on first visit so `self.crossOriginIsolated===true`. This relaxes the pure
+single-file property (3 vendor files + 1 SW file).
+- `loadRw2()` in chromasmith-22.html: `raw.open(bytes,{useCameraWb:true,outputColor:1,
+  outputBps:8,userQual:3,userFlip:-1})`; **`imageData()` returns an OBJECT**
+  `{width,height,colors,bits,data:Uint8Array}` — not a flat array (was an all-black bug).
+- Orientation honored (`userFlip:-1`): portrait RW2 decodes as 4016×6016. Export
+  auto-format treats `rw2` as lossless → PNG out.
+- **Measured perf** (M-series Mac, 24MP ~25MB GH5-class files): decode 13–25 s per file,
+  single-threaded feel; phones will be slower and RAM-tight. Verified: LUT presets, FX
+  (grain/halation/bloom), PNG + JPEG export all work on RW2-sourced images.
+- Caveat (tell the user each time): LibRaw demosaic/WB/color ≠ Lightroom's rendering.
+- Test files: `calib/__TM3329.RW2`, `__TM3617.RW2`, `__TM4555.RW2` (untracked, keep local).
+- Local testing gotcha: macOS sandboxed preview servers can't read `~/Documents` (TCC);
+  serve a copy from `/tmp/chroma-preview` instead (see `.claude/launch.json`).
 
 ## ⚠️ Build stamp
 `chromasmith-22.html` has a `const BUILD='YYYY-MM-DDx'` near the top of its `<script>`
