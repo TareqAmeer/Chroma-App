@@ -2024,7 +2024,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-10f';
+const BUILD='2026-06-11a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -3104,6 +3104,9 @@ async function loadTiff(file){
 // isolation, provided here by coi-serviceworker. NOTE: LibRaw's demosaic/white-balance/
 // colour rendering will NOT match Lightroom, and decode is CPU/RAM heavy (seconds).
 function isRw2File(f){return /\.rw2$/i.test(f.name)}
+// Stringify any thrown value readably — the libraw worker rejects with plain objects,
+// which would otherwise log as "[object Object]" (exactly what an iPhone user reported).
+function errStr(e){if(e&&e.message)return e.message;if(typeof e==='object'&&e!==null){try{return JSON.stringify(e)}catch(_){return String(e)}}return String(e)}
 let _LibRaw=null;
 async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/index.js')).default;return _LibRaw;}
 async function loadRw2(file){
@@ -3112,9 +3115,13 @@ async function loadRw2(file){
   const bytes=new Uint8Array(await file.arrayBuffer());
   const t0=performance.now();
   const raw=new LibRaw();
-  await raw.open(bytes,{useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1}); // sRGB, 8-bit, AHD, camera WB, honour RAW rotation
-  const m=await raw.metadata();
-  const img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array}
+  let m,img;
+  try{
+    await raw.open(bytes,{useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1}); // sRGB, 8-bit, AHD, camera WB, honour RAW rotation
+    m=await raw.metadata();
+    img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array}
+  }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
+  finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
   const dt=Math.round(performance.now()-t0);
   const w=img.width,h=img.height,ch=img.colors||3,rgb=img.data;
   if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} bytes for ${w}×${h}×${ch})`);
@@ -3131,25 +3138,28 @@ async function loadFXImages(fileList){
   if(!files.length)return;
   fxImages=[];
   for(const file of files){
-    const bytes=new Uint8Array(await file.arrayBuffer());
-    let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
-    if(isTiffFile(file)){
-      const{canvas,dpi,icc}=await loadTiff(file);
-      fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately
-      continue;
-    }
-    if(isRw2File(file)){
-      const{canvas,dpi}=await loadRw2(file);
-      fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null}); // lossless source → PNG out
-      continue;
-    }
-    const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
-    const img=await loadImg(file);
-    fxImages.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes});
+    try{
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
+      if(isTiffFile(file)){
+        const{canvas,dpi,icc}=await loadTiff(file);
+        fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately
+        continue;
+      }
+      if(isRw2File(file)){
+        const{canvas,dpi}=await loadRw2(file);
+        fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null}); // lossless source → PNG out
+        continue;
+      }
+      const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
+      const img=await loadImg(file);
+      fxImages.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes});
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err')} // keep loading the rest of the batch
   }
+  if(!fxImages.length){log('No images loaded','err');return}
   fxImg=fxImages[0].img;FX.setImage(fxImg);
-  const n=files.length;
-  setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — preview: ${files[0].name}`:files[0].name);
+  const n=fxImages.length;
+  setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — preview: ${fxImages[0].name}`:fxImages[0].name);
   document.getElementById('fx-fname').value=fxImages[0].name;
   fxVersion=1.0;document.getElementById('fx-ver').textContent='v1.0'; // fresh input → version restarts
   const btn=document.getElementById('btn-fx-export');btn.disabled=false;
@@ -3649,7 +3659,7 @@ if(!FX.ok)log('FX renderer failed to initialise — check console for details','
 // Surface otherwise-silent runtime failures (esp. on iOS, where a thrown error or rejected
 // promise during export just looks like the page "reloading") into the on-page log.
 window.addEventListener('error',e=>{try{log('JS error: '+(e.message||e.type)+(e.filename?` @${(e.lineno||'?')}`:''),'err')}catch(_){}});
-window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+((e.reason&&e.reason.message)||e.reason||'promise rejection'),'err')}catch(_){}});
+window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.reason||'promise rejection'),'err')}catch(_){}});
 (function(){ // device diagnostics — lets the user report what their iPhone actually does
   try{
     const gl=FX.ok&&FX.gl, maxTex=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):'?';

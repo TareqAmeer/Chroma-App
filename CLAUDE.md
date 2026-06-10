@@ -20,6 +20,12 @@ single-file property (3 vendor files + 1 SW file).
   single-threaded feel; phones will be slower and RAM-tight. Verified: LUT presets, FX
   (grain/halation/bloom), PNG + JPEG export all work on RW2-sourced images.
 - Caveat (tell the user each time): LibRaw demosaic/WB/color ≠ Lightroom's rendering.
+- **iPhone: RW2 decode FAILS worker-side** (user-reported, logged only as
+  `Unhandled: [object Object]`). 2026-06-11a shipped diagnostics: `errStr()` stringifies
+  worker error objects, per-file try/catch in `loadFXImages`, and `raw.worker.terminate()`
+  after each decode (the worker leaked ~0.5–1GB of wasm shared memory per file).
+  **Awaiting the user's readable iPhone error** to pick the real fix (wasm memory limit →
+  half-size decode fallback; nested-Worker unsupported → document min iOS version).
 - Test files: `calib/__TM3329.RW2`, `__TM3617.RW2`, `__TM4555.RW2` (untracked, keep local).
 - Local testing gotcha: macOS sandboxed preview servers can't read `~/Documents` (TCC);
   serve a copy from `/tmp/chroma-preview` instead (see `.claude/launch.json`).
