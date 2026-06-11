@@ -28,9 +28,16 @@ single-file property (3 vendor files + 1 SW file).
   gamm:[1,1],noAutoBright:true`), then a 65³ LUT baked from the DCP (bake ≈0.4 s,
   cached) is applied per-pixel. Pipeline + fitted constants validated in
   `calib/dcp_pipeline.py` against `calib/TM3617.tif` (LR 16-bit export, Camera
-  Standard, zero edits; squint loss 0.053; JS == Python pixel-exact). Fit
-  `{ev:-1.148,black:0.0156,gr:0.9491,gb:1.0750}` absorbs Adobe's private
-  BaselineExposure/flare + LR-vs-libraw as-shot-WB diff (`calib/dcp_fit.json`).
+  Standard, zero edits; squint loss 0.053; JS == Python pixel-exact). The fitted
+  correction constants absorb Adobe's private BaselineExposure/flare + LR-vs-libraw
+  as-shot-WB diff and are **ISO-DEPENDENT** (dual-gain sensor; one constant set fit
+  ISO 250 but failed ISO 3200 — user-reported washed-out forest shot, 2026-06-11d).
+  Refit jointly on FOUR LR reference pairs (ISO 200/250/2000/3200: `__TM3329`,
+  `TM3617`, `__TM4555`, `P_TM2007` .tif+.RW2 in calib/), each within 0.001 of its
+  solo-best loss: `x=log2(ISO/100); ev=-0.819-0.1732x; gb=1.0714-0.0214x;
+  gr=0.9709; black=max(0,0.0397-0.00714x)` (`dcpFit(iso)` in the HTML, `iso_fit` in
+  `calib/dcp_pipeline.py`, `calib/dcp_fit_iso.json`; ISO from `metadata().iso_speed`).
+  ⚠️ At high ISO compare PATCH MEANS not single pixels (LR denoises, we don't).
   ⚠️ DNG gotchas: LookTable data layout is **[val][hue][sat]** (NOT the dims order
   hue/sat/val — both 16 so reshape doesn't catch it); V axis is sRGB-encoded when
   LookTableEncoding=1; per-channel tone curve beats hue-preserving. rawpy 0.21
