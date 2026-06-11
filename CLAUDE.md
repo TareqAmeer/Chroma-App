@@ -4,6 +4,8 @@
 Calibrate `chromasmith-22.html`'s halation/bloom WebGL effect to match Dehancer film emulation reference PNGs — close enough to be indistinguishable **at a glance**, then refined numerically.
 
 ## ✅ RW2 (Panasonic RAW) input — SHIPPED 2026-06-10e
+`.RAW` extension also accepted since 2026-06-11c (Panasonic writes RW2 data as `.RAW`
+in some modes — same `IIU\0` magic; LibRaw sniffs the real format from content).
 Decoder: `libraw-wasm@1.1.2`, vendored at `vendor/libraw/{index.js,worker.js,libraw.wasm}`
 (sha512-verified against the npm registry tarball). Lazy `import()` on first RW2 load.
 Its wasm uses **SharedArrayBuffer** → needs cross-origin isolation (COOP/COEP), which
