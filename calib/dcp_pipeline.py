@@ -159,10 +159,19 @@ def apply_tone(pp, dcp):
     return out
 
 # ── full pipeline ─────────────────────────────────────────────────────────────
-# Fitted constants (vs the Lightroom reference TIFF): ev/black absorb Adobe's private
-# BaselineExposure + flare subtraction; gr/gb absorb the small difference between
-# LR's as-shot WB interpretation and libraw's camera-WB multipliers.
-DEFAULT_FIT = {"ev": -1.148, "black": 0.0156, "gr": 0.9491, "gb": 1.0750}
+# Fitted constants (vs the Lightroom reference TIFFs): ev/black absorb Adobe's private
+# BaselineExposure + flare subtraction; gr/gb absorb the difference between LR's
+# as-shot WB interpretation and libraw's camera-WB multipliers.
+# These are ISO-DEPENDENT (dual-gain sensor; Adobe normalizes per gain mode) — fitted
+# jointly on 4 references at ISO 200/250/2000/3200 (calib/dcp_fit_iso.json):
+#   x = log2(ISO/100)
+#   ev=-0.819-0.1732x  gb=1.0714-0.0214x  gr=0.9709  black=max(0, 0.0397-0.00714x)
+def iso_fit(iso):
+    import math
+    x = math.log2((iso or 200) / 100)
+    return {"ev": -0.819 - 0.1732*x, "gb": 1.0714 - 0.0214*x, "gr": 0.9709,
+            "black": max(0.0, 0.0397 - 0.00714*x)}
+DEFAULT_FIT = iso_fit(250)  # TM3617's ISO (back-compat default for main())
 
 def render(cam, dcp, fit=None):
     """cam: float linear WB'd camera RGB (...,3) in [0,1]. Returns sRGB float [0,1]."""

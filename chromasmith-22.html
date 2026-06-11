@@ -2027,7 +2027,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-11c';
+const BUILD='2026-06-11d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -3121,8 +3121,12 @@ async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/in
 // into a 65^3 LUT once per profile, then applied per pixel with trilinear interp.
 const DCP_PROFILES=['Standard','Natural','Vivid','Flat','Portrait','Landscape','Cinelike D2','Cinelike V2','L Classic Neo','Monochrome','L Monochrome','L Monochrome D','L Monochrome S','Leica Monochrome'];
 // ev/black absorb Adobe's private BaselineExposure + flare subtraction; gr/gb absorb the
-// small as-shot-WB interpretation difference (LR vs libraw). Fitted: calib/dcp_fit.json.
-const DCP_FIT={ev:-1.148,black:0.0156,gr:0.9491,gb:1.0750};
+// as-shot-WB interpretation difference (LR vs libraw). These vary with ISO (the S9 is a
+// dual-gain sensor and Adobe normalizes per gain mode) — fitted as linear functions of
+// x = log2(ISO/100) against FOUR LR reference TIFFs spanning ISO 200-3200
+// (calib/dcp_fit_iso.json; per-image losses within 0.001 of each image's solo best fit).
+function dcpFit(iso){const x=Math.log2((iso||200)/100);
+  return{ev:-0.819-0.1732*x,gb:1.0714-0.0214*x,gr:0.9709,black:Math.max(0,0.0397-0.00714*x)};}
 const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
 const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
 function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?'Standard':v}
@@ -3151,10 +3155,10 @@ function parseDCP(buf){
          enc:tags[51108]?tags[51108][0]:0,baseOff:tags[51109]?tags[51109][0]:0};
 }
 function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4)-0.055}
-function bakeDcpLUT(dcp,N){
+function bakeDcpLUT(dcp,fit,N){
   N=N||65;
   const nh=dcp.dims[0],ns=dcp.dims[1],nv=dcp.dims[2],tbl=dcp.look;
-  const expo=Math.pow(2,DCP_FIT.ev+dcp.baseOff),blk=DCP_FIT.black;
+  const expo=Math.pow(2,fit.ev+dcp.baseOff),blk=fit.black;
   const TN=4096,toneL=new Float32Array(TN); // dense per-channel tone curve
   {const p=dcp.tone,np2=p.length/2;
    for(let i=0;i<TN;i++){const x=i/(TN-1);let j=1;while(j<np2-1&&p[2*j]<x)j++;
@@ -3164,7 +3168,7 @@ function bakeDcpLUT(dcp,N){
   const out=new Float32Array(N*N*N*3);
   let o=0;
   for(let bi=0;bi<N;bi++)for(let gi=0;gi<N;gi++)for(let ri=0;ri<N;ri++){
-    const cr=ri/(N-1)*DCP_FIT.gr,cg=gi/(N-1),cb=bi/(N-1)*DCP_FIT.gb;
+    const cr=ri/(N-1)*fit.gr,cg=gi/(N-1),cb=bi/(N-1)*fit.gb;
     // ForwardMatrix → XYZ(D50) → ProPhoto, then exposure
     const X=dcp.fm[0]*cr+dcp.fm[1]*cg+dcp.fm[2]*cb,
           Y=dcp.fm[3]*cr+dcp.fm[4]*cg+dcp.fm[5]*cb,
@@ -3208,13 +3212,17 @@ function bakeDcpLUT(dcp,N){
   }
   return{n:N,data:out};
 }
-const _dcpLutCache={};
-async function getDcpLUT(name){
-  if(_dcpLutCache[name])return _dcpLutCache[name];
-  const r=await fetch('vendor/dcp/Panasonic DC-S9 Camera '+name+'.dcp');
-  if(!r.ok)throw new Error('DCP profile fetch failed: '+name+' ('+r.status+')');
-  const lut=bakeDcpLUT(parseDCP(await r.arrayBuffer()));
-  _dcpLutCache[name]=lut;return lut;
+const _dcpCache={},_dcpLutCache={};
+async function getDcpLUT(name,iso){
+  const key=name+'@'+(iso||200);
+  if(_dcpLutCache[key])return _dcpLutCache[key];
+  if(!_dcpCache[name]){
+    const r=await fetch('vendor/dcp/Panasonic DC-S9 Camera '+name+'.dcp');
+    if(!r.ok)throw new Error('DCP profile fetch failed: '+name+' ('+r.status+')');
+    _dcpCache[name]=parseDCP(await r.arrayBuffer());
+  }
+  const lut=bakeDcpLUT(_dcpCache[name],dcpFit(iso));
+  _dcpLutCache[key]=lut;return lut;
 }
 function applyDcpLUT(u16,w,h,lut){ // u16: interleaved RGB Uint16, linear camera space
   const N=lut.n,L=lut.data,NM=N-1,rgba=new Uint8ClampedArray(w*h*4);
@@ -3255,7 +3263,7 @@ async function loadRw2(file){
   let rgba;
   if(profile){
     if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
-    const lut=await getDcpLUT(profile);
+    const lut=await getDcpLUT(profile,m.iso_speed); // correction constants are ISO-dependent (dual-gain sensor)
     rgba=applyDcpLUT(rgb,w,h,lut);
   }else{
     // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
