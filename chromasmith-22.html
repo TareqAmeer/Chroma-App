@@ -230,6 +230,9 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           <input type="file" accept="image/*,.tif,.tiff,.rw2" multiple onchange="fi(event,'fx-img')">
           <div class="dz-ic">◧</div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
+          <select class="fx-select" id="sel-dcp" onchange="setRawProfile(this.value)"></select>
+        </div>
         <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-lut')">
           <input type="file" accept=".cube" onchange="fi(event,'fx-lut')">
           <div class="dz-ic">⬡</div><div class="dz-lb">Apply LUT (optional)</div><div class="dz-fn" id="fn-fx-lut"></div>
@@ -2024,7 +2027,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-11a';
+const BUILD='2026-06-11b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -3109,28 +3112,160 @@ function isRw2File(f){return /\.rw2$/i.test(f.name)}
 function errStr(e){if(e&&e.message)return e.message;if(typeof e==='object'&&e!==null){try{return JSON.stringify(e)}catch(_){return String(e)}}return String(e)}
 let _LibRaw=null;
 async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/index.js')).default;return _LibRaw;}
+
+// ── DCP (Adobe DNG Camera Profile) rendering — match Lightroom's RAW color ──
+// Pipeline (validated numerically vs an LR reference TIFF in calib/dcp_pipeline.py):
+// linear WB'd camera RGB → [gains] → ForwardMatrix → XYZ(D50) → linear ProPhoto →
+// exposure → ProfileLookTable (HSV deltas, layout [val][hue][sat]) → black subtract →
+// per-channel ProfileToneCurve → ProPhoto→sRGB → gamma. The whole transform is baked
+// into a 65^3 LUT once per profile, then applied per pixel with trilinear interp.
+const DCP_PROFILES=['Standard','Natural','Vivid','Flat','Portrait','Landscape','Cinelike D2','Cinelike V2','L Classic Neo','Monochrome','L Monochrome','L Monochrome D','L Monochrome S','Leica Monochrome'];
+// ev/black absorb Adobe's private BaselineExposure + flare subtraction; gr/gb absorb the
+// small as-shot-WB interpretation difference (LR vs libraw). Fitted: calib/dcp_fit.json.
+const DCP_FIT={ev:-1.148,black:0.0156,gr:0.9491,gb:1.0750};
+const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
+const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
+function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?'Standard':v}
+function setRawProfile(v){localStorage.setItem('rawProfile',v);log('RAW profile: '+(v||'None (LibRaw sRGB)')+' — applies to the next RW2 load','info')}
+function initDcpSelect(){const s=document.getElementById('sel-dcp');if(!s)return;
+  s.innerHTML='<option value="">None (LibRaw sRGB)</option>'+DCP_PROFILES.map(n=>'<option value="'+n+'">'+n+'</option>').join('');
+  s.value=rawProfile();}
+function parseDCP(buf){
+  const d=new DataView(buf);
+  if(d.getUint16(0,true)!==0x4949||d.getUint16(2,true)!==0x4352)throw new Error('not a little-endian DCP');
+  const off=d.getUint32(4,true),n=d.getUint16(off,true);
+  const TYPSZ={1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8};
+  const tags={};
+  for(let i=0;i<n;i++){
+    const e=off+2+i*12,tag=d.getUint16(e,true),typ=d.getUint16(e+2,true),cnt=d.getUint32(e+4,true);
+    const sz=(TYPSZ[typ]||1)*cnt,ptr=sz>4?d.getUint32(e+8,true):e+8;
+    let val;
+    if(typ===10){val=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getInt32(ptr+8*j,true),b=d.getInt32(ptr+8*j+4,true);val[j]=b?a/b:a;}}
+    else if(typ===11){val=new Float32Array(cnt);for(let j=0;j<cnt;j++)val[j]=d.getFloat32(ptr+4*j,true);}
+    else if(typ===4){val=new Uint32Array(cnt);for(let j=0;j<cnt;j++)val[j]=d.getUint32(ptr+4*j,true);}
+    else continue; // only numeric tags are needed
+    tags[tag]=val;
+  }
+  if(!tags[50964]||!tags[50940]||!tags[50981]||!tags[50982])throw new Error('DCP missing ForwardMatrix/ToneCurve/LookTable');
+  return{fm:tags[50964],tone:tags[50940],dims:tags[50981],look:tags[50982],
+         enc:tags[51108]?tags[51108][0]:0,baseOff:tags[51109]?tags[51109][0]:0};
+}
+function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4)-0.055}
+function bakeDcpLUT(dcp,N){
+  N=N||65;
+  const nh=dcp.dims[0],ns=dcp.dims[1],nv=dcp.dims[2],tbl=dcp.look;
+  const expo=Math.pow(2,DCP_FIT.ev+dcp.baseOff),blk=DCP_FIT.black;
+  const TN=4096,toneL=new Float32Array(TN); // dense per-channel tone curve
+  {const p=dcp.tone,np2=p.length/2;
+   for(let i=0;i<TN;i++){const x=i/(TN-1);let j=1;while(j<np2-1&&p[2*j]<x)j++;
+     const x0=p[2*(j-1)],y0=p[2*(j-1)+1],x1=p[2*j],y1=p[2*j+1];
+     toneL[i]=x1>x0?y0+(y1-y0)*(x-x0)/(x1-x0):y0;}}
+  const tone=v=>toneL[Math.round(Math.min(Math.max(v,0),1)*(TN-1))];
+  const out=new Float32Array(N*N*N*3);
+  let o=0;
+  for(let bi=0;bi<N;bi++)for(let gi=0;gi<N;gi++)for(let ri=0;ri<N;ri++){
+    const cr=ri/(N-1)*DCP_FIT.gr,cg=gi/(N-1),cb=bi/(N-1)*DCP_FIT.gb;
+    // ForwardMatrix → XYZ(D50) → ProPhoto, then exposure
+    const X=dcp.fm[0]*cr+dcp.fm[1]*cg+dcp.fm[2]*cb,
+          Y=dcp.fm[3]*cr+dcp.fm[4]*cg+dcp.fm[5]*cb,
+          Z=dcp.fm[6]*cr+dcp.fm[7]*cg+dcp.fm[8]*cb;
+    let r=Math.min(Math.max((XYZ2PP[0]*X+XYZ2PP[1]*Y+XYZ2PP[2]*Z)*expo,0),1),
+        g=Math.min(Math.max((XYZ2PP[3]*X+XYZ2PP[4]*Y+XYZ2PP[5]*Z)*expo,0),1),
+        b=Math.min(Math.max((XYZ2PP[6]*X+XYZ2PP[7]*Y+XYZ2PP[8]*Z)*expo,0),1);
+    // RGB→HSV
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b),c=mx-mn;
+    let h=0;if(c>1e-12){if(mx===r)h=((g-b)/c%6+6)%6;else if(mx===g)h=(b-r)/c+2;else h=(r-g)/c+4;h*=60;}
+    let s=mx>1e-12?c/mx:0,v=mx;
+    // LookTable trilinear (hue wraps; V axis sRGB-encoded when enc===1)
+    const venc=dcp.enc===1?srgbG(v):v;
+    const hi=h/360*nh,si=s*(ns-1),vi=venc*(nv-1);
+    const h0=Math.floor(hi)%nh,h1=(h0+1)%nh,hf=hi-Math.floor(hi);
+    const s0=Math.min(Math.floor(si),ns-2),sf=si-s0,s1=s0+1;
+    const v0=Math.min(Math.floor(vi),nv-2),vf=vi-v0,v1=v0+1;
+    const idx=(vv,hh,ss)=>3*((vv*nh+hh)*ns+ss); // data layout: [val][hue][sat]
+    let dh=0,ds=0,dv=0;
+    for(let k=0;k<3;k++){
+      const c00=tbl[idx(v0,h0,s0)+k]*(1-hf)+tbl[idx(v0,h1,s0)+k]*hf,
+            c01=tbl[idx(v0,h0,s1)+k]*(1-hf)+tbl[idx(v0,h1,s1)+k]*hf,
+            c10=tbl[idx(v1,h0,s0)+k]*(1-hf)+tbl[idx(v1,h1,s0)+k]*hf,
+            c11=tbl[idx(v1,h0,s1)+k]*(1-hf)+tbl[idx(v1,h1,s1)+k]*hf,
+            cc=(c00*(1-sf)+c01*sf)*(1-vf)+(c10*(1-sf)+c11*sf)*vf;
+      if(k===0)dh=cc;else if(k===1)ds=cc;else dv=cc;
+    }
+    h=(h+dh%360+360)%360;s=Math.min(Math.max(s*ds,0),1);v=Math.min(Math.max(v*dv,0),1);
+    // HSV→RGB
+    const hh=h/60,i6=Math.floor(hh)%6,f=hh-Math.floor(hh),
+          p2=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));
+    if(i6===0){r=v;g=t;b=p2}else if(i6===1){r=q;g=v;b=p2}else if(i6===2){r=p2;g=v;b=t}
+    else if(i6===3){r=p2;g=q;b=v}else if(i6===4){r=t;g=p2;b=v}else{r=v;g=p2;b=q}
+    // black subtract + per-channel tone curve
+    r=tone((r-blk)/(1-blk));g=tone((g-blk)/(1-blk));b=tone((b-blk)/(1-blk));
+    // ProPhoto → sRGB + gamma
+    const sr=Math.min(Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),1),
+          sg=Math.min(Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),1),
+          sb=Math.min(Math.max(PP2SRGB[6]*r+PP2SRGB[7]*g+PP2SRGB[8]*b,0),1);
+    out[o++]=srgbG(sr);out[o++]=srgbG(sg);out[o++]=srgbG(sb);
+  }
+  return{n:N,data:out};
+}
+const _dcpLutCache={};
+async function getDcpLUT(name){
+  if(_dcpLutCache[name])return _dcpLutCache[name];
+  const r=await fetch('vendor/dcp/Panasonic DC-S9 Camera '+name+'.dcp');
+  if(!r.ok)throw new Error('DCP profile fetch failed: '+name+' ('+r.status+')');
+  const lut=bakeDcpLUT(parseDCP(await r.arrayBuffer()));
+  _dcpLutCache[name]=lut;return lut;
+}
+function applyDcpLUT(u16,w,h,lut){ // u16: interleaved RGB Uint16, linear camera space
+  const N=lut.n,L=lut.data,NM=N-1,rgba=new Uint8ClampedArray(w*h*4);
+  const sc=NM/65535;
+  for(let i=0,j=0;i<w*h;i++){
+    const fr=u16[3*i]*sc,fg=u16[3*i+1]*sc,fb=u16[3*i+2]*sc;
+    const r0=Math.min(fr|0,NM-1),g0=Math.min(fg|0,NM-1),b0=Math.min(fb|0,NM-1);
+    const rf=fr-r0,gf=fg-g0,bf=fb-b0;
+    for(let k=0;k<3;k++){
+      const q=(rr,gg,bb)=>L[3*((bb*N+gg)*N+rr)+k]; // baked order: b outer, g, r inner
+      const c00=q(r0,g0,b0)*(1-rf)+q(r0+1,g0,b0)*rf, c10=q(r0,g0+1,b0)*(1-rf)+q(r0+1,g0+1,b0)*rf,
+            c01=q(r0,g0,b0+1)*(1-rf)+q(r0+1,g0,b0+1)*rf, c11=q(r0,g0+1,b0+1)*(1-rf)+q(r0+1,g0+1,b0+1)*rf;
+      rgba[j+k]=255*((c00*(1-gf)+c10*gf)*(1-bf)+(c01*(1-gf)+c11*gf)*bf)+0.5;
+    }
+    rgba[j+3]=255;j+=4;
+  }
+  return rgba;
+}
+
 async function loadRw2(file){
   if(!self.crossOriginIsolated)throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
+  const profile=rawProfile();
   const LibRaw=await getLibRaw();
   const bytes=new Uint8Array(await file.arrayBuffer());
   const t0=performance.now();
   const raw=new LibRaw();
   let m,img;
+  const dcpSettings={useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1}; // linear 16-bit camera RGB (DCP input space)
+  const sdrSettings={useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1};                               // sRGB, 8-bit, AHD, camera WB
   try{
-    await raw.open(bytes,{useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1}); // sRGB, 8-bit, AHD, camera WB, honour RAW rotation
+    await raw.open(bytes,profile?dcpSettings:sdrSettings);
     m=await raw.metadata();
-    img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array}
+    img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
-  const dt=Math.round(performance.now()-t0);
   const w=img.width,h=img.height,ch=img.colors||3,rgb=img.data;
-  if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} bytes for ${w}×${h}×${ch})`);
-  // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
-  const rgba=new Uint8ClampedArray(w*h*4);
-  for(let i=0,j=0;i<w*h;i++){const s=i*ch;rgba[j++]=rgb[s];rgba[j++]=ch>1?rgb[s+1]:rgb[s];rgba[j++]=ch>2?rgb[s+2]:rgb[s];rgba[j++]=255;}
+  if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
+  let rgba;
+  if(profile){
+    if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
+    const lut=await getDcpLUT(profile);
+    rgba=applyDcpLUT(rgb,w,h,lut);
+  }else{
+    // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
+    rgba=new Uint8ClampedArray(w*h*4);
+    for(let i=0,j=0;i<w*h;i++){const s=i*ch;rgba[j++]=rgb[s];rgba[j++]=ch>1?rgb[s+1]:rgb[s];rgba[j++]=ch>2?rgb[s+2]:rgb[s];rgba[j++]=255;}
+  }
+  const dt=Math.round(performance.now()-t0);
   const c=document.createElement('canvas');c.width=w;c.height=h;
   c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
-  log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — LibRaw render, not Lightroom-matched`,'ok');
+  log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
   return{canvas:c,dpi:240,ms:dt}; // RW2 carries no resolution tags; 240 = Lightroom's export default
 }
 async function loadFXImages(fileList){
@@ -3669,6 +3804,7 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
   }catch(e){}
 })();
 refreshLUTSelect(); // populate built-in + saved LUTs
+initDcpSelect();    // populate RAW profile dropdown (persisted choice)
 log(`Chromasmith ready (build ${BUILD}) — all processing runs locally in your browser`,'ok');
 </script>
 </body>
