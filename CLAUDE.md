@@ -19,13 +19,29 @@ single-file property (3 vendor files + 1 SW file).
 - **Measured perf** (M-series Mac, 24MP ~25MB GH5-class files): decode 13–25 s per file,
   single-threaded feel; phones will be slower and RAM-tight. Verified: LUT presets, FX
   (grain/halation/bloom), PNG + JPEG export all work on RW2-sourced images.
-- Caveat (tell the user each time): LibRaw demosaic/WB/color ≠ Lightroom's rendering.
-- **iPhone: RW2 decode FAILS worker-side** (user-reported, logged only as
-  `Unhandled: [object Object]`). 2026-06-11a shipped diagnostics: `errStr()` stringifies
-  worker error objects, per-file try/catch in `loadFXImages`, and `raw.worker.terminate()`
-  after each decode (the worker leaked ~0.5–1GB of wasm shared memory per file).
-  **Awaiting the user's readable iPhone error** to pick the real fix (wasm memory limit →
-  half-size decode fallback; nested-Worker unsupported → document min iOS version).
+- **DCP camera profiles (2026-06-11b)**: "RAW profile" dropdown (default **Camera
+  Standard**, persisted in localStorage) applies Adobe DCPs from `vendor/dcp/` (14
+  Panasonic DC-S9 profiles, source: `calib/DCP Camera Profiles/`) so RW2 color ≈
+  Lightroom. Decode switches to linear 16-bit camera RGB (`outputColor:0,outputBps:16,
+  gamm:[1,1],noAutoBright:true`), then a 65³ LUT baked from the DCP (bake ≈0.4 s,
+  cached) is applied per-pixel. Pipeline + fitted constants validated in
+  `calib/dcp_pipeline.py` against `calib/TM3617.tif` (LR 16-bit export, Camera
+  Standard, zero edits; squint loss 0.053; JS == Python pixel-exact). Fit
+  `{ev:-1.148,black:0.0156,gr:0.9491,gb:1.0750}` absorbs Adobe's private
+  BaselineExposure/flare + LR-vs-libraw as-shot-WB diff (`calib/dcp_fit.json`).
+  ⚠️ DNG gotchas: LookTable data layout is **[val][hue][sat]** (NOT the dims order
+  hue/sat/val — both 16 so reshape doesn't catch it); V axis is sRGB-encoded when
+  LookTableEncoding=1; per-channel tone curve beats hue-preserving. rawpy 0.21
+  (LibRaw 0.21.2) **mis-decodes the DC-S9** (wrong white level, zero matrix) — the
+  Python harness reads `/tmp/cam16_6016x4016.bin`, a dump produced by the app's own
+  wasm decode in the browser (re-dump via fetch POST if needed).
+- Caveat for `None` profile: LibRaw demosaic/WB/color ≠ Lightroom's rendering.
+  Remaining DCP-path gap vs LR: default noise reduction/sharpening only.
+- iPhone RW2: first attempt failed (`Unhandled: [object Object]`), worked on retry —
+  almost certainly memory pressure; 2026-06-11a added `errStr()` (readable worker
+  errors), per-file try/catch in `loadFXImages`, and `raw.worker.terminate()` after
+  each decode (the worker leaked ~0.5–1GB wasm shared memory per file — the likely
+  culprit). If it recurs the log now shows the real error.
 - Test files: `calib/__TM3329.RW2`, `__TM3617.RW2`, `__TM4555.RW2` (untracked, keep local).
 - Local testing gotcha: macOS sandboxed preview servers can't read `~/Documents` (TCC);
   serve a copy from `/tmp/chroma-preview` instead (see `.claude/launch.json`).
