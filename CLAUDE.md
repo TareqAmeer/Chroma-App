@@ -55,6 +55,27 @@ single-file property (3 vendor files + 1 SW file).
 - Local testing gotcha: macOS sandboxed preview servers can't read `~/Documents` (TCC);
   serve a copy from `/tmp/chroma-preview` instead (see `.claude/launch.json`).
 
+## ✅ Self-serve LR-preset → LUT workflow — SHIPPED 2026-06-11e
+User pain: per-photo match-and-refine LUTs only cover that photo's gamut → every new
+photo needed a refit (measured: single-photo fits score 0.004 on themselves, up to
+0.043 on other photos; a joint fit scores 0.004–0.006 on all).
+1. **LUT chart** ("LUT chart" button, LUT section): generates a 5640×3840 PNG of all
+   33³ colors as 24px patches (`makeLutChart`/`CHART` consts in chromasmith-22.html).
+   Workflow: download → Lightroom: apply preset → export (sRGB, full size or
+   same-ratio resize) → drop the export on the LUT drop zone (now accepts images) →
+   `chartToLUT` reads patch means (inner 50%, so grain/sharpen/NR cancel) → exact
+   33³ LUT, apply + Save-to-library + "Download .cube". Identity round-trip verified
+   (maxDiff = quantization 1/510). ⚠️ LUT captures GLOBAL color/tone only — sharpen/
+   NR/grain/local masks can't be in a LUT; LR Highlights/Shadows are mildly local.
+2. **"a beach preset v5.7" built-in preset** (now 17): fitted jointly from the user's
+   4 TIFF(no preset)+JPEG(preset) pairs in `calib/BEACH LUT/` via
+   `calib/fit_preset_lut.py` (trilinear splat into 33³ + Laplacian fill of the
+   72% unobserved nodes; validated per-pair, strips `calib/cmp_beach_*.png`).
+3. RW2-vs-LR note: user twice compared against **macOS Preview of the .RAW** (= the
+   camera's embedded JPEG, warmer/darker than LR) — our DCP render matches the
+   actual LR TIFF patch-exactly. When the user says "doesn't match Lightroom",
+   FIRST ask what's rendering the comparison image.
+
 ## ⚠️ Build stamp
 `chromasmith-22.html` has a `const BUILD='YYYY-MM-DDx'` near the top of its `<script>`
 (shown in the header + startup log so users can spot a stale GitHub Pages/Safari cache).
