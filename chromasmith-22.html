@@ -227,7 +227,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
       <div class="fx-ctrl">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
-          <input type="file" accept="image/*,.tif,.tiff,.rw2" multiple onchange="fi(event,'fx-img')">
+          <input type="file" accept="image/*,.tif,.tiff,.rw2,.raw" multiple onchange="fi(event,'fx-img')">
           <div class="dz-ic">◧</div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
@@ -2027,7 +2027,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-11b';
+const BUILD='2026-06-11c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -3106,7 +3106,7 @@ async function loadTiff(file){
 // LibRaw runs in a Web Worker. Its wasm uses SharedArrayBuffer → needs cross-origin
 // isolation, provided here by coi-serviceworker. NOTE: LibRaw's demosaic/white-balance/
 // colour rendering will NOT match Lightroom, and decode is CPU/RAM heavy (seconds).
-function isRw2File(f){return /\.rw2$/i.test(f.name)}
+function isRw2File(f){return /\.(rw2|raw)$/i.test(f.name)} // .RAW: e.g. Panasonic writes RW2 data with a .RAW extension in some modes; LibRaw sniffs the real format
 // Stringify any thrown value readably — the libraw worker rejects with plain objects,
 // which would otherwise log as "[object Object]" (exactly what an iPhone user reported).
 function errStr(e){if(e&&e.message)return e.message;if(typeof e==='object'&&e!==null){try{return JSON.stringify(e)}catch(_){return String(e)}}return String(e)}
