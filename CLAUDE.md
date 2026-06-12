@@ -76,6 +76,19 @@ photo needed a refit (measured: single-photo fits score 0.004 on themselves, up 
    actual LR TIFF patch-exactly. When the user says "doesn't match Lightroom",
    FIRST ask what's rendering the comparison image.
 
+## ✅ Halation "Shadow protect" slider — SHIPPED 2026-06-12a
+User report: dark eyes (dog/human) fully surrounded by bright fur/skin flood RED with
+halation on (σ_R ≫ σ_G glow fills small dark enclosures from all sides). Physically
+film-correct but reads as red-eye. Fix: `Shadow protect` slider (halation panel,
+`sl-hal-p`, **default 0 = bit-identical calibrated Dehancer behavior**); maps 0-100 →
+linear-lum threshold 0–0.15; composite shader scales the received halation glow by
+`smoothstep(0, halProt, lum(base))` (uniform `halProt`, branch skipped at 0).
+⚠️ A receiver-lum gate can NEVER default on: the calibration chart's gaps are PURE
+BLACK (lum 0.0) — darker than real eyes (~0.006 linear) — so any always-on gate would
+kill the Dehancer-matched gap halos. Validated on `calib/__TM6100.jpg` (husky, eyes at
+full-res (789,2085)/(927,2075)): protect 0 → eye [140,43,41] (red flood, repro);
+protect 70 → [55,37,41] (natural). All 5 shader programs verified compiling live.
+
 ## ⚠️ Build stamp
 `chromasmith-22.html` has a `const BUILD='YYYY-MM-DDx'` near the top of its `<script>`
 (shown in the header + startup log so users can spot a stale GitHub Pages/Safari cache).

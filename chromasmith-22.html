@@ -279,6 +279,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         <div class="fx-fields" id="ff-hal">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-a">70</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
+          <div class="fx-row" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior."><div class="fx-label">Shadow protect</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-p">0</div></div>
           <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Colour derived from source (physical film model)</div>
         </div>
       </div>
@@ -2032,7 +2033,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-11e';
+const BUILD='2026-06-12a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -2548,7 +2549,7 @@ precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
-uniform float halR,halG,halB,blmA,grA,grSz,grT,seed,debug;
+uniform float halR,halG,halB,halProt,blmA,grA,grSz,grT,seed,debug;
 uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
 float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2s(float c){return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
@@ -2568,6 +2569,14 @@ void main(){
   float emit=texture(hEmit,uv).r;
   rawH=max(rawH-vec3(emit),0.0);
   vec3 hg=rawH*vec3(halR,halG,halB);   // channel-split: σ_R wide red, σ_G narrow green
+  // SHADOW PROTECT (user slider, default 0 = calibrated Dehancer behavior): attenuate
+  // the halation glow RECEIVED by dark pixels so small dark features fully surrounded
+  // by bright emitters (eyes, nostrils) do not flood red. halProt is the linear-light
+  // luminance below which protection ramps in (0 disables).
+  if(halProt>0.0){
+    float bl=dot(S2L(base_s),vec3(.2126,.7152,.0722));
+    hg*=smoothstep(0.0,halProt,bl);
+  }
   vec3 bg=rawB*blmA;                   // source-colored bloom
   // ---- diagnostic views ----
   if(debug>0.5){
@@ -2768,6 +2777,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1f(ul('halR'),H.gainR*amtH);
     gl.uniform1f(ul('halG'),H.gainG*amtH);
     gl.uniform1f(ul('halB'),H.gainB*amtH);
+    gl.uniform1f(ul('halProt'),(P.halation.enabled&&P.halation.protect)?P.halation.protect:0);
     gl.uniform1f(ul('blmA'),bGain);
     gl.uniform1f(ul('grA'),P.grain.enabled?P.grain.amount/100:0);
     gl.uniform1f(ul('grSz'),P.grain.enabled?P.grain.size/500:1);
@@ -3367,7 +3377,7 @@ async function loadFXImages(fileList){
 }
 function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate()}
 function fxUpdate(){
-  ['grain-a','grain-sz','hal-a','hal-r','bloom-a','bloom-th','bloom-r','b1-t','b2-t'].forEach(id=>{
+  ['grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t'))txt=v+'%';vl.textContent=txt}
   });
@@ -3376,7 +3386,8 @@ function fxUpdate(){
 function getFXParams(){return{
   lut:fxState.lut,
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),type:parseFloat(document.getElementById('sel-grain-t').value)},
-  halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value)},
+  halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),
+    protect:parseFloat((document.getElementById('sl-hal-p')||{value:0}).value)/100*0.15}, // slider 0-100 → linear-lum threshold 0..0.15 (eyes ~0.05-0.07)
   bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value)/100,radius:parseFloat(document.getElementById('sl-bloom-r').value)},
   debug:parseFloat((document.getElementById('sel-debug')||{}).value||0),
   bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
