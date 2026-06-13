@@ -2033,7 +2033,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-12a';
+const BUILD='2026-06-13a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -2110,7 +2110,7 @@ function sampleLUT(lut,r,g,b){
   }return[or,og,ob];
 }
 function writeCube(lut,title){
-  const L=[`TITLE "${title}"`,`LUT_3D_SIZE ${SZ}`,``];
+  const L=[`TITLE "${title}"`,`#LUMIXPHOTOSTYLE STD`,`LUT_3D_SIZE ${SZ}`,``];
   for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);L.push(`${lut[i].toFixed(6)} ${lut[i+1].toFixed(6)} ${lut[i+2].toFixed(6)}`)}
   return L.join('\n');
 }

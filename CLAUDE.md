@@ -89,6 +89,27 @@ kill the Dehancer-matched gap halos. Validated on `calib/__TM6100.jpg` (husky, e
 full-res (789,2085)/(927,2075)): protect 0 → eye [140,43,41] (red flood, repro);
 protect 70 → [55,37,41] (natural). All 5 shader programs verified compiling live.
 
+## ✅ Lumix Lab `.cube` compatibility — SHIPPED 2026-06-13a
+User report: `calib/LUT LIBRARY/a beach preset v5.7.cube` "doesn't work with the Lumix
+Lab app". The file IS a correctly-formed 33³ LUT (`LUT_3D_SIZE 33`, 35937 data lines,
+values in [0,1]) — size/format was **not** the bug. Root cause: it's missing the
+**`#LUMIXPHOTOSTYLE STD`** comment tag. Per Panasonic's LUT Library docs, this tag
+tells the camera/app which Photo Style the LUT expects as input; **if absent, V-Log
+is assumed** — so a STD-targeted LUT like this gets applied as if the source were
+V-Log, producing badly-wrong colors (the other two hand-fixed library files,
+`a_green_shady_beach_v1.cube` and `Lucifer at Brighton Beach.cube`, already carry this
+tag as line 2, which is how the convention was discovered).
+- Fixed at the source: `writeCube()` (chromasmith-22.html, ~line 2113) now emits
+  `TITLE`, `#LUMIXPHOTOSTYLE STD`, `LUT_3D_SIZE`, blank, data — so **every** future
+  "Download .cube" (built-in presets, LUT-chart round trip, history exports, blind
+  XMP→LUT) is Lumix-Lab-ready by default.
+- Added `calib/LUT LIBRARY/a beach preset v5.7 lumix.cube` — byte-identical LUT data
+  to the original plus the one inserted tag line — as the ready-to-sideload file for
+  this preset. The original `a beach preset v5.7.cube` is left as-is (still a valid
+  generic 33³ LUT for non-Lumix tools).
+⚠️ If a future regenerate of `calib/LUT LIBRARY/*_composed.cube` or the built-in
+preset blobs drops this tag again, re-add `#LUMIXPHOTOSTYLE STD` as line 2.
+
 ## ⚠️ Build stamp
 `chromasmith-22.html` has a `const BUILD='YYYY-MM-DDx'` near the top of its `<script>`
 (shown in the header + startup log so users can spot a stale GitHub Pages/Safari cache).
