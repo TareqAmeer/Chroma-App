@@ -499,6 +499,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
       <li><b>LUT chart</b> — downloads a reference chart of every colour. Apply your look to it in another app, drop the result back, and Chromasmith reverse-engineers it into a clean <code>.cube</code>.</li>
       <li><b>Download .cube</b> — exports the active LUT (already formatted for the Lumix&nbsp;Lab app).</li>
     </ul>
+    <div class="gnote"><b>Recommended way to turn any Lightroom preset or profile into a <code>.cube</code>:</b> use the <b>LUT&nbsp;chart</b>. Download it, apply your preset to the chart in Lightroom, export it (sRGB, full size), then drop that export back on the <b>Apply LUT</b> zone. Because it captures the <i>actual rendered look</i> empirically across the whole colour cube, it's more faithful and gap-free than reconstructing a look from slider values — and the resulting <code>.cube</code> is ready to <b>Download</b> (Lumix&nbsp;Lab-compatible) or save to your library. Reads patch means, so any grain/sharpening/noise reduction in the export cancels out. <i>Tip: a LUT only carries global colour &amp; tone — not local masks, sharpening or grain.</i></div>
 
     <h3>Quick Actions &amp; One-tap Looks</h3>
     <ul>
@@ -2273,7 +2274,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17e';
+const BUILD='2026-06-17f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
