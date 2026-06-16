@@ -1,0 +1,28 @@
+# Python calibration environment (recreate from calib/requirements.txt)
+.calibvenv/
+__pycache__/
+*.pyc
+*.npy
+
+# OS / editor cruft
+.DS_Store
+.claude/
+
+# Large or regenerable calibration assets (you supply your own captures):
+# original RAW/JPEG/TIFF captures + the validation/proof renders the scripts emit
+*.RW2
+*.RAW
+*.rw2
+*.raw
+*.dng
+*.tif
+*.tiff
+*.JPG
+*.jpg
+*.jpeg
+calib/fujify/_*.png
+calib/cmp_*.png
+calib/val_*.png
+
+# Untracked source-material folder (not part of the public repo)
+Fujify Luts and XMP/

@@ -1,0 +1,68 @@
+# Chromasmith
+
+A single-file, fully-offline film-emulation and colour-grading tool that runs entirely in
+your browser. Load a photo, apply a film look (LUT), grain, halation, bloom and basic
+adjustments, then export at full resolution — **nothing is ever uploaded**, every image,
+LUT and export is processed locally on your device with WebGL.
+
+**Live app:** open `index.html` (it redirects to the app) — or visit the GitHub Pages site.
+
+There is an in-app **Guide** tab documenting every control and a full FAQ.
+
+## Features
+
+- **Effects & Export** — 11 built-in film looks (Velvia, Astia, Classic Neg, Provia, Reala
+  Ace, the Beach preset, and more), plus film grain, halation, bloom, vignette, borders,
+  and full basic adjustments (exposure/contrast/WB/clarity/sharpen). Crop, rotate, straighten.
+  Export at full original resolution to PNG or JPEG.
+- **Match & Refine** — drop a before/after pair and it builds a `.cube` LUT that reproduces
+  the look (also emits an `.xmp`).
+- **Colour Copy** — transfer the colour and tone of any reference photo onto another.
+- **True 1:1 loupe** — renders a native-resolution crop through the full pipeline so grain
+  and halation appear at real export scale for pixel-peeping.
+- **Panasonic RW2 / RAW** input, decoded locally (LibRaw → WebAssembly) with selectable
+  in-camera DCP colour profiles, so RAW colour matches Lightroom.
+- Undo/redo, split before/after, live histogram, zoom/pan, session save, EXIF readout.
+- Exported `.cube` files are **Lumix Lab–ready** (carry the `#LUMIXPHOTOSTYLE STD` tag).
+
+## Running it
+
+There is **no build step** — it's a single HTML file plus a few vendored assets. Any static
+file server works:
+
+```bash
+# from the repo root
+python3 -m http.server 8000
+# then open http://localhost:8000/
+```
+
+Or deploy the folder as-is to **GitHub Pages** / any static host.
+
+> **Note on RAW support:** decoding RW2/RAW uses `SharedArrayBuffer`, which requires
+> cross-origin isolation (COOP/COEP headers). GitHub Pages can't set those headers, so the
+> app registers `coi-serviceworker.min.js`, which enables isolation client-side and reloads
+> the page once on first visit. Everything else (JPEG/PNG/TIFF, LUTs, all effects, export)
+> works without it.
+
+## Repository layout
+
+```
+index.html                  Redirect → the app
+chromasmith-22.html         The entire application (HTML + CSS + JS + GLSL shaders)
+coi-serviceworker.min.js    Enables cross-origin isolation for the RAW decoder (MIT)
+vendor/
+  libraw/                   LibRaw WebAssembly RW2/RAW decoder (index.js, worker.js, .wasm)
+  dcp/                      Panasonic DC-S9 Adobe DCP camera colour profiles
+```
+
+## Third-party components
+
+- **LibRaw** (WASM build via `libraw-wasm`) — RAW decoding. LGPL/CDDL (LibRaw's own terms).
+- **pako** 2.1.0 (embedded) — zlib inflate for ZIP-compressed TIFF. MIT/Zlib.
+- **coi-serviceworker** (gzuidhof) — cross-origin isolation shim. MIT.
+- Panasonic DC-S9 DCP camera profiles — Adobe/Panasonic camera profiles.
+
+## Privacy
+
+100% client-side. The **● OFFLINE** badge in the header confirms local-only processing —
+it is the intended state, not an error. Your photos never leave your device.

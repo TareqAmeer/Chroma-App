@@ -1,0 +1,13 @@
+{
+ "kR": 0.14846519383397644,
+ "kG": 0.14171490300278614,
+ "kB": 0.14347456072101425,
+ "powG": 0.18741282897279793,
+ "powL": 0.5166851363799156,
+ "powA": 0.8530269689455359,
+ "wL": 0.4822327788479343,
+ "hiLo": 0.8668283015451214,
+ "hiHi": 0.9010710410235563,
+ "grSz": 0.02,
+ "_note": "v4: v3 two-component + per-channel highlight-rolloff gate (1-smoothstep(hiLo,hiHi,value_c)) -- closes the clipped/saturated-channel near-zero-grain gap v3 missed. grSz carried over from v3 fit (h21 hash limitation, see CLAUDE.md)."
+}

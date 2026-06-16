@@ -1,0 +1,11 @@
+{
+ "kR": 0.14226050254920736,
+ "kG": 0.13496666164429738,
+ "kB": 0.13753623391811803,
+ "powG": 0.10599085742674855,
+ "powL": 0.5280417978208573,
+ "powA": 0.856974955386025,
+ "wL": 0.5271434283382574,
+ "grSz": 0.02,
+ "_note": "v3 two-component grain: sigma_c = k_c * amount_norm^powA * (wL*lum^powL + (1-wL)*clamp(res,0,1)_c^powG); grSz fit to ~2px autocorr half-width on Gray50 @ amount=60. NOTE: h21 chaotic hash caps spatial correlation at ~1px (Dehancer ~2.25px) -- needs a small noise-field blur to close (Phase-B, deferred)."
+}
