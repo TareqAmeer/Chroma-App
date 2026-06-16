@@ -97,6 +97,9 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-label{font-size:11px;color:var(--mut);flex-shrink:0;width:80px}
 .fx-slider{flex:1;accent-color:var(--acc);cursor:pointer}
 .fx-val{font-family:var(--mono);font-size:10px;color:var(--acc);width:36px;text-align:right;flex-shrink:0}
+.fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
+.fx-val[contenteditable]:hover{background:var(--sur2)}
+.fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
 .fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
 .fx-select{background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:4px 8px;color:var(--txt);font-family:var(--mono);font-size:10px;flex:1;cursor:pointer;min-width:0;box-sizing:border-box;text-overflow:ellipsis;overflow:hidden}
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
@@ -160,7 +163,16 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
   .btn{min-height:44px}
   .fx-slider{height:28px}
   #fx-fname{width:auto!important;flex:1}
-  .btn-row{flex-wrap:wrap}}
+  .btn-row{flex-wrap:wrap}
+  /* Preview first on phones (height-capped in JS) + sticky so you watch it update while
+     scrolling the controls below — instead of the preview being dead-last off-screen. */
+  .fx-preview-col{order:-1;top:8px;z-index:5;background:var(--bg);padding-bottom:6px}
+  /* Bigger touch targets for the zoom overlay + editable values */
+  .fx-zoom-ctrl{gap:4px;padding:3px}
+  .fx-zoom-ctrl button{padding:9px 13px;font-size:14px}
+  .fx-zoom-ctrl #fx-zoom-pct{font-size:12px;min-width:44px}
+  .fx-val{min-height:26px;display:flex;align-items:center;justify-content:flex-end;font-size:11px}
+  .fx-val[contenteditable]:focus{justify-content:center;min-width:52px}}
 </style>
 </head>
 <body>
@@ -2274,7 +2286,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17f';
+const BUILD='2026-06-17g';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -3928,6 +3940,30 @@ function toggleLoupe(){
   _updateZoomReadout();
   renderPreview();
 }
+// Make every slider's value readout type-editable: tap it, type a number, Enter/blur to apply.
+// Keeps the lightweight contenteditable <div> so all existing `.textContent = ...` display
+// updates keep working; on commit we just set the slider value (it auto-clamps to min/max via
+// the range input) and re-fire its native `input` handler (fxUpdate / geomStraighten).
+function initEditableVals(){
+  document.querySelectorAll('.fx-val[id^="vl-"]').forEach(el=>{
+    const sl=document.getElementById('sl-'+el.id.slice(3));
+    if(!sl||el._editWired)return;el._editWired=true;
+    el.contentEditable='true';el.spellcheck=false;
+    el.setAttribute('inputmode','text');        // full keyboard so the minus sign is available
+    el.title='Tap to type a value';
+    const commit=()=>{
+      const n=parseFloat((el.textContent||'').replace(/[^0-9.+-]/g,''));
+      if(!isNaN(n))sl.value=n;                   // range input sanitises to [min,max] + step
+      sl.dispatchEvent(new Event('input',{bubbles:true})); // runs the slider's own handler → updates display + render
+    };
+    el.addEventListener('focus',()=>{const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);});
+    el.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();el.blur();}
+      else if(e.key==='Escape'){e.preventDefault();sl.dispatchEvent(new Event('input',{bubbles:true}));el.blur();}
+    });
+    el.addEventListener('blur',commit);
+  });
+}
 function initZoomPan(){
   const wrap=document.getElementById('fx-wrap');
   const zw=document.getElementById('fx-zoom-wrap');
@@ -4199,7 +4235,7 @@ function renderLoupe(){
   const fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
   const wrap=document.getElementById('fx-wrap');
   const maxW=Math.min(900,wrap.clientWidth||900);
-  const fit=Math.min(1,maxW/fw),cw=fw*fit|0,ch=fh*fit|0;          // on-screen footprint (matches normal preview)
+  const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint (matches normal preview)
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const cropW=Math.min(Math.round(cw*dpr),fw),cropH=Math.min(Math.round(ch*dpr),fh);
   const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
@@ -4222,6 +4258,9 @@ function renderLoupe(){
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
 }
+// On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
+// the viewport — otherwise a portrait image would fill the screen and bury the controls.
+function fxPreviewMaxH(){return window.innerWidth<=700?Math.max(220,window.innerHeight*0.46):Infinity;}
 function renderPreview(){
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
@@ -4230,7 +4269,8 @@ function renderPreview(){
   const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
   const wrap=document.getElementById('fx-wrap');
   const maxW=Math.min(900,wrap.clientWidth||900);
-  const sc=Math.min(1,maxW/iw);
+  const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
+  const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
   // Render the backing store at devicePixelRatio (capped at 2x) so the preview is crisp on
   // HiDPI screens; 2×900=1800px is still ~1/13 of a 24MP export, so cost stays tiny.
@@ -4954,6 +4994,7 @@ initDcpSelect();    // populate RAW profile dropdown (persisted choice)
 initCompareButton(); // wire "hold to compare" before/after
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 initZoomPan();
+initEditableVals();
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
