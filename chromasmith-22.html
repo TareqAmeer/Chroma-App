@@ -16,7 +16,14 @@ canvas,img,video,select,input{max-width:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:14px;line-height:1.5}
 header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px}
 .logo{font-family:var(--serif);font-size:20px;letter-spacing:.12em;color:var(--acc);font-style:italic}
-.logo span{color:var(--mut);font-size:11px;font-family:var(--mono);letter-spacing:.05em;font-style:normal;margin-left:12px}
+.logo .sub{color:var(--mut);font-size:11px;font-family:var(--mono);letter-spacing:.05em;font-style:normal;margin-left:12px}
+.logo-glow{text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.bstamp{font-family:var(--mono);font-size:10px;color:var(--mut);letter-spacing:.04em;cursor:pointer}
+.hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);cursor:pointer;padding:6px;transition:all .15s}
+.hdr-btn:hover{border-color:var(--mut)}
+.hdr-ic{display:inline-flex;color:var(--mut)}
+.hdr-ic svg{display:block}
 .badge{font-family:var(--mono);font-size:10px;color:var(--ok);background:rgba(82,201,122,.1);border:1px solid rgba(82,201,122,.25);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
 .tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto;touch-action:pan-x;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .tab{flex:0 0 auto;padding:12px 18px;font-size:11px;letter-spacing:.07em;font-family:var(--mono);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s;text-transform:uppercase;white-space:nowrap}
@@ -247,10 +254,22 @@ body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:s
 .fx-rail-btn.on{background:rgba(212,144,58,.12);color:var(--acc)}
 .fx-rail-btn .fx-rail-ic{display:inline-flex;flex-shrink:0}
 .fx-rail-btn .fx-rail-lb{white-space:nowrap}
-body.fx-deskb .fx-panel{column-count:1}
+body.fx-deskb .fx-panel{column-count:1;max-height:calc(100vh - 130px);overflow-y:auto;align-self:start}
 body.fx-deskb .fx-ctrl.sec-active{margin-bottom:0}
 body.fx-deskb .looks-grid{grid-template-columns:repeat(2,1fr);max-height:none}
 body.fx-deskb #fx-actionbar,body.fx-deskb #fx-secnav{display:none}
+/* image always fits the viewport — no page scroll to see it */
+body.fx-deskb #fx-canvas{max-height:calc(100vh - 150px)}
+body.fx-deskb .fx-canvas-wrap{min-height:0}
+/* enabled-section indicator on rail + strip */
+.fx-rail-btn.enabled,.fx-sec-btn.enabled{color:var(--acc)}
+.fx-rail-btn.enabled .fx-rail-ic,.fx-sec-btn.enabled .fx-sec-ic{color:var(--acc)}
+.fx-rail-btn.enabled.on{background:rgba(212,144,58,.18)}
+/* zoom + compare/split/hist relocated into the desktop action bar */
+#fx-deskbar-tools{display:flex;align-items:center;gap:8px}
+body.fx-deskb #fx-deskbar-tools #fx-zoom-ctrl{position:static;display:flex;background:none;border:none;padding:0;gap:2px}
+body.fx-deskb #fx-deskbar-tools #fx-preview-tools{position:static;display:flex;margin:0;gap:4px;flex-wrap:nowrap}
+body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
 /* ── LIGHT THEME ── */
 body.light{--bg:#f4f3ef;--sur:#ffffff;--sur2:#ecebe4;--bdr:#d9d6cc;--txt:#1d1d1a;--mut:#6f6c64}
 body.light #status-cap{background:#000}
@@ -259,8 +278,13 @@ body.light #status-cap{background:#000}
 <body>
 <div id="status-cap"></div>
 <header>
-  <div class="logo">Chromasmith <span>colour calibration</span><span id="build-stamp" onclick="document.body.classList.add('diag-on');applyFxLayout();" title="Tap to reveal diagnostics" style="cursor:pointer"></span></div>
-  <div class="badge">● OFFLINE</div>
+  <div class="logo"><span class="logo-glow">Chroma</span>smith <span class="sub">film simulation tool</span></div>
+  <div class="hdr-right">
+    <span id="build-stamp" class="bstamp" onclick="document.body.classList.add('diag-on');applyFxLayout();" title="Tap to reveal diagnostics"></span>
+    <button class="hdr-btn" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic hdr-ic"></span></button>
+    <button class="hdr-btn" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="hdr-ic" id="hdr-log"></span></button>
+    <div class="badge">● OFFLINE</div>
+  </div>
 </header>
 <div class="tabs">
   <div class="tab active" onclick="switchTab('fx')">Effects &amp; Export</div>
@@ -343,8 +367,7 @@ body.light #status-cap{background:#000}
     <button class="fx-db" onclick="enableAll()" title="Turn on grain, halation, bloom &amp; borders at once"><span class="fx-db-ic" id="db-allfx"></span>Enable all FX</button>
     <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
     <div style="flex:1"></div>
-    <button class="fx-db fx-db-icon" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic fx-db-ic"></span></button>
-    <button class="fx-db fx-db-icon" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="fx-db-ic" id="db-log"></span></button>
+    <div id="fx-deskbar-tools"></div>
   </div>
   <div class="fx-layout">
     <!-- DESKTOP tool rail (one tool at a time) -->
@@ -549,9 +572,9 @@ body.light #status-cap{background:#000}
     <div class="fx-preview-col">
       <div class="fx-canvas-wrap" id="fx-wrap">
         <div class="fx-no-img" id="fx-no-img">
-          <div class="ni-logo">Chromasmith</div>
-          <div class="ni-sub">colour calibration</div>
-          <div class="ni-build" id="ni-build"></div>
+          <div class="ni-logo"><span class="logo-glow">Chroma</span>smith</div>
+          <div class="ni-sub">film simulation tool</div>
+          <div class="ni-build" id="ni-build" onclick="document.body.classList.add('diag-on');applyFxLayout();" style="cursor:pointer" title="Tap to reveal diagnostics"></div>
           <div class="ni-hint">Drop an image to start</div>
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas" onclick="wbEyedropperClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas></div>
@@ -2402,7 +2425,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17i';
+const BUILD='2026-06-17j';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3860,7 +3883,7 @@ async function loadFXImages(fileList){
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate()}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();}
 function fxUpdate(){
   ['grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','vig'].forEach(id=>{
@@ -4387,7 +4410,7 @@ function renderLoupe(){
 }
 // On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.
-function fxPreviewMaxH(){return window.innerWidth<=700?Math.max(220,window.innerHeight*0.42):Infinity;}
+function fxPreviewMaxH(){return window.innerWidth<=700?Math.max(220,window.innerHeight*0.42):Math.max(360,window.innerHeight-150);}
 function renderPreview(){
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
@@ -4774,6 +4797,7 @@ function enableAll(){
     }
   });
   fxUpdate();
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled();
   log('Grain, Halation, Bloom and Borders enabled','ok');
 }
 
@@ -5150,7 +5174,8 @@ function buildToolRail(){        // desktop vertical labelled rail
     b.onclick=()=>fxSection(key);
     rail.appendChild(b);
   });
-  fxSection(_activeSec()||'looks');
+  fxSection(_activeSec()||'image');
+  syncSectionEnabled();
 }
 function fxSection(name){
   const card=document.querySelector(`.fx-ctrl[data-fxsec="${name}"]`);if(!card)return;
@@ -5158,6 +5183,15 @@ function fxSection(name){
   card.classList.add('sec-active');
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
+}
+// Mark a section's rail/strip button when its effect is switched on (toggle has class "on").
+const _SEC_TOGGLE={adjust:'tg-adjust',grain:'tg-grain',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders'};
+function syncSectionEnabled(){
+  document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>{
+    const tg=_SEC_TOGGLE[b.dataset.sec];
+    const on=tg&&document.getElementById(tg)&&document.getElementById(tg).classList.contains('on');
+    b.classList.toggle('enabled',!!on);
+  });
 }
 // ── light / dark theme ──
 function toggleTheme(){
@@ -5178,7 +5212,17 @@ function applyFxLayout(){
   document.body.classList.toggle('fx-deskb',desk);
   document.body.classList.toggle('fx-single',mob||desk);
   if(mob){buildSecNav();if(!_activeSec())fxSection('image');}
-  else if(desk){buildToolRail();if(!_activeSec())fxSection('looks');}
+  else if(desk){buildToolRail();if(!_activeSec())fxSection('image');}
+  relocatePreviewTools(mob,desk);
+}
+// On desktop the zoom + compare/split/histogram controls live in the top action bar;
+// on mobile they overlay the pinned image. Move the single instances accordingly.
+function relocatePreviewTools(mob,desk){
+  const bar=document.getElementById('fx-deskbar-tools'),wrap=document.getElementById('fx-wrap');
+  const zc=document.getElementById('fx-zoom-ctrl'),pt=document.getElementById('fx-preview-tools');
+  if(!bar||!wrap||!zc||!pt)return;
+  if(desk){bar.appendChild(pt);bar.appendChild(zc);}
+  else{wrap.appendChild(zc);wrap.appendChild(pt);}
 }
 const applyMobileFx=applyFxLayout; // legacy alias
 _mqMobile.addEventListener('change',applyFxLayout);
@@ -5217,7 +5261,7 @@ initEditableVals();
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
- set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('db-log','log');}
+ set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('hdr-log','log');}
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
