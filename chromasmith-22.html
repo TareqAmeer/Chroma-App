@@ -283,6 +283,41 @@ body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
 /* ── LIGHT THEME ── */
 body.light{--bg:#f4f3ef;--sur:#ffffff;--sur2:#ecebe4;--bdr:#d9d6cc;--txt:#1d1d1a;--mut:#6f6c64}
 body.light #status-cap{background:#000}
+/* ── COLLAGE TAB ── */
+.cl-layout{display:grid;grid-template-columns:330px 1fr;gap:16px;align-items:start}
+.cl-controls{display:flex;flex-direction:column;gap:10px}
+.cl-controls .fx-ctrl{margin-bottom:0}
+.cl-stage{position:relative;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);height:calc(100vh - 170px);min-height:380px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:18px;position:sticky;top:16px}
+.cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px;pointer-events:none}
+#cl-frame{position:relative;box-shadow:0 6px 30px rgba(0,0,0,.35);display:none}
+.cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:rgba(255,255,255,.03)}
+.cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:4}
+.cl-cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:center;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.cl-cell.dragover{outline:2px dashed var(--acc2);outline-offset:-2px}
+.cl-cell-empty{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);font-size:22px;width:100%;height:100%}
+.cl-div{position:absolute;z-index:5;background:transparent}
+.cl-div.v{cursor:col-resize;width:12px;margin-left:-6px}
+.cl-div.h{cursor:row-resize;height:12px;margin-top:-6px}
+.cl-div::after{content:'';position:absolute;background:rgba(255,255,255,.001);transition:background .15s}
+.cl-div.v::after{left:5px;width:2px;top:0;bottom:0}
+.cl-div.h::after{top:5px;height:2px;left:0;right:0}
+.cl-div:hover::after{background:var(--acc)}
+.cl-tray{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cl-thumb{position:relative;width:50px;height:50px;border-radius:5px;overflow:hidden;border:2px solid var(--bdr);cursor:grab;background:var(--sur2)}
+.cl-thumb img{width:100%;height:100%;object-fit:cover;pointer-events:none}
+.cl-thumb .cl-thumb-x{position:absolute;top:0;right:0;width:16px;height:16px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;line-height:16px;text-align:center;cursor:pointer;border-radius:0 0 0 4px}
+.cl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cl-shape{aspect-ratio:1;border:1px solid var(--bdr);border-radius:5px;background:var(--sur2);cursor:pointer;padding:5px;transition:border-color .15s}
+.cl-shape:hover{border-color:var(--mut)}
+.cl-shape.on{border-color:var(--acc);background:rgba(212,144,58,.1)}
+.cl-shape svg{display:block;width:100%;height:100%}
+.cl-count{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
+.cl-count button{font-family:var(--mono);font-size:11px;min-width:30px;padding:5px 0;border:1px solid var(--bdr);border-radius:5px;background:var(--sur2);color:var(--mut);cursor:pointer}
+.cl-count button.on{border-color:var(--acc);color:var(--acc)}
+.cl-swatches{display:flex;gap:4px;flex-wrap:wrap}
+.cl-swatches button{width:20px;height:20px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;padding:0}
+@media(max-width:700px){.cl-layout{grid-template-columns:1fr}
+  .cl-stage{height:54vh;order:-1;position:static}}
 </style>
 </head>
 <body>
@@ -300,6 +335,7 @@ body.light #status-cap{background:#000}
   <div class="tab active" onclick="switchTab('fx')">Effects &amp; Export</div>
   <div class="tab" onclick="switchTab('match')">Match &amp; Refine</div>
   <div class="tab" onclick="switchTab('copy')">Colour Copy</div>
+  <div class="tab" onclick="switchTab('collage')">Collage</div>
   <div class="tab" onclick="switchTab('guide')">Guide</div>
 </div>
 <main>
@@ -755,6 +791,75 @@ body.light #status-cap{background:#000}
 
       <div class="faq-q">It looks like an old version.</div>
       <div class="faq-a">The build date is shown in the header. If it's stale, hard-refresh to clear the cached page.</div>
+    </div>
+  </div>
+</div>
+<!-- COLLAGE -->
+<div class="panel" id="panel-collage">
+  <div class="cl-layout">
+    <div class="cl-controls">
+      <div class="fx-ctrl">
+        <div class="ctitle" style="margin-bottom:10px">Photos</div>
+        <div class="dz" id="cl-dz" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="clDropFiles(event)">
+          <input type="file" accept="image/*" multiple onchange="clAddFiles(this.files);this.value=''">
+          <div class="dz-ic">＋</div><div class="dz-lb">Add photos</div>
+        </div>
+        <div class="cl-tray" id="cl-tray"></div>
+        <div class="fx-hint" id="cl-tray-hint">Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</div>
+      </div>
+      <div class="fx-ctrl">
+        <div class="ctitle" style="margin-bottom:10px">Canvas size</div>
+        <div class="fx-row"><div class="fx-label">Aspect</div>
+          <select class="fx-select" id="cl-aspect" onchange="clSetAspect(this.value)"></select>
+        </div>
+      </div>
+      <div class="fx-ctrl">
+        <div class="ctitle" style="margin-bottom:10px">Layout</div>
+        <div class="cl-shapes" id="cl-shapes"></div>
+        <div class="fx-hint" id="cl-shape-hint">Pick how many photos and the arrangement.</div>
+      </div>
+      <div class="fx-ctrl">
+        <div class="ctitle" style="margin-bottom:10px">Borders &amp; background</div>
+        <div class="fx-row"><div class="fx-label">Background</div>
+          <input type="color" class="fx-color" id="cl-bg" value="#ffffff" oninput="clSet('bg',this.value)">
+          <div class="cl-swatches" id="cl-swatches"></div>
+        </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Spacing</div><input class="fx-slider" type="range" min="0" max="60" value="8" id="cl-inner" oninput="clSet('inner',+this.value)"><div class="fx-val" id="cl-inner-v">8</div></div>
+        <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" oninput="clSet('outer',+this.value)"><div class="fx-val" id="cl-outer-v">0</div></div>
+        <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" oninput="clSet('radius',+this.value)"><div class="fx-val" id="cl-radius-v">0</div></div>
+      </div>
+      <div class="fx-ctrl" id="cl-cellpanel" style="display:none">
+        <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
+        <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" oninput="clCellZoom(+this.value)"><div class="fx-val" id="cl-zoom-v">100</div></div>
+        <div class="fx-hint">Drag inside the photo to reposition it. Scroll over a photo to zoom.</div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bsec" onclick="clReplaceSelected()"><span class="bdot"></span>Replace</button>
+          <button class="btn bgh" onclick="clCellReset()"><span class="bdot"></span>Reset</button>
+          <button class="btn bgh" onclick="clCellClear()"><span class="bdot"></span>Clear slot</button>
+        </div>
+      </div>
+      <div class="fx-ctrl">
+        <div class="ctitle" style="margin-bottom:10px">Export</div>
+        <div class="fx-row"><div class="fx-label">Long side</div>
+          <select class="fx-select" id="cl-res">
+            <option value="1600">1600 px</option>
+            <option value="2400" selected>2400 px</option>
+            <option value="3200">3200 px</option>
+            <option value="4000">4000 px (large)</option>
+          </select>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bpri" id="cl-export" onclick="clExport()"><span class="bdot"></span>Export collage</button>
+          <button class="btn bgh" onclick="clShuffle()" title="Randomly redistribute photos into the slots"><span class="bdot"></span>Shuffle</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn bgh" onclick="clReset()"><span class="bdot"></span>Start over</button>
+        </div>
+      </div>
+    </div>
+    <div class="cl-stage" id="cl-stage">
+      <div class="cl-empty" id="cl-empty">Add photos to begin your collage</div>
+      <div id="cl-frame"></div>
     </div>
   </div>
 </div>
@@ -2435,7 +2540,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17l';
+const BUILD='2026-06-17m';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5131,7 +5236,7 @@ function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Ma
 function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
 function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
 function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${msg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
-function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();}
+function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','collage','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();}
 
 // ── FX editor: section model, mobile strip + desktop tool rail ────────────────
 function toggleLog(){document.body.classList.toggle('log-on');}
@@ -5293,6 +5398,211 @@ document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
 });
 log(`Chromasmith ready (build ${BUILD}) — all processing runs locally in your browser`,'ok');
+
+// ════════════════════ COLLAGE TAB ════════════════════
+const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9]];
+const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
+const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,sel:-1,frameW:0,frameH:0,inited:false};
+const _leaf=()=>({leaf:true,size:1});
+function _row(){return{dir:'row',size:1,children:[].slice.call(arguments)};}
+function _col(){return{dir:'col',size:1,children:[].slice.call(arguments)};}
+function clLeafCount(n){return n.leaf?1:n.children.reduce((a,c)=>a+clLeafCount(c),0);}
+function clClone(n){return n.leaf?{leaf:true,size:n.size}:{dir:n.dir,size:n.size,children:n.children.map(clClone)};}
+function clTemplates(n){
+  const L=_leaf;
+  if(n<=1)return[L()];
+  if(n===2)return[_row(L(),L()),_col(L(),L()),_row(Object.assign(L(),{size:1.5}),L())];
+  if(n===3)return[_row(L(),L(),L()),_col(L(),L(),L()),_col(L(),_row(L(),L())),_col(_row(L(),L()),L()),_row(L(),_col(L(),L())),_row(_col(L(),L()),L())];
+  if(n===4)return[_col(_row(L(),L()),_row(L(),L())),_row(L(),L(),L(),L()),_col(L(),L(),L(),L()),_row(L(),_col(L(),L(),L())),_col(L(),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()))];
+  if(n===5)return[_col(_row(L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L(),L())),_col(L(),_row(L(),L(),L(),L())),_row(L(),_col(L(),L(),L(),L()))];
+  if(n===6)return[_col(_row(L(),L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()),_col(L(),L())),_col(_row(L(),L()),_row(L(),L()),_row(L(),L()))];
+  const cols=Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols);let rem=n;const rws=[];
+  for(let r=0;r<rows;r++){const cs=[];for(let c=0;c<cols&&rem>0;c++){cs.push(L());rem--;}rws.push(_row.apply(null,cs));}
+  return[_col.apply(null,rws)];
+}
+function clLayoutRects(node,x,y,w,h,gap,divs){
+  if(node.leaf)return[{x,y,w,h}];
+  const ch=node.children,total=ch.reduce((a,c)=>a+c.size,0);let out=[];
+  if(node.dir==='row'){const avail=w-gap*(ch.length-1);let cx=x;
+    ch.forEach((c,i)=>{const cw=avail*c.size/total;out=out.concat(clLayoutRects(c,cx,y,cw,h,gap,divs));
+      if(divs&&i<ch.length-1)divs.push({axis:'v',x:cx+cw+gap/2,y,len:h,parent:node,i,avail,total});cx+=cw+gap;});
+  }else{const avail=h-gap*(ch.length-1);let cy=y;
+    ch.forEach((c,i)=>{const chh=avail*c.size/total;out=out.concat(clLayoutRects(c,x,cy,w,chh,gap,divs));
+      if(divs&&i<ch.length-1)divs.push({axis:'h',x,y:cy+chh+gap/2,len:w,parent:node,i,avail,total});cy+=chh+gap;});}
+  return out;
+}
+function clInit(){
+  if(!CL.inited){
+    const as=document.getElementById('cl-aspect');
+    as.innerHTML=CL_ASPECTS.map(a=>`<option value="${a[0]}">${a[0]}</option>`).join('');
+    const sw=document.getElementById('cl-swatches');sw.innerHTML='';
+    CL_SWATCHES.forEach(c=>{const b=document.createElement('button');b.style.background=c;b.title=c;b.onclick=()=>clSet('bg',c);sw.appendChild(b);});
+    window.addEventListener('resize',()=>{if(document.getElementById('panel-collage').classList.contains('active'))clRenderFrame();});
+    CL.inited=true;
+  }
+  clRebuildShapes();clRenderFrame();
+}
+function clAddFiles(files){
+  const arr=[].slice.call(files).filter(f=>f.type&&f.type.indexOf('image/')===0);if(!arr.length)return;
+  let pending=arr.length;
+  arr.forEach(f=>{const url=URL.createObjectURL(f),img=new Image();
+    img.onload=()=>{CL.photos.push({img,url,name:f.name});if(--pending===0)clPhotosChanged();};
+    img.onerror=()=>{if(--pending===0)clPhotosChanged();};img.src=url;});
+}
+function clDropFiles(e){e.preventDefault();dzl(document.getElementById('cl-dz'));if(e.dataTransfer&&e.dataTransfer.files)clAddFiles(e.dataTransfer.files);}
+function clPhotosChanged(){
+  const n=Math.max(1,CL.photos.length);
+  CL.templates=clTemplates(n);
+  if(CL.templateIdx>=CL.templates.length)CL.templateIdx=0;
+  clSetTemplate(CL.templateIdx,false);
+  clRenderTray();clRebuildShapes();
+  const has=CL.photos.length>0;
+  document.getElementById('cl-empty').style.display=has?'none':'flex';
+  document.getElementById('cl-frame').style.display=has?'block':'none';
+}
+function clSetTemplate(idx,reset){
+  CL.templateIdx=idx;CL.tree=clClone(CL.templates[idx]);
+  const lc=clLeafCount(CL.tree);
+  if(reset||!CL.assign.length){CL.assign=[];for(let i=0;i<lc;i++)CL.assign.push(i<CL.photos.length?i:null);}
+  else{while(CL.assign.length<lc)CL.assign.push(CL.assign.length<CL.photos.length?CL.assign.length:null);CL.assign.length=lc;}
+  CL.cells=[];for(let i=0;i<lc;i++)CL.cells.push({scale:1,ox:0,oy:0});
+  CL.sel=-1;clHideCellPanel();clMarkShapes();clRenderFrame();
+}
+function clRebuildShapes(){
+  const host=document.getElementById('cl-shapes');if(!host)return;host.innerHTML='';
+  const hint=document.getElementById('cl-shape-hint');
+  if(!CL.photos.length){if(hint)hint.textContent='Add photos to see layout options.';return;}
+  if(hint)hint.textContent=CL.photos.length+' photo'+(CL.photos.length>1?'s':'')+' — pick an arrangement.';
+  CL.templates.forEach((t,i)=>{
+    const rects=clLayoutRects(clClone(t),0,0,100,100,3,null);
+    const svg='<svg viewBox="0 0 100 100">'+rects.map(r=>`<rect x="${r.x}" y="${r.y}" width="${Math.max(0,r.w)}" height="${Math.max(0,r.h)}" rx="2" fill="currentColor" opacity=".5"/>`).join('')+'</svg>';
+    const b=document.createElement('div');b.className='cl-shape'+(i===CL.templateIdx?' on':'');b.style.color='var(--mut)';b.innerHTML=svg;
+    b.onclick=()=>clSetTemplate(i,false);host.appendChild(b);
+  });
+}
+function clMarkShapes(){document.querySelectorAll('#cl-shapes .cl-shape').forEach((el,i)=>el.classList.toggle('on',i===CL.templateIdx));}
+function clRenderTray(){
+  const tray=document.getElementById('cl-tray');if(!tray)return;tray.innerHTML='';
+  CL.photos.forEach((p,i)=>{
+    const t=document.createElement('div');t.className='cl-thumb';t.draggable=true;
+    t.innerHTML=`<img src="${p.url}" alt=""><div class="cl-thumb-x" title="Remove">×</div>`;
+    t.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','photo:'+i);e.dataTransfer.effectAllowed='copy';});
+    t.querySelector('.cl-thumb-x').onclick=e=>{e.stopPropagation();clRemovePhoto(i);};
+    tray.appendChild(t);
+  });
+}
+function clRemovePhoto(i){
+  URL.revokeObjectURL(CL.photos[i].url);CL.photos.splice(i,1);
+  CL.assign=CL.assign.map(a=>a==null?null:(a===i?null:(a>i?a-1:a)));
+  clPhotosChanged();
+}
+function clRenderFrame(){
+  const stage=document.getElementById('cl-stage'),frame=document.getElementById('cl-frame');if(!stage||!frame)return;
+  if(!CL.photos.length||!CL.tree){frame.style.display='none';return;}
+  frame.style.display='block';
+  const availW=stage.clientWidth-36,availH=stage.clientHeight-36;
+  const ar=CL.aspect[1]/CL.aspect[2];
+  let fw=availW,fh=fw/ar;if(fh>availH){fh=availH;fw=fh*ar;}
+  CL.frameW=fw;CL.frameH=fh;
+  frame.style.width=fw+'px';frame.style.height=fh+'px';frame.style.background=CL.bg;
+  const base=Math.min(fw,fh),gap=CL.inner/1000*base,outer=CL.outer/1000*base,rad=CL.radius/1000*base;
+  CL.dividers=[];
+  const rects=clLayoutRects(CL.tree,outer,outer,fw-2*outer,fh-2*outer,gap,CL.dividers);
+  frame.innerHTML='';
+  rects.forEach((r,i)=>{
+    const cell=document.createElement('div');cell.className='cl-cell'+(i===CL.sel?' sel':'');
+    cell.style.cssText=`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border-radius:${rad}px`;
+    const pIdx=CL.assign[i];
+    if(pIdx!=null&&CL.photos[pIdx]){const im=document.createElement('img');im.src=CL.photos[pIdx].url;im.alt='';cell.appendChild(im);clApplyTransform(im,CL.cells[i]);}
+    else cell.innerHTML='<div class="cl-cell-empty">＋</div>';
+    cell.dataset.i=i;cell.draggable=(i!==CL.sel);
+    clWireCell(cell,i,r);frame.appendChild(cell);
+  });
+  CL.dividers.forEach(d=>{
+    const el=document.createElement('div');el.className='cl-div '+d.axis;
+    if(d.axis==='v')el.style.cssText=`left:${d.x}px;top:${d.y}px;height:${d.len}px`;
+    else el.style.cssText=`top:${d.y}px;left:${d.x}px;width:${d.len}px`;
+    clWireDivider(el,d);frame.appendChild(el);
+  });
+}
+function clApplyTransform(im,c){im.style.transform=`translate(${c.ox*100}%,${c.oy*100}%) scale(${c.scale})`;}
+function clWireCell(cell,i,r){
+  cell.onclick=()=>{if(cell._panned){cell._panned=false;return;}clSelectCell(i);};
+  cell.addEventListener('wheel',e=>{e.preventDefault();const c=CL.cells[i];if(!c||CL.assign[i]==null)return;
+    c.scale=Math.min(5,Math.max(1,c.scale*(e.deltaY<0?1.08:1/1.08)));const im=cell.querySelector('img');if(im)clApplyTransform(im,c);if(i===CL.sel)clSyncZoom();},{passive:false});
+  cell.addEventListener('pointerdown',e=>{
+    if(i!==CL.sel||CL.assign[i]==null||e.button!==0)return;
+    const c=CL.cells[i],im=cell.querySelector('img');if(!im)return;e.preventDefault();
+    const sx=e.clientX,sy=e.clientY,ox0=c.ox,oy0=c.oy;cell._panned=false;
+    try{cell.setPointerCapture(e.pointerId);}catch(_){}
+    const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>3)cell._panned=true;c.ox=ox0+(ev.clientX-sx)/r.w;c.oy=oy0+(ev.clientY-sy)/r.h;clApplyTransform(im,c);};
+    const up=()=>{cell.removeEventListener('pointermove',mv);cell.removeEventListener('pointerup',up);};
+    cell.addEventListener('pointermove',mv);cell.addEventListener('pointerup',up);
+  });
+  cell.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','cell:'+i);e.dataTransfer.effectAllowed='move';});
+  cell.addEventListener('dragover',e=>{e.preventDefault();cell.classList.add('dragover');});
+  cell.addEventListener('dragleave',()=>cell.classList.remove('dragover'));
+  cell.addEventListener('drop',e=>{e.preventDefault();cell.classList.remove('dragover');
+    const d=e.dataTransfer.getData('text/plain');
+    if(d.indexOf('cell:')===0){const src=+d.slice(5);if(src===i)return;
+      const a=CL.assign[src];CL.assign[src]=CL.assign[i];CL.assign[i]=a;
+      const t=CL.cells[src];CL.cells[src]=CL.cells[i];CL.cells[i]=t;clRenderFrame();}
+    else if(d.indexOf('photo:')===0){CL.assign[i]=+d.slice(6);CL.cells[i]={scale:1,ox:0,oy:0};clRenderFrame();}
+  });
+}
+function clWireDivider(el,d){
+  el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();try{el.setPointerCapture(e.pointerId);}catch(_){}
+    const ch=d.parent.children,s0i=ch[d.i].size,s0j=ch[d.i+1].size,combined=s0i+s0j,factor=d.total/d.avail,minS=combined*0.12;
+    const start=d.axis==='v'?e.clientX:e.clientY;
+    const mv=ev=>{const cur=d.axis==='v'?ev.clientX:ev.clientY;let ni=s0i+(cur-start)*factor;ni=Math.min(combined-minS,Math.max(minS,ni));ch[d.i].size=ni;ch[d.i+1].size=combined-ni;clRenderFrame();};
+    const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);};
+    document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
+  });
+}
+function clSelectCell(i){CL.sel=i;
+  document.querySelectorAll('#cl-frame .cl-cell').forEach((el,j)=>{el.classList.toggle('sel',j===i);el.draggable=(j!==i);});
+  document.getElementById('cl-cellpanel').style.display='block';clSyncZoom();
+}
+function clHideCellPanel(){const p=document.getElementById('cl-cellpanel');if(p)p.style.display='none';}
+function clSyncZoom(){const c=CL.cells[CL.sel];if(!c)return;const z=Math.round(c.scale*100);document.getElementById('cl-zoom').value=z;document.getElementById('cl-zoom-v').textContent=z;}
+function clCellZoom(v){const c=CL.cells[CL.sel];if(!c)return;c.scale=v/100;document.getElementById('cl-zoom-v').textContent=v;const im=document.querySelector('#cl-frame .cl-cell.sel img');if(im)clApplyTransform(im,c);}
+function clCellReset(){const c=CL.cells[CL.sel];if(!c)return;c.scale=1;c.ox=0;c.oy=0;clSyncZoom();clRenderFrame();}
+function clCellClear(){if(CL.sel<0)return;CL.assign[CL.sel]=null;clRenderFrame();}
+function clReplaceSelected(){
+  if(CL.sel<0)return;
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{const f=inp.files[0];if(!f)return;const url=URL.createObjectURL(f),img=new Image();
+    img.onload=()=>{CL.photos.push({img,url,name:f.name});CL.assign[CL.sel]=CL.photos.length-1;CL.cells[CL.sel]={scale:1,ox:0,oy:0};clRenderTray();clRenderFrame();};img.src=url;};
+  inp.click();
+}
+function clSet(p,v){CL[p]=v;const el=document.getElementById('cl-'+p+'-v');if(el)el.textContent=v;if(p==='bg'){const b=document.getElementById('cl-bg');if(b)b.value=v;}clRenderFrame();}
+function clSetAspect(k){const a=CL_ASPECTS.find(x=>x[0]===k);if(a){CL.aspect=a;clRenderFrame();}}
+function clShuffle(){
+  const lc=CL.assign.length,idxs=CL.photos.map((_,i)=>i);
+  for(let i=idxs.length-1;i>0;i--){const j=Math.random()*(i+1)|0;const t=idxs[i];idxs[i]=idxs[j];idxs[j]=t;}
+  CL.assign=[];for(let i=0;i<lc;i++)CL.assign.push(i<idxs.length?idxs[i]:null);
+  CL.cells=CL.cells.map(()=>({scale:1,ox:0,oy:0}));clRenderFrame();
+}
+function clReset(){CL.photos.forEach(p=>URL.revokeObjectURL(p.url));CL.photos=[];CL.assign=[];CL.cells=[];CL.sel=-1;CL.templateIdx=0;clHideCellPanel();clPhotosChanged();clRenderTray();}
+function clRoundRect(ctx,x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function clExport(){
+  if(!CL.photos.length){log('Add photos to the collage first','warn');return;}
+  const long=+document.getElementById('cl-res').value,ar=CL.aspect[1]/CL.aspect[2];
+  let W,H;if(ar>=1){W=long;H=Math.round(long/ar);}else{H=long;W=Math.round(long*ar);}
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');
+  ctx.fillStyle=CL.bg;ctx.fillRect(0,0,W,H);
+  const base=Math.min(W,H),gap=CL.inner/1000*base,outer=CL.outer/1000*base,rad=CL.radius/1000*base;
+  const rects=clLayoutRects(CL.tree,outer,outer,W-2*outer,H-2*outer,gap,null);
+  rects.forEach((r,i)=>{
+    const pIdx=CL.assign[i];if(pIdx==null||!CL.photos[pIdx])return;
+    const img=CL.photos[pIdx].img,c=CL.cells[i],iw=img.naturalWidth,ih=img.naturalHeight;
+    ctx.save();clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
+    const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover;
+    const dx=r.x+(r.w-dw)/2+c.ox*r.w,dy=r.y+(r.h-dh)/2+c.oy*r.h;
+    ctx.drawImage(img,dx,dy,dw,dh);ctx.restore();
+  });
+  cv.toBlob(b=>{if(!b){log('Export failed','err');return;}const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='collage.jpg';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);log('Collage exported ('+W+'×'+H+')','ok');},'image/jpeg',0.95);
+}
 </script>
 </body>
 </html>
