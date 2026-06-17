@@ -116,7 +116,11 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
 .fx-zoom-ctrl button#btn-loupe.on{background:var(--acc);color:#000}
 .fx-zoom-ctrl #fx-zoom-pct{font-size:10px;color:var(--mut);min-width:36px;text-align:center;cursor:default}
-.fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px}
+.fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ni-logo{font-family:var(--serif);font-size:26px;letter-spacing:.12em;color:var(--acc);font-style:italic;margin-bottom:2px}
+.ni-sub{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.ni-build{font-family:var(--mono);font-size:10px;color:var(--mut);opacity:.7}
+.ni-hint{font-size:12px;color:var(--mut);margin-top:14px}
 #fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:11}
 /* one-tap looks */
 .looks-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:340px;overflow-y:auto}
@@ -183,16 +187,17 @@ body.diag-on .fx-diag{display:block}
 body.mobile-fx{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top)}
 body.mobile-fx header{display:none}
 body.mobile-fx .tabs{flex:0 0 auto}
-body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0;margin:0;max-width:100vw;overflow:hidden}
+body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0 4px!important;margin:0;max-width:100vw;overflow:hidden}
+body.mobile-fx .tab{padding-top:8px;padding-bottom:9px}
 body.mobile-fx #panel-fx.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%;max-width:100%}
 body.mobile-fx .fx-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%;max-width:100%}
 /* pinned editor head */
-body.mobile-fx .fx-preview-col{flex:0 0 auto;align-self:stretch;order:-1;position:static;top:auto;z-index:auto;background:var(--bg);padding:6px 10px 0;width:auto;max-width:100%;min-width:0;overflow:hidden}
+body.mobile-fx .fx-preview-col{flex:0 0 auto;align-self:stretch;order:-1;position:static;top:auto;z-index:auto;background:var(--bg);padding:4px 4px 0;width:auto;max-width:100%;min-width:0;overflow:hidden}
 body.mobile-fx .fx-canvas-wrap{width:100%;max-width:100%}
 body.mobile-fx .fx-canvas-wrap{height:42vh;min-height:0}
 body.mobile-fx #fx-canvas{max-height:42vh;object-fit:contain}
 /* scroll area = only the active section's card */
-body.mobile-fx .fx-panel{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;column-count:1;padding:8px 12px 28px}
+body.mobile-fx .fx-panel{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;column-count:1;padding:8px 6px 28px}
 body.mobile-fx .fx-ctrl{display:none}
 body.mobile-fx .fx-ctrl.sec-active{display:block;margin-bottom:0}
 body.mobile-fx.diag-on .fx-diag{display:none}
@@ -207,10 +212,10 @@ body.mobile-fx #fx-actionbar{display:flex;gap:6px;padding:6px 4px 4px;justify-co
 .fx-act:active{background:var(--bdr)}
 .fx-act-ic{font-size:16px;line-height:1}
 .fx-act-lb{font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
-.fx-act-pri{background:var(--acc);border-color:var(--acc)}
-.fx-act-pri .fx-act-ic,.fx-act-pri .fx-act-lb{color:#000}
+.fx-act-pri{border-color:var(--acc)}
+.fx-act-pri .fx-act-ic{color:var(--acc)}
 /* horizontal section strip */
-body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 8px;border-top:1px solid var(--bdr);background:var(--sur)}
+body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 2px;border-top:1px solid var(--bdr);background:var(--sur)}
 .fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--mut);cursor:pointer;padding:4px 6px;font-family:var(--mono);border-radius:6px;min-width:54px}
 .fx-sec-btn .fx-sec-ic{font-size:18px;line-height:1}
 .fx-sec-btn .fx-sec-lb{font-size:8px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
@@ -492,7 +497,12 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
     <!-- PREVIEW -->
     <div class="fx-preview-col">
       <div class="fx-canvas-wrap" id="fx-wrap">
-        <div class="fx-no-img" id="fx-no-img">Drop an image to start</div>
+        <div class="fx-no-img" id="fx-no-img">
+          <div class="ni-logo">Chromasmith</div>
+          <div class="ni-sub">colour calibration</div>
+          <div class="ni-build" id="ni-build"></div>
+          <div class="ni-hint">Drop an image to start</div>
+        </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas" onclick="wbEyedropperClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas></div>
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
         <canvas id="fx-hist"></canvas>
@@ -2343,6 +2353,7 @@ const LUT_PRESETS={
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
 const BUILD='2026-06-17h';
 document.getElementById('build-stamp').textContent='build '+BUILD;
+{const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 // ═══════════════════════════
 // COLOUR MATH
 // ═══════════════════════════
@@ -5023,7 +5034,7 @@ function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classLi
 // ── Mobile FX editor: section strip + pinned layout ───────────────────────────
 function toggleLog(){document.body.classList.toggle('log-on');}
 // glyph + label for each section, in strip order
-const FX_SECTIONS=[['looks','◎','Looks'],['image','◧','Image'],['adjust','◐','Adjust'],
+const FX_SECTIONS=[['image','◧','Image'],['looks','◎','Looks'],['adjust','◐','Adjust'],
   ['crop','⌗','Crop'],['grain','⋰','Grain'],['hal','◌','Halation'],['bloom','✸','Bloom'],
   ['vig','⬗','Vignette'],['borders','▣','Borders'],['export','↧','Export'],['info','ⓘ','Info'],
   ['diag','⚙','Diag']];
@@ -5040,7 +5051,7 @@ function buildSecNav(){
     nav.appendChild(b);
   });
   const cur=document.querySelector('.fx-ctrl.sec-active');
-  fxSection(cur?cur.dataset.fxsec:'looks');
+  fxSection(cur?cur.dataset.fxsec:'image');
 }
 function fxSection(name){
   const card=document.querySelector(`.fx-ctrl[data-fxsec="${name}"]`);if(!card)return;
@@ -5055,7 +5066,7 @@ function applyMobileFx(){
   document.body.classList.toggle('mobile-fx',on);
   if(on){
     buildSecNav();
-    if(!document.querySelector('.fx-ctrl.sec-active'))fxSection('looks');
+    if(!document.querySelector('.fx-ctrl.sec-active'))fxSection('image');
   }
 }
 _mqMobile.addEventListener('change',applyMobileFx);
