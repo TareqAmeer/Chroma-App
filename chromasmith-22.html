@@ -192,7 +192,13 @@ body.diag-on .fx-diag{display:block}
   .fx-zoom-ctrl button{padding:9px 13px;font-size:14px}
   .fx-zoom-ctrl #fx-zoom-pct{font-size:12px;min-width:44px}
   .fx-val{min-height:26px;display:flex;align-items:center;justify-content:flex-end;font-size:11px}
-  .fx-val[contenteditable]:focus{justify-content:center;min-width:52px}}
+  .fx-val[contenteditable]:focus{justify-content:center;min-width:52px}
+  /* On the non-FX tabs the header just shows the title + subtitle; build / theme / log /
+     status move to a slim fixed bar at the bottom so the top stays clean. */
+  body:not(.mobile-fx) header{padding-top:env(safe-area-inset-top);height:auto;min-height:56px}
+  body:not(.mobile-fx) .hdr-right{position:fixed;left:0;right:0;bottom:0;justify-content:center;gap:16px;background:var(--sur);border-top:1px solid var(--bdr);padding:9px 14px calc(9px + env(safe-area-inset-bottom));z-index:1500}
+  body:not(.mobile-fx) main{padding-bottom:70px}
+  body:not(.mobile-fx) #log-area{bottom:54px}}
 
 /* ── MOBILE FX EDITOR: pinned image + horizontal section strip + scrolling controls ── */
 body.mobile-fx{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top)}
@@ -2429,7 +2435,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17k';
+const BUILD='2026-06-17l';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
