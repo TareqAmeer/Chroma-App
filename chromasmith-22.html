@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>CHROMASMITH</title>
 <!-- coi-serviceworker (MIT, Guido Zuidhof): injects COOP/COEP client-side so SharedArrayBuffer
      works on GitHub Pages (which can't set headers). Required by the libraw-wasm RW2 decoder.
      It reloads the page once on first visit to gain cross-origin isolation. -->
 <script src="coi-serviceworker.min.js"></script>
 <style>
-:root{--bg:#0a0a0d;--sur:#111118;--sur2:#18181f;--bdr:#252530;--acc:#d4903a;--acc2:#4a9ddc;--txt:#f0ece2;--mut:#8a8680;--ok:#52c97a;--err:#e05454;--r:8px;--mono:ui-monospace,Menlo,'Courier New',monospace;--serif:Palatino,'Palatino Linotype',Georgia,serif;--sans:-apple-system,'Helvetica Neue',sans-serif}
+:root{--bg:#17171b;--sur:#1f1f25;--sur2:#26262d;--bdr:#34343f;--acc:#d4903a;--acc2:#4a9ddc;--txt:#f0ece2;--mut:#9a968f;--ok:#52c97a;--err:#e05454;--r:8px;--mono:ui-monospace,Menlo,'Courier New',monospace;--serif:Palatino,'Palatino Linotype',Georgia,serif;--sans:-apple-system,'Helvetica Neue',sans-serif}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
 canvas,img,video,select,input{max-width:100%}
@@ -117,6 +117,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-zoom-ctrl button#btn-loupe.on{background:var(--acc);color:#000}
 .fx-zoom-ctrl #fx-zoom-pct{font-size:10px;color:var(--mut);min-width:36px;text-align:center;cursor:default}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px}
+#fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:11}
 /* one-tap looks */
 .looks-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:340px;overflow-y:auto}
 .look-cell{cursor:pointer;border-radius:5px;overflow:hidden;border:2px solid transparent;background:var(--sur2);position:relative}
@@ -152,7 +153,12 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .guide .toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
 .guide .toc a{font-family:var(--mono);font-size:11px;text-decoration:none;color:var(--acc);border:1px solid var(--bdr);border-radius:5px;padding:5px 11px;background:var(--sur)}
 .guide .toc a:hover{border-color:var(--acc);background:var(--sur2)}
-#log-area{background:var(--sur);border-top:1px solid var(--bdr);padding:7px 22px;max-height:66px;overflow-y:auto;position:sticky;bottom:0}
+#log-area{display:none;background:var(--sur);border-top:1px solid var(--bdr);padding:7px 22px;max-height:66px;overflow-y:auto;position:sticky;bottom:0}
+body.log-on #log-area{display:block}
+/* Diagnostics card + status cap + mobile-only chrome hidden by default */
+#status-cap,#fx-actionbar,#fx-secnav{display:none}
+.fx-diag{display:none}
+body.diag-on .fx-diag{display:block}
 .ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
@@ -164,20 +170,58 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
   .fx-slider{height:28px}
   #fx-fname{width:auto!important;flex:1}
   .btn-row{flex-wrap:wrap}
-  /* Preview first on phones (height-capped in JS) + sticky so you watch it update while
-     scrolling the controls below — instead of the preview being dead-last off-screen. */
-  .fx-preview-col{order:-1;top:8px;z-index:5;background:var(--bg);padding-bottom:6px}
+  /* Black cap over the status-bar / notch area */
+  #status-cap{display:block;position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#000;z-index:2000}
   /* Bigger touch targets for the zoom overlay + editable values */
   .fx-zoom-ctrl{gap:4px;padding:3px}
   .fx-zoom-ctrl button{padding:9px 13px;font-size:14px}
   .fx-zoom-ctrl #fx-zoom-pct{font-size:12px;min-width:44px}
   .fx-val{min-height:26px;display:flex;align-items:center;justify-content:flex-end;font-size:11px}
   .fx-val[contenteditable]:focus{justify-content:center;min-width:52px}}
+
+/* ── MOBILE FX EDITOR: pinned image + horizontal section strip + scrolling controls ── */
+body.mobile-fx{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top)}
+body.mobile-fx header{display:none}
+body.mobile-fx .tabs{flex:0 0 auto}
+body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0;margin:0;max-width:100vw;overflow:hidden}
+body.mobile-fx #panel-fx.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%;max-width:100%}
+body.mobile-fx .fx-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%;max-width:100%}
+/* pinned editor head */
+body.mobile-fx .fx-preview-col{flex:0 0 auto;align-self:stretch;order:-1;position:static;top:auto;z-index:auto;background:var(--bg);padding:6px 10px 0;width:auto;max-width:100%;min-width:0;overflow:hidden}
+body.mobile-fx .fx-canvas-wrap{width:100%;max-width:100%}
+body.mobile-fx .fx-canvas-wrap{height:42vh;min-height:0}
+body.mobile-fx #fx-canvas{max-height:42vh;object-fit:contain}
+/* scroll area = only the active section's card */
+body.mobile-fx .fx-panel{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;column-count:1;padding:8px 12px 28px}
+body.mobile-fx .fx-ctrl{display:none}
+body.mobile-fx .fx-ctrl.sec-active{display:block;margin-bottom:0}
+body.mobile-fx.diag-on .fx-diag{display:none}
+body.mobile-fx.diag-on .fx-diag.sec-active{display:block}
+/* compact compare/split/hist as small overlay chips on the image */
+body.mobile-fx #fx-preview-tools{left:auto;right:8px;top:8px;bottom:auto;transform:none;gap:4px;justify-content:flex-end}
+.fx-mini{padding:5px 8px!important;min-height:0!important;font-size:9px!important;letter-spacing:.04em;background:rgba(0,0,0,.55);border-color:var(--bdr)}
+body.mobile-fx #fx-crop-tools{order:5;margin:6px 0 0}
+/* action bar directly below the image */
+body.mobile-fx #fx-actionbar{display:flex;gap:6px;padding:6px 4px 4px;justify-content:space-between}
+.fx-act{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;color:var(--txt);padding:6px 2px;cursor:pointer;font-family:var(--mono)}
+.fx-act:active{background:var(--bdr)}
+.fx-act-ic{font-size:16px;line-height:1}
+.fx-act-lb{font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+.fx-act-pri{background:var(--acc);border-color:var(--acc)}
+.fx-act-pri .fx-act-ic,.fx-act-pri .fx-act-lb{color:#000}
+/* horizontal section strip */
+body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 8px;border-top:1px solid var(--bdr);background:var(--sur)}
+.fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--mut);cursor:pointer;padding:4px 6px;font-family:var(--mono);border-radius:6px;min-width:54px}
+.fx-sec-btn .fx-sec-ic{font-size:18px;line-height:1}
+.fx-sec-btn .fx-sec-lb{font-size:8px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.fx-sec-btn.on{color:var(--acc)}
+.fx-sec-btn.on .fx-sec-ic{transform:scale(1.05)}
 </style>
 </head>
 <body>
+<div id="status-cap"></div>
 <header>
-  <div class="logo">Chromasmith <span>colour calibration</span><span id="build-stamp"></span></div>
+  <div class="logo">Chromasmith <span>colour calibration</span><span id="build-stamp" onclick="document.body.classList.add('diag-on');buildSecNav();" title="Tap to reveal diagnostics" style="cursor:pointer"></span></div>
   <div class="badge">● OFFLINE</div>
 </header>
 <div class="tabs">
@@ -256,7 +300,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 <div class="panel active" id="panel-fx">
   <div class="fx-layout">
     <div class="fx-panel">
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="image">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
           <input type="file" accept="image/*,.tif,.tiff,.rw2,.raw" multiple onchange="fi(event,'fx-img')">
@@ -269,8 +313,8 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           <input type="file" accept=".cube,image/*,.tif,.tiff" onchange="fi(event,'fx-lut')">
           <div class="dz-ic">⬡</div><div class="dz-lb">Apply LUT (.cube or processed LUT chart)</div><div class="dz-fn" id="fn-fx-lut"></div>
         </div>
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Preset</div>
-          <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)"><option value="">None</option></select>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()"><span class="bdot"></span>Save to library</button>
@@ -282,21 +326,18 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Library is stored in this browser only (Safari may purge it after ~7 days unused)</div>
       </div>
-      <!-- QUICK ENABLE -->
-      <div class="fx-ctrl">
-        <div class="fx-ctrl-title">Quick Actions</div>
-        <div class="btn-row">
-          <button class="btn bpri" onclick="enableAll()"><span class="bdot"></span>Enable All FX</button>
-          <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
+      <!-- LOOKS GALLERY + PRESET -->
+      <div class="fx-ctrl" data-fxsec="looks">
+        <div class="fx-ctrl-title">Presets &amp; Looks</div>
+        <div class="fx-row"><div class="fx-label">Preset</div>
+          <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)"><option value="">None</option></select>
+        </div>
+        <div id="fx-looks-ctrl" style="display:none;margin-top:8px">
+          <div class="looks-grid" id="fx-looks"></div>
         </div>
       </div>
-      <!-- LOOKS GALLERY -->
-      <div class="fx-ctrl" id="fx-looks-ctrl" style="display:none">
-        <div class="fx-ctrl-title">One-tap Looks</div>
-        <div class="looks-grid" id="fx-looks"></div>
-      </div>
       <!-- BASIC ADJUSTMENTS -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="adjust">
         <div class="fx-ctrl-title">Basic Adjustments <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
         <div class="fx-fields" id="ff-adjust">
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
@@ -319,7 +360,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         </div>
       </div>
       <!-- CROP & ROTATE -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="crop">
         <div class="fx-ctrl-title">Crop &amp; Rotate</div>
         <div class="btn-row">
           <button class="btn bgh" onclick="geomRotate(-90)" title="Rotate left"><span class="bdot"></span>⟲ 90°</button>
@@ -345,7 +386,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Rotate / flip / straighten / crop apply to every loaded image</div>
       </div>
       <!-- GRAIN -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="grain">
         <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
         <div class="fx-fields" id="ff-grain">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-a">30</div></div>
@@ -360,7 +401,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         </div>
       </div>
       <!-- HALATION -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="hal">
         <div class="fx-ctrl-title">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
         <div class="fx-fields" id="ff-hal">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-a">70</div></div>
@@ -370,7 +411,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         </div>
       </div>
       <!-- BLOOM -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="bloom">
         <div class="fx-ctrl-title">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
         <div class="fx-fields" id="ff-bloom">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-a">40</div></div>
@@ -380,14 +421,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         </div>
       </div>
       <!-- VIGNETTE -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="vig">
         <div class="fx-ctrl-title">Vignette <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
         <div class="fx-fields" id="ff-vig">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">50</div></div>
         </div>
       </div>
       <!-- BORDERS -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="borders">
         <div class="fx-ctrl-title">Borders <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
         <div class="fx-fields" id="ff-borders">
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:8px">Inner border</div>
@@ -399,7 +440,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         </div>
       </div>
       <!-- DIAGNOSTICS -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl fx-diag" data-fxsec="diag">
         <div class="fx-ctrl-title">Diagnostics</div>
         <div class="fx-row"><div class="fx-label">View</div>
           <select class="fx-select" id="sel-debug" onchange="fxUpdate()">
@@ -412,7 +453,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Isolate a single shader pass to debug the match</div>
       </div>
       <!-- EXPORT -->
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-fxsec="export">
         <div class="fx-ctrl-title">Export</div>
         <div class="vrow">
           <div class="vlb">Filename</div>
@@ -441,6 +482,12 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           <button class="btn bgh" onclick="loadSession(true)" title="Restore saved slider settings"><span class="bdot"></span>Load session</button>
         </div>
       </div>
+      <!-- INFO / METADATA -->
+      <div class="fx-ctrl" data-fxsec="info">
+        <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6" id="fx-info"></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:6px;line-height:1.6" id="fx-exif"></div>
+      </div>
     </div>
     <!-- PREVIEW -->
     <div class="fx-preview-col">
@@ -457,18 +504,26 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
           <button onclick="zoomFit()" title="Fit the whole image">Fit</button>
           <button id="btn-loupe" onclick="toggleLoupe()" title="True 1:1 view — renders a native-resolution crop through the full pipeline so grain &amp; halation appear at real export scale">1:1</button>
         </div>
-      </div>
-      <div class="btn-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
-        <button class="btn bgh" id="btn-before" title="Press and hold to see the original">○ Hold to compare</button>
-        <button class="btn bgh" id="btn-split" onclick="toggleSplit()" title="Split before/after view">⇔ Split</button>
-        <button class="btn bgh" id="btn-hist" onclick="toggleHist()" title="Toggle RGB histogram overlay">▦ Histogram</button>
+        <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
+          <button class="btn bgh fx-mini" id="btn-before" title="Press and hold to see the original">○ Compare</button>
+          <button class="btn bgh fx-mini" id="btn-split" onclick="toggleSplit()" title="Split before/after view">⇔ Split</button>
+          <button class="btn bgh fx-mini" id="btn-hist" onclick="toggleHist()" title="Toggle RGB histogram overlay">▦ Histogram</button>
+        </div>
       </div>
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
         <button class="btn bpri" onclick="cropApply()"><span class="bdot"></span>Apply crop</button>
         <button class="btn bgh" onclick="cropCancel()"><span class="bdot"></span>Cancel</button>
       </div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--mut);text-align:center;margin-top:6px" id="fx-info"></div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--mut);text-align:center;margin-top:2px;line-height:1.6" id="fx-exif"></div>
+      <!-- PERSISTENT ACTION BAR (mobile) -->
+      <div id="fx-actionbar">
+        <button class="fx-act" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-act-ic">↩</span><span class="fx-act-lb">Undo</span></button>
+        <button class="fx-act" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-act-ic">↪</span><span class="fx-act-lb">Redo</span></button>
+        <button class="fx-act" onclick="enableAll()" title="Enable all FX"><span class="fx-act-ic">✨</span><span class="fx-act-lb">All FX</span></button>
+        <button class="fx-act fx-act-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span><span class="fx-act-lb">Export</span></button>
+        <button class="fx-act" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="fx-act-ic">≡</span><span class="fx-act-lb">Log</span></button>
+      </div>
+      <!-- HORIZONTAL SECTION STRIP (mobile) -->
+      <div id="fx-secnav"></div>
     </div>
   </div>
 </div>
@@ -2286,7 +2341,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17g';
+const BUILD='2026-06-17h';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 // ═══════════════════════════
 // COLOUR MATH
@@ -4260,7 +4315,7 @@ function renderLoupe(){
 }
 // On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.
-function fxPreviewMaxH(){return window.innerWidth<=700?Math.max(220,window.innerHeight*0.46):Infinity;}
+function fxPreviewMaxH(){return window.innerWidth<=700?Math.max(220,window.innerHeight*0.42):Infinity;}
 function renderPreview(){
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
@@ -4963,7 +5018,48 @@ function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Ma
 function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
 function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
 function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${msg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
-function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active')}
+function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();}
+
+// ── Mobile FX editor: section strip + pinned layout ───────────────────────────
+function toggleLog(){document.body.classList.toggle('log-on');}
+// glyph + label for each section, in strip order
+const FX_SECTIONS=[['looks','◎','Looks'],['image','◧','Image'],['adjust','◐','Adjust'],
+  ['crop','⌗','Crop'],['grain','⋰','Grain'],['hal','◌','Halation'],['bloom','✸','Bloom'],
+  ['vig','⬗','Vignette'],['borders','▣','Borders'],['export','↧','Export'],['info','ⓘ','Info'],
+  ['diag','⚙','Diag']];
+function buildSecNav(){
+  const nav=document.getElementById('fx-secnav');if(!nav)return;
+  const diagOn=document.body.classList.contains('diag-on');
+  nav.innerHTML='';
+  FX_SECTIONS.forEach(([key,ic,lb])=>{
+    if(key==='diag'&&!diagOn)return;
+    if(!document.querySelector(`.fx-ctrl[data-fxsec="${key}"]`))return;
+    const b=document.createElement('button');b.className='fx-sec-btn';b.dataset.sec=key;
+    b.innerHTML=`<span class="fx-sec-ic">${ic}</span><span class="fx-sec-lb">${lb}</span>`;
+    b.onclick=()=>fxSection(key);
+    nav.appendChild(b);
+  });
+  const cur=document.querySelector('.fx-ctrl.sec-active');
+  fxSection(cur?cur.dataset.fxsec:'looks');
+}
+function fxSection(name){
+  const card=document.querySelector(`.fx-ctrl[data-fxsec="${name}"]`);if(!card)return;
+  document.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>c.classList.remove('sec-active'));
+  card.classList.add('sec-active');
+  document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
+  const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
+}
+let _mqMobile=window.matchMedia('(max-width:700px)');
+function applyMobileFx(){
+  const on=_mqMobile.matches&&document.getElementById('panel-fx').classList.contains('active');
+  document.body.classList.toggle('mobile-fx',on);
+  if(on){
+    buildSecNav();
+    if(!document.querySelector('.fx-ctrl.sec-active'))fxSection('looks');
+  }
+}
+_mqMobile.addEventListener('change',applyMobileFx);
+window.addEventListener('orientationchange',()=>setTimeout(applyMobileFx,100));
 
 // WebGL2 check with helpful diagnosis
 (function(){
@@ -4995,6 +5091,7 @@ initCompareButton(); // wire "hold to compare" before/after
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 initZoomPan();
 initEditableVals();
+applyMobileFx();    // set up mobile pinned-image layout + section strip if on a phone
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
