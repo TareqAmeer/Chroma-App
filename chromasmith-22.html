@@ -96,6 +96,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .2s}
 .fx-toggle.on::after{left:16px}
 .fx-fields{display:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
 .fx-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .fx-label{font-size:11px;color:var(--mut);flex-shrink:0;width:80px}
 .fx-slider{flex:1;accent-color:var(--acc);cursor:pointer}
@@ -204,10 +205,10 @@ body.mobile-fx .fx-canvas-wrap{height:42vh;min-height:0}
 body.mobile-fx #fx-canvas{max-height:42vh;object-fit:contain}
 /* scroll area = only the active section's card */
 body.mobile-fx .fx-panel{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;column-count:1;padding:8px 6px 28px}
-body.mobile-fx .fx-ctrl{display:none}
-body.mobile-fx .fx-ctrl.sec-active{display:block;margin-bottom:0}
-body.mobile-fx.diag-on .fx-diag{display:none}
-body.mobile-fx.diag-on .fx-diag.sec-active{display:block}
+body.fx-single .fx-ctrl{display:none}
+body.fx-single .fx-ctrl.sec-active{display:block;margin-bottom:0}
+body.fx-single.diag-on .fx-diag{display:none}
+body.fx-single.diag-on .fx-diag.sec-active{display:block}
 /* compact compare/split/hist as small overlay chips on the image */
 body.mobile-fx #fx-preview-tools{left:auto;right:8px;top:8px;bottom:auto;transform:none;gap:4px;justify-content:flex-end}
 .fx-mini{padding:5px 8px!important;min-height:0!important;font-size:9px!important;letter-spacing:.04em;background:rgba(0,0,0,.55);border-color:var(--bdr)}
@@ -227,12 +228,38 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
 .fx-sec-btn .fx-sec-lb{font-size:8px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
 .fx-sec-btn.on{color:var(--acc)}
 .fx-sec-btn.on .fx-sec-ic{transform:scale(1.05)}
+.fx-sec-ic svg,.fx-rail-ic svg,.fx-db-ic svg{display:block}
+/* ── DESKTOP "one tool at a time" editor (body.fx-deskb) ── */
+#fx-deskbar,#fx-toolrail{display:none}
+body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 10px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);position:sticky;top:8px;z-index:20}
+.fx-db{display:inline-flex;align-items:center;gap:7px;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:8px 12px;cursor:pointer;transition:all .15s}
+.fx-db:hover{border-color:var(--mut)}
+.fx-db .fx-db-ic{display:inline-flex;color:var(--mut)}
+.fx-db-pri{background:var(--acc);border-color:var(--acc);color:#000;font-weight:600}
+.fx-db-pri .fx-db-ic{color:#000}
+.fx-db-pri:hover{background:#e8a54a}
+.fx-db-icon{padding:8px 10px}
+.fx-db-icon .fx-db-ic{color:var(--txt)}
+body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
+body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:66px;align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
+.fx-rail-btn{display:flex;align-items:center;gap:10px;width:120px;background:none;border:none;border-radius:6px;color:var(--mut);cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:9px 10px;text-align:left;transition:all .12s}
+.fx-rail-btn:hover{background:var(--sur2);color:var(--txt)}
+.fx-rail-btn.on{background:rgba(212,144,58,.12);color:var(--acc)}
+.fx-rail-btn .fx-rail-ic{display:inline-flex;flex-shrink:0}
+.fx-rail-btn .fx-rail-lb{white-space:nowrap}
+body.fx-deskb .fx-panel{column-count:1}
+body.fx-deskb .fx-ctrl.sec-active{margin-bottom:0}
+body.fx-deskb .looks-grid{grid-template-columns:repeat(2,1fr);max-height:none}
+body.fx-deskb #fx-actionbar,body.fx-deskb #fx-secnav{display:none}
+/* ── LIGHT THEME ── */
+body.light{--bg:#f4f3ef;--sur:#ffffff;--sur2:#ecebe4;--bdr:#d9d6cc;--txt:#1d1d1a;--mut:#6f6c64}
+body.light #status-cap{background:#000}
 </style>
 </head>
 <body>
 <div id="status-cap"></div>
 <header>
-  <div class="logo">Chromasmith <span>colour calibration</span><span id="build-stamp" onclick="document.body.classList.add('diag-on');buildSecNav();" title="Tap to reveal diagnostics" style="cursor:pointer"></span></div>
+  <div class="logo">Chromasmith <span>colour calibration</span><span id="build-stamp" onclick="document.body.classList.add('diag-on');applyFxLayout();" title="Tap to reveal diagnostics" style="cursor:pointer"></span></div>
   <div class="badge">● OFFLINE</div>
 </header>
 <div class="tabs">
@@ -309,7 +336,19 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
 </div>
 <!-- EFFECTS & EXPORT -->
 <div class="panel active" id="panel-fx">
+  <!-- DESKTOP persistent quick-access bar -->
+  <div id="fx-deskbar">
+    <button class="fx-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span>Undo</button>
+    <button class="fx-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span>Redo</button>
+    <button class="fx-db" onclick="enableAll()" title="Turn on grain, halation, bloom &amp; borders at once"><span class="fx-db-ic" id="db-allfx"></span>Enable all FX</button>
+    <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
+    <div style="flex:1"></div>
+    <button class="fx-db fx-db-icon" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic fx-db-ic"></span></button>
+    <button class="fx-db fx-db-icon" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="fx-db-ic" id="db-log"></span></button>
+  </div>
   <div class="fx-layout">
+    <!-- DESKTOP tool rail (one tool at a time) -->
+    <div id="fx-toolrail"></div>
     <div class="fx-panel">
       <div class="fx-ctrl" data-fxsec="image">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
@@ -340,6 +379,7 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
       <!-- LOOKS GALLERY + PRESET -->
       <div class="fx-ctrl" data-fxsec="looks">
         <div class="fx-ctrl-title">Presets &amp; Looks</div>
+        <div class="fx-hint">Tap a thumbnail to apply a film look instantly — a great starting point.</div>
         <div class="fx-row"><div class="fx-label">Preset</div>
           <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)"><option value="">None</option></select>
         </div>
@@ -350,6 +390,7 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
       <!-- BASIC ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="adjust">
         <div class="fx-ctrl-title">Basic Adjustments <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
+        <div class="fx-hint">Exposure, colour and tone — the fundamentals of every edit.</div>
         <div class="fx-fields" id="ff-adjust">
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
           <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
@@ -399,6 +440,7 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
         <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
+        <div class="fx-hint">Adds the fine speckled texture of real film stock.</div>
         <div class="fx-fields" id="ff-grain">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-a">30</div></div>
           <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="5" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">5</div></div>
@@ -414,6 +456,7 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
       <!-- HALATION -->
       <div class="fx-ctrl" data-fxsec="hal">
         <div class="fx-ctrl-title">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
+        <div class="fx-hint">Soft reddish glow around bright edges, just like real film.</div>
         <div class="fx-fields" id="ff-hal">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-a">70</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
@@ -424,6 +467,7 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
       <!-- BLOOM -->
       <div class="fx-ctrl" data-fxsec="bloom">
         <div class="fx-ctrl-title">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
+        <div class="fx-hint">Dreamy haze that blooms out of the brightest highlights.</div>
         <div class="fx-fields" id="ff-bloom">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-a">40</div></div>
           <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="2" max="60" value="10" id="sl-bloom-th" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-th">10</div></div>
@@ -434,6 +478,7 @@ body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-
       <!-- VIGNETTE -->
       <div class="fx-ctrl" data-fxsec="vig">
         <div class="fx-ctrl-title">Vignette <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
+        <div class="fx-hint">Gently darkens the corners to draw the eye inward.</div>
         <div class="fx-fields" id="ff-vig">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">50</div></div>
         </div>
@@ -2357,9 +2402,10 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17h';
+const BUILD='2026-06-17i';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
+try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
 // ═══════════════════════════
 // COLOUR MATH
 // ═══════════════════════════
@@ -5046,46 +5092,97 @@ function hidePB(id){const el=document.getElementById(id);if(el){el.style.display
 function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${msg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
 function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();}
 
-// ── Mobile FX editor: section strip + pinned layout ───────────────────────────
+// ── FX editor: section model, mobile strip + desktop tool rail ────────────────
 function toggleLog(){document.body.classList.toggle('log-on');}
-// glyph + label for each section, in strip order
-const FX_SECTIONS=[['image','◧','Image'],['looks','◎','Looks'],['grain','⋰','Grain'],
-  ['bloom','✸','Bloom'],['hal','◌','Halation'],['borders','▣','Borders'],['adjust','◐','Adjust'],
-  ['vig','⬗','Vignette'],['crop','⌗','Crop'],['export','↧','Export'],['info','ⓘ','Info'],
-  ['diag','⚙','Diag']];
-function buildSecNav(){
-  const nav=document.getElementById('fx-secnav');if(!nav)return;
+// Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).
+const _SVG=(p,sz)=>`<svg viewBox="0 0 24 24" width="${sz||20}" height="${sz||20}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const ICONS={
+ image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5L5 20"/>',
+ looks:'<path d="M5 3v4M3 5h4"/><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"/>',
+ adjust:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
+ crop:'<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/>',
+ grain:'<circle cx="6" cy="7" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="18" cy="8" r="1"/><circle cx="8" cy="13" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="19" cy="16" r="1"/><circle cx="6" cy="18" r="1"/><circle cx="12" cy="19" r="1"/>',
+ hal:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+ bloom:'<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/>',
+ vig:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="5"/>',
+ borders:'<rect x="3" y="3" width="18" height="18" rx="1"/><rect x="7" y="7" width="10" height="10"/>',
+ export:'<path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/>',
+ info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+ diag:'<circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.5 7.5 0 0 0-1.7-1L14 3h-4l-.4 2.6a7.5 7.5 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7.5 7.5 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.5 7.5 0 0 0 1.7 1L10 21h4l.4-2.6a7.5 7.5 0 0 0 1.7-1l2.3 1 2-3.4z"/>',
+ undo:'<path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/>',
+ redo:'<path d="M15 7l5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h1"/>',
+ enableAll:'<path d="M5 3v3M3.5 4.5h3"/><path d="M18 14v3M16.5 15.5h3"/><path d="M13 4l2 5.5 5.5 2-5.5 2L13 19l-2-5.5L5.5 11.5 11 9.5z"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>',
+ moon:'<path d="M21 13a8 8 0 1 1-9.9-9.9 7 7 0 1 0 9.9 9.9z"/>',
+ log:'<path d="M4 6h16M4 12h16M4 18h10"/>'
+};
+function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
+// label per section, in rail / strip order
+const FX_SECTIONS=[['image','Image'],['looks','Looks'],['grain','Grain'],
+  ['bloom','Bloom'],['hal','Halation'],['borders','Borders'],['adjust','Adjust'],
+  ['vig','Vignette'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
+function _eachSection(cb){
   const diagOn=document.body.classList.contains('diag-on');
-  nav.innerHTML='';
-  FX_SECTIONS.forEach(([key,ic,lb])=>{
+  FX_SECTIONS.forEach(([key,lb])=>{
     if(key==='diag'&&!diagOn)return;
     if(!document.querySelector(`.fx-ctrl[data-fxsec="${key}"]`))return;
+    cb(key,lb);
+  });
+}
+function _activeSec(){const c=document.querySelector('.fx-ctrl.sec-active');return c?c.dataset.fxsec:null;}
+function buildSecNav(){          // mobile horizontal strip
+  const nav=document.getElementById('fx-secnav');if(!nav)return;
+  nav.innerHTML='';
+  _eachSection((key,lb)=>{
     const b=document.createElement('button');b.className='fx-sec-btn';b.dataset.sec=key;
-    b.innerHTML=`<span class="fx-sec-ic">${ic}</span><span class="fx-sec-lb">${lb}</span>`;
+    b.innerHTML=`<span class="fx-sec-ic">${icon(key,18)}</span><span class="fx-sec-lb">${lb}</span>`;
     b.onclick=()=>fxSection(key);
     nav.appendChild(b);
   });
-  const cur=document.querySelector('.fx-ctrl.sec-active');
-  fxSection(cur?cur.dataset.fxsec:'image');
+  fxSection(_activeSec()||'image');
+}
+function buildToolRail(){        // desktop vertical labelled rail
+  const rail=document.getElementById('fx-toolrail');if(!rail)return;
+  rail.innerHTML='';
+  _eachSection((key,lb)=>{
+    const b=document.createElement('button');b.className='fx-rail-btn';b.dataset.sec=key;
+    b.innerHTML=`<span class="fx-rail-ic">${icon(key,22)}</span><span class="fx-rail-lb">${lb}</span>`;
+    b.onclick=()=>fxSection(key);
+    rail.appendChild(b);
+  });
+  fxSection(_activeSec()||'looks');
 }
 function fxSection(name){
   const card=document.querySelector(`.fx-ctrl[data-fxsec="${name}"]`);if(!card)return;
   document.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>c.classList.remove('sec-active'));
   card.classList.add('sec-active');
-  document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
+  document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
 }
-let _mqMobile=window.matchMedia('(max-width:700px)');
-function applyMobileFx(){
-  const on=_mqMobile.matches&&document.getElementById('panel-fx').classList.contains('active');
-  document.body.classList.toggle('mobile-fx',on);
-  if(on){
-    buildSecNav();
-    if(!document.querySelector('.fx-ctrl.sec-active'))fxSection('image');
-  }
+// ── light / dark theme ──
+function toggleTheme(){
+  const light=document.body.classList.toggle('light');
+  try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
+  syncThemeBtns();
 }
-_mqMobile.addEventListener('change',applyMobileFx);
-window.addEventListener('orientationchange',()=>setTimeout(applyMobileFx,100));
+function syncThemeBtns(){
+  const light=document.body.classList.contains('light');
+  document.querySelectorAll('.theme-ic').forEach(e=>e.innerHTML=icon(light?'moon':'sun',18));
+}
+// ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
+let _mqMobile=window.matchMedia('(max-width:700px)');
+function applyFxLayout(){
+  const onFx=document.getElementById('panel-fx').classList.contains('active');
+  const mob=_mqMobile.matches&&onFx, desk=!_mqMobile.matches&&onFx;
+  document.body.classList.toggle('mobile-fx',mob);
+  document.body.classList.toggle('fx-deskb',desk);
+  document.body.classList.toggle('fx-single',mob||desk);
+  if(mob){buildSecNav();if(!_activeSec())fxSection('image');}
+  else if(desk){buildToolRail();if(!_activeSec())fxSection('looks');}
+}
+const applyMobileFx=applyFxLayout; // legacy alias
+_mqMobile.addEventListener('change',applyFxLayout);
+window.addEventListener('orientationchange',()=>setTimeout(applyFxLayout,100));
 
 // WebGL2 check with helpful diagnosis
 (function(){
@@ -5117,7 +5214,10 @@ initCompareButton(); // wire "hold to compare" before/after
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 initZoomPan();
 initEditableVals();
-applyMobileFx();    // set up mobile pinned-image layout + section strip if on a phone
+applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
+syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
+{const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
+ set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('db-log','log');}
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
