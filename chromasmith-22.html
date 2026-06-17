@@ -3625,6 +3625,7 @@ async function refreshLUTSelect(keep){
 }
 async function selectLUT(v){
   const del=document.getElementById('btn-lut-del');del.disabled=!v.startsWith('l:');
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled();
   try{
     if(!v){fxState.lut=null;renderPreview();log('LUT off');return}
     let lut;
@@ -4475,7 +4476,7 @@ function defGeom(){return{rot:0,flipH:false,flipV:false,angle:0,crop:null};}
 // Geometry (rotate/flip/straighten/crop) is BATCH-WIDE: every loaded image shares the
 // previewed image's geom object, so one edit applies to all (crop is normalized, so it
 // scales per-image — best when the batch shares an aspect ratio, e.g. same-camera shots).
-function broadcastGeom(){const g=fxImages[0]&&fxImages[0].geom;if(g)fxImages.forEach(it=>it.geom=g);}
+function broadcastGeom(){const g=fxImages[0]&&fxImages[0].geom;if(g)fxImages.forEach(it=>it.geom=g);if(typeof syncSectionEnabled==='function')syncSectionEnabled();}
 function resetGeomUI(){const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;const sv=document.getElementById('vl-straighten');if(sv)sv.textContent='0°';const ar=document.getElementById('sel-crop-ar');if(ar)ar.value=0;cropAR=0;}
 function curItem(){return fxImages[0]||null;}
 function curGeom(){const it=curItem();if(!it)return null;return it.geom||(it.geom=defGeom());}
@@ -5184,13 +5185,21 @@ function fxSection(name){
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
 }
-// Mark a section's rail/strip button when its effect is switched on (toggle has class "on").
+// Mark a section's rail/strip button when it's "in use":
+//  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
+//  - looks → a preset/LUT other than None/Original is selected
+//  - crop  → any rotate/flip/straighten/crop has been applied
 const _SEC_TOGGLE={adjust:'tg-adjust',grain:'tg-grain',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders'};
+function _secIsEnabled(key){
+  const tg=_SEC_TOGGLE[key];
+  if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
+  if(key==='looks'){const s=document.getElementById('sel-lut');return !!(s&&s.value);}
+  if(key==='crop'){const g=(typeof curGeom==='function')&&curGeom();return !!(g&&(g.rot||g.flipH||g.flipV||g.angle||g.crop));}
+  return false;
+}
 function syncSectionEnabled(){
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>{
-    const tg=_SEC_TOGGLE[b.dataset.sec];
-    const on=tg&&document.getElementById(tg)&&document.getElementById(tg).classList.contains('on');
-    b.classList.toggle('enabled',!!on);
+    b.classList.toggle('enabled',_secIsEnabled(b.dataset.sec));
   });
 }
 // ── light / dark theme ──
