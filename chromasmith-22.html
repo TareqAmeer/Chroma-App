@@ -265,6 +265,10 @@ body.fx-deskb .fx-canvas-wrap{min-height:0}
 .fx-rail-btn.enabled,.fx-sec-btn.enabled{color:var(--acc)}
 .fx-rail-btn.enabled .fx-rail-ic,.fx-sec-btn.enabled .fx-sec-ic{color:var(--acc)}
 .fx-rail-btn.enabled.on{background:rgba(212,144,58,.18)}
+/* All-FX buttons highlight when every effect is on */
+.fx-db.js-allfx.allon{border-color:var(--acc);color:var(--acc)}
+.fx-db.js-allfx.allon .fx-db-ic{color:var(--acc)}
+.fx-act.js-allfx.allon .fx-act-ic,.fx-act.js-allfx.allon .fx-act-lb{color:var(--acc)}
 /* zoom + compare/split/hist relocated into the desktop action bar */
 #fx-deskbar-tools{display:flex;align-items:center;gap:8px}
 body.fx-deskb #fx-deskbar-tools #fx-zoom-ctrl{position:static;display:flex;background:none;border:none;padding:0;gap:2px}
@@ -364,7 +368,7 @@ body.light #status-cap{background:#000}
   <div id="fx-deskbar">
     <button class="fx-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span>Undo</button>
     <button class="fx-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span>Redo</button>
-    <button class="fx-db" onclick="enableAll()" title="Turn on grain, halation, bloom &amp; borders at once"><span class="fx-db-ic" id="db-allfx"></span>Enable all FX</button>
+    <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
     <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
     <div style="flex:1"></div>
     <div id="fx-deskbar-tools"></div>
@@ -539,7 +543,7 @@ body.light #status-cap{background:#000}
           <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="98" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">98</div></div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
         <div class="fx-row" style="margin-top:6px"><div class="fx-label">Format</div>
           <select class="fx-select" id="sel-exp-fmt">
             <option value="auto">Auto (match source)</option>
@@ -602,7 +606,7 @@ body.light #status-cap{background:#000}
       <div id="fx-actionbar">
         <button class="fx-act" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-act-ic">↩</span><span class="fx-act-lb">Undo</span></button>
         <button class="fx-act" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-act-ic">↪</span><span class="fx-act-lb">Redo</span></button>
-        <button class="fx-act" onclick="enableAll()" title="Enable all FX"><span class="fx-act-ic">✨</span><span class="fx-act-lb">All FX</span></button>
+        <button class="fx-act js-allfx" onclick="enableAll()" title="Toggle all FX"><span class="fx-act-ic">✨</span><span class="fx-act-lb">All FX</span></button>
         <button class="fx-act fx-act-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span><span class="fx-act-lb">Export</span></button>
         <button class="fx-act" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="fx-act-ic">≡</span><span class="fx-act-lb">Log</span></button>
       </div>
@@ -2425,7 +2429,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17j';
+const BUILD='2026-06-17k';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3884,7 +3888,7 @@ async function loadFXImages(fileList){
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','vig'].forEach(id=>{
@@ -4755,7 +4759,7 @@ async function exportFX(){
       const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
       const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||it.ext==='rw2'):fmt==='png'; // lossless source → lossless out
       const mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
-      let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||98)/100;
+      let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
       // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
       // fails to save the result to Photos — cap at 0.99 on touch devices.
       if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
@@ -4788,18 +4792,24 @@ async function exportFX(){
 // ═══════════════════════════
 // QUICK ACTIONS
 // ═══════════════════════════
-function enableAll(){
-  ['grain','hal','bloom','borders'].forEach(name=>{
+const _ALLFX=['grain','hal','bloom','borders'];
+function enableAll(){          // toggle: on if any are off, otherwise turn them all off
+  const allOn=_ALLFX.every(n=>document.getElementById(`tg-${n}`).classList.contains('on'));
+  const target=!allOn;
+  _ALLFX.forEach(name=>{
     const tg=document.getElementById(`tg-${name}`);
-    if(!tg.classList.contains('on')){
-      tg.classList.add('on');
-      const ff=document.getElementById(`ff-${name}`);
-      if(ff)ff.style.display='flex';
-    }
+    tg.classList.toggle('on',target);
+    const ff=document.getElementById(`ff-${name}`);
+    if(ff)ff.style.display=target?'flex':'none';
   });
   fxUpdate();
   if(typeof syncSectionEnabled==='function')syncSectionEnabled();
-  log('Grain, Halation, Bloom and Borders enabled','ok');
+  syncAllFxBtn();
+  log(target?'Grain, Halation, Bloom and Borders enabled':'All FX turned off',target?'ok':'info');
+}
+function syncAllFxBtn(){       // highlight the All-FX buttons when every effect is on
+  const allOn=_ALLFX.every(n=>{const t=document.getElementById(`tg-${n}`);return t&&t.classList.contains('on');});
+  document.querySelectorAll('.js-allfx').forEach(b=>b.classList.toggle('allon',allOn));
 }
 
 function generateTestPhoto(){
@@ -5271,6 +5281,7 @@ applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail 
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
  set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('hdr-log','log');}
+syncAllFxBtn();
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
