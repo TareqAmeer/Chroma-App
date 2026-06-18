@@ -291,7 +291,10 @@ body.light #status-cap{background:#000}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px;pointer-events:none}
 #cl-frame{position:relative;box-shadow:0 6px 30px rgba(0,0,0,.35);display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:rgba(255,255,255,.03)}
-.cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:4}
+.cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:4;touch-action:none}
+#cl-dz.hot{border-style:solid;border-color:var(--acc);background:rgba(212,144,58,.08)}
+#cl-dz.hot .dz-ic,#cl-dz.hot .dz-lb{color:var(--acc)}
+#cl-secnav{display:none}
 .cl-cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:center;pointer-events:none;user-select:none;-webkit-user-drag:none}
 .cl-cell.dragover{outline:2px dashed var(--acc2);outline-offset:-2px}
 .cl-cell-empty{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);font-size:22px;width:100%;height:100%}
@@ -316,8 +319,26 @@ body.light #status-cap{background:#000}
 .cl-count button.on{border-color:var(--acc);color:var(--acc)}
 .cl-swatches{display:flex;gap:4px;flex-wrap:wrap}
 .cl-swatches button{width:20px;height:20px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;padding:0}
-@media(max-width:700px){.cl-layout{grid-template-columns:1fr}
-  .cl-stage{height:54vh;order:-1;position:static}}
+/* ── MOBILE COLLAGE: pinned stage on top + section strip (mirrors the FX editor) ── */
+body.mobile-cl{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top)}
+body.mobile-cl header{display:none}
+body.mobile-cl .tabs{flex:0 0 auto}
+body.mobile-cl main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
+body.mobile-cl #panel-collage.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%}
+body.mobile-cl .cl-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%}
+body.mobile-cl .cl-stage{order:0;flex:0 0 auto;height:46vh;position:static;border-radius:0;border:none;border-bottom:1px solid var(--bdr);padding:8px}
+body.mobile-cl #cl-secnav{order:1;display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 6px;border-bottom:1px solid var(--bdr);background:var(--sur);flex:0 0 auto}
+body.mobile-cl .cl-controls{order:2;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 10px 28px}
+body.mobile-cl .cl-controls .fx-ctrl{display:none}
+body.mobile-cl .cl-controls .fx-ctrl.cl-sec-active{display:block}
+.cl-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--mut);cursor:pointer;padding:4px 8px;font-family:var(--mono);border-radius:6px;min-width:58px}
+.cl-sec-btn .cl-sec-ic{display:inline-flex}
+.cl-sec-btn .cl-sec-lb{font-size:8px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.cl-sec-btn.on{color:var(--acc)}
+.cl-sec-ic svg{display:block}
+.fx-ctrl[data-clsec="sel"]:not(.cl-has-sel){display:none}
+body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:block}
+@media(max-width:700px){.cl-layout{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -797,28 +818,29 @@ body.light #status-cap{background:#000}
 <!-- COLLAGE -->
 <div class="panel" id="panel-collage">
   <div class="cl-layout">
+    <div id="cl-secnav"></div>
     <div class="cl-controls">
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-clsec="photos">
         <div class="ctitle" style="margin-bottom:10px">Photos</div>
-        <div class="dz" id="cl-dz" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="clDropFiles(event)">
+        <div class="dz hot" id="cl-dz" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="clDropFiles(event)">
           <input type="file" accept="image/*" multiple onchange="clAddFiles(this.files);this.value=''">
           <div class="dz-ic">＋</div><div class="dz-lb">Add photos</div>
         </div>
         <div class="cl-tray" id="cl-tray"></div>
         <div class="fx-hint" id="cl-tray-hint">Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</div>
       </div>
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-clsec="canvas">
         <div class="ctitle" style="margin-bottom:10px">Canvas size</div>
         <div class="fx-row"><div class="fx-label">Aspect</div>
           <select class="fx-select" id="cl-aspect" onchange="clSetAspect(this.value)"></select>
         </div>
       </div>
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-clsec="layout">
         <div class="ctitle" style="margin-bottom:10px">Layout</div>
         <div class="cl-shapes" id="cl-shapes"></div>
         <div class="fx-hint" id="cl-shape-hint">Pick how many photos and the arrangement.</div>
       </div>
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-clsec="style">
         <div class="ctitle" style="margin-bottom:10px">Borders &amp; background</div>
         <div class="fx-row"><div class="fx-label">Background</div>
           <input type="color" class="fx-color" id="cl-bg" value="#ffffff" oninput="clSet('bg',this.value)">
@@ -828,7 +850,7 @@ body.light #status-cap{background:#000}
         <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" oninput="clSet('outer',+this.value)"><div class="fx-val" id="cl-outer-v">0</div></div>
         <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" oninput="clSet('radius',+this.value)"><div class="fx-val" id="cl-radius-v">0</div></div>
       </div>
-      <div class="fx-ctrl" id="cl-cellpanel" style="display:none">
+      <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
         <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
         <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" oninput="clCellZoom(+this.value)"><div class="fx-val" id="cl-zoom-v">100</div></div>
         <div class="fx-hint">Drag inside the photo to reposition it. Scroll over a photo to zoom.</div>
@@ -838,7 +860,7 @@ body.light #status-cap{background:#000}
           <button class="btn bgh" onclick="clCellClear()"><span class="bdot"></span>Clear slot</button>
         </div>
       </div>
-      <div class="fx-ctrl">
+      <div class="fx-ctrl" data-clsec="export">
         <div class="ctitle" style="margin-bottom:10px">Export</div>
         <div class="fx-row"><div class="fx-label">Long side</div>
           <select class="fx-select" id="cl-res">
@@ -2540,7 +2562,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-17m';
+const BUILD='2026-06-18a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5236,7 +5258,7 @@ function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Ma
 function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
 function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
 function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${msg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
-function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','collage','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();}
+function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','collage','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();}
 
 // ── FX editor: section model, mobile strip + desktop tool rail ────────────────
 function toggleLog(){document.body.classList.toggle('log-on');}
@@ -5411,14 +5433,17 @@ function clClone(n){return n.leaf?{leaf:true,size:n.size}:{dir:n.dir,size:n.size
 function clTemplates(n){
   const L=_leaf;
   if(n<=1)return[L()];
-  if(n===2)return[_row(L(),L()),_col(L(),L()),_row(Object.assign(L(),{size:1.5}),L())];
-  if(n===3)return[_row(L(),L(),L()),_col(L(),L(),L()),_col(L(),_row(L(),L())),_col(_row(L(),L()),L()),_row(L(),_col(L(),L())),_row(_col(L(),L()),L())];
-  if(n===4)return[_col(_row(L(),L()),_row(L(),L())),_row(L(),L(),L(),L()),_col(L(),L(),L(),L()),_row(L(),_col(L(),L(),L())),_col(L(),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()))];
-  if(n===5)return[_col(_row(L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L(),L())),_col(L(),_row(L(),L(),L(),L())),_row(L(),_col(L(),L(),L(),L()))];
-  if(n===6)return[_col(_row(L(),L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()),_col(L(),L())),_col(_row(L(),L()),_row(L(),L()),_row(L(),L()))];
-  const cols=Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols);let rem=n;const rws=[];
-  for(let r=0;r<rows;r++){const cs=[];for(let c=0;c<cols&&rem>0;c++){cs.push(L());rem--;}rws.push(_row.apply(null,cs));}
-  return[_col.apply(null,rws)];
+  const mk=k=>Array.from({length:n},k);
+  const rowAll=()=>_row.apply(null,mk(L)), colAll=()=>_col.apply(null,mk(L)); // always offer horizontal strip + vertical stack
+  let extra=[];
+  if(n===2)extra=[_row(Object.assign(L(),{size:1.5}),L())];
+  else if(n===3)extra=[_col(L(),_row(L(),L())),_col(_row(L(),L()),L()),_row(L(),_col(L(),L())),_row(_col(L(),L()),L())];
+  else if(n===4)extra=[_col(_row(L(),L()),_row(L(),L())),_row(L(),_col(L(),L(),L())),_col(L(),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()))];
+  else if(n===5)extra=[_col(_row(L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L(),L())),_col(L(),_row(L(),L(),L(),L())),_row(L(),_col(L(),L(),L(),L()))];
+  else if(n===6)extra=[_col(_row(L(),L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()),_col(L(),L())),_col(_row(L(),L()),_row(L(),L()),_row(L(),L()))];
+  else{const cols=Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols);let rem=n;const rws=[];
+    for(let r=0;r<rows;r++){const cs=[];for(let c=0;c<cols&&rem>0;c++){cs.push(L());rem--;}rws.push(_row.apply(null,cs));}extra=[_col.apply(null,rws)];}
+  return[rowAll(),colAll()].concat(extra);
 }
 function clLayoutRects(node,x,y,w,h,gap,divs){
   if(node.leaf)return[{x,y,w,h}];
@@ -5440,7 +5465,34 @@ function clInit(){
     window.addEventListener('resize',()=>{if(document.getElementById('panel-collage').classList.contains('active'))clRenderFrame();});
     CL.inited=true;
   }
-  clRebuildShapes();clRenderFrame();
+  clRebuildShapes();clRenderFrame();applyClLayout();
+}
+// mobile: pinned stage + section strip (mirrors the FX editor)
+const CL_SECTIONS=[['photos','image','Photos'],['canvas','vig','Size'],['layout','borders','Layout'],['style','bloom','Style'],['sel','adjust','Photo'],['export','export','Export']];
+function clBuildNav(){
+  const nav=document.getElementById('cl-secnav');if(!nav)return;nav.innerHTML='';
+  CL_SECTIONS.forEach(([key,ic,lb])=>{
+    if(key==='sel'&&CL.sel<0)return;
+    const b=document.createElement('button');b.className='cl-sec-btn';b.dataset.sec=key;
+    b.innerHTML=`<span class="cl-sec-ic">${icon(ic,18)}</span><span class="cl-sec-lb">${lb}</span>`;
+    b.onclick=()=>clSection(key);nav.appendChild(b);
+  });
+  const cur=document.querySelector('.cl-controls .fx-ctrl.cl-sec-active');
+  clSection(cur&&cur.dataset.clsec!=='sel'?cur.dataset.clsec:'photos');
+}
+function clSection(name){
+  const card=document.querySelector(`.cl-controls .fx-ctrl[data-clsec="${name}"]`);if(!card)return;
+  document.querySelectorAll('.cl-controls .fx-ctrl.cl-sec-active').forEach(c=>c.classList.remove('cl-sec-active'));
+  card.classList.add('cl-sec-active');
+  document.querySelectorAll('#cl-secnav .cl-sec-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
+  const sc=document.querySelector('.cl-controls');if(sc)sc.scrollTop=0;
+}
+let _mqCl=window.matchMedia('(max-width:700px)'),_clMqWired=false;
+function applyClLayout(){
+  const on=_mqCl.matches&&document.getElementById('panel-collage').classList.contains('active');
+  document.body.classList.toggle('mobile-cl',on);
+  if(on){clBuildNav();clRenderFrame();}
+  if(!_clMqWired){_clMqWired=true;_mqCl.addEventListener('change',applyClLayout);window.addEventListener('orientationchange',()=>setTimeout(applyClLayout,120));}
 }
 function clAddFiles(files){
   const arr=[].slice.call(files).filter(f=>f.type&&f.type.indexOf('image/')===0);if(!arr.length)return;
@@ -5459,6 +5511,7 @@ function clPhotosChanged(){
   const has=CL.photos.length>0;
   document.getElementById('cl-empty').style.display=has?'none':'flex';
   document.getElementById('cl-frame').style.display=has?'block':'none';
+  document.getElementById('cl-dz').classList.toggle('hot',!has);
 }
 function clSetTemplate(idx,reset){
   CL.templateIdx=idx;CL.tree=clClone(CL.templates[idx]);
@@ -5561,9 +5614,10 @@ function clWireDivider(el,d){
 }
 function clSelectCell(i){CL.sel=i;
   document.querySelectorAll('#cl-frame .cl-cell').forEach((el,j)=>{el.classList.toggle('sel',j===i);el.draggable=(j!==i);});
-  document.getElementById('cl-cellpanel').style.display='block';clSyncZoom();
+  document.getElementById('cl-cellpanel').classList.add('cl-has-sel');clSyncZoom();
+  if(document.body.classList.contains('mobile-cl')){clBuildNav();clSection('sel');}
 }
-function clHideCellPanel(){const p=document.getElementById('cl-cellpanel');if(p)p.style.display='none';}
+function clHideCellPanel(){const p=document.getElementById('cl-cellpanel');if(p)p.classList.remove('cl-has-sel');if(document.body.classList.contains('mobile-cl'))clBuildNav();}
 function clSyncZoom(){const c=CL.cells[CL.sel];if(!c)return;const z=Math.round(c.scale*100);document.getElementById('cl-zoom').value=z;document.getElementById('cl-zoom-v').textContent=z;}
 function clCellZoom(v){const c=CL.cells[CL.sel];if(!c)return;c.scale=v/100;document.getElementById('cl-zoom-v').textContent=v;const im=document.querySelector('#cl-frame .cl-cell.sel img');if(im)clApplyTransform(im,c);}
 function clCellReset(){const c=CL.cells[CL.sel];if(!c)return;c.scale=1;c.ox=0;c.oy=0;clSyncZoom();clRenderFrame();}
