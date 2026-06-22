@@ -551,7 +551,8 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-a">70</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
           <div class="fx-row" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior."><div class="fx-label">Shadow protect</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-p">0</div></div>
-          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Colour derived from source (physical film model)</div>
+          <div class="fx-row" title="Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded)."><div class="fx-label">White glow</div><div class="fx-toggle" id="tg-hal-white" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Warm film glow — turn on White glow for B&amp;W photos</div>
         </div>
       </div>
       <!-- BLOOM -->
@@ -2562,7 +2563,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-18a';
+const BUILD='2026-06-18b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3344,9 +3345,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const amtH=hOn?(P.halation.amount/H.defAmount):0;
     const bGain=bOn?B.gain*(P.bloom.amount/B.defAmount):0;
     // Halation: radius slider scales σ_R; σ_G and σ_B track at calibrated ratio
+    const halWhite=!!P.halation.white;   // neutral/white glow (B&W photos) instead of warm film glow
     const hSigR=Math.max(0.5,(P.halation.radius||H.sigmaR)*sc);
-    const hSigG=Math.max(0.3,hSigR*(H.sigmaG/H.sigmaR));
-    const hSigB=Math.max(0.2,hSigR*(H.sigmaB/H.sigmaR));
+    // White mode: equalise the per-channel blur so the glow is neutral grey (no red fringe).
+    const hSigG=halWhite?hSigR:Math.max(0.3,hSigR*(H.sigmaG/H.sigmaR));
+    const hSigB=halWhite?hSigR:Math.max(0.2,hSigR*(H.sigmaB/H.sigmaR));
     const bSig=Math.max(0.5, (P.bloom.radius? P.bloom.radius : B.sigma)*sc);
     const bThr=(P.bloom.threshold!=null)?P.bloom.threshold:B.thr;
     // Glow runs in the reduced buffers: each reduced texel spans `gs` full-res pixels, so the
@@ -3401,9 +3404,12 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       gl.uniform1i(gl.getUniformLocation(this.progs.comp,u),i);
     });
     const cp=this.progs.comp,ul=k=>gl.getUniformLocation(cp,k);
-    gl.uniform1f(ul('halR'),H.gainR*amtH);
-    gl.uniform1f(ul('halG'),H.gainG*amtH);
-    gl.uniform1f(ul('halB'),H.gainB*amtH);
+    // White mode: equal gains tuned to the Rec.709 luminance of the warm gain vector, so the
+    // neutral glow carries the same visual weight as the warm one at a given Amount.
+    const gW=0.2126*H.gainR+0.7152*H.gainG+0.0722*H.gainB; // ≈0.332
+    gl.uniform1f(ul('halR'),(halWhite?gW:H.gainR)*amtH);
+    gl.uniform1f(ul('halG'),(halWhite?gW:H.gainG)*amtH);
+    gl.uniform1f(ul('halB'),(halWhite?gW:H.gainB)*amtH);
     gl.uniform1f(ul('halProt'),(P.halation.enabled&&P.halation.protect)?P.halation.protect:0);
     gl.uniform1f(ul('blmA'),bGain);
     gl.uniform1f(ul('grA'),P.grain.enabled?P.grain.amount/100:0);
@@ -4017,9 +4023,27 @@ async function loadFXImages(fileList){
   document.getElementById('fx-zoom-ctrl').style.display='flex';
   fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');
   _resetZoom(); fxHistory=[]; fxHistIdx=-1; // reset zoom + history on new image
+  autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   renderPreview();buildLookGallery();
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
+}
+// Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
+// "White glow" halation switch accordingly. The user can still toggle it afterward.
+function autoDetectBW(img){
+  const tg=document.getElementById('tg-hal-white');if(!tg||!img)return;
+  let bw=false;
+  try{
+    const{px}=getPx(img,256);                       // small downscaled sample
+    let s=0,nseen=0;
+    for(let i=0;i<px.length;i+=4){
+      const r=px[i],g=px[i+1],b=px[i+2];
+      s+=(Math.max(r,g,b)-Math.min(r,g,b))/255; nseen++;
+    }
+    bw = nseen>0 && (s/nseen)<0.05;                  // mean saturation < 5% → monochrome
+  }catch(e){}
+  tg.classList.toggle('on',bw);
+  if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
 function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
@@ -4043,7 +4067,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp',
   'grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
-const _FX_SNAP_TOGGLES=['adjust','grain','hal','bloom','vig','borders'];
+const _FX_SNAP_TOGGLES=['adjust','grain','hal','hal-white','bloom','vig','borders'];
 const _FX_SNAP_SELECTS=['sel-lut','sel-grain-t','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(){
@@ -4404,7 +4428,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp',
   'sl-grain-a','sl-grain-sz','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-grain','tg-hal','tg-bloom','tg-vig','tg-borders'];
+const _SESS_TOGGLES=['tg-adjust','tg-grain','tg-hal','tg-hal-white','tg-bloom','tg-vig','tg-borders'];
 const _SESS_SELECTS=['sel-grain-t','sel-lut','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(){
@@ -4505,6 +4529,7 @@ function getFXParams(){return{
     sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),type:parseFloat(document.getElementById('sel-grain-t').value)},
   halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),
+    white:!!(document.getElementById('tg-hal-white')||{}).classList?.contains('on'), // neutral glow (B&W)
     protect:parseFloat((document.getElementById('sl-hal-p')||{value:0}).value)/100*0.15}, // slider 0-100 → linear-lum threshold 0..0.15 (eyes ~0.05-0.07)
   bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value)/100,radius:parseFloat(document.getElementById('sl-bloom-r').value)},
   debug:parseFloat((document.getElementById('sel-debug')||{}).value||0),
