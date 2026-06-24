@@ -295,7 +295,8 @@ body.light #status-cap{background:#000}
 #cl-dz.hot{border-style:solid;border-color:var(--acc);background:rgba(212,144,58,.08)}
 #cl-dz.hot .dz-ic,#cl-dz.hot .dz-lb{color:var(--acc)}
 #cl-secnav{display:none}
-.cl-cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:center;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.cl-cell img{position:absolute;left:0;top:0;pointer-events:none;user-select:none;-webkit-user-drag:none;max-width:none}
+.cl-cell.has-photo{cursor:move}
 .cl-cell.dragover{outline:2px dashed var(--acc2);outline-offset:-2px}
 .cl-cell-empty{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);font-size:22px;width:100%;height:100%}
 .cl-div{position:absolute;z-index:5;background:transparent}
@@ -2563,7 +2564,7 @@ const LUT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-18b';
+const BUILD='2026-06-18c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5591,10 +5592,17 @@ function clRenderFrame(){
     const cell=document.createElement('div');cell.className='cl-cell'+(i===CL.sel?' sel':'');
     cell.style.cssText=`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border-radius:${rad}px`;
     const pIdx=CL.assign[i];
-    if(pIdx!=null&&CL.photos[pIdx]){const im=document.createElement('img');im.src=CL.photos[pIdx].url;im.alt='';cell.appendChild(im);clApplyTransform(im,CL.cells[i]);}
+    const hasPhoto=pIdx!=null&&CL.photos[pIdx];
+    let im=null;
+    if(hasPhoto){im=document.createElement('img');im.alt='';im.src=CL.photos[pIdx].url;cell.appendChild(im);cell.classList.add('has-photo');}
     else cell.innerHTML='<div class="cl-cell-empty">＋</div>';
-    cell.dataset.i=i;cell.draggable=(i!==CL.sel);
+    cell.dataset.i=i;cell.draggable=false; // assigned cells pan on drag; rearrange via the tray
     clWireCell(cell,i,r);frame.appendChild(cell);
+    if(im){ // cell is now in the DOM (real size) — position the photo (cover-fit + clamped offset)
+      const[iw,ih]=clNat(i);
+      const place=()=>clApplyTransform(im,CL.cells[i],iw||im.naturalWidth,ih||im.naturalHeight);
+      im.onload=place;place();
+    }
   });
   CL.dividers.forEach(d=>{
     const el=document.createElement('div');el.className='cl-div '+d.axis;
@@ -5603,17 +5611,33 @@ function clRenderFrame(){
     clWireDivider(el,d);frame.appendChild(el);
   });
 }
-function clApplyTransform(im,c){im.style.transform=`translate(${c.ox*100}%,${c.oy*100}%) scale(${c.scale})`;}
+function clNat(i){const p=CL.photos[CL.assign[i]];return p?[p.img.naturalWidth||1,p.img.naturalHeight||1]:[1,1];}
+// Position the photo exactly like clExport (cover-scale + centred + offset), and CLAMP the
+// offset so the image always fully covers the cell — so dragging only reframes within the
+// photo and never reveals the cell background. ox/oy are stored as a fraction of the cell.
+function clApplyTransform(im,c,iw,ih){
+  const cell=im.parentElement;if(!cell)return;
+  const cw=cell.clientWidth,ch=cell.clientHeight;if(!cw||!ch)return;
+  iw=iw||im.naturalWidth||1;ih=ih||im.naturalHeight||1;
+  const cover=Math.max(cw/iw,ch/ih)*c.scale,dw=iw*cover,dh=ih*cover;
+  const mx=Math.max(0,(dw-cw)/(2*cw)),my=Math.max(0,(dh-ch)/(2*ch)); // pannable half-range
+  c.ox=Math.min(mx,Math.max(-mx,c.ox));c.oy=Math.min(my,Math.max(-my,c.oy));
+  im.style.width=dw+'px';im.style.height=dh+'px';
+  im.style.left=((cw-dw)/2+c.ox*cw)+'px';im.style.top=((ch-dh)/2+c.oy*ch)+'px';
+}
 function clWireCell(cell,i,r){
   cell.onclick=()=>{if(cell._panned){cell._panned=false;return;}clSelectCell(i);};
   cell.addEventListener('wheel',e=>{e.preventDefault();const c=CL.cells[i];if(!c||CL.assign[i]==null)return;
-    c.scale=Math.min(5,Math.max(1,c.scale*(e.deltaY<0?1.08:1/1.08)));const im=cell.querySelector('img');if(im)clApplyTransform(im,c);if(i===CL.sel)clSyncZoom();},{passive:false});
+    c.scale=Math.min(5,Math.max(1,c.scale*(e.deltaY<0?1.08:1/1.08)));const im=cell.querySelector('img');const[iw,ih]=clNat(i);if(im)clApplyTransform(im,c,iw,ih);if(i===CL.sel)clSyncZoom();},{passive:false});
+  // Drag a photo to reposition it within its frame (any cell, no pre-selection needed).
   cell.addEventListener('pointerdown',e=>{
-    if(i!==CL.sel||CL.assign[i]==null||e.button!==0)return;
+    if(CL.assign[i]==null||e.button!==0)return;
+    if(i!==CL.sel)clSelectCell(i);          // auto-select so the very first drag reframes
     const c=CL.cells[i],im=cell.querySelector('img');if(!im)return;e.preventDefault();
+    const[iw,ih]=clNat(i);
     const sx=e.clientX,sy=e.clientY,ox0=c.ox,oy0=c.oy;cell._panned=false;
     try{cell.setPointerCapture(e.pointerId);}catch(_){}
-    const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>3)cell._panned=true;c.ox=ox0+(ev.clientX-sx)/r.w;c.oy=oy0+(ev.clientY-sy)/r.h;clApplyTransform(im,c);};
+    const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>3)cell._panned=true;c.ox=ox0+(ev.clientX-sx)/r.w;c.oy=oy0+(ev.clientY-sy)/r.h;clApplyTransform(im,c,iw,ih);};
     const up=()=>{cell.removeEventListener('pointermove',mv);cell.removeEventListener('pointerup',up);};
     cell.addEventListener('pointermove',mv);cell.addEventListener('pointerup',up);
   });
@@ -5638,13 +5662,13 @@ function clWireDivider(el,d){
   });
 }
 function clSelectCell(i){CL.sel=i;
-  document.querySelectorAll('#cl-frame .cl-cell').forEach((el,j)=>{el.classList.toggle('sel',j===i);el.draggable=(j!==i);});
+  document.querySelectorAll('#cl-frame .cl-cell').forEach((el,j)=>{el.classList.toggle('sel',j===i);el.draggable=false;});
   document.getElementById('cl-cellpanel').classList.add('cl-has-sel');clSyncZoom();
   if(document.body.classList.contains('mobile-cl')){clBuildNav();clSection('sel');}
 }
 function clHideCellPanel(){const p=document.getElementById('cl-cellpanel');if(p)p.classList.remove('cl-has-sel');if(document.body.classList.contains('mobile-cl'))clBuildNav();}
 function clSyncZoom(){const c=CL.cells[CL.sel];if(!c)return;const z=Math.round(c.scale*100);document.getElementById('cl-zoom').value=z;document.getElementById('cl-zoom-v').textContent=z;}
-function clCellZoom(v){const c=CL.cells[CL.sel];if(!c)return;c.scale=v/100;document.getElementById('cl-zoom-v').textContent=v;const im=document.querySelector('#cl-frame .cl-cell.sel img');if(im)clApplyTransform(im,c);}
+function clCellZoom(v){const c=CL.cells[CL.sel];if(!c)return;c.scale=v/100;document.getElementById('cl-zoom-v').textContent=v;const im=document.querySelector('#cl-frame .cl-cell.sel img');const[iw,ih]=clNat(CL.sel);if(im)clApplyTransform(im,c,iw,ih);}
 function clCellReset(){const c=CL.cells[CL.sel];if(!c)return;c.scale=1;c.ox=0;c.oy=0;clSyncZoom();clRenderFrame();}
 function clCellClear(){if(CL.sel<0)return;CL.assign[CL.sel]=null;clRenderFrame();}
 function clReplaceSelected(){
@@ -5677,7 +5701,9 @@ function clExport(){
     const img=CL.photos[pIdx].img,c=CL.cells[i],iw=img.naturalWidth,ih=img.naturalHeight;
     ctx.save();clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
     const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover;
-    const dx=r.x+(r.w-dw)/2+c.ox*r.w,dy=r.y+(r.h-dh)/2+c.oy*r.h;
+    const mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h)); // keep the image covering the cell
+    const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
+    const dx=r.x+(r.w-dw)/2+ox*r.w,dy=r.y+(r.h-dh)/2+oy*r.h;
     ctx.drawImage(img,dx,dy,dw,dh);ctx.restore();
   });
   cv.toBlob(b=>{if(!b){log('Export failed','err');return;}const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='collage.jpg';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);log('Collage exported ('+W+'×'+H+')','ok');},'image/jpeg',0.95);
