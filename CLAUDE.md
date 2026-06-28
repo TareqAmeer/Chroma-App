@@ -86,7 +86,9 @@ Everything is in one file. Key pieces:
      sharpen/clarity unsharp mask (applied to source pixels BEFORE the LUT).
   2. **emit pass** — computes the halation/bloom *emission* map from the graded image.
   3. **blur passes** — per-channel Gaussian blur of the emission (σ_R ≫ σ_G ≫ σ_B).
-  4. **comp pass** — screen-blends the glow back, then grain + vignette.
+  4. **comp pass** — screen-blends the glow back, then (if a Print profile is selected) a
+     2nd 3D LUT lookup `printLut` via `usePrint`/`setPrintLUT`, then grain + vignette.
+     Order mirrors Dehancer: negative → halation → **print** → print grain.
 - **`render(P,w,h,opts)`** — `opts.glowScale` downsamples the blur buffers (cheap preview);
   `opts.scOverride` forces the sigma-scale (= fullWidth/REF) so a tile/crop blurs with the
   *whole image's* radius; `opts.uvOff/uvScale/seed` keep grain continuous across tiles.
@@ -108,11 +110,13 @@ reload the live page in a real browser after touching shader source**, even for 
 
 ## 4. The four tabs
 
-- **Effects & Export** — load image, pick a preset/LUT, basic adjustments, grain/halation/
-  bloom/vignette/borders, crop/rotate/straighten, export at full res. Plus: one-tap Looks
-  gallery, WB eyedropper, auto-enhance, undo/redo (⌘Z/⌘Y, covers geometry too), split
-  before/after, live histogram, zoom/pan, 1:1 loupe, session save, EXIF readout, batch
-  export with progress + cancel.
+- **Effects & Export** — load image, pick a preset/LUT, a **Print profile** (Kodak/Fuji
+  print, applied as a 2nd 3D LUT AFTER the film look + halation — see §8), basic
+  adjustments, grain/halation (incl. **No remjet** strong mode — see §5)/bloom/vignette/
+  borders, crop/rotate/straighten, export at full res. Plus: one-tap Looks gallery, WB
+  eyedropper, auto-enhance, undo/redo (⌘Z/⌘Y, covers geometry too), split before/after,
+  live histogram, zoom/pan, 1:1 loupe, session save, EXIF readout, batch export with
+  progress + cancel.
 - **Match & Refine** — before/after pair → fits a `.cube` LUT empirically (no model
   assumptions). Optional starting `.cube`/`.xmp`. Emits a per-colour HSL summary.
 - **Colour Copy** — per-channel histogram match from a reference image → `.cube`/`.xmp`.
@@ -175,6 +179,20 @@ point-sample harness missed:
    this chart's purple is `(200,0,200)` with R==B exactly, so `bB` (an R/B-excess suppressor)
    is provably inert on it.
 
+### Halation "No remjet" toggle
+Real film without the anti-halation remjet backing halates much more strongly and floods
+interiors (not just gaps/edges). The `No remjet` toggle (default off = bit-identical
+standard behaviour) applies a calibrated multiplicative boost stored in
+`FXR.CAL.halation.noRemjet={gainScale,sigmaScale,thr,hp}`: it scales gain & σ, lowers the
+emission threshold, and — crucially — lowers the **high-pass strength** `hp` (the comp
+shader now subtracts `emit*halHP` instead of `emit`; `hp<1` lets the wide blur survive
+across flat regions, the physical signature of no-remjet flooding). Fitted by
+`calib/optimize_noremjet.py` against `calib/dehancer no remjet x2.png` (glance loss
+weighted toward the no-remjet *surplus* over standard halation, since a plain loss is
+dominated by already-matched regions and barely boosts). The single-σ high-pass model
+can't fully reach Dehancer's boldest rings without overshooting elsewhere — current values
+(gainScale≈1.82, σScale≈1.51, hp≈0.80) are the robust glance-match optimum across weightings.
+
 ### Halation "Shadow protect" slider
 Dark eyes fully surrounded by bright fur/skin flood red with halation on (σ_R ≫ σ_G glow
 fills small dark enclosures). Physically correct but reads as red-eye. The `Shadow protect`
@@ -223,7 +241,15 @@ a dedicated inner-glow term optimized to ~zero gain, so none is needed.
 - **`gen_lut_presets.py`** — regenerates the embedded `LUT_PRESETS` base64 blobs from the
   `LUT LIBRARY/` cubes.
 - Fitted params live in `*.json` (`best_params.json` is the committed halation model;
-  `dcp_fit_iso.json` the ISO-dependent RAW correction; `grain_params*.json` the grain model).
+  `dcp_fit_iso.json` the ISO-dependent RAW correction; `grain_params*.json` the grain model;
+  `noremjet_params.json` the no-remjet halation boost).
+- **Print profiles:** `extract_print_luts.py` recovers exact 33³ `.cube`s from the two
+  5640×3840 print-applied LUT charts (`dehancer kodak/fuji lut print x2.png`) via the same
+  patch-mean algorithm as the app's `chartToLUT` → `calib/PRINT PROFILES/*.cube` (kept OUT
+  of `LUT LIBRARY/` so the 11-film-look list stays clean). `gen_print_presets.py` then bakes
+  them into the embedded `PRINT_PRESETS` blob. Validated: applying each cube to
+  `dehancer base x2.PNG` matches the `dehancer kodak/fujifilm print x2.png` calib renders to
+  <0.5/255 mean.
 
 ---
 
