@@ -143,20 +143,35 @@ is **pixel-identical** to Dehancer's own base, `our_render` can be diffed direct
 // FXR.CAL.halation in chromasmith-22.html:
 halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.9691,
           powL:3.9247,kW:1.0028,kC:0.8860,aG:0.1972,bP:2.10,
-          sigmaR:7.5233,sigmaG:3.7617,sigmaB:1.1285,
-          gainR:1.2380,gainG:0.0958,gainB:0.0,defAmount:70}
+          powLg:3.9247,gA:-1.0,gB:0.15,                 // green channel: lum curve + G≥R hue gate
+          sigmaR:7.5233,sigmaG:2.9672,sigmaB:1.1285,
+          gainR:1.2380,gainG:0.4550,gainB:0.0,defAmount:70}
 ```
 (σ are at the 1×/2400px reference width — double them for the 2×/4800px calibration images.
 `bluesupp` doubles as the model's `bB`.)
 
+### Two-channel emission (warm red + hue-gated green = the yellow band)
+The emission is **two channels** (the `src` shader writes `o.rg`), blurred independently by
+`blur_hal` (σ_R for red, σ_G for green) — so a bright edge reads white→**yellow**→orange→red
+(σ_R≫σ_G: near the edge R+G overlap = yellow, deeper only R = red). This yellow band appears in
+BOTH standard and no-remjet (calib/optimize_hal_twochannel.py):
 ```
-sat   = max(R,G,B) − min(R,G,B)
-white = lum ^ powL                                              // steep brightness-toward-white
-color = sat · max(R + aG·G − bB·max(B−R,0) + bP·min(R,B), 0)    // asymmetric blue-supp + magenta driver
-emit  = smoothstep(thr, thr+knee, lum) · (kW·white + kC·color)
-glow  = max(blur_perChannel(emit) − emit, 0) · (gainR,gainG,gainB)   // HIGH-PASS
+sat    = max(R,G,B) − min(R,G,B)
+white  = lum ^ powL                                            // steep brightness-toward-white
+color  = sat · max(R + aG·G − bB·max(B−R,0) + bP·min(R,B), 0)  // asymmetric blue-supp + magenta
+emitR  = smoothstep(thr,thr+knee,lum) · (kW·white + kC·color)  // warm backing — ALL bright sources
+gate   = smoothstep(gA, gB, G − R)        // ~1 when G≥R, ~0 when R≫G   (LINEAR-light G,R)
+emitG  = smoothstep(thr,thr+knee,lum) · lum^powLg · gate       // YELLOW driver — hue-gated
+glow.r = max(blur_σR(emitR) − hp·emitR, 0) · gainR             // PER-CHANNEL high-pass (hp uniform)
+glow.g = max(blur_σG(emitG) − hp·emitG, 0) · gainG
 result = screen(base_linear, glow)
 ```
+The **hue gate** (`G≥R`) is the key: green fires only for white/grey/yellow/green/cyan and NOT
+red/orange/purple — so red/orange/purple keep a pure-red halo (matches Dehancer's measured per-
+colour halo G/R: red 0.0, orange 0.15, purple 0.01, yellow 0.56, green/cyan 0.72, white 0.60). ⚠️
+Don't drop the gate or red bars grow a wrong orange rim. Standard RED params (gainR/sigmaR + the
+emitR constants) are UNCHANGED from the single-channel v22 fit, so red-based scorecard metrics are
+byte-identical; only the green channel (gainG/sigmaG/powLg/gA/gB) was added.
 
 ### Why this shape (the physical insight that unlocked the fit)
 Real film halation: any bright source scatters off the film backing and re-exposes the
@@ -186,32 +201,29 @@ point-sample harness missed:
    is provably inert on it.
 
 ### Halation "No remjet" + "Extreme" toggles
-Real film without the anti-halation remjet backing halates much more strongly and, at a
-bright edge, shows a **bright yellow band** (strong R+G) fading through orange to red (R
-only). The `No remjet` toggle (default off = bit-identical standard behaviour) uses a
-**per-channel** calibration in
-`FXR.CAL.halation.noRemjet={gainR,gainG,gainB,sigmaScaleR,sigmaScaleG,thr,hp}`: independent
-red/green gains (the yellow band needs green ≈0.4·red, NOT the standard ≈0.08·red) and
-independent σ scales (σ_G width sets the yellow band). `hp` is the high-pass strength (the
-comp shader subtracts `emit*halHP`; `hp<1` lets the wide blur flood interiors — kept ≈0.85
-since the reference keeps bright-block interiors clean). The renderer reads gainR/G/B and
-σ scales per-channel; white-glow mode still equalises to the luminance of the active vector.
+Real film without the anti-halation remjet backing halates much more strongly. The `No remjet`
+toggle (default off = bit-identical standard behaviour) uses
+`FXR.CAL.halation.noRemjet={gainR,gainG,gainB,sigmaScaleR,sigmaScaleG,thr,hp,powL,powLg}`. Three
+things differ from standard, each from a separate piece of evidence in `dehancer no remjet x2.png`:
+1. **Stronger/wider** — higher per-channel gains + σ scales. White-edge fit is analytic (outside a
+   white edge the surround is black so screen() is a no-op:
+   `result_c(d)=l2s(src·gain_c·½·erfc(d/(σ_c√2)))`) — an exact instant fit (edge RMS ≈2.3/255).
+2. **Lower luminance to halate** — flatter `powL`/`powLg` (≈1.6 vs the standard steep 3.92) so dim
+   greys *and* cool tones glow (the standard exponent zeroes mid/dark-grey emission). `powL` is fit
+   to the grey-row left-edge halo strengths.
+3. **Smooth flooded interior** — low `hp` (0.55). The comp shader does a **per-channel** high-pass
+   `rawH -= emit*halHP`; a high `hp` carves a dark ring / colour step just inside bright blocks
+   (the v1 "weird inner glow" bug), so no-remjet lowers it to flood interiors smoothly like the
+   reference.
 
-**Calibration method (`calib/optimize_noremjet.py`) — fit the WHITE-EDGE profile, not the
-whole chart.** A global RGB fit *fails*: balancing every edge pushes green DOWN (the green
-that yellows a white edge over-greens the coloured-bar edges), losing the canonical look.
-The user inspects exactly the white-block edge, and outside a white edge the surround is
-black so `screen()` is a no-op and each channel is analytic:
-`result_c(d)=l2s(kW·½·erfc(d/(σ_c√2))·gain_c)`. So we least-squares fit gainR,gainG,σR,σG to
-the measured left-edge profile of the 100% white bar in `dehancer no remjet x2.png` — an
-*exact* instant fit (edge RMS ≈2.3/255). `hp`/`thr` don't appear in the outside band (e=0
-there), so they're chosen for the interior look. ⚠️ Don't "improve" this with a global
-chart loss — that's the trap that produced the weak reddish-orange v1.
+⚠️ **Fit the white-EDGE, not the whole chart.** A global RGB chart loss pushes green DOWN (the
+green that yellows a white edge over-greens coloured edges) — the trap that produced the weak
+reddish-orange v1. Use `calib/optimize_hal_twochannel.py` (white-edge erfc + grey-row powL +
+rainbow-column hue-gate check).
 
 The **`Extreme`** toggle multiplies the no-remjet gains by `extremeScale` (≈3 → ≈×5–6 of
-standard) for a heavy stylised bloom; it implies no-remjet (engages the same per-channel
-emission params, just scaled). Both default off; both carried through preview, export,
-session and FX snapshot.
+standard) for a heavy stylised bloom; it implies no-remjet. Both default off; both carried through
+preview, export, session and FX snapshot.
 
 ### Halation "Shadow protect" slider
 Dark eyes fully surrounded by bright fur/skin flood red with halation on (σ_R ≫ σ_G glow

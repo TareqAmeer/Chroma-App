@@ -2573,7 +2573,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-28c';
+const BUILD='2026-06-28d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3083,7 +3083,7 @@ precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D img;
-uniform float thr,knee,power,bluesupp,mode,powL,kW,kC,aG,bP;
+uniform float thr,knee,power,bluesupp,mode,powL,kW,kC,aG,bP,powLg,gA,gB;
 float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 void main(){
   vec3 c=texture(img,uv).rgb;
@@ -3115,8 +3115,16 @@ void main(){
     float white=pow(clamp(lum,0.0,1.0),powL);
     float magenta=min(lin.r,lin.b);
     float color=sat*max(lin.r+aG*lin.g-bluesupp*max(lin.b-lin.r,0.0)+bP*magenta,0.0);
-    float emit=bright*(kW*white+kC*color);
-    o=vec4(vec3(emit),1.);  // scalar emit replicated to RGB for triple-sigma blur
+    float emitR=bright*(kW*white+kC*color);   // warm "backing dye" — fires for ALL bright sources
+    // GREEN emission: drives the yellow band at a bright edge (red spreads wider than green via
+    // sigma-split, so near the edge R+G=yellow, deeper R-only=red). HUE-GATED so it appears only
+    // for sources where green is present and not red-dominated (white/grey/yellow/green/cyan), and
+    // NOT for red/orange/purple (otherwise they get a wrong yellow rim). gate = smoothstep over
+    // (G-R) in linear: ~1 when G>=R (white,grey,yellow,green,cyan), ~0 when R>>G (red,orange,purple).
+    float white_g=pow(clamp(lum,0.0,1.0),powLg);
+    float gate=smoothstep(gA,gB,lin.g-lin.r);
+    float emitG=bright*white_g*gate;
+    o=vec4(emitR,emitG,0.0,1.);  // .r=warm backing, .g=yellow driver — blurred per-channel (sigR,sigG)
   } else {
     // bloom: lum-gated source COLOR — bloom carries hue of source light
     float gate=bright*pow(clamp(lum,0.,1.),power);
@@ -3197,11 +3205,13 @@ void main(){
   // emit so the glow ~= 0 (no interior flooding -> fixes the red-bar-turns-orange
   // bug for every color); at gaps/edges blur(emit) > local emit so the halo is
   // full. emit is the scalar pre-blur source (replicated in hEmit.rgb).
-  float emit=texture(hEmit,uv).r;
-  // halHP (default 1) = high-pass strength. No-remjet film (no anti-halation backing)
-  // floods interiors too, so it lowers halHP → less of the local emit is subtracted →
-  // the wide blur survives across flat regions, giving the bold bright no-remjet glow.
-  rawH=max(rawH-vec3(emit*halHP),0.0);
+  // PER-CHANNEL high-pass: hEmit carries (emitR, emitG) so each channel subtracts its OWN local
+  // emission — red and green high-pass at their own scale, keeping the warm/yellow blend smooth.
+  // halHP (default 1) = high-pass strength. No-remjet film (no anti-halation backing) floods
+  // interiors too, so it lowers halHP → less local emit is subtracted → the wide blur survives
+  // across flat regions (bold, smoothly-flooded no-remjet glow instead of a carved dark ring).
+  vec3 emv=texture(hEmit,uv).rgb;
+  rawH=max(rawH-emv*halHP,0.0);
   vec3 hg=rawH*vec3(halR,halG,halB);   // channel-split: σ_R wide red, σ_G narrow green
   // SHADOW PROTECT (user slider, default 0 = calibrated Dehancer behavior): attenuate
   // the halation glow RECEIVED by dark pixels so small dark features fully surrounded
@@ -3435,7 +3445,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // BLOOM: emit (neutral, lum^power) FULL-res → hemitF (scratch) → downsample → blur (h,v)
     // (mode=1 path ignores powL/kW/kC/aG/bP — pass harmless defaults)
     this._pass(this.progs.src,this.fbs.hemitF,
-      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0},[[0,'lut',false]]);
+      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0,powLg:1.0,gA:0.0,gB:1.0},[[0,'lut',false]]);
     this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
     this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2},[[0,'bsrc',false]],RG);
     this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2},[[0,'bglow_h',false]],RG);
@@ -3444,7 +3454,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Full-res into hemitF (kept for the composite's high-pass subtraction, which must be
     // sharp so flat interiors null exactly), then downsampled into hsrc (the wide-blur input).
     // NOTE: this overwrites the bloom emit in hemitF — bloom is done with it by here.
-    const emitU={img:0,thr:(NR&&NR.thr!=null)?NR.thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,powL:H.powL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP};
+    // No-remjet lowers the luminance curve (powL/powLg) and threshold so dim greys halate too.
+    const emPowL=(NR&&NR.powL!=null)?NR.powL:H.powL, emPowLg=(NR&&NR.powLg!=null)?NR.powLg:H.powLg;
+    const emitU={img:0,thr:(NR&&NR.thr!=null)?NR.thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,
+      powL:emPowL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP,powLg:emPowLg,gA:H.gA,gB:H.gB};
     this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
     this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
     this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hsrc',false]],RG);
@@ -3522,18 +3535,26 @@ FXR.CAL={
   //   → red spreads widest, green narrower, blue essentially local → warm backing
   //   colour AND the thin amber-to-red inner-rim cue both emerge from physics.
   // bloom unchanged from v21: source-coloured, σ=12.42px, gain=0.111 (still PASSes).
+  // TWO-CHANNEL emission (calib/optimize_hal2.py): .r = warm "backing dye" (all bright sources),
+  // .g = HUE-GATED yellow driver. The green is gated by `gate=smoothstep(gA,gB, G-R)` (linear) so
+  // it fires only for G≥R sources (white/grey/yellow/green/cyan) and NOT red/orange/purple — those
+  // keep a pure-red halo (matches Dehancer's per-colour halo G/R: red 0.0, white 0.6, etc.). The
+  // yellow→orange→red edge gradient now appears in BOTH standard and no-remjet (σ_R≫σ_G: near the
+  // edge R+G=yellow, deeper R-only=red). Standard red params (gainR,sigmaR + emitR's kW/kC/aG/bP/
+  // bluesupp/powL) are UNCHANGED, so every red-based scorecard requirement is byte-identical; only
+  // the green channel (gainG,sigmaG,powLg,gA,gB) is new. Green sigmaG fit to the std white edge.
   halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.9691,
             powL:3.9247,kW:1.0028,kC:0.8860,aG:0.1972,bP:2.10,
-            sigmaR:7.5233,sigmaG:3.7617,sigmaB:1.1285,
-            gainR:1.2380,gainG:0.0958,gainB:0.0,defAmount:70,
-            // "No remjet" film (no anti-halation backing) — much stronger, with a bright
-            // YELLOW edge band (boosted green) fading to orange/red, then flooding interiors.
-            // PER-CHANNEL calibration (calib/optimize_noremjet.py, edge-weighted RGB loss vs
-            // calib/dehancer no remjet x2.png): gainR/gainG are absolute gains at amount=70;
-            // sigmaScaleR/G widen each channel (σ_G width sets the yellow band); hp<1 lets the
-            // wide blur flood interiors (the no-remjet signature); thr is the lowered threshold.
-            // extremeScale: the "Extreme" toggle multiplies the gains further (≈×5–6 standard).
-            noRemjet:{gainR:1.493,gainG:0.587,gainB:0.0,sigmaScaleR:1.3644,sigmaScaleG:1.240,thr:0.06,hp:0.85},
+            powLg:3.9247,gA:-1.0,gB:0.15,             // green channel: steep lum curve + G≥R hue gate
+            sigmaR:7.5233,sigmaG:2.9672,sigmaB:1.1285,
+            gainR:1.2380,gainG:0.4550,gainB:0.0,defAmount:70,
+            // "No remjet" film (no anti-halation backing): stronger, wider, with the SAME yellow
+            // edge, PLUS (1) a flatter luminance curve (powL/powLg≈1.6) so dim greys/cool also
+            // halate, and (2) a low high-pass (hp=0.55) so the wide blur floods interiors smoothly
+            // (no carved dark ring / colour step). Per-channel gains absolute @amount=70; σ scales
+            // relative to the base σ_R/σ_G. extremeScale: the "Extreme" toggle multiplies ≈×5–6.
+            noRemjet:{gainR:1.492,gainG:0.648,gainB:0.0,sigmaScaleR:1.3651,sigmaScaleG:1.5722,
+                      thr:0.05,hp:0.55,powL:1.628,powLg:1.628},
             extremeScale:3.0},
   bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40}
 };
