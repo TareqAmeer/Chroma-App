@@ -145,7 +145,7 @@ halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.9691,
           powL:3.9247,kW:1.0028,kC:0.8860,aG:0.1972,bP:2.10,
           powLg:3.9247,gA:-1.0,gB:0.15,                 // green channel: lum curve + G≥R hue gate
           sigmaR:7.5233,sigmaG:2.9672,sigmaB:1.1285,
-          gainR:1.2380,gainG:0.4550,gainB:0.0,defAmount:70}
+          gainR:1.2380,gainG:0.0764,gainB:0.0,defAmount:70}  // gainG dot-safe (see ⚠️ below)
 ```
 (σ are at the 1×/2400px reference width — double them for the 2×/4800px calibration images.
 `bluesupp` doubles as the model's `bB`.)
@@ -220,6 +220,17 @@ things differ from standard, each from a separate piece of evidence in `dehancer
 green that yellows a white edge over-greens coloured edges) — the trap that produced the weak
 reddish-orange v1. Use `calib/optimize_hal_twochannel.py` (white-edge erfc + grey-row powL +
 rainbow-column hue-gate check).
+
+⚠️ **`gainG` must be DOT-SAFE (the 2D over-peak trap).** Green has a narrower σ than red, so on a
+**compact** source (a dot) the green blur over-concentrates in 2D and can exceed red → the white
+dot glows *green* instead of yellow (a real user-reported bug). A 1D white-edge fit misses this
+(1D amplitude scales as gain/σ, 2D as gain/σ²). Keep `gainG ≲ gainR·(σ_G/σ_R)²` so the green peak
+stays below red everywhere (verify: a white dot has **0** pixels with G>R, max G/R<1). This caps
+the edge yellow somewhat — that's the unavoidable trade for not greening dots. ⚠️ **A single gain
+can't match both a tiny dot and a big bar** (Dehancer's halation isn't linear in source size — the
+dot needs ~3× the gain a bar wants, which would clip the bar). Tune `gainR` to the BIG sources
+(bars/blocks) and accept that tiny dots glow a bit weaker than Dehancer; the dot's *hue* (yellow
+not green) is what matters.
 
 The **`Extreme`** toggle multiplies the no-remjet gains by `extremeScale` (≈3 → ≈×5–6 of
 standard) for a heavy stylised bloom; it implies no-remjet. Both default off; both carried through

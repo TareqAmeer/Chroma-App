@@ -2573,7 +2573,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-28d';
+const BUILD='2026-06-28e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3547,13 +3547,16 @@ FXR.CAL={
             powL:3.9247,kW:1.0028,kC:0.8860,aG:0.1972,bP:2.10,
             powLg:3.9247,gA:-1.0,gB:0.15,             // green channel: steep lum curve + G≥R hue gate
             sigmaR:7.5233,sigmaG:2.9672,sigmaB:1.1285,
-            gainR:1.2380,gainG:0.4550,gainB:0.0,defAmount:70,
+            // gainG kept LOW so the green peak never exceeds red on COMPACT sources (dots): a
+            // narrow-σ green over-concentrates in 2D, so a too-high gainG turns white dots green
+            // instead of yellow. Dot-safe = gainG ≲ gainR·(σ_G/σ_R)². Fit to the white-dot radial.
+            gainR:1.2380,gainG:0.0764,gainB:0.0,defAmount:70,
             // "No remjet" film (no anti-halation backing): stronger, wider, with the SAME yellow
             // edge, PLUS (1) a flatter luminance curve (powL/powLg≈1.6) so dim greys/cool also
             // halate, and (2) a low high-pass (hp=0.55) so the wide blur floods interiors smoothly
             // (no carved dark ring / colour step). Per-channel gains absolute @amount=70; σ scales
             // relative to the base σ_R/σ_G. extremeScale: the "Extreme" toggle multiplies ≈×5–6.
-            noRemjet:{gainR:1.492,gainG:0.648,gainB:0.0,sigmaScaleR:1.3651,sigmaScaleG:1.5722,
+            noRemjet:{gainR:1.80,gainG:0.34,gainB:0.0,sigmaScaleR:1.40,sigmaScaleG:1.75,
                       thr:0.05,hp:0.55,powL:1.628,powLg:1.628},
             extremeScale:3.0},
   bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40}
