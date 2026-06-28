@@ -2572,7 +2572,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-28a';
+const BUILD='2026-06-28b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3179,7 +3179,7 @@ precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
-uniform float halR,halG,halB,halProt,blmA,grA,grSz,grT,seed,debug,vigAmt,usePrint,halHP;
+uniform float halR,halG,halB,halProt,blmA,grA,grSz,grT,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
 uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
 float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2s(float c){return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
@@ -3225,6 +3225,17 @@ void main(){
   // ---- print profile (Kodak/Fuji): a 2nd 3D LUT applied AFTER the film look + halation,
   //      matching Dehancer's pipeline (negative → halation → print), before print grain.
   if(usePrint>.5){float psc=32./33.,pof=.5/33.;res=texture(printLut,clamp(res,0.,1.)*psc+pof).rgb;}
+  // SATURATION / VIBRANCE applied AFTER the print stage (matches Dehancer's grade-after-print
+  // order). Moving them here means desaturating actually neutralizes the print's neutral tint
+  // (print maps grey -> a warm/cool cast; pulling saturation to 0 must collapse the PRINTED
+  // pixel to its luma, not re-tint an already-grey pixel). Identity when both are 0 (default).
+  if(adjSat2!=0.0||adjVib2!=0.0){
+    float sl=dot(res,vec3(.2126,.7152,.0722));
+    res=mix(vec3(sl),res,1.0+adjSat2);
+    float smx=max(res.r,max(res.g,res.b)),smn=min(res.r,min(res.g,res.b)),ssv=smx>0.0?(smx-smn)/smx:0.0;
+    res=mix(vec3(sl),res,1.0+adjVib2*(1.0-ssv));
+    res=clamp(res,0.0,1.0);
+  }
   // ---- grain (display space) ----
   if(grA>0.){
     float lu=dot(res,vec3(.2126,.7152,.0722));
@@ -3397,7 +3408,9 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
-      adjTint:A.tint||0,adjVib:A.vibrance||0,adjSat:A.saturation||0,
+      // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
+      // grade-after-print order) — zero them here so they aren't applied twice.
+      adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,
       texSize:[1/this.imgW,1/this.imgH]},[[0,'img',false],[1,'',true]]);
 
@@ -3451,6 +3464,9 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1f(ul('halB'),(halWhite?gW:H.gainB)*amtH);
     gl.uniform1f(ul('halProt'),(P.halation.enabled&&P.halation.protect)?P.halation.protect:0);
     gl.uniform1f(ul('halHP'),(NR&&NR.hp!=null)?NR.hp:1.0);   // high-pass strength (no-remjet floods → <1)
+    // saturation/vibrance applied here (post-print) instead of in the lut pass — see comp shader.
+    gl.uniform1f(ul('adjSat2'),(A.enabled?A.saturation:0)||0);
+    gl.uniform1f(ul('adjVib2'),(A.enabled?A.vibrance:0)||0);
     gl.uniform1f(ul('blmA'),bGain);
     gl.uniform1f(ul('grA'),P.grain.enabled?P.grain.amount/100:0);
     gl.uniform1f(ul('grSz'),P.grain.enabled?P.grain.size/500:1);

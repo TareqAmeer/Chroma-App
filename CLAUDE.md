@@ -83,12 +83,18 @@ Everything is in one file. Key pieces:
 - **`FXR` class** — the WebGL2 renderer. 5 shader programs: `lut`, `src`, `blur`,
   `blur_hal`, `comp`. Pipeline per frame:
   1. **lut pass** — LUT lookup + `basicAdjust()` (exposure/contrast/WB/etc.) +
-     sharpen/clarity unsharp mask (applied to source pixels BEFORE the LUT).
+     sharpen/clarity unsharp mask (applied to source pixels BEFORE the LUT). ⚠️ **Saturation
+     & vibrance are NOT applied here** — they moved to the comp pass (see below).
   2. **emit pass** — computes the halation/bloom *emission* map from the graded image.
   3. **blur passes** — per-channel Gaussian blur of the emission (σ_R ≫ σ_G ≫ σ_B).
   4. **comp pass** — screen-blends the glow back, then (if a Print profile is selected) a
-     2nd 3D LUT lookup `printLut` via `usePrint`/`setPrintLUT`, then grain + vignette.
-     Order mirrors Dehancer: negative → halation → **print** → print grain.
+     2nd 3D LUT lookup `printLut` via `usePrint`/`setPrintLUT`, then **saturation/vibrance**
+     (`adjSat2`/`adjVib2`), then grain + vignette. Order mirrors Dehancer: negative →
+     halation → **print** → **grade (sat/vib)** → print grain. ⚠️ Saturation/vibrance run
+     *after* print on purpose: pulling saturation to 0 must collapse the PRINTED pixel to its
+     luma (neutral), not re-tint an already-grey pixel. If they ran before print (the old
+     order), a print profile re-tinted neutrals and 0-saturation no longer matched Dehancer
+     (verified against `calib/*lut print 0 sat*.png`: DH grey→neutral, old CH grey→tinted).
 - **`render(P,w,h,opts)`** — `opts.glowScale` downsamples the blur buffers (cheap preview);
   `opts.scOverride` forces the sigma-scale (= fullWidth/REF) so a tile/crop blurs with the
   *whole image's* radius; `opts.uvOff/uvScale/seed` keep grain continuous across tiles.
