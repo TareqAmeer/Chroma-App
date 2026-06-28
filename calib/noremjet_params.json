@@ -1,7 +1,10 @@
 {
-  "gainScale": 1.8239,
-  "sigmaScale": 1.5067,
-  "thr": 0.0664,
-  "hp": 0.7956,
-  "loss": 0.02658
+  "gainR": 1.4933,
+  "gainG": 0.5872,
+  "gainB": 0.0,
+  "sigmaScaleR": 1.3644,
+  "sigmaScaleG": 1.2399,
+  "thr": 0.06,
+  "hp": 0.85,
+  "edge_rms255": 2.28
 }

@@ -556,7 +556,8 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
           <div class="fx-row" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior."><div class="fx-label">Shadow protect</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-p">0</div></div>
           <div class="fx-row" title="Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded)."><div class="fx-label">White glow</div><div class="fx-toggle" id="tg-hal-white" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
-          <div class="fx-row" title="Film with no anti-halation backing (remjet) — much stronger, bloomier halos, calibrated to Dehancer's no-remjet look."><div class="fx-label">No remjet</div><div class="fx-toggle" id="tg-hal-noremjet" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div class="fx-row" title="Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look."><div class="fx-label">No remjet</div><div class="fx-toggle" id="tg-hal-noremjet" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div class="fx-row" title="Extreme halation — the no-remjet glow pushed ≈5–6× stronger for a heavy, stylised bloom. Implies No remjet."><div class="fx-label">Extreme</div><div class="fx-toggle" id="tg-hal-extreme" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
           <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Warm film glow — turn on White glow for B&amp;W photos</div>
         </div>
       </div>
@@ -2572,7 +2573,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-28b';
+const BUILD='2026-06-28c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3385,16 +3386,24 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
     const dbg=P.debug||0;
     const hOn=P.halation.enabled||dbg>0, bOn=P.bloom.enabled||dbg>0;
-    // No-remjet film (no anti-halation backing) halates much more strongly: a calibrated
-    // gain/sigma/threshold boost on top of the standard v22.1b model (FXR.CAL.halation.noRemjet).
-    const NR=(P.halation.noRemjet&&H.noRemjet)?H.noRemjet:null;
-    const amtH=hOn?(P.halation.amount/H.defAmount)*(NR?NR.gainScale:1):0;
+    // No-remjet film (no anti-halation backing) halates much more strongly AND shows a bright
+    // yellow edge band (boosted green) fading to orange/red — PER-CHANNEL calibration in
+    // FXR.CAL.halation.noRemjet (see calib/optimize_noremjet.py). "Extreme" multiplies the
+    // no-remjet gains further (≈×5–6 of standard) for a stylised look; it implies no-remjet.
+    const wantNR=!!(P.halation.noRemjet||P.halation.extreme);
+    const NR=(wantNR&&H.noRemjet)?H.noRemjet:null;
+    const ext=(P.halation.extreme&&H.extremeScale)?H.extremeScale:1;
+    const amtH=hOn?(P.halation.amount/H.defAmount):0;
     const bGain=bOn?B.gain*(P.bloom.amount/B.defAmount):0;
-    // Halation: radius slider scales σ_R; σ_G and σ_B track at calibrated ratio
     const halWhite=!!P.halation.white;   // neutral/white glow (B&W photos) instead of warm film glow
-    const hSigR=Math.max(0.5,(P.halation.radius||H.sigmaR)*(NR?NR.sigmaScale:1)*sc);
+    // per-channel gains (at amount=defAmount): no-remjet overrides R/G/B; ext scales up.
+    const gainR=(NR?NR.gainR:H.gainR)*ext, gainG=(NR?NR.gainG:H.gainG)*ext, gainB=(NR?(NR.gainB||0):H.gainB)*ext;
+    // Halation: radius slider scales σ_R; σ_G,σ_B track the calibrated ratio. No-remjet widens
+    // each channel by its own scale (σ_G scale vs σ_R sets the yellow-band width).
+    const sSR=NR?NR.sigmaScaleR:1, sSG=NR?NR.sigmaScaleG:1;
+    const hSigR=Math.max(0.5,(P.halation.radius||H.sigmaR)*sSR*sc);
     // White mode: equalise the per-channel blur so the glow is neutral grey (no red fringe).
-    const hSigG=halWhite?hSigR:Math.max(0.3,hSigR*(H.sigmaG/H.sigmaR));
+    const hSigG=halWhite?hSigR:Math.max(0.3,hSigR*(H.sigmaG/H.sigmaR)*(sSG/sSR));
     const hSigB=halWhite?hSigR:Math.max(0.2,hSigR*(H.sigmaB/H.sigmaR));
     const bSig=Math.max(0.5, (P.bloom.radius? P.bloom.radius : B.sigma)*sc);
     const bThr=(P.bloom.threshold!=null)?P.bloom.threshold:B.thr;
@@ -3458,10 +3467,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1i(ul('printLut'),4);gl.uniform1f(ul('usePrint'),prOn?1:0);
     // White mode: equal gains tuned to the Rec.709 luminance of the warm gain vector, so the
     // neutral glow carries the same visual weight as the warm one at a given Amount.
-    const gW=0.2126*H.gainR+0.7152*H.gainG+0.0722*H.gainB; // ≈0.332
-    gl.uniform1f(ul('halR'),(halWhite?gW:H.gainR)*amtH);
-    gl.uniform1f(ul('halG'),(halWhite?gW:H.gainG)*amtH);
-    gl.uniform1f(ul('halB'),(halWhite?gW:H.gainB)*amtH);
+    const gW=0.2126*gainR+0.7152*gainG+0.0722*gainB; // luminance of the active gain vector
+    gl.uniform1f(ul('halR'),(halWhite?gW:gainR)*amtH);
+    gl.uniform1f(ul('halG'),(halWhite?gW:gainG)*amtH);
+    gl.uniform1f(ul('halB'),(halWhite?gW:gainB)*amtH);
     gl.uniform1f(ul('halProt'),(P.halation.enabled&&P.halation.protect)?P.halation.protect:0);
     gl.uniform1f(ul('halHP'),(NR&&NR.hp!=null)?NR.hp:1.0);   // high-pass strength (no-remjet floods → <1)
     // saturation/vibrance applied here (post-print) instead of in the lut pass — see comp shader.
@@ -3517,13 +3526,15 @@ FXR.CAL={
             powL:3.9247,kW:1.0028,kC:0.8860,aG:0.1972,bP:2.10,
             sigmaR:7.5233,sigmaG:3.7617,sigmaB:1.1285,
             gainR:1.2380,gainG:0.0958,gainB:0.0,defAmount:70,
-            // "No remjet" film (no anti-halation backing) — much stronger, wider, more
-            // flooding halation. Calibrated against calib/dehancer no remjet x2.png by
-            // calib/optimize_noremjet.py (glance loss weighted toward the no-remjet glow
-            // SURPLUS over standard). Multiplies gain/sigma off the base model and lowers
-            // the high-pass strength (hp<1 lets the wide blur flood interiors, the physical
-            // signature of no remjet). thr is the lowered emission threshold.
-            noRemjet:{gainScale:1.8239,sigmaScale:1.5067,thr:0.0664,hp:0.7956}},
+            // "No remjet" film (no anti-halation backing) — much stronger, with a bright
+            // YELLOW edge band (boosted green) fading to orange/red, then flooding interiors.
+            // PER-CHANNEL calibration (calib/optimize_noremjet.py, edge-weighted RGB loss vs
+            // calib/dehancer no remjet x2.png): gainR/gainG are absolute gains at amount=70;
+            // sigmaScaleR/G widen each channel (σ_G width sets the yellow band); hp<1 lets the
+            // wide blur flood interiors (the no-remjet signature); thr is the lowered threshold.
+            // extremeScale: the "Extreme" toggle multiplies the gains further (≈×5–6 standard).
+            noRemjet:{gainR:1.493,gainG:0.587,gainB:0.0,sigmaScaleR:1.3644,sigmaScaleG:1.240,thr:0.06,hp:0.85},
+            extremeScale:3.0},
   bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40}
 };
 const FX=new FXR();
@@ -4138,7 +4149,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp',
   'grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
-const _FX_SNAP_TOGGLES=['adjust','grain','hal','hal-white','hal-noremjet','bloom','vig','borders'];
+const _FX_SNAP_TOGGLES=['adjust','grain','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
 const _FX_SNAP_SELECTS=['sel-lut','sel-print','sel-grain-t','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(){
@@ -4499,7 +4510,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp',
   'sl-grain-a','sl-grain-sz','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-grain','tg-hal','tg-hal-white','tg-hal-noremjet','tg-bloom','tg-vig','tg-borders'];
+const _SESS_TOGGLES=['tg-adjust','tg-grain','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
 const _SESS_SELECTS=['sel-grain-t','sel-lut','sel-print','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(){
@@ -4604,6 +4615,7 @@ function getFXParams(){return{
   halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),
     white:!!(document.getElementById('tg-hal-white')||{}).classList?.contains('on'), // neutral glow (B&W)
     noRemjet:!!(document.getElementById('tg-hal-noremjet')||{}).classList?.contains('on'), // strong no-backing halation
+    extreme:!!(document.getElementById('tg-hal-extreme')||{}).classList?.contains('on'), // ≈×5-6 stylised halation
     protect:parseFloat((document.getElementById('sl-hal-p')||{value:0}).value)/100*0.15}, // slider 0-100 → linear-lum threshold 0..0.15 (eyes ~0.05-0.07)
   bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value)/100,radius:parseFloat(document.getElementById('sl-bloom-r').value)},
   debug:parseFloat((document.getElementById('sel-debug')||{}).value||0),

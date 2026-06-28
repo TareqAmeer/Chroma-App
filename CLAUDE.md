@@ -185,19 +185,33 @@ point-sample harness missed:
    this chart's purple is `(200,0,200)` with R==B exactly, so `bB` (an R/B-excess suppressor)
    is provably inert on it.
 
-### Halation "No remjet" toggle
-Real film without the anti-halation remjet backing halates much more strongly and floods
-interiors (not just gaps/edges). The `No remjet` toggle (default off = bit-identical
-standard behaviour) applies a calibrated multiplicative boost stored in
-`FXR.CAL.halation.noRemjet={gainScale,sigmaScale,thr,hp}`: it scales gain & σ, lowers the
-emission threshold, and — crucially — lowers the **high-pass strength** `hp` (the comp
-shader now subtracts `emit*halHP` instead of `emit`; `hp<1` lets the wide blur survive
-across flat regions, the physical signature of no-remjet flooding). Fitted by
-`calib/optimize_noremjet.py` against `calib/dehancer no remjet x2.png` (glance loss
-weighted toward the no-remjet *surplus* over standard halation, since a plain loss is
-dominated by already-matched regions and barely boosts). The single-σ high-pass model
-can't fully reach Dehancer's boldest rings without overshooting elsewhere — current values
-(gainScale≈1.82, σScale≈1.51, hp≈0.80) are the robust glance-match optimum across weightings.
+### Halation "No remjet" + "Extreme" toggles
+Real film without the anti-halation remjet backing halates much more strongly and, at a
+bright edge, shows a **bright yellow band** (strong R+G) fading through orange to red (R
+only). The `No remjet` toggle (default off = bit-identical standard behaviour) uses a
+**per-channel** calibration in
+`FXR.CAL.halation.noRemjet={gainR,gainG,gainB,sigmaScaleR,sigmaScaleG,thr,hp}`: independent
+red/green gains (the yellow band needs green ≈0.4·red, NOT the standard ≈0.08·red) and
+independent σ scales (σ_G width sets the yellow band). `hp` is the high-pass strength (the
+comp shader subtracts `emit*halHP`; `hp<1` lets the wide blur flood interiors — kept ≈0.85
+since the reference keeps bright-block interiors clean). The renderer reads gainR/G/B and
+σ scales per-channel; white-glow mode still equalises to the luminance of the active vector.
+
+**Calibration method (`calib/optimize_noremjet.py`) — fit the WHITE-EDGE profile, not the
+whole chart.** A global RGB fit *fails*: balancing every edge pushes green DOWN (the green
+that yellows a white edge over-greens the coloured-bar edges), losing the canonical look.
+The user inspects exactly the white-block edge, and outside a white edge the surround is
+black so `screen()` is a no-op and each channel is analytic:
+`result_c(d)=l2s(kW·½·erfc(d/(σ_c√2))·gain_c)`. So we least-squares fit gainR,gainG,σR,σG to
+the measured left-edge profile of the 100% white bar in `dehancer no remjet x2.png` — an
+*exact* instant fit (edge RMS ≈2.3/255). `hp`/`thr` don't appear in the outside band (e=0
+there), so they're chosen for the interior look. ⚠️ Don't "improve" this with a global
+chart loss — that's the trap that produced the weak reddish-orange v1.
+
+The **`Extreme`** toggle multiplies the no-remjet gains by `extremeScale` (≈3 → ≈×5–6 of
+standard) for a heavy stylised bloom; it implies no-remjet (engages the same per-channel
+emission params, just scaled). Both default off; both carried through preview, export,
+session and FX snapshot.
 
 ### Halation "Shadow protect" slider
 Dark eyes fully surrounded by bright fur/skin flood red with halation on (σ_R ≫ σ_G glow
