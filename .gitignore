@@ -24,5 +24,11 @@ calib/fujify/_*.png
 calib/cmp_*.png
 calib/val_*.png
 
+# Grain calibration source renders (large; regenerate the chart with gen_grain_chart.py and
+# re-render through Dehancer per calib/calibrate_grain_formats.py). Not bundled.
+grain-test-2x.png
+dehancer-*mm-*.png
+dehancer-baseline-*.png
+
 # Untracked source-material folder (not part of the public repo)
 Fujify Luts and XMP/

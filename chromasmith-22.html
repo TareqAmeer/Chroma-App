@@ -537,12 +537,13 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <div class="fx-hint">Adds the fine speckled texture of real film stock.</div>
         <div class="fx-fields" id="ff-grain">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-a">30</div></div>
-          <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="5" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">5</div></div>
-          <div class="fx-row"><div class="fx-label">Character</div>
-            <select class="fx-select" id="sel-grain-t" onchange="fxUpdate()">
-              <option value="0">Fine / Classic 35mm</option>
-              <option value="1">Medium / Pushed Film</option>
-              <option value="2">Heavy / Grainy</option>
+          <div class="fx-row" title="Fine-tune the grain clump size on top of the film format (5 = format-accurate)."><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="5" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">5</div></div>
+          <div class="fx-row" title="Dehancer film-format grain: smaller formats are coarser/stronger, 65mm is the finest & weakest."><div class="fx-label">Film format</div>
+            <select class="fx-select" id="sel-grain-fmt" onchange="fxUpdate()">
+              <option value="8mm">8mm — coarse</option>
+              <option value="16mm">16mm</option>
+              <option value="35mm" selected>35mm — standard</option>
+              <option value="65mm">65mm — fine</option>
             </select>
           </div>
         </div>
@@ -2573,7 +2574,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-28e';
+const BUILD='2026-06-28f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3188,7 +3189,9 @@ precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
-uniform float halR,halG,halB,halProt,blmA,grA,grSz,grT,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
+uniform float halR,halG,halB,halProt,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
+uniform vec3 grK;     // per-channel grain gain (R,G,B)
+uniform vec2 grHi;    // highlight rolloff gate (lo,hi)
 uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
 float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2s(float c){return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
@@ -3196,6 +3199,13 @@ vec3 S2L(vec3 c){return vec3(s2l(c.r),s2l(c.g),s2l(c.b));}
 vec3 L2S(vec3 c){return vec3(l2s(c.r),l2s(c.g),l2s(c.b));}
 vec3 screen(vec3 a,vec3 b){return 1.-(1.-a)*(1.-b);}
 float h21(vec2 p){p=fract(p*vec2(127.1,311.7));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+// VALUE noise: hash on the integer lattice + smooth bilinear interp → grain CLUMPS of a
+// controllable size (unlike hashing continuous coords, which is 1px white noise at every size).
+// 2 octaves for filmic texture. Unit std ≈ 0.179 (baked into the grK calibration).
+float vlat(vec2 P){vec2 i=floor(P),f=fract(P);f=f*f*(3.-2.*f);
+  float a=h21(i),b=h21(i+vec2(1,0)),c=h21(i+vec2(0,1)),d=h21(i+vec2(1,1));
+  return mix(mix(a,b,f.x),mix(c,d,f.x),f.y)-0.5;}
+float vnoise(vec2 P){return 0.75*vlat(P)+0.35*vlat(P*2.0+5.3);}
 void main(){
   vec3 base_s=texture(base,uv).rgb;
   vec3 rawH=texture(hGlow,uv).rgb;
@@ -3233,8 +3243,21 @@ void main(){
   lin=screen(lin, bg);   // bloom first (source-colored)
   lin=screen(lin, hg);   // halation: warm backing via channel-split σ
   vec3 res=L2S(clamp(lin,0.,1.));
-  // ---- print profile (Kodak/Fuji): a 2nd 3D LUT applied AFTER the film look + halation,
-  //      matching Dehancer's pipeline (negative → halation → print), before print grain.
+  // ---- FILM GRAIN — in the NEGATIVE (before print). Value-noise CLUMPS (not 1px white noise),
+  //      per-channel signal-dependent σ = grA·grK·v^grPowG·highlightGate, with a shared+
+  //      independent mix (corr≈0.4). Calibrated to Dehancer per film format (FXR.CAL.grain).
+  if(grA>0.){
+    vec2 guv=uvOff+uv*uvScale;          // global image uv (continuous across tiles / 1:1 loupe)
+    vec2 P=guv*grFreq+vec2(seed);       // grFreq = clump-cells across the image (fixed-pixel grain)
+    float nS=vnoise(P);                  // shared luminance-correlated component
+    vec3 nC=vec3(vnoise(P+11.1),vnoise(P+23.7),vnoise(P+37.3));  // per-channel independent
+    vec3 v=clamp(res,0.,1.);
+    vec3 gate=1.0-smoothstep(vec3(grHi.x),vec3(grHi.y),v);       // grain rolls off in highlights
+    vec3 sig=grA*grK*pow(v,vec3(grPowG))*gate;
+    res+=(grWi*nC+grWs*nS)*sig;          // mix preserves unit variance, gives the measured ~0.4 corr
+  }
+  // ---- print profile (Kodak/Fuji): 2nd 3D LUT applied AFTER film + halation + GRAIN — Dehancer
+  //      order (negative+grain → print), so the print stock modulates the grain as on real film.
   if(usePrint>.5){float psc=32./33.,pof=.5/33.;res=texture(printLut,clamp(res,0.,1.)*psc+pof).rgb;}
   // SATURATION / VIBRANCE applied AFTER the print stage (matches Dehancer's grade-after-print
   // order). Moving them here means desaturating actually neutralizes the print's neutral tint
@@ -3246,20 +3269,6 @@ void main(){
     float smx=max(res.r,max(res.g,res.b)),smn=min(res.r,min(res.g,res.b)),ssv=smx>0.0?(smx-smn)/smx:0.0;
     res=mix(vec3(sl),res,1.0+adjVib2*(1.0-ssv));
     res=clamp(res,0.0,1.0);
-  }
-  // ---- grain (display space) ----
-  if(grA>0.){
-    float lu=dot(res,vec3(.2126,.7152,.0722));
-    float sf=grT>.5?.04:0.;
-    float msk=clamp(4.*lu*(1.-lu)*.95+sf,0.,1.);
-    vec2 guv=uvOff+uv*uvScale; // global image uv (identity when not tiling)
-    vec2 gc=guv/max(grSz,.0001)+vec2(seed);float g=h21(gc)-.5;
-    float rm=grT*.20;
-    float gr=g+(h21(gc+vec2(.13,.29))-.5)*rm;
-    float gg=g+(h21(gc+vec2(.47,.71))-.5)*rm*.88;
-    float gb=g+(h21(gc+vec2(.83,.19))-.5)*rm*.72;
-    if(grT>.5){float cl=(h21(gc*.18+vec2(.5))-.5)*.55,cl2=(h21(gc*.06+vec2(.3))-.5)*.25;gr+=cl+cl2;gg+=cl*.65+cl2;gb+=cl*.5+cl2*1.8;}
-    res+=vec3(gr,gg,gb)*grA*.24*msk;
   }
   // VIGNETTE — applied last (post-grain), darkens corners in display space
   if(vigAmt>0.){vec2 vc=uv*2.-1.;float vd=dot(vc,vc);res*=1.-smoothstep(0.3,1.5,vd)*vigAmt;}
@@ -3490,9 +3499,26 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1f(ul('adjSat2'),(A.enabled?A.saturation:0)||0);
     gl.uniform1f(ul('adjVib2'),(A.enabled?A.vibrance:0)||0);
     gl.uniform1f(ul('blmA'),bGain);
-    gl.uniform1f(ul('grA'),P.grain.enabled?P.grain.amount/100:0);
-    gl.uniform1f(ul('grSz'),P.grain.enabled?P.grain.size/500:1);
-    gl.uniform1f(ul('grT'),P.grain.type);
+    // FILM GRAIN (value-noise, per-channel signal-dependent — see FXR.CAL.grain). Film format
+    // (8/16/35/65mm) sets clump cell size + strength; Amount = intensity (with headroom past
+    // Dehancer's max); Size = fine multiplier on the format's clump size.
+    {const G=C.grain,fmt=G.formats[P.grain.format]||G.formats['35mm'];
+     const amtNorm=(P.grain.enabled?P.grain.amount/100:0)*G.amountSpan;   // 0..~1.5 (headroom)
+     const amtScale=amtNorm>0?Math.pow(amtNorm,G.powA):0;
+     const grA=P.grain.enabled?amtScale*fmt.scale:0;
+     const sizeMul=(P.grain.size||5)/5;                                   // slider 5 = format-accurate
+     // Clump cell = a fixed PIXEL size in the OUTPUT (so it's visible in the preview AND matches
+     // Dehancer at export). grFreq = cells across the FULL image = fullOutputW / cellPx. Divide by
+     // uvScale so a tile/loupe (which renders a sub-region) keeps the SAME global cell grid.
+     const uvSx=(opts&&opts.uvScale)?opts.uvScale[0]:1;
+     const cellPx=fmt.cellPx*sizeMul;
+     const grFreq=(w/uvSx)/Math.max(cellPx,0.5);
+     gl.uniform1f(ul('grA'),grA);
+     gl.uniform1f(ul('grFreq'),grFreq);
+     gl.uniform3f(ul('grK'),G.kR,G.kG,G.kB);
+     gl.uniform1f(ul('grPowG'),G.powG);
+     gl.uniform2f(ul('grHi'),G.hiLo,G.hiHi);
+     gl.uniform1f(ul('grWi'),G.wi);gl.uniform1f(ul('grWs'),G.ws);}
     gl.uniform1f(ul('seed'),(opts&&opts.seed!=null)?opts.seed:Math.random()*100);
     gl.uniform1f(ul('debug'),P.debug||0);
     gl.uniform1f(ul('vigAmt'),P.vignette||0);
@@ -3559,14 +3585,26 @@ FXR.CAL={
             noRemjet:{gainR:1.80,gainG:0.34,gainB:0.0,sigmaScaleR:1.40,sigmaScaleG:1.75,
                       thr:0.05,hp:0.55,powL:1.628,powLg:1.628},
             extremeScale:3.0},
-  bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40}
+  bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40},
+  // FILM GRAIN — value-noise, per-channel signal-dependent σ, calibrated to Dehancer's grain
+  // module measured from grain-test-2x.png rendered at each film format (calib/measure_grain*,
+  // grain refs dehancer-{8,16,35,65}mm-{60,100}.png). Model (display space, before print):
+  //   σ_c = grA · k_c · v_c^powG · (1−smoothstep(hiLo,hiHi,v_c))         per channel
+  //   noise_c = (wi·indep_c + ws·shared) · σ_c    (wi²+ws²=1 → unit variance, corr=ws²≈0.40)
+  //   grA = (amount/100·amountSpan)^powA · format.scale                  (value-noise unit std baked into k)
+  // R is ~1.2× G≈B; σ rises to a peak near v≈0.7 then rolls off (highlight gate). Format sets the
+  // clump CELL size (px at refW=4800) + a strength scale (65mm finest/weakest, 35mm strongest).
+  grain:{kR:0.66,kG:0.55,kB:0.55,powG:0.69,powA:0.59,hiLo:0.72,hiHi:0.95,
+         wi:0.7746,ws:0.6325,amountSpan:1.5,refW:4800,
+         formats:{ '8mm':{cellPx:5.0,scale:0.83}, '16mm':{cellPx:4.0,scale:1.00},
+                   '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
 };
 const FX=new FXR();
 
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={grain:{enabled:false,amount:30,size:5,type:0},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={grain:{enabled:false,amount:30,size:5,format:'35mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[];
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
@@ -4174,7 +4212,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
 const _FX_SNAP_TOGGLES=['adjust','grain','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
-const _FX_SNAP_SELECTS=['sel-lut','sel-print','sel-grain-t','sel-debug'];
+const _FX_SNAP_SELECTS=['sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(){
   const s={sliders:{},toggles:{},selects:{},colors:{}};
@@ -4535,7 +4573,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-grain-a','sl-grain-sz','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-adjust','tg-grain','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
-const _SESS_SELECTS=['sel-grain-t','sel-lut','sel-print','sel-exp-fmt'];
+const _SESS_SELECTS=['sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(){
   const s={};
@@ -4635,7 +4673,7 @@ function getFXParams(){return{
     temp:adjVal('sl-adj-temp')/100, tint:adjVal('sl-adj-tint')/100,
     vibrance:adjVal('sl-adj-vib')/100, saturation:adjVal('sl-adj-sat')/100,
     sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500},
-  grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),type:parseFloat(document.getElementById('sel-grain-t').value)},
+  grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
   halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),
     white:!!(document.getElementById('tg-hal-white')||{}).classList?.contains('on'), // neutral glow (B&W)
     noRemjet:!!(document.getElementById('tg-hal-noremjet')||{}).classList?.contains('on'), // strong no-backing halation

@@ -87,14 +87,16 @@ Everything is in one file. Key pieces:
      & vibrance are NOT applied here** — they moved to the comp pass (see below).
   2. **emit pass** — computes the halation/bloom *emission* map from the graded image.
   3. **blur passes** — per-channel Gaussian blur of the emission (σ_R ≫ σ_G ≫ σ_B).
-  4. **comp pass** — screen-blends the glow back, then (if a Print profile is selected) a
-     2nd 3D LUT lookup `printLut` via `usePrint`/`setPrintLUT`, then **saturation/vibrance**
-     (`adjSat2`/`adjVib2`), then grain + vignette. Order mirrors Dehancer: negative →
-     halation → **print** → **grade (sat/vib)** → print grain. ⚠️ Saturation/vibrance run
-     *after* print on purpose: pulling saturation to 0 must collapse the PRINTED pixel to its
-     luma (neutral), not re-tint an already-grey pixel. If they ran before print (the old
-     order), a print profile re-tinted neutrals and 0-saturation no longer matched Dehancer
-     (verified against `calib/*lut print 0 sat*.png`: DH grey→neutral, old CH grey→tinted).
+  4. **comp pass** — screen-blends bloom+halation, then **grain** (value-noise, see §6b), then
+     (if a Print profile is selected) a 2nd 3D LUT `printLut` via `usePrint`/`setPrintLUT`, then
+     **saturation/vibrance** (`adjSat2`/`adjVib2`), then vignette. Order mirrors Dehancer:
+     negative → halation → **grain** → **print** → **grade (sat/vib)** → vignette.
+     - ⚠️ **Grain is BEFORE print** (it's in the negative; the print stock then modulates it).
+       Identity vs after-print when no print profile is selected.
+     - ⚠️ **Saturation/vibrance run AFTER print** on purpose: pulling saturation to 0 must
+       collapse the PRINTED pixel to its luma (neutral), not re-tint an already-grey pixel. If
+       they ran before print (the old order), a print profile re-tinted neutrals and
+       0-saturation no longer matched Dehancer (`calib/*lut print 0 sat*.png`: DH grey→neutral).
 - **`render(P,w,h,opts)`** — `opts.glowScale` downsamples the blur buffers (cheap preview);
   `opts.scOverride` forces the sigma-scale (= fullWidth/REF) so a tile/crop blurs with the
   *whole image's* radius; `opts.uvOff/uvScale/seed` keep grain continuous across tiles.
@@ -279,8 +281,29 @@ a dedicated inner-glow term optimized to ~zero gain, so none is needed.
   eval; runs entirely in Python). Produced `best_params.json`.
 - **`gen_chart.py`** — chart geometry. **`validate_v22.py`** — zone-by-zone point samples
   (secondary guardrail only — see lessons).
-- **Grain:** `grainmodel.py`, `optimize_grain*.py`, `grain_scorecard.py`, `measure_grain.py`,
-  `gen_grain_chart.py`, `grain_params*.json`.
+- **Grain:** `gen_grain_chart.py` (flat test chart), `calibrate_grain_formats.py` (the SHIPPED
+  per-format fit from the Dehancer exports `dehancer-{8,16,35,65}mm-{60,100}.png`), plus the older
+  `grainmodel.py`/`optimize_grain*.py`/`measure_grain.py`/`grain_params*.json` (superseded).
+
+### 6b. The film-grain model (value-noise, calibrated per film format)
+The shipped grain (comp shader + `FXR.CAL.grain`) replaced the old 1px white-noise hash that was
+invisible at any size. Key points:
+- **Value (lattice) noise**, not a continuous hash: `vlat()`/`vnoise()` hash the integer lattice
+  and bilinear-interpolate → grain CLUMPS of a controllable size (white noise has no size).
+- **Fixed-pixel clump size**: `grFreq = (renderW/uvScaleX)/cellPx` → cells are a constant pixel
+  size in the OUTPUT (visible in the fit-preview AND Dehancer-accurate at export; tiles/loupe stay
+  continuous via `guv`). ⚠️ Image-fraction cells (the first attempt) go SUB-PIXEL in the
+  downscaled preview → the value noise averages to ~0 (σ collapses, no clumps). Must be buffer-px.
+- **Per-channel signal-dependent σ**: `σ_c = grA·k_c·v_c^powG·(1−smoothstep(hiLo,hiHi,v_c))`.
+  σ rises with luminance, peaks ~v0.7, rolls off in highlights. R≈1.2×G≈B (NOT blue-suppressed —
+  that was a measurement artifact of a stale `profile_block` Y-coord landing on a colour ramp).
+- **Shared+independent mix** (`noise_c = wi·indep_c + ws·shared`, wi²+ws²=1) gives the measured
+  channel correlation ≈0.4 (some chroma grain, like Dehancer).
+- **Film format = size + strength** (`CAL.grain.formats`): 8mm coarsest, 65mm finest & WEAKEST
+  (0.52× of 35mm). Amount has headroom past Dehancer (`amountSpan`); slider ~70 ≈ Dehancer's max.
+- ⚠️ **Measure grain by mean-subtraction, NOT a high-pass blur** — a high-pass removes the coarse
+  grain and halves σ (the trap that made the old `grain_targets.json`/v4 look weak). Grain is
+  applied in display space, BEFORE print.
 - **`gen_lut_presets.py`** — regenerates the embedded `LUT_PRESETS` base64 blobs from the
   `LUT LIBRARY/` cubes.
 - Fitted params live in `*.json` (`best_params.json` is the committed halation model;
