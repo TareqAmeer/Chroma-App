@@ -289,7 +289,11 @@ a dedicated inner-glow term optimized to ~zero gain, so none is needed.
 The shipped grain (comp shader + `FXR.CAL.grain`) replaced the old 1px white-noise hash that was
 invisible at any size. Key points:
 - **Value (lattice) noise**, not a continuous hash: `vlat()`/`vnoise()` hash the integer lattice
-  and bilinear-interpolate → grain CLUMPS of a controllable size (white noise has no size).
+  and interpolate → grain CLUMPS of a controllable size (white noise has no size). ⚠️ Use the
+  **`hash12`** (Dave Hoskins) lattice hash, NOT `h21` — `h21`'s `127.1` multiplier has a `0.1`
+  fractional residue, so adjacent cells barely differ → a REPEATING tiled pattern (visible
+  streaks / "organized grid"). `vnoise` sums **3 octaves ROTATED** between each other + quintic
+  interp so no axis-aligned grid survives; unit std ≈0.157 (baked into `grK`).
 - **Fixed-pixel clump size**: `grFreq = (renderW/uvScaleX)/cellPx` → cells are a constant pixel
   size in the OUTPUT (visible in the fit-preview AND Dehancer-accurate at export; tiles/loupe stay
   continuous via `guv`). ⚠️ Image-fraction cells (the first attempt) go SUB-PIXEL in the

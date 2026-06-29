@@ -2574,7 +2574,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-28f';
+const BUILD='2026-06-29a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3199,13 +3199,17 @@ vec3 S2L(vec3 c){return vec3(s2l(c.r),s2l(c.g),s2l(c.b));}
 vec3 L2S(vec3 c){return vec3(l2s(c.r),l2s(c.g),l2s(c.b));}
 vec3 screen(vec3 a,vec3 b){return 1.-(1.-a)*(1.-b);}
 float h21(vec2 p){p=fract(p*vec2(127.1,311.7));p+=dot(p,p+45.32);return fract(p.x*p.y);}
-// VALUE noise: hash on the integer lattice + smooth bilinear interp → grain CLUMPS of a
-// controllable size (unlike hashing continuous coords, which is 1px white noise at every size).
-// 2 octaves for filmic texture. Unit std ≈ 0.179 (baked into the grK calibration).
-float vlat(vec2 P){vec2 i=floor(P),f=fract(P);f=f*f*(3.-2.*f);
-  float a=h21(i),b=h21(i+vec2(1,0)),c=h21(i+vec2(0,1)),d=h21(i+vec2(1,1));
+// VALUE noise for film grain: lattice hash + smooth interp → CLUMPS of a controllable size.
+// ⚠️ Use hash12 (Dave Hoskins), NOT h21 — h21's 127.1 multiplier has a 0.1 fractional residue, so
+// adjacent lattice cells barely differ → a REPEATING tiled pattern (visible streaks/"organized
+// grid", the v1 grain bug). hash12 decorrelates cleanly. Quintic interp + 3 octaves ROTATED
+// between each other so no axis-aligned grid survives. Unit std ≈ 0.157 (baked into grK).
+float hash12(vec2 p){vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
+float vlat(vec2 P){vec2 i=floor(P),f=fract(P);f=f*f*f*(f*(f*6.-15.)+10.);
+  float a=hash12(i),b=hash12(i+vec2(1,0)),c=hash12(i+vec2(0,1)),d=hash12(i+vec2(1,1));
   return mix(mix(a,b,f.x),mix(c,d,f.x),f.y)-0.5;}
-float vnoise(vec2 P){return 0.75*vlat(P)+0.35*vlat(P*2.0+5.3);}
+float vnoise(vec2 P){mat2 R=mat2(0.80,-0.60,0.60,0.80);vec2 P1=R*P,P2=R*P1;
+  return 0.6*vlat(P1+10.0)+0.3*vlat(P2*2.04+50.0)+0.18*vlat(P*8.33+90.0);}
 void main(){
   vec3 base_s=texture(base,uv).rgb;
   vec3 rawH=texture(hGlow,uv).rgb;
@@ -3594,7 +3598,7 @@ FXR.CAL={
   //   grA = (amount/100·amountSpan)^powA · format.scale                  (value-noise unit std baked into k)
   // R is ~1.2× G≈B; σ rises to a peak near v≈0.7 then rolls off (highlight gate). Format sets the
   // clump CELL size (px at refW=4800) + a strength scale (65mm finest/weakest, 35mm strongest).
-  grain:{kR:0.66,kG:0.55,kB:0.55,powG:0.69,powA:0.59,hiLo:0.72,hiHi:0.95,
+  grain:{kR:0.75,kG:0.63,kB:0.63,powG:0.69,powA:0.59,hiLo:0.72,hiHi:0.95,
          wi:0.7746,ws:0.6325,amountSpan:1.5,refW:4800,
          formats:{ '8mm':{cellPx:5.0,scale:0.83}, '16mm':{cellPx:4.0,scale:1.00},
                    '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
