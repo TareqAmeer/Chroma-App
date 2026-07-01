@@ -536,14 +536,14 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
         <div class="fx-hint">Adds the fine speckled texture of real film stock.</div>
         <div class="fx-fields" id="ff-grain">
-          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-a">30</div></div>
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="60" id="sl-grain-a" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-a">60</div></div>
           <div class="fx-row" title="Fine-tune the grain clump size on top of the film format (5 = format-accurate)."><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="5" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">5</div></div>
           <div class="fx-row" title="Dehancer film-format grain: smaller formats are coarser/stronger, 65mm is the finest & weakest."><div class="fx-label">Film format</div>
             <select class="fx-select" id="sel-grain-fmt" onchange="fxUpdate()">
               <option value="8mm">8mm — coarse</option>
               <option value="16mm">16mm</option>
-              <option value="35mm" selected>35mm — standard</option>
-              <option value="65mm">65mm — fine</option>
+              <option value="35mm">35mm — standard</option>
+              <option value="65mm" selected>65mm — fine</option>
             </select>
           </div>
         </div>
@@ -2574,7 +2574,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-06-29a';
+const BUILD='2026-07-01a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3189,7 +3189,7 @@ precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
-uniform float halR,halG,halB,halProt,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
+uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
 uniform vec3 grK;     // per-channel grain gain (R,G,B)
 uniform vec2 grHi;    // highlight rolloff gate (lo,hi)
 uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
@@ -3226,7 +3226,12 @@ void main(){
   // across flat regions (bold, smoothly-flooded no-remjet glow instead of a carved dark ring).
   vec3 emv=texture(hEmit,uv).rgb;
   rawH=max(rawH-emv*halHP,0.0);
-  vec3 hg=rawH*vec3(halR,halG,halB);   // channel-split: σ_R wide red, σ_G narrow green
+  // Warm film glow uses the channel-split emission (σ_R wide red, σ_G narrow green → yellow band).
+  // White glow (B&W photos): the emission only writes .rg, so a channel-split glow can never be
+  // neutral (its blue is always 0 → yellow). Instead drive ALL THREE channels from the neutral
+  // brightness backing (rawH.r = emitR, which fires for every bright source) so the glow is a true
+  // grey — works identically for standard, no-remjet and extreme.
+  vec3 hg=(halWhite>0.5)?vec3(rawH.r*halR):rawH*vec3(halR,halG,halB);
   // SHADOW PROTECT (user slider, default 0 = calibrated Dehancer behavior): attenuate
   // the halation glow RECEIVED by dark pixels so small dark features fully surrounded
   // by bright emitters (eyes, nostrils) do not flood red. halProt is the linear-light
@@ -3497,6 +3502,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1f(ul('halR'),(halWhite?gW:gainR)*amtH);
     gl.uniform1f(ul('halG'),(halWhite?gW:gainG)*amtH);
     gl.uniform1f(ul('halB'),(halWhite?gW:gainB)*amtH);
+    gl.uniform1f(ul('halWhite'),halWhite?1:0);   // neutral glow: drive all 3 channels from rawH.r
     gl.uniform1f(ul('halProt'),(P.halation.enabled&&P.halation.protect)?P.halation.protect:0);
     gl.uniform1f(ul('halHP'),(NR&&NR.hp!=null)?NR.hp:1.0);   // high-pass strength (no-remjet floods → <1)
     // saturation/vibrance applied here (post-print) instead of in the lut pass — see comp shader.
@@ -3608,7 +3614,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={grain:{enabled:false,amount:30,size:5,format:'35mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[];
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
