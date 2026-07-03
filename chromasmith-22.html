@@ -584,6 +584,18 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           </div>
         </div>
       </div>
+      <!-- FILM ARTIFACTS -->
+      <div class="fx-ctrl" data-fxsec="art">
+        <div class="fx-ctrl-title">Film Artifacts <div class="fx-toggle" id="tg-art" onclick="toggleFX('art')"></div></div>
+        <div class="fx-hint">Negative defects — dust &amp; hairs, scratches and a light leak. Applied before the print stock, like real film damage.</div>
+        <div class="fx-fields" id="ff-art">
+          <div class="fx-row" title="Random dust specks and the odd hair — mostly light (dust on the negative prints white)."><div class="fx-label">Dust</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-art-du" oninput="fxUpdate()"><div class="fx-val" id="vl-art-du">30</div></div>
+          <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" oninput="fxUpdate()"><div class="fx-val" id="vl-art-sc">20</div></div>
+          <div class="fx-row" title="A warm light leak flooding in from one edge."><div class="fx-label">Light leak</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-art-lk" oninput="fxUpdate()"><div class="fx-val" id="vl-art-lk">0</div></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="artReshuffle()" title="Re-roll the random dust/scratch/leak placement"><span class="bdot"></span>Reshuffle</button></div>
+          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Placement is seeded — export matches preview; Reshuffle re-rolls it</div>
+        </div>
+      </div>
       <!-- HALATION -->
       <div class="fx-ctrl" data-fxsec="hal">
         <div class="fx-ctrl-title">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
@@ -795,6 +807,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     <h3>Film FX</h3>
     <ul>
       <li><b>Film Grain</b> — Amount, Size, and grain character. Rendered at true export scale in the 1:1 view (see below).</li>
+      <li><b>Film Artifacts</b> — dust &amp; hairs, vertical scratches and a warm light leak, applied to the "negative" before the print stock. Placement is seeded (export matches preview); <b>Reshuffle</b> re-rolls it.</li>
       <li><b>Halation</b> — the red-orange glow real film gives bright edges. <b>Amount</b>, <b>Radius</b>, and <b>Shadow protect</b> (raise it if dark eyes surrounded by bright skin flood red).</li>
       <li><b>Bloom</b> — soft highlight glow. Amount, Threshold, Radius.</li>
       <li><b>Vignette</b> — darkens the corners.</li>
@@ -3265,6 +3278,7 @@ in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
 uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
+uniform float dustA,scrA,leakA,fxSeed,artAsp; // film artifacts (dust/scratches/light leak) + stable seed + image aspect
 uniform vec3 grK;     // per-channel grain gain (R,G,B)
 uniform vec2 grHi;    // highlight rolloff gate (lo,hi)
 uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
@@ -3339,6 +3353,54 @@ void main(){
     vec3 gate=1.0-smoothstep(vec3(grHi.x),vec3(grHi.y),v);       // grain rolls off in highlights
     vec3 sig=grA*grK*pow(v,vec3(grPowG))*gate;
     res+=(grWi*nC+grWs*nS)*sig;          // mix preserves unit variance, gives the measured ~0.4 corr
+  }
+  // ---- FILM ARTIFACTS — negative defects, applied BEFORE the print (like grain). All coords are
+  //      IMAGE-RELATIVE (q = fraction of image height, aspect-corrected) so the preview, the 1:1
+  //      loupe and the tiled export all place identical artifacts; fxSeed is stable per image
+  //      (user "Reshuffle" re-rolls it), so export always matches preview.
+  if(dustA>0.||scrA>0.||leakA>0.){
+    vec2 g2=uvOff+uv*uvScale;
+    vec2 q=vec2(g2.x*artAsp,g2.y);
+    if(dustA>0.){
+      // sparse dust: one candidate per 0.02-height cell; center kept 0.2 from the cell edge so a
+      // speck (max r 0.16 cell) never clips at a cell border. Rare cells become elongated hairs.
+      vec2 Pd=q/0.02;vec2 idc=floor(Pd);
+      if(hash12(idc+fxSeed)<dustA*0.10){
+        vec2 ctr=idc+0.2+0.6*vec2(hash12(idc+7.31+fxSeed),hash12(idc+13.77+fxSeed));
+        vec2 dv=Pd-ctr;
+        float hh=hash12(idc+3.7+fxSeed);
+        if(hh>0.86){float an=hh*40.0;vec2 dr=vec2(cos(an),sin(an));dv=vec2(dot(dv,dr)*0.22,dot(dv,vec2(-dr.y,dr.x)));}
+        float rr=0.06+0.10*hash12(idc+21.13+fxSeed);
+        float spot=smoothstep(rr,rr*0.35,length(dv));
+        float lite=step(0.3,hash12(idc+31.7+fxSeed));            // 70% light (dust on the neg prints white)
+        float op=(0.45+0.5*hash12(idc+41.3+fxSeed))*clamp(dustA*2.0,0.,1.);
+        res=mix(res,vec3(lite>0.5?0.93:0.06),spot*op);
+      }
+    }
+    if(scrA>0.){
+      // thin vertical scratches: one candidate per 0.08-height column, wobbling x via value noise,
+      // faded in/out along y (lifetime gating) so they never run the full frame edge to edge.
+      float sxc=q.x/0.08;float sid=floor(sxc);
+      if(hash12(vec2(sid,fxSeed*3.7))<scrA*0.45){
+        float xl=(sid+0.15+0.7*hash12(vec2(sid,fxSeed+9.1)))*0.08+0.002*vlat(vec2(q.y*12.0,sid*7.7+fxSeed));
+        float line=smoothstep(0.0011,0.0002,abs(q.x-xl));
+        float vis=smoothstep(0.05,0.35,0.5+vlat(vec2(sid*13.1+fxSeed,q.y*5.0)));
+        float lop=(0.25+0.35*hash12(vec2(sid,fxSeed+17.3)))*clamp(scrA*1.6,0.,1.);
+        res=mix(res,vec3(0.88),line*vis*lop);
+      }
+    }
+    if(leakA>0.){
+      // warm light leak from a random left/right edge: wide orange blob + hotter red core,
+      // screen-blended in LINEAR light (a leak EXPOSES the negative), gently noise-modulated.
+      float side=step(0.5,hash12(vec2(fxSeed,1.71)));
+      vec2 lc=vec2(side*artAsp,0.25+0.5*hash12(vec2(fxSeed,2.93)));
+      float dl=length(q-lc);
+      float R=0.45+0.25*hash12(vec2(fxSeed,4.13));
+      float blob=exp(-dl*dl/(R*R))*(0.75+0.25*vlat(q*3.0+fxSeed));
+      vec3 leak=vec3(1.0,0.30,0.05)*blob*leakA;
+      leak+=vec3(0.9,0.05,0.02)*exp(-dl*dl/(R*R*0.25))*leakA*0.5;
+      vec3 l2=S2L(res);l2=1.-(1.-l2)*(1.-clamp(leak,0.,1.));res=L2S(l2);
+    }
   }
   // ---- print profile (Kodak/Fuji): 2nd 3D LUT applied AFTER film + halation + GRAIN — Dehancer
   //      order (negative+grain → print), so the print stock modulates the grain as on real film.
@@ -3620,6 +3682,16 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
      gl.uniform1f(ul('grPowG'),G.powG);
      gl.uniform2f(ul('grHi'),G.hiLo,G.hiHi);
      gl.uniform1f(ul('grWi'),G.wi);gl.uniform1f(ul('grWs'),G.ws);}
+    // FILM ARTIFACTS (dust/scratches/light leak) — image-relative coords + a stable per-image
+    // seed (fxState.artSeed via P.artifacts.seed) so preview, loupe, tiles and export all match.
+    {const AR=P.artifacts||{},aOn=AR.enabled?1:0;
+     const uvSy=(opts&&opts.uvScale)?opts.uvScale[1]:1;
+     const uvSx2=(opts&&opts.uvScale)?opts.uvScale[0]:1;
+     gl.uniform1f(ul('dustA'),aOn?(AR.dust||0)/100:0);
+     gl.uniform1f(ul('scrA'),aOn?(AR.scratch||0)/100:0);
+     gl.uniform1f(ul('leakA'),aOn?(AR.leak||0)/100:0);
+     gl.uniform1f(ul('fxSeed'),(AR.seed!=null)?AR.seed:7.7);
+     gl.uniform1f(ul('artAsp'),((w/uvSx2)/(h/uvSy))||1);}
     gl.uniform1f(ul('seed'),(opts&&opts.seed!=null)?opts.seed:Math.random()*100);
     gl.uniform1f(ul('debug'),P.debug||0);
     gl.uniform1f(ul('vigAmt'),P.vignette||0);
@@ -3705,7 +3777,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[];
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
@@ -4292,7 +4364,7 @@ function autoDetectBW(img){
 }
 function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
-  ['grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
+  ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','vig'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
@@ -4428,12 +4500,15 @@ function hslSlider(k,v){
 function hslResetBand(){['hue','sat','lum'].forEach(k=>{delete fxState.hsl[k][hslBand];});bakeHsl();hslSyncUI();fxUpdate();}
 function hslResetAll(){fxState.hsl=_hslDefault();bakeHsl();hslSyncUI();fxUpdate();}
 
+// ══ FILM ARTIFACTS ═════════════════════════════════════════════════════════════
+function artReshuffle(){fxState.artSeed=Math.random()*100;fxUpdate();log('Artifacts reshuffled','info');}
+
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
 const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp',
-  'grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
+  'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
-const _FX_SNAP_TOGGLES=['adjust','curves','hsl','grain','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
 const _FX_SNAP_SELECTS=['sel-input','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(){
@@ -4445,6 +4520,7 @@ function getUISnapshot(){
   const it=fxImages[0];s.geom=(it&&it.geom)?JSON.parse(JSON.stringify(it.geom)):null; // batch-wide geometry (crop/rotate/flip/straighten)
   s.curves=JSON.parse(JSON.stringify(fxState.curves));   // tone-curve control points
   s.hsl=JSON.parse(JSON.stringify(fxState.hsl));         // HSL mixer band settings
+  s.artSeed=fxState.artSeed;                              // artifact placement seed
   return s;
 }
 function applyUISnapshot(s){
@@ -4454,6 +4530,7 @@ function applyUISnapshot(s){
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
+  if(s.artSeed!=null)fxState.artSeed=s.artSeed;
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten)
     fxImages.forEach(it=>it.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom());
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
@@ -4796,9 +4873,9 @@ function autoEnhance(){
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp',
-  'sl-grain-a','sl-grain-sz','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
+  'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-grain','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
+const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
 const _SESS_SELECTS=['sel-input','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(){
@@ -4809,6 +4886,7 @@ function saveSession(){
   _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
   s._curves=fxState.curves;   // tone-curve control points
   s._hsl=fxState.hsl;         // HSL mixer band settings
+  s._artSeed=fxState.artSeed; // artifact placement seed
   try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));log('Session saved','ok');}catch(e){log('Session save failed: '+e.message,'warn');}
 }
 function loadSession(userTriggered){
@@ -4825,6 +4903,7 @@ function loadSession(userTriggered){
     _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
     if(s._curves){fxState.curves=s._curves;bakeCurves();drawCurveEditor();}
     if(s._hsl){fxState.hsl=s._hsl;bakeHsl();hslSyncUI();}
+    if(s._artSeed!=null)fxState.artSeed=s._artSeed;
     fxUpdate();
     // restore LUT preset selection if stored
     if(s['sel-lut'])selectLUT(s['sel-lut']).catch(()=>{});
@@ -4907,6 +4986,8 @@ function getFXParams(){return{
     vibrance:adjVal('sl-adj-vib')/100, saturation:adjVal('sl-adj-sat')/100,
     sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
+  artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
+    dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed},
   halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),
     white:!!(document.getElementById('tg-hal-white')||{}).classList?.contains('on'), // neutral glow (B&W)
     noRemjet:!!(document.getElementById('tg-hal-noremjet')||{}).classList?.contains('on'), // strong no-backing halation
@@ -5676,6 +5757,7 @@ const ICONS={
  adjust:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
  curves:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M6 18c6 0 6-12 12-12"/>',
  hsl:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>',
+ art:'<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="9" cy="8" r="1"/><circle cx="15" cy="15" r="1"/><path d="M13 5l1 3M8 16v3"/>',
  crop:'<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/>',
  grain:'<circle cx="6" cy="7" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="18" cy="8" r="1"/><circle cx="8" cy="13" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="19" cy="16" r="1"/><circle cx="6" cy="18" r="1"/><circle cx="12" cy="19" r="1"/>',
  hal:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
@@ -5694,7 +5776,7 @@ const ICONS={
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
-const FX_SECTIONS=[['image','Image'],['looks','Looks'],['grain','Grain'],
+const FX_SECTIONS=[['image','Image'],['looks','Looks'],['grain','Grain'],['art','Artifacts'],
   ['bloom','Bloom'],['hal','Halation'],['borders','Borders'],['adjust','Adjust'],
   ['curves','Curves'],['hsl','Mixer'],['vig','Vignette'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
 function _eachSection(cb){
@@ -5741,7 +5823,7 @@ function fxSection(name){
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
 //  - looks → a preset/LUT other than None/Original is selected
 //  - crop  → any rotate/flip/straighten/crop has been applied
-const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',grain:'tg-grain',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders'};
+const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders'};
 function _secIsEnabled(key){
   const tg=_SEC_TOGGLE[key];
   if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
