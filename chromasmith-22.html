@@ -133,6 +133,13 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .ni-build{font-family:var(--mono);font-size:10px;color:var(--mut);opacity:.7}
 .ni-hint{font-size:12px;color:var(--mut);margin-top:14px}
 #fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:11}
+/* multi-photo filmstrip — switch which loaded photo is previewed */
+#fx-filmstrip{display:none;gap:6px;overflow-x:auto;padding:2px 1px;margin-top:8px}
+.fs-thumb{position:relative;flex:0 0 auto;width:52px;height:52px;border-radius:6px;overflow:hidden;border:2px solid var(--bdr);background:var(--sur2);cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent}
+.fs-thumb:hover{border-color:var(--mut)}
+.fs-thumb.active{border-color:var(--acc)}
+.fs-thumb canvas{display:block;width:100%;height:100%}
+.fs-idx{position:absolute;bottom:1px;right:2px;font-size:9px;font-family:var(--mono);color:#fff;background:rgba(0,0,0,.6);border-radius:3px;padding:0 3px;line-height:1.4;pointer-events:none}
 /* one-tap looks */
 .looks-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:340px;overflow-y:auto}
 .look-cell{cursor:pointer;border-radius:5px;overflow:hidden;border:2px solid transparent;background:var(--sur2);position:relative}
@@ -684,6 +691,13 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           </select>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">JPG is never fully lossless, even at 100. PNG is lossless but files are much larger.</div>
+        <div id="fx-export-scope-row" style="margin-top:8px;display:none">
+          <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope</div>
+          <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
+            <button class="btn bsec" id="btn-scope-all" onclick="setExportScope('all')" style="flex:1;padding-left:6px;padding-right:6px"><span class="bdot"></span>All photos</button>
+            <button class="btn bgh" id="btn-scope-cur" onclick="setExportScope('current')" style="flex:1;padding-left:6px;padding-right:6px"><span class="bdot"></span>Current photo</button>
+          </div>
+        </div>
         <div class="btn-row">
           <button class="btn bpri" id="btn-fx-export" disabled onclick="exportFX()"><span class="bdot"></span>Export</button>
           <button class="btn bgh" id="btn-fx-cancel" onclick="fxExportCancel=true" style="display:none">Cancel</button>
@@ -730,6 +744,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <button class="btn bgh fx-mini" id="btn-hist" onclick="toggleHist()" title="Toggle RGB histogram overlay">▦ Histogram</button>
         </div>
       </div>
+      <div id="fx-filmstrip" title="Click a photo to preview it"></div>
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
         <button class="btn bpri" onclick="cropApply()"><span class="bdot"></span>Apply crop</button>
         <button class="btn bgh" onclick="cropCancel()"><span class="bdot"></span>Cancel</button>
@@ -838,8 +853,10 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     <ul>
       <li><b>Filename / Format / Quality</b> — Auto picks PNG for lossless sources and JPEG otherwise.</li>
       <li><b>Export</b> renders at <b>full original resolution</b> (not the preview size). Batch exports show a progress bar and a <b>Cancel</b> button.</li>
+      <li>When more than one photo is loaded, an <b>All photos / Current photo</b> switch appears above Export — export the whole batch, or just the one you're previewing.</li>
       <li><b>Save session / Load session</b> — remember all slider settings in this browser between visits.</li>
     </ul>
+    <div class="gnote">Loading several photos shows a <b>filmstrip</b> of thumbnails below the preview — click one to switch which photo you're previewing/editing. The same effects and geometry (crop/rotate/straighten) apply to every loaded photo; if one photo in a batch export fails (e.g. too large for this device), the rest still export — check the log for which one was skipped.</div>
 
     <h2 id="g-preview">Preview, zoom &amp; the 1:1 loupe</h2>
     <div class="gcard">
@@ -2654,7 +2671,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-03b';
+const BUILD='2026-07-04a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3847,7 +3864,7 @@ const FX=new FXR();
 // FX UI
 // ═══════════════════════════
 const fxState={curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,masks:[],grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
-let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[];
+let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all';
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
 let fxSplit=false, fxSplitPos=0.5;       // split before/after view
@@ -4397,20 +4414,20 @@ async function loadFXImages(fileList){
   if(!fxImages.length){log('No images loaded','err');return}
   if(cropMode)cropExit();
   fxImages.forEach(it=>it.geom=defGeom());
+  fxCurIdx=0;fxExportScope='all';
   fxImg=fxImages[0].img;updateWork();
   resetGeomUI();
   const n=fxImages.length;
-  setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — preview: ${fxImages[0].name}`:fxImages[0].name);
+  setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
   document.getElementById('fx-fname').value=fxImages[0].name;
   fxVersion=1.0;document.getElementById('fx-ver').textContent='v1.0'; // fresh input → version restarts
   const btn=document.getElementById('btn-fx-export');btn.disabled=false;
-  btn.innerHTML=`<span class="bdot"></span>Export${n>1?` All (${n})`:''}`;
   document.getElementById('fx-preview-tools').style.display='flex';
   document.getElementById('fx-zoom-ctrl').style.display='flex';
   fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');
   _resetZoom(); fxHistory=[]; fxHistIdx=-1; // reset zoom + history on new image
   autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
-  renderPreview();buildLookGallery();
+  renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
@@ -5234,9 +5251,47 @@ function defGeom(){return{rot:0,flipH:false,flipV:false,angle:0,crop:null};}
 // Geometry (rotate/flip/straighten/crop) is BATCH-WIDE: every loaded image shares the
 // previewed image's geom object, so one edit applies to all (crop is normalized, so it
 // scales per-image — best when the batch shares an aspect ratio, e.g. same-camera shots).
-function broadcastGeom(){const g=fxImages[0]&&fxImages[0].geom;if(g)fxImages.forEach(it=>it.geom=g);if(typeof syncSectionEnabled==='function')syncSectionEnabled();}
+// Broadcast from curItem() (NOT always index 0 — the filmstrip lets any loaded photo become
+// "current"), so editing whichever photo you're previewing correctly propagates to the rest.
+function broadcastGeom(){const it=curItem();const g=it&&it.geom;if(g)fxImages.forEach(x=>x.geom=g);if(typeof syncSectionEnabled==='function')syncSectionEnabled();}
 function resetGeomUI(){const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;const sv=document.getElementById('vl-straighten');if(sv)sv.textContent='0°';const ar=document.getElementById('sel-crop-ar');if(ar)ar.value=0;cropAR=0;}
-function curItem(){return fxImages[0]||null;}
+function curItem(){return fxImages[fxCurIdx]||null;}
+// ── multi-photo filmstrip: switch which loaded photo the preview/crop/export-current shows ──
+function buildFilmstrip(){
+  const el=document.getElementById('fx-filmstrip');if(!el)return;
+  if(fxCurIdx>=fxImages.length)fxCurIdx=0;
+  el.innerHTML='';
+  if(fxImages.length<2){el.style.display='none';return;}
+  el.style.display='flex';
+  fxImages.forEach((it,i)=>{
+    const b=document.createElement('button');
+    b.className='fs-thumb'+(i===fxCurIdx?' active':'');
+    b.title=it.name;
+    b.onclick=()=>fxSelectImage(i);
+    const cv=document.createElement('canvas');cv.width=52;cv.height=52;
+    const cx=cv.getContext('2d');
+    const iw=it.img.naturalWidth||it.img.width,ih=it.img.naturalHeight||it.img.height;
+    const s=Math.max(52/iw,52/ih),dw=iw*s,dh=ih*s;
+    cx.drawImage(it.img,(52-dw)/2,(52-dh)/2,dw,dh);
+    b.appendChild(cv);
+    const idx=document.createElement('span');idx.className='fs-idx';idx.textContent=i+1;
+    b.appendChild(idx);
+    el.appendChild(b);
+  });
+}
+function fxSelectImage(idx){
+  if(idx<0||idx>=fxImages.length||idx===fxCurIdx)return;
+  fxCurIdx=idx;
+  const it=fxImages[fxCurIdx];
+  if(cropMode)cropExit();
+  fxImg=it.img;updateWork();
+  const ss=document.getElementById('sl-straighten');
+  if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
+  document.getElementById('fx-fname').value=it.name;
+  setDZ('dz-fx-img','fn-fx-img',fxImages.length>1?`${fxImages.length} images — previewing ${fxCurIdx+1}/${fxImages.length}: ${it.name}`:it.name);
+  showExif(it.exif||{});
+  renderPreview();buildLookGallery();buildFilmstrip();
+}
 function curGeom(){const it=curItem();if(!it)return null;return it.geom||(it.geom=defGeom());}
 // Largest centred axis-aligned rect of the SAME aspect ratio that fits a W×H image rotated by `a`.
 function inscribedSameAspect(W,H,a){
@@ -5471,68 +5526,100 @@ async function renderTiled(P,src,iw,ih){
   }
   return out;
 }
+// Export scope: 'all' processes every loaded photo, 'current' only the one being previewed
+// (the filmstrip selection). Only meaningful — and only shown — when >1 photo is loaded.
+function setExportScope(scope){fxExportScope=scope;syncExportScopeUI();}
+function syncExportScopeUI(){
+  const n=fxImages.length,row=document.getElementById('fx-export-scope-row');
+  if(row)row.style.display=n>1?'block':'none';
+  const lb=document.getElementById('fx-export-scope-lb');if(lb)lb.textContent=`Export scope (${n} photos loaded)`;
+  const bAll=document.getElementById('btn-scope-all'),bCur=document.getElementById('btn-scope-cur');
+  if(bAll)bAll.className='btn '+(fxExportScope==='all'?'bsec':'bgh');
+  if(bCur)bCur.className='btn '+(fxExportScope==='current'?'bsec':'bgh');
+  const scope=n>1?fxExportScope:'all';
+  const btn=document.getElementById('btn-fx-export');if(!btn)return;
+  btn.innerHTML='<span class="bdot"></span>Export'+(n>1?(scope==='current'?' current photo':` all (${n})`):'');
+}
 async function exportFX(){
   if(!fxImages.length){log('No image loaded','warn');return}
+  const scope=fxImages.length>1?fxExportScope:'all';
+  const items=scope==='current'?[fxImages[fxCurIdx]]:fxImages;
   const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
   const prompt=document.getElementById('fx-save-prompt');if(prompt)prompt.innerHTML='';
-  const N=fxImages.length;
+  const N=items.length;
   fxExportCancel=false;
   const cancelBtn=document.getElementById('btn-fx-cancel');
   const progBox=document.getElementById('fx-export-prog'),progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
   if(N>1){if(cancelBtn)cancelBtn.style.display='';if(progBox)progBox.style.display='block';}
   const setProg=(done,label)=>{if(progBar)progBar.style.width=Math.round(done/N*100)+'%';if(progTxt)progTxt.textContent=label;};
+  let failed=0;
   try{
     const P=getFXParams();
     const ver=`v${fxVersion.toFixed(1)}`;
     const single=N===1;
     const results=[];
-    // ── Phase 1: render every image to bytes at FULL resolution (no share yet) ──
-    for(let idx=0;idx<fxImages.length;idx++){
+    // ── Phase 1: render every image to bytes at FULL resolution (no share yet). Each image is
+    // its own try/catch so ONE bad/oversized/corrupt image can't silently discard every image
+    // already rendered before it — previously a single mid-batch exception skipped straight to
+    // the outer catch and `saveFiles` was never called, so a whole export could vanish with only
+    // an error logged. Now a per-image failure is logged and skipped; the rest of the batch and
+    // whatever already succeeded still gets saved. ──
+    for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
-      const it=fxImages[idx];
-      const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first
-      const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
-      setProg(idx,`Rendering ${idx+1}/${N}: ${it.name}…`);
-      log(`Rendering ${idx+1}/${fxImages.length}: ${it.name} at ${iw}×${ih}${shouldTile(iw,ih)?' (tiled)':''}…`,'info');
-      await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
-      const proc=await processToCanvas(P,src,iw,ih);   // full-res processed image (no border)
-      const w=proc.width,h=proc.height;
-      const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
-      // Only allocate a second full-res canvas when borders actually need one; free `proc`
-      // BEFORE encoding so at most one full-res canvas is alive at toBlob time.
-      let ec=proc;
-      if(b1t||b2t){
-        const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
-        ec=document.createElement('canvas');ec.width=tw;ec.height=th;
-        const ctx=ec.getContext('2d');
-        ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
-        ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-        ctx.drawImage(proc,b1t+b2t,b1t+b2t);
-        proc.width=proc.height=0;
+      const it=items[idx];
+      try{
+        const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first
+        const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+        setProg(idx,`Rendering ${idx+1}/${N}: ${it.name}…`);
+        log(`Rendering ${idx+1}/${N}: ${it.name} at ${iw}×${ih}${shouldTile(iw,ih)?' (tiled)':''}…`,'info');
+        await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
+        const proc=await processToCanvas(P,src,iw,ih);   // full-res processed image (no border)
+        const w=proc.width,h=proc.height;
+        const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
+        // Only allocate a second full-res canvas when borders actually need one; free `proc`
+        // BEFORE encoding so at most one full-res canvas is alive at toBlob time.
+        let ec=proc;
+        if(b1t||b2t){
+          const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
+          ec=document.createElement('canvas');ec.width=tw;ec.height=th;
+          const ctx=ec.getContext('2d');
+          ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
+          ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
+          ctx.drawImage(proc,b1t+b2t,b1t+b2t);
+          proc.width=proc.height=0;
+        }
+        const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+        const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||it.ext==='rw2'):fmt==='png'; // lossless source → lossless out
+        const mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
+        let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
+        // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
+        // fails to save the result to Photos — cap at 0.99 on touch devices.
+        if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
+        const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q));
+        if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;continue;}
+        let out=new Uint8Array(await blob.arrayBuffer());
+        if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
+        if(it.icc)out=await embedICC(out,it.icc,outExt); // TIFF source: re-embed its ICC (no source bytes to splice from)
+        out=injectDPI(out,outExt,it.dpi);
+        const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
+        results.push({content:out,fname:`${base}_${ver}.${outExt}`,mime});
+        ec.width=ec.height=0; // free big intermediates promptly
+        setProg(idx+1,`Rendered ${idx+1}/${N}`);
+        log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
+      }catch(e){
+        failed++;
+        log(`Failed to render ${it.name}: ${e&&e.message||e} — skipping, continuing with the rest of the batch`,'err');
+        console.error(e);
       }
-      const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
-      const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||it.ext==='rw2'):fmt==='png'; // lossless source → lossless out
-      const mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
-      let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
-      // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
-      // fails to save the result to Photos — cap at 0.99 on touch devices.
-      if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
-      const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q));
-      if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');continue;}
-      let out=new Uint8Array(await blob.arrayBuffer());
-      if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
-      if(it.icc)out=await embedICC(out,it.icc,outExt); // TIFF source: re-embed its ICC (no source bytes to splice from)
-      out=injectDPI(out,outExt,it.dpi);
-      const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
-      results.push({content:out,fname:`${base}_${ver}.${outExt}`,mime});
-      ec.width=ec.height=0; // free big intermediates promptly
-      setProg(idx+1,`Rendered ${idx+1}/${N}`);
-      log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
     }
     // ── Phase 2: save all at once (one share sheet → Save to Photos) ──
     if(results.length){setProg(N,`Saving ${results.length} file(s)…`);await saveFiles(results);}
-    updateWork();renderPreview();   // restore the preview's working image after per-image GL churn
+    // Restore the preview's working image after per-image GL churn. Guarded on its own: if this
+    // throws (e.g. the currently-previewed photo is the one that just failed above), the files
+    // already saved above must NOT be reported as an export error — only the refresh failed.
+    try{updateWork();renderPreview();}catch(e){log('Preview refresh after export failed (exported files are unaffected): '+(e&&e.message||e),'warn');}
     if(results.length)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
+    if(failed&&results.length)log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');
   }catch(e){
     log('Export error: '+(e&&e.message||e),'err');console.error(e);
   }finally{
@@ -5655,6 +5742,7 @@ async function loadTestPhoto(){
   img.onload=()=>{
     if(cropMode)cropExit();
     fxImages=[{img,name:'test-photo',ext:'png',dpi:72,geom:defGeom()}];
+    fxCurIdx=0;fxExportScope='all';
     fxImg=img;updateWork();resetGeomUI();
     const dz=document.getElementById('dz-fx-img');if(dz)dz.classList.add('loaded');
     const fn=document.getElementById('fn-fx-img');if(fn)fn.textContent='test-photo.png';
@@ -5663,7 +5751,7 @@ async function loadTestPhoto(){
     document.getElementById('fx-preview-tools').style.display='flex';
     document.getElementById('fx-zoom-ctrl').style.display='flex';
     fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');_resetZoom();
-    renderPreview();buildLookGallery();log('Test photo loaded — grain/halation/bloom test chart','ok');
+    renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();log('Test photo loaded — grain/halation/bloom test chart','ok');
   };
   img.src=tc.toDataURL('image/png');
 }

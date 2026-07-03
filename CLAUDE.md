@@ -141,6 +141,23 @@ reload the live page in a real browser after touching shader source**, even for 
   eyedropper, auto-enhance, undo/redo (⌘Z/⌘Y, covers geometry, curves, HSL and masks too),
   split before/after, live histogram, zoom/pan, 1:1 loupe, session save, EXIF readout, batch
   export with progress + cancel.
+  - **Multi-photo batches**: dropping several images loads them all into `fxImages[]`; a
+    **filmstrip** of thumbnails appears below the preview (`buildFilmstrip()`/`fxSelectImage()`) so
+    you can click any loaded photo to preview/crop/rotate it (`fxCurIdx` — NOT always index 0;
+    `curItem()`/`curGeom()` follow it). Effects/adjustments apply to every photo identically
+    (shared `fxState`/sliders); geometry (crop/rotate/flip/straighten) is also shared across the
+    batch, broadcast from whichever photo is currently selected (`broadcastGeom()` reads
+    `curItem()`, not `fxImages[0]` — a photo-specific edit must propagate from the photo actually
+    being edited). An **All photos / Current photo** export-scope toggle appears once >1 photo is
+    loaded (`fxExportScope`).
+  - ⚠️ **`exportFX()`'s Phase-1 render loop wraps EACH photo in its own try/catch.** Before this,
+    one bad/oversized/corrupt photo mid-batch threw out of the loop straight to the outer catch —
+    every photo rendered *before* it was silently discarded (`saveFiles` never ran) with only an
+    error logged, so a batch export could "lose" photos with no obvious cause. Now a per-photo
+    failure is logged and skipped; the rest of the batch (and anything already rendered) still
+    saves. The final `updateWork()/renderPreview()` preview-refresh call is *also* separately
+    try/caught, so a failure restoring the on-screen preview after export can never be confused
+    with (or mask) a real export failure.
 - **Match & Refine** — before/after pair → fits a `.cube` LUT empirically (no model
   assumptions). Optional starting `.cube`/`.xmp`. Emits a per-colour HSL summary.
 - **Colour Copy** — per-channel histogram match from a reference image → `.cube`/`.xmp`.
