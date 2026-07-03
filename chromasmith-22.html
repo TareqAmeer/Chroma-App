@@ -508,6 +508,24 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetAdjust()"><span class="bdot"></span>Reset adjustments</button></div>
         </div>
       </div>
+      <!-- TONE CURVES -->
+      <div class="fx-ctrl" data-fxsec="curves">
+        <div class="fx-ctrl-title">Tone Curves <div class="fx-toggle" id="tg-curves" onclick="toggleFX('curves')"></div></div>
+        <div class="fx-hint">Point curves for precise tone shaping — click the graph to add a point, drag to shape, double-click a point to remove it.</div>
+        <div class="fx-fields" id="ff-curves">
+          <div class="btn-row" id="curve-chips">
+            <button class="btn bgh crv-chip on" data-ch="m" onclick="curveSetCh('m')">RGB</button>
+            <button class="btn bgh crv-chip" data-ch="r" onclick="curveSetCh('r')">R</button>
+            <button class="btn bgh crv-chip" data-ch="g" onclick="curveSetCh('g')">G</button>
+            <button class="btn bgh crv-chip" data-ch="b" onclick="curveSetCh('b')">B</button>
+          </div>
+          <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:8px"></canvas>
+          <div class="btn-row" style="margin-top:6px">
+            <button class="btn bgh" onclick="curveResetCh()"><span class="bdot"></span>Reset channel</button>
+            <button class="btn bgh" onclick="curveResetAll()"><span class="bdot"></span>Reset all</button>
+          </div>
+        </div>
+      </div>
       <!-- CROP & ROTATE -->
       <div class="fx-ctrl" data-fxsec="crop">
         <div class="fx-ctrl-title">Crop &amp; Rotate</div>
@@ -747,6 +765,12 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <li><b>Crop</b> opens an interactive crop overlay with aspect presets; <b>Reset geometry</b> clears all of it.</li>
     </ul>
     <div class="gnote">Geometry applies to <b>every</b> loaded image (for batch exports). <kbd>⌘Z</kbd>/<kbd>⌘Y</kbd> undo and redo it.</div>
+
+    <h3>Tone Curves</h3>
+    <ul>
+      <li><b>RGB / R / G / B</b> tabs — master and per-channel point curves. Click the graph to add a point, drag to shape, double-click a point to remove it. Endpoints slide vertically (lift blacks / fade highlights).</li>
+    </ul>
+    <div class="gnote">Curves apply after Basic Adjustments and before the film FX, so halation &amp; grain react to the curved image — like shaping the negative.</div>
 
     <h3>Film FX</h3>
     <ul>
@@ -3016,6 +3040,9 @@ uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
 uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
+// Tone curves: 256x1 RGBA table baked on the CPU (master composed with per-channel point curves,
+// monotone cubic). Sampled at texel centers so an identity table is byte-identical passthrough.
+uniform sampler2D curveTex;uniform float useCurve;
 uniform vec2 texSize;
 float s2lp(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.055;}
@@ -3069,7 +3096,10 @@ if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
 if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
 if(useLut>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(lut3,c.rgb*sc+of).rgb;}
-c.rgb=basicAdjust(c.rgb);o=c;}`);
+c.rgb=basicAdjust(c.rgb);
+if(useCurve>.5){vec3 t=clamp(c.rgb,0.0,1.0)*(255.0/256.0)+(0.5/256.0);
+  c.rgb=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);}
+o=c;}`);
 
     // SOURCE EMISSION v22 — rule-based model (linear light), replacing the v5
     // red-surplus model which badly mismatched Dehancer (it never halated green/
@@ -3389,16 +3419,22 @@ void main(){
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
   }
+  // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
+  setCurveTex(d){const gl=this.gl;if(!this.curveTx)this.curveTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.curveTx);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -3464,13 +3500,14 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Pass 1: LUT grade + basic adjustments -> lut (sRGB), FULL resolution (the export base)
     const A=P.adjust||{};
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
+      curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
       // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,
-      texSize:[1/this.imgW,1/this.imgH]},[[0,'img',false],[1,'',true]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,'img',false],[1,'',true],[2,'curve',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -3635,7 +3672,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[];
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
@@ -4220,7 +4257,7 @@ function autoDetectBW(img){
   tg.classList.toggle('on',bw);
   if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','vig'].forEach(id=>{
@@ -4237,12 +4274,87 @@ function resetAdjust(){
 }
 function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}
 
+// ══ TONE CURVES — master + R/G/B point curves, monotone cubic, baked to a 256×1 LUT ══
+let curveCh='m',_crvDrag=-1;
+function _curveDefault(){return{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]};}
+// Monotone cubic (Fritsch–Carlson) through sorted control points — no overshoot/ringing,
+// so a gentle S-curve stays monotone (a Catmull-Rom would overshoot past 0/1 at the toes).
+function curveEval(pts){
+  const n=pts.length;if(n<2){const y=n?pts[0][1]:0;return _=>y;}
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),d=[],m=[];
+  for(let i=0;i<n-1;i++)d.push((ys[i+1]-ys[i])/Math.max(xs[i+1]-xs[i],1e-6));
+  m.push(d[0]);for(let i=1;i<n-1;i++)m.push(d[i-1]*d[i]<=0?0:(d[i-1]+d[i])/2);m.push(d[n-2]);
+  for(let i=0;i<n-1;i++){if(!d[i]){m[i]=0;m[i+1]=0;continue;}const a=m[i]/d[i],b=m[i+1]/d[i],s=a*a+b*b;
+    if(s>9){const t=3/Math.sqrt(s);m[i]=t*a*d[i];m[i+1]=t*b*d[i];}}
+  return x=>{if(x<=xs[0])return ys[0];if(x>=xs[n-1])return ys[n-1];
+    let i=0;while(x>xs[i+1])i++;const h=xs[i+1]-xs[i],t=(x-xs[i])/h,t2=t*t,t3=t2*t;
+    return ys[i]*(2*t3-3*t2+1)+m[i]*h*(t3-2*t2+t)+ys[i+1]*(3*t2-2*t3)+m[i+1]*h*(t3-t2);};
+}
+function curvesIdentity(){const C=fxState.curves;
+  return['m','r','g','b'].every(k=>{const p=C[k];return p.length===2&&p[0][0]===0&&p[0][1]===0&&p[1][0]===1&&p[1][1]===1;});}
+// Bake: out_c = master(channel_c(v)) per 8-bit level. Identity bakes to i/255 exactly, and the
+// shader samples texel CENTERS, so identity+useCurve is byte-identical to useCurve off.
+function bakeCurves(){
+  const C=fxState.curves,cl=v=>Math.min(1,Math.max(0,v));
+  const fM=curveEval(C.m),fR=curveEval(C.r),fG=curveEval(C.g),fB=curveEval(C.b);
+  const d=new Uint8Array(256*4);
+  for(let i=0;i<256;i++){const v=i/255;
+    d[i*4]=cl(fM(cl(fR(v))))*255+.5|0;d[i*4+1]=cl(fM(cl(fG(v))))*255+.5|0;d[i*4+2]=cl(fM(cl(fB(v))))*255+.5|0;d[i*4+3]=255;}
+  if(FX.ok)FX.setCurveTex(d);
+}
+function curveSetCh(ch){curveCh=ch;document.querySelectorAll('.crv-chip').forEach(b=>b.classList.toggle('on',b.dataset.ch===ch));drawCurveEditor();}
+function curveResetCh(){fxState.curves[curveCh]=[[0,0],[1,1]];curveChanged();}
+function curveResetAll(){fxState.curves=_curveDefault();curveChanged();}
+function curveChanged(){bakeCurves();drawCurveEditor();fxUpdate();}
+function drawCurveEditor(){
+  const cv=document.getElementById('cv-curve');if(!cv||!cv.clientWidth)return;
+  const dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth;
+  cv.width=w*dpr;cv.height=w*dpr;
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,w);
+  x.strokeStyle='rgba(255,255,255,.08)';x.lineWidth=1;
+  for(let i=1;i<4;i++){x.beginPath();x.moveTo(w*i/4,0);x.lineTo(w*i/4,w);x.moveTo(0,w*i/4);x.lineTo(w,w*i/4);x.stroke();}
+  x.strokeStyle='rgba(255,255,255,.15)';x.beginPath();x.moveTo(0,w);x.lineTo(w,0);x.stroke();
+  const col={m:'#e8e8e8',r:'#ff6b6b',g:'#69db7c',b:'#74a9ff'}[curveCh];
+  const f=curveEval(fxState.curves[curveCh]);
+  x.strokeStyle=col;x.lineWidth=1.5;x.beginPath();
+  for(let i=0;i<=w;i++){const y=Math.min(1,Math.max(0,f(i/w)));(i?x.lineTo:x.moveTo).call(x,i,w-y*w);}
+  x.stroke();
+  x.fillStyle=col;fxState.curves[curveCh].forEach(p=>{x.beginPath();x.arc(p[0]*w,w-p[1]*w,4,0,7);x.fill();});
+}
+function _crvPos(e){const cv=document.getElementById('cv-curve'),r=cv.getBoundingClientRect();
+  return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height))];}
+function _crvHit(px,py){let hit=-1;fxState.curves[curveCh].forEach((p,i)=>{if(Math.hypot(p[0]-px,p[1]-py)<0.06)hit=i;});return hit;}
+function _crvInit(){
+  const cv=document.getElementById('cv-curve');if(!cv)return;
+  cv.addEventListener('pointerdown',e=>{
+    const[px,py]=_crvPos(e),pts=fxState.curves[curveCh];
+    let hit=_crvHit(px,py);
+    if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
+    _crvDrag=hit;cv.setPointerCapture(e.pointerId);
+    bakeCurves();drawCurveEditor();
+  });
+  cv.addEventListener('pointermove',e=>{
+    if(_crvDrag<0)return;const pts=fxState.curves[curveCh];let[px,py]=_crvPos(e);
+    if(_crvDrag===0)px=0;else if(_crvDrag===pts.length-1)px=1;              // endpoints: x pinned, y free
+    else px=Math.min(pts[_crvDrag+1][0]-0.01,Math.max(pts[_crvDrag-1][0]+0.01,px));
+    pts[_crvDrag]=[px,py];bakeCurves();drawCurveEditor();
+    clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);           // live drag preview; history on release
+  });
+  const up=()=>{if(_crvDrag<0)return;_crvDrag=-1;curveChanged();};
+  cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+  cv.addEventListener('dblclick',e=>{
+    const[px,py]=_crvPos(e),pts=fxState.curves[curveCh],hit=_crvHit(px,py);
+    if(hit>0&&hit<pts.length-1){pts.splice(hit,1);curveChanged();}
+  });
+  bakeCurves();drawCurveEditor();
+}
+
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
 const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp',
   'grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
-const _FX_SNAP_TOGGLES=['adjust','grain','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
+const _FX_SNAP_TOGGLES=['adjust','curves','grain','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
 const _FX_SNAP_SELECTS=['sel-input','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(){
@@ -4252,6 +4364,7 @@ function getUISnapshot(){
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s.selects[id]=el.value;});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s.colors[id]=el.value;});
   const it=fxImages[0];s.geom=(it&&it.geom)?JSON.parse(JSON.stringify(it.geom)):null; // batch-wide geometry (crop/rotate/flip/straighten)
+  s.curves=JSON.parse(JSON.stringify(fxState.curves));   // tone-curve control points
   return s;
 }
 function applyUISnapshot(s){
@@ -4259,6 +4372,7 @@ function applyUISnapshot(s){
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff)ff.style.display=on?'flex':'none';}});
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];if(id==='sel-lut')selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
+  if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten)
     fxImages.forEach(it=>it.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom());
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
@@ -4603,7 +4717,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp',
   'sl-grain-a','sl-grain-sz','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-grain','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
+const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-grain','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
 const _SESS_SELECTS=['sel-input','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(){
@@ -4612,6 +4726,7 @@ function saveSession(){
   _SESS_TOGGLES.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.classList.contains('on');});
   _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
   _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
+  s._curves=fxState.curves;   // tone-curve control points
   try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));log('Session saved','ok');}catch(e){log('Session save failed: '+e.message,'warn');}
 }
 function loadSession(userTriggered){
@@ -4626,6 +4741,7 @@ function loadSession(userTriggered){
     });
     _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
     _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
+    if(s._curves){fxState.curves=s._curves;bakeCurves();drawCurveEditor();}
     fxUpdate();
     // restore LUT preset selection if stored
     if(s['sel-lut'])selectLUT(s['sel-lut']).catch(()=>{});
@@ -4697,6 +4813,7 @@ function getFXParams(){return{
   lut:fxState.lut,
   print:fxState.print,
   input:(document.getElementById('sel-input')||{}).value||'',   // '' standard | 'vlog' V-Log source
+  curves:!!(document.getElementById('tg-curves')||{classList:{contains:()=>false}}).classList.contains('on')&&!curvesIdentity(),
   adjust:{enabled:document.getElementById('tg-adjust').classList.contains('on'),
     exposure:adjVal('sl-adj-exp')/50,   // ±2 stops
     contrast:adjVal('sl-adj-con')/200,  // ±0.5
@@ -5473,6 +5590,7 @@ const ICONS={
  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5L5 20"/>',
  looks:'<path d="M5 3v4M3 5h4"/><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"/>',
  adjust:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
+ curves:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M6 18c6 0 6-12 12-12"/>',
  crop:'<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/>',
  grain:'<circle cx="6" cy="7" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="18" cy="8" r="1"/><circle cx="8" cy="13" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="19" cy="16" r="1"/><circle cx="6" cy="18" r="1"/><circle cx="12" cy="19" r="1"/>',
  hal:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
@@ -5493,7 +5611,7 @@ function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
 const FX_SECTIONS=[['image','Image'],['looks','Looks'],['grain','Grain'],
   ['bloom','Bloom'],['hal','Halation'],['borders','Borders'],['adjust','Adjust'],
-  ['vig','Vignette'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
+  ['curves','Curves'],['vig','Vignette'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
 function _eachSection(cb){
   const diagOn=document.body.classList.contains('diag-on');
   FX_SECTIONS.forEach(([key,lb])=>{
@@ -5532,12 +5650,13 @@ function fxSection(name){
   card.classList.add('sec-active');
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
+  if(name==='curves'&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
 }
 // Mark a section's rail/strip button when it's "in use":
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
 //  - looks → a preset/LUT other than None/Original is selected
 //  - crop  → any rotate/flip/straighten/crop has been applied
-const _SEC_TOGGLE={adjust:'tg-adjust',grain:'tg-grain',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders'};
+const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',grain:'tg-grain',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders'};
 function _secIsEnabled(key){
   const tg=_SEC_TOGGLE[key];
   if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
@@ -5612,6 +5731,7 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
 refreshLUTSelect(); // populate built-in + saved LUTs
 initDcpSelect();    // populate RAW profile dropdown (persisted choice)
 initCompareButton(); // wire "hold to compare" before/after
+_crvInit();          // tone-curve editor (pointer handlers + initial bake/draw)
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 initZoomPan();
 initEditableVals();
