@@ -471,6 +471,9 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <div class="fx-ctrl" data-fxsec="looks">
         <div class="fx-ctrl-title">Presets &amp; Looks</div>
         <div class="fx-hint">Tap a thumbnail to apply a film look instantly — a great starting point.</div>
+        <div class="fx-row" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."><div class="fx-label">Input</div>
+          <select class="fx-select" id="sel-input" onchange="fxUpdate()"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
+        </div>
         <div class="fx-row"><div class="fx-label">Preset</div>
           <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)"><option value="">None</option></select>
         </div>
@@ -720,6 +723,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <li><b>Drop image</b> — load the photo you want to grade.</li>
       <li><b>RAW profile</b> — for RW2 files, picks the in-camera colour profile (default <b>Camera Standard</b>) so colours match Lightroom.</li>
       <li><b>Apply LUT</b> — drop a <code>.cube</code> file or a processed LUT chart to apply a custom look.</li>
+      <li><b>Input</b> — set to <b>V-Log (Lumix)</b> for V-Log stills/frame grabs: converts V-Log/V-Gamut to Rec.709 <i>before</i> the film look, so any normal Rec.709 <code>.cube</code> then applies correctly on top. Leave on Standard for normal photos.</li>
       <li><b>Preset</b> — pick one of the 11 built-in film looks (Velvia, Astia, Classic Neg, Provia, Reala Ace, the Beach preset, etc.).</li>
       <li><b>Save to library / Delete</b> — store the current LUT in this browser, or remove a saved one.</li>
       <li><b>LUT chart</b> — downloads a reference chart of every colour. Apply your look to it in another app, drop the result back, and Chromasmith reverse-engineers it into a clean <code>.cube</code>.</li>
@@ -2574,7 +2578,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-01a';
+const BUILD='2026-07-03a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3011,9 +3015,23 @@ uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
 // the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
 uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity;
+uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
 uniform vec2 texSize;
 float s2lp(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.055;}
+// V-Log (Lumix/Panasonic) -> Rec.709 input transform. Inverse V-Log EOTF constants b/c/d from
+// the Panasonic V-Log/V-Gamut whitepaper (cut2 = 0.181 = 5.6*0.01+0.125); then the exact
+// V-Gamut -> Rec.709 primaries matrix (both D65, derived from the published chromaticities),
+// clamp, and sRGB-encode (the app's working space). 18% grey: V-Log 0.423 -> linear 0.18.
+float vlogInv(float v){return v<0.181?(v-0.125)/5.6:pow(10.0,(v-0.598206)/0.241514)-0.00873;}
+vec3 vlog2rec709(vec3 c){
+  vec3 lin=vec3(vlogInv(c.r),vlogInv(c.g),vlogInv(c.b));
+  lin=mat3(1.806576,-0.170090,-0.025206,
+          -0.695697, 1.305955,-0.154468,
+          -0.110879,-0.135865, 1.179674)*lin;   // column-major: V-Gamut -> Rec.709
+  lin=clamp(lin,0.0,1.0);
+  return vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
+}
 float gmp(float v,float c,float w){return exp(-(v-c)*(v-c)/(2.0*w*w));}
 vec3 basicAdjust(vec3 c){
   if(adjOn<0.5)return c;
@@ -3047,6 +3065,9 @@ if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
   float cw=4.*lv*(1.-lv);
   c.rgb=clamp(c.rgb+hp*(adjSharp+adjClarity*cw),0.,1.);
 }
+// Input transform BEFORE the look LUT (sharpen above runs on raw source values — consistent
+// for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
+if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
 if(useLut>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(lut3,c.rgb*sc+of).rgb;}
 c.rgb=basicAdjust(c.rgb);o=c;}`);
 
@@ -3442,7 +3463,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 
     // Pass 1: LUT grade + basic adjustments -> lut (sRGB), FULL resolution (the export base)
     const A=P.adjust||{};
-    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,
+    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
       // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
@@ -4222,7 +4243,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'grain-a','grain-sz','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
 const _FX_SNAP_TOGGLES=['adjust','grain','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
-const _FX_SNAP_SELECTS=['sel-lut','sel-print','sel-grain-fmt','sel-debug'];
+const _FX_SNAP_SELECTS=['sel-input','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(){
   const s={sliders:{},toggles:{},selects:{},colors:{}};
@@ -4583,7 +4604,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-grain-a','sl-grain-sz','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-adjust','tg-grain','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
-const _SESS_SELECTS=['sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
+const _SESS_SELECTS=['sel-input','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(){
   const s={};
@@ -4675,6 +4696,7 @@ function showExif(exif){
 function getFXParams(){return{
   lut:fxState.lut,
   print:fxState.print,
+  input:(document.getElementById('sel-input')||{}).value||'',   // '' standard | 'vlog' V-Log source
   adjust:{enabled:document.getElementById('tg-adjust').classList.contains('on'),
     exposure:adjVal('sl-adj-exp')/50,   // ±2 stops
     contrast:adjVal('sl-adj-con')/200,  // ±0.5
