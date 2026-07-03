@@ -60,7 +60,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-06-17e`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-03b`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -82,15 +82,28 @@ Everything is in one file. Key pieces:
 
 - **`FXR` class** — the WebGL2 renderer. 5 shader programs: `lut`, `src`, `blur`,
   `blur_hal`, `comp`. Pipeline per frame:
-  1. **lut pass** — LUT lookup + `basicAdjust()` (exposure/contrast/WB/etc.) +
-     sharpen/clarity unsharp mask (applied to source pixels BEFORE the LUT). ⚠️ **Saturation
-     & vibrance are NOT applied here** — they moved to the comp pass (see below).
+  1. **lut pass** — full grading chain, in order: [optional **V-Log input transform**
+     (`useVlog`): analytic inverse V-Log EOTF + exact V-Gamut→Rec.709 matrix, before anything
+     else] → sharpen/clarity unsharp mask (on source pixels) → look LUT → [**HSL mixer**
+     (`useHsl`): a 2nd 33³ LUT re-baked on the CPU from `applyHSL()` whenever a band slider
+     moves] → `basicAdjust()` (exposure/contrast/WB/etc.) → [**local-adjust masks** (`mskN`):
+     up to 4 analytic radial/linear masks passed as vec4 uniform arrays, global-uv mapped via
+     `uvOffL/uvScaleL` so preview/loupe/export tiles place them identically; per mask
+     exp/con/temp/sat + luminance-range gate + invert] → [**tone curves** (`useCurve`):
+     256×1 table baked from monotone-cubic point curves, sampled at texel centers so identity
+     is byte-identical]. Each optional stage is gated off (and identity-gated in
+     `getFXParams`) by default. ⚠️ **Saturation & vibrance are NOT applied here** — they moved
+     to the comp pass (see below). ⚠️ GLSL functions must be DECLARED BEFORE USE — `maskAdjust`
+     once referenced `s2lp` above its definition and blacked the whole pipeline.
   2. **emit pass** — computes the halation/bloom *emission* map from the graded image.
   3. **blur passes** — per-channel Gaussian blur of the emission (σ_R ≫ σ_G ≫ σ_B).
   4. **comp pass** — screen-blends bloom+halation, then **grain** (value-noise, see §6b), then
-     (if a Print profile is selected) a 2nd 3D LUT `printLut` via `usePrint`/`setPrintLUT`, then
-     **saturation/vibrance** (`adjSat2`/`adjVib2`), then vignette. Order mirrors Dehancer:
-     negative → halation → **grain** → **print** → **grade (sat/vib)** → vignette.
+     **film artifacts** (procedural dust/hairs + wobbling vertical scratches + warm light leak;
+     image-relative coords + a stable seed `fxState.artSeed`/Reshuffle so preview==export, and
+     tile renders are byte-identical), then (if a Print profile is selected) a 2nd 3D LUT
+     `printLut` via `usePrint`/`setPrintLUT`, then **saturation/vibrance** (`adjSat2`/`adjVib2`),
+     then vignette. Order mirrors Dehancer:
+     negative → halation → **grain** → **artifacts** → **print** → **grade (sat/vib)** → vignette.
      - ⚠️ **Grain is BEFORE print** (it's in the negative; the print stock then modulates it).
        Identity vs after-print when no print profile is selected.
      - ⚠️ **Saturation/vibrance run AFTER print** on purpose: pulling saturation to 0 must
@@ -118,13 +131,16 @@ reload the live page in a real browser after touching shader source**, even for 
 
 ## 4. The four tabs
 
-- **Effects & Export** — load image, pick a preset/LUT, a **Print profile** (Kodak/Fuji
-  print, applied as a 2nd 3D LUT AFTER the film look + halation — see §8), basic
-  adjustments, grain/halation (incl. **No remjet** strong mode — see §5)/bloom/vignette/
+- **Effects & Export** — load image, pick an **Input profile** (Standard or **V-Log (Lumix)** —
+  converts V-Log/V-Gamut→Rec.709 before the look LUT), a preset/LUT, a **Print profile**
+  (Kodak/Fuji print, applied as a 2nd 3D LUT AFTER the film look + halation — see §8), basic
+  adjustments, **Tone Curves** (master+R/G/B point-curve editor), **Color Mixer** (8-band HSL),
+  **Local Adjustments** (up to 4 radial/linear masks), grain/**Film Artifacts** (dust/scratches/
+  light leak + Reshuffle)/halation (incl. **No remjet** strong mode — see §5)/bloom/vignette/
   borders, crop/rotate/straighten, export at full res. Plus: one-tap Looks gallery, WB
-  eyedropper, auto-enhance, undo/redo (⌘Z/⌘Y, covers geometry too), split before/after,
-  live histogram, zoom/pan, 1:1 loupe, session save, EXIF readout, batch export with
-  progress + cancel.
+  eyedropper, auto-enhance, undo/redo (⌘Z/⌘Y, covers geometry, curves, HSL and masks too),
+  split before/after, live histogram, zoom/pan, 1:1 loupe, session save, EXIF readout, batch
+  export with progress + cancel.
 - **Match & Refine** — before/after pair → fits a `.cube` LUT empirically (no model
   assumptions). Optional starting `.cube`/`.xmp`. Emits a per-colour HSL summary.
 - **Colour Copy** — per-channel histogram match from a reference image → `.cube`/`.xmp`.
