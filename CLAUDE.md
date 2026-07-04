@@ -159,7 +159,9 @@ reload the live page in a real browser after touching shader source**, even for 
   adjustments, **Tone Curves** (master+R/G/B point-curve editor), **Color Mixer** (8-band HSL),
   **Local Adjustments** (up to 4 radial/linear masks), grain/**Film Artifacts** (dust/scratches/
   light leak + Reshuffle)/halation (incl. **No remjet** strong mode — see §5)/bloom/vignette/
-  borders, crop/rotate/straighten, export at full res. Plus: one-tap Looks gallery, WB
+  borders, **Canvas** (aspect-ratio matte around image+borders — ratio chips/zoom/bg color or
+  blurred-photo fill via `canvasCompose()`, shared by preview & export; order: photo → borders
+  → canvas), crop/rotate/straighten, export at full res. Plus: one-tap Looks gallery, WB
   eyedropper, auto-enhance, undo/redo (⌘Z/⌘Y, covers geometry, curves, HSL and masks too),
   split before/after, live histogram, zoom/pan, 1:1 loupe, session save, EXIF readout, batch
   export with progress + cancel.
@@ -172,6 +174,15 @@ reload the live page in a real browser after touching shader source**, even for 
     `curItem()`, not `fxImages[0]` — a photo-specific edit must propagate from the photo actually
     being edited). An **All photos / Current photo** export-scope toggle appears once >1 photo is
     loaded (`fxExportScope`).
+  - **Mobile (≤700px) is app-shaped, not web-shaped**: the photo fills the screen; tapping a
+    tool icon slides up a bottom sheet (`body.sheet-open`, 42vh — ⚠️ Chrome will NOT
+    interpolate a height transition from 0 to `min()`/`calc()`, use a plain length +
+    `max-height` cap) and `fxPreviewMaxH()` measures the LIVE wrap for re-fits. Global
+    `user-select:none` (inputs exempt), tabs hidden behind the ⋯ action-bar sheet
+    (`fxMoreMenu`), big ＋ empty state (`fxPickPhotos`), `toast()` pills, slider value
+    bubbles + double-tap-to-reset, swipe-to-switch photos, long-press-to-compare, dbl-tap
+    zoom, export overlay (`_expOverlay`), looks gallery relocated to a horizontal preset
+    rail under the preview (`relocatePreviewTools`). Haptics via `hapt()` (native-gated).
   - ⚠️ **`exportFX()`'s Phase-1 render loop wraps EACH photo in its own try/catch.** Before this,
     one bad/oversized/corrupt photo mid-batch threw out of the loop straight to the outer catch —
     every photo rendered *before* it was silently discarded (`saveFiles` never ran) with only an

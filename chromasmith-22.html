@@ -236,6 +236,43 @@ body.mobile-fx.sheet-open .fx-panel{height:42vh;max-height:430px;overflow-y:auto
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
 body.mobile-fx.sheet-open #fx-filmstrip{display:none!important} /* give the sheet the strip's room */
+/* ── de-webification: the app must not feel like a webpage ── */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+input,textarea,[contenteditable],#log-area{-webkit-user-select:text;user-select:text}
+button,.btn,.fx-toggle,.fx-select,.fx-slider,.fx-sec-btn,.fx-rail-btn,.fx-act,.fs-thumb,.look-cell{touch-action:manipulation}
+canvas,img{-webkit-user-drag:none}
+.fx-panel{overscroll-behavior:contain}
+/* toast pills — user-facing feedback (the log stays for diagnostics) */
+#fx-toast{position:fixed;left:50%;bottom:calc(98px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(8px);background:rgba(20,20,22,.94);border:1px solid var(--bdr);color:var(--txt);font-family:var(--mono);font-size:11px;letter-spacing:.05em;padding:9px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;z-index:3000;max-width:80vw;text-align:center}
+#fx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#fx-toast.ok{border-color:var(--acc);color:var(--acc)}
+/* slider polish: bigger touch targets + a value bubble above the thumb while dragging */
+#fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:3000}
+body.mobile-fx .fx-slider{min-height:34px}
+body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
+/* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
+body.mobile-fx .tabs{display:none}
+body.mobile-fx .ni-hint{display:none}
+#fx-add-btn{display:block;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:36px;line-height:1;border:none;cursor:pointer;margin:18px auto 6px;box-shadow:0 4px 22px rgba(212,144,58,.45)}
+#fx-add-btn:active{transform:scale(.94)}
+.ni-add-lb{font-family:var(--mono);font-size:11px;color:var(--acc);letter-spacing:.08em}
+#fx-more-menu{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2500;display:flex;align-items:flex-end}
+#fx-more-menu .mm-sheet{background:var(--sur);width:100%;border-radius:14px 14px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+#fx-more-menu .btn{width:100%;justify-content:center;min-height:44px}
+/* active tool pill on the icon strip */
+body.mobile-fx .fx-sec-btn.on{background:rgba(212,144,58,.14)}
+/* export overlay (mobile): dim + big progress + cancel */
+#fx-exp-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2600;display:flex;align-items:flex-end;justify-content:center}
+#fx-exp-ov .eo-box{background:var(--sur);border-radius:14px 14px 0 0;width:100%;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;align-items:center}
+#fx-exp-ov .eo-txt{font-family:var(--mono);font-size:11px;color:var(--txt)}
+#fx-exp-ov .eo-bar{width:100%;height:5px;background:var(--bdr);border-radius:3px;overflow:hidden}
+#fx-exp-ov #eo-fill{height:100%;width:0;background:var(--acc);transition:width .15s}
+#fx-exp-ov .btn{min-height:44px;width:100%;justify-content:center}
+/* preset rail: the looks gallery rides under the preview on mobile (InShot filter strip) */
+body.mobile-fx #fx-looks-ctrl{margin:6px 6px 0}
+body.mobile-fx #fx-looks{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;max-height:none;padding:2px 1px}
+body.mobile-fx .look-cell{flex:0 0 72px}
+body.mobile-fx.sheet-open #fx-looks-ctrl{display:none!important}
 body.fx-single .fx-ctrl{display:none}
 body.fx-single .fx-ctrl.sec-active{display:block;margin-bottom:0}
 body.fx-single.diag-on .fx-diag{display:none}
@@ -750,6 +787,8 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="ni-logo"><span class="logo-glow">Chroma</span>smith</div>
           <div class="ni-sub">film simulation tool</div>
           <div class="ni-build" id="ni-build" onclick="document.body.classList.add('diag-on');applyFxLayout();" style="cursor:pointer" title="Tap to reveal diagnostics"></div>
+          <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos">＋</button>
+          <div class="ni-add-lb">Add Photos</div>
           <div class="ni-hint">Drop an image to start</div>
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas" onclick="wbEyedropperClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas></div>
@@ -781,6 +820,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <button class="fx-act js-allfx" onclick="enableAll()" title="Toggle all FX"><span class="fx-act-ic">✨</span><span class="fx-act-lb">All FX</span></button>
         <button class="fx-act fx-act-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span><span class="fx-act-lb">Export</span></button>
         <button class="fx-act" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="fx-act-ic">≡</span><span class="fx-act-lb">Log</span></button>
+        <button class="fx-act" onclick="fxMoreMenu()" title="More tools (Match &amp; Refine, Colour Copy, Collage, Guide)"><span class="fx-act-ic">⋯</span><span class="fx-act-lb">More</span></button>
       </div>
       <!-- HORIZONTAL SECTION STRIP (mobile) -->
       <div id="fx-secnav"></div>
@@ -2697,7 +2737,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-04b';
+const BUILD='2026-07-04c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4474,7 +4514,7 @@ function autoDetectBW(img){
   tg.classList.toggle('on',bw);
   if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','vig'].forEach(id=>{
@@ -4614,6 +4654,88 @@ function hslResetAll(){fxState.hsl=_hslDefault();bakeHsl();hslSyncUI();fxUpdate(
 
 // ══ FILM ARTIFACTS ═════════════════════════════════════════════════════════════
 function artReshuffle(){fxState.artSeed=Math.random()*100;fxUpdate();log('Artifacts reshuffled','info');}
+
+// ══ APP-LIKE UX — toasts, haptics, picker, more-menu, slider polish, gestures ══
+// User-facing feedback pill (the log stays for diagnostics).
+function toast(msg,ok){
+  let t=document.getElementById('fx-toast');
+  if(!t){t=document.createElement('div');t.id='fx-toast';document.body.appendChild(t);}
+  t.textContent=msg;t.classList.toggle('ok',!!ok);t.classList.add('show');
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1900);
+}
+function fxPickPhotos(){const inp=document.querySelector('#dz-fx-img input[type=file]');if(inp)inp.click();}
+// Haptic tap in the iOS shell (Capacitor Haptics plugin) — silently inert everywhere else.
+function hapt(s){try{if(capNative()&&window.Capacitor.Plugins.Haptics)window.Capacitor.Plugins.Haptics.impact({style:s||'LIGHT'});}catch(e){}}
+// Mobile "⋯" sheet: the editor is the whole app on the phone; the other tabs live here.
+function fxMoreMenu(){
+  const old=document.getElementById('fx-more-menu');if(old){old.remove();return;}
+  const m=document.createElement('div');m.id='fx-more-menu';
+  const sh=document.createElement('div');sh.className='mm-sheet';
+  [['Match & Refine','match'],['Colour Copy','copy'],['Collage','collage'],['Guide','guide']].forEach(([lb,tab])=>{
+    const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
+    b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
+  });
+  const c=document.createElement('button');c.className='btn bsec';c.textContent='Cancel';c.onclick=()=>m.remove();sh.appendChild(c);
+  m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+// Slider polish: value bubble above the thumb while dragging (mobile), and DOUBLE-TAP a
+// slider to reset it to its authored default.
+document.addEventListener('input',e=>{
+  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
+  if(!document.body.classList.contains('mobile-fx'))return;
+  let b=document.getElementById('fx-sl-bubble');
+  if(!b){b=document.createElement('div');b.id='fx-sl-bubble';document.body.appendChild(b);}
+  const r=s.getBoundingClientRect(),min=+s.min||0,max=+s.max||100,f=(s.value-min)/((max-min)||1);
+  b.textContent=s.value;b.style.left=(r.left+f*r.width)+'px';b.style.top=(r.top-32)+'px';b.style.opacity='1';
+  clearTimeout(b._h);b._h=setTimeout(()=>b.style.opacity='0',700);
+});
+document.addEventListener('dblclick',e=>{
+  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
+  s.value=s.defaultValue;s.dispatchEvent(new Event('input',{bubbles:true}));hapt();toast('Reset');
+});
+// De-webification bits that need JS: lock page zoom on touch/native (the app pinch-zooms the
+// PHOTO, the page itself must not zoom), and kill the long-press context menu on the preview.
+(function(){
+  if((window.matchMedia&&window.matchMedia('(pointer:coarse)').matches)||capNative()){
+    const m=document.querySelector('meta[name=viewport]');
+    if(m)m.setAttribute('content','width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no');
+  }
+  const wrap=document.getElementById('fx-wrap');
+  if(wrap)wrap.addEventListener('contextmenu',e=>e.preventDefault());
+})();
+// Swipe left/right on the (unzoomed) preview to switch photos in a multi-photo batch.
+(function(){
+  const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+  let sx=0,sy=0,st=0,valid=false;
+  wrap.addEventListener('touchstart',e=>{valid=e.touches.length===1;if(valid){sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();}},{passive:true});
+  wrap.addEventListener('touchend',e=>{
+    if(!valid||fxZoom>1||cropMode||fxLoupe||fxImages.length<2)return;
+    const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+    if(Math.abs(dx)>60&&Math.abs(dy)<45&&Date.now()-st<600){fxSelectImage(fxCurIdx+(dx<0?1:-1));hapt();}
+  },{passive:true});
+})();
+// Long-press ANYWHERE on the photo = hold-to-compare (the chip button stays for discoverability).
+(function(){
+  const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+  let t=null,sx=0,sy=0,engaged=false;
+  wrap.addEventListener('pointerdown',e=>{
+    if(!fxWork||cropMode||e.button)return;
+    sx=e.clientX;sy=e.clientY;engaged=false;
+    t=setTimeout(()=>{engaged=true;fxCompare=true;renderPreview();hapt();},380);
+  });
+  wrap.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-sx,e.clientY-sy)>12){clearTimeout(t);t=null;}});
+  const end=()=>{clearTimeout(t);t=null;if(engaged){engaged=false;fxCompare=false;renderPreview();}};
+  wrap.addEventListener('pointerup',end);wrap.addEventListener('pointercancel',end);wrap.addEventListener('pointerleave',end);
+})();
+// Mobile export overlay: dimmed screen + big progress + cancel (the panel sheet may be closed).
+function _expOverlay(show){
+  let o=document.getElementById('fx-exp-ov');
+  if(!show){if(o)o.remove();return;}
+  if(!o){o=document.createElement('div');o.id='fx-exp-ov';
+    o.innerHTML='<div class="eo-box"><div class="eo-txt" id="eo-txt">Exporting…</div><div class="eo-bar"><div id="eo-fill"></div></div><button class="btn bgh" onclick="fxExportCancel=true">Cancel</button></div>';
+    document.body.appendChild(o);}
+}
 
 // ══ CANVAS — aspect-ratio matte around image+borders (see canvasCompose) ═══════
 const CV_ARS=[['Fit',0],['1:1',1],['4:5',0.8],['3:4',0.75],['4:3',4/3],['9:16',9/16],['16:9',16/9],['3:2',1.5],['2:3',2/3]];
@@ -4975,7 +5097,7 @@ function initZoomPan(){
   const pup=()=>{pd=null;zw.classList.remove('dragging');};
   zw.addEventListener('pointerup',pup);zw.addEventListener('pointercancel',pup);
   // Double-click to reset
-  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(fxZoom>1){e.stopPropagation();_resetZoom();}});
+  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(fxZoom>1){e.stopPropagation();_resetZoom();}else if(fxWork){e.stopPropagation();fxZoom=2.5;_applyZoom();}}); // dbl-tap: Fit ↔ zoomed
   // Pinch
   let _pt={};
   wrap.addEventListener('touchstart',e=>{[...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});},{passive:true});
@@ -5662,7 +5784,11 @@ async function exportFX(){
   const cancelBtn=document.getElementById('btn-fx-cancel');
   const progBox=document.getElementById('fx-export-prog'),progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
   if(N>1){if(cancelBtn)cancelBtn.style.display='';if(progBox)progBox.style.display='block';}
-  const setProg=(done,label)=>{if(progBar)progBar.style.width=Math.round(done/N*100)+'%';if(progTxt)progTxt.textContent=label;};
+  const mobExp=document.body.classList.contains('mobile-fx');
+  if(mobExp)_expOverlay(true);   // mobile: the panel sheet may be closed — show a proper overlay
+  const setProg=(done,label)=>{if(progBar)progBar.style.width=Math.round(done/N*100)+'%';if(progTxt)progTxt.textContent=label;
+    const ef=document.getElementById('eo-fill'),et=document.getElementById('eo-txt');
+    if(ef)ef.style.width=Math.round(done/N*100)+'%';if(et)et.textContent=label;};
   let failed=0;
   try{
     const P=getFXParams();
@@ -5737,12 +5863,15 @@ async function exportFX(){
     try{updateWork();renderPreview();}catch(e){log('Preview refresh after export failed (exported files are unaffected): '+(e&&e.message||e),'warn');}
     if(results.length)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
     if(failed&&results.length)log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');
+    if(results.length)toast(`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);
   }catch(e){
     log('Export error: '+(e&&e.message||e),'err');console.error(e);
+    toast('Export failed — see log');
   }finally{
     if(btn)btn.disabled=false; // re-enable for another export
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
+    _expOverlay(false);
     fxExportCancel=false;
   }
 }
@@ -6018,7 +6147,7 @@ async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}]
 function anchorDownload(content,fname,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);}
 async function saveFile(content,fname,mime='application/octet-stream'){
   if(capNative()){
-    try{await capShareFiles([{content,fname,mime}]);return}
+    try{await capShareFiles([{content,fname,mime}]);toast('Saved ✓',true);return}
     catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}
   }
   try{const file=new File([content],fname,{type:mime});
@@ -6033,7 +6162,7 @@ async function saveFile(content,fname,mime='application/octet-stream'){
 async function saveFiles(items){ // items: [{content,fname,mime}]
   if(!items.length)return;
   if(capNative()){
-    try{await capShareFiles(items);return}
+    try{await capShareFiles(items);toast('Saved ✓',true);return}
     catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}
   }
   const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
@@ -6190,6 +6319,7 @@ function fxSection(name,noSheet){
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
   if(mob&&!noSheet)document.body.classList.add('sheet-open');
+  if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
   if(name==='curves'&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
 }
 function fxSheetClose(){
@@ -6251,6 +6381,13 @@ function relocatePreviewTools(mob,desk){
   if(!bar||!wrap||!zc||!pt)return;
   if(desk){bar.appendChild(pt);bar.appendChild(zc);}
   else{wrap.appendChild(zc);wrap.appendChild(pt);}
+  // Preset rail: on mobile the looks gallery rides under the preview (InShot filter strip);
+  // on desktop it lives in the Looks card (its original home = last child of that card).
+  const lc=document.getElementById('fx-looks-ctrl'),col=document.querySelector('.fx-preview-col'),looksCard=document.querySelector('[data-fxsec="looks"]');
+  if(lc&&col&&looksCard){
+    if(mob)col.insertBefore(lc,document.getElementById('fx-crop-tools'));
+    else looksCard.appendChild(lc);
+  }
 }
 const applyMobileFx=applyFxLayout; // legacy alias
 _mqMobile.addEventListener('change',applyFxLayout);
