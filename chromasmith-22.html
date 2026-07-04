@@ -215,16 +215,27 @@ body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!impor
 body.mobile-fx .tab{padding-top:8px;padding-bottom:9px}
 body.mobile-fx #panel-fx.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%;max-width:100%}
 body.mobile-fx .fx-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%;max-width:100%}
-/* pinned editor head */
-body.mobile-fx .fx-preview-col{flex:0 0 auto;align-self:stretch;order:-1;position:static;top:auto;z-index:auto;background:var(--bg);padding:4px 0 0;width:auto;max-width:100%;min-width:0;overflow:hidden}
+/* PREVIEW-FIRST layout (InShot-style): the photo fills all space between the tab row and
+   the bottom toolbar; tapping a tool opens a BOTTOM SHEET (.sheet-open) and the photo
+   shrinks to the remaining space. fxPreviewMaxH() measures the live wrap height, and a
+   transitionend listener re-fits the render when the sheet finishes opening/closing. */
+body.mobile-fx .fx-preview-col{flex:1 1 auto;align-self:stretch;order:-1;position:static;top:auto;z-index:auto;background:var(--bg);padding:4px 0 0;width:auto;max-width:100%;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 /* image + action bar keep a small inset; the section strip goes full-bleed */
 body.mobile-fx .fx-canvas-wrap{margin:0 6px}
 body.mobile-fx #fx-actionbar{padding:6px 6px 4px}
 body.mobile-fx .fx-canvas-wrap{width:auto;max-width:100%}
-body.mobile-fx .fx-canvas-wrap{height:42vh;min-height:0}
-body.mobile-fx #fx-canvas{max-height:42vh;object-fit:contain}
-/* scroll area = only the active section's card */
-body.mobile-fx .fx-panel{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;column-count:1;padding:8px 6px 28px}
+body.mobile-fx .fx-canvas-wrap{flex:1 1 auto;height:auto;min-height:120px}
+body.mobile-fx #fx-canvas{object-fit:contain}
+/* bottom sheet = the tool panel; height animates 0 ↔ 42dvh, flex gives the freed space
+   back to the photo. Drag-handle row (#fx-sheet-handle) closes it. */
+body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:1;padding:0 10px;background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.45);transition:height .28s ease}
+/* NOTE: plain 42vh, NOT min(42vh,430px) — Chrome refuses to interpolate a height transition
+   from 0 to a min()/calc() value (it just sticks at 0). max-height applies the cap instead. */
+body.mobile-fx.sheet-open .fx-panel{height:42vh;max-height:430px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 10px 30px}
+#fx-sheet-handle{display:none}
+body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
+body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
+body.mobile-fx.sheet-open #fx-filmstrip{display:none!important} /* give the sheet the strip's room */
 body.fx-single .fx-ctrl{display:none}
 body.fx-single .fx-ctrl.sec-active{display:block;margin-bottom:0}
 body.fx-single.diag-on .fx-diag{display:none}
@@ -448,6 +459,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     <!-- DESKTOP tool rail (one tool at a time) -->
     <div id="fx-toolrail"></div>
     <div class="fx-panel">
+      <div id="fx-sheet-handle" onclick="fxSheetClose()" title="Close"><div class="fx-sheet-bar"></div></div>
       <div class="fx-ctrl" data-fxsec="image">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
@@ -5234,7 +5246,16 @@ function renderLoupe(){
 }
 // On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.
-function fxPreviewMaxH(){return window.innerWidth<=700?Math.max(220,window.innerHeight*0.42):Math.max(360,window.innerHeight-150);}
+// Mobile: measure the LIVE preview area (flex-allocated — full height when the tool sheet is
+// closed, reduced while it's open) so the render always fits what's actually on screen.
+function fxPreviewMaxH(){
+  if(window.innerWidth<=700){
+    const wrap=document.getElementById('fx-wrap');
+    const h=wrap?wrap.clientHeight:0;
+    return Math.max(220,h||window.innerHeight*0.42);
+  }
+  return Math.max(360,window.innerHeight-150);
+}
 function renderPreview(){
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
@@ -6145,7 +6166,7 @@ function buildSecNav(){          // mobile horizontal strip
     b.onclick=()=>fxSection(key);
     nav.appendChild(b);
   });
-  fxSection(_activeSec()||'image');
+  fxSection(_activeSec()||'image',true);
 }
 function buildToolRail(){        // desktop vertical labelled rail
   const rail=document.getElementById('fx-toolrail');if(!rail)return;
@@ -6156,17 +6177,32 @@ function buildToolRail(){        // desktop vertical labelled rail
     b.onclick=()=>fxSection(key);
     rail.appendChild(b);
   });
-  fxSection(_activeSec()||'image');
+  fxSection(_activeSec()||'image',true);
   syncSectionEnabled();
 }
-function fxSection(name){
+function fxSection(name,noSheet){
   const card=document.querySelector(`.fx-ctrl[data-fxsec="${name}"]`);if(!card)return;
+  const mob=document.body.classList.contains('mobile-fx');
+  // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
+  if(mob&&!noSheet&&card.classList.contains('sec-active')&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}
   document.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>c.classList.remove('sec-active'));
   card.classList.add('sec-active');
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
+  if(mob&&!noSheet)document.body.classList.add('sheet-open');
   if(name==='curves'&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
 }
+function fxSheetClose(){
+  document.body.classList.remove('sheet-open');
+  document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.remove('on'));
+}
+// Re-fit the render when the sheet finishes opening/closing (the photo's flex space changed).
+(function(){
+  const p=document.querySelector('.fx-panel');
+  if(p)p.addEventListener('transitionend',e=>{
+    if(e.propertyName==='height'&&document.body.classList.contains('mobile-fx')&&!cropMode)renderPreview();
+  });
+})();
 // Mark a section's rail/strip button when it's "in use":
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
 //  - looks → a preset/LUT other than None/Original is selected
@@ -6202,8 +6238,9 @@ function applyFxLayout(){
   document.body.classList.toggle('mobile-fx',mob);
   document.body.classList.toggle('fx-deskb',desk);
   document.body.classList.toggle('fx-single',mob||desk);
-  if(mob){buildSecNav();if(!_activeSec())fxSection('image');}
-  else if(desk){buildToolRail();if(!_activeSec())fxSection('image');}
+  if(!mob)document.body.classList.remove('sheet-open'); // sheet state is mobile-only
+  if(mob){buildSecNav();if(!_activeSec())fxSection('image',true);}
+  else if(desk){buildToolRail();if(!_activeSec())fxSection('image',true);}
   relocatePreviewTools(mob,desk);
 }
 // On desktop the zoom + compare/split/histogram controls live in the top action bar;
