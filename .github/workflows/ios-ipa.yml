@@ -1,0 +1,62 @@
+name: Build iOS IPA (unsigned, for Flarestore)
+
+# Builds the Capacitor iOS shell around chromasmith-22.html on Apple's toolchain and
+# publishes an UNSIGNED Chromasmith.ipa as a workflow artifact. Download it from the
+# run's Artifacts section and upload to Flarestore (or any signing service) to sideload.
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'chromasmith-22.html'
+      - 'coi-serviceworker.min.js'
+      - 'vendor/**'
+      - 'ios/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - 'build-ios.sh'
+      - 'patches/**'
+      - '.github/workflows/ios-ipa.yml'
+
+jobs:
+  build-ipa:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS deps (postinstall applies the COOP/COEP Capacitor patch)
+        run: npm ci
+
+      - name: Stage web assets + sync Capacitor (runs pod install)
+        run: |
+          ./build-ios.sh
+          npx cap sync ios
+
+      - name: Build Release app (no code signing)
+        run: |
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          cd ios/App/build/Build/Products/Release-iphoneos
+          mkdir Payload
+          cp -R App.app Payload/
+          zip -qry Chromasmith.ipa Payload
+          ls -la Chromasmith.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Chromasmith-ipa
+          path: ios/App/build/Build/Products/Release-iphoneos/Chromasmith.ipa
+          retention-days: 30

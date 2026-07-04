@@ -1,0 +1,10 @@
+{
+  "appId": "com.tareq.chromasmith",
+  "appName": "Chromasmith",
+  "webDir": "www",
+  "backgroundColor": "#141414",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#141414"
+  }
+}

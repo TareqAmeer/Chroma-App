@@ -1,0 +1,21 @@
+{
+  "name": "chromasmith",
+  "version": "1.0.0",
+  "description": "Chromasmith — offline film-emulation photo editor (iOS shell wraps the single-file web app)",
+  "private": true,
+  "scripts": {
+    "postinstall": "patch-package",
+    "build:www": "./build-ios.sh",
+    "sync": "./build-ios.sh && npx cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/ios": "^8.4.1",
+    "@capacitor/share": "^8.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
+    "patch-package": "^8.0.1"
+  }
+}

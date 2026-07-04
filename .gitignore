@@ -32,3 +32,8 @@ dehancer-baseline-*.png
 
 # Untracked source-material folder (not part of the public repo)
 Fujify Luts and XMP/
+
+# iOS shell (Capacitor): www/ is staged by build-ios.sh; node_modules restored by npm ci.
+# The ios/ project IS committed (ios/.gitignore covers its build products/Pods/public).
+node_modules/
+www/

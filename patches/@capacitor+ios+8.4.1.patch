@@ -1,0 +1,18 @@
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift b/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift
+index acc8eff..b32a152 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift
+@@ -48,7 +48,12 @@ open class WebViewAssetHandler: NSObject, WKURLSchemeHandler {
+             let mimeType = mimeTypeForExtension(pathExtension: url.pathExtension)
+             var headers =  [
+                 "Content-Type": mimeType,
+-                "Cache-Control": "no-cache"
++                "Cache-Control": "no-cache",
++                // Chromasmith patch: cross-origin isolation so SharedArrayBuffer (libraw-wasm
++                // RW2 decode) is available inside the WKWebView shell. All assets are
++                // same-origin, so COEP require-corp needs no CORP headers on subresources.
++                "Cross-Origin-Opener-Policy": "same-origin",
++                "Cross-Origin-Embedder-Policy": "require-corp"
+             ]
+ 
+             // if using live reload, then set CORS headers

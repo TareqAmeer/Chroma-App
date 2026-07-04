@@ -2671,7 +2671,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-04a';
+const BUILD='2026-07-04b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5878,8 +5878,32 @@ function mkRefCard(prevIdx){
 // is true on desktop Chrome/Safari too, so gating on canShare alone hijacked desktop exports
 // into the share path (and its "Tap to save" fallback button). Gate on the device instead.
 function useShareSheet(){return isMemoryConstrained()} // same touch/iOS predicate
+// ── Capacitor-native save path (the iOS app shell) ────────────────────────────
+// Inside the WKWebView shell navigator.share({files}) is unreliable across iOS versions, so
+// when running natively write the blobs to the app cache (Filesystem plugin) and present the
+// NATIVE share sheet (Share plugin) — which also needs no live user-activation, so the
+// multi-photo "activation expired" fallback never triggers. Gated on window.Capacitor:
+// completely inert in every browser (GitHub Pages behavior unchanged).
+function capNative(){return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}
+function _u8b64(u8){let s='';const CH=32768;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);}
+async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}] → native share sheet
+  const{Filesystem,Share}=window.Capacitor.Plugins;
+  const uris=[];
+  for(const it of items){
+    const data=typeof it.content==='string'
+      ?btoa(unescape(encodeURIComponent(it.content)))
+      :_u8b64(it.content instanceof Uint8Array?it.content:new Uint8Array(it.content));
+    const r=await Filesystem.writeFile({path:'export/'+it.fname,data,directory:'CACHE',recursive:true});
+    uris.push(r.uri);
+  }
+  await Share.share({files:uris});
+}
 function anchorDownload(content,fname,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);}
 async function saveFile(content,fname,mime='application/octet-stream'){
+  if(capNative()){
+    try{await capShareFiles([{content,fname,mime}]);return}
+    catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}
+  }
   try{const file=new File([content],fname,{type:mime});
     if(useShareSheet()&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
   catch(e){if(e&&e.name==='AbortError')return} // user dismissed the share sheet
@@ -5891,6 +5915,10 @@ async function saveFile(content,fname,mime='application/octet-stream'){
 // Downloads one-by-one, the bug the user hit). Desktop just downloads each file.
 async function saveFiles(items){ // items: [{content,fname,mime}]
   if(!items.length)return;
+  if(capNative()){
+    try{await capShareFiles(items);return}
+    catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}
+  }
   const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
   const canShare=useShareSheet()&&navigator.canShare&&navigator.canShare({files});
   if(canShare){
@@ -6115,7 +6143,9 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
     const gl=FX.ok&&FX.gl, maxTex=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):'?';
     const mem=typeof navigator.deviceMemory==='number'?navigator.deviceMemory+'GB':'n/a';
     const share=(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],'t.jpg',{type:'image/jpeg'})]}))?'yes':'no';
-    log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
+    const native=capNative()?' · NATIVE app shell':'';
+    const coi=self.crossOriginIsolated?'yes':'no';
+    log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · SAB/RAW ${coi}${native} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
   }catch(e){}
 })();
 refreshLUTSelect(); // populate built-in + saved LUTs
