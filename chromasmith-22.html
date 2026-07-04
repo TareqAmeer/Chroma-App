@@ -661,6 +661,19 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
         </div>
       </div>
+      <!-- CANVAS (aspect-ratio matte around image + borders) -->
+      <div class="fx-ctrl" data-fxsec="canvas">
+        <div class="fx-ctrl-title">Canvas <div class="fx-toggle" id="tg-canvas" onclick="toggleFX('canvas')"></div></div>
+        <div class="fx-hint">Put the photo on a canvas — pick an aspect ratio (e.g. 4:5 so Instagram doesn't crop a 2:3 photo), zoom it, and choose the background.</div>
+        <div class="fx-fields" id="ff-canvas">
+          <div class="btn-row" id="cv-ar-chips" style="flex-wrap:wrap;gap:4px"></div>
+          <div class="fx-row" title="1 = photo fits the canvas exactly; smaller = more matte around it; bigger = crops into the frame."><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="50" max="150" value="100" id="sl-canvas-z" oninput="fxUpdate();document.getElementById('vl-canvas-z').textContent=this.value+'%'"><div class="fx-val" id="vl-canvas-z">100%</div></div>
+          <div class="fx-row" style="margin-top:6px"><div class="fx-label">Background</div>
+            <div class="btn-row" id="cv-bg-swatches" style="gap:4px;flex-wrap:wrap;margin-top:0"></div>
+          </div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Custom</div><input type="color" class="fx-color" id="cl-canvas-bg" value="#000000" oninput="cvSetBg(this.value)"></div>
+        </div>
+      </div>
       <!-- DIAGNOSTICS -->
       <div class="fx-ctrl fx-diag" data-fxsec="diag">
         <div class="fx-ctrl-title">Diagnostics</div>
@@ -846,6 +859,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <li><b>Bloom</b> — soft highlight glow. Amount, Threshold, Radius.</li>
       <li><b>Vignette</b> — darkens the corners.</li>
       <li><b>Borders</b> — two stackable coloured frames with adjustable thickness.</li>
+      <li><b>Canvas</b> — mats the photo (with its borders) onto an aspect-ratio canvas: pick a ratio (4:5 keeps Instagram from cropping a 2:3 photo), zoom the photo on the canvas, and choose a background colour or a blurred copy of the photo.</li>
     </ul>
     <div class="gnote">The halation &amp; bloom are calibrated to match Dehancer's film-emulation reference. Every effect is a toggle — off by default, so a bare LUT export stays clean.</div>
 
@@ -3863,7 +3877,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,masks:[],grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,masks:[],grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all';
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
@@ -4589,6 +4603,34 @@ function hslResetAll(){fxState.hsl=_hslDefault();bakeHsl();hslSyncUI();fxUpdate(
 // ══ FILM ARTIFACTS ═════════════════════════════════════════════════════════════
 function artReshuffle(){fxState.artSeed=Math.random()*100;fxUpdate();log('Artifacts reshuffled','info');}
 
+// ══ CANVAS — aspect-ratio matte around image+borders (see canvasCompose) ═══════
+const CV_ARS=[['Fit',0],['1:1',1],['4:5',0.8],['3:4',0.75],['4:3',4/3],['9:16',9/16],['16:9',16/9],['3:2',1.5],['2:3',2/3]];
+const CV_BGS=['#000000','#ffffff','#141414','#f5f0e8','#d4903a','#4a5d73','#7a3b3b','blur'];
+function cvBuildChips(){
+  const row=document.getElementById('cv-ar-chips');
+  if(row){row.innerHTML='';
+    CV_ARS.forEach(([lb,ar])=>{
+      const b=document.createElement('button');
+      b.className='btn '+(fxState.canvas.ar===ar?'bsec':'bgh');
+      b.style.cssText='padding:6px 9px;min-width:0';
+      b.textContent=lb;b.onclick=()=>{fxState.canvas.ar=ar;cvBuildChips();fxUpdate();};
+      row.appendChild(b);
+    });}
+  const sw=document.getElementById('cv-bg-swatches');
+  if(sw){sw.innerHTML='';
+    CV_BGS.forEach(c=>{
+      const b=document.createElement('button');
+      const isBlur=c==='blur';
+      const sel=isBlur?fxState.canvas.blur:(!fxState.canvas.blur&&fxState.canvas.bg===c);
+      b.style.cssText='width:24px;height:24px;border-radius:50%;border:2px solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
+        +(isBlur?'background:linear-gradient(135deg,#888,#333);font-size:8px;color:#fff':'background:'+c);
+      if(isBlur){b.textContent='BLR';b.title='Blurred photo as the background';}
+      b.onclick=()=>{if(isBlur){fxState.canvas.blur=!fxState.canvas.blur;}else{fxState.canvas.bg=c;fxState.canvas.blur=false;}cvBuildChips();fxUpdate();};
+      sw.appendChild(b);
+    });}
+}
+function cvSetBg(c){fxState.canvas.bg=c;fxState.canvas.blur=false;cvBuildChips();fxUpdate();}
+
 // ══ LOCAL ADJUSTMENTS — up to 4 analytic radial/linear masks (see lut-pass shader) ═
 // Masks store SHADER-ready values (uv coords with y=0 at the image BOTTOM — the FLIP_Y
 // texture convention; exposure in stops; etc.). The sliders convert: Y sliders are
@@ -4654,7 +4696,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
-const _FX_SNAP_TOGGLES=['adjust','curves','hsl','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders'];
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
 const _FX_SNAP_SELECTS=['sel-input','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(){
@@ -4668,6 +4710,7 @@ function getUISnapshot(){
   s.hsl=JSON.parse(JSON.stringify(fxState.hsl));         // HSL mixer band settings
   s.artSeed=fxState.artSeed;                              // artifact placement seed
   s.masks=JSON.parse(JSON.stringify(fxState.masks));      // local-adjustment masks
+  s.canvas=JSON.parse(JSON.stringify(fxState.canvas));    // canvas matte (ar/bg/blur)
   return s;
 }
 function applyUISnapshot(s){
@@ -4679,6 +4722,7 @@ function applyUISnapshot(s){
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
   if(s.masks){fxState.masks=JSON.parse(JSON.stringify(s.masks));mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();}
+  if(s.canvas){fxState.canvas=JSON.parse(JSON.stringify(s.canvas));cvBuildChips();}
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten)
     fxImages.forEach(it=>it.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom());
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
@@ -5022,8 +5066,8 @@ const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
-  'sl-b1-t','sl-b2-t','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders'];
+  'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
+const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
 const _SESS_SELECTS=['sel-input','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(){
@@ -5036,6 +5080,7 @@ function saveSession(){
   s._hsl=fxState.hsl;         // HSL mixer band settings
   s._artSeed=fxState.artSeed; // artifact placement seed
   s._masks=fxState.masks;     // local-adjustment masks
+  s._canvas=fxState.canvas;   // canvas matte (ar/bg/blur)
   try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));log('Session saved','ok');}catch(e){log('Session save failed: '+e.message,'warn');}
 }
 function loadSession(userTriggered){
@@ -5054,6 +5099,7 @@ function loadSession(userTriggered){
     if(s._hsl){fxState.hsl=s._hsl;bakeHsl();hslSyncUI();}
     if(s._artSeed!=null)fxState.artSeed=s._artSeed;
     if(s._masks){fxState.masks=s._masks;mskSel=fxState.masks.length-1;mskRebuild();}
+    if(s._canvas){fxState.canvas=s._canvas;cvBuildChips();}
     fxUpdate();
     // restore LUT preset selection if stored
     if(s['sel-lut'])selectLUT(s['sel-lut']).catch(()=>{});
@@ -5147,6 +5193,8 @@ function getFXParams(){return{
   bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value)/100,radius:parseFloat(document.getElementById('sl-bloom-r').value)},
   debug:parseFloat((document.getElementById('sel-debug')||{}).value||0),
   vignette:document.getElementById('tg-vig').classList.contains('on')?(adjVal('sl-vig')/100):0,
+  canvas:{enabled:!!(document.getElementById('tg-canvas')||{classList:{contains:()=>false}}).classList.contains('on'),
+    ar:fxState.canvas.ar,zoom:adjVal('sl-canvas-z')/100||1,bg:fxState.canvas.bg,blur:fxState.canvas.blur},
   bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
   b1:{thickness:parseFloat(document.getElementById('sl-b1-t').value),color:document.getElementById('cl-b1').value},
   b2:{thickness:parseFloat(document.getElementById('sl-b2-t').value),color:document.getElementById('cl-b2').value},
@@ -5228,19 +5276,61 @@ function renderPreview(){
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
 }
+// ── CANVAS matte (InShot-style): put the (bordered) image on an aspect-ratio canvas with a
+// solid-color or blurred-image background, so e.g. a 2:3 photo + border posts to Instagram's
+// 4:5/3:4 without cropping. ORDER: photo → borders (belong to the image) → canvas around
+// everything. Shared by preview AND export so they match by construction.
+// CV={enabled,ar(w/h, 0=off),zoom(0.5..1.5, 1=fit),bg,'blur'}. zoom>1 crops into the frame.
+function canvasCompose(src,CV){
+  if(!CV||!CV.enabled||!CV.ar)return src;
+  const sw=src.width,sh=src.height,ar=CV.ar,zoom=CV.zoom||1;
+  const outW=Math.round(sw/sh>ar?sw:sh*ar),outH=Math.round(sw/sh>ar?sw/ar:sh);
+  const out=document.createElement('canvas');out.width=outW;out.height=outH;
+  const x=out.getContext('2d');
+  x.fillStyle=CV.bg||'#000000';x.fillRect(0,0,outW,outH);
+  if(CV.blur){
+    // blur = draw a cover-fit copy at 1/16 scale then upscale with smoothing — reliable on
+    // every browser (ctx.filter blur is not trustworthy on iOS), and resolution-independent
+    // so the preview blur matches the export blur.
+    const t=document.createElement('canvas');
+    const tw=Math.max(1,Math.round(outW/16)),th=Math.max(1,Math.round(outH/16));
+    t.width=tw;t.height=th;const tx=t.getContext('2d');
+    const s=Math.max(tw/sw,th/sh);
+    tx.drawImage(src,(tw-sw*s)/2,(th-sh*s)/2,sw*s,sh*s);
+    x.imageSmoothingEnabled=true;
+    x.drawImage(t,0,0,outW,outH);
+    x.fillStyle='rgba(0,0,0,.22)';x.fillRect(0,0,outW,outH); // slight dim so the photo pops
+    t.width=t.height=0;
+  }
+  x.drawImage(src,(outW-sw*zoom)/2,(outH-sh*zoom)/2,sw*zoom,sh*zoom);
+  return out;
+}
 // Bug C fix: borders were only drawn at export. Draw them in the preview too (onto a 2D
 // overlay canvas) so the toggle/colours/thickness are actually visible while editing.
+// Extended for the CANVAS matte: borders first, then canvasCompose around the result.
 function applyPreviewBorders(P,pw,ph){
   const wrap=document.getElementById('fx-wrap');
   let bd=document.getElementById('fx-canvas-bd');
   const b1t=P.bordersEnabled?Math.round(pw*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(pw*P.b2.thickness/100):0;
-  if(!b1t&&!b2t){if(bd)bd.style.display='none';FX.cv.style.display='block';return;}
+  const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
+  if(!b1t&&!b2t&&!cvOn){if(bd)bd.style.display='none';FX.cv.style.display='block';return;}
   if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);}
-  const tw=pw+2*(b1t+b2t),th=ph+2*(b1t+b2t);
-  bd.width=tw;bd.height=th;const x=bd.getContext('2d');
-  x.fillStyle=P.b2.color;x.fillRect(0,0,tw,th);
-  x.fillStyle=P.b1.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-  x.drawImage(FX.cv,b1t+b2t,b1t+b2t,pw,ph);
+  // stage 1: bordered image (or the bare render when borders are off)
+  let stage=FX.cv;
+  if(b1t||b2t){
+    const tw=pw+2*(b1t+b2t),th=ph+2*(b1t+b2t);
+    stage=document.createElement('canvas');stage.width=tw;stage.height=th;
+    const x=stage.getContext('2d');
+    x.fillStyle=P.b2.color;x.fillRect(0,0,tw,th);
+    x.fillStyle=P.b1.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
+    x.drawImage(FX.cv,b1t+b2t,b1t+b2t,pw,ph);
+  }
+  // stage 2: canvas matte around image+borders
+  const fin=canvasCompose(stage,P.canvas);
+  bd.width=fin.width;bd.height=fin.height;
+  bd.getContext('2d').drawImage(fin,0,0);
+  if(stage!==FX.cv)stage.width=stage.height=0;
+  if(fin!==stage&&fin!==FX.cv)fin.width=fin.height=0;
   FX.cv.style.display='none';bd.style.display='block';
 }
 
@@ -5587,6 +5677,12 @@ async function exportFX(){
           ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
           ctx.drawImage(proc,b1t+b2t,b1t+b2t);
           proc.width=proc.height=0;
+        }
+        // CANVAS matte (aspect ratio + background) around the bordered image — same helper
+        // as the preview, so what you see is exactly what exports.
+        if(P.canvas&&P.canvas.enabled&&P.canvas.ar){
+          const matted=canvasCompose(ec,P.canvas);
+          if(matted!==ec){ec.width=ec.height=0;ec=matted;}
         }
         const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
         const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||it.ext==='rw2'):fmt==='png'; // lossless source → lossless out
@@ -6015,6 +6111,7 @@ const ICONS={
  bloom:'<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/>',
  vig:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="5"/>',
  borders:'<rect x="3" y="3" width="18" height="18" rx="1"/><rect x="7" y="7" width="10" height="10"/>',
+ canvas:'<rect x="3" y="5" width="18" height="14" rx="1"/><rect x="8.5" y="8" width="7" height="8"/>',
  export:'<path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/>',
  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
  diag:'<circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.5 7.5 0 0 0-1.7-1L14 3h-4l-.4 2.6a7.5 7.5 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7.5 7.5 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.5 7.5 0 0 0 1.7 1L10 21h4l.4-2.6a7.5 7.5 0 0 0 1.7-1l2.3 1 2-3.4z"/>',
@@ -6027,7 +6124,7 @@ const ICONS={
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
-const FX_SECTIONS=[['image','Image'],['looks','Looks'],['grain','Grain'],['art','Artifacts'],
+const FX_SECTIONS=[['image','Image'],['looks','Looks'],['canvas','Canvas'],['grain','Grain'],['art','Artifacts'],
   ['bloom','Bloom'],['hal','Halation'],['borders','Borders'],['adjust','Adjust'],
   ['curves','Curves'],['hsl','Mixer'],['local','Local'],['vig','Vignette'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
 function _eachSection(cb){
@@ -6074,7 +6171,7 @@ function fxSection(name){
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
 //  - looks → a preset/LUT other than None/Original is selected
 //  - crop  → any rotate/flip/straighten/crop has been applied
-const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',local:'tg-local',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders'};
+const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',local:'tg-local',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
 function _secIsEnabled(key){
   const tg=_SEC_TOGGLE[key];
   if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
@@ -6154,6 +6251,7 @@ initCompareButton(); // wire "hold to compare" before/after
 _crvInit();          // tone-curve editor (pointer handlers + initial bake/draw)
 hslBuildChips();     // HSL mixer band chips
 mskRebuild();        // local-adjustment mask list
+cvBuildChips();      // canvas ratio chips + background swatches
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 initZoomPan();
 initEditableVals();
