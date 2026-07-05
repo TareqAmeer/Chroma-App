@@ -220,7 +220,16 @@ body.diag-on .fx-diag{display:block}
   body:not(.mobile-fx) #log-area{bottom:54px}}
 
 /* ── MOBILE FX EDITOR: pinned image + horizontal section strip + scrolling controls ── */
-body.mobile-fx{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,env(safe-area-inset-top))}
+/* `100svh` (smallest possible viewport, i.e. with Safari's address/toolbar chrome fully
+   EXPANDED), not `100dvh` — `dvh` is supposed to track the current visible viewport, but on
+   iOS Safari it can equal the *largest* viewport during the toolbar's own show/hide
+   transition, especially near first paint, sizing the whole app taller than what's actually
+   visible. Because the layout is a flex column with the photo (`.fx-preview-col`) as the
+   only flexible row, sizing to the smallest possible viewport guarantees the fixed rows
+   (top bar, tool nav, sheet) always fit with zero scrolling — the only cost is a bit of
+   unused space at the bottom when Safari's chrome auto-collapses, which is the safe
+   trade-off vs. the top/bottom bars clipping off-screen. */
+body.mobile-fx{height:100svh;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,env(safe-area-inset-top))}
 body.mobile-fx header{display:none}
 body.mobile-fx .tabs{flex:0 0 auto}
 body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
@@ -4724,6 +4733,17 @@ document.addEventListener('dblclick',e=>{
   }
   const wrap=document.getElementById('fx-wrap');
   if(wrap)wrap.addEventListener('contextmenu',e=>e.preventDefault());
+})();
+// Safety net: iOS Safari's address-bar collapse/expand can leave the page scrolled by a few
+// dozen px even though body.mobile-fx is `overflow:hidden` at a fixed (100svh) height — the
+// visible window ends up showing the MIDDLE of the fixed layout (top bar looks pushed down,
+// bottom nav clipped off) instead of the top. Force-correct on load/resize/orientation.
+(function(){
+  const snap=()=>{if(document.body.classList.contains('mobile-fx')&&(window.scrollX||window.scrollY))window.scrollTo(0,0);};
+  window.addEventListener('load',snap);
+  window.addEventListener('resize',snap);
+  window.addEventListener('orientationchange',()=>setTimeout(snap,50));
+  if(window.visualViewport)window.visualViewport.addEventListener('resize',snap);
 })();
 // Swipe left/right on the (unzoomed) preview to switch photos in a multi-photo batch.
 (function(){
