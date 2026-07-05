@@ -45,6 +45,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .dz-sb{font-size:11px;color:var(--mut);margin-top:1px}
 .dz-fn{font-family:var(--mono);font-size:10px;color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip-tap{margin-top:0}
 .btn{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;padding:9px 16px;border-radius:5px;border:1px solid;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:disabled{opacity:.3;cursor:not-allowed}
 .bpri{background:var(--acc);border-color:var(--acc);color:#000;font-weight:600}.bpri:not(:disabled):hover{background:#e8a54a}
@@ -104,14 +105,25 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-toggle.on::after{left:16px}
 .fx-fields{display:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
-.fx-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.fx-label{font-size:11px;color:var(--mut);flex-shrink:0;width:80px}
-.fx-slider{flex:1;accent-color:var(--acc);cursor:pointer}
-.fx-val{font-family:var(--mono);font-size:10px;color:var(--acc);width:36px;text-align:right;flex-shrink:0}
+/* Two-line slider layout: label + value share a top row, the track spans full width below —
+   DOM order (label, slider, val) is unchanged, `order` just re-flows them visually so the
+   existing contenteditable tap-to-type value div needs no markup changes. */
+.fx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px}
+.fx-label{order:1;font-size:11px;color:var(--mut);flex-shrink:0}
+.fx-slider{order:3;flex:1 1 100%;width:100%;accent-color:var(--acc);cursor:pointer;margin-top:1px}
+.fx-val{order:2;font-family:var(--mono);font-size:11px;color:var(--acc);text-align:right;flex-shrink:0}
 .fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
 .fx-val[contenteditable]:hover{background:var(--sur2)}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
 .fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
+/* Color Mixer band swatches: plain circle + colored underline, no bordered chip box */
+.hsl-chip{display:flex;flex-direction:column;align-items:center;background:none;border:none;border-bottom:2px solid transparent;padding:5px 6px 6px;cursor:pointer}
+/* Color Mixer sliders: gradient track (Hue = fixed rainbow; Sat/Lum tinted per selected band
+   via JS, see hslSyncUI). Track colour comes from the input's own `background`, so appearance
+   must be reset to none — WebKit/Safari-focused since the app runs in Safari or a WKWebView shell. */
+.fx-slider-grad{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b)}
+.fx-slider-grad::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.5)}
+.fx-slider-grad::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:none;box-shadow:0 0 3px rgba(0,0,0,.5)}
 .fx-select{background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:4px 8px;color:var(--txt);font-family:var(--mono);font-size:10px;flex:1;cursor:pointer;min-width:0;box-sizing:border-box;text-overflow:ellipsis;overflow:hidden}
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
 #fx-canvas{display:block;max-width:100%;height:auto}
@@ -222,16 +234,21 @@ body.mobile-fx .fx-layout{display:flex;flex-direction:column;align-items:stretch
 body.mobile-fx .fx-preview-col{flex:1 1 auto;align-self:stretch;order:-1;position:static;top:auto;z-index:auto;background:var(--bg);padding:4px 0 0;width:auto;max-width:100%;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 /* image + action bar keep a small inset; the section strip goes full-bleed */
 body.mobile-fx .fx-canvas-wrap{margin:0 6px}
-body.mobile-fx #fx-actionbar{padding:6px 6px 4px}
+body.mobile-fx #fx-actionbar{order:-1;padding:2px 6px 6px}
+/* `.fx-ctrl{break-inside:avoid}` is a desktop 2-column-masonry rule. In the mobile sheet
+   (fixed-height, column-count:1, overflow-y:auto) an un-splittable card taller than the
+   available height gets pushed whole into a phantom 2nd column instead of scrolling —
+   invisible offscreen content. Disable break-inside there so tall panels just scroll. */
+body.mobile-fx .fx-ctrl{break-inside:auto}
 body.mobile-fx .fx-canvas-wrap{width:auto;max-width:100%}
 body.mobile-fx .fx-canvas-wrap{flex:1 1 auto;height:auto;min-height:120px}
 body.mobile-fx #fx-canvas{object-fit:contain}
 /* bottom sheet = the tool panel; height animates 0 ↔ 42dvh, flex gives the freed space
    back to the photo. Drag-handle row (#fx-sheet-handle) closes it. */
-body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:1;padding:0 10px;background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.45);transition:height .28s ease}
+body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 10px;background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.45);transition:height .28s ease}
 /* NOTE: plain 42vh, NOT min(42vh,430px) — Chrome refuses to interpolate a height transition
    from 0 to a min()/calc() value (it just sticks at 0). max-height applies the cap instead. */
-body.mobile-fx.sheet-open .fx-panel{height:42vh;max-height:430px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 10px 30px}
+body.mobile-fx.sheet-open .fx-panel{height:34vh;max-height:360px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 10px 30px}
 #fx-sheet-handle{display:none}
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
@@ -268,11 +285,11 @@ body.mobile-fx .fx-sec-btn.on{background:rgba(212,144,58,.14)}
 #fx-exp-ov .eo-bar{width:100%;height:5px;background:var(--bdr);border-radius:3px;overflow:hidden}
 #fx-exp-ov #eo-fill{height:100%;width:0;background:var(--acc);transition:width .15s}
 #fx-exp-ov .btn{min-height:44px;width:100%;justify-content:center}
-/* preset rail: the looks gallery rides under the preview on mobile (InShot filter strip) */
-body.mobile-fx #fx-looks-ctrl{margin:6px 6px 0}
+/* preset rail: lives inside the Looks tool panel (not docked under the preview at all
+   times) — a horizontal tap-to-select strip, gated behind the Looks sheet like every
+   other tool's controls. */
 body.mobile-fx #fx-looks{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;max-height:none;padding:2px 1px}
 body.mobile-fx .look-cell{flex:0 0 72px}
-body.mobile-fx.sheet-open #fx-looks-ctrl{display:none!important}
 body.fx-single .fx-ctrl{display:none}
 body.fx-single .fx-ctrl.sec-active{display:block;margin-bottom:0}
 body.fx-single.diag-on .fx-diag{display:none}
@@ -282,12 +299,11 @@ body.mobile-fx #fx-preview-tools{left:auto;right:8px;top:8px;bottom:auto;transfo
 .fx-mini{padding:5px 8px!important;min-height:0!important;font-size:9px!important;letter-spacing:.04em;background:rgba(0,0,0,.55);border-color:var(--bdr)}
 body.mobile-fx #fx-crop-tools{order:5;margin:6px 0 0}
 /* action bar directly below the image */
-body.mobile-fx #fx-actionbar{display:flex;gap:6px;padding:6px 4px 4px;justify-content:space-between}
-.fx-act{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;color:var(--txt);padding:6px 2px;cursor:pointer;font-family:var(--mono)}
-.fx-act:active{background:var(--bdr)}
-.fx-act-ic{font-size:16px;line-height:1}
-.fx-act-lb{font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
-.fx-act-pri{border-color:var(--acc)}
+body.mobile-fx #fx-actionbar{display:flex;gap:2px;padding:6px 4px 4px;justify-content:flex-start}
+.fx-act{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--txt);padding:6px 10px;cursor:pointer;font-family:var(--mono)}
+.fx-act:active{background:var(--sur2);border-radius:7px}
+.fx-act-ic{font-size:18px;line-height:1}
+.fx-act-lb{display:none}
 .fx-act-pri .fx-act-ic{color:var(--acc)}
 /* horizontal section strip */
 body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 2px;border-top:1px solid var(--bdr);background:var(--sur)}
@@ -526,24 +542,21 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- LOOKS GALLERY + PRESET -->
       <div class="fx-ctrl" data-fxsec="looks">
         <div class="fx-ctrl-title">Presets &amp; Looks</div>
-        <div class="fx-hint">Tap a thumbnail to apply a film look instantly — a great starting point.</div>
-        <div class="fx-row" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."><div class="fx-label">Input</div>
-          <select class="fx-select" id="sel-input" onchange="fxUpdate()"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
-        </div>
-        <div class="fx-row"><div class="fx-label">Preset</div>
-          <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)"><option value="">None</option></select>
-        </div>
-        <div class="fx-row" style="margin-top:6px" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."><div class="fx-label">Print</div>
-          <select class="fx-select" id="sel-print" onchange="selectPrint(this.value)"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
-        </div>
-        <div id="fx-looks-ctrl" style="display:none;margin-top:8px">
+        <div class="fx-label" style="margin-bottom:4px">Input</div>
+        <select class="fx-select" id="sel-input" onchange="fxUpdate()" style="display:none"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
+        <div class="btn-row chip-tap" id="chips-input" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."></div>
+        <div class="fx-label" style="margin:10px 0 4px">Print</div>
+        <select class="fx-select" id="sel-print" onchange="selectPrint(this.value)" style="display:none"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
+        <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
+        <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)" style="display:none"><option value="">None</option></select>
+        <div id="fx-looks-ctrl" style="display:none;margin-top:10px">
+          <div class="fx-label" style="margin-bottom:4px">Preset</div>
           <div class="looks-grid" id="fx-looks"></div>
         </div>
       </div>
       <!-- BASIC ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="adjust">
         <div class="fx-ctrl-title">Basic Adjustments <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
-        <div class="fx-hint">Exposure, colour and tone — the fundamentals of every edit.</div>
         <div class="fx-fields" id="ff-adjust">
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
           <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
@@ -567,7 +580,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
         <div class="fx-ctrl-title">Tone Curves <div class="fx-toggle" id="tg-curves" onclick="toggleFX('curves')"></div></div>
-        <div class="fx-hint">Point curves for precise tone shaping — click the graph to add a point, drag to shape, double-click a point to remove it.</div>
         <div class="fx-fields" id="ff-curves">
           <div class="btn-row" id="curve-chips">
             <button class="btn bgh crv-chip on" data-ch="m" onclick="curveSetCh('m')">RGB</button>
@@ -575,7 +587,13 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
             <button class="btn bgh crv-chip" data-ch="g" onclick="curveSetCh('g')">G</button>
             <button class="btn bgh crv-chip" data-ch="b" onclick="curveSetCh('b')">B</button>
           </div>
-          <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:8px"></canvas>
+          <div style="max-width:280px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px">
+            <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+          </div>
+          <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:2px"></canvas>
+          <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
+            <span>Blacks</span><span>Midtones</span><span>Whites</span>
+          </div>
           <div class="btn-row" style="margin-top:6px">
             <button class="btn bgh" onclick="curveResetCh()"><span class="bdot"></span>Reset channel</button>
             <button class="btn bgh" onclick="curveResetAll()"><span class="bdot"></span>Reset all</button>
@@ -585,12 +603,11 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- HSL COLOR MIXER -->
       <div class="fx-ctrl" data-fxsec="hsl">
         <div class="fx-ctrl-title">Color Mixer <div class="fx-toggle" id="tg-hsl" onclick="toggleFX('hsl')"></div></div>
-        <div class="fx-hint">HSL colour mixer — pick a colour band, then shift its hue, saturation and luminance.</div>
         <div class="fx-fields" id="ff-hsl">
           <div class="btn-row" id="hsl-chips" style="flex-wrap:wrap;gap:4px"></div>
-          <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-hsl-h" oninput="hslSlider('hue',this.value)"><div class="fx-val" id="vl-hsl-h">0</div></div>
-          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-hsl-s" oninput="hslSlider('sat',this.value)"><div class="fx-val" id="vl-hsl-s">0</div></div>
-          <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-hsl-l" oninput="hslSlider('lum',this.value)"><div class="fx-val" id="vl-hsl-l">0</div></div>
+          <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-h" oninput="hslSlider('hue',this.value)"><div class="fx-val" id="vl-hsl-h">0</div></div>
+          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-s" oninput="hslSlider('sat',this.value)"><div class="fx-val" id="vl-hsl-s">0</div></div>
+          <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-l" oninput="hslSlider('lum',this.value)"><div class="fx-val" id="vl-hsl-l">0</div></div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="hslResetBand()"><span class="bdot"></span>Reset band</button>
             <button class="btn bgh" onclick="hslResetAll()"><span class="bdot"></span>Reset all</button>
@@ -600,7 +617,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- LOCAL ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="local">
         <div class="fx-ctrl-title">Local Adjustments <div class="fx-toggle" id="tg-local" onclick="toggleFX('local')"></div></div>
-        <div class="fx-hint">Up to 4 radial or linear gradient masks — each with its own exposure, contrast, temp and saturation, plus a luminance-range gate.</div>
         <div class="fx-fields" id="ff-local">
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAdd('radial')"><span class="bdot"></span>+ Radial</button>
@@ -639,7 +655,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
         <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
-        <div class="fx-hint">Adds the fine speckled texture of real film stock.</div>
         <div class="fx-fields" id="ff-grain">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="60" id="sl-grain-a" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-a">60</div></div>
           <div class="fx-row" title="Fine-tune the grain clump size on top of the film format (5 = format-accurate)."><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="5" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">5</div></div>
@@ -656,9 +671,9 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- FILM ARTIFACTS -->
       <div class="fx-ctrl" data-fxsec="art">
         <div class="fx-ctrl-title">Film Artifacts <div class="fx-toggle" id="tg-art" onclick="toggleFX('art')"></div></div>
-        <div class="fx-hint">Negative defects — dust &amp; hairs, scratches and a light leak. Applied before the print stock, like real film damage.</div>
         <div class="fx-fields" id="ff-art">
           <div class="fx-row" title="Random dust specks and the odd hair — mostly light (dust on the negative prints white)."><div class="fx-label">Dust</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-art-du" oninput="fxUpdate()"><div class="fx-val" id="vl-art-du">30</div></div>
+          <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck colour — Both is the real-film mix (mostly light specks); Black/White forces one colour."></div>
           <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" oninput="fxUpdate()"><div class="fx-val" id="vl-art-sc">20</div></div>
           <div class="fx-row" title="A warm light leak flooding in from one edge."><div class="fx-label">Light leak</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-art-lk" oninput="fxUpdate()"><div class="fx-val" id="vl-art-lk">0</div></div>
           <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="artReshuffle()" title="Re-roll the random dust/scratch/leak placement"><span class="bdot"></span>Reshuffle</button></div>
@@ -668,7 +683,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- HALATION -->
       <div class="fx-ctrl" data-fxsec="hal">
         <div class="fx-ctrl-title">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
-        <div class="fx-hint">Soft reddish glow around bright edges, just like real film.</div>
         <div class="fx-fields" id="ff-hal">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-a">70</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
@@ -682,7 +696,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- BLOOM -->
       <div class="fx-ctrl" data-fxsec="bloom">
         <div class="fx-ctrl-title">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
-        <div class="fx-hint">Dreamy haze that blooms out of the brightest highlights.</div>
         <div class="fx-fields" id="ff-bloom">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-a">40</div></div>
           <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="2" max="60" value="10" id="sl-bloom-th" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-th">10</div></div>
@@ -693,7 +706,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- VIGNETTE -->
       <div class="fx-ctrl" data-fxsec="vig">
         <div class="fx-ctrl-title">Vignette <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
-        <div class="fx-hint">Gently darkens the corners to draw the eye inward.</div>
         <div class="fx-fields" id="ff-vig">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">50</div></div>
         </div>
@@ -713,7 +725,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <!-- CANVAS (aspect-ratio matte around image + borders) -->
       <div class="fx-ctrl" data-fxsec="canvas">
         <div class="fx-ctrl-title">Canvas <div class="fx-toggle" id="tg-canvas" onclick="toggleFX('canvas')"></div></div>
-        <div class="fx-hint">Put the photo on a canvas — pick an aspect ratio (e.g. 4:5 so Instagram doesn't crop a 2:3 photo), zoom it, and choose the background.</div>
         <div class="fx-fields" id="ff-canvas">
           <div class="btn-row" id="cv-ar-chips" style="flex-wrap:wrap;gap:4px"></div>
           <div class="fx-row" title="1 = photo fits the canvas exactly; smaller = more matte around it; bigger = crops into the frame."><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="50" max="150" value="100" id="sl-canvas-z" oninput="fxUpdate();document.getElementById('vl-canvas-z').textContent=this.value+'%'"><div class="fx-val" id="vl-canvas-z">100%</div></div>
@@ -819,8 +830,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <button class="fx-act" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-act-ic">↪</span><span class="fx-act-lb">Redo</span></button>
         <button class="fx-act js-allfx" onclick="enableAll()" title="Toggle all FX"><span class="fx-act-ic">✨</span><span class="fx-act-lb">All FX</span></button>
         <button class="fx-act fx-act-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span><span class="fx-act-lb">Export</span></button>
-        <button class="fx-act" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="fx-act-ic">≡</span><span class="fx-act-lb">Log</span></button>
-        <button class="fx-act" onclick="fxMoreMenu()" title="More tools (Match &amp; Refine, Colour Copy, Collage, Guide)"><span class="fx-act-ic">⋯</span><span class="fx-act-lb">More</span></button>
+        <button class="fx-act" onclick="fxMoreMenu()" title="More tools (Match &amp; Refine, Colour Copy, Collage, Guide, Log)"><span class="fx-act-ic">⋯</span><span class="fx-act-lb">More</span></button>
       </div>
       <!-- HORIZONTAL SECTION STRIP (mobile) -->
       <div id="fx-secnav"></div>
@@ -2737,7 +2747,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-04c';
+const BUILD='2026-07-05a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3415,7 +3425,7 @@ in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
 uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
-uniform float dustA,scrA,leakA,fxSeed,artAsp; // film artifacts (dust/scratches/light leak) + stable seed + image aspect
+uniform float dustA,scrA,leakA,fxSeed,artAsp,dustMode; // film artifacts (dust/scratches/light leak) + stable seed + image aspect; dustMode: 0=both,1=black,2=white
 uniform vec3 grK;     // per-channel grain gain (R,G,B)
 uniform vec2 grHi;    // highlight rolloff gate (lo,hi)
 uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
@@ -3509,7 +3519,8 @@ void main(){
         if(hh>0.86){float an=hh*40.0;vec2 dr=vec2(cos(an),sin(an));dv=vec2(dot(dv,dr)*0.22,dot(dv,vec2(-dr.y,dr.x)));}
         float rr=0.06+0.10*hash12(idc+21.13+fxSeed);
         float spot=smoothstep(rr,rr*0.35,length(dv));
-        float lite=step(0.3,hash12(idc+31.7+fxSeed));            // 70% light (dust on the neg prints white)
+        float liteR=step(0.3,hash12(idc+31.7+fxSeed));            // 70% light (dust on the neg prints white)
+        float lite=dustMode<0.5?liteR:(dustMode<1.5?0.0:1.0);     // dustMode forces all-black or all-white specks
         float op=(0.45+0.5*hash12(idc+41.3+fxSeed))*clamp(dustA*2.0,0.,1.);
         res=mix(res,vec3(lite>0.5?0.93:0.06),spot*op);
       }
@@ -3842,6 +3853,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
      gl.uniform1f(ul('dustA'),aOn?(AR.dust||0)/100:0);
      gl.uniform1f(ul('scrA'),aOn?(AR.scratch||0)/100:0);
      gl.uniform1f(ul('leakA'),aOn?(AR.leak||0)/100:0);
+     gl.uniform1f(ul('dustMode'),AR.dustMode||0);
      gl.uniform1f(ul('fxSeed'),(AR.seed!=null)?AR.seed:7.7);
      gl.uniform1f(ul('artAsp'),((w/uvSx2)/(h/uvSy))||1);}
     gl.uniform1f(ul('seed'),(opts&&opts.seed!=null)?opts.seed:Math.random()*100);
@@ -3929,7 +3941,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,masks:[],grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:60,size:5,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all';
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
@@ -4240,6 +4252,7 @@ async function selectLUT(v){
 }
 // Print profile (Kodak/Fuji): a 2nd 3D LUT applied AFTER the film look + halation.
 function selectPrint(v){
+  const sel=document.getElementById('sel-print');if(sel&&sel.value!==v){sel.value=v;sel._chipsRender&&sel._chipsRender();}
   try{
     if(!v||!PRINT_PRESETS[v]){fxState.print=null;FX.setPrintLUT(null);renderPreview();log('Print profile off');return}
     const lut=lutFromBytes(b64ToBytes(PRINT_PRESETS[v]));
@@ -4626,10 +4639,11 @@ function bakeHsl(){
 function hslBuildChips(){
   const row=document.getElementById('hsl-chips');if(!row)return;row.innerHTML='';
   HSL_BANDS.forEach(b=>{
-    const bt=document.createElement('button');bt.className='btn bgh hsl-chip'+(b===hslBand?' on':'');bt.dataset.band=b;
-    bt.title=b;bt.style.minWidth='28px';bt.style.padding='4px 7px';
+    const bt=document.createElement('button');bt.className='hsl-chip'+(b===hslBand?' on':'');bt.dataset.band=b;
+    bt.title=b;
+    bt.style.borderBottomColor=(b===hslBand?HSL_COLS[b]:'transparent');
     const edited=['hue','sat','lum'].some(k=>fxState.hsl[k]&&fxState.hsl[k][b]);
-    bt.innerHTML='<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+HSL_COLS[b]+';box-shadow:'+(edited?'0 0 0 2px rgba(255,255,255,.55)':'none')+'"></span>';
+    bt.innerHTML='<span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:'+HSL_COLS[b]+';box-shadow:'+(edited?'0 0 0 2px rgba(255,255,255,.55)':'none')+'"></span>';
     bt.onclick=()=>hslSetBand(b);
     row.appendChild(bt);
   });
@@ -4642,6 +4656,11 @@ function hslSyncUI(){
     const sl=document.getElementById('sl-hsl-'+sfx),vl=document.getElementById('vl-hsl-'+sfx);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
+  // Saturation/Luminance tracks tint toward the selected band's colour (Hue keeps its fixed
+  // rainbow gradient from CSS, so it's left alone here).
+  const col=HSL_COLS[hslBand];
+  const slS=document.getElementById('sl-hsl-s');if(slS)slS.style.background='linear-gradient(to right,#888,'+col+')';
+  const slL=document.getElementById('sl-hsl-l');if(slL)slL.style.background='linear-gradient(to right,#000,'+col+',#fff)';
 }
 function hslSlider(k,v){
   fxState.hsl[k][hslBand]=parseFloat(v)||0;
@@ -4675,6 +4694,8 @@ function fxMoreMenu(){
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
     b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
   });
+  const logBtn=document.createElement('button');logBtn.className='btn bgh';logBtn.textContent='Log';
+  logBtn.onclick=()=>{m.remove();toggleLog();};sh.appendChild(logBtn);
   const c=document.createElement('button');c.className='btn bsec';c.textContent='Cancel';c.onclick=()=>m.remove();sh.appendChild(c);
   m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
   document.body.appendChild(m);
@@ -4715,17 +4736,25 @@ document.addEventListener('dblclick',e=>{
     if(Math.abs(dx)>60&&Math.abs(dy)<45&&Date.now()-st<600){fxSelectImage(fxCurIdx+(dx<0?1:-1));hapt();}
   },{passive:true});
 })();
-// Long-press ANYWHERE on the photo = hold-to-compare (the chip button stays for discoverability).
+// Long-press with ONE finger = hold-to-compare (the chip button stays for discoverability).
+// A 2nd finger landing means this is a pinch-zoom gesture instead, so it cancels/blocks compare
+// — each touch point fires its own pointerdown (Pointer Events spec), so counting active
+// pointerIds on this element is enough to tell a hold from a pinch without touching the
+// separate touchstart/touchmove pinch-zoom handler below.
 (function(){
   const wrap=document.getElementById('fx-wrap');if(!wrap)return;
   let t=null,sx=0,sy=0,engaged=false;
+  const active=new Set();
+  const cancelCompare=()=>{clearTimeout(t);t=null;if(engaged){engaged=false;fxCompare=false;renderPreview();}};
   wrap.addEventListener('pointerdown',e=>{
     if(!fxWork||cropMode||e.button)return;
+    active.add(e.pointerId);
+    if(active.size>1){cancelCompare();return;}
     sx=e.clientX;sy=e.clientY;engaged=false;
     t=setTimeout(()=>{engaged=true;fxCompare=true;renderPreview();hapt();},380);
   });
   wrap.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-sx,e.clientY-sy)>12){clearTimeout(t);t=null;}});
-  const end=()=>{clearTimeout(t);t=null;if(engaged){engaged=false;fxCompare=false;renderPreview();}};
+  const end=e=>{active.delete(e.pointerId);cancelCompare();};
   wrap.addEventListener('pointerup',end);wrap.addEventListener('pointercancel',end);wrap.addEventListener('pointerleave',end);
 })();
 // Mobile export overlay: dimmed screen + big progress + cancel (the panel sheet may be closed).
@@ -4850,7 +4879,7 @@ function getUISnapshot(){
 function applyUISnapshot(s){
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff)ff.style.display=on?'flex':'none';}});
-  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];if(id==='sel-lut')selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
+  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
@@ -5213,6 +5242,7 @@ function saveSession(){
   s._curves=fxState.curves;   // tone-curve control points
   s._hsl=fxState.hsl;         // HSL mixer band settings
   s._artSeed=fxState.artSeed; // artifact placement seed
+  s._dustMode=fxState.dustMode; // dust speck colour mode (0 both,1 black,2 white)
   s._masks=fxState.masks;     // local-adjustment masks
   s._canvas=fxState.canvas;   // canvas matte (ar/bg/blur)
   try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));log('Session saved','ok');}catch(e){log('Session save failed: '+e.message,'warn');}
@@ -5227,11 +5257,12 @@ function loadSession(userTriggered){
       el.classList.toggle('on',!!s[id]);
       const ff=document.getElementById('ff-'+id.slice(3));if(ff)ff.style.display=s[id]?'flex':'none';
     });
-    _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
+    _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null){el.value=s[id];el._chipsRender&&el._chipsRender();}});
     _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
     if(s._curves){fxState.curves=s._curves;bakeCurves();drawCurveEditor();}
     if(s._hsl){fxState.hsl=s._hsl;bakeHsl();hslSyncUI();}
     if(s._artSeed!=null)fxState.artSeed=s._artSeed;
+    if(s._dustMode!=null){fxState.dustMode=s._dustMode;dustModeBuildChips();}
     if(s._masks){fxState.masks=s._masks;mskSel=fxState.masks.length-1;mskRebuild();}
     if(s._canvas){fxState.canvas=s._canvas;cvBuildChips();}
     fxUpdate();
@@ -5318,7 +5349,7 @@ function getFXParams(){return{
     sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
   artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
-    dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed},
+    dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed,dustMode:fxState.dustMode||0},
   halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),
     white:!!(document.getElementById('tg-hal-white')||{}).classList?.contains('on'), // neutral glow (B&W)
     noRemjet:!!(document.getElementById('tg-hal-noremjet')||{}).classList?.contains('on'), // strong no-backing halation
@@ -5389,9 +5420,12 @@ function renderPreview(){
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
-  // Render the backing store at devicePixelRatio (capped at 2x) so the preview is crisp on
-  // HiDPI screens; 2×900=1800px is still ~1/13 of a 24MP export, so cost stays tiny.
-  const dpr=Math.min(window.devicePixelRatio||1,2);
+  // Render the backing store at devicePixelRatio (capped at 2x in-browser so the preview is
+  // crisp on HiDPI screens without costing much: 2×900=1800px is still ~1/13 of a 24MP
+  // export). Native iOS GPUs handle full-res live preview comfortably, so the Capacitor
+  // shell raises the cap to 3x for a noticeably sharper preview; the browser/Pages build is
+  // left untouched since we can't verify perf/memory headroom on arbitrary mobile Safari.
+  const dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
   const pw=(cw*dpr)|0,ph=(ch*dpr)|0;                   // WebGL backing store
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
   const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
@@ -6381,13 +6415,6 @@ function relocatePreviewTools(mob,desk){
   if(!bar||!wrap||!zc||!pt)return;
   if(desk){bar.appendChild(pt);bar.appendChild(zc);}
   else{wrap.appendChild(zc);wrap.appendChild(pt);}
-  // Preset rail: on mobile the looks gallery rides under the preview (InShot filter strip);
-  // on desktop it lives in the Looks card (its original home = last child of that card).
-  const lc=document.getElementById('fx-looks-ctrl'),col=document.querySelector('.fx-preview-col'),looksCard=document.querySelector('[data-fxsec="looks"]');
-  if(lc&&col&&looksCard){
-    if(mob)col.insertBefore(lc,document.getElementById('fx-crop-tools'));
-    else looksCard.appendChild(lc);
-  }
 }
 const applyMobileFx=applyFxLayout; // legacy alias
 _mqMobile.addEventListener('change',applyFxLayout);
@@ -6419,13 +6446,41 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
     log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · SAB/RAW ${coi}${native} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
   }catch(e){}
 })();
+// Tap-to-select chip row mirroring a plain <select> (kept in the DOM, hidden, as the
+// existing state store so session/snapshot code that reads/writes its .value is untouched).
+function selectToChips(selectId,chipsId){
+  const sel=document.getElementById(selectId),row=document.getElementById(chipsId);
+  if(!sel||!row)return;
+  const render=()=>{
+    row.innerHTML='';
+    Array.from(sel.options).forEach(o=>{
+      const b=document.createElement('button');b.className='btn bgh'+(o.value===sel.value?' on':'');
+      b.textContent=o.textContent;
+      b.onclick=()=>{sel.value=o.value;sel.dispatchEvent(new Event('change',{bubbles:true}));render();};
+      row.appendChild(b);
+    });
+  };
+  render();
+  sel._chipsRender=render; // re-synced after programmatic sel.value writes (session/snapshot restore)
+}
 refreshLUTSelect(); // populate built-in + saved LUTs
 initDcpSelect();    // populate RAW profile dropdown (persisted choice)
 initCompareButton(); // wire "hold to compare" before/after
 _crvInit();          // tone-curve editor (pointer handlers + initial bake/draw)
-hslBuildChips();     // HSL mixer band chips
+hslSyncUI();     // HSL mixer band chips + slider values/gradient tracks
 mskRebuild();        // local-adjustment mask list
 cvBuildChips();      // canvas ratio chips + background swatches
+selectToChips('sel-input','chips-input'); // input-profile tap chips
+selectToChips('sel-print','chips-print'); // print-profile tap chips
+function dustModeBuildChips(){
+  const row=document.getElementById('chips-dustmode');if(!row)return;row.innerHTML='';
+  [['Both',0],['Black',1],['White',2]].forEach(([lb,val])=>{
+    const b=document.createElement('button');b.className='btn bgh'+(fxState.dustMode===val?' on':'');b.textContent=lb;
+    b.onclick=()=>{fxState.dustMode=val;dustModeBuildChips();fxUpdate();};
+    row.appendChild(b);
+  });
+}
+dustModeBuildChips();
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 initZoomPan();
 initEditableVals();
