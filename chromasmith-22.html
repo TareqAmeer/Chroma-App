@@ -299,17 +299,17 @@ body.mobile-fx #fx-preview-tools{left:auto;right:8px;top:8px;bottom:auto;transfo
 .fx-mini{padding:5px 8px!important;min-height:0!important;font-size:9px!important;letter-spacing:.04em;background:rgba(0,0,0,.55);border-color:var(--bdr)}
 body.mobile-fx #fx-crop-tools{order:5;margin:6px 0 0}
 /* action bar directly below the image */
-body.mobile-fx #fx-actionbar{display:flex;gap:2px;padding:6px 4px 4px;justify-content:flex-start}
-.fx-act{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--txt);padding:6px 10px;cursor:pointer;font-family:var(--mono)}
-.fx-act:active{background:var(--sur2);border-radius:7px}
-.fx-act-ic{font-size:18px;line-height:1}
+body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:10px 4px;justify-content:space-between}
+.fx-act{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;color:var(--txt);padding:8px 14px;min-width:44px;min-height:44px;cursor:pointer;font-family:var(--mono)}
+.fx-act:active{background:var(--sur2);border-radius:9px}
+.fx-act-ic{font-size:25px;line-height:1}
 .fx-act-lb{display:none}
 .fx-act-pri .fx-act-ic{color:var(--acc)}
 /* horizontal section strip */
-body.mobile-fx #fx-secnav{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 2px;border-top:1px solid var(--bdr);background:var(--sur)}
-.fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--mut);cursor:pointer;padding:4px 6px;font-family:var(--mono);border-radius:6px;min-width:54px}
-.fx-sec-btn .fx-sec-ic{font-size:18px;line-height:1}
-.fx-sec-btn .fx-sec-lb{font-size:8px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+body.mobile-fx #fx-secnav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px 4px;border-top:1px solid var(--bdr);background:var(--sur)}
+.fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;color:var(--mut);cursor:pointer;padding:6px 12px;font-family:var(--mono);border-radius:8px;min-width:60px;min-height:44px}
+.fx-sec-btn .fx-sec-ic{font-size:24px;line-height:1}
+.fx-sec-btn .fx-sec-lb{font-size:9px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
 .fx-sec-btn.on{color:var(--acc)}
 .fx-sec-btn.on .fx-sec-ic{transform:scale(1.05)}
 .fx-sec-ic svg,.fx-rail-ic svg,.fx-db-ic svg{display:block}
