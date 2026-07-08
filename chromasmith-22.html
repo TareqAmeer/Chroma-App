@@ -3,13 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- Home-Screen (standalone PWA) metas: without these iOS picks its own display mode and
+     env(safe-area-inset-*) geometry is mode-dependent/undefined — the cause of the
+     inconsistent top-bar/bottom-nav placement. black-translucent = webview extends
+     edge-to-edge under the status bar, so safe-area insets are always real values.
+     NOTE: read at ADD time — users must remove + re-add the Home Screen icon to pick
+     these up. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chromasmith">
 <title>CHROMASMITH</title>
 <!-- coi-serviceworker (MIT, Guido Zuidhof): injects COOP/COEP client-side so SharedArrayBuffer
      works on GitHub Pages (which can't set headers). Required by the libraw-wasm RW2 decoder.
      It reloads the page once on first visit to gain cross-origin isolation. -->
 <script src="coi-serviceworker.min.js"></script>
 <style>
-:root{--bg:#17171b;--sur:#1f1f25;--sur2:#26262d;--bdr:#34343f;--acc:#d4903a;--acc2:#4a9ddc;--txt:#f0ece2;--mut:#9a968f;--ok:#52c97a;--err:#e05454;--r:8px;--mono:ui-monospace,Menlo,'Courier New',monospace;--serif:Palatino,'Palatino Linotype',Georgia,serif;--sans:-apple-system,'Helvetica Neue',sans-serif}
+:root{--bg:#17171b;--sur:#1f1f25;--sur2:#26262d;--bdr:#34343f;--acc:#d4903a;--acc2:#4a9ddc;--txt:#f0ece2;--mut:#9a968f;--ok:#52c97a;--err:#e05454;--r:8px;--mono:ui-monospace,Menlo,'Courier New',monospace;--serif:Palatino,'Palatino Linotype',Georgia,serif;--sans:-apple-system,'Helvetica Neue',sans-serif;
+  /* Safe-area insets as overridable custom props: layout rules use var(--sat)/var(--sab)
+     instead of env() directly, so desktop-Chrome testing can inject real iPhone values
+     (e.g. --sat:47px --sab:34px) and render the exact device geometry Chrome can't emulate. */
+  --sat:env(safe-area-inset-top);--sab:env(safe-area-inset-bottom)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
 canvas,img,video,select,input{max-width:100%}
@@ -220,16 +233,13 @@ body.diag-on .fx-diag{display:block}
   body:not(.mobile-fx) #log-area{bottom:54px}}
 
 /* ── MOBILE FX EDITOR: pinned image + horizontal section strip + scrolling controls ── */
-/* `100svh` (smallest possible viewport, i.e. with Safari's address/toolbar chrome fully
-   EXPANDED), not `100dvh` — `dvh` is supposed to track the current visible viewport, but on
-   iOS Safari it can equal the *largest* viewport during the toolbar's own show/hide
-   transition, especially near first paint, sizing the whole app taller than what's actually
-   visible. Because the layout is a flex column with the photo (`.fx-preview-col`) as the
-   only flexible row, sizing to the smallest possible viewport guarantees the fixed rows
-   (top bar, tool nav, sheet) always fit with zero scrolling — the only cost is a bit of
-   unused space at the bottom when Safari's chrome auto-collapses, which is the safe
-   trade-off vs. the top/bottom bars clipping off-screen. */
-body.mobile-fx{height:100svh;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,env(safe-area-inset-top))}
+/* App height comes from the JS-owned --app-h (visualViewport.height — the only number that
+   is ALWAYS the true visible height across Safari / Home-Screen standalone / the Capacitor
+   shell; every CSS viewport unit lies in at least one of those modes: dvh can equal the
+   largest viewport mid toolbar-transition, svh/vh disagree in standalone). 100svh is only
+   the pre-JS first-paint fallback. The layout is a flex column whose ONLY flexible row is
+   the photo, so with a correct total height the fixed rows can never be pushed off-screen. */
+body.mobile-fx{height:var(--app-h,100svh);display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
 body.mobile-fx header{display:none}
 body.mobile-fx .tabs{flex:0 0 auto}
 body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
@@ -252,12 +262,18 @@ body.mobile-fx .fx-ctrl{break-inside:auto}
 body.mobile-fx .fx-canvas-wrap{width:auto;max-width:100%}
 body.mobile-fx .fx-canvas-wrap{flex:1 1 auto;height:auto;min-height:120px}
 body.mobile-fx #fx-canvas{object-fit:contain}
-/* bottom sheet = the tool panel; height animates 0 ↔ 42dvh, flex gives the freed space
+/* bottom sheet = the tool panel; height animates 0 ↔ 34vh, flex gives the freed space
    back to the photo. Drag-handle row (#fx-sheet-handle) closes it. */
 body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 10px;background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.45);transition:height .28s ease}
-/* NOTE: plain 42vh, NOT min(42vh,430px) — Chrome refuses to interpolate a height transition
-   from 0 to a min()/calc() value (it just sticks at 0). max-height applies the cap instead. */
-body.mobile-fx.sheet-open .fx-panel{height:34vh;max-height:360px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 10px 30px}
+/* NOTE: plain 34vh for the ANIMATED value — Chrome refuses to interpolate a height
+   transition to a min()/calc() endpoint (sticks at 0), so the real size cap lives in
+   max-height (never transitioned → min()/calc() on the JS-owned --app-h is safe there).
+   vh may over-report on iOS Safari but a worst-case 34vh still fits the flex budget (the
+   photo row shrinks). ⚠️ Testing gotcha: in an offscreen/headless preview tab Chrome
+   throttles animation frames, so this transition can APPEAR permanently stuck at its
+   padding floor until something forces a paint (e.g. a screenshot) — disable transitions
+   or force a frame before measuring sheet geometry in automated checks. */
+body.mobile-fx.sheet-open .fx-panel{height:34vh;max-height:min(360px,calc(var(--app-h,100svh)*.45));overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 10px max(30px,calc(var(--sab) + 10px))}
 #fx-sheet-handle{display:none}
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
@@ -315,7 +331,9 @@ body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:10px 4px;justify-content
 .fx-act-lb{display:none}
 .fx-act-pri .fx-act-ic{color:var(--acc)}
 /* horizontal section strip */
-body.mobile-fx #fx-secnav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px 4px;border-top:1px solid var(--bdr);background:var(--sur)}
+/* bottom padding = home-indicator safe area: without it the tool row's lower half sits
+   under the iPhone home indicator (34px) — the "bottom bar not visible" report. */
+body.mobile-fx #fx-secnav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px 4px max(10px,var(--sab));border-top:1px solid var(--bdr);background:var(--sur)}
 .fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;color:var(--mut);cursor:pointer;padding:6px 12px;font-family:var(--mono);border-radius:8px;min-width:60px;min-height:44px}
 .fx-sec-btn .fx-sec-ic{font-size:24px;line-height:1}
 .fx-sec-btn .fx-sec-lb{font-size:9px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
@@ -401,7 +419,7 @@ body.light #status-cap{background:#000}
 .cl-swatches{display:flex;gap:4px;flex-wrap:wrap}
 .cl-swatches button{width:20px;height:20px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;padding:0}
 /* ── MOBILE COLLAGE: pinned stage on top + section strip (mirrors the FX editor) ── */
-body.mobile-cl{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top)}
+body.mobile-cl{height:var(--app-h,100svh);display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
 body.mobile-cl header{display:none}
 body.mobile-cl .tabs{flex:0 0 auto}
 body.mobile-cl main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
@@ -537,6 +555,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" onclick="loadTestPhoto()"><span class="bdot"></span>Load Test Photo</button>
+          <button class="btn bgh" onclick="gpImportClick()" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)"><span class="bdot"></span>Google Photos…</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()"><span class="bdot"></span>Save to library</button>
@@ -792,6 +811,15 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <button class="btn bgh" onclick="saveSession()" title="Save all slider settings to localStorage"><span class="bdot"></span>Save session</button>
           <button class="btn bgh" onclick="loadSession(true)" title="Restore saved slider settings"><span class="bdot"></span>Load session</button>
         </div>
+        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
+          <div class="fx-label" style="width:auto;margin-bottom:6px">Google Photos</div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn bgh" id="btn-gp-connect" onclick="gpConnectToggle()" title="Sign in to Google Photos (lasts ~1 hour)"><span class="bdot"></span>Connect</button>
+            <button class="btn bgh" id="btn-gp-save" onclick="gpToggleSave()" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><span class="bdot"></span>Upload exports: Off</button>
+            <button class="btn bgh" onclick="gpAskClientId(true)" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px"><span class="bdot"></span>ID…</button>
+          </div>
+          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.</div>
+        </div>
       </div>
       <!-- INFO / METADATA -->
       <div class="fx-ctrl" data-fxsec="info">
@@ -809,7 +837,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="ni-build" id="ni-build" onclick="document.body.classList.add('diag-on');applyFxLayout();" style="cursor:pointer" title="Tap to reveal diagnostics"></div>
           <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos">＋</button>
           <div class="ni-add-lb">Add Photos</div>
-          <div class="ni-hint">Drop an image to start</div>
+          <div class="ni-hint">Drop an image to start · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas" onclick="wbEyedropperClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas></div>
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
@@ -980,10 +1008,13 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     <h2 id="g-faq">FAQ</h2>
     <div class="gcard">
       <div class="faq-q">Are my photos uploaded anywhere?</div>
-      <div class="faq-a">No. All decoding, grading and exporting runs in your browser with WebGL. The app works fully offline.</div>
+      <div class="faq-a">No. All decoding, grading and exporting runs in your browser with WebGL. The app works fully offline. The one exception is the optional <b>Google Photos</b> connection below — and only when you use it.</div>
 
       <div class="faq-q">Why does the header say OFFLINE?</div>
       <div class="faq-a">It's confirming local-only processing — that's the intended state, not a connection error.</div>
+
+      <div class="faq-q">Can I use Google Photos?</div>
+      <div class="faq-a">Yes — optional and off by default. <b>Google Photos…</b> (Image Input) opens Google's own picker so you can filter and select photos from your library, and <b>Upload exports</b> (Export panel) mirrors every export into a “Chromasmith” album. It needs a one-time free setup at <code>console.cloud.google.com</code>: <b>1)</b> create a project, <b>2)</b> enable the <b>Google Photos Picker API</b> and <b>Photos Library API</b> (APIs &amp; Services → Library), <b>3)</b> configure the OAuth consent screen (External → stay in <b>Testing</b>, add your own Gmail as a test user), <b>4)</b> create <b>Credentials → OAuth client ID → Web application</b> and add this app's address to BOTH lists — <i>Authorized JavaScript origins</i> gets the origin (e.g. <code>https://yourname.github.io</code>) and <i>Authorized redirect URIs</i> gets the full page URL (e.g. <code>https://yourname.github.io/Chroma-App/chromasmith-22.html</code>), <b>5)</b> paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (just hit <b>Connect</b> again); allow pop-ups for this site.</div>
 
       <div class="faq-q">My RW2 / RAW colours don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
@@ -2756,10 +2787,28 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-05a';
+const BUILD='2026-07-09a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
+// ── Google Photos OAuth callback (runs in the SIGN-IN POPUP, not the app) ─────
+// This page is cross-origin isolated (coi-serviceworker sets COOP same-origin for
+// SharedArrayBuffer), which DISOWNS every popup — window.opener/postMessage can never reach
+// back, so Google's GIS popup library is unusable here. Instead gpAuth() opens a manual
+// implicit-flow popup that redirects back to THIS page with the token in the hash
+// (state=gpcb); this handler stores it in localStorage (which crosses COOP boundaries fine —
+// the opener listens for the storage event), then halts app boot in the popup.
+const _GP_CB=(()=>{try{
+  if(!/[#&]state=gpcb(&|$)/.test(location.hash))return false;
+  const p=new URLSearchParams(location.hash.slice(1));
+  localStorage.setItem('gpTokRelay',JSON.stringify({at:p.get('access_token')||'',err:p.get('error')||'',
+    exp:Date.now()+(parseInt(p.get('expires_in')||'3600',10)||3600)*1000,t:Date.now()}));
+  history.replaceState(null,'',location.pathname+location.search);
+  document.documentElement.innerHTML='<body style="background:#141414;color:#ddd;font:14px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">Google Photos connected &#10003; — you can close this window.</body>';
+  setTimeout(()=>{try{window.close()}catch(e){}},150);
+  return true;
+}catch(e){return false}})();
+if(_GP_CB)throw new Error('gp-oauth-callback — not an error: halting app boot inside the sign-in popup');
 // ═══════════════════════════
 // COLOUR MATH
 // ═══════════════════════════
@@ -4734,16 +4783,56 @@ document.addEventListener('dblclick',e=>{
   const wrap=document.getElementById('fx-wrap');
   if(wrap)wrap.addEventListener('contextmenu',e=>e.preventDefault());
 })();
-// Safety net: iOS Safari's address-bar collapse/expand can leave the page scrolled by a few
-// dozen px even though body.mobile-fx is `overflow:hidden` at a fixed (100svh) height — the
-// visible window ends up showing the MIDDLE of the fixed layout (top bar looks pushed down,
-// bottom nav clipped off) instead of the top. Force-correct on load/resize/orientation.
+// ── App-height owner + layout safety nets ──────────────────────────────────────
+// --app-h is THE height the mobile layout is sized to (body.mobile-fx / body.mobile-cl use
+// var(--app-h,100svh)). It comes from visualViewport.height — the only measurement that is
+// always the true visible height across Safari, Home-Screen standalone and the Capacitor
+// shell; every CSS viewport unit (vh/dvh/svh) mis-reports in at least one of those modes.
+// Also: snap any stray page scroll back to (0,0) — with overflow:hidden at a fixed height a
+// residual scroll offset from iOS chrome transitions shows the MIDDLE of the layout (top bar
+// pushed down, bottom nav clipped).
+function appHSync(){
+  const h=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||0;
+  if(h)document.documentElement.style.setProperty('--app-h',Math.round(h)+'px');
+  if(document.body.classList.contains('mobile-fx')&&(window.scrollX||window.scrollY))window.scrollTo(0,0);
+  if(typeof diagLayout==='function')diagLayout();
+}
+// Log one measurement line (visible in More→Log) so on-device layout bugs are diagnosed from
+// data instead of screenshots: every number that decides whether the layout fits, + verdict.
+let _diagLast='';
+function diagLayout(){
+  try{
+    if(!document.body.classList.contains('mobile-fx'))return;
+    const vv=window.visualViewport?Math.round(window.visualViewport.height):0,ih=window.innerHeight;
+    const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||0;
+    const cs=getComputedStyle(document.body);
+    const sat=Math.round(parseFloat(cs.paddingTop))||0; // resolved max(10px,var(--sat))
+    const sn=document.getElementById('fx-secnav');
+    const snB=sn?Math.round(sn.getBoundingClientRect().bottom):0;
+    const sh=document.documentElement.scrollHeight;
+    const vis=appH||vv||ih;
+    const over=Math.max(sh-vis,snB-vis);
+    const msg=`Layout ${BUILD}: vv=${vv} inner=${ih} app-h=${appH} padTop=${sat} scrollH=${sh} navBottom=${snB} → ${over>2?('OVERFLOW '+over+'px'):'FITS'}`;
+    if(msg!==_diagLast){_diagLast=msg;log(msg,over>2?'err':'info');}
+  }catch(e){}
+}
 (function(){
-  const snap=()=>{if(document.body.classList.contains('mobile-fx')&&(window.scrollX||window.scrollY))window.scrollTo(0,0);};
-  window.addEventListener('load',snap);
-  window.addEventListener('resize',snap);
-  window.addEventListener('orientationchange',()=>setTimeout(snap,50));
-  if(window.visualViewport)window.visualViewport.addEventListener('resize',snap);
+  window.addEventListener('load',appHSync);
+  window.addEventListener('resize',appHSync);
+  window.addEventListener('pageshow',appHSync);
+  window.addEventListener('focus',appHSync);
+  document.addEventListener('visibilitychange',appHSync);
+  window.addEventListener('orientationchange',()=>setTimeout(appHSync,50));
+  if(window.visualViewport)window.visualViewport.addEventListener('resize',appHSync);
+  // Watchdog: events are the fast path but none of them is guaranteed on every engine/mode
+  // (verified: a CDP viewport change can resize the window without dispatching resize).
+  // A 1s drift check is imperceptible in cost and makes a stale --app-h self-healing.
+  setInterval(()=>{
+    const h=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||0;
+    const cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||0;
+    if(h&&Math.abs(h-cur)>1)appHSync();
+  },1000);
+  appHSync();
 })();
 // Swipe left/right on the (unzoomed) preview to switch photos in a multi-photo batch.
 (function(){
@@ -5425,7 +5514,9 @@ function fxPreviewMaxH(){
   if(window.innerWidth<=700){
     const wrap=document.getElementById('fx-wrap');
     const h=wrap?wrap.clientHeight:0;
-    return Math.max(220,h||window.innerHeight*0.42);
+    // fallback derives from --app-h (the JS-owned true visible height) so CSS and JS agree
+    const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||window.innerHeight;
+    return Math.max(220,h||appH*0.42);
   }
   return Math.max(360,window.innerHeight-150);
 }
@@ -5844,6 +5935,12 @@ async function exportFX(){
     const ef=document.getElementById('eo-fill'),et=document.getElementById('eo-txt');
     if(ef)ef.style.width=Math.round(done/N*100)+'%';if(et)et.textContent=label;};
   let failed=0;
+  // Google Photos upload is on → grab/refresh the token NOW, under this click's activation
+  // (the sign-in popup would be blocked after a long multi-photo render).
+  if(gpSaveEnabled()&&!gpTok()){
+    try{await gpAuth()}
+    catch(e){log('Google Photos sign-in failed — this export saves to device only ('+(e&&e.message||e)+')','warn')}
+  }
   try{
     const P=getFXParams();
     const ver=`v${fxVersion.toFixed(1)}`;
@@ -5911,6 +6008,18 @@ async function exportFX(){
     }
     // ── Phase 2: save all at once (one share sheet → Save to Photos) ──
     if(results.length){setProg(N,`Saving ${results.length} file(s)…`);await saveFiles(results);}
+    // ── Phase 3 (optional): mirror the exports to Google Photos. Failures here must never
+    // read as an export failure — the files above are already saved locally.
+    if(results.length&&gpSaveEnabled()&&gpTok()){
+      try{
+        setProg(N,`Uploading ${results.length} to Google Photos…`);
+        const nUp=await gpUploadItems(results,lb=>setProg(N,lb));
+        log(`Uploaded ${nUp}/${results.length} to Google Photos (album "Chromasmith")`,'ok');
+      }catch(e){
+        log('Google Photos upload failed (files are still saved locally): '+(e&&e.message||e),'err');
+        toast('Google Photos upload failed — see log');
+      }
+    }
     // Restore the preview's working image after per-image GL churn. Guarded on its own: if this
     // throws (e.g. the currently-previewed photo is the one that just failed above), the files
     // already saved above must NOT be reported as an export error — only the refresh failed.
@@ -6246,6 +6355,207 @@ function showSaveButton(files,items){
 }
 function dl(content,fname,mime='application/octet-stream'){saveFile(content,fname,mime)}
 function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.baseName}_${item.ver}`;if(t==='lut'){dl(writeCube(item.lut,n),`${n}.cube`);log(`Downloaded ${n}.cube`,'ok')}else{dl(item.xmp,`${n}.xmp`,'text/xml');log(`Downloaded ${n}.xmp`,'ok')}}
+
+// ═══════════════════════════
+// GOOGLE PHOTOS (optional, online-only — inert unless the user connects)
+// ═══════════════════════════
+// Import picks photos via Google's own Picker API UI (in-app library browsing was removed
+// from Google's API in March 2025 — filtering/selection happens on photos.google.com);
+// export uploads app-created images with the Library API "appendonly" scope into a
+// "Chromasmith" album. Everything is client-side REST with a user-supplied OAuth client ID
+// (localStorage "gpClientId") — no server, no bundled key, nothing loads until used.
+// Sign-in is a MANUAL implicit-flow popup (see the state=gpcb handler next to BUILD):
+// COOP same-origin (needed for RAW/SharedArrayBuffer) disowns popups, so the token comes
+// back via a localStorage relay + storage event instead of window.opener/postMessage.
+const GP_SCOPES='https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/photoslibrary.appendonly';
+function gpClientId(){try{return (localStorage.getItem('gpClientId')||'').trim()}catch(e){return ''}}
+function gpAskClientId(force){
+  let cid=gpClientId();
+  if(cid&&!force)return cid;
+  cid=(window.prompt('Paste your Google OAuth client ID (ends in .apps.googleusercontent.com).\n\nOne-time free setup — see Guide → "Can I use Google Photos?" for the console steps.',cid||'')||'').trim();
+  if(cid){try{localStorage.setItem('gpClientId',cid)}catch(e){}}
+  gpUpdateUI();
+  return cid;
+}
+function gpTok(){try{const t=JSON.parse(sessionStorage.getItem('gpTok')||'null');if(t&&t.at&&t.exp>Date.now()+60e3)return t.at}catch(e){}return null}
+function gpConnected(){return !!gpTok()}
+// Interactive sign-in — MUST run under a user gesture (opens a popup). Resolves with the token.
+function gpAuth(){
+  const cached=gpTok();if(cached)return Promise.resolve(cached);
+  const cid=gpAskClientId();
+  if(!cid)return Promise.reject(new Error('No Google client ID set'));
+  // redirect_uri = this exact page URL — must be listed under BOTH "Authorized JavaScript
+  // origins" (origin only) and "Authorized redirect URIs" (full URL) on the OAuth client.
+  const redirect=location.origin+location.pathname;
+  const url='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
+    client_id:cid,redirect_uri:redirect,response_type:'token',scope:GP_SCOPES,
+    state:'gpcb',include_granted_scopes:'true'}).toString();
+  const t0=Date.now();
+  try{localStorage.removeItem('gpTokRelay')}catch(e){}
+  const win=window.open(url,'gpauth','width=500,height=680');
+  if(!win){toast('Allow pop-ups for this site to connect Google Photos');return Promise.reject(new Error('Popup blocked'))}
+  return new Promise((res,rej)=>{
+    let done=false,iv=0;
+    const finish=(err,at)=>{if(done)return;done=true;clearInterval(iv);window.removeEventListener('storage',onSt);
+      gpUpdateUI();if(err)rej(err instanceof Error?err:new Error(err));else res(at)};
+    // ⚠️ win.closed is USELESS here — COOP disowns the popup so it reads true immediately.
+    // Rely on the storage relay + a hard timeout only.
+    const check=()=>{
+      let r=null;try{r=JSON.parse(localStorage.getItem('gpTokRelay')||'null')}catch(e){}
+      if(r&&r.t>=t0){
+        try{localStorage.removeItem('gpTokRelay')}catch(e){}
+        if(r.at){try{sessionStorage.setItem('gpTok',JSON.stringify({at:r.at,exp:r.exp}))}catch(e){}finish(null,r.at)}
+        else finish('Google sign-in failed: '+(r.err||'no token returned'));
+        return;
+      }
+      if(Date.now()-t0>180e3)finish('Sign-in timed out — close the Google window and try again');
+    };
+    const onSt=e=>{if(e.key==='gpTokRelay')check()};
+    window.addEventListener('storage',onSt);
+    iv=setInterval(check,400);
+  });
+}
+function gpDisconnect(){
+  const at=gpTok();
+  try{sessionStorage.removeItem('gpTok')}catch(e){}
+  if(at)fetch('https://oauth2.googleapis.com/revoke?token='+encodeURIComponent(at),{method:'POST'}).catch(()=>{});
+  gpUpdateUI();toast('Google Photos disconnected',true);
+}
+function gpConnectToggle(){
+  if(gpConnected()){gpDisconnect();return}
+  gpAuth().then(()=>toast('Google Photos connected ✓',true))
+    .catch(e=>{log('Google Photos connect: '+(e&&e.message||e),'warn')});
+}
+async function gpFetch(url,opts={},retry=true){
+  let at=gpTok();if(!at)at=await gpAuth();
+  const r=await fetch(url,{...opts,headers:{...(opts.headers||{}),Authorization:'Bearer '+at}});
+  if(r.status===401&&retry){try{sessionStorage.removeItem('gpTok')}catch(e){}gpUpdateUI();return gpFetch(url,opts,false)}
+  if(!r.ok){let m='';try{m=((await r.json()).error||{}).message||''}catch(e){}throw new Error('Google Photos HTTP '+r.status+(m?': '+m:''))}
+  return r;
+}
+// ── Import: Picker API session flow ───────────────────────────────────────────
+let _gpImportBusy=false;
+function gpImportClick(){ // entry point (button onclick) — grab the popup slot SYNCHRONOUSLY
+  if(_gpImportBusy){toast('Google Photos import already running…');return}
+  if(!gpClientId()&&!gpAskClientId())return;
+  // Already signed in → claim this click's popup allowance with a same-origin about:blank
+  // (COOP keeps same-origin popups attached, so we can still steer it to the picker after
+  // the async session create). Not signed in → gpAuth() needs the popup slot instead; the
+  // picker tab then gets a one-tap fallback if the browser blocks it.
+  const preWin=gpTok()?window.open('about:blank','_blank'):null;
+  gpImportPhotos(preWin);
+}
+function gpTapOpen(uri){ // popup blocked → a real <a> the user taps (fresh activation)
+  let h=document.getElementById('gp-tap-open');
+  if(!h){h=document.createElement('a');h.id='gp-tap-open';h.target='_blank';h.rel='noopener';
+    h.style.cssText='position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9999;background:var(--acc);color:#000;font:600 13px system-ui;padding:11px 18px;border-radius:22px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.45)';
+    document.body.appendChild(h);}
+  h.href=uri;h.textContent='Tap to open the Google Photos picker';
+}
+function gpTapClear(){const h=document.getElementById('gp-tap-open');if(h)h.remove()}
+async function gpImportPhotos(preWin){
+  _gpImportBusy=true;
+  try{
+    await gpAuth();
+    const sess=await(await gpFetch('https://photospicker.googleapis.com/v1/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+    let opened=false;
+    if(preWin&&!preWin.closed){try{preWin.location.href=sess.pickerUri;opened=true}catch(e){}}
+    if(!opened){const w=window.open(sess.pickerUri,'_blank');if(w)opened=true}
+    if(!opened)gpTapOpen(sess.pickerUri);
+    toast('Pick photos in Google Photos, then hit Done',true);
+    log('Waiting for your Google Photos selection…','info');
+    const pc=sess.pollingConfig||{};
+    const ivMs=Math.max(1,parseFloat(pc.pollInterval||'3')||3)*1000;
+    const deadline=Date.now()+Math.min(parseFloat(pc.timeoutIn||'900')||900,900)*1000;
+    let ready=false;
+    while(Date.now()<deadline){
+      await new Promise(r=>setTimeout(r,ivMs));
+      const s=await(await gpFetch('https://photospicker.googleapis.com/v1/sessions/'+encodeURIComponent(sess.id))).json();
+      if(s.mediaItemsSet){ready=true;break}
+    }
+    gpTapClear();
+    if(!ready){toast('Google Photos pick timed out');return}
+    let items=[],pageToken='';
+    do{
+      const u='https://photospicker.googleapis.com/v1/mediaItems?sessionId='+encodeURIComponent(sess.id)+'&pageSize=100'+(pageToken?'&pageToken='+encodeURIComponent(pageToken):'');
+      const j=await(await gpFetch(u)).json();
+      items=items.concat(j.mediaItems||[]);pageToken=j.nextPageToken||'';
+    }while(pageToken);
+    const photos=items.filter(m=>m.type!=='VIDEO'&&m.mediaFile&&m.mediaFile.baseUrl);
+    const skippedVid=items.length-photos.length;
+    if(skippedVid)log('Skipped '+skippedVid+' video(s) — Chromasmith is photos-only','warn');
+    if(!photos.length){toast('No photos picked');return}
+    const files=[];
+    for(let i=0;i<photos.length;i++){
+      toast('Downloading '+(i+1)+'/'+photos.length+' from Google Photos…',true);
+      const mf=photos[i].mediaFile;
+      try{
+        // "=d" = original bytes; the baseUrl needs the Bearer header (a plain img src 403s)
+        const blob=await(await gpFetch(mf.baseUrl+'=d')).blob();
+        files.push(new File([blob],mf.filename||('gphotos_'+(i+1)+'.jpg'),{type:mf.mimeType||blob.type||'image/jpeg'}));
+      }catch(e){log('Failed to download '+(mf.filename||'a photo')+': '+(e&&e.message||e),'err')}
+    }
+    gpFetch('https://photospicker.googleapis.com/v1/sessions/'+encodeURIComponent(sess.id),{method:'DELETE'}).catch(()=>{});
+    if(!files.length){toast('Google Photos import failed — see log');return}
+    await loadFXImages(files);
+    toast('Imported '+files.length+' photo'+(files.length>1?'s':'')+' from Google Photos ✓',true);
+  }catch(e){
+    log('Google Photos import: '+(e&&e.message||e),'err');
+    toast('Google Photos import failed — see log');
+  }finally{_gpImportBusy=false;gpTapClear();
+    if(preWin&&!preWin.closed){try{preWin.close()}catch(e){}}}
+}
+// ── Export: upload into the app-created "Chromasmith" album ───────────────────
+function gpSaveEnabled(){try{return localStorage.getItem('gpSaveExports')==='1'}catch(e){return false}}
+function gpToggleSave(){
+  try{localStorage.setItem('gpSaveExports',gpSaveEnabled()?'0':'1')}catch(e){}
+  gpUpdateUI();
+  if(gpSaveEnabled()&&!gpConnected())gpAuth().catch(e=>log('Google Photos: '+(e&&e.message||e),'warn'));
+}
+async function gpAlbumId(){
+  let id=null;try{id=localStorage.getItem('gpAlbumId')}catch(e){}
+  if(id)return id;
+  const j=await(await gpFetch('https://photoslibrary.googleapis.com/v1/albums',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({album:{title:'Chromasmith'}})})).json();
+  try{localStorage.setItem('gpAlbumId',j.id)}catch(e){}
+  return j.id;
+}
+async function gpUploadItems(items,onProg){ // items: [{content:Uint8Array,fname,mime}] → returns #created
+  let albumId=await gpAlbumId();
+  const toks=[];
+  for(let i=0;i<items.length;i++){
+    const it=items[i];
+    if(onProg)onProg('Uploading to Google Photos '+(i+1)+'/'+items.length+'…');
+    const r=await gpFetch('https://photoslibrary.googleapis.com/v1/uploads',{method:'POST',
+      headers:{'Content-Type':'application/octet-stream','X-Goog-Upload-Content-Type':it.mime,'X-Goog-Upload-Protocol':'raw'},
+      body:it.content});
+    toks.push({tok:await r.text(),fname:it.fname});
+  }
+  let created=0;
+  for(let i=0;i<toks.length;i+=50){ // batchCreate caps at 50 items per call
+    const newItems=toks.slice(i,i+50).map(t=>({simpleMediaItem:{uploadToken:t.tok,fileName:t.fname}}));
+    const create=aid=>gpFetch('https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({albumId:aid,newMediaItems:newItems})});
+    let r;
+    try{r=await create(albumId)}
+    catch(e){ // cached album deleted on photos.google.com → recreate once and retry
+      if(!/album|invalid|not.?found/i.test(e&&e.message||''))throw e;
+      try{localStorage.removeItem('gpAlbumId')}catch(_){}
+      albumId=await gpAlbumId();r=await create(albumId);
+    }
+    const j=await r.json();
+    (j.newMediaItemResults||[]).forEach(x=>{
+      const bad=x.status&&x.status.code&&x.status.code!==0;
+      if(bad)log('Google Photos rejected an item: '+(x.status.message||'unknown error'),'warn');else created++;
+    });
+  }
+  return created;
+}
+function gpUpdateUI(){
+  const c=document.getElementById('btn-gp-connect');
+  if(c){c.className='btn '+(gpConnected()?'bsec':'bgh');c.innerHTML='<span class="bdot"></span>'+(gpConnected()?'Connected ✓':'Connect');}
+  const s=document.getElementById('btn-gp-save');
+  if(s){s.className='btn '+(gpSaveEnabled()?'bsec':'bgh');s.innerHTML='<span class="bdot"></span>Upload exports: '+(gpSaveEnabled()?'On':'Off');}
+}
+gpUpdateUI();
 
 // ═══════════════════════════
 // FILE HANDLING
