@@ -612,6 +612,11 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
           <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
           <div class="fx-row"><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
+          <div class="fx-row" style="margin-top:8px"><div class="fx-label" style="color:var(--acc);font-size:11px;letter-spacing:.04em">Noise Reduction</div></div>
+          <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
+          <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
+          <div class="fx-row"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
+          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Tames RAW sensor noise (esp. high ISO) before the film look. Independent of the toggle above.</div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance"><span class="bdot"></span>WB Eyedropper</button>
             <button class="btn bgh" onclick="autoEnhance()" title="One-click levels and white balance from the image histogram"><span class="bdot"></span>Auto-enhance</button>
@@ -2801,7 +2806,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-09d';
+const BUILD='2026-07-09e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3485,6 +3490,40 @@ void main(){
   o=vec4(s/max(t,vec3(1e-6)),1.);
 }`);
 
+    // NOISE REDUCTION — edge-aware (bilateral) luminance denoise + wider chroma denoise,
+    // run on the SOURCE before sharpen/LUT (so it tames sensor noise, not film grain). Only
+    // runs when Luminance or Color amount > 0 (otherwise the pass is skipped entirely, so the
+    // default path is byte-identical). Luma/chroma split: keep a bilateral-denoised luminance
+    // (edges preserved) and a spatially-blurred chroma (colour noise is coarse and cheap to kill).
+    this.progs.nr=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail;
+float yl(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
+void main(){
+  vec3 c0=texture(img,uv).rgb; float l0=yl(c0);
+  // range sigma on luma shrinks as Detail rises, so strong edges stop being averaged across
+  float sigR=mix(0.22,0.035,clamp(nrDetail,0.,1.));
+  vec3 lsum=vec3(0.); float lw=0.;   // bilateral (edge-preserving) accumulation
+  vec3 csum=vec3(0.); float cw=0.;   // spatial-only accumulation (for chroma)
+  for(int y=-3;y<=3;y++){
+    for(int x=-3;x<=3;x++){
+      vec2 off=vec2(float(x),float(y));
+      vec3 c=texture(img,uv+off*texSize).rgb;
+      float ws=exp(-dot(off,off)/(2.*1.6*1.6));
+      csum+=c*ws; cw+=ws;
+      float dl=yl(c)-l0; float wr=exp(-dl*dl/(2.*sigR*sigR));
+      lsum+=c*ws*wr; lw+=ws*wr;
+    }
+  }
+  vec3 bil=lsum/max(lw,1e-4);   // edge-preserving denoise: take its luminance
+  vec3 spa=csum/max(cw,1e-4);   // full blur: take its chroma
+  float y=mix(l0,yl(bil),clamp(nrLuma,0.,1.));
+  vec3 chroma=mix(c0-l0, spa-yl(spa), clamp(nrColor,0.,1.));
+  o=vec4(clamp(vec3(y)+chroma,0.,1.),1.);
+}`);
+
     // COMPOSITE — LINEAR-light screen of RGB glows, then back to sRGB, then grain.
     //   hGlow.rgb = per-channel halation blurs (σ_R, σ_G, σ_B independently).
     //   bGlow.rgb = source-colored bloom glow (carries hue of source light).
@@ -3662,6 +3701,7 @@ void main(){
     this.fbs={};this.txs={};
     const w2=Math.max(1,Math.ceil(w/gs)),h2=Math.max(1,Math.ceil(h/gs));
     this._allocTex('lut',w,h);                                            // full-res graded base
+    this._allocTex('nr',w,h);                                             // denoised source (only used when NR on)
     this._allocTex('hemitF',w,h);                                         // FULL-res halation emit (for a sharp high-pass)
     ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2)); // reduced-res glow
     this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.gs=gs;
@@ -3826,6 +3866,15 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;});
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
+    // NOISE REDUCTION: denoise the source into fbs.nr first, then the lut pass samples that
+    // instead of imgTx. Runs at render resolution (so on export tiles it is full-res/tile-res
+    // and correct; the preview is approximate, same as sharpen/grain — the 1:1 loupe is true).
+    const nrP=P.nr, nrOn=!!(nrP&&(nrP.luma>0||nrP.color>0));
+    if(nrOn){
+      this._pass(this.progs.nr,this.fbs.nr,
+        {img:0,nrLuma:nrP.luma,nrColor:nrP.color,nrDetail:nrP.detail!=null?nrP.detail:0.5,
+         texSize:[1/this.imgW,1/this.imgH]},[[0,'img',false]]);
+    }
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
@@ -3837,7 +3886,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,
-      texSize:[1/this.imgW,1/this.imgH]},[[0,'img',false],[1,'',true],[2,'curve',false],[3,'hsl',true]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,nrOn?'nr':'img',false],[1,'',true],[2,'curve',false],[3,'hsl',true]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -4602,7 +4651,7 @@ function autoDetectBW(img){
 function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','vig'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','nr-lum','nr-col','nr-det','vig'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -4610,8 +4659,9 @@ function fxUpdate(){
   clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
 }
 function resetAdjust(){
-  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp']
+  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','nr-lum','nr-col']
     .forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
   fxUpdate();log('Adjustments reset','info');
 }
 function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}
@@ -5474,6 +5524,9 @@ function getFXParams(){return{
     temp:adjVal('sl-adj-temp')/100, tint:adjVal('sl-adj-tint')/100,
     vibrance:adjVal('sl-adj-vib')/100, saturation:adjVal('sl-adj-sat')/100,
     sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500},
+  // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
+  // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
+  nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
   artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
     dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed,dustMode:fxState.dustMode||0},
