@@ -2801,7 +2801,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-09c';
+const BUILD='2026-07-09d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -6388,7 +6388,7 @@ function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.
 const GP_SCOPES='https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/photoslibrary.appendonly';
 // Default OAuth client ID (client IDs are public by design; the consent screen is in Testing
 // mode so only registered test users can complete sign-in). Override any time via the ID… button.
-const GP_DEFAULT_CLIENT_ID='333802374628-ib7h680fkdtvc06qg3dj3usu8eqpg9kd.apps.googleusercontent.com';
+const GP_DEFAULT_CLIENT_ID='1074476279331-nqd78kh57q7s9j5kte4f30hv0b93cl95.apps.googleusercontent.com';
 function gpClientId(){try{return (localStorage.getItem('gpClientId')||'').trim()||GP_DEFAULT_CLIENT_ID}catch(e){return GP_DEFAULT_CLIENT_ID}}
 function gpAskClientId(force){
   let cid=gpClientId();
