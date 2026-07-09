@@ -277,6 +277,18 @@ body.mobile-fx.sheet-open .fx-panel{height:34vh;max-height:min(360px,calc(var(--
 #fx-sheet-handle{display:none}
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
+/* ── dynamic-feel polish (InShot/Darkroom-style) ── */
+/* tool-panel content slides up + fades as you switch tools in the open sheet */
+@keyframes fxSecIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+body.mobile-fx.sheet-open .fx-ctrl.sec-active{animation:fxSecIn .18s ease}
+/* tactile press feedback on the two icon rows */
+.fx-sec-btn,.fx-act{transition:transform .12s ease}
+.fx-sec-btn:active,.fx-act:active{transform:scale(.9)}
+/* horizontal rails settle onto a cell instead of stopping mid-scroll */
+body.mobile-fx #fx-looks{scroll-snap-type:x proximity}
+body.mobile-fx .look-cell{scroll-snap-align:center}
+#fx-filmstrip{scroll-snap-type:x proximity}
+#fx-filmstrip .fs-thumb{scroll-snap-align:center}
 body.mobile-fx.sheet-open #fx-filmstrip{display:none!important} /* give the sheet the strip's room */
 /* ── de-webification: the app must not feel like a webpage ── */
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
@@ -539,7 +551,9 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     <!-- DESKTOP tool rail (one tool at a time) -->
     <div id="fx-toolrail"></div>
     <div class="fx-panel">
-      <div id="fx-sheet-handle" onclick="fxSheetClose()" title="Close"><div class="fx-sheet-bar"></div></div>
+      <!-- tap OR drag-down to close — both handled by the pointer logic (no onclick: a
+           click also fires after a spring-back drag and would wrongly close the sheet) -->
+      <div id="fx-sheet-handle" title="Close"><div class="fx-sheet-bar"></div></div>
       <div class="fx-ctrl" data-fxsec="image">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
@@ -2787,7 +2801,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-09a';
+const BUILD='2026-07-09b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5107,9 +5121,13 @@ function drawHistogram(){
 }
 
 // ══ ZOOM / PAN ════════════════════════════════════════════════════════════════
-function _applyZoom(){
+function _applyZoom(smooth){
   const zw=document.getElementById('fx-zoom-wrap');
   if(!zw)return;
+  // smooth=true (dbl-tap / zoom buttons / reset) animates the transform like a native
+  // editor; live pinch/pan calls omit it so the image stays glued to the fingers.
+  zw.style.transition=smooth?'transform .22s ease':'';
+  if(smooth){clearTimeout(zw._smoothT);zw._smoothT=setTimeout(()=>{zw.style.transition='';},260);}
   if(fxZoom<=1){fxZoom=1;fxPanX=0;fxPanY=0;}
   else{
     // Clamp pan so the image always covers the frame — no black in the corners.
@@ -5124,7 +5142,7 @@ function _applyZoom(){
   zw.style.transform=`scale(${fxZoom}) translate(${fxPanX}px,${fxPanY}px)`;
   _updateZoomReadout();
 }
-function _resetZoom(){fxZoom=1;fxPanX=0;fxPanY=0;_applyZoom();}
+function _resetZoom(smooth){fxZoom=1;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
   pct.textContent=fxLoupe?'1:1':Math.round(fxZoom*100)+'%';
@@ -5140,9 +5158,9 @@ function zoomBy(factor){
     const cw=parseFloat(cv.style.width)||cv.clientWidth,ch=parseFloat(cv.style.height)||cv.clientHeight;
     fxPanX-=0*cw*(fxZoom-prev)/fxZoom;fxPanY-=0*ch*(fxZoom-prev)/fxZoom; // centre anchor → no shift
   }
-  _applyZoom();
+  _applyZoom(true);
 }
-function zoomFit(){if(fxLoupe)toggleLoupe();else _resetZoom();}
+function zoomFit(){if(fxLoupe)toggleLoupe();else _resetZoom(true);}
 // True 1:1 loupe: render a NATIVE-resolution crop through the full pipeline (scOverride =
 // fullWidth/REF) so grain & halation appear at REAL export scale — the CSS zoom only
 // magnifies the ~1800px preview buffer and can't show that.
@@ -5235,7 +5253,7 @@ function initZoomPan(){
   const pup=()=>{pd=null;zw.classList.remove('dragging');};
   zw.addEventListener('pointerup',pup);zw.addEventListener('pointercancel',pup);
   // Double-click to reset
-  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(fxZoom>1){e.stopPropagation();_resetZoom();}else if(fxWork){e.stopPropagation();fxZoom=2.5;_applyZoom();}}); // dbl-tap: Fit ↔ zoomed
+  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(fxZoom>1){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();fxZoom=2.5;_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
   // Pinch
   let _pt={};
   wrap.addEventListener('touchstart',e=>{[...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});},{passive:true});
@@ -6682,20 +6700,95 @@ function fxSection(name,noSheet){
   card.classList.add('sec-active');
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
-  if(mob&&!noSheet)document.body.classList.add('sheet-open');
+  if(mob&&!noSheet){document.body.classList.add('sheet-open');fxLiveFit(360);hapt();}
   if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
   if(name==='curves'&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
 }
 function fxSheetClose(){
   document.body.classList.remove('sheet-open');
   document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.remove('on'));
+  fxLiveFit(360);
+}
+// ── Live-fit: while the bottom sheet animates or is being dragged, rescale the EXISTING
+// preview canvas via cheap CSS width/height each frame (GPU composite scale — no WebGL
+// re-render) so the photo continuously tracks the moving sheet like InShot/Darkroom.
+// The transitionend/drag-end renderPreview() then redraws it crisp at the final size.
+// Targets whichever canvas is actually visible (the borders/canvas-matte overlay
+// #fx-canvas-bd replaces #fx-canvas when active — see applyPreviewBorders).
+let _lfRaf=0,_lfUntil=0;
+function fxLiveFitStop(){_lfUntil=0;if(_lfRaf){cancelAnimationFrame(_lfRaf);_lfRaf=0;}}
+function fxLiveFit(ms){
+  if(!document.body.classList.contains('mobile-fx'))return;
+  _lfUntil=performance.now()+(ms||360);
+  if(_lfRaf)return; // already running — the deadline extension above is enough
+  const wrap=document.getElementById('fx-wrap');
+  const bd=document.getElementById('fx-canvas-bd');
+  const cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
+  if(!wrap||!cv)return;
+  const w0=parseFloat(cv.style.width)||cv.clientWidth,h0=parseFloat(cv.style.height)||cv.clientHeight;
+  if(!w0||!h0)return;
+  const step=()=>{
+    const aw=wrap.clientWidth,ah=wrap.clientHeight;
+    if(aw>0&&ah>0){
+      const s=Math.min(aw/w0,ah/h0,1);
+      cv.style.width=(w0*s)+'px';cv.style.height=(h0*s)+'px';
+    }
+    _lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;
+  };
+  _lfRaf=requestAnimationFrame(step);
 }
 // Re-fit the render when the sheet finishes opening/closing (the photo's flex space changed).
 (function(){
   const p=document.querySelector('.fx-panel');
   if(p)p.addEventListener('transitionend',e=>{
-    if(e.propertyName==='height'&&document.body.classList.contains('mobile-fx')&&!cropMode)renderPreview();
+    if(e.propertyName==='height'&&document.body.classList.contains('mobile-fx')&&!cropMode){fxLiveFitStop();renderPreview();}
   });
+})();
+// ── Sheet drag-to-dismiss: grab the handle and the sheet follows the finger; a downward
+// flick or dragging past ~38% closes it, anything else springs back. The CSS height
+// transition is suspended while the finger is down (inline height wins) and restored for
+// the release animation. A short, still press still counts as the old tap-to-close.
+(function(){
+  const h=document.getElementById('fx-sheet-handle');if(!h)return;
+  h.style.touchAction='none';
+  let p=null,startY=0,startH=0,lastY=0,lastT=0,vel=0,moved=false;
+  h.addEventListener('pointerdown',e=>{
+    if(!document.body.classList.contains('sheet-open'))return;
+    p=document.querySelector('.fx-panel');if(!p)return;
+    startY=lastY=e.clientY;lastT=performance.now();vel=0;moved=false;
+    startH=p.getBoundingClientRect().height;
+    p.style.transition='none';
+    try{h.setPointerCapture(e.pointerId);}catch(_){}
+    e.preventDefault();
+  });
+  h.addEventListener('pointermove',e=>{
+    if(!p)return;
+    const now=performance.now(),dy=e.clientY-lastY;
+    if(now>lastT)vel=0.8*vel+0.2*(dy/(now-lastT)); // px/ms, +ve = downward
+    lastY=e.clientY;lastT=now;
+    if(Math.abs(e.clientY-startY)>6)moved=true;
+    p.style.height=Math.max(0,Math.min(startH,startH-(e.clientY-startY)))+'px';
+    fxLiveFit(90); // photo tracks the finger
+  });
+  const end=()=>{
+    if(!p)return;const pn=p;p=null;
+    const cur=pn.getBoundingClientRect().height;
+    // tap, downward flick, or dragged past ~38%. A flick only counts if the finger was
+    // still moving just before lift-off — pausing >120ms decays the intent to zero.
+    const flick=vel>0.5&&(performance.now()-lastT)<120;
+    const close=!moved||flick||cur<startH*0.62;
+    // Synchronous release (NO rAF — it never fires in a hidden/backgrounded tab, which
+    // would leave the inline height stuck): restore the stylesheet transition, force a
+    // reflow so it registers the dragged height as the starting value, then flip state —
+    // clearing the inline height animates from the finger position to the CSS target.
+    pn.style.transition='';
+    void pn.offsetHeight;
+    if(close)fxSheetClose();
+    pn.style.height='';
+    fxLiveFit(360);
+    if(close)hapt();
+  };
+  h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
 })();
 // Mark a section's rail/strip button when it's "in use":
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
