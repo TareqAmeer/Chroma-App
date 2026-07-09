@@ -612,6 +612,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
           <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
           <div class="fx-row"><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
+          <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a colour-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
           <div class="fx-row" style="margin-top:8px"><div class="fx-label" style="color:var(--acc);font-size:11px;letter-spacing:.04em">Noise Reduction</div></div>
           <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
           <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
@@ -2806,7 +2807,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-09e';
+const BUILD='2026-07-09f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3260,7 +3261,7 @@ uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
 // Basic adjustments (applied AFTER the LUT, BEFORE film FX — so halation/bloom react to
 // the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
-uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity;
+uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
 // Tone curves: 256x1 RGBA table baked on the CPU (master composed with per-channel point curves,
 // monotone cubic). Sampled at texel centers so an identity table is byte-identical passthrough.
@@ -3323,6 +3324,25 @@ vec3 basicAdjust(vec3 c){
   c=mix(vec3(l),c,1.0+adjSat);
   float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),sv=mx>0.0?(mx-mn)/mx:0.0;
   c=mix(vec3(l),c,1.0+adjVib*(1.0-sv));
+  // Skin warmth: independent of Adobe/DCP colour-science matching (proven impractical —
+  // Lightroom's per-shot chromatic-adaptation is proprietary/undocumented). Instead this is
+  // a manual, hue-gated dial so skin can be tuned to taste in ONE control instead of the full
+  // 8-band HSL mixer. Targets the orange/skin hue band (~10-45deg) via a soft gaussian gate
+  // (same shape convention as applyHSL's per-band weighting), unaffected by other hues.
+  if(adjSkin!=0.0&&mx>1e-4){
+    float mx2=max(c.r,max(c.g,c.b)),mn2=min(c.r,min(c.g,c.b)),d2=mx2-mn2;
+    float h=0.0;
+    if(d2>1e-5){
+      if(mx2==c.r)h=mod((c.g-c.b)/d2,6.0);
+      else if(mx2==c.g)h=(c.b-c.r)/d2+2.0;
+      else h=(c.r-c.g)/d2+4.0;
+      h*=60.0;
+    }
+    float skinGate=exp(-pow((h-27.0)/22.0,2.0))*smoothstep(0.0,0.12,sv);
+    vec3 lin2=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
+    lin2.r*=1.0+0.30*adjSkin*skinGate; lin2.b*=1.0-0.30*adjSkin*skinGate;
+    c=vec3(l2sp(lin2.r),l2sp(lin2.g),l2sp(lin2.b));
+  }
   return clamp(c,0.0,1.0);
 }
 void main(){vec4 c=texture(img,uv);
@@ -3885,7 +3905,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
-      adjSharp:A.sharpness||0,adjClarity:A.clarity||0,
+      adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,
       texSize:[1/this.imgW,1/this.imgH]},[[0,nrOn?'nr':'img',false],[1,'',true],[2,'curve',false],[3,'hsl',true]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
@@ -4651,7 +4671,7 @@ function autoDetectBW(img){
 function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','nr-lum','nr-col','nr-det','vig'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','vig'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -4659,7 +4679,7 @@ function fxUpdate(){
   clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
 }
 function resetAdjust(){
-  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','nr-lum','nr-col']
+  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col']
     .forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
   {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
   fxUpdate();log('Adjustments reset','info');
@@ -5523,7 +5543,8 @@ function getFXParams(){return{
     whites:adjVal('sl-adj-wh')/100, blacks:adjVal('sl-adj-bl')/100,
     temp:adjVal('sl-adj-temp')/100, tint:adjVal('sl-adj-tint')/100,
     vibrance:adjVal('sl-adj-vib')/100, saturation:adjVal('sl-adj-sat')/100,
-    sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500},
+    sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500,
+    skin:adjVal('sl-adj-skin')/100},
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
   nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100},
