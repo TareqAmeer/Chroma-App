@@ -1,0 +1,14 @@
+{
+  "name": "chromasmith-desktop",
+  "version": "1.0.0",
+  "description": "Chromasmith — native macOS shell (Tauri) wrapping the single-file web app",
+  "private": true,
+  "scripts": {
+    "build:dist": "../build-desktop.sh",
+    "dev": "npm run build:dist && tauri dev",
+    "build": "npm run build:dist && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

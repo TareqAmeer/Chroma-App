@@ -37,3 +37,8 @@ Fujify Luts and XMP/
 # The ios/ project IS committed (ios/.gitignore covers its build products/Pods/public).
 node_modules/
 www/
+
+# macOS desktop shell (Tauri): desktop/dist/ is staged by build-desktop.sh; Rust build
+# artifacts (target/, can be multiple GB) are never committed, only source + config.
+desktop/dist/
+desktop/src-tauri/target/

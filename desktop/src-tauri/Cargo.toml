@@ -1,0 +1,38 @@
+[package]
+name = "chromasmith"
+version = "1.0.0"
+description = "Chromasmith — offline film-emulation photo editor (native macOS shell)"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Manual asset server: Tauri's declarative app.security.headers config does not reliably
+# attach COOP/COEP to the main document's response in this build (verified — origin is
+# correctly tauri://localhost, but crossOriginIsolated stayed false even after a forced
+# reload). A manually registered protocol handler gives full control over every response's
+# headers, the same level of control the iOS Capacitor shell's WebViewAssetHandler Swift
+# patch already uses successfully for this exact requirement. (Reads dist/ off disk at
+# runtime for now, not compile-time-embedded — see main.rs's DIST_DIR comment.)
+mime_guess = "2"
+# Native RAW (RW2) decode — the same architecture RapidRAW uses: decode in Rust, never in the
+# WebView, sidestepping WKWebView's unreliable SharedArrayBuffer support entirely (the libraw-
+# wasm decoder the browser/iOS builds use needs SharedArrayBuffer, which this native shell
+# could not get WKWebView to expose — verified two independent ways). rawler decodes to raw
+# Bayer sensor data only; this app does its own black-level/WB/demosaic in main.rs, then hands
+# linear 16-bit camera RGB to the EXISTING, already-calibrated JS DCP pipeline unchanged.
+rawler = "0.7"
+base64 = "0.22"
+
+[profile.release]
+strip = true
+# NOTE: opt-level="s" + codegen-units=1 + lto=true were dropped for now — rawler's dependency
+# tree (jxl/image codecs etc.) made whole-program LTO builds take 10+ minutes, too slow while
+# iterating. Reinstate these once the native RAW pipeline is verified working, for a smaller
+# final binary.
