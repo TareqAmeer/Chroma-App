@@ -669,6 +669,8 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAdd('radial')"><span class="bdot"></span>+ Radial</button>
             <button class="btn bgh" onclick="mskAdd('linear')"><span class="bdot"></span>+ Linear</button>
+            <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye"><span class="bdot"></span>+ Brush</button>
+            <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed"><span class="bdot"></span>+ Sky</button>
           </div>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -2807,7 +2809,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-09g';
+const BUILD='2026-07-10a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3275,10 +3277,15 @@ uniform sampler3D hslLut;uniform float useHsl;
 // an optional luminance-range gate and invert. Applied after basicAdjust, before the curves.
 uniform float mskN;
 uniform vec4 mskA[4];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full effect at p0, none past p1)
-uniform vec4 mskB[4];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, unused
+uniform vec4 mskB[4];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
 uniform vec4 mskC[4];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
 uniform vec4 mskD[4];  // lumLo, lumHi (0..1 range gate), unused, unused
 uniform vec2 uvOffL,uvScaleL;
+// Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
+// (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
+// resolution independent of image size, sampled here in the SAME global uv as the analytic
+// masks so it lines up identically in preview/loupe/every export tile.
+uniform sampler2D maskTex;
 uniform vec2 texSize;
 float s2lp(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.055;}
@@ -3368,7 +3375,8 @@ if(mskN>0.5){
     if(float(i)>=mskN)break;
     vec4 A=mskA[i],B=mskB[i];
     float w;
-    if(B.x<0.5){vec2 dd=(gm-A.xy)/max(A.zw,vec2(1e-4));float t=length(dd);
+    if(B.w>0.5){w=texture(maskTex,gm)[i];}      // painted/sky raster mask, packed channel i
+    else if(B.x<0.5){vec2 dd=(gm-A.xy)/max(A.zw,vec2(1e-4));float t=length(dd);
       float f=clamp(B.y,0.02,1.0);w=1.0-smoothstep(max(1.0-2.0*f,0.0),1.0,t);}
     else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
     if(B.z>0.5)w=1.0-w;
@@ -3799,16 +3807,27 @@ void main(){
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  // Painted/sky raster masks: up to 4 packed one-per-channel (slot i -> channel i) into a
+  // single RGBA texture, authored in JS at a fixed resolution (mskTexDims) independent of
+  // image size. FLIP_Y to match imgTx's convention so it samples correctly in the same
+  // global uv (uvOffL/uvScaleL) the analytic radial/linear masks already use.
+  setMaskTex(data,w,h){const gl=this.gl;if(!this.maskTx)this.maskTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.maskTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -3880,11 +3899,13 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const MK=(P.masks&&P.masks.length)?P.masks.slice(0,4):[];
     const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16);
     MK.forEach((m,i)=>{const o=i*4;
-      if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
+      if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
+      else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
       else{mA[o]=m.cx;mA[o+1]=m.cy;mA[o+2]=m.rx;mA[o+3]=m.ry;mB[o]=0;}
       mB[o+1]=m.feather!=null?m.feather:0.5;mB[o+2]=m.invert?1:0;
       mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;});
+    if(MK.some(m=>m.type==='brush'))mskBuildTex();
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // NOISE REDUCTION: denoise the source into fbs.nr first, then the lut pass samples that
     // instead of imgTx. Runs at render resolution (so on export tiles it is full-res/tile-res
@@ -3898,6 +3919,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
+      maskTex:4,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
@@ -3906,7 +3928,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,
-      texSize:[1/this.imgW,1/this.imgH]},[[0,nrOn?'nr':'img',false],[1,'',true],[2,'curve',false],[3,'hsl',true]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,nrOn?'nr':'img',false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -4994,15 +5016,135 @@ function cvSetBg(c){fxState.canvas.bg=c;fxState.canvas.blur=false;cvBuildChips()
 let mskSel=-1;
 function mskAdd(type){
   if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
-  const m=type==='linear'
-    ?{type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0}
-    :{type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};
+  let m;
+  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};
+  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};}
+  else{ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
+    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};
+    mskGenerateSky(m);
+  }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   mskRebuild();fxUpdate();
 }
-function mskDelete(){if(mskSel<0)return;fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();fxUpdate();}
+function mskDelete(){if(mskSel<0)return;
+  if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
+  fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;mskRebuild();fxUpdate();}
 function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.invert;mskRebuild();fxUpdate();}
+
+// ── Painted/sky raster masks: up to 4 packed one-per-channel into a single RGBA texture,
+// authored at a fixed resolution independent of image size (see FXR.setMaskTex, lut-pass
+// shader). Stored as a plain JSON-safe number array (m.px) so it round-trips through the
+// existing generic mask save/undo/session code with no extra plumbing.
+let _mskTexDirty=true;
+function mskTexDims(){
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
+  const MAXD=512,s=Math.min(1,MAXD/Math.max(iw,ih));
+  return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
+}
+function mskEnsureDims(m){
+  const{w,h}=mskTexDims();
+  if(m.mtW===w&&m.mtH===h&&m.px&&m.px.length===w*h)return;
+  const nw=new Array(w*h).fill(0);
+  if(m.px&&m.mtW&&m.mtH){for(let y=0;y<h;y++){const sy=Math.min(m.mtH-1,(y/h*m.mtH)|0);
+    for(let x=0;x<w;x++){const sx=Math.min(m.mtW-1,(x/w*m.mtW)|0);nw[y*w+x]=m.px[sy*m.mtW+sx];}}}
+  m.px=nw;m.mtW=w;m.mtH=h;
+}
+function mskBuildTex(){
+  const{w,h}=mskTexDims();
+  const buf=new Uint8Array(w*h*4);
+  fxState.masks.slice(0,4).forEach((m,i)=>{
+    if(m.type!=='brush')return;
+    mskEnsureDims(m);
+    const px=m.px;
+    for(let j=0;j<w*h;j++)buf[j*4+i]=px[j]||0;
+  });
+  FX.setMaskTex(buf,w,h);
+  _mskTexDirty=false;
+}
+function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(3-2*t);}
+// One-shot sky heuristic (no ML): weights the upper part of the frame, favouring blue-ish
+// and/or bright (overcast) pixels. A reasonable starting point the user then brush-refines —
+// there is no in-app subject/sky segmentation model, by design (kept fully offline/small).
+function mskGenerateSky(m){
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img){m.px=[];m.mtW=0;m.mtH=0;return;}
+  const{w,h}=mskTexDims();
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h).data;
+  const px=new Array(w*h);
+  for(let y=0;y<h;y++){
+    const rowW=1-_smoothstepJS(0.35,0.85,y/h); // strong at top, fades out by 85% down
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4,r=d[i],g=d[i+1],b=d[i+2];
+      const lum=(0.2126*r+0.7152*g+0.0722*b)/255;
+      const blueness=Math.max(0,Math.min(1,((b-r)/255)*2));
+      let score=rowW*(0.5+0.5*blueness)*Math.min(1,lum*1.3);
+      if(rowW>0.5&&lum>0.75)score=Math.max(score,rowW*0.9); // bright overcast sky
+      px[y*w+x]=Math.max(0,Math.min(255,Math.round(score*255)));
+    }
+  }
+  m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;
+}
+// ── Brush painting: pointer-drag stamps a soft circular falloff into the selected brush
+// mask's pixel array. Coordinates are mapped CSS→canvas→normalized image fraction the same
+// way wbEyedropperClick does, then scaled into the mask's own (independent) resolution.
+let mskPaintMode=false,mskPaintErase=false,mskBrushSize=25,mskBrushFlow=60,_mskStroke=null;
+function mskPaintToggle(){
+  mskPaintMode=!mskPaintMode;
+  if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
+  const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
+  if(FX.cv)FX.cv.style.cursor=mskPaintMode?'crosshair':'';
+}
+function mskPaintStop(){mskPaintMode=false;const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';}
+function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;const b=document.getElementById('btn-msk-erase');if(b)b.classList.toggle('on',mskPaintErase);}
+function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Array(m.mtW*m.mtH).fill(0);_mskTexDirty=true;fxUpdate();}
+function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
+  const src=fxWork||fxImg;if(!src||!FX.cv)return null;
+  const rect=FX.cv.getBoundingClientRect();
+  const dpr=FX.cv.width/rect.width;
+  const cx=(e.clientX-rect.left)*dpr,cy=(e.clientY-rect.top)*dpr;
+  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
+  return{nx:Math.min(1,Math.max(0,cx*sw/FX.cv.width/sw)),ny:Math.min(1,Math.max(0,cy*sh/FX.cv.height/sh))};
+}
+function mskPaintAt(m,nx,ny){
+  const w=m.mtW,h=m.mtH,cx=nx*w,cy=ny*h;
+  const rad=Math.max(2,(mskBrushSize/100)*0.25*Math.max(w,h));
+  const flow=Math.max(0.02,mskBrushFlow/100);
+  const x0=Math.max(0,Math.floor(cx-rad)),x1=Math.min(w-1,Math.ceil(cx+rad));
+  const y0=Math.max(0,Math.floor(cy-rad)),y1=Math.min(h-1,Math.ceil(cy+rad));
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const dd=Math.hypot(x-cx,y-cy)/rad;if(dd>1)continue;
+    const soft=1-dd*dd*(3-2*dd),add=flow*soft*255,idx=y*w+x,cur=m.px[idx];
+    m.px[idx]=mskPaintErase?Math.max(0,cur-add):Math.min(255,cur+add);
+  }
+  _mskTexDirty=true;
+}
+(function initMaskPaint(){
+  const cv=document.getElementById('fx-canvas');if(!cv)return;
+  let renderQueued=false;
+  const queueRender=()=>{if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;renderPreview();});};
+  cv.addEventListener('pointerdown',e=>{
+    if(!mskPaintMode)return;
+    const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;
+    e.preventDefault();e.stopPropagation();
+    try{cv.setPointerCapture(e.pointerId)}catch(_){}
+    _mskStroke=m;
+    const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny);
+    queueRender();
+  });
+  cv.addEventListener('pointermove',e=>{
+    if(!mskPaintMode||!_mskStroke)return;
+    e.preventDefault();e.stopPropagation();
+    const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny);
+    queueRender();
+  });
+  const end=e=>{if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();};
+  cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+})();
 function _mskRow(label,k,val,min,max,sc,flip){
   const sv=Math.round(flip?(1-val)*100:val/sc);
   return '<div class="fx-row"><div class="fx-label">'+label+'</div>'
@@ -5019,23 +5161,34 @@ function mskSlide(el){
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
   if(!list||!ctl)return;list.innerHTML='';
+  if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
-    b.textContent=(m.type==='linear'?'Linear ':'Radial ')+(i+1);
+    b.textContent=(m.type==='linear'?'Linear':m.type==='radial'?'Radial':m.origin==='sky'?'Sky':'Brush')+' '+(i+1);
     b.onclick=()=>{mskSel=i;mskRebuild();};list.appendChild(b);
   });
   const m=fxState.masks[mskSel];
-  if(!m){ctl.innerHTML='<div style="font-size:10px;color:var(--mut);font-family:var(--mono)">Add a mask to begin — Radial for faces/subjects, Linear for skies.</div>';return;}
+  if(!m){ctl.innerHTML='<div style="font-size:10px;color:var(--mut);font-family:var(--mono)">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div>';return;}
   let h='';
   if(m.type==='radial'){
     h+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
-      +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false);
-  }else{
+      +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false)
+      +_mskRow('Feather','feather',m.feather,0,100,0.01,false);
+  }else if(m.type==='linear'){
     h+=_mskRow('Start X','x0',m.x0,0,100,0.01,false)+_mskRow('Start Y','y0',m.y0,0,100,0.01,true)
-      +_mskRow('End X','x1',m.x1,0,100,0.01,false)+_mskRow('End Y','y1',m.y1,0,100,0.01,true);
+      +_mskRow('End X','x1',m.x1,0,100,0.01,false)+_mskRow('End Y','y1',m.y1,0,100,0.01,true)
+      +_mskRow('Feather','feather',m.feather,0,100,0.01,false);
+  }else{ // brush / sky raster mask
+    h+='<div class="btn-row">'
+      +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview"><span class="bdot"></span>'+(mskPaintMode?'Painting ✓':'🖌 Paint')+'</button>'
+      +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add"><span class="bdot"></span>Erase</button></div>'
+      +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
+      +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
+      +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()"><span class="bdot"></span>Clear paint</button>'
+      +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()"><span class="bdot"></span>Re-detect sky</button>':'')+'</div>'
+      +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>';
   }
-  h+=_mskRow('Feather','feather',m.feather,0,100,0.01,false)
-    +_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
+  h+=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
     +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
@@ -5049,7 +5202,7 @@ function mskRebuild(){
 
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
 const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
 const _FX_SNAP_TOGGLES=['adjust','curves','hsl','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
@@ -5301,7 +5454,7 @@ function initZoomPan(){
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
-    if(_wbEyedropperActive||(!fxLoupe&&fxZoom<=1))return;
+    if(_wbEyedropperActive||mskPaintMode||(!fxLoupe&&fxZoom<=1))return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
   });
@@ -5424,7 +5577,7 @@ function autoEnhance(){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-nr-lum','sl-nr-col','sl-nr-det',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
