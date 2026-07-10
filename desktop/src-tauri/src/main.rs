@@ -80,8 +80,9 @@ fn main() {
             read_file_bytes,
             library::list_dir,
             library::get_thumbnail,
-            library::get_rating,
-            library::set_rating
+            library::get_meta,
+            library::get_sidecar,
+            library::set_sidecar
         ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
         // on every single response, including the very first navigation — see the Cargo.toml

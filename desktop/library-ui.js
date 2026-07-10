@@ -12,10 +12,17 @@
     root: localStorage.getItem(LS_ROOT) || '',
     expanded: new Set(),
     currentFolder: '',
-    entries: [],          // image entries in the currently-viewed folder
-    ratings: new Map(),    // path -> rating (cached client-side once fetched)
+    entries: [],           // image entries in the currently-viewed folder
+    sidecars: new Map(),   // path -> {rating,label,edited,recipe} (cached client-side)
+    meta: new Map(),       // path -> {camera,lens,date,iso}
     minRating: 0,
+    typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff'
+    cameraFilter: 'all',
+    lensFilter: 'all',
+    tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
+    search: '',
     open: false,
+    openedPath: '',        // path of the photo currently loaded into the editor FROM the library
   };
 
   // ── styles ──────────────────────────────────────────────────────────────────
@@ -50,10 +57,19 @@
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
     .lib-card .lib-name{font-size:11px;font-family:ui-monospace,Menlo,monospace;color:#9a968f;
       padding:6px 8px 2px}
-    .lib-stars{display:flex;gap:2px;padding:0 8px 8px}
+    .lib-tagrow{display:flex;align-items:center;gap:8px;padding:0 8px 8px}
+    .lib-stars{display:flex;gap:2px}
     .lib-star{cursor:pointer;font-size:13px;color:#4a4a55}
     .lib-star.on{color:#d4903a}
+    .lib-flags{display:flex;gap:4px;margin-left:auto}
+    .lib-flag{cursor:pointer;font-size:12px;opacity:.35;filter:grayscale(1)}
+    .lib-flag.on{opacity:1;filter:none}
+    .lib-edited-badge{position:absolute;top:6px;right:6px;background:#d4903a;color:#17171b;
+      font-size:9px;font-weight:700;letter-spacing:.03em;border-radius:4px;padding:2px 5px}
     #lib-empty{color:#9a968f;font-size:13px;padding:40px;text-align:center}
+    #lib-top select,#lib-top input{background:#26262d;border:1px solid #34343f;color:#f0ece2;
+      border-radius:8px;padding:6px 10px;font-size:12px}
+    #lib-search{width:150px}
   `;
   document.head.appendChild(style);
 
@@ -64,8 +80,23 @@
     <div id="lib-top">
       <span class="lib-title">Library</span>
       <button class="lib-btn" id="lib-pick">Choose Folder…</button>
-      <select class="lib-btn" id="lib-filter" title="Filter by minimum star rating">
-        <option value="0">All photos</option>
+      <input id="lib-search" placeholder="Search filename…" />
+      <select id="lib-type-filter" title="Filter by file type">
+        <option value="all">All types</option>
+        <option value="raw">RAW</option><option value="jpeg">JPEG</option>
+        <option value="png">PNG</option><option value="tiff">TIFF</option>
+      </select>
+      <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
+      <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
+      <select id="lib-tag-filter" title="Filter by tag">
+        <option value="all">All tags</option>
+        <option value="red">🚩 Red flag</option>
+        <option value="green">🟢 Green flag</option>
+        <option value="edited">Edited</option>
+        <option value="noedited">Not edited</option>
+      </select>
+      <select id="lib-filter" title="Filter by minimum star rating">
+        <option value="0">All ratings</option>
         <option value="1">★ 1+</option><option value="2">★★ 2+</option>
         <option value="3">★★★ 3+</option><option value="4">★★★★ 4+</option>
         <option value="5">★★★★★ 5</option>
@@ -102,23 +133,62 @@
     } catch (e) { /* leave blank on failure — a broken thumb isn't fatal */ }
   }
 
-  function starsHtml(path, rating) {
+  function starsHtml(rating) {
     let h = '';
     for (let i = 1; i <= 5; i++) h += `<span class="lib-star${i <= rating ? ' on' : ''}" data-i="${i}">★</span>`;
     return h;
   }
+  function flagsHtml(label) {
+    return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Red flag">🚩</span>` +
+           `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Green flag">🟢</span>`;
+  }
+
+  // ── options for a <select> populated with the distinct values present in this folder ─────
+  function populateSelect(sel, values, allLabel) {
+    const cur = sel.value;
+    const distinct = Array.from(new Set(values.filter(Boolean))).sort();
+    sel.innerHTML = `<option value="all">${allLabel}</option>` + distinct.map((v) => `<option value="${v}">${v}</option>`).join('');
+    sel.value = distinct.includes(cur) ? cur : 'all';
+  }
+
+  // ── base64<->JSON helpers for the edit-recipe sidecar payload (unicode-safe) ─────────────
+  function snapshotToB64(snap) { return btoa(unescape(encodeURIComponent(JSON.stringify(snap)))); }
+  function snapshotFromB64(b64) { return JSON.parse(decodeURIComponent(escape(atob(b64)))); }
 
   async function openInEditor(path) {
     try {
       const buf = await invoke('read_file_bytes', { path });
       const file = new File([buf], baseName(path), { type: '' });
       await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
+      state.openedPath = path;
+      const sc = await getSidecar(path);
+      if (sc.recipe) {
+        try { applyUISnapshot(snapshotFromB64(sc.recipe)); fxUpdate(); } catch (e) { console.error('restore recipe', e); }
+      }
       overlay.classList.remove('on');
       state.open = false;
     } catch (e) {
       console.error('openInEditor', e);
     }
   }
+
+  // ── auto-persist: any edit to a library-opened photo silently saves a non-destructive
+  // recipe (the same FX snapshot the undo history and session-save use) into its XMP
+  // sidecar and marks it "edited" — even before export. Debounced so a slider drag writes
+  // once, not per frame. No-op for photos not opened from the Library (state.openedPath ''). ──
+  let saveTimer;
+  window.chromasmithOnEdit = (snap) => {
+    if (!state.openedPath) return;
+    clearTimeout(saveTimer);
+    const path = state.openedPath;
+    saveTimer = setTimeout(async () => {
+      const cur = await getSidecar(path);
+      const recipe = snapshotToB64(snap);
+      const updated = { ...cur, edited: true, recipe };
+      state.sidecars.set(path, updated);
+      await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
+    }, 2000);
+  };
 
   // ── folder tree ────────────────────────────────────────────────────────────
   async function renderTree() {
@@ -157,6 +227,19 @@
   }
 
   // ── grid ────────────────────────────────────────────────────────────────────
+  async function getSidecar(path) {
+    if (state.sidecars.has(path)) return state.sidecars.get(path);
+    const sc = await invoke('get_sidecar', { path }).catch(() => ({ rating: 0, label: '', edited: false, recipe: '' }));
+    state.sidecars.set(path, sc);
+    return sc;
+  }
+  async function getMeta(path) {
+    if (state.meta.has(path)) return state.meta.get(path);
+    const m = await invoke('get_meta', { path }).catch(() => ({ camera: null, lens: null, date: null, iso: null }));
+    state.meta.set(path, m);
+    return m;
+  }
+
   async function openFolder(path) {
     state.currentFolder = path;
     const grid = document.getElementById('lib-grid');
@@ -169,21 +252,44 @@
       return;
     }
     state.entries = entries.filter((e) => e.is_image);
+    // Prefetch sidecar+meta for every entry up front — filters need the full set to decide
+    // what's shown, and both are cheap/disk-cached (header-only parse, no pixel decode).
+    await Promise.all(state.entries.map((e) => Promise.all([getSidecar(e.path), getMeta(e.path)])));
+    populateSelect(document.getElementById('lib-camera-filter'), state.entries.map((e) => state.meta.get(e.path)?.camera), 'All cameras');
+    populateSelect(document.getElementById('lib-lens-filter'), state.entries.map((e) => state.meta.get(e.path)?.lens), 'All lenses');
     await renderGrid();
   }
+
+  function passesFilters(entry) {
+    const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
+    const m = state.meta.get(entry.path) || {};
+    if (sc.rating < state.minRating) return false;
+    if (state.typeFilter !== 'all' && entry.kind !== state.typeFilter) return false;
+    if (state.cameraFilter !== 'all' && m.camera !== state.cameraFilter) return false;
+    if (state.lensFilter !== 'all' && m.lens !== state.lensFilter) return false;
+    if (state.search && !entry.name.toLowerCase().includes(state.search)) return false;
+    if (state.tagFilter === 'red' && sc.label !== 'Red') return false;
+    if (state.tagFilter === 'green' && sc.label !== 'Green') return false;
+    if (state.tagFilter === 'edited' && !sc.edited) return false;
+    if (state.tagFilter === 'noedited' && sc.edited) return false;
+    return true;
+  }
+
   async function renderGrid() {
     const grid = document.getElementById('lib-grid');
     grid.innerHTML = '';
-    const shown = [];
-    for (const entry of state.entries) {
-      const rating = state.ratings.has(entry.path) ? state.ratings.get(entry.path) : await invoke('get_rating', { path: entry.path }).then((r) => { state.ratings.set(entry.path, r); return r; }).catch(() => 0);
-      if (rating < state.minRating) continue;
-      shown.push(entry);
+    const shown = state.entries.filter(passesFilters);
+    for (const entry of shown) {
+      const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
       card.className = 'lib-card';
       card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
+        ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
         <div class="lib-name">${entry.name}</div>
-        <div class="lib-stars">${starsHtml(entry.path, Math.max(rating, 0))}</div>`;
+        <div class="lib-tagrow">
+          <div class="lib-stars">${starsHtml(Math.max(sc.rating, 0))}</div>
+          <div class="lib-flags">${flagsHtml(sc.label)}</div>
+        </div>`;
       const img = card.querySelector('img');
       loadThumb(entry.path, img);
       card.querySelector('.lib-thumb-wrap').ondblclick = () => openInEditor(entry.path);
@@ -191,11 +297,26 @@
         star.onclick = async (e) => {
           e.stopPropagation();
           const val = parseInt(star.dataset.i, 10);
-          const newRating = state.ratings.get(entry.path) === val ? 0 : val; // click same star again to clear
-          state.ratings.set(entry.path, newRating);
-          await invoke('set_rating', { path: entry.path, rating: newRating }).catch(() => {});
-          card.querySelector('.lib-stars').innerHTML = starsHtml(entry.path, newRating);
+          const cur = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
+          const newRating = cur.rating === val ? 0 : val; // click same star again to clear
+          const updated = { ...cur, rating: newRating };
+          state.sidecars.set(entry.path, updated);
+          await invoke('set_sidecar', { path: entry.path, rating: newRating, label: updated.label, edited: updated.edited }).catch(() => {});
+          card.querySelector('.lib-stars').innerHTML = starsHtml(newRating);
           card.querySelectorAll('.lib-star').forEach((s2) => { s2.onclick = star.onclick; });
+        };
+      });
+      card.querySelectorAll('.lib-flag').forEach((flag) => {
+        flag.onclick = async (e) => {
+          e.stopPropagation();
+          const which = flag.dataset.flag;
+          const cur = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
+          const newLabel = cur.label === which ? '' : which; // click same flag again to clear
+          const updated = { ...cur, label: newLabel };
+          state.sidecars.set(entry.path, updated);
+          await invoke('set_sidecar', { path: entry.path, rating: updated.rating, label: newLabel, edited: updated.edited }).catch(() => {});
+          card.querySelector('.lib-flags').innerHTML = flagsHtml(newLabel);
+          card.querySelectorAll('.lib-flag').forEach((f2) => { f2.onclick = flag.onclick; });
         };
       });
       grid.appendChild(card);
@@ -208,6 +329,15 @@
   overlay.querySelector('#lib-pick').onclick = pickFolder;
   overlay.querySelector('#lib-close').onclick = () => { overlay.classList.remove('on'); state.open = false; };
   overlay.querySelector('#lib-filter').onchange = (e) => { state.minRating = parseInt(e.target.value, 10); renderGrid(); };
+  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
+  let searchDebounce;
+  overlay.querySelector('#lib-search').oninput = (e) => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); }, 150);
+  };
 
   async function toggleLibrary() {
     state.open = !state.open;

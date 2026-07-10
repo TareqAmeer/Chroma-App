@@ -2817,7 +2817,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-10b';
+const BUILD='2026-07-10c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5296,6 +5296,7 @@ function fxHistoryPush(){
   fxHistory.push(snap);
   if(fxHistory.length>20){fxHistory.shift();}
   fxHistIdx=fxHistory.length-1;
+  if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(snap); // native-shell Library auto-save hook; no-op elsewhere
 }
 function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}

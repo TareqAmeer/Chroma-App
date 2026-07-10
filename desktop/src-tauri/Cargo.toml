@@ -32,6 +32,8 @@ base64 = "0.22"
 # Library browser: thumbnail generation (downsize + JPEG-encode both RAW-decoded buffers and
 # regular JPEG/PNG files) and a small non-crypto hash for the on-disk thumbnail cache key.
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# Library browser: EXIF (camera/lens/date) for non-RAW files — rawler covers the RAWs.
+kamadak-exif = "0.5"
 
 [profile.release]
 strip = true
