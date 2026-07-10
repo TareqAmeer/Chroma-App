@@ -126,3 +126,70 @@ pub fn decode_rw2_bytes(bytes: &[u8]) -> Result<DecodedRaw, String> {
         rgb16,
     })
 }
+
+/// Apply a baked N^3 DCP LUT (the same Float32 data bakeDcpLUT produces in JS, values are
+/// sRGB-encoded 0..1) to linear u16 RGB with trilinear interpolation, producing RGBA8 ready
+/// for ImageData/putImageData. Mirrors chromasmith-22.html's applyDcpLUT indexing exactly —
+/// moved here because 24M pixels × 24 LUT reads was multi-second, UI-blocking work on the JS
+/// main thread; with rayon it's tens of milliseconds.
+pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Vec<u8> {
+    let nm = n - 1;
+    let sc = nm as f32 / 65535.0;
+    let px_count = rgb16.len() / 3;
+    let mut rgba = vec![0u8; px_count * 4];
+    rgba.par_chunks_mut(4)
+        .zip(rgb16.par_chunks(3))
+        .for_each(|(dst, src)| {
+            let fr = src[0] as f32 * sc;
+            let fg = src[1] as f32 * sc;
+            let fb = src[2] as f32 * sc;
+            let r0 = (fr as usize).min(nm - 1);
+            let g0 = (fg as usize).min(nm - 1);
+            let b0 = (fb as usize).min(nm - 1);
+            let rf = fr - r0 as f32;
+            let gf = fg - g0 as f32;
+            let bf = fb - b0 as f32;
+            let idx = |r: usize, g: usize, b: usize| 3 * ((b * n + g) * n + r);
+            for c in 0..3 {
+                let c000 = lut[idx(r0, g0, b0) + c];
+                let c100 = lut[idx(r0 + 1, g0, b0) + c];
+                let c010 = lut[idx(r0, g0 + 1, b0) + c];
+                let c110 = lut[idx(r0 + 1, g0 + 1, b0) + c];
+                let c001 = lut[idx(r0, g0, b0 + 1) + c];
+                let c101 = lut[idx(r0 + 1, g0, b0 + 1) + c];
+                let c011 = lut[idx(r0, g0 + 1, b0 + 1) + c];
+                let c111 = lut[idx(r0 + 1, g0 + 1, b0 + 1) + c];
+                let c00 = c000 * (1.0 - rf) + c100 * rf;
+                let c10 = c010 * (1.0 - rf) + c110 * rf;
+                let c01 = c001 * (1.0 - rf) + c101 * rf;
+                let c11 = c011 * (1.0 - rf) + c111 * rf;
+                let v = (c00 * (1.0 - gf) + c10 * gf) * (1.0 - bf) + (c01 * (1.0 - gf) + c11 * gf) * bf;
+                dst[c] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            }
+            dst[3] = 255;
+        });
+    rgba
+}
+
+/// sRGB-gamma the linear u16 RGB to RGBA8 — the "None (LibRaw sRGB)" no-profile path,
+/// previously a 72M-iteration JS loop in desktop-native.js.
+pub fn srgb_rgba(rgb16: &[u16]) -> Vec<u8> {
+    let g = |v: f32| -> f32 {
+        if v <= 0.0031308 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        }
+    };
+    let px_count = rgb16.len() / 3;
+    let mut rgba = vec![0u8; px_count * 4];
+    rgba.par_chunks_mut(4)
+        .zip(rgb16.par_chunks(3))
+        .for_each(|(dst, src)| {
+            for c in 0..3 {
+                dst[c] = (g(src[c] as f32 / 65535.0) * 255.0).round() as u8;
+            }
+            dst[3] = 255;
+        });
+    rgba
+}

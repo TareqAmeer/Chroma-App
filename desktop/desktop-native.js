@@ -30,33 +30,52 @@
   // natively in Rust instead (src-tauri/src/raw_decode.rs, via the `rawler` crate), never in
   // the WebView. Overriding the global getLibRaw() here means loadRw2() itself needs no
   // changes at all — it just receives an object shaped like libraw-wasm's.
-  const s2g = (v) => v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; // sRGB OETF
+  // Framed raw-body invoke: [u32 jsonLen][json utf8][payload]. No base64 in either direction
+  // (Tauri v2 sends ArrayBuffer/Uint8Array invoke args as a raw body; responses were already
+  // raw ipc::Response buffers).
+  const framedInvoke = (cmd, jsonObj, payload) => {
+    const json = new TextEncoder().encode(JSON.stringify(jsonObj));
+    const framed = new Uint8Array(4 + json.length + payload.length);
+    new DataView(framed.buffer).setUint32(0, json.length, true);
+    framed.set(json, 4);
+    framed.set(payload, 4 + json.length);
+    return invoke(cmd, framed);
+  };
+  const _rustLuts = {}; // lutKey -> true once registered with the Rust side this session
   class NativeLibRawShim {
     async open(bytes, settings) {
-      this._settings = settings; // {outputBps:16,...} DCP path vs {outputBps:8,...} "None" path
-      const b64 = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.readAsDataURL(new Blob([bytes]));
-      });
-      const buf = await invoke('decode_raw', { bytesB64: b64 }); // ArrayBuffer (raw ipc::Response)
+      // DCP path: the whole develop (decode + PPG demosaic + baked-LUT apply) runs in Rust
+      // and returns display-ready RGBA8 — the old flow shipped 145MB of u16 RGB over IPC and
+      // ran a 24M-pixel trilinear loop on the JS main thread. The 65^3 LUT is baked once per
+      // profile in JS (bakeDcpLUT; dcpFit is ISO-independent since the native-decode refit)
+      // and registered with Rust once per session.
+      const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+      let mode = 'srgb', lutKey = '';
+      if (settings && settings.outputBps === 16) {
+        if (profile) {
+          mode = 'lut'; lutKey = 'dcp:' + profile;
+          if (!_rustLuts[lutKey]) {
+            const lut = await getDcpLUT(profile, 200); // iso arg vestigial (constants ISO-independent)
+            await framedInvoke('store_dcp_lut', { key: lutKey },
+              new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+            _rustLuts[lutKey] = true;
+          }
+        } else {
+          mode = 'linear16';
+        }
+      }
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey } : { mode }, bytes);
       const head = new Uint32Array(buf, 0, 3);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
-      this._linear16 = new Uint16Array(buf, 12); // always linear 16-bit RGB out of Rust
+      this._mode = mode; this._buf = buf;
     }
     async metadata() { return { iso_speed: this._iso, make: 'Panasonic', model: 'DC-S9' }; }
     async imageData() {
-      // DCP path (the default / recommended profile-matched path): hand the linear 16-bit
-      // buffer straight to bakeDcpLUT/applyDcpLUT exactly as libraw-wasm's dcpSettings would.
-      if (this._settings && this._settings.outputBps === 16) {
-        return { width: this._w, height: this._h, colors: 3, bits: 16, dataSize: this._linear16.byteLength, data: this._linear16 };
+      if (this._mode === 'linear16') {
+        return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 12) };
       }
-      // "None (LibRaw sRGB)" path: apply sRGB gamma ourselves and pack to 8-bit, matching the
-      // shape (not the exact tone) of libraw's own outputColor:1/outputBps:8 rendering.
-      const n = this._linear16.length;
-      const out = new Uint8ClampedArray(n);
-      for (let i = 0; i < n; i++) out[i] = Math.round(s2g(this._linear16[i] / 65535) * 255);
-      return { width: this._w, height: this._h, colors: 3, bits: 8, dataSize: out.byteLength, data: out };
+      // rgba:true tells loadRw2 the pixels are final RGBA8 — no JS-side LUT/gamma pass needed.
+      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 12) };
     }
     get worker() { return { terminate() {} }; }
   }

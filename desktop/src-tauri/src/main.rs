@@ -39,27 +39,85 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-// Native RW2 decode (see raw_decode.rs for why: WKWebView's SharedArrayBuffer support isn't
-// reliable enough for the browser build's libraw-wasm decoder in this native shell). Input is
-// base64 (simplest correct thing — decode is a one-time cost per photo import, not a hot
-// loop, so the ~33% encode overhead on a ~25MB RW2 doesn't matter in practice). Output uses
-// tauri::ipc::Response to skip JSON/base64 entirely for the much larger (~3x) decoded buffer:
-// a tiny fixed header (width/height/iso as little-endian u32) followed by raw u16 RGB bytes,
-// parsed back out in desktop-native.js's LibRaw shim.
+// ── Native RW2 decode + develop, no base64 anywhere ─────────────────────────────────────
+// (see raw_decode.rs for why native: WKWebView's SharedArrayBuffer support isn't reliable
+// enough for the browser build's libraw-wasm decoder in this shell.)
+//
+// The JS side bakes the DCP color transform into a 65^3 LUT once per profile (bakeDcpLUT)
+// and registers it here; each decode then runs entirely in Rust — rawler decode + PPG
+// demosaic + rayon-parallel LUT apply — and returns display-ready RGBA8. This removed the
+// two big costs measured in the old flow: a 24M-pixel trilinear loop on the JS main thread,
+// and base64/oversized buffers over IPC (request was a 33MB base64 string; response was
+// 145MB of u16 RGB that JS immediately quantized to 8-bit anyway).
+//
+// Request framing (raw invoke body, no JSON): [u32 jsonLen][json utf8][payload]
+//   store_dcp_lut json {"key": "..."}     payload = little-endian f32 LUT data (65^3*3)
+//   decode_raw_v2 json {"mode":"lut","lutKey":"..."} or {"mode":"srgb"} or {"mode":"linear16"}
+//                 payload = the RW2 file bytes
+// decode_raw_v2 response: [u32 w][u32 h][u32 iso][RGBA8 | u16 RGB LE (linear16 mode)]
+use std::collections::HashMap;
+use std::sync::Mutex;
+static DCP_LUTS: Mutex<Option<HashMap<String, std::sync::Arc<Vec<f32>>>>> = Mutex::new(None);
+
+fn parse_framed(body: &tauri::ipc::InvokeBody) -> Result<(serde_json::Value, &[u8]), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = body else {
+        return Err("expected raw invoke body".into());
+    };
+    if bytes.len() < 4 {
+        return Err("framed body too short".into());
+    }
+    let jlen = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+    if bytes.len() < 4 + jlen {
+        return Err("framed body truncated".into());
+    }
+    let json: serde_json::Value =
+        serde_json::from_slice(&bytes[4..4 + jlen]).map_err(|e| format!("frame json: {e}"))?;
+    Ok((json, &bytes[4 + jlen..]))
+}
+
 #[tauri::command]
-fn decode_raw(bytes_b64: String) -> Result<tauri::ipc::Response, String> {
-    use base64::Engine;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(&bytes_b64)
-        .map_err(|e| format!("base64: {e}"))?;
-    let decoded = raw_decode::decode_rw2_bytes(&bytes)?;
-    let mut out = Vec::with_capacity(12 + decoded.rgb16.len() * 2);
+fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let key = json["key"].as_str().ok_or("missing key")?.to_string();
+    if payload.len() % 4 != 0 {
+        return Err("LUT payload not f32-aligned".into());
+    }
+    let lut: Vec<f32> = payload
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    let mut guard = DCP_LUTS.lock().unwrap();
+    guard.get_or_insert_with(HashMap::new).insert(key, std::sync::Arc::new(lut));
+    Ok(())
+}
+
+#[tauri::command]
+fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let mode = json["mode"].as_str().unwrap_or("linear16");
+    let decoded = raw_decode::decode_rw2_bytes(payload)?;
+    let body: Vec<u8> = match mode {
+        "lut" => {
+            let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
+            let lut = {
+                let guard = DCP_LUTS.lock().unwrap();
+                guard
+                    .as_ref()
+                    .and_then(|m| m.get(key).cloned())
+                    .ok_or_else(|| format!("LUT '{key}' not registered"))?
+            };
+            let n = (lut.len() / 3) as f64;
+            let n = n.cbrt().round() as usize;
+            raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)
+        }
+        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16),
+        _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
+    };
+    let mut out = Vec::with_capacity(12 + body.len());
     out.extend_from_slice(&decoded.width.to_le_bytes());
     out.extend_from_slice(&decoded.height.to_le_bytes());
     out.extend_from_slice(&decoded.iso.to_le_bytes());
-    for v in &decoded.rgb16 {
-        out.extend_from_slice(&v.to_le_bytes());
-    }
+    out.extend_from_slice(&body);
     Ok(tauri::ipc::Response::new(out))
 }
 
@@ -76,7 +134,8 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
-            decode_raw,
+            store_dcp_lut,
+            decode_raw_v2,
             read_file_bytes,
             library::list_dir,
             library::get_thumbnail,

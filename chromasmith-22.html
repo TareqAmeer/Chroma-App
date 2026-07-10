@@ -2817,7 +2817,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-10e';
+const BUILD='2026-07-10f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4694,7 +4694,9 @@ async function loadRw2(file){
   const w=img.width,h=img.height,ch=img.colors||3;let rgb=img.data;
   if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
   let rgba;
-  if(profile){
+  if(img.rgba){
+    rgba=img.data; // native shell: decode + DCP develop already done in Rust, pixels are final RGBA8
+  }else if(profile){
     if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
     // libraw-wasm's "linear" output is measurably non-linear vs true (ADC-count) linearity:
     // wasm ≈ 1.22·native^0.634 per channel (fitted on identical frames vs the desktop shell's
