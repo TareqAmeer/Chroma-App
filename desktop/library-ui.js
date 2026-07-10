@@ -83,7 +83,7 @@
   const baseName = (p) => p.split('/').pop();
   async function pickFolder() {
     try {
-      const chosen = await invoke('plugin:dialog|open', { directory: true, multiple: false });
+      const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
       if (!chosen) return;
       state.root = Array.isArray(chosen) ? chosen[0] : chosen;
       localStorage.setItem(LS_ROOT, state.root);
