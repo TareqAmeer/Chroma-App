@@ -15,6 +15,7 @@ use tauri::Emitter;
 // + app.path().resource_dir()) so the built .app is portable to any Mac.
 const DIST_DIR: &str = "/Users/tareqameer/Documents/GitHub/Chroma-App/desktop/dist";
 
+mod library;
 mod raw_decode;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
@@ -62,11 +63,26 @@ fn decode_raw(bytes_b64: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(out))
 }
 
+// Read a file's raw bytes for the Library view to open a selected photo into the editor (a
+// plain File-shaped object, same as picking it from the OS file dialog or dragging it in).
+#[tauri::command]
+fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![decode_raw])
+        .invoke_handler(tauri::generate_handler![
+            decode_raw,
+            read_file_bytes,
+            library::list_dir,
+            library::get_thumbnail,
+            library::get_rating,
+            library::set_rating
+        ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
         // on every single response, including the very first navigation — see the Cargo.toml
         // comment for why the declarative app.security.headers config wasn't reliable here.
@@ -103,6 +119,8 @@ fn main() {
 
             let open_item =
                 MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Some("CmdOrCtrl+O"))?;
+            let library_item =
+                MenuItem::with_id(handle, "menu-library", "Library…", true, Some("CmdOrCtrl+L"))?;
             let export_item =
                 MenuItem::with_id(handle, "menu-export", "Export…", true, Some("CmdOrCtrl+E"))?;
             let file_menu = Submenu::with_items(
@@ -111,6 +129,7 @@ fn main() {
                 true,
                 &[
                     &open_item,
+                    &library_item,
                     &export_item,
                     &PredefinedMenuItem::separator(handle)?,
                     &PredefinedMenuItem::close_window(handle, None)?,
@@ -173,7 +192,7 @@ fn main() {
             let handle2 = handle.clone();
             app.on_menu_event(move |_app, event| {
                 let id = event.id().0.as_str();
-                if matches!(id, "menu-open" | "menu-export" | "menu-undo" | "menu-redo") {
+                if matches!(id, "menu-open" | "menu-library" | "menu-export" | "menu-undo" | "menu-redo") {
                     let _ = handle2.emit(id, ());
                 }
             });

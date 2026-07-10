@@ -29,6 +29,9 @@ mime_guess = "2"
 # linear 16-bit camera RGB to the EXISTING, already-calibrated JS DCP pipeline unchanged.
 rawler = "0.7"
 base64 = "0.22"
+# Library browser: thumbnail generation (downsize + JPEG-encode both RAW-decoded buffers and
+# regular JPEG/PNG files) and a small non-crypto hash for the on-disk thumbnail cache key.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [profile.release]
 strip = true

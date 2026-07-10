@@ -16,11 +16,15 @@ mkdir -p desktop/dist
 cp chromasmith-22.html desktop/dist/index.html
 cp -R vendor desktop/dist/vendor
 cp desktop/desktop-native.js desktop/dist/desktop-native.js
+cp desktop/library-ui.js desktop/dist/library-ui.js
 
-# Inject the native-shell glue script right before </body>, WITHOUT touching the source
+# Inject the native-shell glue scripts right before </body>, WITHOUT touching the source
 # chromasmith-22.html (it stays a platform-agnostic single file for web/iOS). Native-only
-# concerns (traffic-light spacing, window drag region, menu-bar wiring) live entirely in
-# desktop-native.js and only run when window.__TAURI__ is present.
+# concerns (traffic-light spacing, window drag region, menu-bar wiring, the Library folder
+# browser) live entirely in these injected scripts and only run when window.__TAURI__ is
+# present. library-ui.js loads after desktop-native.js (it calls loadFXImages, a global
+# desktop-native.js also relies on, and reads window.chromasmithToggleLibrary's caller wiring
+# from it) — order matters less than both being present, but keep it for clarity.
 python3 - <<'PY'
 p = "desktop/dist/index.html"
 html = open(p, encoding="utf-8").read()
@@ -29,7 +33,8 @@ html = open(p, encoding="utf-8").read()
 # which a naive first-match replace grabbed instead of the real closing tag.
 idx = html.rfind("</body>")
 assert idx != -1, "index.html has no </body> to inject before"
-html = html[:idx] + '<script src="desktop-native.js"></script>\n' + html[idx:]
+tags = '<script src="desktop-native.js"></script>\n<script src="library-ui.js"></script>\n'
+html = html[:idx] + tags + html[idx:]
 open(p, "w", encoding="utf-8").write(html)
 PY
 

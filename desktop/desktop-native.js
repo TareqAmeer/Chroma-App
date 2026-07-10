@@ -81,6 +81,19 @@
   const logo = document.querySelector('header .logo');
   if (logo) logo.setAttribute('data-tauri-drag-region', '');
 
+  // Library toggle button — matches the existing .hdr-btn styling, added before the theme
+  // toggle. library-ui.js (loaded separately, see build-desktop.sh) defines the actual view
+  // and exposes window.chromasmithToggleLibrary; this button is just the entry point.
+  const hdrRight = document.querySelector('.hdr-right');
+  if (hdrRight) {
+    const libBtn = document.createElement('button');
+    libBtn.className = 'hdr-btn';
+    libBtn.title = 'Photo Library (local folders)';
+    libBtn.textContent = '🗂';
+    libBtn.onclick = () => window.chromasmithToggleLibrary && window.chromasmithToggleLibrary();
+    hdrRight.insertBefore(libBtn, hdrRight.firstChild);
+  }
+
   // ── Native menu bar wiring ────────────────────────────────────────────────────
   // The Rust side (src-tauri/src/main.rs) builds a real macOS menu bar (App/File/Edit/
   // Window) and emits these events for the items that need to call into the app; standard
