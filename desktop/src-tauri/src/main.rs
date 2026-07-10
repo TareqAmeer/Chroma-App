@@ -17,6 +17,27 @@ const DIST_DIR: &str = "/Users/tareqameer/Documents/GitHub/Chroma-App/desktop/di
 
 mod raw_decode;
 
+/// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(hex) = std::str::from_utf8(&bytes[i + 1..i + 3]) {
+                if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                    out.push(byte);
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 // Native RW2 decode (see raw_decode.rs for why: WKWebView's SharedArrayBuffer support isn't
 // reliable enough for the browser build's libraw-wasm decoder in this native shell). Input is
 // base64 (simplest correct thing — decode is a one-time cost per photo import, not a hot
@@ -50,8 +71,13 @@ fn main() {
         // on every single response, including the very first navigation — see the Cargo.toml
         // comment for why the declarative app.security.headers config wasn't reliable here.
         .register_uri_scheme_protocol("cs", |_ctx, request| {
-            let path = request.uri().path().trim_start_matches('/');
-            let path = if path.is_empty() { "index.html" } else { path };
+            let raw_path = request.uri().path().trim_start_matches('/');
+            let raw_path = if raw_path.is_empty() { "index.html" } else { raw_path };
+            // The URI path arrives percent-encoded (spaces -> %20 etc — several of the app's
+            // own asset filenames have spaces, e.g. "vendor/dcp/Panasonic DC-S9 Camera
+            // Standard.dcp") but std::fs::read needs the literal decoded path. Forgetting this
+            // silently 404s every asset whose name needs encoding.
+            let path = percent_decode(raw_path);
             let full = format!("{DIST_DIR}/{path}");
             let (body, mime, status): (Vec<u8>, String, u16) = match std::fs::read(&full) {
                 Ok(b) => (

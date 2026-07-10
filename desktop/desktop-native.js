@@ -6,6 +6,20 @@
   if (!window.__TAURI__) return;
   const invoke = window.__TAURI__.core.invoke;
 
+  // loadRw2() has an unconditional guard — `if(!self.crossOriginIsolated) throw ...` — that
+  // blocks RW2 loading whenever cross-origin isolation is off, since the WEB build's decoder
+  // (libraw-wasm) needs SharedArrayBuffer for that. The native shim below never touches
+  // SharedArrayBuffer at all (decode happens in Rust), so that guard's assumption doesn't hold
+  // here — but chromasmith-22.html has no way to know a native decoder is available, and it
+  // must stay platform-agnostic. Spoofing the (real, correctly false) crossOriginIsolated
+  // value to true — ONLY under Tauri — satisfies the guard without touching that file. `self`
+  // and `window` are the same object in a page context, so this covers both call sites.
+  try {
+    Object.defineProperty(window, 'crossOriginIsolated', { value: true, configurable: true });
+  } catch (e) {
+    console.error('could not spoof crossOriginIsolated', e);
+  }
+
   // ── Native RW2 decode ─────────────────────────────────────────────────────────
   // chromasmith-22.html's loadRw2() calls getLibRaw() then `new LibRaw()` expecting libraw-
   // wasm's interface (.open/.metadata()/.imageData()/.worker.terminate()) — that decoder needs
