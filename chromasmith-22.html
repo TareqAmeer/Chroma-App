@@ -804,6 +804,16 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           </select>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Isolate a single shader pass to debug the match</div>
+        <div class="fx-ctrl-title" style="margin-top:14px">DCP pipeline (RW2 + profile only)</div>
+        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="cb-dcp-tc" checked onchange="dcpDiagChanged()"> Apply Tone Curve</label></div>
+        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="cb-dcp-ll" checked onchange="dcpDiagChanged()"> Apply Look Table</label></div>
+        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="cb-dcp-be" checked onchange="dcpDiagChanged()"> Apply Baseline Exposure</label></div>
+        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="cb-dcp-noclip" onchange="dcpDiagChanged()"> Extended-range highlights (no early clip)</label></div>
+        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Re-decodes the current RW2 with these options — try combinations against a Lightroom reference</div>
       </div>
       <!-- EXPORT -->
       <div class="fx-ctrl" data-fxsec="export">
@@ -2817,7 +2827,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-10c';
+const BUILD='2026-07-10d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4555,10 +4565,32 @@ function parseDCP(buf){
          enc:tags[51108]?tags[51108][0]:0,baseOff:tags[51109]?tags[51109][0]:0};
 }
 function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4)-0.055}
-function bakeDcpLUT(dcp,fit,N){
+// Diagnostics-panel opts for A/B testing the DCP pipeline against a Lightroom reference —
+// see chromasmith-22.html's Diagnostics section. All default to current shipping behavior.
+function dcpDiagOpts(){
+  const on=(id,def)=>{const el=document.getElementById(id);return el?el.checked:def};
+  return{tc:on('cb-dcp-tc',true),ll:on('cb-dcp-ll',true),be:on('cb-dcp-be',true),noclip:on('cb-dcp-noclip',false)};
+}
+function dcpDiagKey(o){return(o.tc?1:0)+''+(o.ll?1:0)+''+(o.be?1:0)+''+(o.noclip?1:0)}
+// Diagnostics checkbox handler — the DCP bake happens once at RW2 import (loadRw2→applyDcpLUT),
+// not per preview render, so toggling an option re-decodes the CURRENT photo from its
+// retained original File (see loadFXImages' rawFile) rather than touching the live WebGL pipeline.
+async function dcpDiagChanged(){
+  const it=curItem();
+  if(!it||it.ext!=='rw2'||!it.rawFile){log('Diagnostics: open an RW2 with a RAW profile selected to A/B test','info');return}
+  if(!rawProfile()){log('Diagnostics: select a RAW profile (not "None") to see an effect','info');return}
+  try{
+    const{canvas}=await loadRw2(it.rawFile);
+    it.img=canvas;fxImg=canvas; // curItem() is always fxImages[fxCurIdx], so it IS the active image
+    updateWork();renderPreview();
+    log('Re-decoded with DCP options: '+JSON.stringify(dcpDiagOpts()),'info');
+  }catch(e){log('Diagnostics re-decode failed: '+errStr(e),'err')}
+}
+function bakeDcpLUT(dcp,fit,N,opts){
   N=N||65;
+  opts=opts||{tc:true,ll:true,be:true,noclip:false};
   const nh=dcp.dims[0],ns=dcp.dims[1],nv=dcp.dims[2],tbl=dcp.look;
-  const expo=Math.pow(2,fit.ev+dcp.baseOff),blk=fit.black;
+  const expo=Math.pow(2,fit.ev+(opts.be?dcp.baseOff:0)),blk=fit.black;
   const TN=4096,toneL=new Float32Array(TN); // dense per-channel tone curve
   {const p=dcp.tone,np2=p.length/2;
    for(let i=0;i<TN;i++){const x=i/(TN-1);let j=1;while(j<np2-1&&p[2*j]<x)j++;
@@ -4573,22 +4605,25 @@ function bakeDcpLUT(dcp,fit,N){
     const X=dcp.fm[0]*cr+dcp.fm[1]*cg+dcp.fm[2]*cb,
           Y=dcp.fm[3]*cr+dcp.fm[4]*cg+dcp.fm[5]*cb,
           Z=dcp.fm[6]*cr+dcp.fm[7]*cg+dcp.fm[8]*cb;
-    let r=Math.min(Math.max((XYZ2PP[0]*X+XYZ2PP[1]*Y+XYZ2PP[2]*Z)*expo,0),1),
-        g=Math.min(Math.max((XYZ2PP[3]*X+XYZ2PP[4]*Y+XYZ2PP[5]*Z)*expo,0),1),
-        b=Math.min(Math.max((XYZ2PP[6]*X+XYZ2PP[7]*Y+XYZ2PP[8]*Z)*expo,0),1);
+    let r=Math.max((XYZ2PP[0]*X+XYZ2PP[1]*Y+XYZ2PP[2]*Z)*expo,0),
+        g=Math.max((XYZ2PP[3]*X+XYZ2PP[4]*Y+XYZ2PP[5]*Z)*expo,0),
+        b=Math.max((XYZ2PP[6]*X+XYZ2PP[7]*Y+XYZ2PP[8]*Z)*expo,0);
+    if(!opts.noclip){r=Math.min(r,1);g=Math.min(g,1);b=Math.min(b,1)} // shipping behavior: clip here (pre-LookTable/tone-curve)
     // RGB→HSV
     const mx=Math.max(r,g,b),mn=Math.min(r,g,b),c=mx-mn;
     let h=0;if(c>1e-12){if(mx===r)h=((g-b)/c%6+6)%6;else if(mx===g)h=(b-r)/c+2;else h=(r-g)/c+4;h*=60;}
     let s=mx>1e-12?c/mx:0,v=mx;
     // LookTable trilinear (hue wraps; V axis sRGB-encoded when enc===1)
-    const venc=dcp.enc===1?srgbG(v):v;
+    // vi is clamped for TABLE-INDEX purposes only (index clamp ≠ value clamp — v itself,
+    // used below for v*dv, is left extended-range when opts.noclip lifted the earlier ceiling)
+    const venc=Math.min(dcp.enc===1?srgbG(v):v,1);
     const hi=h/360*nh,si=s*(ns-1),vi=venc*(nv-1);
     const h0=Math.floor(hi)%nh,h1=(h0+1)%nh,hf=hi-Math.floor(hi);
     const s0=Math.min(Math.floor(si),ns-2),sf=si-s0,s1=s0+1;
     const v0=Math.min(Math.floor(vi),nv-2),vf=vi-v0,v1=v0+1;
     const idx=(vv,hh,ss)=>3*((vv*nh+hh)*ns+ss); // data layout: [val][hue][sat]
-    let dh=0,ds=0,dv=0;
-    for(let k=0;k<3;k++){
+    let dh=0,ds=1,dv=1;
+    if(opts.ll)for(let k=0;k<3;k++){
       const c00=tbl[idx(v0,h0,s0)+k]*(1-hf)+tbl[idx(v0,h1,s0)+k]*hf,
             c01=tbl[idx(v0,h0,s1)+k]*(1-hf)+tbl[idx(v0,h1,s1)+k]*hf,
             c10=tbl[idx(v1,h0,s0)+k]*(1-hf)+tbl[idx(v1,h1,s0)+k]*hf,
@@ -4596,14 +4631,16 @@ function bakeDcpLUT(dcp,fit,N){
             cc=(c00*(1-sf)+c01*sf)*(1-vf)+(c10*(1-sf)+c11*sf)*vf;
       if(k===0)dh=cc;else if(k===1)ds=cc;else dv=cc;
     }
-    h=(h+dh%360+360)%360;s=Math.min(Math.max(s*ds,0),1);v=Math.min(Math.max(v*dv,0),1);
+    h=(h+dh%360+360)%360;s=Math.max(s*ds,0);v=Math.max(v*dv,0);
+    if(!opts.noclip){s=Math.min(s,1);v=Math.min(v,1)} // shipping behavior: clip here too (pre-tone-curve)
     // HSV→RGB
     const hh=h/60,i6=Math.floor(hh)%6,f=hh-Math.floor(hh),
           p2=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));
     if(i6===0){r=v;g=t;b=p2}else if(i6===1){r=q;g=v;b=p2}else if(i6===2){r=p2;g=v;b=t}
     else if(i6===3){r=p2;g=q;b=v}else if(i6===4){r=t;g=p2;b=v}else{r=v;g=p2;b=q}
-    // black subtract + per-channel tone curve
-    r=tone((r-blk)/(1-blk));g=tone((g-blk)/(1-blk));b=tone((b-blk)/(1-blk));
+    // black subtract + per-channel tone curve (identity pass-through when opts.tc is off)
+    if(opts.tc){r=tone((r-blk)/(1-blk));g=tone((g-blk)/(1-blk));b=tone((b-blk)/(1-blk));}
+    else{r=(r-blk)/(1-blk);g=(g-blk)/(1-blk);b=(b-blk)/(1-blk);}
     // ProPhoto → sRGB + gamma
     const sr=Math.min(Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),1),
           sg=Math.min(Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),1),
@@ -4613,15 +4650,16 @@ function bakeDcpLUT(dcp,fit,N){
   return{n:N,data:out};
 }
 const _dcpCache={},_dcpLutCache={};
-async function getDcpLUT(name,iso){
-  const key=name+'@'+(iso||200);
+async function getDcpLUT(name,iso,opts){
+  opts=opts||dcpDiagOpts();
+  const key=name+'@'+(iso||200)+'@'+dcpDiagKey(opts);
   if(_dcpLutCache[key])return _dcpLutCache[key];
   if(!_dcpCache[name]){
     const r=await fetch('vendor/dcp/Panasonic DC-S9 Camera '+name+'.dcp');
     if(!r.ok)throw new Error('DCP profile fetch failed: '+name+' ('+r.status+')');
     _dcpCache[name]=parseDCP(await r.arrayBuffer());
   }
-  const lut=bakeDcpLUT(_dcpCache[name],dcpFit(iso));
+  const lut=bakeDcpLUT(_dcpCache[name],dcpFit(iso),null,opts);
   _dcpLutCache[key]=lut;return lut;
 }
 function applyDcpLUT(u16,w,h,lut){ // u16: interleaved RGB Uint16, linear camera space
@@ -4691,7 +4729,7 @@ async function loadFXImages(fileList){
       }
       if(isRw2File(file)){
         const{canvas,dpi}=await loadRw2(file);
-        fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null}); // lossless source → PNG out
+        fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null,rawFile:file}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
