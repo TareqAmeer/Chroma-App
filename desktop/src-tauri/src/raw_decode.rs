@@ -1,13 +1,26 @@
 // Native RW2 decode for the desktop shell: rawler gives us raw (un-demosaiced) Bayer sensor
-// data + metadata; we do black-level subtraction, camera white balance, and a bilinear
-// demosaic ourselves, then hand linear 16-bit interleaved RGB to the EXISTING, already-
-// calibrated JS DCP pipeline (chromasmith-22.html's bakeDcpLUT/applyDcpLUT) completely
-// unchanged — this file only replicates what libraw-wasm's `dcpSettings` decode already
-// produces (useCameraWb:true, outputColor:0 "raw", outputBps:16, gamm:[1,1] linear,
-// userFlip:-1 no auto-rotate), not the colour science itself.
+// data + metadata; we use rawler's OWN maintained ops for the physically-calibrated steps —
+// apply_scaling() (per-CFA black/white-level normalization, the same code dnglab/RapidRAW
+// ship on) and PPGDemosaic (Pattern-Pixel-Grouping, far better edge behaviour than the old
+// hand-rolled 3x3 bilinear) — then apply camera white balance with LibRaw's documented
+// convention and hand linear 16-bit interleaved RGB to the JS DCP pipeline
+// (chromasmith-22.html's bakeDcpLUT/applyDcpLUT).
+//
+// LibRaw scale convention replicated here (dcraw scale_colors, stable for decades):
+//   pre_mul normalized so its MINIMUM element is 1.0 (green for Panasonic),
+//   scale_mul[c] = pre_mul[c] * 65535/(white - black)
+// rawler's apply_scaling gives exactly (v-black)/(white-black) in 0..1 (≡ the 65535 scale),
+// so multiplying by min-normalized WB afterwards reproduces libraw's absolute levels with
+// no fudge factor. (The old WHITE_LEVEL_MATCH=2.334 eyeball constant is gone; any remaining
+// GLOBAL exposure offset vs Lightroom is a fitted constant in the JS dcpFit, refitted against
+// this decode — see calib/dcp_dual_fit.py.)
 use rawler::decoders::RawDecodeParams;
-use rawler::rawimage::RawImageData;
+use rawler::imgop::sensor::bayer::ppg::PPGDemosaic;
+use rawler::imgop::sensor::bayer::Demosaic;
+use rawler::pixarray::PixF32;
+use rawler::rawimage::RawPhotometricInterpretation;
 use rawler::rawsource::RawSource;
+use rayon::prelude::*;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -28,112 +41,87 @@ pub fn decode_rw2_bytes(bytes: &[u8]) -> Result<DecodedRaw, String> {
     let metadata = decoder
         .raw_metadata(&source, &params)
         .map_err(|e| format!("metadata: {e}"))?;
-    let raw_image = decoder
+    let mut raw_image = decoder
         .raw_image(&source, &params, false)
         .map_err(|e| format!("decode: {e}"))?;
 
-    let iso = metadata.exif.iso_speed.unwrap_or(200);
+    // iso_speed_ratings is the standard EXIF ISO tag (what this file actually carries);
+    // iso_speed (a different EXIF tag) is absent on the S9 and used to silently default
+    // everything to 200, flattening dcpFit's ISO dependence on the native path.
+    let iso = metadata
+        .exif
+        .iso_speed_ratings
+        .map(|v| v as u32)
+        .or(metadata.exif.iso_speed)
+        .unwrap_or(200);
+
+    // 1) Per-CFA black/white-level normalization → f32 in 0..1 (rawler-maintained math).
+    raw_image
+        .apply_scaling()
+        .map_err(|e| format!("black/white scaling: {e}"))?;
+
     let w = raw_image.width;
     let h = raw_image.height;
 
-    let bayer: Vec<u16> = match &raw_image.data {
-        RawImageData::Integer(v) => v.clone(),
-        RawImageData::Float(v) => v.iter().map(|f| (*f * 65535.0).round() as u16).collect(),
+    let cfa_config = match &raw_image.photometric {
+        RawPhotometricInterpretation::Cfa(config) => config.clone(),
+        other => return Err(format!("unsupported photometric interpretation: {other:?}")),
     };
+    if !cfa_config.cfa.is_rgb() {
+        return Err(format!("CFA pattern '{}' is not RGB — PPG demosaic unavailable", cfa_config.cfa));
+    }
 
-    // Black level is a (possibly >1x1) repeating TILE indexed by pixel position, not by CFA
-    // colour index. White level, in contrast, is genuinely per-colour (RGBE) — but this
-    // camera's file only carries ONE value for all channels (verified: white.0 has length 1),
-    // so indexing by colour with a mismatched-scale fallback for the missing G/B entries
-    // silently made green/blue ~4x too dark relative to red (16383 fallback vs the real 4095)
-    // — that was the whole cause of the red/magenta cast. Fall back to the first (only) value
-    // instead of a hardcoded constant.
-    let black_tile = &raw_image.blacklevel;
-    let bw = black_tile.width.max(1);
-    let bh = black_tile.height.max(1);
-    let white: &Vec<u32> = &raw_image.whitelevel.0;
-    let wb = raw_image.wb_coeffs; // [R, G, B, G2] camera-as-shot multipliers, RGBE order
-    let cfa = &raw_image.camera.cfa;
-
-    // 1) black-level subtract + normalize + camera-WB, in RAW BAYER space (matches LibRaw's
-    //    use_camera_wb applied before demosaic).
-    let mut wbd = vec![0f32; w * h];
-    for row in 0..h {
-        for col in 0..w {
-            let idx = row * w + col;
-            let c = cfa.color_at(row, col); // 0=R,1=G,2=B
-            let bl = black_tile
-                .levels
-                .get((row % bh) * bw + (col % bw))
-                .map(|r| r.as_f32())
-                .unwrap_or(0.0);
-            // The file's white level (4095, a bare 12-bit ADC ceiling) reads noticeably darker
-            // than libraw's own per-camera-calibrated effective white point once run through
-            // the SAME downstream DCP pipeline (empirically ~2.33x / +1.2 EV dim, verified by
-            // rendering this exact frame both ways and comparing to the app's own trusted
-            // libraw-wasm decode of it). Real sensors typically have a calibrated headroom
-            // below the raw ADC ceiling that dumb bit-depth math doesn't know about; scaling
-            // the effective white level down (rather than gaining the output up) keeps
-            // highlight clipping behaviour consistent with that calibrated headroom.
-            const WHITE_LEVEL_MATCH: f32 = 2.334;
-            let wl = (white.get(c).or_else(|| white.first()).copied().unwrap_or(16383) as f32) / WHITE_LEVEL_MATCH;
-            let g = wb[c.min(3)].max(0.0001);
-            let v = (bayer[idx] as f32 - bl) / (wl - bl).max(1.0) * g;
-            wbd[idx] = v.max(0.0);
+    // 2) Camera white balance in Bayer space, LibRaw pre_mul convention: normalize the RGB
+    //    multipliers so the smallest is exactly 1.0 (values >1 can push highlights past 1.0 —
+    //    that's correct; libraw clips at 65535 and we clip at the final u16 pack, same place).
+    let mut wb = raw_image.wb_coeffs; // [R, G, B, G2], may contain NaN
+    if wb[0].is_nan() {
+        wb = [1.0, 1.0, 1.0, 1.0];
+    }
+    if wb[3].is_nan() || wb[3] <= 0.0 {
+        wb[3] = wb[1]; // G2 follows G when absent
+    }
+    let dmin = wb[..3].iter().copied().filter(|v| *v > 0.0).fold(f32::MAX, f32::min);
+    if dmin > 0.0 && dmin.is_finite() {
+        for c in wb.iter_mut() {
+            *c /= dmin;
         }
     }
 
-    // 2) bilinear demosaic: each output pixel takes its own CFA channel directly, the other
-    //    two channels are averaged from same-colour neighbours in a 3x3 window. Simple,
-    //    well-known, good enough for a first cut — RapidRAW's own rawler-based pipeline makes
-    //    the same trade (matching its quality tier, not LibRaw's AHD, which the calibrated DCP
-    //    colour pipeline downstream does not depend on).
-    let mut rgb16 = vec![0u16; w * h * 3];
-    let sample = |plane: &[f32], row: i32, col: i32, want: usize| -> Option<f32> {
-        if row < 0 || col < 0 || row as usize >= h || col as usize >= w {
-            return None;
-        }
-        let (row, col) = (row as usize, col as usize);
-        if cfa.color_at(row, col) == want {
-            Some(plane[row * w + col])
-        } else {
-            None
-        }
-    };
-    for row in 0..h {
-        for col in 0..w {
-            let idx = row * w + col;
-            let mut out = [0f32; 3];
-            let here = cfa.color_at(row, col);
-            for ch in 0..3 {
-                if here == ch {
-                    out[ch] = wbd[idx];
-                    continue;
-                }
-                let mut sum = 0f32;
-                let mut n = 0f32;
-                for dr in -1..=1i32 {
-                    for dc in -1..=1i32 {
-                        if dr == 0 && dc == 0 {
-                            continue;
-                        }
-                        if let Some(v) = sample(&wbd, row as i32 + dr, col as i32 + dc, ch) {
-                            sum += v;
-                            n += 1.0;
-                        }
-                    }
-                }
-                out[ch] = if n > 0.0 { sum / n } else { wbd[idx] };
+    let mut pixels: Vec<f32> = raw_image.data.as_f32().into_owned();
+    let cfa = cfa_config.cfa.clone();
+    pixels
+        .par_chunks_mut(w)
+        .enumerate()
+        .for_each(|(row, line)| {
+            for (col, v) in line.iter_mut().enumerate() {
+                *v = (*v * wb[cfa.color_at(row, col)]).max(0.0);
             }
-            for ch in 0..3 {
-                rgb16[idx * 3 + ch] = (out[ch].clamp(0.0, 1.0) * 65535.0).round() as u16;
-            }
-        }
-    }
+        });
+
+    // 3) PPG demosaic (rawler's own; internally SIMD/rayon-assisted). ROI = full frame to
+    //    keep output dimensions identical to the libraw-wasm decode this app already uses.
+    let pix = PixF32::new_with(pixels, w, h);
+    let roi = pix.rect();
+    let rgb = PPGDemosaic::new().demosaic(&pix, &cfa_config.cfa, &cfa_config.colors, roi);
+
+    // 4) Pack to interleaved u16. Floor already applied; ceiling (1.0) only here — the one
+    //    hard clip, mirroring libraw's CLIP at 65535 after scale_colors.
+    let out_w = rgb.width;
+    let out_h = rgb.height;
+    let mut rgb16 = vec![0u16; out_w * out_h * 3];
+    rgb16
+        .par_chunks_mut(3)
+        .zip(rgb.pixels().par_iter())
+        .for_each(|(dst, px)| {
+            dst[0] = (px[0].clamp(0.0, 1.0) * 65535.0).round() as u16;
+            dst[1] = (px[1].clamp(0.0, 1.0) * 65535.0).round() as u16;
+            dst[2] = (px[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
+        });
 
     Ok(DecodedRaw {
-        width: w as u32,
-        height: h as u32,
+        width: out_w as u32,
+        height: out_h as u32,
         iso,
         rgb16,
     })

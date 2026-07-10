@@ -804,16 +804,6 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
           </select>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Isolate a single shader pass to debug the match</div>
-        <div class="fx-ctrl-title" style="margin-top:14px">DCP pipeline (RW2 + profile only)</div>
-        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="cb-dcp-tc" checked onchange="dcpDiagChanged()"> Apply Tone Curve</label></div>
-        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="cb-dcp-ll" checked onchange="dcpDiagChanged()"> Apply Look Table</label></div>
-        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="cb-dcp-be" checked onchange="dcpDiagChanged()"> Apply Baseline Exposure</label></div>
-        <div class="fx-row"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="cb-dcp-noclip" onchange="dcpDiagChanged()"> Extended-range highlights (no early clip)</label></div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Re-decodes the current RW2 with these options — try combinations against a Lightroom reference</div>
       </div>
       <!-- EXPORT -->
       <div class="fx-ctrl" data-fxsec="export">
@@ -2827,7 +2817,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-10d';
+const BUILD='2026-07-10e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4530,13 +4520,14 @@ async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/in
 // per-channel ProfileToneCurve → ProPhoto→sRGB → gamma. The whole transform is baked
 // into a 65^3 LUT once per profile, then applied per pixel with trilinear interp.
 const DCP_PROFILES=['Standard','Natural','Vivid','Flat','Portrait','Landscape','Cinelike D2','Cinelike V2','L Classic Neo','Monochrome','L Monochrome','L Monochrome D','L Monochrome S','Leica Monochrome'];
-// ev/black absorb Adobe's private BaselineExposure + flare subtraction; gr/gb absorb the
-// as-shot-WB interpretation difference (LR vs libraw). These vary with ISO (the S9 is a
-// dual-gain sensor and Adobe normalizes per gain mode) — fitted as linear functions of
-// x = log2(ISO/100) against FOUR LR reference TIFFs spanning ISO 200-3200
-// (calib/dcp_fit_iso.json; per-image losses within 0.001 of each image's solo best fit).
-function dcpFit(iso){const x=Math.log2((iso||200)/100);
-  return{ev:-0.819-0.1732*x,gb:1.0714-0.0214*x,gr:0.9709,black:Math.max(0,0.0397-0.00714*x)};}
+// Residual correction constants, refitted against FIVE Lightroom reference TIFFs (ISO
+// 200-5000) on the NATIVE rawler decode + the DNG-SDK-correct pipeline below
+// (calib/dcp_native_fit.py -> dcp_native_fit.json). With the decode truly linear and the
+// pipeline structurally right, everything collapsed to near-identity: ev 0.000 with NO ISO
+// dependence (the old ev=-0.819-0.1732x and black=0.04 were compensating a mis-linearized
+// libraw-wasm decode — wasm ~= 1.22*native^0.634, measured per-pixel), and gr/gb are a ~2%
+// WB-interpretation trim. Shadow-skin patches now match LR within 5/255 (previously crushed).
+function dcpFit(iso){return{ev:0.0,gb:0.9783,gr:0.9860};}
 const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
 const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
 function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?'Standard':v}
@@ -4565,33 +4556,21 @@ function parseDCP(buf){
          enc:tags[51108]?tags[51108][0]:0,baseOff:tags[51109]?tags[51109][0]:0};
 }
 function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4)-0.055}
-// Diagnostics-panel opts for A/B testing the DCP pipeline against a Lightroom reference —
-// see chromasmith-22.html's Diagnostics section. All default to current shipping behavior.
-function dcpDiagOpts(){
-  const on=(id,def)=>{const el=document.getElementById(id);return el?el.checked:def};
-  return{tc:on('cb-dcp-tc',true),ll:on('cb-dcp-ll',true),be:on('cb-dcp-be',true),noclip:on('cb-dcp-noclip',false)};
-}
-function dcpDiagKey(o){return(o.tc?1:0)+''+(o.ll?1:0)+''+(o.be?1:0)+''+(o.noclip?1:0)}
-// Diagnostics checkbox handler — the DCP bake happens once at RW2 import (loadRw2→applyDcpLUT),
-// not per preview render, so toggling an option re-decodes the CURRENT photo from its
-// retained original File (see loadFXImages' rawFile) rather than touching the live WebGL pipeline.
-async function dcpDiagChanged(){
-  const it=curItem();
-  if(!it||it.ext!=='rw2'||!it.rawFile){log('Diagnostics: open an RW2 with a RAW profile selected to A/B test','info');return}
-  if(!rawProfile()){log('Diagnostics: select a RAW profile (not "None") to see an effect','info');return}
-  try{
-    const{canvas}=await loadRw2(it.rawFile);
-    it.img=canvas;fxImg=canvas; // curItem() is always fxImages[fxCurIdx], so it IS the active image
-    updateWork();renderPreview();
-    log('Re-decoded with DCP options: '+JSON.stringify(dcpDiagOpts()),'info');
-  }catch(e){log('Diagnostics re-decode failed: '+errStr(e),'err')}
-}
-function bakeDcpLUT(dcp,fit,N,opts){
+// Bake the DCP transform into a 65^3 LUT. Pipeline order and clamping semantics mirror the
+// Adobe DNG SDK as implemented by RawTherapee's rtengine/dcp.cc (verified against its source):
+// camera RGB → ForwardMatrix → XYZ(D50) → linear ProPhoto → exposure (2^(ev+BaselineExposure
+// Offset)) → LookTable (HSV deltas; TABLE-INDEX clamps only, values stay extended-range) →
+// hue-preserving Adobe RGBTone tone curve (curve on max & min channel, median interpolated —
+// NOT per-channel; per-channel application over-darkens/over-saturates mixed colors, worst in
+// shadows) → ProPhoto→sRGB → gamma. NO black subtraction anywhere: the DCPs carry
+// DefaultBlackRender=None (the profile forbids it; the ToneCurve has its own shadow toe), and
+// black levels are fully handled at raw decode. Values are floored at 0 but NOT ceiled at 1
+// until the final output stage, so bright saturated colors keep their hue through the curve.
+function bakeDcpLUT(dcp,fit,N){
   N=N||65;
-  opts=opts||{tc:true,ll:true,be:true,noclip:false};
   const nh=dcp.dims[0],ns=dcp.dims[1],nv=dcp.dims[2],tbl=dcp.look;
-  const expo=Math.pow(2,fit.ev+(opts.be?dcp.baseOff:0)),blk=fit.black;
-  const TN=4096,toneL=new Float32Array(TN); // dense per-channel tone curve
+  const expo=Math.pow(2,fit.ev+dcp.baseOff);
+  const TN=4096,toneL=new Float32Array(TN); // dense tone curve (sampled via RGBTone below)
   {const p=dcp.tone,np2=p.length/2;
    for(let i=0;i<TN;i++){const x=i/(TN-1);let j=1;while(j<np2-1&&p[2*j]<x)j++;
      const x0=p[2*(j-1)],y0=p[2*(j-1)+1],x1=p[2*j],y1=p[2*j+1];
@@ -4601,21 +4580,19 @@ function bakeDcpLUT(dcp,fit,N,opts){
   let o=0;
   for(let bi=0;bi<N;bi++)for(let gi=0;gi<N;gi++)for(let ri=0;ri<N;ri++){
     const cr=ri/(N-1)*fit.gr,cg=gi/(N-1),cb=bi/(N-1)*fit.gb;
-    // ForwardMatrix → XYZ(D50) → ProPhoto, then exposure
+    // ForwardMatrix → XYZ(D50) → ProPhoto, then exposure (floor 0, no ceiling)
     const X=dcp.fm[0]*cr+dcp.fm[1]*cg+dcp.fm[2]*cb,
           Y=dcp.fm[3]*cr+dcp.fm[4]*cg+dcp.fm[5]*cb,
           Z=dcp.fm[6]*cr+dcp.fm[7]*cg+dcp.fm[8]*cb;
     let r=Math.max((XYZ2PP[0]*X+XYZ2PP[1]*Y+XYZ2PP[2]*Z)*expo,0),
         g=Math.max((XYZ2PP[3]*X+XYZ2PP[4]*Y+XYZ2PP[5]*Z)*expo,0),
         b=Math.max((XYZ2PP[6]*X+XYZ2PP[7]*Y+XYZ2PP[8]*Z)*expo,0);
-    if(!opts.noclip){r=Math.min(r,1);g=Math.min(g,1);b=Math.min(b,1)} // shipping behavior: clip here (pre-LookTable/tone-curve)
     // RGB→HSV
     const mx=Math.max(r,g,b),mn=Math.min(r,g,b),c=mx-mn;
     let h=0;if(c>1e-12){if(mx===r)h=((g-b)/c%6+6)%6;else if(mx===g)h=(b-r)/c+2;else h=(r-g)/c+4;h*=60;}
     let s=mx>1e-12?c/mx:0,v=mx;
-    // LookTable trilinear (hue wraps; V axis sRGB-encoded when enc===1)
-    // vi is clamped for TABLE-INDEX purposes only (index clamp ≠ value clamp — v itself,
-    // used below for v*dv, is left extended-range when opts.noclip lifted the earlier ceiling)
+    // LookTable trilinear (hue wraps; V axis sRGB-encoded when enc===1). venc/vi clamps are
+    // TABLE-INDEX bounds only — v itself stays extended-range for the v*dv product below.
     const venc=Math.min(dcp.enc===1?srgbG(v):v,1);
     const hi=h/360*nh,si=s*(ns-1),vi=venc*(nv-1);
     const h0=Math.floor(hi)%nh,h1=(h0+1)%nh,hf=hi-Math.floor(hi);
@@ -4623,7 +4600,7 @@ function bakeDcpLUT(dcp,fit,N,opts){
     const v0=Math.min(Math.floor(vi),nv-2),vf=vi-v0,v1=v0+1;
     const idx=(vv,hh,ss)=>3*((vv*nh+hh)*ns+ss); // data layout: [val][hue][sat]
     let dh=0,ds=1,dv=1;
-    if(opts.ll)for(let k=0;k<3;k++){
+    for(let k=0;k<3;k++){
       const c00=tbl[idx(v0,h0,s0)+k]*(1-hf)+tbl[idx(v0,h1,s0)+k]*hf,
             c01=tbl[idx(v0,h0,s1)+k]*(1-hf)+tbl[idx(v0,h1,s1)+k]*hf,
             c10=tbl[idx(v1,h0,s0)+k]*(1-hf)+tbl[idx(v1,h1,s0)+k]*hf,
@@ -4631,17 +4608,36 @@ function bakeDcpLUT(dcp,fit,N,opts){
             cc=(c00*(1-sf)+c01*sf)*(1-vf)+(c10*(1-sf)+c11*sf)*vf;
       if(k===0)dh=cc;else if(k===1)ds=cc;else dv=cc;
     }
-    h=(h+dh%360+360)%360;s=Math.max(s*ds,0);v=Math.max(v*dv,0);
-    if(!opts.noclip){s=Math.min(s,1);v=Math.min(v,1)} // shipping behavior: clip here too (pre-tone-curve)
+    h=(h+dh%360+360)%360;s=Math.min(Math.max(s*ds,0),1);v=Math.max(v*dv,0); // s is a ratio (≤1 by definition); v stays extended
     // HSV→RGB
     const hh=h/60,i6=Math.floor(hh)%6,f=hh-Math.floor(hh),
           p2=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));
     if(i6===0){r=v;g=t;b=p2}else if(i6===1){r=q;g=v;b=p2}else if(i6===2){r=p2;g=v;b=t}
     else if(i6===3){r=p2;g=q;b=v}else if(i6===4){r=t;g=p2;b=v}else{r=v;g=p2;b=q}
-    // black subtract + per-channel tone curve (identity pass-through when opts.tc is off)
-    if(opts.tc){r=tone((r-blk)/(1-blk));g=tone((g-blk)/(1-blk));b=tone((b-blk)/(1-blk));}
-    else{r=(r-blk)/(1-blk);g=(g-blk)/(1-blk);b=(b-blk)/(1-blk);}
-    // ProPhoto → sRGB + gamma
+    // Hue-preserving Adobe RGBTone (DNG SDK / RawTherapee AdobeToneCurve): apply the curve to
+    // the max and min channels, interpolate the median between them at its original ratio.
+    {
+      let tr,tg,tb;
+      if(r>=g){
+        if(g>b){ // r >= g > b
+          tr=tone(r);tb=tone(b);tg=r>b?tb+(tr-tb)*(g-b)/(r-b):tr;
+        }else if(b>r){ // b > r >= g
+          tb=tone(b);tg=tone(g);tr=b>g?tg+(tb-tg)*(r-g)/(b-g):tb;
+        }else{ // r >= b >= g
+          tr=tone(r);tg=tone(g);tb=r>g?tg+(tr-tg)*(b-g)/(r-g):tr;
+        }
+      }else{
+        if(r>b){ // g > r > b
+          tg=tone(g);tb=tone(b);tr=g>b?tb+(tg-tb)*(r-b)/(g-b):tg;
+        }else if(b>g){ // b > g > r
+          tb=tone(b);tr=tone(r);tg=b>r?tr+(tb-tr)*(g-r)/(b-r):tb;
+        }else{ // g >= b >= r
+          tg=tone(g);tr=tone(r);tb=g>r?tr+(tg-tr)*(b-r)/(g-r):tg;
+        }
+      }
+      r=tr;g=tg;b=tb;
+    }
+    // ProPhoto → sRGB + gamma (the single final value clamp)
     const sr=Math.min(Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),1),
           sg=Math.min(Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),1),
           sb=Math.min(Math.max(PP2SRGB[6]*r+PP2SRGB[7]*g+PP2SRGB[8]*b,0),1);
@@ -4650,16 +4646,15 @@ function bakeDcpLUT(dcp,fit,N,opts){
   return{n:N,data:out};
 }
 const _dcpCache={},_dcpLutCache={};
-async function getDcpLUT(name,iso,opts){
-  opts=opts||dcpDiagOpts();
-  const key=name+'@'+(iso||200)+'@'+dcpDiagKey(opts);
+async function getDcpLUT(name,iso){
+  const key=name+'@'+(iso||200);
   if(_dcpLutCache[key])return _dcpLutCache[key];
   if(!_dcpCache[name]){
     const r=await fetch('vendor/dcp/Panasonic DC-S9 Camera '+name+'.dcp');
     if(!r.ok)throw new Error('DCP profile fetch failed: '+name+' ('+r.status+')');
     _dcpCache[name]=parseDCP(await r.arrayBuffer());
   }
-  const lut=bakeDcpLUT(_dcpCache[name],dcpFit(iso),null,opts);
+  const lut=bakeDcpLUT(_dcpCache[name],dcpFit(iso));
   _dcpLutCache[key]=lut;return lut;
 }
 function applyDcpLUT(u16,w,h,lut){ // u16: interleaved RGB Uint16, linear camera space
@@ -4696,12 +4691,23 @@ async function loadRw2(file){
     img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
-  const w=img.width,h=img.height,ch=img.colors||3,rgb=img.data;
+  const w=img.width,h=img.height,ch=img.colors||3;let rgb=img.data;
   if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
   let rgba;
   if(profile){
     if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
-    const lut=await getDcpLUT(profile,m.iso_speed); // correction constants are ISO-dependent (dual-gain sensor)
+    // libraw-wasm's "linear" output is measurably non-linear vs true (ADC-count) linearity:
+    // wasm ≈ 1.22·native^0.634 per channel (fitted on identical frames vs the desktop shell's
+    // rawler decode, 3% residual). The DCP constants are calibrated on TRUE linear data, so
+    // in the browser (no native shell) linearize first: v' = (v/gain)^(1/0.634). The desktop
+    // shell's NativeLibRawShim already returns true-linear data — skip there.
+    if(!window.__TAURI__){
+      const GAIN=[1.219,1.215,1.193],PW=1/0.634;
+      const lin=new Uint16Array(rgb.length);
+      for(let i=0;i<rgb.length;i++)lin[i]=Math.min(Math.pow((rgb[i]/65535)/GAIN[i%3],PW)*65535,65535);
+      rgb=lin;
+    }
+    const lut=await getDcpLUT(profile,m.iso_speed);
     rgba=applyDcpLUT(rgb,w,h,lut);
   }else{
     // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)

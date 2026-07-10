@@ -369,6 +369,7 @@ dependencies = [
  "kamadak-exif",
  "mime_guess",
  "rawler",
+ "rayon",
  "serde",
  "serde_json",
  "tauri",

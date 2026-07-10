@@ -28,6 +28,9 @@ mime_guess = "2"
 # Bayer sensor data only; this app does its own black-level/WB/demosaic in main.rs, then hands
 # linear 16-bit camera RGB to the EXISTING, already-calibrated JS DCP pipeline unchanged.
 rawler = "0.7"
+# Parallel pixel loops in the native decode (rawler already pulls rayon in; this just makes
+# the dependency explicit for our own code).
+rayon = "1"
 base64 = "0.22"
 # Library browser: thumbnail generation (downsize + JPEG-encode both RAW-decoded buffers and
 # regular JPEG/PNG files) and a small non-crypto hash for the on-disk thumbnail cache key.
