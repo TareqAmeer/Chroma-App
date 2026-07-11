@@ -2817,7 +2817,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-10f';
+const BUILD='2026-07-11a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4641,7 +4641,32 @@ function bakeDcpLUT(dcp,fit,N){
     const sr=Math.min(Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),1),
           sg=Math.min(Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),1),
           sb=Math.min(Math.max(PP2SRGB[6]*r+PP2SRGB[7]*g+PP2SRGB[8]*b,0),1);
-    out[o++]=srgbG(sr);out[o++]=srgbG(sg);out[o++]=srgbG(sb);
+    let gr2=srgbG(sr),gg2=srgbG(sg),gb2=srgbG(sb);
+    // Residual cool-highlight lift (fitted vs Lightroom, calib/dcp_residual_tone.py +
+    // dcp_sky_gate.json): after everything above, LR still renders bright SATURATED COOL
+    // regions (blue sky most visibly) ~6-8/255 brighter and slightly less saturated. The
+    // residual is hue/sat/value-gated, NOT a global tone shift — skin (warm hue), water
+    // (same hue as sky but low sat) and shadows (low v) all sit outside the gates and are
+    // untouched (verified: gate patches byte-identical, sky diff +7.4 → +0.7). Applied in
+    // final sRGB-gamma space (the space the residual was measured in).
+    {
+      const mx2=Math.max(gr2,gg2,gb2),mn2=Math.min(gr2,gg2,gb2),c2=mx2-mn2;
+      let h2=0;if(c2>1e-12){if(mx2===gr2)h2=((gg2-gb2)/c2%6+6)%6;else if(mx2===gg2)h2=(gb2-gr2)/c2+2;else h2=(gr2-gg2)/c2+4;h2*=60;}
+      let s2=mx2>1e-12?c2/mx2:0,v2=mx2;
+      const ss=(a,b2,x)=>{const t=Math.min(Math.max((x-a)/Math.max(b2-a,1e-9),0),1);return t*t*(3-2*t)};
+      const dhh=Math.abs(((h2-215)+180)%360-180);
+      const ghRaw=Math.min(Math.max(1-dhh/161.39,0),1), gh=ghRaw*ghRaw*(3-2*ghRaw);
+      const gate=gh*ss(0.10,0.4986,s2)*(ss(0.45,0.62,v2)*(1-ss(0.90,0.985,v2)));
+      if(gate>0){
+        v2=Math.min(Math.max(v2+0.05322*gate,0),1);
+        s2=Math.min(Math.max(s2-0.02173*gate,0),1);
+        const hh2=h2/60,i7=Math.floor(hh2)%6,f2=hh2-Math.floor(hh2),
+              pp=v2*(1-s2),qq=v2*(1-s2*f2),tt=v2*(1-s2*(1-f2));
+        if(i7===0){gr2=v2;gg2=tt;gb2=pp}else if(i7===1){gr2=qq;gg2=v2;gb2=pp}else if(i7===2){gr2=pp;gg2=v2;gb2=tt}
+        else if(i7===3){gr2=pp;gg2=qq;gb2=v2}else if(i7===4){gr2=tt;gg2=pp;gb2=v2}else{gr2=v2;gg2=pp;gb2=qq}
+      }
+    }
+    out[o++]=gr2;out[o++]=gg2;out[o++]=gb2;
   }
   return{n:N,data:out};
 }

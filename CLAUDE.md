@@ -409,6 +409,12 @@ invisible at any size. Key points:
 - Correction constants are near-identity and **not ISO-dependent**: `dcpFit` returns
   `{ev:0.0, gr:0.9860, gb:0.9783}` — fitted in `calib/dcp_native_fit.py` against 5 LR
   reference TIFFs on the NATIVE (rawler) decode, with shadow-skin patches in the loss/gate.
+- A final **hue/sat/value-gated residual lift** closes the last LR gap (bright saturated COOL
+  regions — blue sky — rendered ~7/255 darker; skin/water/shadows sit outside the gates and
+  are untouched). Fitted in `calib/dcp_residual_tone.py` → `calib/dcp_sky_gate.json`, baked
+  as constants at the end of `bakeDcpLUT` in final sRGB-gamma space (the measurement space).
+  ⚠️ A 1D tone curve CANNOT express this residual — sky and water share hue AND luma; only
+  saturation separates them (0.30 vs 0.13). Don't refit it as a tone/exposure tweak.
   ⚠️ The old ISO-dependent fudges (`ev=-0.819-0.17x`, `black=0.04`, native
   `WHITE_LEVEL_MATCH=2.334`) existed only to bend a **mis-linearized libraw-wasm decode**
   (measured: wasm ≈ 1.22·native^0.634 per channel) toward LR at midtones — they crushed
