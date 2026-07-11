@@ -7,6 +7,40 @@
   if (!window.__TAURI__) return;
   const invoke = window.__TAURI__.core.invoke;
 
+  // ── decoded-image cache: reopening a photo you've already viewed this session skips the
+  // full decode (RW2: PPG demosaic + DCP LUT bake, several seconds) entirely — the SAME
+  // fxImages[0] entry (its canvas, already the finished decode) is reinstalled directly via
+  // chromasmith-22.html's installFXImages(). Keyed by path only (not mtime/size — a file
+  // changing on disk mid-session while it's cached is an edge case, not worth the extra
+  // invoke() per open to detect). Budgeted by estimated byte size (canvas w*h*4), LRU-evicted
+  // by last-access time; the currently-open photo is never evicted (it's still on screen).
+  // "clear if the app gets too slow" per the user's own suggestion → chromasmithClearImageCache. ──
+  const IMG_CACHE_BUDGET = 1024 * 1024 * 1024; // 1GB default
+  const imgCache = new Map(); // path -> {entry, size, ts}
+  function imgCacheSize() { let s = 0; imgCache.forEach((v) => { s += v.size; }); return s; }
+  function imgCacheEvict() {
+    if (imgCacheSize() <= IMG_CACHE_BUDGET) return;
+    const entries = Array.from(imgCache.entries())
+      .filter(([p]) => p !== state.openedPath)
+      .sort((a, b) => a[1].ts - b[1].ts); // oldest-accessed first
+    for (const [p] of entries) {
+      imgCache.delete(p);
+      if (imgCacheSize() <= IMG_CACHE_BUDGET) break;
+    }
+  }
+  function imgCacheStore(path, entry, loadKey) {
+    const c = entry.img;
+    const size = (c && c.width && c.height) ? c.width * c.height * 4 : 32 * 1024 * 1024; // heuristic fallback
+    imgCache.set(path, { entry, size, ts: Date.now(), loadKey });
+    imgCacheEvict();
+  }
+  window.chromasmithClearImageCache = () => {
+    const n = imgCache.size, mb = Math.round(imgCacheSize() / (1024 * 1024));
+    imgCache.clear();
+    if (typeof toast === 'function') toast(`Cleared ${n} cached photo(s) (${mb} MB)`, true);
+    if (typeof log === 'function') log(`Image cache cleared: ${n} photo(s), ${mb} MB`, 'info');
+  };
+
   const LS_ROOT = 'chromasmith_lib_root';
   const state = {
     root: localStorage.getItem(LS_ROOT) || '',
@@ -225,27 +259,56 @@
   function snapshotToB64(snap) { return btoa(unescape(encodeURIComponent(JSON.stringify(snap)))); }
   function snapshotFromB64(b64) { return JSON.parse(decodeURIComponent(escape(atob(b64)))); }
 
+  // ── single-flight + latest-wins: without this, clicking photo A then quickly clicking
+  // photo B started TWO concurrent opens with nothing stopping A's slower decode from
+  // completing (and rendering) AFTER B's — visibly "loading on top of" whatever you'd
+  // already switched to. Now a click while a load is in flight just remembers the latest
+  // requested path; the in-flight load, on finishing, immediately starts that latest
+  // request instead. Only one decode ever runs at a time, and the end state always matches
+  // the last thing you actually clicked. ──
+  let openBusy = false, openPendingPath = null;
   async function openInEditor(path) {
+    if (openBusy) { openPendingPath = path; return; }
+    openBusy = true;
+    try {
+      await openInEditorInner(path);
+    } finally {
+      openBusy = false;
+      const next = (openPendingPath && openPendingPath !== path) ? openPendingPath : null;
+      openPendingPath = null;
+      if (next) openInEditor(next);
+    }
+  }
+  async function openInEditorInner(path) {
+    // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
+    // off it — otherwise a quick edit right before switching photos could be dropped.
+    await flushPendingSave();
     // Selecting a photo from the full-window home screen transitions into the editor — the
     // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
     if (state.expanded_view) toggleExpandedView(false);
-    // Fire the provisional preview WITHOUT awaiting it — it's meant to show something while
-    // the full decode runs behind it. Awaiting it here made the two IPC round-trips run back
-    // to back (get_preview THEN read_file_bytes/decode) instead of overlapping, which made
-    // every open strictly SLOWER than before this feature existed — the opposite of the
-    // intent. hideProvisional is only needed once, in the `finally` below, so the promise
-    // itself is all that needs to survive past this point.
-    const provisionalPromise = showProvisional(path);
+    const cached = imgCache.get(path);
+    // Cache hit: skip read_file_bytes + the full decode entirely, and skip the provisional
+    // preview too (there's nothing to bridge — the real image is already ready instantly).
+    const provisionalPromise = cached ? Promise.resolve(() => {}) : showProvisional(path);
     try {
-      const buf = await invoke('read_file_bytes', { path });
-      // lastModified:0 (not the default Date.now()) — chromasmith-22.html's loadFXImages()
-      // keys "is this the same photo already loaded" off name+size+lastModified so it knows
-      // whether to reset per-photo state (export version, All-FX toggles) on load. A File
-      // built fresh from read_file_bytes on every reopen would otherwise get a new
-      // lastModified each time (today's timestamp), making the SAME photo look like a
-      // different one on every single reopen and defeating that check entirely.
-      const file = new File([buf], baseName(path), { type: '', lastModified: 0 });
-      await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
+      if (cached) {
+        cached.ts = Date.now(); // touch for LRU
+        installFXImages([cached.entry], cached.loadKey);
+      } else {
+        const buf = await invoke('read_file_bytes', { path });
+        // lastModified:0 (not the default Date.now()) — chromasmith-22.html's loadFXImages()
+        // keys "is this the same photo already loaded" off name+size+lastModified so it knows
+        // whether to reset per-photo state (export version, All-FX toggles) on load. A File
+        // built fresh from read_file_bytes on every reopen would otherwise get a new
+        // lastModified each time (today's timestamp), making the SAME photo look like a
+        // different one on every single reopen and defeating that check entirely.
+        const file = new File([buf], baseName(path), { type: '', lastModified: 0 });
+        await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
+        if (fxImages[0]) {
+          const loadKey = `${baseName(path)}:${buf.byteLength}:0`; // must match loadFXImages' own key formula
+          imgCacheStore(path, fxImages[0], loadKey);
+        }
+      }
       state.openedPath = path;
       const sc = await getSidecar(path);
       if (sc.recipe) {
@@ -288,21 +351,44 @@
 
   // ── auto-persist: any edit to a library-opened photo silently saves a non-destructive
   // recipe (the same FX snapshot the undo history and session-save use) into its XMP
-  // sidecar and marks it "edited" — even before export. Debounced so a slider drag writes
-  // once, not per frame. No-op for photos not opened from the Library (state.openedPath ''). ──
-  let saveTimer;
+  // sidecar and marks it "edited" — even before export. The DISK write is still debounced
+  // (a slider drag writes once, not per frame), but the "edited" badge itself now appears
+  // the instant an edit happens, not up to 2s later — and previously it didn't appear at
+  // all until the whole grid was rebuilt (renderGrid() was the only place the badge markup
+  // was ever produced), i.e. you'd have to leave the folder and come back to see it.
+  // No-op for photos not opened from the Library (state.openedPath ''). ──
+  function markCardEdited(path) {
+    const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card && !card.querySelector('.lib-edited-badge')) {
+      const badge = document.createElement('div');
+      badge.className = 'lib-edited-badge';
+      badge.textContent = 'EDITED';
+      card.appendChild(badge);
+    }
+  }
+  let saveTimer, pendingSave = null;
+  async function flushPendingSave() {
+    if (!pendingSave) return;
+    clearTimeout(saveTimer);
+    const { path, recipe } = pendingSave;
+    pendingSave = null;
+    const cur = await getSidecar(path);
+    const updated = { ...cur, edited: true, recipe };
+    state.sidecars.set(path, updated);
+    await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
+  }
   window.chromasmithOnEdit = (snap) => {
     if (!state.openedPath) return;
-    clearTimeout(saveTimer);
     const path = state.openedPath;
-    saveTimer = setTimeout(async () => {
-      const cur = await getSidecar(path);
-      const recipe = snapshotToB64(snap);
-      const updated = { ...cur, edited: true, recipe };
-      state.sidecars.set(path, updated);
-      await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
-    }, 2000);
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, recipe: '' };
+    if (!cur.edited) { state.sidecars.set(path, { ...cur, edited: true }); markCardEdited(path); }
+    clearTimeout(saveTimer);
+    pendingSave = { path, recipe: snapshotToB64(snap) };
+    saveTimer = setTimeout(flushPendingSave, 2000);
   };
+  // A pending write must not be silently dropped by switching photos (or quitting) inside
+  // the 2s debounce window — flush it immediately whenever either happens.
+  window.addEventListener('beforeunload', flushPendingSave);
 
   // ── folder tree ────────────────────────────────────────────────────────────
   async function renderTree() {

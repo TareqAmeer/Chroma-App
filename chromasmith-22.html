@@ -2880,7 +2880,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12d';
+const BUILD='2026-07-12e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4849,32 +4849,16 @@ async function loadRw2(file){
   log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
   return{canvas:c,dpi:240,ms:dt}; // RW2 carries no resolution tags; 240 = Lightroom's export default
 }
-async function loadFXImages(fileList){
-  const files=[...fileList].filter(f=>f.type.startsWith('image/')||isTiffFile(f)||isRw2File(f)); // TIFF/RW2 mime is often empty on drop
-  if(!files.length)return;
-  fxImages=[];
-  for(const file of files){
-    try{
-      const bytes=new Uint8Array(await file.arrayBuffer());
-      let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
-      if(isTiffFile(file)){
-        const{canvas,dpi,icc}=await loadTiff(file);
-        fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately
-        continue;
-      }
-      if(isRw2File(file)){
-        const{canvas,dpi}=await loadRw2(file);
-        fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null,rawFile:file}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
-        applyRawDefaults();
-        continue;
-      }
-      const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
-      const exif=(ext==='jpg'||ext==='jpeg')?readExifTags(bytes):{};
-      const img=await loadImg(file);
-      fxImages.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif});
-    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err')} // keep loading the rest of the batch
-  }
-  if(!fxImages.length){log('No images loaded','err');return}
+// Installs already-decoded entries as the active fxImages and renders — the second half of
+// loadFXImages, split out so a caller with an ALREADY-DECODED entry (the desktop Library's
+// image cache — see chromasmithInstallCachedImage in library-ui.js) can skip the expensive
+// decode (RW2: PPG demosaic + DCP LUT bake, several seconds) entirely on a cache hit, instead
+// of re-running the whole file→canvas pipeline just to redisplay the same photo.
+// entries: [{img,name,ext,dpi,bytes,exif,icc?,rawFile?}, ...]; loadKey: same "is this a
+// genuinely different photo" string loadFXImages computes from file name+size+lastModified.
+function installFXImages(entries,loadKey){
+  if(!entries.length)return;
+  fxImages=entries;
   if(cropMode)cropExit();
   fxImages.forEach(it=>it.geom=defGeom());
   fxCurIdx=0;fxExportScope='all';
@@ -4890,7 +4874,6 @@ async function loadFXImages(fileList){
   // the OS/browser's own duplicate-download naming ("(1)", "(2)"...) silently replaced the
   // intended "_v1.1"/"_v1.2" scheme. Key on name+size+lastModified so a real edit-then-reload
   // of the same file (same bytes) still counts as "the same photo".
-  const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
   const isNewPhoto=loadKey!==_fxLoadKey;
   if(isNewPhoto){fxVersion=1.0;_fxLoadKey=loadKey;}
   document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
@@ -4918,6 +4901,39 @@ async function loadFXImages(fileList){
   renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
+}
+async function loadFXImages(fileList){
+  const files=[...fileList].filter(f=>f.type.startsWith('image/')||isTiffFile(f)||isRw2File(f)); // TIFF/RW2 mime is often empty on drop
+  if(!files.length)return;
+  const entries=[];
+  for(const file of files){
+    try{
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
+      if(isTiffFile(file)){
+        const{canvas,dpi,icc}=await loadTiff(file);
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately
+        continue;
+      }
+      if(isRw2File(file)){
+        const{canvas,dpi}=await loadRw2(file);
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null,rawFile:file}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        continue;
+      }
+      const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
+      const exif=(ext==='jpg'||ext==='jpeg')?readExifTags(bytes):{};
+      const img=await loadImg(file);
+      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif});
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err')} // keep loading the rest of the batch
+  }
+  if(!entries.length){log('No images loaded','err');return}
+  // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
+  // now) — was previously inline per-RW2-entry, before any render had happened; moving it
+  // after the render here would apply the defaults a frame too late, requiring a manual
+  // slider nudge before they'd visibly take effect.
+  if(entries.some(it=>it.ext==='rw2'))applyRawDefaults();
+  const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
+  installFXImages(entries,loadKey);
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
 // "White glow" halation switch accordingly. The user can still toggle it afterward.
@@ -5707,7 +5723,11 @@ function initZoomPan(){
     const ox=(e.clientX-r.left)/r.width;
     const oy=(e.clientY-r.top)/r.height;
     const prev=fxZoom;
-    fxZoom=Math.max(1,Math.min(8,fxZoom*(e.deltaY<0?1.1:0.9)));
+    // A trackpad pinch is delivered as a rapid BURST of wheel events (not a single gesture
+    // event), so a 10%-per-tick step compounded dozens of times a second felt like the zoom
+    // was slamming in/out almost instantly. 2.5% per tick is ~4x gentler — a full pinch still
+    // reaches the same 1x-8x range, it just takes noticeably more travel to get there.
+    fxZoom=Math.max(1,Math.min(8,fxZoom*(e.deltaY<0?1.025:0.975)));
     if(fxZoom===1){fxPanX=0;fxPanY=0;}else{
       // Zoom toward cursor
       const cv=document.getElementById('fx-canvas');
@@ -7206,6 +7226,7 @@ function ovfBuild(){
   tabs.forEach(([k,lb])=>{h+=`<button class="fx-ovf-item" onclick="ovfClose();switchTab('${k}')">${active==='panel-'+k?'✓ ':''}${lb}</button>`;});
   h+='<div class="fx-ovf-sep"></div>';
   if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Library (L)</button>';
+  if(window.chromasmithClearImageCache)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithClearImageCache()">Clear image cache</button>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();toggleTheme()">Light / dark theme</button>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();toggleLog()">Diagnostics log</button>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();document.body.classList.add(\'diag-on\');applyFxLayout()">Diagnostics section</button>';
