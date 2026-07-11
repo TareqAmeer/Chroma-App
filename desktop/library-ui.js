@@ -431,7 +431,12 @@
   const thumbBlobUrls = new Map(); // path -> last objectURL, so we can revoke it
   function refreshCardThumbFromCanvas(path) {
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    const cv = document.getElementById('fx-canvas');
+    // Borders / the Canvas matte are composited onto a SEPARATE overlay canvas (#fx-canvas-bd,
+    // see chromasmith-22.html's applyPreviewBorders) which is shown INSTEAD of #fx-canvas while
+    // active (#fx-canvas gets display:none) — grabbing #fx-canvas unconditionally silently
+    // dropped borders/canvas-matte edits from the library thumbnail. Use whichever is visible.
+    const bd = document.getElementById('fx-canvas-bd');
+    const cv = (bd && bd.style.display !== 'none' && bd.width && bd.height) ? bd : document.getElementById('fx-canvas');
     if (!card || !cv || !cv.width || !cv.height) return;
     const img = card.querySelector('img');
     if (!img) return;

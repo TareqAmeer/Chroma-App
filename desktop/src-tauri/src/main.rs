@@ -137,7 +137,7 @@ fn lens_profile_available(make: String, model: String, lens_model: String) -> bo
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-12k"
+    "2026-07-12l"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -224,6 +224,12 @@ async fn google_oauth_loopback(auth_url_template: String) -> Result<OAuthResult,
 }
 
 fn main() {
+    // Printed unconditionally, BEFORE anything else, straight to the terminal `npm run dev`
+    // (or `cargo run`) runs in — no JS round-trip needed, so it's visible even if the webview
+    // never loads. Compare against native_build_tag()'s value: if they differ (or this line
+    // never appears), the running process is NOT the one src-tauri/src was last edited for —
+    // a full quit + relaunch (real recompile) is needed before any native-side fix applies.
+    eprintln!("=== Chromasmith native build: {} ===", native_build_tag());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
