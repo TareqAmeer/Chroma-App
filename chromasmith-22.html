@@ -1044,7 +1044,11 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <div class="faq-a">It's confirming local-only processing — that's the intended state, not a connection error.</div>
 
       <div class="faq-q">Can I use Google Photos?</div>
-      <div class="faq-a">Yes — optional and off by default. <b>Google Photos…</b> (Image Input) opens Google's own picker so you can filter and select photos from your library, and <b>Upload exports</b> (Export panel) mirrors every export into a “Chromasmith” album. It needs a one-time free setup at <code>console.cloud.google.com</code>: <b>1)</b> create a project, <b>2)</b> enable the <b>Google Photos Picker API</b> and <b>Photos Library API</b> (APIs &amp; Services → Library), <b>3)</b> configure the OAuth consent screen (External → stay in <b>Testing</b>, add your own Gmail as a test user), <b>4)</b> create <b>Credentials → OAuth client ID → Web application</b> and add this app's address to BOTH lists — <i>Authorized JavaScript origins</i> gets the origin (e.g. <code>https://yourname.github.io</code>) and <i>Authorized redirect URIs</i> gets the full page URL (e.g. <code>https://yourname.github.io/Chroma-App/chromasmith-22.html</code>), <b>5)</b> paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (just hit <b>Connect</b> again); allow pop-ups for this site.</div>
+      <div class="faq-a">Yes — optional and off by default. <b>Google Photos…</b> (Image Input) opens Google's own picker so you can filter and select photos from your library, and <b>Upload exports</b> (Export panel) mirrors every export into a “Chromasmith” album. It needs a one-time free setup at <code>console.cloud.google.com</code>, and the steps differ slightly depending on whether you're using the browser/GitHub Pages build or the desktop app:
+      <br><br><b>1)</b> create a project, <b>2)</b> enable the <b>Google Photos Picker API</b> and <b>Photos Library API</b> (APIs &amp; Services → Library), <b>3)</b> configure the OAuth consent screen (External → stay in <b>Testing</b>, add your own Gmail as a test user), then:
+      <br><br><u>Browser / GitHub Pages:</u> create <b>Credentials → OAuth client ID → Web application</b> and add this app's address to BOTH lists — <i>Authorized JavaScript origins</i> gets the origin (e.g. <code>https://yourname.github.io</code>) and <i>Authorized redirect URIs</i> gets the full page URL (e.g. <code>https://yourname.github.io/Chroma-App/chromasmith-22.html</code>).
+      <br><br><u>Desktop app:</u> create <b>Credentials → OAuth client ID → Desktop app</b> instead — no origins or redirect URIs to register at all; sign-in opens your system's default browser and completes over a local loopback connection (127.0.0.1), then hands control back to the app.
+      <br><br>Either way, paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (the app re-prompts automatically); on the browser build, allow pop-ups for this site.</div>
 
       <div class="faq-q">My RW2 / RAW colours don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
@@ -2817,7 +2821,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-11b';
+const BUILD='2026-07-11c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4161,7 +4165,7 @@ const FX=new FXR();
 // FX UI
 // ═══════════════════════════
 const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
-let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all';
+let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
 let fxSplit=false, fxSplitPos=0.5;       // split before/after view
@@ -4790,7 +4794,16 @@ async function loadFXImages(fileList){
   const n=fxImages.length;
   setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
   document.getElementById('fx-fname').value=fxImages[0].name;
-  fxVersion=1.0;document.getElementById('fx-ver').textContent='v1.0'; // fresh input → version restarts
+  // Version restarts only for a GENUINELY new photo/batch — not on every reopen. The docked
+  // Library panel (unlike the old full-page overlay) stays visible next to the editor, so
+  // clicking the same photo again (to compare after an export, or just re-selecting it) is now
+  // common; resetting to v1.0 every time made every export reuse the same "_v1.0" filename, so
+  // the OS/browser's own duplicate-download naming ("(1)", "(2)"...) silently replaced the
+  // intended "_v1.1"/"_v1.2" scheme. Key on name+size+lastModified so a real edit-then-reload
+  // of the same file (same bytes) still counts as "the same photo".
+  const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
+  if(loadKey!==_fxLoadKey){fxVersion=1.0;_fxLoadKey=loadKey;}
+  document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
   const btn=document.getElementById('btn-fx-export');btn.disabled=false;
   document.getElementById('fx-preview-tools').style.display='flex';
   document.getElementById('fx-zoom-ctrl').style.display='flex';
@@ -6771,23 +6784,74 @@ function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.
 const GP_SCOPES='https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/photoslibrary.appendonly';
 // Default OAuth client ID (client IDs are public by design; the consent screen is in Testing
 // mode so only registered test users can complete sign-in). Override any time via the ID… button.
+// ⚠️ This is a "Web application"-type client, wired for the GitHub Pages https origin — it
+// CANNOT complete sign-in in the desktop shell (see gpClientId's window.__TAURI__ branch and
+// gpAuthNative below), which needs a separate "Desktop app"-type client instead.
 const GP_DEFAULT_CLIENT_ID='1074476279331-nqd78kh57q7s9j5kte4f30hv0b93cl95.apps.googleusercontent.com';
-function gpClientId(){try{return (localStorage.getItem('gpClientId')||'').trim()||GP_DEFAULT_CLIENT_ID}catch(e){return GP_DEFAULT_CLIENT_ID}}
+function gpClientId(){
+  try{const own=(localStorage.getItem('gpClientId')||'').trim();if(own)return own}catch(e){}
+  // Never silently fall back to the shared Web-app default under Tauri — it's the wrong OAuth
+  // client type for the desktop loopback flow and would fail with a confusing server error.
+  // Returning '' here makes gpAskClientId's `if(!cid)` prompt for a real "Desktop app" client.
+  return window.__TAURI__?'':GP_DEFAULT_CLIENT_ID;
+}
 function gpAskClientId(force){
   let cid=gpClientId();
   if(cid&&!force)return cid;
-  cid=(window.prompt('Paste your Google OAuth client ID (ends in .apps.googleusercontent.com).\n\nOne-time free setup — see Guide → "Can I use Google Photos?" for the console steps.',cid||'')||'').trim();
+  const msg=window.__TAURI__
+    ?'Paste your Google OAuth client ID (ends in .apps.googleusercontent.com).\n\nMust be an OAuth client of type "Desktop app" (not "Web application") — create one free in Google Cloud Console → APIs & Services → Credentials → Create Credentials → OAuth client ID → Desktop app. See Guide → "Can I use Google Photos?" for the full steps.'
+    :'Paste your Google OAuth client ID (ends in .apps.googleusercontent.com).\n\nOne-time free setup — see Guide → "Can I use Google Photos?" for the console steps.';
+  cid=(window.prompt(msg,cid||'')||'').trim();
   if(cid){try{localStorage.setItem('gpClientId',cid)}catch(e){}}
   gpUpdateUI();
   return cid;
 }
 function gpTok(){try{const t=JSON.parse(sessionStorage.getItem('gpTok')||'null');if(t&&t.at&&t.exp>Date.now()+60e3)return t.at}catch(e){}return null}
 function gpConnected(){return !!gpTok()}
+// ── PKCE helpers (RFC 7636) — the desktop loopback flow is a public/installed OAuth client
+// (no client secret), so the authorization code exchange is secured with a code_verifier/
+// code_challenge pair instead. Web Crypto is available in both the browser and the Tauri
+// WKWebView, so this needs no native code. ──────────────────────────────────────────────────
+function pkceVerifier(){
+  const b=new Uint8Array(64);crypto.getRandomValues(b);
+  return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function pkceChallenge(verifier){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+// Desktop shell sign-in: system browser + loopback redirect (RFC 8252), PKCE code exchange.
+// See google_oauth_loopback in desktop/src-tauri/src/main.rs for the native half.
+async function gpAuthNative(cid){
+  const verifier=pkceVerifier(),challenge=await pkceChallenge(verifier);
+  const template='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
+    client_id:cid,redirect_uri:'http://127.0.0.1:{PORT}/callback',response_type:'code',
+    scope:GP_SCOPES,state:'gpcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
+  const invoke=window.__TAURI__.core.invoke;
+  let result;
+  try{result=await invoke('google_oauth_loopback',{authUrlTemplate:template})}
+  catch(e){throw new Error('Google sign-in failed: '+(e&&e.message||e))}
+  const params=new URLSearchParams(result.query);
+  if(params.get('error'))throw new Error('Google sign-in failed: '+params.get('error'));
+  const code=params.get('code');
+  if(!code)throw new Error('Google sign-in failed: no authorization code returned');
+  const redirect_uri=`http://127.0.0.1:${result.port}/callback`; // MUST exactly match the auth request
+  const tokRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams({client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri}).toString()});
+  const tokJson=await tokRes.json().catch(()=>({}));
+  if(!tokRes.ok||!tokJson.access_token)throw new Error('Google token exchange failed: '+(tokJson.error_description||tokJson.error||tokRes.status));
+  const at=tokJson.access_token,exp=Date.now()+(tokJson.expires_in||3600)*1000;
+  try{sessionStorage.setItem('gpTok',JSON.stringify({at,exp}))}catch(e){}
+  gpUpdateUI();
+  return at;
+}
 // Interactive sign-in — MUST run under a user gesture (opens a popup). Resolves with the token.
 function gpAuth(){
   const cached=gpTok();if(cached)return Promise.resolve(cached);
   const cid=gpAskClientId();
   if(!cid)return Promise.reject(new Error('No Google client ID set'));
+  if(window.__TAURI__)return gpAuthNative(cid);
   // redirect_uri = this exact page URL — must be listed under BOTH "Authorized JavaScript
   // origins" (origin only) and "Authorized redirect URIs" (full URL) on the OAuth client.
   const redirect=location.origin+location.pathname;

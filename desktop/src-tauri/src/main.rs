@@ -129,6 +129,74 @@ fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+// ── Google OAuth for the desktop shell: the web build's popup+redirect flow (gpAuth() in
+// chromasmith-22.html) assumes the page is served from a real https:// origin, so Google can
+// redirect the popup back to it — but this shell serves from a custom "cs://" scheme, which
+// Google's OAuth server won't accept as a redirect_uri at all. The standard fix for installed/
+// desktop apps (RFC 8252) is a loopback redirect: open the system browser at the Google
+// consent screen, bind an ephemeral 127.0.0.1 port as the redirect target, and read the
+// authorization code off the one HTTP request Google's redirect makes to it. No client secret
+// needed — the JS side does a PKCE code exchange, same as any public/installed OAuth client.
+// (This requires a Google OAuth client of type "Desktop app", not "Web application" — the
+// existing GP_DEFAULT_CLIENT_ID is a Web client for the GitHub Pages build and won't work here;
+// chromasmith-22.html's gpClientId() already refuses to fall back to it under window.__TAURI__.)
+#[derive(serde::Serialize)]
+struct OAuthResult {
+    port: u16,
+    query: String,
+}
+
+#[tauri::command]
+async fn google_oauth_loopback(auth_url_template: String) -> Result<OAuthResult, String> {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("bind loopback port: {e}"))?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let auth_url = auth_url_template.replace("{PORT}", &port.to_string());
+    std::process::Command::new("open")
+        .arg(&auth_url)
+        .spawn()
+        .map_err(|e| format!("couldn't open the system browser: {e}"))?;
+
+    // Watchdog: Google only ever calls the redirect if the user finishes sign-in. If they
+    // close the tab instead, accept() below would block forever — after 3 minutes, connect to
+    // our own listener with a sentinel path so accept() returns and the command can give up.
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(180));
+        if let Ok(mut s) = std::net::TcpStream::connect(("127.0.0.1", port)) {
+            let _ = s.write_all(b"GET /__cs_timeout HTTP/1.1\r\nHost: x\r\n\r\n");
+        }
+    });
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<OAuthResult, String> {
+        let (mut stream, _) = listener.accept().map_err(|e| format!("accept: {e}"))?;
+        let mut buf = [0u8; 8192];
+        let n = stream.read(&mut buf).unwrap_or(0);
+        let req = String::from_utf8_lossy(&buf[..n]).into_owned();
+        let path = req.lines().next().unwrap_or("").split_whitespace().nth(1).unwrap_or("").to_string();
+        let timed_out = path.contains("__cs_timeout");
+        let body = if timed_out {
+            "<html><body style=\"font-family:-apple-system,sans-serif;text-align:center;padding:60px\"><h2>Sign-in timed out</h2><p>Close this tab and try again in Chromasmith.</p></body></html>"
+        } else {
+            "<html><body style=\"font-family:-apple-system,sans-serif;text-align:center;padding:60px\"><h2>Chromasmith connected ✓</h2><p>You can close this tab and return to the app.</p></body></html>"
+        };
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let _ = stream.write_all(resp.as_bytes());
+        let _ = stream.flush();
+        if timed_out {
+            return Err("Sign-in timed out — try again".into());
+        }
+        Ok(OAuthResult { port, query: path.splitn(2, '?').nth(1).unwrap_or("").to_string() })
+    })
+    .await
+    .map_err(|e| format!("oauth listener thread panicked: {e}"))?
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -137,6 +205,7 @@ fn main() {
             store_dcp_lut,
             decode_raw_v2,
             read_file_bytes,
+            google_oauth_loopback,
             library::list_dir,
             library::get_thumbnail,
             library::get_preview,
