@@ -27,49 +27,55 @@
 
   // ── styles ──────────────────────────────────────────────────────────────────
   const style = document.createElement('style');
+  // RapidRAW-style DOCKED left panel (not a modal overlay): library and editor are visible
+  // and usable at the same time. The app's own layout is untouched — body gets padding-left
+  // while the dock is open, and a window resize event re-fits the preview.
+  const DOCK_W = 340;
   style.textContent = `
-    #lib-overlay{position:fixed;inset:0;z-index:5000;background:#17171b;display:none;
-      grid-template-columns:260px 1fr;grid-template-rows:56px 1fr 52px;color:#f0ece2;
+    #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
+      background:#17171b;display:none;border-right:1px solid #34343f;
+      grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:#f0ece2;
       font-family:-apple-system,'Helvetica Neue',sans-serif;}
     #lib-overlay.on{display:grid}
-    #lib-top{grid-column:1/3;display:flex;align-items:center;gap:10px;padding:0 16px;
-      border-bottom:1px solid #34343f;-webkit-app-region:drag}
-    #lib-top button,#lib-top select{-webkit-app-region:no-drag}
-    #lib-top .lib-title{font-weight:600;font-size:15px;margin-right:auto;padding-left:70px}
-    #lib-side{grid-row:2;border-right:1px solid #34343f;overflow:auto;padding:10px 6px}
-    #lib-main{grid-row:2;overflow:auto;padding:16px}
-    #lib-bottom{grid-column:1/3;grid-row:3;display:flex;align-items:center;gap:14px;
-      padding:0 16px;border-top:1px solid #34343f}
+    body.lib-docked{padding-left:${DOCK_W}px}
+    #lib-top{display:flex;align-items:center;gap:8px;padding:34px 12px 6px;-webkit-app-region:drag}
+    #lib-top button{-webkit-app-region:no-drag}
+    #lib-top .lib-title{font-weight:600;font-size:14px;margin-right:auto}
+    #lib-filters{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 8px}
+    #lib-filters #lib-search{grid-column:1/3}
+    #lib-side{overflow:auto;padding:4px 8px;border-top:1px solid #24242c;border-bottom:1px solid #24242c}
+    #lib-main{overflow:auto;padding:10px}
+    #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid #34343f}
     .lib-btn{background:#26262d;border:1px solid #34343f;color:#f0ece2;border-radius:8px;
-      padding:6px 12px;font-size:12px;cursor:pointer}
+      padding:5px 10px;font-size:12px;cursor:pointer}
     .lib-btn:hover{background:#34343f}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
-    .lib-tree-row{display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:6px;cursor:pointer}
+    .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
     .lib-tree-row:hover{background:#26262d}
     .lib-tree-row.on{background:#34343f}
     .lib-tree-chev{width:14px;flex:0 0 14px;text-align:center;opacity:.6;font-size:10px}
-    .lib-tree-children{margin-left:16px}
-    #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
-    .lib-card{background:#1f1f25;border:1px solid #34343f;border-radius:10px;overflow:hidden;
+    .lib-tree-children{margin-left:14px}
+    #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+    .lib-card{background:#1f1f25;border:1px solid #34343f;border-radius:8px;overflow:hidden;
       cursor:pointer;position:relative}
     .lib-card:hover{border-color:#d4903a}
+    .lib-card.sel{border-color:#d4903a;box-shadow:0 0 0 1px #d4903a}
     .lib-thumb-wrap{aspect-ratio:1.3;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
-    .lib-card .lib-name{font-size:11px;font-family:ui-monospace,Menlo,monospace;color:#9a968f;
-      padding:6px 8px 2px}
-    .lib-tagrow{display:flex;align-items:center;gap:8px;padding:0 8px 8px}
-    .lib-stars{display:flex;gap:2px}
-    .lib-star{cursor:pointer;font-size:13px;color:#4a4a55}
+    .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:#9a968f;
+      padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .lib-tagrow{display:flex;align-items:center;gap:6px;padding:0 6px 6px}
+    .lib-stars{display:flex;gap:1px}
+    .lib-star{cursor:pointer;font-size:12px;color:#4a4a55}
     .lib-star.on{color:#d4903a}
-    .lib-flags{display:flex;gap:4px;margin-left:auto}
-    .lib-flag{cursor:pointer;font-size:12px;opacity:.35;filter:grayscale(1)}
+    .lib-flags{display:flex;gap:3px;margin-left:auto}
+    .lib-flag{cursor:pointer;font-size:11px;opacity:.35;filter:grayscale(1)}
     .lib-flag.on{opacity:1;filter:none}
-    .lib-edited-badge{position:absolute;top:6px;right:6px;background:#d4903a;color:#17171b;
-      font-size:9px;font-weight:700;letter-spacing:.03em;border-radius:4px;padding:2px 5px}
-    #lib-empty{color:#9a968f;font-size:13px;padding:40px;text-align:center}
-    #lib-top select,#lib-top input{background:#26262d;border:1px solid #34343f;color:#f0ece2;
-      border-radius:8px;padding:6px 10px;font-size:12px}
-    #lib-search{width:150px}
+    .lib-edited-badge{position:absolute;top:4px;right:4px;background:#d4903a;color:#17171b;
+      font-size:8px;font-weight:700;letter-spacing:.03em;border-radius:4px;padding:1px 4px}
+    #lib-empty{color:#9a968f;font-size:12px;padding:30px 10px;text-align:center}
+    #lib-filters select,#lib-filters input{background:#26262d;border:1px solid #34343f;color:#f0ece2;
+      border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
   `;
   document.head.appendChild(style);
 
@@ -79,7 +85,10 @@
   overlay.innerHTML = `
     <div id="lib-top">
       <span class="lib-title">Library</span>
-      <button class="lib-btn" id="lib-pick">Choose Folder…</button>
+      <button class="lib-btn" id="lib-pick" title="Choose root folder">📁</button>
+      <button class="lib-btn" id="lib-close" title="Hide library panel">⇤</button>
+    </div>
+    <div id="lib-filters">
       <input id="lib-search" placeholder="Search filename…" />
       <select id="lib-type-filter" title="Filter by file type">
         <option value="all">All types</option>
@@ -101,14 +110,12 @@
         <option value="3">★★★ 3+</option><option value="4">★★★★ 4+</option>
         <option value="5">★★★★★ 5</option>
       </select>
-      <button class="lib-btn" id="lib-close">Close</button>
     </div>
     <div id="lib-side"></div>
     <div id="lib-main"><div id="lib-grid"></div></div>
     <div id="lib-bottom"><span style="font-size:11px;color:#9a968f" id="lib-count"></span></div>
   `;
   document.body.appendChild(overlay);
-  overlay.querySelector('#lib-top').setAttribute('data-tauri-drag-region', '');
 
   // ── helpers ─────────────────────────────────────────────────────────────────
   const baseName = (p) => p.split('/').pop();
@@ -165,8 +172,10 @@
       if (sc.recipe) {
         try { applyUISnapshot(snapshotFromB64(sc.recipe)); fxUpdate(); } catch (e) { console.error('restore recipe', e); }
       }
-      overlay.classList.remove('on');
-      state.open = false;
+      // Docked layout: the panel stays open next to the editor; just mark the active card.
+      overlay.querySelectorAll('.lib-card.sel').forEach((c) => c.classList.remove('sel'));
+      const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+      if (card) card.classList.add('sel');
     } catch (e) {
       console.error('openInEditor', e);
     }
@@ -282,7 +291,8 @@
     for (const entry of shown) {
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
-      card.className = 'lib-card';
+      card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '');
+      card.dataset.path = entry.path;
       card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
         ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
         <div class="lib-name">${entry.name}</div>
@@ -292,7 +302,7 @@
         </div>`;
       const img = card.querySelector('img');
       loadThumb(entry.path, img);
-      card.querySelector('.lib-thumb-wrap').ondblclick = () => openInEditor(entry.path);
+      card.querySelector('.lib-thumb-wrap').onclick = () => openInEditor(entry.path); // single click opens (docked panel stays)
       card.querySelectorAll('.lib-star').forEach((star) => {
         star.onclick = async (e) => {
           e.stopPropagation();
@@ -327,7 +337,7 @@
 
   // ── wiring ──────────────────────────────────────────────────────────────────
   overlay.querySelector('#lib-pick').onclick = pickFolder;
-  overlay.querySelector('#lib-close').onclick = () => { overlay.classList.remove('on'); state.open = false; };
+  overlay.querySelector('#lib-close').onclick = () => { if (state.open) toggleLibrary(); };
   overlay.querySelector('#lib-filter').onchange = (e) => { state.minRating = parseInt(e.target.value, 10); renderGrid(); };
   overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; renderGrid(); };
@@ -342,6 +352,10 @@
   async function toggleLibrary() {
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
+    document.body.classList.toggle('lib-docked', state.open);
+    // The dock shifts the app's layout; the preview canvas measures the window to fit, so
+    // poke a resize once the CSS has applied.
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     if (state.open) {
       if (!state.root) { await pickFolder(); return; }
       await renderTree();
