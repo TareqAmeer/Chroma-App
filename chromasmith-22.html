@@ -2880,7 +2880,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12b';
+const BUILD='2026-07-12c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4876,8 +4876,24 @@ async function loadFXImages(fileList){
   // intended "_v1.1"/"_v1.2" scheme. Key on name+size+lastModified so a real edit-then-reload
   // of the same file (same bytes) still counts as "the same photo".
   const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
-  if(loadKey!==_fxLoadKey){fxVersion=1.0;_fxLoadKey=loadKey;}
+  const isNewPhoto=loadKey!==_fxLoadKey;
+  if(isNewPhoto){fxVersion=1.0;_fxLoadKey=loadKey;}
   document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
+  // "All FX" (grain/halation/bloom/borders) is shared/global UI state ON PURPOSE while
+  // switching between photos WITHIN one already-loaded batch (fxSelectImage) — that's what
+  // lets one Adjust/Grain/etc. edit apply to every photo in a batch identically. But loading a
+  // genuinely different photo (a fresh loadFXImages call — reported as "All FX stays stuck on
+  // the new image") should start clean, same as geometry/zoom/history above: turning on All FX
+  // for one photo shouldn't silently paint every future unrelated photo you open. A caller that
+  // then restores a saved per-photo recipe (openInEditor's applyUISnapshot) runs AFTER this and
+  // correctly reapplies that specific photo's own toggle state, recipe or not.
+  if(isNewPhoto){
+    _ALLFX.forEach(name=>{
+      const tg=document.getElementById(`tg-${name}`);if(tg)tg.classList.remove('on');
+      const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display='none';
+    });
+    if(typeof syncAllFxBtn==='function')syncAllFxBtn();
+  }
   const btn=document.getElementById('btn-fx-export');btn.disabled=false;
   document.getElementById('fx-preview-tools').style.display='flex';
   document.getElementById('fx-zoom-ctrl').style.display='flex';

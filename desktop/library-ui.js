@@ -232,7 +232,13 @@
     const hideProvisional = await showProvisional(path);
     try {
       const buf = await invoke('read_file_bytes', { path });
-      const file = new File([buf], baseName(path), { type: '' });
+      // lastModified:0 (not the default Date.now()) — chromasmith-22.html's loadFXImages()
+      // keys "is this the same photo already loaded" off name+size+lastModified so it knows
+      // whether to reset per-photo state (export version, All-FX toggles) on load. A File
+      // built fresh from read_file_bytes on every reopen would otherwise get a new
+      // lastModified each time (today's timestamp), making the SAME photo look like a
+      // different one on every single reopen and defeating that check entirely.
+      const file = new File([buf], baseName(path), { type: '', lastModified: 0 });
       await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
       state.openedPath = path;
       const sc = await getSidecar(path);
