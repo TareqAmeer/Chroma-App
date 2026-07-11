@@ -97,7 +97,8 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     let (json, payload) = parse_framed(request.body())?;
     let mode = json["mode"].as_str().unwrap_or("linear16");
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
-    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens)?;
+    let native_nr = json["nativeNr"].as_bool().unwrap_or(true);
+    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, native_nr)?;
     let body: Vec<u8> = match mode {
         "lut" => {
             let key = json["lutKey"].as_str().ok_or("missing lutKey")?;

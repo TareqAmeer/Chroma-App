@@ -34,7 +34,7 @@ pub struct DecodedRaw {
     pub rgb16: Vec<u16>,
 }
 
-pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool) -> Result<DecodedRaw, String> {
+pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Result<DecodedRaw, String> {
     let source = RawSource::new_from_slice(bytes);
     let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
     let params = RawDecodeParams::default();
@@ -142,15 +142,16 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool) -> Result<DecodedRaw, Str
         }
     }
 
-    // 6) Shadow denoise — see denoise_shadows_rgb16's doc comment for why this has to happen
-    //    HERE (on true-linear data) rather than in the app's own WebGL NR pass, which runs on
-    //    the image AFTER the DCP tone curve and so structurally cannot reach this noise.
-    denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
-
-    // 7) Chroma-only wavelet denoise (ISO-gated; no-op below ISO 1600) — kills the large
-    //    red/green midtone mottling of high-ISO files that neither the shadow pass nor the
-    //    post-tone-curve WebGL slider can reach. Luma untouched. See its doc comment.
-    denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso);
+    // 6/7) Native (Rust) noise reduction — user-toggleable (default on) via the "RAW Noise
+    //    Reduction" switch in the Noise Reduction panel. Both passes run on true-linear data,
+    //    before any tone curve, which is why they can't live in the WebGL NR sliders (see each
+    //    function's doc comment) — but that also means the toggle can't be live, only apply on
+    //    the next decode. Off entirely reproduces the untouched decode, for comparison or if a
+    //    photo needs its own manual grain/detail instead.
+    if native_nr {
+        denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
+        denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso);
+    }
 
     Ok(DecodedRaw {
         width: out_w as u32,

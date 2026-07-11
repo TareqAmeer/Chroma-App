@@ -711,6 +711,9 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
            enable toggle — it's driven by the sliders being >0, same as Lens). -->
       <div class="fx-ctrl" data-fxsec="nr">
         <div class="fx-ctrl-title">Noise Reduction</div>
+        <div class="fx-row" title="Desktop only: the native Rust-side shadow + chroma-wavelet denoise that runs on the linear RAW data before any tone curve, ahead of these sliders. On by default — turn off to compare against the untouched decode, or if it's oversmoothing. Requires reopening this photo to take effect.">
+          <div class="fx-label">RAW Noise Reduction</div><div class="fx-toggle on" id="tg-native-nr" onclick="fxNativeNrToggled(this)"></div>
+        </div>
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
@@ -2918,7 +2921,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12i';
+const BUILD='2026-07-12j';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4335,6 +4338,22 @@ function fxLensAutoToggled(){
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const tg=document.getElementById('tg-lens-auto');
   if(tg&&window.chromasmithAutoLens)tg.classList.add('on');
+});
+
+// ── Native (Rust) noise reduction on/off — desktop only. Both the shadow denoise and the
+// chroma-wavelet denoise (see raw_decode.rs) run on linear RAW data during decode, before
+// anything else touches the pixels, so — like Auto lens-profile — toggling this can't take
+// effect live; it needs a fresh decode of the current RAW. Defaults ON (unchanged behavior).
+try{window.chromasmithNativeNr=localStorage.getItem('chromasmithNativeNr')!=='0';}catch(e){window.chromasmithNativeNr=true;}
+function fxNativeNrToggled(el){
+  const on=el.classList.toggle('on');
+  window.chromasmithNativeNr=on;
+  try{localStorage.setItem('chromasmithNativeNr',on?'1':'0');}catch(e){}
+  if(window.__TAURI__)toast(on?'RAW noise reduction on — reopen this photo to apply':'RAW noise reduction off — reopen this photo to apply',true);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  const tg=document.getElementById('tg-native-nr');
+  if(tg)tg.classList.toggle('on',window.chromasmithNativeNr);
 });
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original

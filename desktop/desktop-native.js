@@ -65,7 +65,9 @@
         }
       }
       const autoLens = !!window.chromasmithAutoLens;
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, autoLens } : { mode, autoLens }, bytes);
+      const nativeNr = window.chromasmithNativeNr !== false; // default on
+      const extra = { autoLens, nativeNr };
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra } : { mode, ...extra }, bytes);
       const head = new Uint32Array(buf, 0, 3);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       this._mode = mode; this._buf = buf;
