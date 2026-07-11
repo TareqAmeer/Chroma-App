@@ -15,7 +15,16 @@
   // invoke() per open to detect). Budgeted by estimated byte size (canvas w*h*4), LRU-evicted
   // by last-access time; the currently-open photo is never evicted (it's still on screen).
   // "clear if the app gets too slow" per the user's own suggestion → chromasmithClearImageCache. ──
-  const IMG_CACHE_BUDGET = 1024 * 1024 * 1024; // 1GB default
+  // 1GB was far too small in practice: a single decoded 6000x4000 RW2 canvas is
+  // 6000*4000*4 = ~96MB, so 1GB held only ~10 photos before evicting — on a typical batch
+  // (dozens of photos) almost every filmstrip click was a full re-decode (several seconds,
+  // per the NR-fix commit) even for a photo viewed moments earlier. Scale the budget with
+  // available RAM (same navigator.deviceMemory signal isMemoryConstrained() already uses),
+  // capped so it can't starve the rest of the app on genuinely low-memory machines.
+  const IMG_CACHE_BUDGET = (() => {
+    const gb = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : 8;
+    return Math.min(Math.max(gb, 4), 16) * 0.375 * 1024 * 1024 * 1024; // ~1.5GB@4GB … ~6GB@16GB
+  })();
   const imgCache = new Map(); // path -> {entry, size, ts}
   function imgCacheSize() { let s = 0; imgCache.forEach((v) => { s += v.size; }); return s; }
   function imgCacheEvict() {
@@ -101,6 +110,10 @@
     .lib-card.sel{border-color:#d4903a;box-shadow:0 0 0 1px #d4903a}
     .lib-card.multi{border-color:#5b9bd5;box-shadow:0 0 0 1px #5b9bd5}
     .lib-card.sel.multi{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #5b9bd5}
+    .lib-card.flag-red{box-shadow:0 0 0 2px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
+    .lib-card.flag-green{box-shadow:0 0 0 2px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
+    .lib-card.flag-red.sel{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
+    .lib-card.flag-green.sel{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
     .lib-thumb-wrap{aspect-ratio:1.3;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
     .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:#9a968f;
@@ -299,6 +312,8 @@
     // Cache hit: skip read_file_bytes + the full decode entirely, and skip the provisional
     // preview too (there's nothing to bridge — the real image is already ready instantly).
     const provisionalPromise = cached ? Promise.resolve(() => {}) : showProvisional(path);
+    const spin = document.getElementById('fx-fname-spin');
+    if (spin && !cached) spin.style.display = '';
     try {
       if (cached) {
         cached.ts = Date.now(); // touch for LRU
@@ -355,6 +370,7 @@
     } finally {
       const hideProvisional = await provisionalPromise;
       hideProvisional();
+      if (spin) spin.style.display = 'none';
     }
   }
 
@@ -375,6 +391,33 @@
       card.appendChild(badge);
     }
   }
+  // ── refresh a card's grid thumbnail from the LIVE preview canvas (the graded/edited result),
+  // not the raw camera-JPEG the disk thumbnail cache holds — so the filmstrip/grid shows the
+  // latest edit once you move away from a photo, instead of the unedited RAW forever. Session-
+  // only: it just swaps the <img> src client-side, never touches the Rust-side thumbnail cache. ──
+  const thumbBlobUrls = new Map(); // path -> last objectURL, so we can revoke it
+  function refreshCardThumbFromCanvas(path) {
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    const cv = document.getElementById('fx-canvas');
+    if (!card || !cv || !cv.width || !cv.height) return;
+    const img = card.querySelector('img');
+    if (!img) return;
+    const LONG_EDGE = 360;
+    const scale = LONG_EDGE / Math.max(cv.width, cv.height);
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(cv.width * scale));
+    out.height = Math.max(1, Math.round(cv.height * scale));
+    out.getContext('2d').drawImage(cv, 0, 0, out.width, out.height);
+    out.toBlob((blob) => {
+      if (!blob) return;
+      const prev = thumbBlobUrls.get(path);
+      const url = URL.createObjectURL(blob);
+      thumbBlobUrls.set(path, url);
+      img.src = url;
+      if (prev) URL.revokeObjectURL(prev);
+    }, 'image/jpeg', 0.85);
+  }
+
   let saveTimer, pendingSave = null;
   async function flushPendingSave() {
     if (!pendingSave) return;
@@ -385,6 +428,7 @@
     const updated = { ...cur, edited: true, recipe };
     state.sidecars.set(path, updated);
     await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
+    refreshCardThumbFromCanvas(path);
   }
   window.chromasmithOnEdit = (snap) => {
     if (!state.openedPath) return;
@@ -501,7 +545,11 @@
     state.sidecars.set(path, updated);
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited }).catch(() => {});
     const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(label);
+    if (card) {
+      card.querySelector('.lib-flags').innerHTML = flagsHtml(label);
+      card.classList.toggle('flag-red', label === 'Red');
+      card.classList.toggle('flag-green', label === 'Green');
+    }
   }
   let grid; // set at the top of renderGrid; the helpers above close over it
 
@@ -578,6 +626,53 @@
     item('🚩 Red flag', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))));
     item('🟢 Green flag', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))));
     item('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))));
+    sep();
+    item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
+      const files = [];
+      for (const p of paths) {
+        try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: '' })); }
+        catch (e) { console.error('read_file_bytes', p, e); }
+      }
+      if (!files.length) return;
+      state.openedPath = '';
+      await loadFXImages(files);
+      // restore each photo's saved recipe before exporting, same as opening one normally
+      for (let i = 0; i < paths.length; i++) {
+        const sc = await getSidecar(paths[i]);
+        if (sc.recipe && fxImages[i]) {
+          const savedIdx = fxCurIdx; fxCurIdx = i;
+          try { applyUISnapshot(snapshotFromB64(sc.recipe)); } catch (e) { console.error('restore recipe', e); }
+          fxCurIdx = savedIdx;
+        }
+      }
+      setExportScope(n > 1 ? 'all' : 'current');
+      await exportFX();
+    });
+    item('Reset edit', () => Promise.all(paths.map(async (p) => {
+      const cur = await getSidecar(p);
+      const updated = { ...cur, edited: false, recipe: '' };
+      state.sidecars.set(p, updated);
+      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: false, recipe: '' }).catch(() => {});
+      const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
+      const badge = card && card.querySelector('.lib-edited-badge');
+      if (badge) badge.remove();
+      if (p === state.openedPath) { openInEditor(p); } // re-open to fall back to RAW defaults
+    })));
+    sep();
+    item('Copy edit', async () => {
+      const sc = await getSidecar(paths[0]);
+      window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
+      toast('Edit copied', true);
+    });
+    const pasteItem = item('Paste edit', () => Promise.all(paths.map(async (p) => {
+      const cur = await getSidecar(p);
+      const updated = { ...cur, edited: true, recipe: window.__copiedRecipe };
+      state.sidecars.set(p, updated);
+      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe: window.__copiedRecipe }).catch(() => {});
+      markCardEdited(p);
+      if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(window.__copiedRecipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
+    })));
+    if (!window.__copiedRecipe) { pasteItem.style.opacity = '.4'; pasteItem.style.pointerEvents = 'none'; }
     document.body.appendChild(ctxMenu);
     const { innerWidth: vw, innerHeight: vh } = window;
     const r = ctxMenu.getBoundingClientRect();
@@ -592,7 +687,8 @@
     shown.forEach((entry, idx) => {
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
-      card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '');
+      card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
+        (sc.label === 'Red' ? ' flag-red' : sc.label === 'Green' ? ' flag-green' : '');
       card.dataset.path = entry.path;
       card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
         ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}

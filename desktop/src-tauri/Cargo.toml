@@ -37,6 +37,12 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 # Library browser: EXIF (camera/lens/date) for non-RAW files — rawler covers the RAWs.
 kamadak-exif = "0.5"
+# Lens-profile auto-correction (distortion/vignette/TCA) looked up by camera+lens EXIF, using
+# lensfun's bundled community database. Pure-Rust port (no system liblensfun dependency, unlike
+# the C original) — but it's pre-alpha (0.7.0): API surface may still shift on upgrade. The
+# manual Distortion/Vignette/CA sliders remain the fallback when no profile match is found (this
+# camera/lens pairing — Panasonic DC-S9 + LUMIX S 18-40 — may not be in the community DB yet).
+lensfun = "0.7"
 
 [profile.release]
 strip = true

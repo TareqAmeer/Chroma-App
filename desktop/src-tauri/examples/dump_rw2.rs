@@ -8,6 +8,8 @@
 // little-endian u16 (interleaved RGB, linear, camera-WB'd — same as decode_raw's IPC buffer).
 // Optional integer downscale box-averages (8 → 752x502 from 6016x4016), the same format as
 // the wasm dbgDumpCam16 dumps so the Python harness reads both identically (and 63x smaller).
+#[path = "../src/lens_correct.rs"]
+mod lens_correct;
 #[path = "../src/raw_decode.rs"]
 mod raw_decode;
 
@@ -22,7 +24,7 @@ fn main() {
     let ds: usize = args.get(3).map(|s| s.parse().expect("downscale int")).unwrap_or(1);
     let bytes = std::fs::read(&args[1]).expect("read input");
     let t0 = std::time::Instant::now();
-    let d = raw_decode::decode_rw2_bytes(&bytes).expect("decode");
+    let d = raw_decode::decode_rw2_bytes(&bytes, false).expect("decode");
     eprintln!(
         "{}x{} iso {} decoded in {:.2}s",
         d.width,

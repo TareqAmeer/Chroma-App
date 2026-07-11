@@ -15,6 +15,7 @@ use tauri::Emitter;
 // + app.path().resource_dir()) so the built .app is portable to any Mac.
 const DIST_DIR: &str = "/Users/tareqameer/Documents/GitHub/Chroma-App/desktop/dist";
 
+mod lens_correct;
 mod library;
 mod raw_decode;
 
@@ -95,7 +96,8 @@ fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
 fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let mode = json["mode"].as_str().unwrap_or("linear16");
-    let decoded = raw_decode::decode_rw2_bytes(payload)?;
+    let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
+    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens)?;
     let body: Vec<u8> = match mode {
         "lut" => {
             let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
@@ -119,6 +121,11 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     out.extend_from_slice(&decoded.iso.to_le_bytes());
     out.extend_from_slice(&body);
     Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command]
+fn lens_profile_available(make: String, model: String, lens_model: String) -> bool {
+    lens_correct::profile_available(&make, &model, &lens_model)
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -204,6 +211,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             store_dcp_lut,
             decode_raw_v2,
+            lens_profile_available,
             read_file_bytes,
             google_oauth_loopback,
             library::list_dir,

@@ -25,6 +25,32 @@ fn is_raw_ext(ext: &str) -> bool {
     RAW_EXTS.contains(&ext)
 }
 
+/// EXIF orientation (1/3/6/8) for a RAW, read the same way raw_decode.rs does for the full
+/// decode. rawler's extract_thumbnail_pixels/extract_preview_pixels return pixels as-shot with
+/// NO rotation applied (unlike the full-decode path), so without this, portrait RW2s showed
+/// upright only once the full decode finished — the library grid thumbnail and the provisional
+/// preview shown while that decode is in flight were both sideways.
+fn raw_orientation(path: &str) -> u16 {
+    (|| -> Option<u16> {
+        let source = rawler::rawsource::RawSource::new(Path::new(path)).ok()?;
+        let decoder = rawler::get_decoder(&source).ok()?;
+        let md = decoder.raw_metadata(&source, &RawDecodeParams::default()).ok()?;
+        md.exif.orientation
+    })()
+    .unwrap_or(1)
+}
+
+/// Rotate/flip a decoded thumbnail/preview per EXIF orientation (1=as-is, 3=180°, 6=90° CW,
+/// 8=90° CCW — the only values cameras emit).
+fn apply_orientation_dynamic(img: image::DynamicImage, orientation: u16) -> image::DynamicImage {
+    match orientation {
+        3 => img.rotate180(),
+        6 => img.rotate90(),
+        8 => img.rotate270(),
+        _ => img,
+    }
+}
+
 /// Coarse file-type bucket for the library's type filter.
 fn kind_of(ext: &str) -> &'static str {
     if is_raw_ext(ext) {
@@ -84,6 +110,9 @@ fn cache_key(path: &str, mtime: u64, size: u64) -> String {
     path.hash(&mut h);
     mtime.hash(&mut h);
     size.hash(&mut h);
+    // "v2": bumped when orientation-correction was added to get_thumbnail, so pre-existing
+    // sideways-cached portrait thumbnails aren't served stale.
+    "v2".hash(&mut h);
     format!("{:016x}.jpg", h.finish())
 }
 
@@ -103,8 +132,9 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
 
     let ext = ext_lower(Path::new(&path));
     let img = if is_raw_ext(&ext) {
-        rawler::analyze::extract_thumbnail_pixels(&path, &RawDecodeParams::default())
-            .map_err(|e| format!("thumbnail decode: {e}"))?
+        let img = rawler::analyze::extract_thumbnail_pixels(&path, &RawDecodeParams::default())
+            .map_err(|e| format!("thumbnail decode: {e}"))?;
+        apply_orientation_dynamic(img, raw_orientation(&path))
     } else {
         image::open(&path).map_err(|e| format!("image open: {e}"))?
     };
@@ -139,6 +169,7 @@ pub fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
     }
     let img = rawler::analyze::extract_preview_pixels(&path, &RawDecodeParams::default())
         .map_err(|e| format!("preview decode: {e}"))?;
+    let img = apply_orientation_dynamic(img, raw_orientation(&path));
     let mut out = Cursor::new(Vec::new());
     img.to_rgb8()
         .write_to(&mut out, image::ImageFormat::Jpeg)

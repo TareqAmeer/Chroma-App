@@ -64,7 +64,8 @@
           mode = 'linear16';
         }
       }
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey } : { mode }, bytes);
+      const autoLens = !!window.chromasmithAutoLens;
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, autoLens } : { mode, autoLens }, bytes);
       const head = new Uint32Array(buf, 0, 3);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       this._mode = mode; this._buf = buf;

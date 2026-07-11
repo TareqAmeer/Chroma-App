@@ -34,7 +34,7 @@ pub struct DecodedRaw {
     pub rgb16: Vec<u16>,
 }
 
-pub fn decode_rw2_bytes(bytes: &[u8]) -> Result<DecodedRaw, String> {
+pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool) -> Result<DecodedRaw, String> {
     let source = RawSource::new_from_slice(bytes);
     let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
     let params = RawDecodeParams::default();
@@ -123,6 +123,24 @@ pub fn decode_rw2_bytes(bytes: &[u8]) -> Result<DecodedRaw, String> {
     //    upstream), so read metadata.exif.orientation. Cameras emit 1/3/6/8 only.
     let orientation = metadata.exif.orientation.unwrap_or(1);
     let (mut rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
+
+    // 5.5) Optional automatic lens-profile correction (distortion) — see lens_correct.rs.
+    // Graceful no-op when the camera/lens pairing has no match in the bundled DB.
+    if auto_lens {
+        let lens_model = metadata
+            .exif
+            .lens_model
+            .clone()
+            .or_else(|| metadata.lens.as_ref().map(|l| l.lens_model.clone()))
+            .unwrap_or_default();
+        let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
+        let focal_len = metadata.exif.focal_length.as_ref().map(ratio).unwrap_or(0.0);
+        if !lens_model.is_empty() && focal_len > 0.0 {
+            crate::lens_correct::correct_distortion(
+                &mut rgb16, out_w, out_h, &metadata.make, &metadata.model, &lens_model, focal_len,
+            );
+        }
+    }
 
     // 6) Shadow denoise — see denoise_shadows_rgb16's doc comment for why this has to happen
     //    HERE (on true-linear data) rather than in the app's own WebGL NR pass, which runs on
