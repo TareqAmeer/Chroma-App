@@ -86,6 +86,25 @@
     #lib-provisional{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;
       object-fit:contain;pointer-events:none;z-index:50;display:none}
     #lib-provisional.on{display:block}
+    /* deskx (Darkroom shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
+       thumbnails, single column, no filters/tree/name chrome (all of that lives in the
+       full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
+    body.deskx #lib-overlay:not(.full){width:120px;grid-template-rows:auto 1fr}
+    body.deskx.lib-docked{padding-left:120px}
+    body.deskx.lib-docked.lib-full{padding-left:0}
+    body.deskx #lib-overlay:not(.full) #lib-filters,body.deskx #lib-overlay:not(.full) #lib-side,
+    body.deskx #lib-overlay:not(.full) #lib-bottom{display:none}
+    body.deskx #lib-overlay #lib-top{padding:8px 8px 6px;-webkit-app-region:no-drag} /* strip starts below the deskbar — no traffic-light clearance needed */
+    body.deskx #lib-overlay:not(.full) #lib-top{padding:8px 6px 6px;gap:4px}
+    body.deskx #lib-overlay:not(.full) #lib-top .lib-title{display:none}
+    body.deskx #lib-overlay:not(.full) #lib-main{padding:6px}
+    body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:1fr;gap:6px}
+    body.deskx #lib-overlay:not(.full) .lib-card .lib-name,
+    body.deskx #lib-overlay:not(.full) .lib-tagrow{display:none}
+    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:1}
+    /* the fixed 44px deskbar sits above everything; keep the strip below it */
+    body.deskx #lib-overlay{top:44px;z-index:2500}
+    body.deskx #lib-overlay.full{top:44px}
   `;
   document.head.appendChild(style);
 
@@ -207,6 +226,9 @@
   function snapshotFromB64(b64) { return JSON.parse(decodeURIComponent(escape(atob(b64)))); }
 
   async function openInEditor(path) {
+    // Selecting a photo from the full-window home screen transitions into the editor — the
+    // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
+    if (state.expanded_view) toggleExpandedView(false);
     const hideProvisional = await showProvisional(path);
     try {
       const buf = await invoke('read_file_bytes', { path });
@@ -215,7 +237,17 @@
       state.openedPath = path;
       const sc = await getSidecar(path);
       if (sc.recipe) {
-        try { applyUISnapshot(snapshotFromB64(sc.recipe)); fxUpdate(); } catch (e) { console.error('restore recipe', e); }
+        try {
+          applyUISnapshot(snapshotFromB64(sc.recipe));
+          // A recipe saved before the RAW-defaults feature existed carries nr-col:0 (its
+          // honest value at save time), which just clobbered whatever applyRawDefaults() set
+          // moments ago inside loadFXImages — silently undoing the Color NR 25 default on
+          // every previously-edited photo. applyRawDefaults() only fills sliders still at 0,
+          // so re-running it here backfills stale recipes without touching one that
+          // intentionally set NR to something else.
+          if (typeof applyRawDefaults === 'function') applyRawDefaults();
+          fxUpdate();
+        } catch (e) { console.error('restore recipe', e); }
       }
       // Real metadata (camera/lens/shutter/aperture/iso/date) via rawler on the Rust side —
       // the editor's own RW2 branch attaches none, so without this #fx-exif stays empty.
@@ -536,4 +568,13 @@
   window.chromasmithToggleLibrary = toggleLibrary; // called from the header button in desktop-native.js
 
   window.__TAURI__.event.listen('menu-library', toggleLibrary);
+
+  // ── deskx home screen: the app opens to the full-window Library, not the editor (matches
+  // the approved Darkroom-style wireframe). desktop-native.js sets body.deskx synchronously
+  // before this script runs (build-desktop.sh loads it first), so the class is already present
+  // here. Runs once at startup only — afterward the user's own open/close/expand actions own
+  // the state. ──
+  if (document.body.classList.contains('deskx')) {
+    toggleLibrary().then(() => toggleExpandedView(true));
+  }
 })();

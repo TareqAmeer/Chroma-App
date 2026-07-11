@@ -390,6 +390,60 @@ body.fx-deskb .fx-canvas-wrap{min-height:0}
 body.fx-deskb #fx-deskbar-tools #fx-zoom-ctrl{position:static;display:flex;background:none;border:none;padding:0;gap:2px}
 body.fx-deskb #fx-deskbar-tools #fx-preview-tools{position:static;display:flex;margin:0;gap:4px;flex-wrap:nowrap}
 body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
+/* ── DESKX — Darkroom-style desktop shell layout (body.deskx, layered ON TOP of fx-deskb).
+   Applied only by the Tauri shell (desktop-native.js) or "?deskx=1" for browser testing, so
+   the web/Pages/iOS builds are bit-identical without it. Geometry: one fixed 44px top bar
+   (the deskbar, doubling as the window drag strip), photo edge-to-edge on black filling all
+   remaining space, 320px single-section tools panel, 48px icon rail on the FAR RIGHT.
+   Clicking the active rail icon closes the panel entirely (body.panel-closed). ── */
+body.deskx header,body.deskx .tabs,body.deskx #fx-filmstrip{display:none}
+body.deskx main{max-width:none;margin:0;padding:44px 0 0}
+body.deskx.fx-deskb main{overflow:hidden;height:100vh}
+body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 100px}
+body.deskx #fx-deskbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:3000;height:44px;
+  margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr);border-radius:0;background:var(--sur)}
+/* The deskbar is INSIDE #panel-fx; on other tabs that panel loses .active (display:none),
+   which would take the fixed bar down with it. Keep the panel technically displayed and hide
+   its editor content instead, so the top bar (and its ⋯ menu, the only way back) persists. */
+body.deskx #panel-fx:not(.active){display:block}
+body.deskx #panel-fx:not(.active) .fx-layout{display:none}
+body.deskx .fx-db{padding:5px 10px}
+/* Grid columns are transitioned so opening/closing the panel (or the library dock resizing)
+   reflows the photo smoothly instead of snapping — panel toggling is the app's most frequent
+   desktop interaction, so this is worth the extra rule. renderPreview() is deliberately NOT
+   called on every animation frame (too expensive); fxSection/library-ui.js fire ONE redraw via
+   requestAnimationFrame after starting the transition, and the canvas's own max-width:100%;
+   height:auto CSS scaling covers the visual interpolation in between. */
+body.deskx .fx-layout{grid-template-columns:1fr 320px 64px;gap:0;height:calc(100vh - 44px);align-items:stretch;
+  transition:grid-template-columns .2s ease}
+body.deskx.panel-closed .fx-layout{grid-template-columns:1fr 0 64px}
+body.deskx.panel-closed .fx-panel{display:none}
+body.deskx .fx-preview-col{order:1;position:static;top:auto;align-self:stretch;height:100%;display:flex;flex-direction:column;min-width:0;min-height:0}
+body.deskx .fx-panel{order:2;max-height:none;height:100%;overflow-y:auto;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box}
+body.deskx #fx-toolrail{order:3;position:static;top:auto;align-self:stretch;width:64px;box-sizing:border-box;
+  border:none;border-left:1px solid var(--bdr);border-radius:0;padding:6px 4px;overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;gap:2px}
+/* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only. */
+body.deskx .fx-rail-btn{width:100%;flex-direction:column;gap:3px;padding:8px 2px;justify-content:center;font-size:9px}
+body.deskx .fx-rail-btn .fx-rail-lb{white-space:normal;text-align:center;line-height:1.15}
+body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;border:none;border-radius:0;margin:0}
+body.deskx #fx-canvas{max-height:none}
+body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;
+  background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
+body.deskx .fx-preview-col{position:relative}
+body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
+/* ⋯ overflow menu (deskbar): navigation to the non-editor tabs + utilities */
+#fx-overflow{display:none;position:relative}
+body.deskx #fx-overflow{display:inline-flex}
+#fx-overflow-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:200px;
+  background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#fx-overflow-menu.on{display:block}
+.fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
+  color:var(--txt);cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;
+  padding:9px 10px;text-align:left}
+.fx-ovf-item:hover{background:var(--sur2)}
+.fx-ovf-item.dim{color:var(--mut);cursor:default}
+.fx-ovf-sep{height:1px;background:var(--bdr);margin:4px 2px}
 /* ── LIGHT THEME ── */
 body.light{--bg:#f4f3ef;--sur:#ffffff;--sur2:#ecebe4;--bdr:#d9d6cc;--txt:#1d1d1a;--mut:#6f6c64}
 body.light #status-cap{background:#000}
@@ -540,12 +594,17 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
 <div class="panel active" id="panel-fx">
   <!-- DESKTOP persistent quick-access bar -->
   <div id="fx-deskbar">
+    <button class="fx-db" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)">🗂</button>
     <button class="fx-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span>Undo</button>
     <button class="fx-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span>Redo</button>
     <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
-    <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
     <div style="flex:1"></div>
     <div id="fx-deskbar-tools"></div>
+    <div id="fx-overflow">
+      <button class="fx-db" onclick="ovfToggle(event)" title="More — other tools &amp; settings">⋯</button>
+      <div id="fx-overflow-menu"></div>
+    </div>
+    <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
   </div>
   <div class="fx-layout">
     <!-- DESKTOP tool rail (one tool at a time) -->
@@ -2821,10 +2880,13 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-11c';
+const BUILD='2026-07-12b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
+// deskx (Darkroom-style desktop layout): normally applied by the Tauri shell
+// (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
+try{if(new URLSearchParams(location.search).has('deskx'))document.body.classList.add('deskx');}catch(e){}
 // ── Google Photos OAuth callback (runs in the SIGN-IN POPUP, not the app) ─────
 // This page is cross-origin isolated (coi-serviceworker sets COOP same-origin for
 // SharedArrayBuffer), which DISOWNS every popup — window.opener/postMessage can never reach
@@ -3561,16 +3623,21 @@ void main(){
     // runs when Luminance or Color amount > 0 (otherwise the pass is skipped entirely, so the
     // default path is byte-identical). Luma/chroma split: keep a bilateral-denoised luminance
     // (edges preserved) and a spatially-blurred chroma (colour noise is coarse and cheap to kill).
-    // nrScale (=fullImageWidth/REF, same convention as the halation sigmas) and nrChromaStep
-    // widen the 7x7 tap grid in absolute pixels so chroma NR reaches real high-ISO blotch size
-    // at full/export resolution instead of the old fixed ±3px (invisible past a downscaled
-    // preview, and too narrow at 24MP even at full strength). Luma keeps a much tighter step so
-    // edge/detail preservation doesn't degrade.
+    // nrScale (=fullImageWidth/REF, same convention as the halation sigmas), nrChromaStep and
+    // nrChromaSig widen the 9x9 tap grid in absolute pixels so chroma NR reaches real high-ISO
+    // blotch size at full/export resolution instead of the old fixed ±3px (invisible past a
+    // downscaled preview, and too narrow at 24MP even at full strength — v1 of this fix still
+    // wasn't enough: a real ISO 6400+ frame's chroma blotches run 5-15px across, well past the
+    // ~8px max reach the first pass gave). The Gaussian weight is now computed in the SAME
+    // real-pixel offset used for sampling (dC, not the raw tap index), so widening the step
+    // widens the blur radius itself, not just the sample spacing — a true wider blur, not a
+    // sparser sample of the same small radius. Luma keeps a much tighter step so edge/detail
+    // preservation doesn't degrade.
     this.progs.nr=this._prog(VS,`#version 300 es
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail,nrScale,nrChromaStep;
+uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail,nrScale,nrChromaStep,nrChromaSig;
 float yl(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
 void main(){
   vec3 c0=texture(img,uv).rgb; float l0=yl(c0);
@@ -3579,15 +3646,18 @@ void main(){
   float lumaStep=clamp(nrScale,1.0,2.5); // tight — edge/detail preservation, only mildly scaled
   vec3 lsum=vec3(0.); float lw=0.;   // bilateral (edge-preserving) accumulation
   vec3 csum=vec3(0.); float cw=0.;   // spatial-only accumulation (for chroma)
-  for(int y=-3;y<=3;y++){
-    for(int x=-3;x<=3;x++){
+  for(int y=-4;y<=4;y++){
+    for(int x=-4;x<=4;x++){
       vec2 off=vec2(float(x),float(y));
-      float ws=exp(-dot(off,off)/(2.*1.6*1.6));
-      vec3 cC=texture(img,uv+off*nrChromaStep*texSize).rgb;
+      vec2 dC=off*nrChromaStep;
+      float ws=exp(-dot(dC,dC)/(2.*nrChromaSig*nrChromaSig));
+      vec3 cC=texture(img,uv+dC*texSize).rgb;
       csum+=cC*ws; cw+=ws;
-      vec3 cL=texture(img,uv+off*lumaStep*texSize).rgb;
+      vec2 dL=off*lumaStep;
+      float wsl=exp(-dot(dL,dL)/(2.*1.6*1.6));
+      vec3 cL=texture(img,uv+dL*texSize).rgb;
       float dl=yl(cL)-l0; float wr=exp(-dl*dl/(2.*sigR*sigR));
-      lsum+=cL*ws*wr; lw+=ws*wr;
+      lsum+=cL*wsl*wr; lw+=wsl*wr;
     }
   }
   vec3 bil=lsum/max(lw,1e-4);   // edge-preserving denoise: take its luminance
@@ -3969,10 +4039,14 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // preview is approximate, same as sharpen/grain — the 1:1 loupe is true).
     const nrP=P.nr, nrOn=!!(nrP&&(nrP.luma>0||nrP.color>0));
     if(nrOn){
-      const nrChromaStep=Math.max(1,sc)*(0.5+nrP.color)*1.5;
+      // Wider + genuinely stronger than v1: step scales 1x(off)→4x(full amount) instead of
+      // 0.75x→1.5x, and the Gaussian sigma (nrChromaSig, in the shader) now tracks the step
+      // directly so a bigger step is a wider blur, not just sparser taps of the same size.
+      const nrChromaStep=Math.max(1,sc)*(1.0+nrP.color*3.0);
+      const nrChromaSig=nrChromaStep*1.2;
       this._pass(this.progs.nr,this.fbs.nr,
         {img:0,nrLuma:nrP.luma,nrColor:nrP.color,nrDetail:nrP.detail!=null?nrP.detail:0.5,
-         nrScale:sc,nrChromaStep,
+         nrScale:sc,nrChromaStep,nrChromaSig,
          texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
     }
     const lutSrc=nrOn?'nr':srcAfterLens;
@@ -5932,6 +6006,12 @@ function fxPreviewMaxH(){
     const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||window.innerHeight;
     return Math.max(220,h||appH*0.42);
   }
+  if(document.body.classList.contains('deskx')){
+    // deskx: the wrap is a flex cell that IS the available space — measure it live, same as
+    // the mobile branch, so JS sizing can never drift from the CSS grid.
+    const wrap=document.getElementById('fx-wrap');
+    return Math.max(360,(wrap&&wrap.clientHeight)||window.innerHeight-52);
+  }
   return Math.max(360,window.innerHeight-150);
 }
 function renderPreview(){
@@ -5941,7 +6021,10 @@ function renderPreview(){
   if(fxLoupe){renderLoupe();return;}
   const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
   const wrap=document.getElementById('fx-wrap');
-  const maxW=Math.min(900,wrap.clientWidth||900);
+  const deskx=document.body.classList.contains('deskx');
+  // deskx: no 900px cap — the photo fills the whole preview cell (Darkroom-style). The GPU
+  // cost is bounded by the BACKING-STORE cap below, not the CSS size.
+  const maxW=deskx?(wrap.clientWidth||900):Math.min(900,wrap.clientWidth||900);
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
@@ -5950,7 +6033,10 @@ function renderPreview(){
   // export). Native iOS GPUs handle full-res live preview comfortably, so the Capacitor
   // shell raises the cap to 3x for a noticeably sharper preview; the browser/Pages build is
   // left untouched since we can't verify perf/memory headroom on arbitrary mobile Safari.
-  const dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
+  // deskx: CSS width can now reach ~1600+, so cap the backing store at 3200px wide (crisp on
+  // a 1440p window at dpr 2) instead of letting cw*dpr grow unbounded.
+  let dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
+  if(deskx&&cw>0)dpr=Math.min(dpr,3200/cw);
   const pw=(cw*dpr)|0,ph=(ch*dpr)|0;                   // WebGL backing store
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
   const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
@@ -7077,6 +7163,32 @@ function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classLi
 
 // ── FX editor: section model, mobile strip + desktop tool rail ────────────────
 function toggleLog(){document.body.classList.toggle('log-on');}
+// ── deskx ⋯ overflow menu: with the web header/tabs hidden, this is the navigation to the
+// non-editor tabs plus the utilities that lived in the header. Rebuilt on every open so the
+// checkmarks/labels always reflect current state. ──
+function ovfBuild(){
+  const m=document.getElementById('fx-overflow-menu');if(!m)return;
+  const active=(document.querySelector('.panel.active')||{}).id||'panel-fx';
+  const tabs=[['fx','Editor'],['match','Match & Refine'],['copy','Colour Copy'],['collage','Collage'],['guide','Guide']];
+  let h='';
+  tabs.forEach(([k,lb])=>{h+=`<button class="fx-ovf-item" onclick="ovfClose();switchTab('${k}')">${active==='panel-'+k?'✓ ':''}${lb}</button>`;});
+  h+='<div class="fx-ovf-sep"></div>';
+  if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Library (L)</button>';
+  h+='<button class="fx-ovf-item" onclick="ovfClose();toggleTheme()">Light / dark theme</button>';
+  h+='<button class="fx-ovf-item" onclick="ovfClose();toggleLog()">Diagnostics log</button>';
+  h+='<button class="fx-ovf-item" onclick="ovfClose();document.body.classList.add(\'diag-on\');applyFxLayout()">Diagnostics section</button>';
+  h+='<div class="fx-ovf-sep"></div>';
+  h+=`<div class="fx-ovf-item dim">build ${BUILD}</div>`;
+  m.innerHTML=h;
+}
+function ovfClose(){const m=document.getElementById('fx-overflow-menu');if(m)m.classList.remove('on');}
+function ovfToggle(e){
+  if(e)e.stopPropagation();
+  const m=document.getElementById('fx-overflow-menu');if(!m)return;
+  if(m.classList.contains('on')){ovfClose();return;}
+  ovfBuild();m.classList.add('on');
+}
+document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-overflow'))ovfClose();});
 // Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).
 const _SVG=(p,sz)=>`<svg viewBox="0 0 24 24" width="${sz||20}" height="${sz||20}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const ICONS={
@@ -7118,7 +7230,19 @@ function _eachSection(cb){
     cb(key,lb);
   });
 }
-function _activeSec(){const c=document.querySelector('.fx-ctrl.sec-active');return c?c.dataset.fxsec:null;}
+// deskx-only rail consolidation (Darkroom-style — shorter rail): Curves+Mixer share one
+// "Color" button, Grain+Artifacts+Bloom+Halation share one "Film" button. The underlying
+// .fx-ctrl cards and their internals are UNTOUCHED — fxSection just marks every member card
+// sec-active together, so they stack in the panel under one rail selection. Not used outside
+// deskx (buildSecNav/mobile and the older fx-deskb rail keep the full flat list).
+const FX_GROUPS={color:{label:'Color',icon:'curves',members:['curves','hsl']},
+  film:{label:'Film',icon:'grain',members:['grain','art','bloom','hal']}};
+const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
+function _activeSec(){
+  const c=document.querySelector('.fx-ctrl.sec-active');if(!c)return null;
+  const key=c.dataset.fxsec;
+  return (document.body.classList.contains('deskx')&&FX_GROUP_OF[key])?FX_GROUP_OF[key]:key;
+}
 function buildSecNav(){          // mobile horizontal strip
   const nav=document.getElementById('fx-secnav');if(!nav)return;
   nav.innerHTML='';
@@ -7133,27 +7257,52 @@ function buildSecNav(){          // mobile horizontal strip
 function buildToolRail(){        // desktop vertical labelled rail
   const rail=document.getElementById('fx-toolrail');if(!rail)return;
   rail.innerHTML='';
+  const dx=document.body.classList.contains('deskx');
+  const seenGroups=new Set();
   _eachSection((key,lb)=>{
-    const b=document.createElement('button');b.className='fx-rail-btn';b.dataset.sec=key;
-    b.innerHTML=`<span class="fx-rail-ic">${icon(key,22)}</span><span class="fx-rail-lb">${lb}</span>`;
-    b.onclick=()=>fxSection(key);
+    let bKey=key,bLb=lb,bIcon=key;
+    if(dx&&FX_GROUP_OF[key]){
+      const g=FX_GROUP_OF[key];
+      if(seenGroups.has(g))return; // this group's button was already emitted at its first member
+      seenGroups.add(g);
+      bKey=g;bLb=FX_GROUPS[g].label;bIcon=FX_GROUPS[g].icon;
+    }
+    const b=document.createElement('button');b.className='fx-rail-btn';b.dataset.sec=bKey;
+    b.innerHTML=`<span class="fx-rail-ic">${icon(bIcon,22)}</span><span class="fx-rail-lb">${bLb}</span>`;
+    b.onclick=()=>fxSection(bKey);
     rail.appendChild(b);
   });
   fxSection(_activeSec()||'image',true);
   syncSectionEnabled();
 }
 function fxSection(name,noSheet){
-  const card=document.querySelector(`.fx-ctrl[data-fxsec="${name}"]`);if(!card)return;
+  const dx=document.body.classList.contains('deskx');
+  const members=(dx&&FX_GROUPS[name])?FX_GROUPS[name].members:[name];
+  const cards=members.map(k=>document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`)).filter(Boolean);
+  if(!cards.length)return;
   const mob=document.body.classList.contains('mobile-fx');
+  const isActive=cards.some(c=>c.classList.contains('sec-active'));
   // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
-  if(mob&&!noSheet&&card.classList.contains('sec-active')&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}
+  if(mob&&!noSheet&&isActive&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}
+  // deskx (Darkroom-style): clicking the ACTIVE rail icon closes the whole tools panel —
+  // the grid column collapses and the photo reflows wider. noSheet (programmatic re-selects
+  // from applyFxLayout/buildToolRail) never toggles, so layout rebuilds can't flap the panel.
+  if(dx&&!noSheet&&isActive&&!document.body.classList.contains('panel-closed')){
+    document.body.classList.add('panel-closed');
+    document.querySelectorAll('#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.remove('on'));
+    requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));renderPreview();});
+    return;
+  }
+  const wasClosed=dx&&document.body.classList.contains('panel-closed');
+  if(dx)document.body.classList.remove('panel-closed');
   document.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>c.classList.remove('sec-active'));
-  card.classList.add('sec-active');
+  cards.forEach(c=>c.classList.add('sec-active'));
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
   if(mob&&!noSheet){document.body.classList.add('sheet-open');fxLiveFit(360);hapt();}
   if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
-  if(name==='curves'&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
+  if(wasClosed)requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));renderPreview();}); // photo reflows narrower when the panel reopens
+  if(members.includes('curves')&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
 }
 function fxSheetClose(){
   document.body.classList.remove('sheet-open');
@@ -7247,6 +7396,7 @@ function fxLiveFit(ms){
 //  - crop  → any rotate/flip/straighten/crop has been applied
 const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',local:'tg-local',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
 function _secIsEnabled(key){
+  if(typeof FX_GROUPS!=='undefined'&&FX_GROUPS[key])return FX_GROUPS[key].members.some(_secIsEnabled); // deskx Color/Film rail buttons
   const tg=_SEC_TOGGLE[key];
   if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
   if(key==='looks'){const s=document.getElementById('sel-lut');return !!(s&&s.value);}

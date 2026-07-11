@@ -85,71 +85,39 @@
   }
   window.getLibRaw = async function () { return NativeLibRawShim; };
 
-  // ── Traffic-light spacing + custom titlebar drag region ──────────────────────
-  // titleBarStyle:"Overlay" (tauri.conf.json) removes the native title bar text/background
-  // but keeps the traffic-light buttons floating over the web content — so the app's own
-  // <header> needs left padding to clear them, and needs to double as the window's drag
-  // handle since there's no native title bar left to drag by.
+  // ── Darkroom-style shell layout: everything is chromasmith-22.html's `body.deskx` mode
+  // (grid, icon rail right, panel toggle, ⋯ menu, 44px deskbar) — the shell only turns it on
+  // and handles the two things a web page can't: the window drag region and traffic lights.
+  // titleBarStyle:"Overlay" (tauri.conf.json) keeps the traffic-light buttons floating over
+  // the web content; the deskbar's 84px left padding (deskx CSS) clears them, and the deskbar
+  // itself is the drag handle. Buttons inside it must be explicitly no-drag or every click
+  // becomes a window drag.
   const style = document.createElement('style');
   style.textContent = `
-    body.tauri-native header{padding-left:78px;-webkit-app-region:no-drag}
-    body.tauri-native header .logo{-webkit-app-region:drag}
-    body.tauri-native .hdr-right{-webkit-app-region:no-drag}
-    /* No whole-window scroll in the desktop shell — header/tabs stay fixed, and everything
-       below them (main) is the single scroll region. Inside the Effects tab, fx-panel and
-       fx-canvas already cap their own height (chromasmith-22.html's body.fx-deskb rules) and
-       scroll internally, so in practice that tab never needs main to scroll either — this is
-       just the safety net for the other tabs (Guide, Match & Refine, Colour Copy). */
-    body.tauri-native{height:100vh;overflow:hidden;display:flex;flex-direction:column}
-    body.tauri-native header,body.tauri-native .tabs{flex:0 0 auto}
-    body.tauri-native main{flex:1 1 auto;min-height:0;overflow-y:auto}
-    body.tauri-native #log-area{flex:0 0 auto}
-    /* Collapsible right tools panel (Effects tab, desktop tool-rail layout): hides the
-       360px adjustments panel so the preview can take the freed width. Toggled by
-       #hdr-tools-toggle below; state isn't persisted — it's a per-session view preference. */
-    body.tauri-native.fx-deskb.tools-collapsed .fx-layout{grid-template-columns:auto 0 1fr}
-    body.tauri-native.fx-deskb.tools-collapsed .fx-panel{display:none}
+    body.tauri-native #fx-deskbar{-webkit-app-region:drag}
+    body.tauri-native #fx-deskbar button,body.tauri-native #fx-deskbar-tools,
+    body.tauri-native #fx-deskbar-tools *,body.tauri-native #fx-overflow,
+    body.tauri-native #fx-overflow *{-webkit-app-region:no-drag}
+    body.tauri-native{height:100vh;overflow:hidden}
+    body.tauri-native #log-area{z-index:3500}
   `;
   document.head.appendChild(style);
   document.body.classList.add('tauri-native');
+  document.body.classList.add('deskx');
+  const deskbar = document.getElementById('fx-deskbar');
+  if (deskbar) deskbar.setAttribute('data-tauri-drag-region', '');
+  if (typeof applyFxLayout === 'function') applyFxLayout(); // re-fit now that deskx changed the geometry
 
-  const header = document.querySelector('header');
-  if (header) header.setAttribute('data-tauri-drag-region', '');
-  const logo = document.querySelector('header .logo');
-  if (logo) logo.setAttribute('data-tauri-drag-region', '');
-
-  // Library toggle button — matches the existing .hdr-btn styling, added before the theme
-  // toggle. library-ui.js (loaded separately, see build-desktop.sh) defines the actual view
-  // and exposes window.chromasmithToggleLibrary; this button is just the entry point.
-  const hdrRight = document.querySelector('.hdr-right');
-  if (hdrRight) {
-    const libBtn = document.createElement('button');
-    libBtn.className = 'hdr-btn';
-    libBtn.title = 'Photo Library (local folders) — L';
-    libBtn.textContent = '🗂';
-    libBtn.onclick = () => window.chromasmithToggleLibrary && window.chromasmithToggleLibrary();
-    hdrRight.insertBefore(libBtn, hdrRight.firstChild);
-
-    const toolsBtn = document.createElement('button');
-    toolsBtn.className = 'hdr-btn';
-    toolsBtn.title = 'Hide/show the adjustments panel — Tab';
-    toolsBtn.textContent = '⬛';
-    toolsBtn.onclick = toggleToolsPanel;
-    hdrRight.insertBefore(toolsBtn, hdrRight.firstChild);
-  }
-
-  // ── Collapsible right adjustments panel (image dominates; panel re-opens on demand). ────
-  function toggleToolsPanel() {
-    document.body.classList.toggle('tools-collapsed');
-    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-  }
   document.addEventListener('keydown', (e) => {
     const t = e.target;
     const typing = t && t.closest && t.closest('input,textarea,[contenteditable]');
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'Tab' && document.body.classList.contains('fx-deskb')) {
+      // Toggle the tools panel like clicking the active rail icon (deskx panel-closed flow).
       e.preventDefault();
-      toggleToolsPanel();
+      const on = document.querySelector('#fx-toolrail .fx-rail-btn.on');
+      if (on) on.click();
+      else if (typeof fxSection === 'function') fxSection((typeof _activeSec === 'function' && _activeSec()) || 'adjust');
     } else if (e.key === 'l' || e.key === 'L') {
       window.chromasmithToggleLibrary && window.chromasmithToggleLibrary();
     }
