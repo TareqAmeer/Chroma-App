@@ -78,7 +78,7 @@
   const DOCK_W = 340;
   style.textContent = `
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
-      background:#17171b;display:none;border-right:2px solid #3a3a44;
+      background:#17171b;display:none;border-right:3px solid #55555f;
       grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:#f0ece2;
       font-family:-apple-system,'Helvetica Neue',sans-serif;transition:width .15s ease;}
     #lib-overlay.on{display:grid}

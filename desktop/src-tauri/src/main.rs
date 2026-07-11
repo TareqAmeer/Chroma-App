@@ -129,6 +129,17 @@ fn lens_profile_available(make: String, model: String, lens_model: String) -> bo
     lens_correct::profile_available(&make, &model, &lens_model)
 }
 
+// A visible way to confirm the RUNNING app actually has today's Rust changes compiled in —
+// unlike chromasmith-22.html/desktop/*.js (read from desktop/dist/ off disk at runtime, so a
+// plain in-app reload picks up JS/CSS edits), any change to desktop/src-tauri/src/*.rs needs a
+// full `cargo build` + app RESTART (quitting a running `tauri dev`/.app and relaunching, not
+// just Cmd+R) before it takes effect. Bump this string whenever a native fix ships, and check
+// it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
+#[tauri::command]
+fn native_build_tag() -> &'static str {
+    "2026-07-12k"
+}
+
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
 // plain File-shaped object, same as picking it from the OS file dialog or dragging it in).
 #[tauri::command]
@@ -220,6 +231,7 @@ fn main() {
             store_dcp_lut,
             decode_raw_v2,
             lens_profile_available,
+            native_build_tag,
             read_file_bytes,
             google_oauth_loopback,
             library::list_dir,

@@ -449,9 +449,11 @@ body.deskx #fx-toolrail{order:3;position:static;top:auto;align-self:stretch;widt
 body.deskx .fx-rail-btn{width:100%;flex-direction:column;gap:3px;padding:8px 2px;justify-content:center;font-size:9px}
 body.deskx .fx-rail-btn .fx-rail-lb{white-space:normal;text-align:center;line-height:1.15}
 /* Darkroom-style gutter: a visible margin + border boxes the preview off from the filmstrip
-   and the tool rail, instead of the photo touching the library panel edge-to-edge. */
+   and the tool rail, instead of the photo touching the library panel edge-to-edge. Thickened
+   and lightened further — the first pass (1px, #3a3a44) read as almost invisible against the
+   dark UI. */
 body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;
-  border:1px solid #3a3a44;border-radius:10px;margin:12px}
+  border:2px solid #55555f;border-radius:12px;margin:22px}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
@@ -2921,7 +2923,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12j';
+const BUILD='2026-07-12k';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -7728,6 +7730,16 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
     log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · SAB/RAW ${coi}${native} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
   }catch(e){}
 })();
+// Native (Rust) build tag — a plain in-app reload/Cmd+R picks up JS/CSS from desktop/dist/
+// (read off disk at runtime), but any src-tauri/src/*.rs change needs a real `cargo build` +
+// full app RESTART. This makes that distinction checkable instead of guessed: if a native-side
+// fix "isn't working," check this line FIRST — if it's not the tag you expect, the app is
+// running a stale Rust binary and no amount of in-app reloading will pick up the fix.
+if(window.__TAURI__){
+  window.__TAURI__.core.invoke('native_build_tag').then(tag=>{
+    log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit (⌘Q) and relaunch, not just reload`,'info');
+  }).catch(()=>{});
+}
 // Tap-to-select chip row mirroring a plain <select> (kept in the DOM, hidden, as the
 // existing state store so session/snapshot code that reads/writes its .value is untouched).
 function selectToChips(selectId,chipsId){
