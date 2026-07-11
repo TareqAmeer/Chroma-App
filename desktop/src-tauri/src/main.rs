@@ -139,6 +139,7 @@ fn main() {
             read_file_bytes,
             library::list_dir,
             library::get_thumbnail,
+            library::get_preview,
             library::get_meta,
             library::get_sidecar,
             library::set_sidecar

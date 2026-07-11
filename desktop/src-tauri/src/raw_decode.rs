@@ -119,12 +119,53 @@ pub fn decode_rw2_bytes(bytes: &[u8]) -> Result<DecodedRaw, String> {
             dst[2] = (px[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
         });
 
+    // 5) EXIF orientation. raw_image.orientation is hardcoded Normal in rawler 0.7 (TODO
+    //    upstream), so read metadata.exif.orientation. Cameras emit 1/3/6/8 only.
+    let orientation = metadata.exif.orientation.unwrap_or(1);
+    let (rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
+
     Ok(DecodedRaw {
         width: out_w as u32,
         height: out_h as u32,
         iso,
         rgb16,
     })
+}
+
+/// Rotate an interleaved u16 RGB buffer per EXIF orientation (1=as-is, 3=180°,
+/// 6=90° CW, 8=90° CCW). Rayon over destination rows; ~10ms for 24MP.
+fn apply_orientation(src: Vec<u16>, w: usize, h: usize, orientation: u16) -> (Vec<u16>, usize, usize) {
+    match orientation {
+        3 => {
+            let mut dst = vec![0u16; src.len()];
+            dst.par_chunks_mut(w * 3).enumerate().for_each(|(y, line)| {
+                let sy = h - 1 - y;
+                for x in 0..w {
+                    let s = (sy * w + (w - 1 - x)) * 3;
+                    line[x * 3..x * 3 + 3].copy_from_slice(&src[s..s + 3]);
+                }
+            });
+            (dst, w, h)
+        }
+        6 | 8 => {
+            // output is h wide, w tall
+            let mut dst = vec![0u16; src.len()];
+            dst.par_chunks_mut(h * 3).enumerate().for_each(|(y, line)| {
+                for x in 0..h {
+                    // 6 (90 CW):  dst(x,y) = src(y, h-1-x)
+                    // 8 (90 CCW): dst(x,y) = src(w-1-y, x)
+                    let s = if orientation == 6 {
+                        ((h - 1 - x) * w + y) * 3
+                    } else {
+                        (x * w + (w - 1 - y)) * 3
+                    };
+                    line[x * 3..x * 3 + 3].copy_from_slice(&src[s..s + 3]);
+                }
+            });
+            (dst, h, w)
+        }
+        _ => (src, w, h),
+    }
 }
 
 /// Apply a baked N^3 DCP LUT (the same Float32 data bakeDcpLUT produces in JS, values are

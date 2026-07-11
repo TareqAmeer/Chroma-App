@@ -2817,7 +2817,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-11a';
+const BUILD='2026-07-11b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3557,26 +3557,33 @@ void main(){
     // runs when Luminance or Color amount > 0 (otherwise the pass is skipped entirely, so the
     // default path is byte-identical). Luma/chroma split: keep a bilateral-denoised luminance
     // (edges preserved) and a spatially-blurred chroma (colour noise is coarse and cheap to kill).
+    // nrScale (=fullImageWidth/REF, same convention as the halation sigmas) and nrChromaStep
+    // widen the 7x7 tap grid in absolute pixels so chroma NR reaches real high-ISO blotch size
+    // at full/export resolution instead of the old fixed ±3px (invisible past a downscaled
+    // preview, and too narrow at 24MP even at full strength). Luma keeps a much tighter step so
+    // edge/detail preservation doesn't degrade.
     this.progs.nr=this._prog(VS,`#version 300 es
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail;
+uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail,nrScale,nrChromaStep;
 float yl(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
 void main(){
   vec3 c0=texture(img,uv).rgb; float l0=yl(c0);
   // range sigma on luma shrinks as Detail rises, so strong edges stop being averaged across
   float sigR=mix(0.22,0.035,clamp(nrDetail,0.,1.));
+  float lumaStep=clamp(nrScale,1.0,2.5); // tight — edge/detail preservation, only mildly scaled
   vec3 lsum=vec3(0.); float lw=0.;   // bilateral (edge-preserving) accumulation
   vec3 csum=vec3(0.); float cw=0.;   // spatial-only accumulation (for chroma)
   for(int y=-3;y<=3;y++){
     for(int x=-3;x<=3;x++){
       vec2 off=vec2(float(x),float(y));
-      vec3 c=texture(img,uv+off*texSize).rgb;
       float ws=exp(-dot(off,off)/(2.*1.6*1.6));
-      csum+=c*ws; cw+=ws;
-      float dl=yl(c)-l0; float wr=exp(-dl*dl/(2.*sigR*sigR));
-      lsum+=c*ws*wr; lw+=ws*wr;
+      vec3 cC=texture(img,uv+off*nrChromaStep*texSize).rgb;
+      csum+=cC*ws; cw+=ws;
+      vec3 cL=texture(img,uv+off*lumaStep*texSize).rgb;
+      float dl=yl(cL)-l0; float wr=exp(-dl*dl/(2.*sigR*sigR));
+      lsum+=cL*ws*wr; lw+=ws*wr;
     }
   }
   vec3 bil=lsum/max(lw,1e-4);   // edge-preserving denoise: take its luminance
@@ -3958,8 +3965,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // preview is approximate, same as sharpen/grain — the 1:1 loupe is true).
     const nrP=P.nr, nrOn=!!(nrP&&(nrP.luma>0||nrP.color>0));
     if(nrOn){
+      const nrChromaStep=Math.max(1,sc)*(0.5+nrP.color)*1.5;
       this._pass(this.progs.nr,this.fbs.nr,
         {img:0,nrLuma:nrP.luma,nrColor:nrP.color,nrDetail:nrP.detail!=null?nrP.detail:0.5,
+         nrScale:sc,nrChromaStep,
          texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
     }
     const lutSrc=nrOn?'nr':srcAfterLens;
@@ -4763,6 +4772,7 @@ async function loadFXImages(fileList){
       if(isRw2File(file)){
         const{canvas,dpi}=await loadRw2(file);
         fxImages.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null,rawFile:file}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        applyRawDefaults();
         continue;
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
@@ -4825,6 +4835,18 @@ function resetAdjust(){
   fxUpdate();log('Adjustments reset','info');
 }
 function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}
+// RAW-only baseline (Lightroom applies Color NR 25 + capture sharpening by default on import;
+// this app previously opened every RAW at zero corrective defaults). Only touches sliders
+// still sitting at their own defaults, so it never clobbers a value the user (or a restored
+// XMP recipe, applied right after loadFXImages returns) has already set.
+function applyRawDefaults(){
+  const col=document.getElementById('sl-nr-col'),sharp=document.getElementById('sl-adj-sharp');
+  const vCol=document.getElementById('vl-nr-col'),vSharp=document.getElementById('vl-adj-sharp');
+  let applied=false;
+  if(col&&adjVal('sl-nr-col')===0){col.value=25;if(vCol)vCol.textContent='25';applied=true;}
+  if(sharp&&adjVal('sl-adj-sharp')===0){sharp.value=40;if(vSharp)vSharp.textContent='40';applied=true;}
+  if(applied)log('RAW defaults applied (Color NR 25, Sharpen 40)','info');
+}
 
 // ══ TONE CURVES — master + R/G/B point curves, monotone cubic, baked to a 256×1 LUT ══
 let curveCh='m',_crvDrag=-1;
@@ -5339,9 +5361,16 @@ function getUISnapshot(){
   s.artSeed=fxState.artSeed;                              // artifact placement seed
   s.masks=JSON.parse(JSON.stringify(fxState.masks));      // local-adjustment masks
   s.canvas=JSON.parse(JSON.stringify(fxState.canvas));    // canvas matte (ar/bg/blur)
+  s.ver=2; // 2: exposure slider is /20 (±5 stops) — bumped from the unversioned /50 (±2 stops) mapping
   return s;
 }
 function applyUISnapshot(s){
+  // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
+  // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
+  // an old raw slider value unchanged would apply 2.5x the intended exposure shift. Rescale once.
+  if(s.sliders&&s.sliders['adj-exp']!==undefined&&s.ver!==2){
+    s.sliders['adj-exp']=Math.max(-100,Math.min(100,parseFloat(s.sliders['adj-exp'])*(20/50)));
+  }
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff)ff.style.display=on?'flex':'none';}});
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
@@ -5683,7 +5712,7 @@ function autoEnhance(){
   const avgR=avg(rs),avgG=avg(gs),avgB=avg(bs);
   const blacksAdj=Math.max(-100,Math.min(100,Math.round(-p1*100)));
   const whitesAdj=Math.max(-100,Math.min(100,Math.round((1-p99)*100)));
-  const expAdj=Math.max(-100,Math.min(100,Math.round((0.38-med)/0.38*50)));
+  const expAdj=Math.max(-100,Math.min(100,Math.round((0.38-med)/0.38*20))); // *20: matches the exposure slider's /20 (±5 stop) mapping
   const tempAdj=Math.max(-100,Math.min(100,Math.round((avgB-avgR)/(avgR+avgB+1e-9)*100/0.22)));
   const tintAdj=Math.max(-100,Math.min(100,Math.round((1-(avgR+avgB)/(2*avgG+1e-9))/0.14*100)));
   const setSlider=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
@@ -5716,12 +5745,14 @@ function saveSession(){
   s._dustMode=fxState.dustMode; // dust speck colour mode (0 both,1 black,2 white)
   s._masks=fxState.masks;     // local-adjustment masks
   s._canvas=fxState.canvas;   // canvas matte (ar/bg/blur)
+  s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
   try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));log('Session saved','ok');}catch(e){log('Session save failed: '+e.message,'warn');}
 }
 function loadSession(userTriggered){
   try{
     const raw=localStorage.getItem(_SESS_KEY);if(!raw)return;
     const s=JSON.parse(raw);
+    if(s['sl-adj-exp']!=null&&s._ver!==2)s['sl-adj-exp']=Math.max(-100,Math.min(100,parseFloat(s['sl-adj-exp'])*(20/50)));
     _SESS_SLIDERS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
     _SESS_TOGGLES.forEach(id=>{
       const el=document.getElementById(id);if(!el||s[id]==null)return;
@@ -5811,7 +5842,7 @@ function getFXParams(){return{
   hsl:!!(document.getElementById('tg-hsl')||{classList:{contains:()=>false}}).classList.contains('on')&&!hslIdentity(),
   masks:(document.getElementById('tg-local')||{classList:{contains:()=>false}}).classList.contains('on')?fxState.masks:[],
   adjust:{enabled:document.getElementById('tg-adjust').classList.contains('on'),
-    exposure:adjVal('sl-adj-exp')/50,   // ±2 stops
+    exposure:adjVal('sl-adj-exp')/20,   // ±5 stops (slider stays -100..100)
     contrast:adjVal('sl-adj-con')/200,  // ±0.5
     highlights:adjVal('sl-adj-hi')/100, shadows:adjVal('sl-adj-sh')/100,
     whites:adjVal('sl-adj-wh')/100, blacks:adjVal('sl-adj-bl')/100,

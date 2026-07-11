@@ -69,7 +69,11 @@
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       this._mode = mode; this._buf = buf;
     }
-    async metadata() { return { iso_speed: this._iso, make: 'Panasonic', model: 'DC-S9' }; }
+    // make/model here were previously hardcoded 'Panasonic'/'DC-S9' — wrong for any other
+    // camera and redundant besides: library-ui.js's openInEditor fetches real metadata
+    // (camera/lens/shutter/aperture/iso/date) via the Rust get_meta command and overwrites
+    // #fx-exif right after load, so this shim doesn't need to guess.
+    async metadata() { return { iso_speed: this._iso, make: '', model: '' }; }
     async imageData() {
       if (this._mode === 'linear16') {
         return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 12) };
@@ -91,6 +95,20 @@
     body.tauri-native header{padding-left:78px;-webkit-app-region:no-drag}
     body.tauri-native header .logo{-webkit-app-region:drag}
     body.tauri-native .hdr-right{-webkit-app-region:no-drag}
+    /* No whole-window scroll in the desktop shell — header/tabs stay fixed, and everything
+       below them (main) is the single scroll region. Inside the Effects tab, fx-panel and
+       fx-canvas already cap their own height (chromasmith-22.html's body.fx-deskb rules) and
+       scroll internally, so in practice that tab never needs main to scroll either — this is
+       just the safety net for the other tabs (Guide, Match & Refine, Colour Copy). */
+    body.tauri-native{height:100vh;overflow:hidden;display:flex;flex-direction:column}
+    body.tauri-native header,body.tauri-native .tabs{flex:0 0 auto}
+    body.tauri-native main{flex:1 1 auto;min-height:0;overflow-y:auto}
+    body.tauri-native #log-area{flex:0 0 auto}
+    /* Collapsible right tools panel (Effects tab, desktop tool-rail layout): hides the
+       360px adjustments panel so the preview can take the freed width. Toggled by
+       #hdr-tools-toggle below; state isn't persisted — it's a per-session view preference. */
+    body.tauri-native.fx-deskb.tools-collapsed .fx-layout{grid-template-columns:auto 0 1fr}
+    body.tauri-native.fx-deskb.tools-collapsed .fx-panel{display:none}
   `;
   document.head.appendChild(style);
   document.body.classList.add('tauri-native');
@@ -107,11 +125,35 @@
   if (hdrRight) {
     const libBtn = document.createElement('button');
     libBtn.className = 'hdr-btn';
-    libBtn.title = 'Photo Library (local folders)';
+    libBtn.title = 'Photo Library (local folders) — L';
     libBtn.textContent = '🗂';
     libBtn.onclick = () => window.chromasmithToggleLibrary && window.chromasmithToggleLibrary();
     hdrRight.insertBefore(libBtn, hdrRight.firstChild);
+
+    const toolsBtn = document.createElement('button');
+    toolsBtn.className = 'hdr-btn';
+    toolsBtn.title = 'Hide/show the adjustments panel — Tab';
+    toolsBtn.textContent = '⬛';
+    toolsBtn.onclick = toggleToolsPanel;
+    hdrRight.insertBefore(toolsBtn, hdrRight.firstChild);
   }
+
+  // ── Collapsible right adjustments panel (image dominates; panel re-opens on demand). ────
+  function toggleToolsPanel() {
+    document.body.classList.toggle('tools-collapsed');
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  document.addEventListener('keydown', (e) => {
+    const t = e.target;
+    const typing = t && t.closest && t.closest('input,textarea,[contenteditable]');
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'Tab' && document.body.classList.contains('fx-deskb')) {
+      e.preventDefault();
+      toggleToolsPanel();
+    } else if (e.key === 'l' || e.key === 'L') {
+      window.chromasmithToggleLibrary && window.chromasmithToggleLibrary();
+    }
+  });
 
   // ── Native menu bar wiring ────────────────────────────────────────────────────
   // The Rust side (src-tauri/src/main.rs) builds a real macOS menu bar (App/File/Edit/

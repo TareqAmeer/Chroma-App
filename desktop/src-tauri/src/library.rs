@@ -126,6 +126,26 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// Fast provisional preview for opening a RAW into the editor: the camera's own embedded
+/// JPEG (rawler's extract_preview_pixels — bigger than the grid thumbnail, no demosaic), so
+/// the editor shows *something* in well under a second while the full native decode (PPG
+/// demosaic + DCP LUT, ~3-5s) runs behind it and swaps in. Not cached — it's a one-shot
+/// provisional frame, not reused.
+#[tauri::command]
+pub fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
+    let ext = ext_lower(Path::new(&path));
+    if !is_raw_ext(&ext) {
+        return Err("get_preview is for RAW files only".into());
+    }
+    let img = rawler::analyze::extract_preview_pixels(&path, &RawDecodeParams::default())
+        .map_err(|e| format!("preview decode: {e}"))?;
+    let mut out = Cursor::new(Vec::new());
+    img.to_rgb8()
+        .write_to(&mut out, image::ImageFormat::Jpeg)
+        .map_err(|e| format!("jpeg encode: {e}"))?;
+    Ok(tauri::ipc::Response::new(out.into_inner()))
+}
+
 // ── Photo metadata (camera / lens / date / iso) for the library's filter dropdowns.
 // RAWs go through rawler's raw_metadata (no pixel decode); JPEG/TIFF through kamadak-exif;
 // PNG has no EXIF → nulls. Disk-cached exactly like thumbnails (path+mtime+size key). ──────
@@ -135,10 +155,27 @@ pub struct PhotoMeta {
     pub lens: Option<String>,
     pub date: Option<String>,
     pub iso: Option<u32>,
+    pub shutter: Option<String>,
+    pub aperture: Option<String>,
+    pub focal_len: Option<String>,
+}
+
+/// Formats a rawler Rational exposure time the way the app's own EXIF reader does
+/// ("1/250" or "2.5s" for slow shutters).
+fn fmt_shutter(secs: f64) -> String {
+    if secs <= 0.0 {
+        String::new()
+    } else if secs < 0.5 {
+        format!("1/{}", (1.0 / secs).round() as i64)
+    } else {
+        format!("{secs:.1}s")
+    }
 }
 
 fn meta_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
-    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".meta.json"))
+    // .meta2.json: bumped from .meta.json when shutter/aperture/focal_len were added, so
+    // pre-existing cache entries (missing the new fields) don't get served stale.
+    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".meta2.json"))
 }
 
 fn read_meta(path: &str) -> PhotoMeta {
@@ -152,11 +189,15 @@ fn read_meta(path: &str) -> PhotoMeta {
         } else {
             Some(format!("{} {}", md.make, md.model).trim().to_string())
         };
+        let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f64 / r.d as f64 } else { 0.0 };
         PhotoMeta {
             camera,
             lens: md.exif.lens_model.clone().or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone())),
             date: md.exif.date_time_original.clone(),
             iso: md.exif.iso_speed_ratings.map(|v| v as u32),
+            shutter: md.exif.exposure_time.as_ref().map(|r| fmt_shutter(ratio(r))),
+            aperture: md.exif.fnumber.as_ref().map(|r| format!("f/{:.1}", ratio(r))),
+            focal_len: md.exif.focal_length.as_ref().map(|r| format!("{:.0}mm", ratio(r))),
         }
     } else if matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff") {
         let Ok(file) = std::fs::File::open(path) else { return PhotoMeta::default() };
@@ -176,7 +217,15 @@ fn read_meta(path: &str) -> PhotoMeta {
         let iso = exif
             .get_field(exif::Tag::PhotographicSensitivity, exif::In::PRIMARY)
             .and_then(|f| f.value.get_uint(0));
-        PhotoMeta { camera, lens: s(exif::Tag::LensModel), date: s(exif::Tag::DateTimeOriginal), iso }
+        PhotoMeta {
+            camera,
+            lens: s(exif::Tag::LensModel),
+            date: s(exif::Tag::DateTimeOriginal),
+            iso,
+            shutter: s(exif::Tag::ExposureTime),
+            aperture: s(exif::Tag::FNumber).map(|v| format!("f/{v}")),
+            focal_len: s(exif::Tag::FocalLength),
+        }
     } else {
         PhotoMeta::default()
     }

@@ -22,7 +22,9 @@
     tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
     search: '',
     open: false,
+    expanded_view: false,  // full-window library grid (vs the docked 340px strip)
     openedPath: '',        // path of the photo currently loaded into the editor FROM the library
+    selected: new Set(),   // multi-selected paths (shift/cmd-click), for batch rate/flag/open
   };
 
   // ── styles ──────────────────────────────────────────────────────────────────
@@ -35,9 +37,12 @@
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
       background:#17171b;display:none;border-right:1px solid #34343f;
       grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:#f0ece2;
-      font-family:-apple-system,'Helvetica Neue',sans-serif;}
+      font-family:-apple-system,'Helvetica Neue',sans-serif;transition:width .15s ease;}
     #lib-overlay.on{display:grid}
+    #lib-overlay.full{width:100vw;grid-template-rows:auto auto minmax(100px,18%) 1fr 28px}
+    #lib-overlay.full #lib-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
     body.lib-docked{padding-left:${DOCK_W}px}
+    body.lib-docked.lib-full{padding-left:0}
     #lib-top{display:flex;align-items:center;gap:8px;padding:34px 12px 6px;-webkit-app-region:drag}
     #lib-top button{-webkit-app-region:no-drag}
     #lib-top .lib-title{font-weight:600;font-size:14px;margin-right:auto}
@@ -60,6 +65,8 @@
       cursor:pointer;position:relative}
     .lib-card:hover{border-color:#d4903a}
     .lib-card.sel{border-color:#d4903a;box-shadow:0 0 0 1px #d4903a}
+    .lib-card.multi{border-color:#5b9bd5;box-shadow:0 0 0 1px #5b9bd5}
+    .lib-card.sel.multi{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #5b9bd5}
     .lib-thumb-wrap{aspect-ratio:1.3;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
     .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:#9a968f;
@@ -76,6 +83,9 @@
     #lib-empty{color:#9a968f;font-size:12px;padding:30px 10px;text-align:center}
     #lib-filters select,#lib-filters input{background:#26262d;border:1px solid #34343f;color:#f0ece2;
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
+    #lib-provisional{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;
+      object-fit:contain;pointer-events:none;z-index:50;display:none}
+    #lib-provisional.on{display:block}
   `;
   document.head.appendChild(style);
 
@@ -86,6 +96,7 @@
     <div id="lib-top">
       <span class="lib-title">Library</span>
       <button class="lib-btn" id="lib-pick" title="Choose root folder">📁</button>
+      <button class="lib-btn" id="lib-expand" title="Full-window view — G">⛶</button>
       <button class="lib-btn" id="lib-close" title="Hide library panel">⇤</button>
     </div>
     <div id="lib-filters">
@@ -116,6 +127,39 @@
     <div id="lib-bottom"><span style="font-size:11px;color:#9a968f" id="lib-count"></span></div>
   `;
   document.body.appendChild(overlay);
+
+  // ── provisional preview: while a RAW's full native decode (PPG demosaic + DCP LUT,
+  // several seconds) runs, show the camera's own embedded JPEG immediately over the preview
+  // canvas so opening a photo doesn't look frozen. Its own <img>, not the WebGL canvas
+  // (fx-canvas already owns a WebGL2 context — a 2D drawImage onto it isn't possible), so it
+  // can't interfere with FXR state; removed the moment loadFXImages finishes (or fails). ────
+  let provisionalImg = null, provisionalToken = 0;
+  function ensureProvisionalEl() {
+    if (provisionalImg) return provisionalImg;
+    const wrap = document.getElementById('fx-zoom-wrap');
+    if (!wrap) return null;
+    provisionalImg = document.createElement('img');
+    provisionalImg.id = 'lib-provisional';
+    wrap.appendChild(provisionalImg);
+    return provisionalImg;
+  }
+  const RAW_EXT_RE = /\.(rw2|raw|dng|cr2|cr3|nef|arw|orf)$/i;
+  async function showProvisional(path) {
+    if (!RAW_EXT_RE.test(path)) return () => {};
+    const myToken = ++provisionalToken;
+    const el = ensureProvisionalEl();
+    if (!el) return () => {};
+    try {
+      const buf = await invoke('get_preview', { path });
+      if (myToken !== provisionalToken) return () => {}; // superseded by a newer open
+      const blob = new Blob([buf], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+      el.onload = () => URL.revokeObjectURL(url);
+      el.src = url;
+      el.classList.add('on');
+    } catch (e) { /* embedded preview unavailable — just skip the provisional frame */ }
+    return () => { if (myToken === provisionalToken) el.classList.remove('on'); };
+  }
 
   // ── helpers ─────────────────────────────────────────────────────────────────
   const baseName = (p) => p.split('/').pop();
@@ -163,6 +207,7 @@
   function snapshotFromB64(b64) { return JSON.parse(decodeURIComponent(escape(atob(b64)))); }
 
   async function openInEditor(path) {
+    const hideProvisional = await showProvisional(path);
     try {
       const buf = await invoke('read_file_bytes', { path });
       const file = new File([buf], baseName(path), { type: '' });
@@ -172,12 +217,27 @@
       if (sc.recipe) {
         try { applyUISnapshot(snapshotFromB64(sc.recipe)); fxUpdate(); } catch (e) { console.error('restore recipe', e); }
       }
+      // Real metadata (camera/lens/shutter/aperture/iso/date) via rawler on the Rust side —
+      // the editor's own RW2 branch attaches none, so without this #fx-exif stays empty.
+      try {
+        const m = await getMeta(path);
+        if (typeof showExif === 'function' && fxImages[0]) {
+          const exif = {
+            model: m.camera || '', shutter: m.shutter || '', aperture: m.aperture || '',
+            iso: m.iso ? `ISO ${m.iso}` : '', focalLen: m.focal_len || '', date: m.date || '',
+          };
+          fxImages[0].exif = exif;
+          showExif(exif);
+        }
+      } catch (e) { console.error('load metadata', e); }
       // Docked layout: the panel stays open next to the editor; just mark the active card.
       overlay.querySelectorAll('.lib-card.sel').forEach((c) => c.classList.remove('sel'));
       const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
       if (card) card.classList.add('sel');
     } catch (e) {
       console.error('openInEditor', e);
+    } finally {
+      hideProvisional();
     }
   }
 
@@ -251,6 +311,7 @@
 
   async function openFolder(path) {
     state.currentFolder = path;
+    state.selected.clear();
     const grid = document.getElementById('lib-grid');
     grid.innerHTML = '<div id="lib-empty">Loading…</div>';
     let entries;
@@ -284,14 +345,114 @@
     return true;
   }
 
+  // ── rating/flag mutation, factored so both the per-card star/flag clicks AND the
+  // multi-select context menu can apply the same write+cache+redraw logic. ─────────────────
+  async function setRating(path, rating) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    const updated = { ...cur, rating };
+    state.sidecars.set(path, updated);
+    await invoke('set_sidecar', { path, rating, label: updated.label, edited: updated.edited }).catch(() => {});
+    const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) card.querySelector('.lib-stars').innerHTML = starsHtml(Math.max(rating, 0));
+  }
+  async function setLabel(path, label) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    const updated = { ...cur, label };
+    state.sidecars.set(path, updated);
+    await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited }).catch(() => {});
+    const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(label);
+  }
+  let grid; // set at the top of renderGrid; the helpers above close over it
+
+  // ── multi-select: cmd/ctrl toggles one card, shift range-selects from the last-clicked
+  // anchor (over the currently-shown/filtered order), plain click opens (and clears selection
+  // — matches the existing single-click-opens behaviour so nothing regresses for the common
+  // case). Right-click selects the card under the cursor if it isn't already selected, then
+  // opens a context menu that applies rating/flag/open actions to the whole selection. ──────
+  let selectAnchor = -1;
+  function updateCardSelClasses() {
+    grid.querySelectorAll('.lib-card').forEach((c) => c.classList.toggle('multi', state.selected.has(c.dataset.path)));
+  }
+  function handleCardClick(e, entry, idx, shown) {
+    if (e.shiftKey && selectAnchor >= 0) {
+      const [lo, hi] = [selectAnchor, idx].sort((a, b) => a - b);
+      state.selected.clear();
+      for (let i = lo; i <= hi; i++) state.selected.add(shown[i].path);
+      updateCardSelClasses();
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      if (state.selected.has(entry.path)) state.selected.delete(entry.path); else state.selected.add(entry.path);
+      selectAnchor = idx;
+      updateCardSelClasses();
+      return;
+    }
+    state.selected.clear();
+    selectAnchor = idx;
+    updateCardSelClasses();
+    openInEditor(entry.path); // plain click opens, same as before multi-select existed
+  }
+
+  let ctxMenu = null;
+  function closeContextMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
+  document.addEventListener('click', closeContextMenu);
+  async function showContextMenu(e, entry, shown) {
+    e.preventDefault();
+    if (!state.selected.has(entry.path)) {
+      state.selected.clear();
+      state.selected.add(entry.path);
+      selectAnchor = shown.indexOf(entry);
+      updateCardSelClasses();
+    }
+    closeContextMenu();
+    const paths = Array.from(state.selected);
+    const n = paths.length;
+    ctxMenu = document.createElement('div');
+    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:#26262d;border:1px solid #34343f;' +
+      'border-radius:8px;padding:4px;font-size:12px;color:#f0ece2;font-family:-apple-system,sans-serif;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    const item = (label, fn) => {
+      const el = document.createElement('div');
+      el.textContent = label;
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      el.onmouseenter = () => { el.style.background = '#34343f'; };
+      el.onmouseleave = () => { el.style.background = ''; };
+      el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
+      ctxMenu.appendChild(el);
+      return el;
+    };
+    const sep = () => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:#34343f;margin:4px 0'; ctxMenu.appendChild(s); };
+    item(`Open ${n > 1 ? n + ' photos' : 'in editor'}`, async () => {
+      if (n <= 1) { await openInEditor(paths[0]); return; }
+      const files = [];
+      for (const p of paths) {
+        try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: '' })); }
+        catch (e) { console.error('read_file_bytes', p, e); }
+      }
+      if (files.length) { state.openedPath = ''; await loadFXImages(files); } // batch: no single auto-persist target
+    });
+    sep();
+    for (let r = 1; r <= 5; r++) item(`${'★'.repeat(r)} Rate ${r}`, () => Promise.all(paths.map((p) => setRating(p, r))));
+    item('Clear rating', () => Promise.all(paths.map((p) => setRating(p, 0))));
+    sep();
+    item('🚩 Red flag', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))));
+    item('🟢 Green flag', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))));
+    item('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))));
+    document.body.appendChild(ctxMenu);
+    const { innerWidth: vw, innerHeight: vh } = window;
+    const r = ctxMenu.getBoundingClientRect();
+    ctxMenu.style.left = Math.min(e.clientX, vw - r.width - 8) + 'px';
+    ctxMenu.style.top = Math.min(e.clientY, vh - r.height - 8) + 'px';
+  }
+
   async function renderGrid() {
-    const grid = document.getElementById('lib-grid');
+    grid = document.getElementById('lib-grid');
     grid.innerHTML = '';
     const shown = state.entries.filter(passesFilters);
-    for (const entry of shown) {
+    shown.forEach((entry, idx) => {
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
-      card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '');
+      card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '');
       card.dataset.path = entry.path;
       card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
         ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
@@ -302,42 +463,50 @@
         </div>`;
       const img = card.querySelector('img');
       loadThumb(entry.path, img);
-      card.querySelector('.lib-thumb-wrap').onclick = () => openInEditor(entry.path); // single click opens (docked panel stays)
+      card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
+      card.oncontextmenu = (e) => showContextMenu(e, entry, shown);
       card.querySelectorAll('.lib-star').forEach((star) => {
-        star.onclick = async (e) => {
+        star.onclick = (e) => {
           e.stopPropagation();
           const val = parseInt(star.dataset.i, 10);
-          const cur = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
-          const newRating = cur.rating === val ? 0 : val; // click same star again to clear
-          const updated = { ...cur, rating: newRating };
-          state.sidecars.set(entry.path, updated);
-          await invoke('set_sidecar', { path: entry.path, rating: newRating, label: updated.label, edited: updated.edited }).catch(() => {});
-          card.querySelector('.lib-stars').innerHTML = starsHtml(newRating);
-          card.querySelectorAll('.lib-star').forEach((s2) => { s2.onclick = star.onclick; });
+          const cur = state.sidecars.get(entry.path) || { rating: 0 };
+          setRating(entry.path, cur.rating === val ? 0 : val); // click same star again to clear
         };
       });
       card.querySelectorAll('.lib-flag').forEach((flag) => {
-        flag.onclick = async (e) => {
+        flag.onclick = (e) => {
           e.stopPropagation();
           const which = flag.dataset.flag;
-          const cur = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
-          const newLabel = cur.label === which ? '' : which; // click same flag again to clear
-          const updated = { ...cur, label: newLabel };
-          state.sidecars.set(entry.path, updated);
-          await invoke('set_sidecar', { path: entry.path, rating: updated.rating, label: newLabel, edited: updated.edited }).catch(() => {});
-          card.querySelector('.lib-flags').innerHTML = flagsHtml(newLabel);
-          card.querySelectorAll('.lib-flag').forEach((f2) => { f2.onclick = flag.onclick; });
+          const cur = state.sidecars.get(entry.path) || { label: '' };
+          setLabel(entry.path, cur.label === which ? '' : which); // click same flag again to clear
         };
       });
       grid.appendChild(card);
-    }
+    });
     if (!shown.length) grid.innerHTML = '<div id="lib-empty">No photos match this filter in this folder.</div>';
-    document.getElementById('lib-count').textContent = `${shown.length} of ${state.entries.length} photo(s)`;
+    document.getElementById('lib-count').textContent = state.selected.size
+      ? `${state.selected.size} selected — ${shown.length} of ${state.entries.length} photo(s)`
+      : `${shown.length} of ${state.entries.length} photo(s)`;
   }
 
   // ── wiring ──────────────────────────────────────────────────────────────────
   overlay.querySelector('#lib-pick').onclick = pickFolder;
   overlay.querySelector('#lib-close').onclick = () => { if (state.open) toggleLibrary(); };
+  overlay.querySelector('#lib-expand').onclick = () => toggleExpandedView();
+  function toggleExpandedView(force) {
+    state.expanded_view = force !== undefined ? force : !state.expanded_view;
+    overlay.classList.toggle('full', state.expanded_view);
+    document.body.classList.toggle('lib-full', state.expanded_view);
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  document.addEventListener('keydown', (e) => {
+    if (!state.open) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('input,textarea,[contenteditable]')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'g' || e.key === 'G') toggleExpandedView();
+    else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
+  });
   overlay.querySelector('#lib-filter').onchange = (e) => { state.minRating = parseInt(e.target.value, 10); renderGrid(); };
   overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; renderGrid(); };
@@ -353,6 +522,7 @@
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
     document.body.classList.toggle('lib-docked', state.open);
+    if (!state.open && state.expanded_view) toggleExpandedView(false); // don't stay full-window for next open
     // The dock shifts the app's layout; the preview canvas measures the window to fit, so
     // poke a resize once the CSS has applied.
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
