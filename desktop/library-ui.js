@@ -229,7 +229,13 @@
     // Selecting a photo from the full-window home screen transitions into the editor — the
     // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
     if (state.expanded_view) toggleExpandedView(false);
-    const hideProvisional = await showProvisional(path);
+    // Fire the provisional preview WITHOUT awaiting it — it's meant to show something while
+    // the full decode runs behind it. Awaiting it here made the two IPC round-trips run back
+    // to back (get_preview THEN read_file_bytes/decode) instead of overlapping, which made
+    // every open strictly SLOWER than before this feature existed — the opposite of the
+    // intent. hideProvisional is only needed once, in the `finally` below, so the promise
+    // itself is all that needs to survive past this point.
+    const provisionalPromise = showProvisional(path);
     try {
       const buf = await invoke('read_file_bytes', { path });
       // lastModified:0 (not the default Date.now()) — chromasmith-22.html's loadFXImages()
@@ -261,7 +267,7 @@
         const m = await getMeta(path);
         if (typeof showExif === 'function' && fxImages[0]) {
           const exif = {
-            model: m.camera || '', shutter: m.shutter || '', aperture: m.aperture || '',
+            model: m.camera || '', lens: m.lens || '', shutter: m.shutter || '', aperture: m.aperture || '',
             iso: m.iso ? `ISO ${m.iso}` : '', focalLen: m.focal_len || '', date: m.date || '',
           };
           fxImages[0].exif = exif;
@@ -275,6 +281,7 @@
     } catch (e) {
       console.error('openInEditor', e);
     } finally {
+      const hideProvisional = await provisionalPromise;
       hideProvisional();
     }
   }

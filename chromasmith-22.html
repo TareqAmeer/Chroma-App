@@ -2880,7 +2880,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12c';
+const BUILD='2026-07-12d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3644,13 +3644,28 @@ void main(){
   // range sigma on luma shrinks as Detail rises, so strong edges stop being averaged across
   float sigR=mix(0.22,0.035,clamp(nrDetail,0.,1.));
   float lumaStep=clamp(nrScale,1.0,2.5); // tight — edge/detail preservation, only mildly scaled
+  // Near-black pixels have almost no real signal (measured: mean ~2/255 in a true-black patch),
+  // so the sensor's per-pixel chroma variance reads as highly visible colour speckle relative
+  // to that near-zero base — a flat-strength blur measurably still leaves ~45% of the chroma
+  // std behind there. Real shadows have no fine chroma detail worth preserving anyway (it's
+  // read noise, not signal), so widen the chroma reach further as luma approaches 0 — the same
+  // shape Lightroom's Color NR uses (aggressive in true blacks, gentle by midtones). Tapers out
+  // by ~15% luma so midtone chroma detail is untouched.
+  // ⚠️ Scaling the sample offset AND sigma by the SAME factor is a no-op on blur strength — a
+  // self-similar rescale samples the identical Gaussian *shape* just moved further out, so the
+  // same ~handful of taps end up significantly weighted either way (measured: no improvement).
+  // sigBoost must grow FASTER than the offset so sigma widens relative to the tap spacing —
+  // that's what actually pulls more of the 9x9 grid's 81 taps into the weighted average.
+  float darkBoost=mix(2.4,1.0,smoothstep(0.0,0.15,l0));
+  float sigBoost=mix(4.2,1.0,smoothstep(0.0,0.15,l0));
   vec3 lsum=vec3(0.); float lw=0.;   // bilateral (edge-preserving) accumulation
   vec3 csum=vec3(0.); float cw=0.;   // spatial-only accumulation (for chroma)
   for(int y=-4;y<=4;y++){
     for(int x=-4;x<=4;x++){
       vec2 off=vec2(float(x),float(y));
-      vec2 dC=off*nrChromaStep;
-      float ws=exp(-dot(dC,dC)/(2.*nrChromaSig*nrChromaSig));
+      vec2 dC=off*nrChromaStep*darkBoost;
+      float csig=nrChromaSig*sigBoost;
+      float ws=exp(-dot(dC,dC)/(2.*csig*csig));
       vec3 cC=texture(img,uv+dC*texSize).rgb;
       csum+=cC*ws; cw+=ws;
       vec2 dL=off*lumaStep;
@@ -5932,6 +5947,7 @@ function showExif(exif){
   if(!exif||!Object.keys(exif).length){el.textContent='';return;}
   const parts=[];
   if(exif.make||exif.model)parts.push([exif.make,exif.model].filter(Boolean).join(' '));
+  if(exif.lens)parts.push(exif.lens);
   if(exif.shutter||exif.aperture||exif.iso||exif.focalLen)
     parts.push([exif.focalLen,exif.aperture,exif.shutter,exif.iso].filter(Boolean).join('  '));
   if(exif.date)parts.push(exif.date.slice(0,10));
