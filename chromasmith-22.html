@@ -448,7 +448,10 @@ body.deskx #fx-toolrail{order:3;position:static;top:auto;align-self:stretch;widt
 /* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only. */
 body.deskx .fx-rail-btn{width:100%;flex-direction:column;gap:3px;padding:8px 2px;justify-content:center;font-size:9px}
 body.deskx .fx-rail-btn .fx-rail-lb{white-space:normal;text-align:center;line-height:1.15}
-body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;border:none;border-radius:0;margin:0}
+/* Darkroom-style gutter: a visible margin + border boxes the preview off from the filmstrip
+   and the tool rail, instead of the photo touching the library panel edge-to-edge. */
+body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;
+  border:1px solid #3a3a44;border-radius:10px;margin:12px}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
@@ -2915,7 +2918,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12h';
+const BUILD='2026-07-12i';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -7106,7 +7109,11 @@ async function pkceChallenge(verifier){
 async function gpAuthNative(cid){
   const verifier=pkceVerifier(),challenge=await pkceChallenge(verifier);
   const template='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
-    client_id:cid,redirect_uri:'http://127.0.0.1:{PORT}/callback',response_type:'code',
+    // Google's documented loopback format is EXACTLY "http://127.0.0.1:<port>" — no path.
+    // A trailing "/callback" (or even "/") is outside the pattern their validator matches for
+    // this client type, which is what actually produced "Error 400: invalid_request / doesn't
+    // comply with Google's OAuth 2.0 policy" even after the {PORT}-encoding bug was fixed.
+    client_id:cid,redirect_uri:'http://127.0.0.1:{PORT}',response_type:'code',
     scope:GP_SCOPES,state:'gpcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
   const invoke=window.__TAURI__.core.invoke;
   let result;
@@ -7116,7 +7123,7 @@ async function gpAuthNative(cid){
   if(params.get('error'))throw new Error('Google sign-in failed: '+params.get('error'));
   const code=params.get('code');
   if(!code)throw new Error('Google sign-in failed: no authorization code returned');
-  const redirect_uri=`http://127.0.0.1:${result.port}/callback`; // MUST exactly match the auth request
+  const redirect_uri=`http://127.0.0.1:${result.port}`; // MUST exactly match the auth request — no path
   // Google quirk: "Desktop app" OAuth clients are issued a client_secret and the token
   // endpoint REQUIRES it in the code exchange even with PKCE (unlike a spec-pure public
   // client). Include it when the user has provided one; if the exchange comes back

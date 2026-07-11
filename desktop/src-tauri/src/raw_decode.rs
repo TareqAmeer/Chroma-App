@@ -242,12 +242,16 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         return;
     }
     let (levels, strength): (usize, f32) = match iso {
-        0..=1599 => return,
-        1600..=3199 => (3, 0.5),
-        3200..=6399 => (4, 0.7),
-        6400..=12799 => (4, 0.85),
-        _ => (5, 0.95),
+        0..=1599 => {
+            eprintln!("[chroma-nr] ISO {iso} < 1600 — skipped");
+            return;
+        }
+        1600..=3199 => (3, 0.6),
+        3200..=6399 => (5, 0.85),
+        6400..=12799 => (6, 0.97),
+        _ => (7, 0.99),
     };
+    eprintln!("[chroma-nr] ISO {iso} -> levels={levels} strength={strength} ({w}x{h})");
     let npx = w * h;
     // RGB u16 -> Y/Cb/Cr f32 planes (BT.601, chroma zero-centered).
     let mut yv = vec![0f32; npx];
@@ -303,8 +307,11 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         let mut rebuilt = vec![0f32; npx];
         for lvl in 0..levels {
             let smooth = atrous_smooth(&current, w, h, 1usize << lvl);
-            // detail_lvl = current - smooth; attenuated by strength, easing off at coarse levels
-            let keep = 1.0 - strength * (1.0 - lvl as f32 / levels as f32 * 0.35);
+            // detail_lvl = current - smooth; attenuated by strength, with only a SLIGHT ease-off
+            // at the coarsest level (large low-frequency color "packets" — the dominant
+            // complaint at high ISO — live in the coarser levels, so they must be hit almost as
+            // hard as fine speckle, not protected the way a real color gradient would be).
+            let keep = 1.0 - strength * (1.0 - lvl as f32 / levels as f32 * 0.12);
             rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| {
                 *o += (current[i] - smooth[i]) * keep;
             });

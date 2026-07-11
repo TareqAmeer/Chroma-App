@@ -78,7 +78,7 @@
   const DOCK_W = 340;
   style.textContent = `
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
-      background:#17171b;display:none;border-right:1px solid #34343f;
+      background:#17171b;display:none;border-right:2px solid #3a3a44;
       grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:#f0ece2;
       font-family:-apple-system,'Helvetica Neue',sans-serif;transition:width .15s ease;}
     #lib-overlay.on{display:grid}
@@ -104,7 +104,7 @@
     .lib-tree-chev{width:14px;flex:0 0 14px;text-align:center;opacity:.6;font-size:10px}
     .lib-tree-children{margin-left:14px}
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
-    .lib-card{background:#1f1f25;border:1px solid #34343f;border-radius:8px;overflow:hidden;
+    .lib-card{background:#1f1f25;border:2px solid #34343f;border-radius:8px;overflow:hidden;
       cursor:pointer;position:relative}
     .lib-card:hover{border-color:#d4903a}
     .lib-card.sel{border-color:#d4903a;box-shadow:0 0 0 1px #d4903a}
@@ -114,8 +114,11 @@
     .lib-card.flag-green{box-shadow:0 0 0 2px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
     .lib-card.flag-red.sel{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
     .lib-card.flag-green.sel{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
-    .lib-thumb-wrap{aspect-ratio:1.3;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
-    .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
+       photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
+       instead of being cropped to fill a square — same treatment as the docked filmstrip. */
+    .lib-thumb-wrap{aspect-ratio:1.3;background:#0c0c0f;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .lib-thumb-wrap img{width:100%;height:100%;object-fit:contain;display:block}
     .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:#9a968f;
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-tagrow{display:flex;align-items:center;gap:6px;padding:0 6px 6px}
