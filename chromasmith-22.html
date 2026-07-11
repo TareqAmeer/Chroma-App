@@ -659,30 +659,36 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <div class="fx-ctrl" data-fxsec="adjust">
         <div class="fx-ctrl-title">Basic Adjustments <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
         <div class="fx-fields" id="ff-adjust">
+          <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
+          <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
           <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
           <div class="fx-row"><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-hi" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hi">0</div></div>
           <div class="fx-row"><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sh">0</div></div>
           <div class="fx-row"><div class="fx-label">Whites</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wh">0</div></div>
           <div class="fx-row"><div class="fx-label">Blacks</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-bl" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-bl">0</div></div>
-          <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
-          <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
           <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
           <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
           <div class="fx-row"><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
           <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a colour-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
-          <div class="fx-row" style="margin-top:8px"><div class="fx-label" style="color:var(--acc);font-size:11px;letter-spacing:.04em">Noise Reduction</div></div>
-          <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
-          <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
-          <div class="fx-row"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
-          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Tames RAW sensor noise (esp. high ISO) before the film look. Independent of the toggle above.</div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance"><span class="bdot"></span>WB Eyedropper</button>
             <button class="btn bgh" onclick="autoEnhance()" title="One-click levels and white balance from the image histogram"><span class="bdot"></span>Auto-enhance</button>
           </div>
           <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetAdjust()"><span class="bdot"></span>Reset adjustments</button></div>
         </div>
+      </div>
+      <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a
+           tacked-on sub-section (matches the Lens Correction card's pattern: a plain title, no
+           enable toggle — it's driven by the sliders being >0, same as Lens). -->
+      <div class="fx-ctrl" data-fxsec="nr">
+        <div class="fx-ctrl-title">Noise Reduction</div>
+        <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
+        <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
+        <div class="fx-row"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
+        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
+        <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()"><span class="bdot"></span>Reset noise reduction</button></div>
       </div>
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
@@ -2880,7 +2886,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12e';
+const BUILD='2026-07-12f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4963,10 +4969,14 @@ function fxUpdate(){
   clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
 }
 function resetAdjust(){
-  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col']
+  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin']
     .forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
-  {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
   fxUpdate();log('Adjustments reset','info');
+}
+function resetNR(){
+  ['nr-lum','nr-col'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
+  fxUpdate();log('Noise reduction reset','info');
 }
 function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}
 // RAW-only baseline (Lightroom applies Color NR 25 + capture sharpening by default on import;
@@ -6149,7 +6159,11 @@ function canvasCompose(src,CV){
 // overlay canvas) so the toggle/colours/thickness are actually visible while editing.
 // Extended for the CANVAS matte: borders first, then canvasCompose around the result.
 function applyPreviewBorders(P,pw,ph){
-  const wrap=document.getElementById('fx-wrap');
+  // Appended into #fx-zoom-wrap (NOT the outer #fx-wrap) — that's the element _applyZoom()
+  // actually applies scale()/translate() to. Appending to #fx-wrap put this canvas outside
+  // the zoomed subtree entirely, so zoom worked (fxZoom/readout updated) but had zero visual
+  // effect whenever Borders/Canvas-matte was on and this overlay was the visible layer.
+  const wrap=document.getElementById('fx-zoom-wrap');
   let bd=document.getElementById('fx-canvas-bd');
   const b1t=P.bordersEnabled?Math.round(pw*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(pw*P.b2.thickness/100):0;
   const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
@@ -6210,6 +6224,12 @@ function buildFilmstrip(){
   });
 }
 function fxSelectImage(idx){
+  // The desktop Library (library-ui.js) sets this while a photo is decoding — switching the
+  // filmstrip mid-decode used to render fxImages' STALE previous contents for a moment before
+  // the library's own load finished and overwrote it, a visible flash of the wrong photo.
+  // Simplest fix: just ignore filmstrip clicks while a library load owns the transition,
+  // rather than trying to coordinate two independent async flows.
+  if(window.chromasmithLibraryBusy)return;
   if(idx<0||idx>=fxImages.length||idx===fxCurIdx)return;
   fxCurIdx=idx;
   const it=fxImages[fxCurIdx];
@@ -7248,6 +7268,7 @@ const ICONS={
  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5L5 20"/>',
  looks:'<path d="M5 3v4M3 5h4"/><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"/>',
  adjust:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
+ nr:'<path d="M12 3c4 5 7 8.5 7 12a7 7 0 1 1-14 0c0-3.5 3-7 7-12z"/>',
  curves:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M6 18c6 0 6-12 12-12"/>',
  hsl:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>',
  art:'<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="9" cy="8" r="1"/><circle cx="15" cy="15" r="1"/><path d="M13 5l1 3M8 16v3"/>',
@@ -7273,7 +7294,7 @@ const ICONS={
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
 const FX_SECTIONS=[['image','Image'],['looks','Looks'],['canvas','Canvas'],['grain','Grain'],['art','Artifacts'],
-  ['bloom','Bloom'],['hal','Halation'],['borders','Borders'],['adjust','Adjust'],
+  ['bloom','Bloom'],['hal','Halation'],['borders','Borders'],['adjust','Adjust'],['nr','Noise'],
   ['curves','Curves'],['hsl','Mixer'],['local','Local'],['vig','Vignette'],['lens','Lens'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
 function _eachSection(cb){
   const diagOn=document.body.classList.contains('diag-on');
@@ -7343,7 +7364,14 @@ function fxSection(name,noSheet){
   if(dx&&!noSheet&&isActive&&!document.body.classList.contains('panel-closed')){
     document.body.classList.add('panel-closed');
     document.querySelectorAll('#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.remove('on'));
-    requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));renderPreview();});
+    // Was a single early renderPreview() that pinned #fx-canvas to a fixed inline px size —
+    // for the rest of the ~200ms grid-column transition the container kept animating while
+    // the canvas's frozen inline height didn't track it (only width, via max-width:100%),
+    // visibly squeezing/stretching the image. fxLiveFit continuously rescales width+height
+    // together every rAF (same mechanism the mobile sheet already uses); the .fx-layout
+    // transitionend listener below does the one crisp final renderPreview().
+    fxLiveFit(240);
+    requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));
     return;
   }
   const wasClosed=dx&&document.body.classList.contains('panel-closed');
@@ -7354,7 +7382,7 @@ function fxSection(name,noSheet){
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
   if(mob&&!noSheet){document.body.classList.add('sheet-open');fxLiveFit(360);hapt();}
   if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
-  if(wasClosed)requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));renderPreview();}); // photo reflows narrower when the panel reopens
+  if(wasClosed){fxLiveFit(240);requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));} // photo reflows narrower when the panel reopens — live-fit tracks the transition, see the panel-close branch above
   if(members.includes('curves')&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
 }
 function fxSheetClose(){
@@ -7371,7 +7399,7 @@ function fxSheetClose(){
 let _lfRaf=0,_lfUntil=0;
 function fxLiveFitStop(){_lfUntil=0;if(_lfRaf){cancelAnimationFrame(_lfRaf);_lfRaf=0;}}
 function fxLiveFit(ms){
-  if(!document.body.classList.contains('mobile-fx'))return;
+  if(!document.body.classList.contains('mobile-fx')&&!document.body.classList.contains('deskx'))return;
   _lfUntil=performance.now()+(ms||360);
   if(_lfRaf)return; // already running — the deadline extension above is enough
   const wrap=document.getElementById('fx-wrap');
@@ -7395,6 +7423,15 @@ function fxLiveFit(ms){
   const p=document.querySelector('.fx-panel');
   if(p)p.addEventListener('transitionend',e=>{
     if(e.propertyName==='height'&&document.body.classList.contains('mobile-fx')&&!cropMode){fxLiveFitStop();renderPreview();}
+  });
+})();
+// Same idea for deskx: the tools-panel toggle animates .fx-layout's grid-template-columns
+// (200ms), which is what actually resizes #fx-wrap; fxLiveFit tracks it continuously, this
+// fires the one crisp final renderPreview() once the grid has actually finished moving.
+(function(){
+  const l=document.querySelector('.fx-layout');
+  if(l)l.addEventListener('transitionend',e=>{
+    if(e.propertyName==='grid-template-columns'&&document.body.classList.contains('deskx')&&!cropMode){fxLiveFitStop();renderPreview();}
   });
 })();
 // ── Sheet drag-to-dismiss: grab the handle and the sheet follows the finger; a downward

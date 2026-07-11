@@ -266,14 +266,23 @@
   // requested path; the in-flight load, on finishing, immediately starts that latest
   // request instead. Only one decode ever runs at a time, and the end state always matches
   // the last thing you actually clicked. ──
+  // chromasmith-22.html's fxSelectImage() (filmstrip clicks) is a COMPLETELY SEPARATE entry
+  // point that reads/renders the global fxImages array directly, with no idea this mutex
+  // exists — clicking a filmstrip thumbnail while a library decode is in flight rendered the
+  // STALE previous batch (fxSelectImage's own render, synchronous, no queueing) moments before
+  // the pending decode's installFXImages() overwrote it with the actually-newly-opened photo —
+  // a visible flash of the wrong image. Mirroring openBusy onto this global lets fxSelectImage
+  // simply no-op while a library load owns the transition, rather than fighting over it.
   let openBusy = false, openPendingPath = null;
   async function openInEditor(path) {
     if (openBusy) { openPendingPath = path; return; }
     openBusy = true;
+    window.chromasmithLibraryBusy = true;
     try {
       await openInEditorInner(path);
     } finally {
       openBusy = false;
+      window.chromasmithLibraryBusy = false;
       const next = (openPendingPath && openPendingPath !== path) ? openPendingPath : null;
       openPendingPath = null;
       if (next) openInEditor(next);

@@ -122,7 +122,12 @@ pub fn decode_rw2_bytes(bytes: &[u8]) -> Result<DecodedRaw, String> {
     // 5) EXIF orientation. raw_image.orientation is hardcoded Normal in rawler 0.7 (TODO
     //    upstream), so read metadata.exif.orientation. Cameras emit 1/3/6/8 only.
     let orientation = metadata.exif.orientation.unwrap_or(1);
-    let (rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
+    let (mut rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
+
+    // 6) Shadow denoise — see denoise_shadows_rgb16's doc comment for why this has to happen
+    //    HERE (on true-linear data) rather than in the app's own WebGL NR pass, which runs on
+    //    the image AFTER the DCP tone curve and so structurally cannot reach this noise.
+    denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
 
     Ok(DecodedRaw {
         width: out_w as u32,
@@ -130,6 +135,61 @@ pub fn decode_rw2_bytes(bytes: &[u8]) -> Result<DecodedRaw, String> {
         iso,
         rgb16,
     })
+}
+
+/// Shadow-only denoise on LINEAR 16-bit camera RGB, run BEFORE the DCP tone curve is ever
+/// applied. Fixed strength, not user-adjustable — this is a pipeline-level fix, not a slider.
+///
+/// ⚠️ Why this can't live in the app's existing WebGL "Noise Reduction" sliders (chromasmith-
+/// 22.html's `nr` shader pass): that pass runs on `img` — the canvas the DCP LUT bake (this
+/// same struct's `rgb16`, run through `apply_lut_rgba`) already produced. By the time it sees
+/// a pixel, the Adobe hue-preserving tone curve's shadow toe has ALREADY nonlinearly stretched
+/// whatever tiny sensor fluctuation was there into a much more visible swing — no amount of
+/// downstream blur strength undoes an upstream nonlinear amplification. Measured directly
+/// against a reported photo (chroma std in a near-black patch): the WebGL pass at 100% still
+/// left real noise behind for exactly this reason. Denoising the true-linear signal, before
+/// that curve ever touches it, is the only place this can actually be fixed at the source.
+///
+/// Strongest at true black, tapering to zero by ~15% luma (same gate shape already validated
+/// in the WebGL shader) so normal midtone/highlight detail is completely untouched — most of a
+/// typical frame never enters the blur loop at all (the per-pixel luma check short-circuits
+/// immediately), which is what keeps this affordable to run unconditionally on every RAW open.
+/// The existing WebGL sliders are untouched and still work exactly as before, as an additional
+/// user-adjustable layer on top of this fixed baseline.
+fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
+    const THRESH: f32 = 0.15 * 65535.0; // luma gate — matches the WebGL NR shader's shadow taper
+    const RADIUS: i32 = 3; // 7x7 taps
+    const MAX_BLEND: f32 = 0.85; // blend fraction toward the local average AT true black (luma=0)
+    let src = rgb.to_vec();
+    rgb.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
+        for x in 0..w {
+            let i = x * 3;
+            let base = y * w * 3 + i;
+            let r = src[base] as f32;
+            let g = src[base + 1] as f32;
+            let b = src[base + 2] as f32;
+            let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+            if luma >= THRESH {
+                continue; // fast path — skip the blur entirely outside true shadows
+            }
+            let weight = (1.0 - luma / THRESH).clamp(0.0, 1.0) * MAX_BLEND;
+            let (mut sr, mut sg, mut sb, mut n) = (0f32, 0f32, 0f32, 0f32);
+            for dy in -RADIUS..=RADIUS {
+                let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
+                for dx in -RADIUS..=RADIUS {
+                    let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
+                    let si = (sy * w + sx) * 3;
+                    sr += src[si] as f32;
+                    sg += src[si + 1] as f32;
+                    sb += src[si + 2] as f32;
+                    n += 1.0;
+                }
+            }
+            row[i] = (r * (1.0 - weight) + (sr / n) * weight).round().clamp(0.0, 65535.0) as u16;
+            row[i + 1] = (g * (1.0 - weight) + (sg / n) * weight).round().clamp(0.0, 65535.0) as u16;
+            row[i + 2] = (b * (1.0 - weight) + (sb / n) * weight).round().clamp(0.0, 65535.0) as u16;
+        }
+    });
 }
 
 /// Rotate an interleaved u16 RGB buffer per EXIF orientation (1=as-is, 3=180°,
