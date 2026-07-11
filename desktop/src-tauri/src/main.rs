@@ -160,7 +160,14 @@ async fn google_oauth_loopback(auth_url_template: String) -> Result<OAuthResult,
 
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("bind loopback port: {e}"))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let auth_url = auth_url_template.replace("{PORT}", &port.to_string());
+    // The JS side builds the template with URLSearchParams, which percent-encodes the braces
+    // in the redirect_uri to %7BPORT%7D — a plain "{PORT}" replace never matched, so Google
+    // received a literal "http://127.0.0.1:{PORT}/callback" redirect URI and rejected the
+    // whole request with "Error 400: invalid_request / doesn't comply with OAuth 2.0 policy".
+    // Replace both the raw and percent-encoded forms so either template encoding works.
+    let auth_url = auth_url_template
+        .replace("{PORT}", &port.to_string())
+        .replace("%7BPORT%7D", &port.to_string());
     std::process::Command::new("open")
         .arg(&auth_url)
         .spawn()

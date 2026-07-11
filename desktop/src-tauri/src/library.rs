@@ -183,6 +183,13 @@ pub fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
 #[derive(Serialize, serde::Deserialize, Default, Clone)]
 pub struct PhotoMeta {
     pub camera: Option<String>,
+    /// Camera make and model as SEPARATE fields (the combined `camera` string stays for the
+    /// library filter dropdowns) — the metadata panel shows "Camera Make" / "Camera Model"
+    /// rows, and the lensfun profile lookup needs them split too.
+    #[serde(default)]
+    pub make: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
     pub lens: Option<String>,
     pub date: Option<String>,
     pub iso: Option<u32>,
@@ -204,9 +211,9 @@ fn fmt_shutter(secs: f64) -> String {
 }
 
 fn meta_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
-    // .meta2.json: bumped from .meta.json when shutter/aperture/focal_len were added, so
+    // .meta3.json: bumped from .meta2.json when make/model split fields were added, so
     // pre-existing cache entries (missing the new fields) don't get served stale.
-    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".meta2.json"))
+    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".meta3.json"))
 }
 
 fn read_meta(path: &str) -> PhotoMeta {
@@ -223,6 +230,8 @@ fn read_meta(path: &str) -> PhotoMeta {
         let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f64 / r.d as f64 } else { 0.0 };
         PhotoMeta {
             camera,
+            make: if md.make.is_empty() { None } else { Some(md.make.trim().to_string()) },
+            model: if md.model.is_empty() { None } else { Some(md.model.trim().to_string()) },
             lens: md.exif.lens_model.clone().or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone())),
             date: md.exif.date_time_original.clone(),
             iso: md.exif.iso_speed_ratings.map(|v| v as u32),
@@ -241,7 +250,7 @@ fn read_meta(path: &str) -> PhotoMeta {
         };
         let make = s(exif::Tag::Make);
         let model = s(exif::Tag::Model);
-        let camera = match (make, model) {
+        let camera = match (make.clone(), model.clone()) {
             (Some(mk), Some(md)) => Some(format!("{mk} {md}")),
             (mk, md) => mk.or(md),
         };
@@ -250,6 +259,8 @@ fn read_meta(path: &str) -> PhotoMeta {
             .and_then(|f| f.value.get_uint(0));
         PhotoMeta {
             camera,
+            make,
+            model,
             lens: s(exif::Tag::LensModel),
             date: s(exif::Tag::DateTimeOriginal),
             iso,

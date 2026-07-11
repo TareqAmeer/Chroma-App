@@ -147,6 +147,11 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool) -> Result<DecodedRaw, Str
     //    the image AFTER the DCP tone curve and so structurally cannot reach this noise.
     denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
 
+    // 7) Chroma-only wavelet denoise (ISO-gated; no-op below ISO 1600) — kills the large
+    //    red/green midtone mottling of high-ISO files that neither the shadow pass nor the
+    //    post-tone-curve WebGL slider can reach. Luma untouched. See its doc comment.
+    denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso);
+
     Ok(DecodedRaw {
         width: out_w as u32,
         height: out_h as u32,
@@ -207,6 +212,119 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
             row[i + 1] = (g * (1.0 - weight) + (sg / n) * weight).round().clamp(0.0, 65535.0) as u16;
             row[i + 2] = (b * (1.0 - weight) + (sb / n) * weight).round().clamp(0.0, 65535.0) as u16;
         }
+    });
+}
+
+/// Chroma-only wavelet denoise on LINEAR 16-bit camera RGB, ISO-gated — the fix for the
+/// "green and red blotches in ISO 12800 sand where Lightroom shows uniform bluish gray" gap.
+///
+/// Why the existing passes couldn't do this:
+/// - `denoise_shadows_rgb16` only fires below 15% linear luma and blurs all 3 channels — the
+///   blotchy sand is a MIDTONE, and blurring RGB equally softens luma detail.
+/// - the WebGL Color-NR slider runs after the DCP tone curve (amplified noise) and its spatial
+///   blur has a small fixed reach, while high-ISO chroma noise forms LARGE low-frequency
+///   "packets" (RawPedia/darktable both call this out — it's why they use wavelets for chroma).
+///
+/// Algorithm (the darktable/RawTherapee-recommended shape): split into Y/Cb/Cr, run an à-trous
+/// (undecimated, B3-spline 1-4-6-4-1) wavelet decomposition on Cb and Cr ONLY, attenuate each
+/// detail level, keep the residual low-pass, reconstruct, convert back. Luma is never touched,
+/// so sharpness and the fine "film-like" luma grain survive — only the colored mottling drains
+/// out, which is exactly Lightroom's Color-NR rendition. A plain large box blur is NOT
+/// equivalent: it bleeds strong colors across edges (documented failure mode) — the wavelet's
+/// per-level attenuation with a preserved low-pass keeps real color transitions intact.
+///
+/// `levels`/`strength` scale with ISO: 0 below ISO 1600 (no cost for clean files), moderate at
+/// 3200-6400, strong at ≥12800 where the packets are coarsest.
+fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
+    // Diagnostic escape hatch for A/B validation via the dump_rw2 example (CS_NO_CHROMA_NR=1
+    // reproduces the pre-wavelet decode exactly). Not a user-facing setting.
+    if std::env::var_os("CS_NO_CHROMA_NR").is_some() {
+        return;
+    }
+    let (levels, strength): (usize, f32) = match iso {
+        0..=1599 => return,
+        1600..=3199 => (3, 0.5),
+        3200..=6399 => (4, 0.7),
+        6400..=12799 => (4, 0.85),
+        _ => (5, 0.95),
+    };
+    let npx = w * h;
+    // RGB u16 -> Y/Cb/Cr f32 planes (BT.601, chroma zero-centered).
+    let mut yv = vec![0f32; npx];
+    let mut cb = vec![0f32; npx];
+    let mut cr = vec![0f32; npx];
+    yv.par_iter_mut().zip(cb.par_iter_mut()).zip(cr.par_iter_mut()).enumerate().for_each(|(i, ((py, pcb), pcr))| {
+        let r = rgb[i * 3] as f32;
+        let g = rgb[i * 3 + 1] as f32;
+        let b = rgb[i * 3 + 2] as f32;
+        *py = 0.299 * r + 0.587 * g + 0.114 * b;
+        *pcb = -0.168_736 * r - 0.331_264 * g + 0.5 * b;
+        *pcr = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
+    });
+
+    // Separable à-trous convolution with the B3-spline kernel [1,4,6,4,1]/16, hole spacing 2^lvl.
+    fn atrous_smooth(src: &[f32], w: usize, h: usize, step: usize) -> Vec<f32> {
+        const K: [f32; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0];
+        let mut tmp = vec![0f32; src.len()];
+        // horizontal
+        tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            let base = y * w;
+            for x in 0..w {
+                let mut acc = 0f32;
+                for (k, kv) in K.iter().enumerate() {
+                    let off = (k as i64 - 2) * step as i64;
+                    let sx = (x as i64 + off).clamp(0, w as i64 - 1) as usize;
+                    acc += src[base + sx] * kv;
+                }
+                row[x] = acc;
+            }
+        });
+        // vertical
+        let mut out = vec![0f32; src.len()];
+        out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            for x in 0..w {
+                let mut acc = 0f32;
+                for (k, kv) in K.iter().enumerate() {
+                    let off = (k as i64 - 2) * step as i64;
+                    let sy = (y as i64 + off).clamp(0, h as i64 - 1) as usize;
+                    acc += tmp[sy * w + x] * kv;
+                }
+                row[x] = acc;
+            }
+        });
+        out
+    }
+
+    // Per chroma plane: decompose, attenuate the detail (finest levels hardest — that's where
+    // per-pixel color speckle lives; coarser levels get progressively gentler so broad, REAL
+    // color gradients survive), keep the final low-pass untouched.
+    let denoise_plane = |plane: &mut Vec<f32>| {
+        let mut current = std::mem::take(plane);
+        let mut rebuilt = vec![0f32; npx];
+        for lvl in 0..levels {
+            let smooth = atrous_smooth(&current, w, h, 1usize << lvl);
+            // detail_lvl = current - smooth; attenuated by strength, easing off at coarse levels
+            let keep = 1.0 - strength * (1.0 - lvl as f32 / levels as f32 * 0.35);
+            rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| {
+                *o += (current[i] - smooth[i]) * keep;
+            });
+            current = smooth;
+        }
+        // residual low-pass carries the true colors
+        rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += current[i]);
+        *plane = rebuilt;
+    };
+    denoise_plane(&mut cb);
+    denoise_plane(&mut cr);
+
+    // back to RGB u16 (Y untouched)
+    rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+        let y = yv[i];
+        let b = cb[i];
+        let r = cr[i];
+        px[0] = (y + 1.402 * r).round().clamp(0.0, 65535.0) as u16;
+        px[1] = (y - 0.344_136 * b - 0.714_136 * r).round().clamp(0.0, 65535.0) as u16;
+        px[2] = (y + 1.772 * b).round().clamp(0.0, 65535.0) as u16;
     });
 }
 

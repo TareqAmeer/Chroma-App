@@ -130,9 +130,14 @@
     #lib-empty{color:#9a968f;font-size:12px;padding:30px 10px;text-align:center}
     #lib-filters select,#lib-filters input{background:#26262d;border:1px solid #34343f;color:#f0ece2;
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
-    #lib-provisional{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;
+    /* Provisional preview must fully REPLACE the previous photo, not float over it: it fills
+       the whole zoom-wrap with an opaque black backing and hides the canvas underneath —
+       otherwise a portrait provisional over a landscape canvas left slices of the OLD photo
+       visible around it ("photos load on top of each other"). */
+    #lib-provisional{position:absolute;inset:0;width:100%;height:100%;background:#000;
       object-fit:contain;pointer-events:none;z-index:50;display:none}
     #lib-provisional.on{display:block}
+    body.lib-provisional-on #fx-canvas,body.lib-provisional-on #fx-canvas-orig{visibility:hidden}
     /* deskx (Darkroom shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
@@ -148,7 +153,12 @@
     body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:1fr;gap:6px}
     body.deskx #lib-overlay:not(.full) .lib-card .lib-name,
     body.deskx #lib-overlay:not(.full) .lib-tagrow{display:none}
-    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:1}
+    /* Lightroom-style filmstrip cells: the photo keeps its REAL aspect ratio (no square
+       crop) inside a bordered cell. object-fit:contain + auto height so portrait frames are
+       tall and landscape frames are short, like Lightroom's filmstrip. */
+    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px}
+    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{width:100%;height:auto;object-fit:contain}
+    body.deskx #lib-overlay:not(.full) .lib-card{border:1px solid #34343f;border-radius:6px;padding:2px;background:#1f1f25}
     /* the fixed 44px deskbar sits above everything; keep the strip below it */
     body.deskx #lib-overlay{top:44px;z-index:2500}
     body.deskx #lib-overlay.full{top:44px}
@@ -223,12 +233,23 @@
       el.onload = () => URL.revokeObjectURL(url);
       el.src = url;
       el.classList.add('on');
+      document.body.classList.add('lib-provisional-on'); // hides the canvas (old photo) beneath
     } catch (e) { /* embedded preview unavailable — just skip the provisional frame */ }
-    return () => { if (myToken === provisionalToken) el.classList.remove('on'); };
+    return () => {
+      if (myToken === provisionalToken) {
+        el.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+      }
+    };
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────
   const baseName = (p) => p.split('/').pop();
+  // Best-effort MIME from the filename — File objects built from read_file_bytes carry no
+  // type, and chromasmith-22.html has type-based branches downstream (its loadFXImages filter
+  // is now extension-aware too, but a real MIME keeps every other check honest).
+  const MIME_BY_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff' };
+  const mimeFromName = (p) => MIME_BY_EXT[(p.split('.').pop() || '').toLowerCase()] || '';
   async function pickFolder() {
     try {
       const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
@@ -314,6 +335,9 @@
     const provisionalPromise = cached ? Promise.resolve(() => {}) : showProvisional(path);
     const spin = document.getElementById('fx-fname-spin');
     if (spin && !cached) spin.style.display = '';
+    // Deskbar title: show the incoming photo's name + a spinner immediately (RapidRAW-style);
+    // loadFXImages swaps the spinner for the real dimensions when the decode lands.
+    if (!cached && typeof fxDeskbarTitle === 'function') fxDeskbarTitle(baseName(path), '', true);
     try {
       if (cached) {
         cached.ts = Date.now(); // touch for LRU
@@ -326,9 +350,10 @@
         // built fresh from read_file_bytes on every reopen would otherwise get a new
         // lastModified each time (today's timestamp), making the SAME photo look like a
         // different one on every single reopen and defeating that check entirely.
-        const file = new File([buf], baseName(path), { type: '', lastModified: 0 });
+        const file = new File([buf], baseName(path), { type: mimeFromName(path), lastModified: 0 });
         await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
+          fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
           const loadKey = `${baseName(path)}:${buf.byteLength}:0`; // must match loadFXImages' own key formula
           imgCacheStore(path, fxImages[0], loadKey);
         }
@@ -354,7 +379,8 @@
         const m = await getMeta(path);
         if (typeof showExif === 'function' && fxImages[0]) {
           const exif = {
-            model: m.camera || '', lens: m.lens || '', shutter: m.shutter || '', aperture: m.aperture || '',
+            model: m.model || m.camera || '', make: m.make || '',
+            lens: m.lens || '', shutter: m.shutter || '', aperture: m.aperture || '',
             iso: m.iso ? `ISO ${m.iso}` : '', focalLen: m.focal_len || '', date: m.date || '',
           };
           fxImages[0].exif = exif;
@@ -371,6 +397,10 @@
       const hideProvisional = await provisionalPromise;
       hideProvisional();
       if (spin) spin.style.display = 'none';
+      // If the decode failed (loadFXImages never replaced the spinner with dimensions),
+      // don't leave the deskbar spinner running forever.
+      const st = document.getElementById('db-title-status');
+      if (st && st.classList.contains('spin') && typeof fxDeskbarTitle === 'function') fxDeskbarTitle(undefined, '', false);
     }
   }
 
@@ -536,7 +566,7 @@
     const updated = { ...cur, rating };
     state.sidecars.set(path, updated);
     await invoke('set_sidecar', { path, rating, label: updated.label, edited: updated.edited }).catch(() => {});
-    const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) card.querySelector('.lib-stars').innerHTML = starsHtml(Math.max(rating, 0));
   }
   async function setLabel(path, label) {
@@ -544,7 +574,7 @@
     const updated = { ...cur, label };
     state.sidecars.set(path, updated);
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited }).catch(() => {});
-    const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) {
       card.querySelector('.lib-flags').innerHTML = flagsHtml(label);
       card.classList.toggle('flag-red', label === 'Red');
@@ -593,8 +623,14 @@
       selectAnchor = shown.indexOf(entry);
       updateCardSelClasses();
     }
+    buildPathsMenu(e.clientX, e.clientY, Array.from(state.selected), { includeOpen: true });
+  }
+
+  // Shared right-click menu for a set of photo paths — used by the library grid cards
+  // (with an "Open" item) AND the editor preview itself (the currently-opened photo, no
+  // "Open"). One builder so the two menus never drift apart.
+  function buildPathsMenu(x, y, paths, opts = {}) {
     closeContextMenu();
-    const paths = Array.from(state.selected);
     const n = paths.length;
     ctxMenu = document.createElement('div');
     ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:#26262d;border:1px solid #34343f;' +
@@ -610,16 +646,18 @@
       return el;
     };
     const sep = () => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:#34343f;margin:4px 0'; ctxMenu.appendChild(s); };
-    item(`Open ${n > 1 ? n + ' photos' : 'in editor'}`, async () => {
-      if (n <= 1) { await openInEditor(paths[0]); return; }
-      const files = [];
-      for (const p of paths) {
-        try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: '' })); }
-        catch (e) { console.error('read_file_bytes', p, e); }
-      }
-      if (files.length) { state.openedPath = ''; await loadFXImages(files); } // batch: no single auto-persist target
-    });
-    sep();
+    if (opts.includeOpen) {
+      item(`Open ${n > 1 ? n + ' photos' : 'in editor'}`, async () => {
+        if (n <= 1) { await openInEditor(paths[0]); return; }
+        const files = [];
+        for (const p of paths) {
+          try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
+          catch (e) { console.error('read_file_bytes', p, e); }
+        }
+        if (files.length) { state.openedPath = ''; await loadFXImages(files); } // batch: no single auto-persist target
+      });
+      sep();
+    }
     for (let r = 1; r <= 5; r++) item(`${'★'.repeat(r)} Rate ${r}`, () => Promise.all(paths.map((p) => setRating(p, r))));
     item('Clear rating', () => Promise.all(paths.map((p) => setRating(p, 0))));
     sep();
@@ -630,7 +668,7 @@
     item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
       const files = [];
       for (const p of paths) {
-        try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: '' })); }
+        try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
         catch (e) { console.error('read_file_bytes', p, e); }
       }
       if (!files.length) return;
@@ -653,7 +691,7 @@
       const updated = { ...cur, edited: false, recipe: '' };
       state.sidecars.set(p, updated);
       await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: false, recipe: '' }).catch(() => {});
-      const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
+      const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
       const badge = card && card.querySelector('.lib-edited-badge');
       if (badge) badge.remove();
       if (p === state.openedPath) { openInEditor(p); } // re-open to fall back to RAW defaults
@@ -676,8 +714,22 @@
     document.body.appendChild(ctxMenu);
     const { innerWidth: vw, innerHeight: vh } = window;
     const r = ctxMenu.getBoundingClientRect();
-    ctxMenu.style.left = Math.min(e.clientX, vw - r.width - 8) + 'px';
-    ctxMenu.style.top = Math.min(e.clientY, vh - r.height - 8) + 'px';
+    ctxMenu.style.left = Math.min(x, vw - r.width - 8) + 'px';
+    ctxMenu.style.top = Math.min(y, vh - r.height - 8) + 'px';
+  }
+
+  // Right-click on the EDITOR preview: same menu for the photo currently open from the
+  // library. chromasmith-22.html already preventDefault()s contextmenu on #fx-wrap (its
+  // native long-press suppression), so this listener only has to build the menu. Capture
+  // phase so it runs regardless of that handler; no-op when nothing library-opened.
+  {
+    // This script is injected right before </body>, so the DOM is already parsed here.
+    const wrap = document.getElementById('fx-wrap');
+    if (wrap) wrap.addEventListener('contextmenu', (e) => {
+      if (!state.openedPath) return;
+      e.preventDefault();
+      buildPathsMenu(e.clientX, e.clientY, [state.openedPath], { includeOpen: false });
+    });
   }
 
   async function renderGrid() {

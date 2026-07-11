@@ -209,6 +209,28 @@ body.diag-on .fx-diag{display:block}
 .ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
+/* Metadata panel (Darkroom-style): labeled rows + a 4-across icon chip strip. Top-level on
+   purpose — these were briefly inside the max-width:700px media query and never applied on
+   desktop, rendering the chips as bare stacked text. */
+@keyframes fxspin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.fx-exif-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:8px 0;
+  border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
+.fx-exif-chip{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 2px;
+  background:var(--sur2);font-family:var(--sans);font-size:11px;color:var(--txt);min-width:0}
+.fx-exif-chip+.fx-exif-chip{border-left:1px solid var(--bdr)}
+.fx-exif-chip-ic{font-size:15px;color:var(--txt);line-height:1}
+.fx-exif-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  padding:7px 0;border-top:1px solid var(--bdr);font-family:var(--sans);font-size:12px}
+.fx-exif-row:first-child{border-top:none}
+.fx-exif-row .fx-exif-lb{color:var(--mut);flex-shrink:0}
+.fx-exif-row .fx-exif-val{color:var(--txt);text-align:right;word-break:break-word;min-width:0}
+/* Deskbar center title: filename + a status suffix that is a spinner while a decode is in
+   flight and "W × H" once loaded (RapidRAW-style). Hidden (empty) until a photo is open. */
+#fx-deskbar-title{display:flex;align-items:center;gap:8px;min-width:0;max-width:40vw;
+  font-family:var(--sans);font-size:12px;color:var(--txt)}
+#db-title-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#db-title-status{color:var(--mut);flex-shrink:0;white-space:nowrap}
+#db-title-status.spin::before{content:'⟳';display:inline-block;animation:fxspin .8s linear infinite}
 @media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}
   .fx-panel{column-count:1}
   main,main:has(#panel-fx.active){padding-left:14px;padding-right:14px}
@@ -216,16 +238,6 @@ body.diag-on .fx-diag{display:block}
   .btn{min-height:44px}
   .fx-slider{height:28px}
   #fx-fname{width:auto!important;flex:1}
-  @keyframes fxspin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-  .fx-exif-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0}
-  .fx-exif-chip{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;
-    border:1px solid var(--bdr);border-radius:8px;background:var(--sur2,rgba(255,255,255,.03));
-    font-family:var(--mono);font-size:11px;color:var(--txt)}
-  .fx-exif-chip-ic{font-size:14px;color:var(--mut)}
-  .fx-exif-row{display:flex;justify-content:space-between;gap:8px;padding:4px 0;
-    border-top:1px solid var(--bdr);font-family:var(--mono);font-size:11px}
-  .fx-exif-row .fx-exif-lb{color:var(--mut)}
-  .fx-exif-row .fx-exif-val{color:var(--txt);text-align:right}
   .btn-row{flex-wrap:wrap}
   /* Black cap over the status-bar / notch area */
   #status-cap{display:block;position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#000;z-index:2000}
@@ -608,6 +620,8 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     <button class="fx-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span>Undo</button>
     <button class="fx-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span>Redo</button>
     <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
+    <div style="flex:1"></div>
+    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
     <div style="flex:1"></div>
     <div id="fx-deskbar-tools"></div>
     <div id="fx-overflow">
@@ -2901,7 +2915,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12g';
+const BUILD='2026-07-12h';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4276,6 +4290,17 @@ const FX=new FXR();
 // ═══════════════════════════
 const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
+// Deskbar center title (deskx desktop shell): filename + status suffix. status is either the
+// image dimensions ("6000 × 4000") or, while a decode is in flight, an animated spinner
+// (spinning=true, statusText ignored). Also exposed on window for library-ui.js.
+function fxDeskbarTitle(name,statusText,spinning){
+  const n=document.getElementById('db-title-name'),s=document.getElementById('db-title-status');
+  if(!n||!s)return;
+  if(name!==undefined&&name!==null)n.textContent=name;
+  s.classList.toggle('spin',!!spinning);
+  s.textContent=spinning?'':(statusText||'');
+}
+window.fxDeskbarTitle=fxDeskbarTitle;
 // ── Auto lens-profile correction (desktop only) — see desktop/src-tauri/src/lens_correct.rs.
 // The actual correction runs server-side in Rust during RAW decode (a geometric per-pixel
 // remap, not a shader term), so toggling it can't take effect live like the manual sliders —
@@ -4292,13 +4317,17 @@ function fxLensAutoToggled(){
   if(!on){status.textContent='';return;}
   const exif=(fxImages[fxCurIdx]&&fxImages[fxCurIdx].exif)||{};
   if(!exif.model||!exif.lens){status.textContent='Load a RAW photo first to check for a lens profile.';return;}
+  // The metadata may carry make+model split (library opener) or combined in model — split it
+  // here so the lensfun lookup gets clean fields either way.
+  let make=exif.make||'',model=exif.model||'';
+  if(!make&&model.includes(' ')){const i=model.indexOf(' ');make=model.slice(0,i);model=model.slice(i+1);}
   const invoke=window.__TAURI__.core.invoke;
   status.textContent='Checking lens-profile database…';
-  invoke('lens_profile_available',{make:'',model:exif.model,lensModel:exif.lens}).then(avail=>{
+  invoke('lens_profile_available',{make,model,lensModel:exif.lens}).then(avail=>{
     status.textContent=avail
       ?'Profile match found ✓ — reopen this photo (or reload the app) to apply.'
-      :`No profile for "${exif.model} · ${exif.lens}" in the bundled database yet — falling back to the manual sliders below.`;
-  }).catch(()=>{status.textContent='Could not check the lens-profile database.';});
+      :`No profile for "${make} ${model} · ${exif.lens}" in the bundled database yet — falling back to the manual sliders below.`;
+  }).catch(e=>{status.textContent='Lens DB check failed: '+(e&&e.message||e);});
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const tg=document.getElementById('tg-lens-auto');
@@ -4916,6 +4945,7 @@ function installFXImages(entries,loadKey){
   const n=fxImages.length;
   setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
   document.getElementById('fx-fname').value=fxImages[0].name;
+  fxDeskbarTitle(fxImages[0].name,fxImages[0].img?`${fxImages[0].img.width} × ${fxImages[0].img.height}`:'');
   // Version restarts only for a GENUINELY new photo/batch — not on every reopen. The docked
   // Library panel (unlike the old full-page overlay) stays visible next to the editor, so
   // clicking the same photo again (to compare after an export, or just re-selecting it) is now
@@ -4952,7 +4982,12 @@ function installFXImages(entries,loadKey){
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
 async function loadFXImages(fileList){
-  const files=[...fileList].filter(f=>f.type.startsWith('image/')||isTiffFile(f)||isRw2File(f)); // TIFF/RW2 mime is often empty on drop
+  // MIME is often EMPTY, not just for TIFF/RW2: the desktop library opens files via
+  // read_file_bytes and builds File objects with type:'' — a plain MIME check silently
+  // dropped every PNG/JPEG opened from the library ("No images loaded"). Fall back to the
+  // filename extension whenever the MIME is missing/unhelpful.
+  const IMG_EXT_RE=/\.(png|jpe?g|gif|webp|avif|heic|heif|bmp)$/i;
+  const files=[...fileList].filter(f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f));
   if(!files.length)return;
   const entries=[];
   for(const file of files){
@@ -6018,12 +6053,27 @@ function readExifTags(b){
 function showExif(exif){
   const el=document.getElementById('fx-exif');if(!el)return;
   if(!exif||!Object.keys(exif).filter(k=>exif[k]).length){el.innerHTML='';return;}
-  const chip=(icon,val)=>val?`<div class="fx-exif-chip"><span class="fx-exif-chip-ic">${icon}</span><span>${val}</span></div>`:'';
-  const chips=[chip('▦',exif.iso),chip('⬡',exif.aperture),chip('◔',exif.shutter),chip('◭',exif.focalLen)].filter(Boolean);
-  const row=(label,val)=>val?`<div class="fx-exif-row"><span class="fx-exif-lb">${label}</span><span class="fx-exif-val">${val}</span></div>`:'';
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const chip=(icon,val)=>val?`<div class="fx-exif-chip"><span class="fx-exif-chip-ic">${icon}</span><span>${esc(val)}</span></div>`:'';
+  const chips=[chip('▦',exif.iso),chip('◉',exif.aperture),chip('◔',exif.shutter),chip('▽',exif.focalLen)].filter(Boolean);
+  const row=(label,val)=>val?`<div class="fx-exif-row"><span class="fx-exif-lb">${label}</span><span class="fx-exif-val">${esc(val)}</span></div>`:'';
+  // Darkroom-style order: Date, Dimensions, [ISO ƒ ⏱ mm chip strip], File Name, Size, Format,
+  // Lens, Camera Make, Camera Model. Extra fields (dims/fileName/fileSize/format/make) are
+  // attached by the loaders / library opener; missing ones simply don't render.
+  const it=fxImages[fxCurIdx]||fxImages[0]||{};
+  const dims=(it.img&&it.img.width)?`${it.img.width}×${it.img.height}`:'';
+  const fmtDate=d=>{if(!d)return'';const m=String(d).match(/^(\d{4})[:-](\d{2})[:-](\d{2})/);
+    if(!m)return d;const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${MO[parseInt(m[2],10)-1]||m[2]} ${parseInt(m[3],10)}, ${m[1]}`;};
+  const fmtSize=b=>b?(b>=1048576?(b/1048576).toFixed(1)+' MB':Math.round(b/1024)+' KB'):'';
+  let make=exif.make||'',model=exif.model||'';
+  if(!make&&model.includes(' ')){const i=model.indexOf(' ');make=model.slice(0,i);model=model.slice(i+1);}
   el.innerHTML=
+    row('Date',fmtDate(exif.date))+row('Dimensions',dims)+
     (chips.length?`<div class="fx-exif-grid">${chips.join('')}</div>`:'')+
-    row('Camera',exif.model)+row('Lens',exif.lens)+row('Date',exif.date?exif.date.slice(0,10):'');
+    row('File Name',it.name||'')+row('Size',fmtSize(it.fileSize))+
+    row('File Format',it.ext?it.ext.toUpperCase():'')+
+    row('Lens Model',exif.lens)+row('Camera Make',make)+row('Camera Model',model);
 }
 function getFXParams(){return{
   lut:fxState.lut,
@@ -6280,6 +6330,7 @@ function fxSelectImage(idx){
   const ss=document.getElementById('sl-straighten');
   if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
   document.getElementById('fx-fname').value=it.name;
+  fxDeskbarTitle(it.name,it.img?`${it.img.width} × ${it.img.height}`:'');
   setDZ('dz-fx-img','fn-fx-img',fxImages.length>1?`${fxImages.length} images — previewing ${fxCurIdx+1}/${fxImages.length}: ${it.name}`:it.name);
   showExif(it.exif||{});
   renderPreview();buildLookGallery();buildFilmstrip();
@@ -7066,11 +7117,28 @@ async function gpAuthNative(cid){
   const code=params.get('code');
   if(!code)throw new Error('Google sign-in failed: no authorization code returned');
   const redirect_uri=`http://127.0.0.1:${result.port}/callback`; // MUST exactly match the auth request
-  const tokRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:new URLSearchParams({client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri}).toString()});
-  const tokJson=await tokRes.json().catch(()=>({}));
-  if(!tokRes.ok||!tokJson.access_token)throw new Error('Google token exchange failed: '+(tokJson.error_description||tokJson.error||tokRes.status));
+  // Google quirk: "Desktop app" OAuth clients are issued a client_secret and the token
+  // endpoint REQUIRES it in the code exchange even with PKCE (unlike a spec-pure public
+  // client). Include it when the user has provided one; if the exchange comes back
+  // invalid_client without it, prompt once and retry.
+  const exchange=async(secret)=>{
+    const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri};
+    if(secret)body.client_secret=secret;
+    const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams(body).toString()});
+    return {ok:r.ok,json:await r.json().catch(()=>({})),status:r.status};
+  };
+  let secret='';try{secret=(localStorage.getItem('gpClientSecret')||'').trim()}catch(e){}
+  let res2=await exchange(secret);
+  if(!res2.ok&&(res2.json.error==='invalid_client')&&!secret){
+    const picked=await askTextModal('Google client secret',
+      'Google also needs this OAuth client’s secret for the sign-in exchange (Desktop-app clients have one — Google Cloud Console → Credentials → your client → "Client secret"). It stays on this device.','');
+    secret=(picked||'').trim();
+    if(secret){try{localStorage.setItem('gpClientSecret',secret)}catch(e){}res2=await exchange(secret);}
+  }
+  const tokJson=res2.json;
+  if(!res2.ok||!tokJson.access_token)throw new Error('Google token exchange failed: '+(tokJson.error_description||tokJson.error||res2.status));
   const at=tokJson.access_token,exp=Date.now()+(tokJson.expires_in||3600)*1000;
   try{sessionStorage.setItem('gpTok',JSON.stringify({at,exp}))}catch(e){}
   gpUpdateUI();

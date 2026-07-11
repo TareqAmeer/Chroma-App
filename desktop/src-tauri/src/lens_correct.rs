@@ -93,3 +93,24 @@ pub fn correct_distortion(
         });
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_db_loads() {
+        assert!(db().is_some(), "lensfun bundled DB must load");
+    }
+
+    #[test]
+    fn dc_s9_lookup_does_not_error() {
+        // Whether or not the DC-S9 + LUMIX S 18-40 pairing is IN the community DB, the lookup
+        // itself must not panic and must return a plain bool. Print the verdict so a plain
+        // `cargo test -- --nocapture` doubles as the diagnostic the UI status line reports.
+        let avail = profile_available("Panasonic", "DC-S9", "LUMIX S 18-40/F4.5-6.3");
+        println!("DC-S9 + LUMIX S 18-40 profile available: {avail}");
+        let cams = db().map(|d| d.find_cameras(Some("Panasonic"), "DC-S9").len()).unwrap_or(0);
+        println!("Panasonic DC-S9 camera entries in DB: {cams}");
+    }
+}
