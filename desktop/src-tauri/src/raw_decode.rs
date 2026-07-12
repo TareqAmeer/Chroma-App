@@ -263,7 +263,12 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         }
         1600..=3199 => (3, 0.6),
         3200..=6399 => (5, 0.85),
-        6400..=12799 => (6, 0.97),
+        // 12800 was previously JUST missing this bracket (old bound was 6400..=12799) and
+        // falling into the most aggressive catch-all below — measured against a real
+        // Lightroom reference (nr_scorecard.py), that produced visibly over-smoothed, muted
+        // colors. Widened so ISO 12800 lands here instead, where 5000/2000 both measured
+        // within ~4% of Lightroom's own default NR.
+        6400..=15999 => (6, 0.97),
         _ => (7, 0.99),
     };
     eprintln!("[chroma-nr] ISO {iso} -> levels={levels} strength={strength} ({w}x{h})");

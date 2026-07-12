@@ -2922,7 +2922,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12n';
+const BUILD='2026-07-12o';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -7377,12 +7377,29 @@ async function gpImportPhotos(preWin){
     if(skippedVid)log('Skipped '+skippedVid+' video(s) — Chromasmith is photos-only','warn');
     if(!photos.length){toast('No photos picked');return}
     const files=[];
+    // "Load failed" (WKWebView's generic fetch()-network-abort string, distinct from gpFetch's
+    // own "Google Photos HTTP nnn" for real HTTP errors) turned up on large RAW/HEIC downloads
+    // — a plain unbounded fetch().blob() with no timeout is more exposed to a transient
+    // WKWebView network hiccup on a 20-50MB transfer than on a small JPEG. Retry a few times
+    // with backoff for exactly that failure mode; a genuine HTTP error (403/404/etc, which
+    // gpFetch throws with an "HTTP" message) isn't retried since it won't succeed on repeat.
+    const downloadWithRetry=async(url,attempts=3)=>{
+      for(let a=1;a<=attempts;a++){
+        try{return await(await gpFetch(url)).blob()}
+        catch(e){
+          const isHttpError=/HTTP \d/.test(e&&e.message||'');
+          if(isHttpError||a===attempts)throw e;
+          log(`Download attempt ${a} failed (${e&&e.message||e}) — retrying…`,'warn');
+          await new Promise(r=>setTimeout(r,500*a));
+        }
+      }
+    };
     for(let i=0;i<photos.length;i++){
       toast('Downloading '+(i+1)+'/'+photos.length+' from Google Photos…',true);
       const mf=photos[i].mediaFile;
       try{
         // "=d" = original bytes; the baseUrl needs the Bearer header (a plain img src 403s)
-        const blob=await(await gpFetch(mf.baseUrl+'=d')).blob();
+        const blob=await downloadWithRetry(mf.baseUrl+'=d');
         files.push(new File([blob],mf.filename||('gphotos_'+(i+1)+'.jpg'),{type:mf.mimeType||blob.type||'image/jpeg'}));
       }catch(e){log('Failed to download '+(mf.filename||'a photo')+': '+(e&&e.message||e),'err')}
     }

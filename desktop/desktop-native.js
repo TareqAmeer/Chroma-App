@@ -44,10 +44,15 @@
   const _rustLuts = {}; // lutKey -> true once registered with the Rust side this session
   class NativeLibRawShim {
     async open(bytes, settings) {
-      // Clear the PREVIOUS photo's ground-truth lens-applied flag immediately, so the status
-      // line doesn't keep showing "Applied ✓" for the outgoing photo while this one decodes.
+      // Clear the PREVIOUS photo's ground-truth lens-applied flag immediately. Deliberately NOT
+      // calling chromasmithLensStatusRefresh() here (or right after decode, below) — at both of
+      // those points fxImages[fxCurIdx].exif is still the OUTGOING photo's (library-ui.js only
+      // attaches the new photo's real exif later, after its own getMeta() call resolves), so a
+      // refresh here would read stale/wrong data and could flash a false "no lens model" for
+      // the photo that's still loading. library-ui.js's post-getMeta refresh (right after
+      // showExif) is the only correct place to trigger this — this flag update just makes sure
+      // that later call has fresh data to read.
       window.chromasmithLensApplied = undefined;
-      if (typeof window.chromasmithLensStatusRefresh === 'function') window.chromasmithLensStatusRefresh();
       // DCP path: the whole develop (decode + PPG demosaic + baked-LUT apply) runs in Rust
       // and returns display-ready RGBA8 — the old flow shipped 145MB of u16 RGB over IPC and
       // ran a 24M-pixel trilinear loop on the JS main thread. The 65^3 LUT is baked once per
@@ -96,8 +101,7 @@
       const head = new Uint32Array(buf, 0, 5);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       const usedLut = head[3] === 1;
-      window.chromasmithLensApplied = head[4] === 1;
-      if (typeof window.chromasmithLensStatusRefresh === 'function') window.chromasmithLensStatusRefresh();
+      window.chromasmithLensApplied = head[4] === 1; // see the comment above open() for why this doesn't also trigger a refresh here
       this._mode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
       this._buf = buf;
       if (mode === 'lut' && !usedLut && typeof log === 'function') {
