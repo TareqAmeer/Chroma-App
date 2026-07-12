@@ -144,6 +144,7 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
             .lens_model
             .clone()
             .or_else(|| metadata.lens.as_ref().map(|l| l.lens_model.clone()))
+            .or_else(|| crate::lens_correct::exif_lens_model_fallback(bytes))
             .unwrap_or_default();
         let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
         let focal_len = metadata.exif.focal_length.as_ref().map(ratio).unwrap_or(0.0);
@@ -263,13 +264,17 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         }
         1600..=3199 => (3, 0.6),
         3200..=6399 => (5, 0.85),
-        // 12800 was previously JUST missing this bracket (old bound was 6400..=12799) and
-        // falling into the most aggressive catch-all below — measured against a real
-        // Lightroom reference (nr_scorecard.py), that produced visibly over-smoothed, muted
-        // colors. Widened so ISO 12800 lands here instead, where 5000/2000 both measured
-        // within ~4% of Lightroom's own default NR.
-        6400..=15999 => (6, 0.97),
-        _ => (7, 0.99),
+        // `keep = 1 - strength*(1 - lvl/levels*0.12)` is steeply nonlinear near strength=1: at
+        // the finest level, strength 0.85 keeps 15% of the chroma signal, but 0.97 keeps only
+        // 3% — a ~5x cut, not a proportionally-small step. That's why the previous fix here
+        // (bumping strength 0.99->0.97 for the 6400+ bracket) barely moved the measured
+        // over-smoothing (nr_scorecard.py: 0.67x -> 0.65x vs Lightroom, i.e. no real change).
+        // ISO 12800 genuinely has more low-frequency chroma "packets" than 5000, but the fix
+        // for that is MORE WAVELET LEVELS (reaching coarser noise), not a harder per-level cut
+        // that also destroys real color saturation. Keep the proven strength (0.85, same as
+        // 5000 — measured 0.96x, comparable to Lightroom) and add levels instead.
+        6400..=15999 => (8, 0.85),
+        _ => (9, 0.85),
     };
     eprintln!("[chroma-nr] ISO {iso} -> levels={levels} strength={strength} ({w}x{h})");
     let npx = w * h;

@@ -211,9 +211,10 @@ fn fmt_shutter(secs: f64) -> String {
 }
 
 fn meta_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
-    // .meta3.json: bumped from .meta2.json when make/model split fields were added, so
-    // pre-existing cache entries (missing the new fields) don't get served stale.
-    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".meta3.json"))
+    // .meta4.json: bumped from .meta3.json when the kamadak-exif RW2-lens fallback was added,
+    // so a photo already cached with an empty lens (from before the fallback existed) gets
+    // re-read instead of serving the stale empty value forever.
+    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".meta4.json"))
 }
 
 fn read_meta(path: &str) -> PhotoMeta {
@@ -232,7 +233,9 @@ fn read_meta(path: &str) -> PhotoMeta {
             camera,
             make: if md.make.is_empty() { None } else { Some(md.make.trim().to_string()) },
             model: if md.model.is_empty() { None } else { Some(md.model.trim().to_string()) },
-            lens: md.exif.lens_model.clone().or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone())),
+            lens: md.exif.lens_model.clone()
+                .or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone()))
+                .or_else(|| std::fs::read(path).ok().and_then(|b| crate::lens_correct::exif_lens_model_fallback(&b))),
             date: md.exif.date_time_original.clone(),
             iso: md.exif.iso_speed_ratings.map(|v| v as u32),
             shutter: md.exif.exposure_time.as_ref().map(|r| fmt_shutter(ratio(r))),

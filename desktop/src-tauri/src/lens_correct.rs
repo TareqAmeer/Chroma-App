@@ -12,6 +12,27 @@ use lensfun::{Database, Modifier};
 use rayon::prelude::*;
 use std::sync::OnceLock;
 
+// Panasonic RW2 deliberately breaks the TIFF magic number (0x0055 at offset 2-3 instead of the
+// standard 0x002A) — specifically so generic TIFF/EXIF readers refuse the file outright — even
+// though the IFD structure underneath is standard EXIF (confirmed: exifread/Python parses it
+// fine; kamadak-exif's format-sniff step is what rejects it). rawler's OWN structured metadata
+// (raw_metadata().exif.lens_model / .lens) comes back empty for at least one real DC-S9 file
+// that DOES carry a LensModel EXIF tag (verified: `exiftool`-equivalent read found "LUMIX S
+// 18-40/F4.5-6.3" in the raw bytes rawler's own parse missed) — a rawler gap, not a missing
+// tag. Patch the magic number in a scratch copy and hand it to kamadak-exif (already a
+// dependency, used for JPEG/TIFF elsewhere) as a fallback when rawler comes back empty.
+pub fn exif_lens_model_fallback(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 4 || bytes[0] != b'I' || bytes[1] != b'I' || bytes[2] != 0x55 || bytes[3] != 0x00 {
+        return None; // not an RW2-shaped header — don't guess at other RAW formats' quirks
+    }
+    let mut patched = bytes.to_vec();
+    patched[2] = 0x2A;
+    let exif = exif::Reader::new().read_raw(patched).ok()?;
+    let v = exif.get_field(exif::Tag::LensModel, exif::In::PRIMARY)?.display_value().to_string();
+    let cleaned = v.trim().trim_matches('"').trim().to_string();
+    if cleaned.is_empty() { None } else { Some(cleaned) }
+}
+
 static DB: OnceLock<Option<Database>> = OnceLock::new();
 
 fn db() -> Option<&'static Database> {
