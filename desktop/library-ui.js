@@ -325,6 +325,18 @@
       if (next) openInEditor(next);
     }
   }
+  // Called by chromasmith-22.html's Auto lens-profile / RAW Noise Reduction toggles: both are
+  // baked into the native RAW decode (not a live shader term), so a toggle alone changes
+  // nothing visible — the previous UX ("reopen this photo to apply") was a real trap: toggling
+  // and re-exporting WITHOUT actually closing/reopening produced two byte-identical exports
+  // from the same cached decode, silently. Evict the cache entry and force a real re-decode
+  // immediately instead of relying on the user to remember an extra manual step.
+  window.chromasmithReloadCurrentPhoto = () => {
+    if (!state.openedPath) return false;
+    imgCache.delete(state.openedPath);
+    openInEditor(state.openedPath);
+    return true;
+  };
   async function openInEditorInner(path) {
     // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
     // off it — otherwise a quick edit right before switching photos could be dropped.

@@ -99,7 +99,21 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
     let native_nr = json["nativeNr"].as_bool().unwrap_or(true);
     let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, native_nr)?;
-    let body: Vec<u8> = match mode {
+    // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files
+    // for (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a
+    // DIFFERENT sensor's data wouldn't error — it would just silently produce wrong colors (a
+    // much worse failure mode than not opening at all). JS already picks the file by detected
+    // camera (peek_raw_camera + getDcpLUT's cameraPrefix), so this is a defense-in-depth
+    // backstop, not the primary gate. Downgrade an unsupported "lut" request to the plain
+    // linear16 body instead; `usedLut` in the header tells JS whether its requested mode was
+    // actually honored, since the body FORMAT differs (RGBA8 for lut/srgb vs raw u16 for
+    // linear16) and it needs to parse the right one.
+    const KNOWN_DCP_MAKES: &[&str] = &["panasonic", "sony"];
+    let make_lower = decoded.make.to_lowercase();
+    let has_dcp_support = KNOWN_DCP_MAKES.iter().any(|m| make_lower.contains(m));
+    let effective_mode = if mode == "lut" && !has_dcp_support { "linear16" } else { mode };
+    let used_lut = if effective_mode == "lut" { 1u32 } else { 0u32 };
+    let body: Vec<u8> = match effective_mode {
         "lut" => {
             let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
             let lut = {
@@ -116,10 +130,11 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
-    let mut out = Vec::with_capacity(12 + body.len());
+    let mut out = Vec::with_capacity(16 + body.len());
     out.extend_from_slice(&decoded.width.to_le_bytes());
     out.extend_from_slice(&decoded.height.to_le_bytes());
     out.extend_from_slice(&decoded.iso.to_le_bytes());
+    out.extend_from_slice(&used_lut.to_le_bytes());
     out.extend_from_slice(&body);
     Ok(tauri::ipc::Response::new(out))
 }
@@ -127,6 +142,29 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 #[tauri::command]
 fn lens_profile_available(make: String, model: String, lens_model: String) -> bool {
     lens_correct::profile_available(&make, &model, &lens_model)
+}
+
+#[derive(serde::Serialize)]
+struct CameraIdent {
+    make: String,
+    model: String,
+}
+
+// Cheap EXIF-only peek (no demosaic) so the JS side can pick the right DCP profile file
+// BEFORE committing to a full 'lut'-mode decode — NativeLibRawShim.open() only receives raw
+// bytes (not a filesystem path), so it can't just call library::get_meta(path) for this.
+#[tauri::command]
+fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("expected raw body".into()),
+    };
+    let source = rawler::rawsource::RawSource::new_from_slice(bytes);
+    let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
+    let md = decoder
+        .raw_metadata(&source, &rawler::decoders::RawDecodeParams::default())
+        .map_err(|e| format!("metadata: {e}"))?;
+    Ok(CameraIdent { make: md.make.clone(), model: md.model.clone() })
 }
 
 // A visible way to confirm the RUNNING app actually has today's Rust changes compiled in —
@@ -137,7 +175,7 @@ fn lens_profile_available(make: String, model: String, lens_model: String) -> bo
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-12l"
+    "2026-07-12m"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -238,6 +276,7 @@ fn main() {
             decode_raw_v2,
             lens_profile_available,
             native_build_tag,
+            peek_raw_camera,
             read_file_bytes,
             google_oauth_loopback,
             library::list_dir,

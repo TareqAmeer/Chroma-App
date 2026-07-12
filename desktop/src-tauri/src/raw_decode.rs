@@ -28,6 +28,10 @@ pub struct DecodedRaw {
     pub width: u32,
     pub height: u32,
     pub iso: u32,
+    /// EXIF camera make (e.g. "Panasonic") — used by main.rs to decide whether a requested
+    /// DCP LUT is even applicable (the bundled profiles are Panasonic DC-S9 only; applying
+    /// them to a different sensor's data would silently produce wrong colors, not an error).
+    pub make: String,
     /// interleaved RGB, u16 per channel, linear (no gamma), camera-white-balanced — same shape
     /// as libraw-wasm's imageData().data under dcpSettings.
     #[serde(skip)]
@@ -157,6 +161,7 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
         width: out_w as u32,
         height: out_h as u32,
         iso,
+        make: metadata.make.clone(),
         rgb16,
     })
 }

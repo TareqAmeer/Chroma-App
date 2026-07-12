@@ -2922,7 +2922,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12l';
+const BUILD='2026-07-12m';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4321,7 +4321,11 @@ function fxLensAutoToggled(){
   const status=document.getElementById('lens-auto-status');
   if(!window.__TAURI__){if(status)status.textContent='Desktop app only — no effect in the browser/iOS build.';return;}
   if(!status)return;
-  if(!on){status.textContent='';return;}
+  if(!on){
+    status.textContent='';
+    if(typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
+    return;
+  }
   const exif=(fxImages[fxCurIdx]&&fxImages[fxCurIdx].exif)||{};
   if(!exif.model||!exif.lens){status.textContent='Load a RAW photo first to check for a lens profile.';return;}
   // The metadata may carry make+model split (library opener) or combined in model — split it
@@ -4331,9 +4335,12 @@ function fxLensAutoToggled(){
   const invoke=window.__TAURI__.core.invoke;
   status.textContent='Checking lens-profile database…';
   invoke('lens_profile_available',{make,model,lensModel:exif.lens}).then(avail=>{
-    status.textContent=avail
-      ?'Profile match found ✓ — reopen this photo (or reload the app) to apply.'
-      :`No profile for "${make} ${model} · ${exif.lens}" in the bundled database yet — falling back to the manual sliders below.`;
+    if(avail){
+      const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+      status.textContent='Profile match found ✓'+(reloaded?' — reloading this photo…':' — will apply next time you open a photo.');
+    }else{
+      status.textContent=`No profile for "${make} ${model} · ${exif.lens}" in the bundled database yet — falling back to the manual sliders below.`;
+    }
   }).catch(e=>{status.textContent='Lens DB check failed: '+(e&&e.message||e);});
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
@@ -4350,7 +4357,9 @@ function fxNativeNrToggled(el){
   const on=el.classList.toggle('on');
   window.chromasmithNativeNr=on;
   try{localStorage.setItem('chromasmithNativeNr',on?'1':'0');}catch(e){}
-  if(window.__TAURI__)toast(on?'RAW noise reduction on — reopen this photo to apply':'RAW noise reduction off — reopen this photo to apply',true);
+  const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+  const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
+  if(window.__TAURI__)toast((on?'RAW noise reduction on':'RAW noise reduction off')+suffix,true);
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const tg=document.getElementById('tg-native-nr');
@@ -4709,7 +4718,13 @@ async function loadTiff(file){
 // LibRaw runs in a Web Worker. Its wasm uses SharedArrayBuffer → needs cross-origin
 // isolation, provided here by coi-serviceworker. NOTE: LibRaw's demosaic/white-balance/
 // colour rendering will NOT match Lightroom, and decode is CPU/RAM heavy (seconds).
-function isRw2File(f){return /\.(rw2|raw)$/i.test(f.name)} // .RAW: e.g. Panasonic writes RW2 data with a .RAW extension in some modes; LibRaw sniffs the real format
+// Was RW2/RAW-only — silently dropped every other camera's RAW file at the loadFXImages
+// filter (chromasmith-22.html:5013), since browsers have no image/* MIME for most RAW
+// extensions. Native decode (raw_decode.rs) is format-agnostic (rawler + PPG demosaic work
+// for any Bayer sensor); only the bundled DCP colour profile is Panasonic-specific, and
+// main.rs now downgrades gracefully (falls back to linear16, logs a warning) for other makes.
+const RAW_FILE_EXT_RE=/\.(rw2|raw|dng|cr2|cr3|nef|arw|orf)$/i;
+function isRw2File(f){return RAW_FILE_EXT_RE.test(f.name)}
 // Stringify any thrown value readably — the libraw worker rejects with plain objects,
 // which would otherwise log as "[object Object]" (exactly what an iPhone user reported).
 function errStr(e){if(e&&e.message)return e.message;if(typeof e==='object'&&e!==null){try{return JSON.stringify(e)}catch(_){return String(e)}}return String(e)}
@@ -4722,7 +4737,21 @@ async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/in
 // exposure → ProfileLookTable (HSV deltas, layout [val][hue][sat]) → black subtract →
 // per-channel ProfileToneCurve → ProPhoto→sRGB → gamma. The whole transform is baked
 // into a 65^3 LUT once per profile, then applied per pixel with trilinear interp.
-const DCP_PROFILES=['Standard','Natural','Vivid','Flat','Portrait','Landscape','Cinelike D2','Cinelike V2','L Classic Neo','Monochrome','L Monochrome','L Monochrome D','L Monochrome S','Leica Monochrome'];
+// Union of every camera's style names — not every name resolves for every camera (Sony has no
+// "Cinelike D2", Panasonic has no "Neutral"/"Clear"/"Deep"/"Light"); getDcpLUT falls back to
+// that camera's Standard profile when the specific file doesn't exist.
+const DCP_PROFILES=['Standard','Natural','Vivid','Flat','Portrait','Landscape','Cinelike D2','Cinelike V2','L Classic Neo','Monochrome','L Monochrome','L Monochrome D','L Monochrome S','Leica Monochrome','Neutral','Clear','Deep','Light'];
+// Detected EXIF make/model -> vendor/dcp/ filename prefix. Add an entry here whenever a new
+// camera's .dcp set is dropped into vendor/dcp/ (see CLAUDE.md §7 for where they come from).
+const CAMERA_DCP_PREFIXES=[
+  {test:/panasonic/i,model:/dc-s9/i,prefix:'Panasonic DC-S9'},
+  {test:/sony/i,model:/dsc-rx100m5/i,prefix:'Sony DSC-RX100M5'},
+];
+function cameraDcpPrefix(make,model){
+  const m=(make||'').trim(),mo=(model||'').trim();
+  for(const c of CAMERA_DCP_PREFIXES)if(c.test.test(m)&&c.model.test(mo))return c.prefix;
+  return null; // no bundled profile for this camera — caller should skip DCP entirely
+}
 // Residual correction constants, refitted against FIVE Lightroom reference TIFFs (ISO
 // 200-5000) on the NATIVE rawler decode + the DNG-SDK-correct pipeline below
 // (calib/dcp_native_fit.py -> dcp_native_fit.json). With the decode truly linear and the
@@ -4730,7 +4759,14 @@ const DCP_PROFILES=['Standard','Natural','Vivid','Flat','Portrait','Landscape','
 // dependence (the old ev=-0.819-0.1732x and black=0.04 were compensating a mis-linearized
 // libraw-wasm decode — wasm ~= 1.22*native^0.634, measured per-pixel), and gr/gb are a ~2%
 // WB-interpretation trim. Shadow-skin patches now match LR within 5/255 (previously crushed).
-function dcpFit(iso){return{ev:0.0,gb:0.9783,gr:0.9860};}
+// Fitted ONLY against the Panasonic DC-S9 (calib/dcp_native_fit.py, against real Lightroom
+// TIFFs) — a small residual exposure/WB correction layered on top of the DCP's own matrices.
+// Applying it to a different sensor's data would be a wrong-but-plausible-looking tweak, not
+// a calibrated one, so any other camera gets identity until it has its own fitted constants.
+function dcpFit(iso,cameraPrefix){
+  if(cameraPrefix&&cameraPrefix!=='Panasonic DC-S9')return{ev:0.0,gb:1.0,gr:1.0};
+  return{ev:0.0,gb:0.9783,gr:0.9860};
+}
 const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
 const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
 function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?'Standard':v}
@@ -4874,15 +4910,23 @@ function bakeDcpLUT(dcp,fit,N){
   return{n:N,data:out};
 }
 const _dcpCache={},_dcpLutCache={};
-async function getDcpLUT(name,iso){
-  const key=name+'@'+(iso||200);
+// cameraPrefix: the vendor/dcp/ filename prefix (see cameraDcpPrefix), REQUIRED now — a photo
+// with no matching bundled camera profile must never silently fall back to the Panasonic
+// files (that was the original bug: every camera got the DC-S9 profile applied to it).
+async function getDcpLUT(cameraPrefix,name,iso){
+  if(!cameraPrefix)throw new Error('no bundled DCP profile for this camera');
+  const cacheKey=cameraPrefix+'|'+name;
+  const key=cacheKey+'@'+(iso||200);
   if(_dcpLutCache[key])return _dcpLutCache[key];
-  if(!_dcpCache[name]){
-    const r=await fetch('vendor/dcp/Panasonic DC-S9 Camera '+name+'.dcp');
-    if(!r.ok)throw new Error('DCP profile fetch failed: '+name+' ('+r.status+')');
-    _dcpCache[name]=parseDCP(await r.arrayBuffer());
+  if(!_dcpCache[cacheKey]){
+    let r=await fetch('vendor/dcp/'+cameraPrefix+' Camera '+name+'.dcp');
+    if(!r.ok&&name!=='Standard'){ // this camera doesn't have that specific style — fall back to its Standard
+      r=await fetch('vendor/dcp/'+cameraPrefix+' Camera Standard.dcp');
+    }
+    if(!r.ok)throw new Error('DCP profile fetch failed: '+cameraPrefix+' '+name+' ('+r.status+')');
+    _dcpCache[cacheKey]=parseDCP(await r.arrayBuffer());
   }
-  const lut=bakeDcpLUT(_dcpCache[name],dcpFit(iso));
+  const lut=bakeDcpLUT(_dcpCache[cacheKey],dcpFit(iso,cameraPrefix));
   _dcpLutCache[key]=lut;return lut;
 }
 function applyDcpLUT(u16,w,h,lut){ // u16: interleaved RGB Uint16, linear camera space
@@ -4937,7 +4981,9 @@ async function loadRw2(file){
       for(let i=0;i<rgb.length;i++)lin[i]=Math.min(Math.pow((rgb[i]/65535)/GAIN[i%3],PW)*65535,65535);
       rgb=lin;
     }
-    const lut=await getDcpLUT(profile,m.iso_speed);
+    const camPrefix=cameraDcpPrefix(m.make,m.model);
+    if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile.`);
+    const lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
     rgba=applyDcpLUT(rgb,w,h,lut);
   }else{
     // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
@@ -5024,7 +5070,7 @@ async function loadFXImages(fileList){
       }
       if(isRw2File(file)){
         const{canvas,dpi}=await loadRw2(file);
-        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'rw2',dpi,bytes:null,rawFile:file}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
@@ -5038,7 +5084,7 @@ async function loadFXImages(fileList){
   // now) — was previously inline per-RW2-entry, before any render had happened; moving it
   // after the render here would apply the defaults a frame too late, requiring a manual
   // slider nudge before they'd visibly take effect.
-  if(entries.some(it=>it.ext==='rw2'))applyRawDefaults();
+  if(entries.some(it=>RAW_FILE_EXT_RE.test('.'+it.ext)))applyRawDefaults();
   const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
   installFXImages(entries,loadKey);
 }
@@ -6671,7 +6717,7 @@ async function exportFX(){
           if(matted!==ec){ec.width=ec.height=0;ec=matted;}
         }
         const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
-        const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||it.ext==='rw2'):fmt==='png'; // lossless source → lossless out
+        const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||RAW_FILE_EXT_RE.test('.'+it.ext)):fmt==='png'; // lossless source → lossless out
         const mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
         let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
         // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
@@ -7158,7 +7204,12 @@ async function gpAuthNative(cid){
   };
   let secret='';try{secret=(localStorage.getItem('gpClientSecret')||'').trim()}catch(e){}
   let res2=await exchange(secret);
-  if(!res2.ok&&(res2.json.error==='invalid_client')&&!secret){
+  // Google's actual response for a missing/wrong secret is error:'invalid_request' with an
+  // error_description mentioning "client_secret" — NOT error:'invalid_client' as first assumed,
+  // so that exact-match check never fired and the raw Google error ("client_secret is missing")
+  // just surfaced to the user with no prompt. Match on the description text instead.
+  const needsSecret=!res2.ok&&/client_secret/i.test(res2.json.error_description||'')&&!secret;
+  if(needsSecret){
     const picked=await askTextModal('Google client secret',
       'Google also needs this OAuth client’s secret for the sign-in exchange (Desktop-app clients have one — Google Cloud Console → Credentials → your client → "Client secret"). It stays on this device.','');
     secret=(picked||'').trim();

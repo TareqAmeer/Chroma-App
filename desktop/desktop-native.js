@@ -52,25 +52,48 @@
       const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
       let mode = 'srgb', lutKey = '';
       if (settings && settings.outputBps === 16) {
+        // Which camera's .dcp files apply is only knowable from EXIF, and open() only gets raw
+        // bytes (not a filesystem path) — a cheap metadata-only peek (no demosaic) first, so a
+        // camera we have no bundled profile for skips straight to linear16 instead of getting
+        // the wrong camera's colors applied (see cameraDcpPrefix in chromasmith-22.html).
+        let camPrefix = null;
         if (profile) {
-          mode = 'lut'; lutKey = 'dcp:' + profile;
+          try {
+            const ident = await invoke('peek_raw_camera', bytes);
+            camPrefix = (typeof cameraDcpPrefix === 'function') ? cameraDcpPrefix(ident.make, ident.model) : null;
+          } catch (e) { console.error('peek_raw_camera', e); }
+        }
+        if (profile && camPrefix) {
+          mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
           if (!_rustLuts[lutKey]) {
-            const lut = await getDcpLUT(profile, 200); // iso arg vestigial (constants ISO-independent)
+            const lut = await getDcpLUT(camPrefix, profile, 200); // iso arg vestigial (constants ISO-independent)
             await framedInvoke('store_dcp_lut', { key: lutKey },
               new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
             _rustLuts[lutKey] = true;
           }
         } else {
           mode = 'linear16';
+          if (profile && !camPrefix && typeof log === 'function') {
+            log('No bundled colour profile for this camera — RAW Noise Reduction and geometry still apply, but you\'ll need Basic Adjustments (White Balance/Exposure/etc.) to grade instead of a RAW profile.', 'warn');
+          }
         }
       }
       const autoLens = !!window.chromasmithAutoLens;
       const nativeNr = window.chromasmithNativeNr !== false; // default on
       const extra = { autoLens, nativeNr };
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra } : { mode, ...extra }, bytes);
-      const head = new Uint32Array(buf, 0, 3);
+      // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
+      // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
+      // peek_raw_camera pre-check above ever disagrees with it — read the flag rather than
+      // assuming our own requested mode was honored.
+      const head = new Uint32Array(buf, 0, 4);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
-      this._mode = mode; this._buf = buf;
+      const usedLut = head[3] === 1;
+      this._mode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
+      this._buf = buf;
+      if (mode === 'lut' && !usedLut && typeof log === 'function') {
+        log('Rust declined to apply the DCP profile for this camera (unexpected — the JS-side check should have caught this first). RAW Noise Reduction and geometry still apply; use Basic Adjustments to grade manually.', 'warn');
+      }
     }
     // make/model here were previously hardcoded 'Panasonic'/'DC-S9' — wrong for any other
     // camera and redundant besides: library-ui.js's openInEditor fetches real metadata
@@ -79,10 +102,10 @@
     async metadata() { return { iso_speed: this._iso, make: '', model: '' }; }
     async imageData() {
       if (this._mode === 'linear16') {
-        return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 12) };
+        return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 16) };
       }
       // rgba:true tells loadRw2 the pixels are final RGBA8 — no JS-side LUT/gamma pass needed.
-      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 12) };
+      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 16) };
     }
     get worker() { return { terminate() {} }; }
   }
