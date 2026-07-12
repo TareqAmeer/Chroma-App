@@ -180,11 +180,18 @@ fn download_url_native(url: String, bearer: String) -> Result<tauri::ipc::Respon
     let req = ureq::get(&url).set("Authorization", &format!("Bearer {bearer}"));
     match req.call() {
         Ok(resp) => {
+            let content_type = resp.header("content-type").unwrap_or("?").to_string();
             let mut buf = Vec::new();
             resp.into_reader()
                 .take(500 * 1024 * 1024) // 500MB cap — a sane ceiling for a single photo
                 .read_to_end(&mut buf)
                 .map_err(|e| format!("read body: {e}"))?;
+            // Diagnostic for the DNG "no decoder found" report: confirms whether the download
+            // itself is intact (right size, right magic bytes) before blaming rawler's DNG
+            // support — a truncated/wrong-content-type response would explain an empty
+            // make/model just as well as a genuine rawler gap.
+            let head: String = buf.iter().take(8).map(|b| format!("{b:02x}")).collect();
+            eprintln!("[download_url_native] {} bytes, content-type={content_type}, head={head}", buf.len());
             Ok(tauri::ipc::Response::new(buf))
         }
         Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code}")),
@@ -235,7 +242,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-12q"
+    "2026-07-12r"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
