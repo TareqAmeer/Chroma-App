@@ -33,7 +33,12 @@ from PIL import Image
 
 Image.MAX_IMAGE_PIXELS = None
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SC = "/private/tmp/claude-501/-Users-tareqameer-Documents-GitHub-Chroma-App/90b32845-2d88-4db5-a609-abc7c61ec0f1/scratchpad"
+# Directory holding the `dump_rw2` outputs `set{N}_cs_off.bin` / `set{N}_cs_on.bin`
+# (RW2 decoded NR-off via CS_NO_CHROMA_NR=1, and NR-on). Override with CS_DUMP_DIR.
+SC = os.environ.get(
+    "CS_DUMP_DIR",
+    "/private/tmp/claude-501/-Users-tareqameer-Documents-GitHub-Chroma-App/90b32845-2d88-4db5-a609-abc7c61ec0f1/scratchpad",
+)
 
 SETS = {
     1: dict(iso=12800, lr_no="LR-noNR.tif",  lr_def="LR-defaultNR.tif"),
@@ -48,8 +53,27 @@ COLOR_CHROMA_MIN = 0.03   # a patch counts as "colored" if mean |chroma| exceeds
 
 # PASS thresholds (multiplicative tolerance on the on/off reduction ratio, CS vs LR):
 Y_RETAIN_MIN = 0.80       # CS Y-ratio must be >= 0.80 * LR Y-ratio (else CS over-smooths luma)
-CHROMA_REMOVE_MAX = 1.40  # CS chroma-ratio must be <= 1.40 * LR chroma-ratio (else CS under-cleans)
+# TWO-SIDED chroma gate. Previously "CS keeps MORE chroma noise than LR" was informational-only,
+# which let a real regression ship (visible red/green speckle in sky/fur the user caught by eye
+# where LR was clean). Now, WHERE NR IS ACTIVE (ISO >= NR_MIN_ISO), CS keeping materially more
+# flat-region chroma noise than LR is a hard FAIL ("noisy-chroma"). At ISO < NR_MIN_ISO the app
+# intentionally skips chroma NR, so CS ~= no-change vs LR's light touch is expected and exempt.
+CHROMA_REMOVE_MAX = 1.50  # CS chroma-ratio must be <= 1.50 * LR chroma-ratio (else under-cleaned)
+NR_MIN_ISO = 1600         # below this the wavelet chroma pass is skipped by design
 SAT_RETAIN_MIN = 0.88     # CS colored-patch chroma-magnitude ratio must be >= 0.88 (else muted)
+
+# Dedicated FEATURE (tag) patch for set 1 (__TM8304, ISO 12800): a small saturated gold dog-tag
+# against near-black fur. Distinct from the flat-patch noise check — this verifies the tag's
+# COLOR survives NR (the "gold reads as silver" defect). Full-res bin coords (6016x4016).
+TAG_SET = 1
+TAG_BOX = (2417, 2612, 1818, 2110)  # (y0, y1, x0, x1)
+# Calibrated in the space THIS validator actually uses (flat sRGB gamma on linear camera RGB,
+# not the real DCP profile — see load_bin_srgb below): measured ratio at the shipped fix is
+# 0.86 here (vs 0.95 in the real DCP-baked space cross-checked separately with dcp_apply.js,
+# a different tone-curve response to the same colour is expected). Gate a little below that
+# (0.85) so this passes with headroom while still catching a regression back toward the
+# pre-fix 0.56-0.70 range.
+TAG_SAT_RETAIN_MIN = 0.85
 
 
 def srgb(x):
@@ -138,6 +162,19 @@ def measure(off, on):
     return out
 
 
+def tag_sat_ratio(cs_off, cs_on):
+    """Bright-pixel saturation of the feature (tag) patch, on/off. <1 = NR desaturated it."""
+    y0, y1, x0, x1 = TAG_BOX
+    def bright_sat(img):
+        c = img[y0:y1, x0:x1]
+        y = 0.299 * c[..., 0] + 0.587 * c[..., 1] + 0.114 * c[..., 2]
+        m = y >= np.percentile(y, 90)
+        mx, mn = c.max(-1), c.min(-1)
+        return float(((mx - mn) / np.maximum(mx, 1e-6))[m].mean())
+    s_off, s_on = bright_sat(cs_off), bright_sat(cs_on)
+    return s_on / max(s_off, 1e-9), s_off, s_on
+
+
 def main():
     print(f"{'set/ISO':<11}{'bucket':<8}"
           f"{'Yret CS|LR':>16}{'Cb CS|LR':>16}{'sat CS|LR':>16}  verdict")
@@ -156,12 +193,15 @@ def main():
             # Y retention: CS must not smooth luma much more than LR
             if not np.isnan(c["y"]) and not np.isnan(l["y"]) and c["y"] < Y_RETAIN_MIN * l["y"]:
                 fails.append("waxy-luma")
-            # chroma UNDER-cleaning (CS removes less than LR) is informational only — it's never a
-            # user complaint (the complaints are always over-processing), and at ISO<1600 we
-            # intentionally skip NR entirely, so CS≈no-change vs LR's light touch is expected/fine.
+            # chroma UNDER-cleaning: a FAIL where NR is active (CS leaving materially more
+            # flat-region chroma noise than LR = the visible red/green speckle regression), but
+            # exempt below NR_MIN_ISO where the wavelet pass is skipped by design.
             note = ""
             if not np.isnan(c["cb"]) and not np.isnan(l["cb"]) and c["cb"] > CHROMA_REMOVE_MAX * max(l["cb"], 1e-3):
-                note = " (under-chroma, ok)"
+                if info["iso"] >= NR_MIN_ISO:
+                    fails.append("noisy-chroma")
+                else:
+                    note = " (under-chroma, NR-off ISO, ok)"
             # saturation
             if not np.isnan(c["sat"]) and c["sat"] < SAT_RETAIN_MIN:
                 fails.append("muted")
@@ -176,6 +216,16 @@ def main():
             print(f"{str(s)+'/'+str(info['iso']):<11}{b:<8}"
                   f"{pair(c['y'], l['y']):>16}{pair(c['cb'], l['cb']):>16}"
                   f"{satpair:>16}  {verdict}")
+        # dedicated feature (tag) saturation-retention check
+        if s == TAG_SET:
+            ratio, s_off, s_on = tag_sat_ratio(cs_off, cs_on)
+            tag_fail = ratio < TAG_SAT_RETAIN_MIN
+            if tag_fail:
+                any_fail = True
+            print(f"{'':<11}{'TAG':<8}{'':>16}{'':>16}"
+                  f"{f'{s_on:.2f}/{s_off:.2f}':>16}  "
+                  f"{'PASS' if not tag_fail else 'FAIL:desaturated-tag'} "
+                  f"(sat on/off ratio {ratio:.2f}, min {TAG_SAT_RETAIN_MIN})")
         print()
     print("Ratios are on-NR/off-NR noise std (LOWER = more removed). 'Yret CS|LR': CS should NOT be"
           "\nmuch lower than LR (that's over-smoothed luma = waxy). 'sat': CS colored-patch chroma"

@@ -94,7 +94,12 @@ pub fn correct_distortion(
     let Some(db) = db() else { return false };
     let Some(camera) = db.find_cameras(Some(make), model).into_iter().next() else { return false };
     let Some(lens) = db.find_lenses(Some(camera), lens_model).into_iter().next() else { return false };
-    let mut modifier = Modifier::new(lens, focal_len, camera.crop_factor, w as u32, h as u32, true);
+    // `reverse` MUST be false here: per lensfun's own docs, reverse=false corrects distortion
+    // in an existing photo, while reverse=true does the opposite — simulates/ADDS the lens's
+    // distortion to a clean image. This was passing `true`, so every photo got the real
+    // in-camera distortion PLUS a second, simulated dose of the same distortion compounding on
+    // top (reported: straight lamppost/horizon visibly bowed after "correction").
+    let mut modifier = Modifier::new(lens, focal_len, camera.crop_factor, w as u32, h as u32, false);
     if !modifier.enable_distortion_correction(lens) {
         return false; // lens has no distortion calibration in the DB — leave pixels as-is
     }
