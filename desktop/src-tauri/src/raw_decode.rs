@@ -236,6 +236,21 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
             let cr_p = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
             let cb_a = -0.168_736 * ar - 0.331_264 * ag + 0.5 * ab;
             let cr_a = 0.5 * ar - 0.418_688 * ag - 0.081_312 * ab;
+            // Isolated-saturated-detail protection (same fix as denoise_chroma_wavelet_rgb16,
+            // needed here too — this pass runs FIRST and already blends a small saturated
+            // highlight, e.g. a metal tag, toward its 7x7 neighbourhood before the wavelet pass
+            // even sees it). Large orig-vs-local-avg chroma excess = real isolated color, not
+            // noise (chroma noise is small-magnitude by construction) — reduce the blend weight.
+            // Thresholds are ~4x lower than the wavelet pass's: this is a tight 7x7 average, not
+            // a broad low-pass, so orig-vs-local excess is naturally smaller for the same real
+            // color edge (measured: saturating the wavelet's threshold here left this pass still
+            // draining ~40% of the gap, because its own excess rarely crossed the higher bar).
+            const ISO_LO: f32 = 0.0004 * 65535.0;
+            const ISO_HI: f32 = 0.003 * 65535.0;
+            let excess = (cb_p - cb_a).hypot(cr_p - cr_a);
+            let ti = ((excess - ISO_LO) / (ISO_HI - ISO_LO)).clamp(0.0, 1.0);
+            let iso = ti * ti * (3.0 - 2.0 * ti);
+            let weight = weight * (1.0 - iso);
             let cb = cb_p * (1.0 - weight) + cb_a * weight;
             let cr = cr_p * (1.0 - weight) + cr_a * weight;
             // reconstruct with the ORIGINAL luma (luma untouched — no detail loss)
@@ -344,8 +359,9 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
 
     // Per chroma plane: decompose, attenuate the detail (finest levels hardest — that's where
     // per-pixel color speckle lives; coarser levels get progressively gentler so broad, REAL
-    // color gradients survive), keep the final low-pass untouched.
-    let denoise_plane = |plane: &mut Vec<f32>| {
+    // color gradients survive), keep the final low-pass untouched. Returns the final low-pass
+    // residual too (needed below to detect isolated saturated details).
+    let denoise_plane = |plane: &mut Vec<f32>| -> Vec<f32> {
         let mut current = std::mem::take(plane);
         let mut rebuilt = vec![0f32; npx];
         for lvl in 0..levels {
@@ -363,12 +379,13 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         // residual low-pass carries the true colors
         rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += current[i]);
         *plane = rebuilt;
+        current
     };
-    // Keep the ORIGINAL chroma so highlights can be protected below.
+    // Keep the ORIGINAL chroma so highlights/isolated-detail can be protected below.
     let cb_orig = cb.clone();
     let cr_orig = cr.clone();
-    denoise_plane(&mut cb);
-    denoise_plane(&mut cr);
+    let cb_lowpass = denoise_plane(&mut cb);
+    let cr_lowpass = denoise_plane(&mut cr);
 
     // Highlight protection. Bright highlights have high SNR (little chroma noise to remove) and
     // sit near the RGB gamut edge, where smoothing chroma then clamping back into gamut visibly
@@ -378,12 +395,32 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     // rises (smoothstep 0.6->0.9), leaving shadow/mid fully denoised but highlight color intact.
     const HL_LO: f32 = 0.60 * 65535.0;
     const HL_HI: f32 = 0.90 * 65535.0;
+    // Isolated-saturated-detail protection. The highlight gate above only fires on ABSOLUTE
+    // brightness, so a small saturated object that's merely bright RELATIVE to a much darker
+    // surround (a gold dog-tag against near-black fur at high ISO) gets none of it — its true
+    // luma never crosses 60%. The wavelet's coarse levels (spacing up to 2^(levels-1) px) then
+    // pull chroma from a huge neighbourhood that's almost entirely neutral fur, diluting the
+    // tag's gold toward grey/blue ("gold reads as silver" — reported, confirmed against a
+    // Lightroom reference: CS-NR-off matches LR's tag color almost exactly, CS-NR-on doesn't).
+    // Fix: compare each pixel's ORIGINAL chroma magnitude to its final wavelet LOW-PASS (the
+    // broad-neighbourhood chroma average) — a big excess means "isolated saturated feature",
+    // not noise (chroma noise speckle is small-magnitude by construction), so blend back toward
+    // the original chroma the same way highlights are protected.
+    // NOTE: linear-domain chroma magnitude is tiny relative to the 16-bit range (measured on
+    // a real ISO-12800 gold-tag patch: bright-pixel |chroma| excess ~0.006-0.015 of 65535,
+    // NOT the 0.05-0.16 first guessed) — the DCP tone curve hasn't stretched shadows yet here.
+    const ISO_LO: f32 = 0.0015 * 65535.0;
+    const ISO_HI: f32 = 0.012 * 65535.0;
     rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
         let y = yv[i];
         let t = ((y - HL_LO) / (HL_HI - HL_LO)).clamp(0.0, 1.0);
         let hl = t * t * (3.0 - 2.0 * t); // smoothstep: 0 below 0.6 luma, 1 above 0.9
-        let b = cb[i] * (1.0 - hl) + cb_orig[i] * hl;
-        let r = cr[i] * (1.0 - hl) + cr_orig[i] * hl;
+        let excess = (cb_orig[i] - cb_lowpass[i]).hypot(cr_orig[i] - cr_lowpass[i]);
+        let ti = ((excess - ISO_LO) / (ISO_HI - ISO_LO)).clamp(0.0, 1.0);
+        let iso = ti * ti * (3.0 - 2.0 * ti);
+        let protect = hl.max(iso);
+        let b = cb[i] * (1.0 - protect) + cb_orig[i] * protect;
+        let r = cr[i] * (1.0 - protect) + cr_orig[i] * protect;
         px[0] = (y + 1.402 * r).round().clamp(0.0, 65535.0) as u16;
         px[1] = (y - 0.344_136 * b - 0.714_136 * r).round().clamp(0.0, 65535.0) as u16;
         px[2] = (y + 1.772 * b).round().clamp(0.0, 65535.0) as u16;
