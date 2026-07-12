@@ -103,15 +103,60 @@ pub fn correct_distortion(
     if !modifier.enable_distortion_correction(lens) {
         return false; // lens has no distortion calibration in the DB — leave pixels as-is
     }
+
+    // Auto-scale ("Constrain Crop"): correcting real barrel/pincushion distortion without any
+    // compensating zoom necessarily exposes invalid (out-of-frame) content at the corners/edges
+    // — the corrected coordinate for a frame-edge pixel samples OUTSIDE the original photo,
+    // which `bilinear_sample` fills with black (reported: "black layer behind the photo").
+    // Lightroom/ACR hide this by silently zooming in just enough to crop it away; Chromasmith
+    // didn't, so the SAME correction that looks clean in Lightroom showed black wedges here.
+    // Find the minimal centered zoom `scale` (>=1) such that every border sample's corrected
+    // coordinate stays within the original frame. This probes the GEOMETRY directly (not pixel
+    // content), so it's exact regardless of how dark the photo is — a content-based black-pixel
+    // scan would misfire on a genuinely dark scene (this exact case: a night beach photo).
+    let cx = (w as f32 - 1.0) / 2.0;
+    let cy = (h as f32 - 1.0) / 2.0;
+    let in_bounds = |mx: f32, my: f32| mx >= 0.0 && mx <= w as f32 - 1.0 && my >= 0.0 && my <= h as f32 - 1.0;
+    let fits_at = |s: f32| -> bool {
+        const N: usize = 32;
+        let mut coords = [0f32; 2];
+        for k in 0..N {
+            let t = k as f32 / (N - 1) as f32;
+            for &(ox, oy) in &[
+                (t * (w as f32 - 1.0), 0.0),
+                (t * (w as f32 - 1.0), h as f32 - 1.0),
+                (0.0, t * (h as f32 - 1.0)),
+                (w as f32 - 1.0, t * (h as f32 - 1.0)),
+            ] {
+                let qx = cx + (ox - cx) / s;
+                let qy = cy + (oy - cy) / s;
+                modifier.apply_geometry_distortion(qx, qy, 1, 1, &mut coords);
+                if !in_bounds(coords[0], coords[1]) {
+                    return false;
+                }
+            }
+        }
+        true
+    };
+    let mut scale = 1.0f32;
+    // Cap at 2.0 — if the calibration data were ever bad enough to need more than a 2x crop,
+    // that's a sign something upstream is wrong; better to leave a (rare) black sliver than
+    // silently throw away half the frame.
+    while scale < 2.0 && !fits_at(scale) {
+        scale += 0.002;
+    }
+
     let src = rgb16.clone();
     rgb16
         .par_chunks_mut(w * 3)
         .enumerate()
         .for_each(|(row, out_row)| {
-            let mut coords = vec![0.0f32; w * 2];
-            modifier.apply_geometry_distortion(0.0, row as f32, w, 1, &mut coords);
+            let mut coords = [0.0f32; 2];
             for col in 0..w {
-                let sample = bilinear_sample(&src, w, h, coords[col * 2], coords[col * 2 + 1]);
+                let qx = cx + (col as f32 - cx) / scale;
+                let qy = cy + (row as f32 - cy) / scale;
+                modifier.apply_geometry_distortion(qx, qy, 1, 1, &mut coords);
+                let sample = bilinear_sample(&src, w, h, coords[0], coords[1]);
                 out_row[col * 3] = sample[0];
                 out_row[col * 3 + 1] = sample[1];
                 out_row[col * 3 + 2] = sample[2];
