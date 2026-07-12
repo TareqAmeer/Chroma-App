@@ -163,10 +163,44 @@ fn open_url_native(url: String) -> Result<(), String> {
         .map_err(|e| format!("couldn't open the system browser: {e}"))
 }
 
+// Native HTTP download, bypassing the WKWebView network stack. The Google Photos Picker's
+// media bytes live on the `*.googleusercontent.com` user-content CDN; a cross-origin GET with
+// the required `Authorization: Bearer` header forces a CORS preflight the CDN never answers
+// for the `tauri://localhost` origin — so BOTH fetch() and XHR fail identically ("Load
+// failed"/"XHR network error"), transport-independently. Doing the GET natively in Rust (same
+// pattern as google_oauth_loopback/open_url_native) sidesteps CORS, redirects, and any
+// WKWebView blob-size limit entirely. On a non-2xx the error string carries the HTTP status,
+// so an auth/scope problem (401/403) is distinguishable from the transport problem this fixes.
+#[tauri::command]
+fn download_url_native(url: String, bearer: String) -> Result<tauri::ipc::Response, String> {
+    use std::io::Read;
+    if !url.starts_with("https://") {
+        return Err("refusing to download a non-https URL".into());
+    }
+    let req = ureq::get(&url).set("Authorization", &format!("Bearer {bearer}"));
+    match req.call() {
+        Ok(resp) => {
+            let mut buf = Vec::new();
+            resp.into_reader()
+                .take(500 * 1024 * 1024) // 500MB cap — a sane ceiling for a single photo
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("read body: {e}"))?;
+            Ok(tauri::ipc::Response::new(buf))
+        }
+        Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code}")),
+        Err(e) => Err(format!("network: {e}")),
+    }
+}
+
 #[derive(serde::Serialize)]
 struct CameraIdent {
     make: String,
     model: String,
+    // Lens model, with the RW2 kamadak-exif fallback applied (rawler's own parse misses it on
+    // Panasonic RW2 — see lens_correct::exif_lens_model_fallback). Attached here so the editor's
+    // decode shim can populate the metadata panel's lens on EVERY open path, not only the single
+    // library-card path that separately calls get_meta.
+    lens: String,
 }
 
 // Cheap EXIF-only peek (no demosaic) so the JS side can pick the right DCP profile file
@@ -183,7 +217,14 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
     let md = decoder
         .raw_metadata(&source, &rawler::decoders::RawDecodeParams::default())
         .map_err(|e| format!("metadata: {e}"))?;
-    Ok(CameraIdent { make: md.make.clone(), model: md.model.clone() })
+    let lens = md
+        .exif
+        .lens_model
+        .clone()
+        .or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone()))
+        .or_else(|| lens_correct::exif_lens_model_fallback(bytes))
+        .unwrap_or_default();
+    Ok(CameraIdent { make: md.make.clone(), model: md.model.clone(), lens })
 }
 
 // A visible way to confirm the RUNNING app actually has today's Rust changes compiled in —
@@ -194,7 +235,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-12p"
+    "2026-07-12q"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -294,6 +335,7 @@ fn main() {
             store_dcp_lut,
             decode_raw_v2,
             lens_profile_available,
+            download_url_native,
             native_build_tag,
             open_url_native,
             peek_raw_camera,

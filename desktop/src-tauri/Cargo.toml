@@ -37,6 +37,10 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
 # Library browser: EXIF (camera/lens/date) for non-RAW files — rawler covers the RAWs.
 kamadak-exif = "0.5"
+# Native HTTP download for the Google Photos Picker's googleusercontent.com CDN, which the
+# WKWebView's own fetch()/XHR can't reach (CORS preflight the CDN won't answer for the
+# tauri:// origin). ureq is a small blocking client; rustls (no OpenSSL/tokio) keeps the build light.
+ureq = "2"
 # Lens-profile auto-correction (distortion/vignette/TCA) looked up by camera+lens EXIF, using
 # lensfun's bundled community database. Pure-Rust port (no system liblensfun dependency, unlike
 # the C original) — but it's pre-alpha (0.7.0): API surface may still shift on upgrade. The

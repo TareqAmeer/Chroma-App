@@ -60,18 +60,15 @@
       // and registered with Rust once per session.
       const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
       let mode = 'srgb', lutKey = '';
+      // Cheap EXIF-only peek (no demosaic), ALWAYS — it yields make/model (for the DCP profile
+      // choice) AND lens (with the RW2 kamadak-exif fallback rawler's own parse misses). Doing
+      // it unconditionally means every open path gets lens into fxImages[].exif via metadata()
+      // below, so the metadata panel shows lens no matter how the photo was opened — not just
+      // the single library-card path that separately calls get_meta.
+      this._ident = { make: '', model: '', lens: '' };
+      try { this._ident = await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
       if (settings && settings.outputBps === 16) {
-        // Which camera's .dcp files apply is only knowable from EXIF, and open() only gets raw
-        // bytes (not a filesystem path) — a cheap metadata-only peek (no demosaic) first, so a
-        // camera we have no bundled profile for skips straight to linear16 instead of getting
-        // the wrong camera's colors applied (see cameraDcpPrefix in chromasmith-22.html).
-        let camPrefix = null;
-        if (profile) {
-          try {
-            const ident = await invoke('peek_raw_camera', bytes);
-            camPrefix = (typeof cameraDcpPrefix === 'function') ? cameraDcpPrefix(ident.make, ident.model) : null;
-          } catch (e) { console.error('peek_raw_camera', e); }
-        }
+        const camPrefix = (typeof cameraDcpPrefix === 'function') ? cameraDcpPrefix(this._ident.make, this._ident.model) : null;
         if (profile && camPrefix) {
           mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
           if (!_rustLuts[lutKey]) {
@@ -108,11 +105,14 @@
         log('Rust declined to apply the DCP profile for this camera (unexpected — the JS-side check should have caught this first). RAW Noise Reduction and geometry still apply; use Basic Adjustments to grade manually.', 'warn');
       }
     }
-    // make/model here were previously hardcoded 'Panasonic'/'DC-S9' — wrong for any other
-    // camera and redundant besides: library-ui.js's openInEditor fetches real metadata
-    // (camera/lens/shutter/aperture/iso/date) via the Rust get_meta command and overwrites
-    // #fx-exif right after load, so this shim doesn't need to guess.
-    async metadata() { return { iso_speed: this._iso, make: '', model: '' }; }
+    // make/model/lens now come from the always-on peek (this._ident). library-ui.js's
+    // get_meta still refines the panel with the fuller set (shutter/aperture/date) on library
+    // opens, but returning lens here means EVERY open path (import, drag-drop, batch) shows at
+    // least camera+lens, which get_meta-only paths previously missed.
+    async metadata() {
+      const id = this._ident || {};
+      return { iso_speed: this._iso, make: id.make || '', model: id.model || '', lens: id.lens || '' };
+    }
     async imageData() {
       if (this._mode === 'linear16') {
         return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 20) };

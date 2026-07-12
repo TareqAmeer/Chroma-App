@@ -2922,7 +2922,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12p';
+const BUILD='2026-07-12q';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5015,7 +5015,7 @@ async function loadRw2(file){
   const c=document.createElement('canvas');c.width=w;c.height=h;
   c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
   log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
-  return{canvas:c,dpi:240,ms:dt}; // RW2 carries no resolution tags; 240 = Lightroom's export default
+  return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
 }
 // Installs already-decoded entries as the active fxImages and renders — the second half of
 // loadFXImages, split out so a caller with an ALREADY-DECODED entry (the desktop Library's
@@ -5090,8 +5090,11 @@ async function loadFXImages(fileList){
         continue;
       }
       if(isRw2File(file)){
-        const{canvas,dpi}=await loadRw2(file);
-        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        const{canvas,dpi,meta}=await loadRw2(file);
+        // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
+        // on EVERY open path — library-ui's get_meta refines this later on library opens.
+        const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):''}:undefined;
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
@@ -7404,10 +7407,20 @@ async function gpImportPhotos(preWin){
       xhr.timeout=120000;
       xhr.send();
     });
+    // Under Tauri, download NATIVELY in Rust: the googleusercontent.com CDN rejects the
+    // Authorization-header GET's CORS preflight for the tauri:// origin, so fetch AND XHR both
+    // fail transport-independently ("Load failed"/"XHR network error"). The native path
+    // (download_url_native) has no CORS and returns the raw bytes; a real HTTP error comes back
+    // as "HTTP nnn" so it's still distinguishable from the transport issue this fixes.
+    const nativeBlob=async(url,at)=>{
+      const buf=await window.__TAURI__.core.invoke('download_url_native',{url,bearer:at});
+      return new Blob([buf]);
+    };
     const downloadWithRetry=async(url,attempts=3)=>{
       let at=gpTok();if(!at)at=await gpAuth();
+      const fetchOne=window.__TAURI__?()=>nativeBlob(url,at):()=>xhrBlob(url,at);
       for(let a=1;a<=attempts;a++){
-        try{return await xhrBlob(url,at)}
+        try{return await fetchOne()}
         catch(e){
           const isHttpError=/HTTP \d/.test(e&&e.message||'');
           if(isHttpError||a===attempts)throw e;

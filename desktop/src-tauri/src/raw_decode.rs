@@ -224,9 +224,24 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
                     n += 1.0;
                 }
             }
-            row[i] = (r * (1.0 - weight) + (sr / n) * weight).round().clamp(0.0, 65535.0) as u16;
-            row[i + 1] = (g * (1.0 - weight) + (sg / n) * weight).round().clamp(0.0, 65535.0) as u16;
-            row[i + 2] = (b * (1.0 - weight) + (sb / n) * weight).round().clamp(0.0, 65535.0) as u16;
+            // CHROMA-ONLY blend, luma preserved. Blending RGB toward the local average (the old
+            // behaviour) smeared LUMA detail — measured against a real Lightroom reference
+            // (calib/nr_validate.py): in ISO-12800 shadows CS kept only 48% of the luma noise
+            // where Lightroom keeps 98%, i.e. we destroyed the fine dark-fur texture the user
+            // saw as "waxy". Lightroom removes shadow COLOR blotches while keeping luminance
+            // grain. So: convert the pixel and the neighbourhood-average to Y/Cb/Cr, blend only
+            // the chroma toward the average, and reconstruct with the pixel's ORIGINAL luma.
+            let (ar, ag, ab) = (sr / n, sg / n, sb / n);
+            let cb_p = -0.168_736 * r - 0.331_264 * g + 0.5 * b;
+            let cr_p = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
+            let cb_a = -0.168_736 * ar - 0.331_264 * ag + 0.5 * ab;
+            let cr_a = 0.5 * ar - 0.418_688 * ag - 0.081_312 * ab;
+            let cb = cb_p * (1.0 - weight) + cb_a * weight;
+            let cr = cr_p * (1.0 - weight) + cr_a * weight;
+            // reconstruct with the ORIGINAL luma (luma untouched — no detail loss)
+            row[i] = (luma + 1.402 * cr).round().clamp(0.0, 65535.0) as u16;
+            row[i + 1] = (luma - 0.344_136 * cb - 0.714_136 * cr).round().clamp(0.0, 65535.0) as u16;
+            row[i + 2] = (luma + 1.772 * cb).round().clamp(0.0, 65535.0) as u16;
         }
     });
 }
@@ -263,7 +278,10 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
             return;
         }
         1600..=3199 => (3, 0.6),
-        3200..=6399 => (5, 0.85),
+        // Strength lowered from 0.85: measured against Lightroom (nr_validate.py), 0.85 over-
+        // cleaned chroma (CS kept less chroma than LR) and drained highlight saturation to 0.84
+        // ("muted colors"). 0.70 keeps more real color while still killing the noise.
+        3200..=6399 => (5, 0.70),
         // `keep = 1 - strength*(1 - lvl/levels*0.12)` is steeply nonlinear near strength=1: at
         // the finest level, strength 0.85 keeps 15% of the chroma signal, but 0.97 keeps only
         // 3% — a ~5x cut, not a proportionally-small step. That's why the previous fix here
@@ -273,8 +291,8 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         // for that is MORE WAVELET LEVELS (reaching coarser noise), not a harder per-level cut
         // that also destroys real color saturation. Keep the proven strength (0.85, same as
         // 5000 — measured 0.96x, comparable to Lightroom) and add levels instead.
-        6400..=15999 => (8, 0.85),
-        _ => (9, 0.85),
+        6400..=15999 => (8, 0.78),
+        _ => (9, 0.78),
     };
     eprintln!("[chroma-nr] ISO {iso} -> levels={levels} strength={strength} ({w}x{h})");
     let npx = w * h;
@@ -346,14 +364,26 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += current[i]);
         *plane = rebuilt;
     };
+    // Keep the ORIGINAL chroma so highlights can be protected below.
+    let cb_orig = cb.clone();
+    let cr_orig = cr.clone();
     denoise_plane(&mut cb);
     denoise_plane(&mut cr);
 
-    // back to RGB u16 (Y untouched)
+    // Highlight protection. Bright highlights have high SNR (little chroma noise to remove) and
+    // sit near the RGB gamut edge, where smoothing chroma then clamping back into gamut visibly
+    // DESATURATES real color — measured vs Lightroom (nr_validate.py): CS drained ISO-5000
+    // highlight saturation to 0.85 where LR keeps ~1.0 (LR barely denoises highlight chroma:
+    // it retains 90% there). So blend the denoised chroma back toward the original as luma
+    // rises (smoothstep 0.6->0.9), leaving shadow/mid fully denoised but highlight color intact.
+    const HL_LO: f32 = 0.60 * 65535.0;
+    const HL_HI: f32 = 0.90 * 65535.0;
     rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
         let y = yv[i];
-        let b = cb[i];
-        let r = cr[i];
+        let t = ((y - HL_LO) / (HL_HI - HL_LO)).clamp(0.0, 1.0);
+        let hl = t * t * (3.0 - 2.0 * t); // smoothstep: 0 below 0.6 luma, 1 above 0.9
+        let b = cb[i] * (1.0 - hl) + cb_orig[i] * hl;
+        let r = cr[i] * (1.0 - hl) + cr_orig[i] * hl;
         px[0] = (y + 1.402 * r).round().clamp(0.0, 65535.0) as u16;
         px[1] = (y - 0.344_136 * b - 0.714_136 * r).round().clamp(0.0, 65535.0) as u16;
         px[2] = (y + 1.772 * b).round().clamp(0.0, 65535.0) as u16;
