@@ -44,6 +44,10 @@
   const _rustLuts = {}; // lutKey -> true once registered with the Rust side this session
   class NativeLibRawShim {
     async open(bytes, settings) {
+      // Clear the PREVIOUS photo's ground-truth lens-applied flag immediately, so the status
+      // line doesn't keep showing "Applied ✓" for the outgoing photo while this one decodes.
+      window.chromasmithLensApplied = undefined;
+      if (typeof window.chromasmithLensStatusRefresh === 'function') window.chromasmithLensStatusRefresh();
       // DCP path: the whole develop (decode + PPG demosaic + baked-LUT apply) runs in Rust
       // and returns display-ready RGBA8 — the old flow shipped 145MB of u16 RGB over IPC and
       // ran a 24M-pixel trilinear loop on the JS main thread. The 65^3 LUT is baked once per
@@ -86,9 +90,14 @@
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
       // peek_raw_camera pre-check above ever disagrees with it — read the flag rather than
       // assuming our own requested mode was honored.
-      const head = new Uint32Array(buf, 0, 4);
+      // 5th header word: whether auto lens-profile correction was ACTUALLY applied on this
+      // decode (ground truth, not a separate DB probe) — surfaced to the lens-auto status UI
+      // via window.chromasmithLensApplied so it can show what really happened.
+      const head = new Uint32Array(buf, 0, 5);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       const usedLut = head[3] === 1;
+      window.chromasmithLensApplied = head[4] === 1;
+      if (typeof window.chromasmithLensStatusRefresh === 'function') window.chromasmithLensStatusRefresh();
       this._mode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
       this._buf = buf;
       if (mode === 'lut' && !usedLut && typeof log === 'function') {
@@ -102,10 +111,10 @@
     async metadata() { return { iso_speed: this._iso, make: '', model: '' }; }
     async imageData() {
       if (this._mode === 'linear16') {
-        return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 16) };
+        return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 20) };
       }
       // rgba:true tells loadRw2 the pixels are final RGBA8 — no JS-side LUT/gamma pass needed.
-      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 16) };
+      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 20) };
     }
     get worker() { return { terminate() {} }; }
   }

@@ -353,6 +353,21 @@
     // Deskbar title: show the incoming photo's name + a spinner immediately (RapidRAW-style);
     // loadFXImages swaps the spinner for the real dimensions when the decode lands.
     if (!cached && typeof fxDeskbarTitle === 'function') fxDeskbarTitle(baseName(path), '', true);
+    // RAW Noise Reduction is baked into the native decode itself (not a live shader term), so
+    // it must be per-PHOTO, not one global switch bleeding into whatever you open next — peek
+    // the sidecar's saved recipe BEFORE decoding (not after, like the rest of applyUISnapshot)
+    // so window.chromasmithNativeNr is already correct when the decode shim reads it. Falls
+    // back to the app-wide default (true) for a photo with no saved recipe yet.
+    const sc = await getSidecar(path);
+    let nativeNrForThisPhoto;
+    try { nativeNrForThisPhoto = localStorage.getItem('chromasmithNativeNr') !== '0'; } catch (e) { nativeNrForThisPhoto = true; }
+    if (sc.recipe) {
+      try {
+        const snap = snapshotFromB64(sc.recipe);
+        if (snap.nativeNr !== undefined) nativeNrForThisPhoto = snap.nativeNr;
+      } catch (e) { /* fall through to default */ }
+    }
+    window.chromasmithNativeNr = nativeNrForThisPhoto;
     try {
       if (cached) {
         cached.ts = Date.now(); // touch for LRU
@@ -374,7 +389,6 @@
         }
       }
       state.openedPath = path;
-      const sc = await getSidecar(path);
       if (sc.recipe) {
         try {
           applyUISnapshot(snapshotFromB64(sc.recipe));
@@ -400,6 +414,9 @@
           };
           fxImages[0].exif = exif;
           showExif(exif);
+          // The lens-auto status line reads exif.lens for its message text — refresh it now
+          // that metadata has actually landed (it may have shown "still loading" a moment ago).
+          if (typeof window.chromasmithLensStatusRefresh === 'function') window.chromasmithLensStatusRefresh();
         }
       } catch (e) { console.error('load metadata', e); }
       // Docked layout: the panel stays open next to the editor; just mark the active card.

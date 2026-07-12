@@ -130,11 +130,13 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
-    let mut out = Vec::with_capacity(16 + body.len());
+    let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
+    let mut out = Vec::with_capacity(20 + body.len());
     out.extend_from_slice(&decoded.width.to_le_bytes());
     out.extend_from_slice(&decoded.height.to_le_bytes());
     out.extend_from_slice(&decoded.iso.to_le_bytes());
     out.extend_from_slice(&used_lut.to_le_bytes());
+    out.extend_from_slice(&lens_applied.to_le_bytes());
     out.extend_from_slice(&body);
     Ok(tauri::ipc::Response::new(out))
 }
@@ -142,6 +144,23 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 #[tauri::command]
 fn lens_profile_available(make: String, model: String, lens_model: String) -> bool {
     lens_correct::profile_available(&make, &model, &lens_model)
+}
+
+// Open a URL in the user's default system browser. Needed because the WKWebView shell has no
+// browser chrome — `window.open()`/`<a target="_blank">` (the Google Photos picker's normal
+// web-build fallback chain) silently do nothing here, exactly like the OAuth consent screen
+// would if it used the same approach (google_oauth_loopback already spawns `open` for that
+// reason). Same fix, generalized: the Photos Picker's "Tap to open" link goes through this too.
+#[tauri::command]
+fn open_url_native(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("refusing to open a non-http(s) URL".into());
+    }
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("couldn't open the system browser: {e}"))
 }
 
 #[derive(serde::Serialize)]
@@ -175,7 +194,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-12m"
+    "2026-07-12n"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -276,6 +295,7 @@ fn main() {
             decode_raw_v2,
             lens_profile_available,
             native_build_tag,
+            open_url_native,
             peek_raw_camera,
             read_file_bytes,
             google_oauth_loopback,

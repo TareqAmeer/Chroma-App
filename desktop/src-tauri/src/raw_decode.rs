@@ -32,6 +32,10 @@ pub struct DecodedRaw {
     /// DCP LUT is even applicable (the bundled profiles are Panasonic DC-S9 only; applying
     /// them to a different sensor's data would silently produce wrong colors, not an error).
     pub make: String,
+    /// Whether auto lens-profile distortion correction was ACTUALLY applied on this decode
+    /// (ground truth from lens_correct::correct_distortion's return value) — not merely
+    /// requested. False whenever auto_lens was off, or on but no profile matched.
+    pub lens_applied: bool,
     /// interleaved RGB, u16 per channel, linear (no gamma), camera-white-balanced — same shape
     /// as libraw-wasm's imageData().data under dcpSettings.
     #[serde(skip)]
@@ -129,7 +133,11 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
     let (mut rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
 
     // 5.5) Optional automatic lens-profile correction (distortion) — see lens_correct.rs.
-    // Graceful no-op when the camera/lens pairing has no match in the bundled DB.
+    // Graceful no-op when the camera/lens pairing has no match in the bundled DB. `lens_applied`
+    // reports the REAL outcome of THIS decode (not a separate DB probe) back to main.rs/JS, so
+    // the UI can show ground truth ("Applied ✓" / "not applied") instead of a guess that could
+    // drift from what the decode actually did.
+    let mut lens_applied = false;
     if auto_lens {
         let lens_model = metadata
             .exif
@@ -140,7 +148,7 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
         let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
         let focal_len = metadata.exif.focal_length.as_ref().map(ratio).unwrap_or(0.0);
         if !lens_model.is_empty() && focal_len > 0.0 {
-            crate::lens_correct::correct_distortion(
+            lens_applied = crate::lens_correct::correct_distortion(
                 &mut rgb16, out_w, out_h, &metadata.make, &metadata.model, &lens_model, focal_len,
             );
         }
@@ -162,6 +170,7 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
         height: out_h as u32,
         iso,
         make: metadata.make.clone(),
+        lens_applied,
         rgb16,
     })
 }

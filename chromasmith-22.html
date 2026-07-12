@@ -2922,7 +2922,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12m';
+const BUILD='2026-07-12n';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4314,38 +4314,53 @@ window.fxDeskbarTitle=fxDeskbarTitle;
 // it needs a fresh decode of the current RAW. window.chromasmithAutoLens is read by
 // desktop-native.js's decode_raw_v2 invoke; this file just owns the toggle UI + persistence.
 try{window.chromasmithAutoLens=localStorage.getItem('chromasmithAutoLens')==='1';}catch(e){window.chromasmithAutoLens=false;}
+// Ground-truth indicator: desktop-native.js sets window.chromasmithLensApplied from the
+// decode's OWN report of whether it actually ran the correction (raw_decode.rs's
+// lens_applied — a real outcome, not a separate guess) and calls this after every decode, so
+// the status line always reflects the photo currently on screen, not a stale toggle-time check.
+function fxLensStatusRefresh(){
+  const status=document.getElementById('lens-auto-status');
+  if(!status)return;
+  if(!window.__TAURI__){status.textContent='Desktop app only — no effect in the browser/iOS build.';return;}
+  if(!window.chromasmithAutoLens){status.textContent='';return;}
+  const exif=(fxImages[fxCurIdx]&&fxImages[fxCurIdx].exif)||{};
+  if(!fxImages.length){status.textContent='No photo loaded.';return;}
+  if(window.chromasmithLensApplied===true){
+    status.textContent='✓ Applied on this photo'+(exif.lens?' ('+exif.lens+')':'')+'.';
+    status.style.color='var(--ok, #4caf50)';
+    return;
+  }
+  status.style.color='';
+  if(!exif.model&&!exif.lens){
+    status.textContent='This photo hasn’t finished loading its metadata yet — status will update automatically.';
+    return;
+  }
+  if(!exif.lens){
+    status.textContent='This photo’s RAW metadata has no lens model recorded, so a profile can’t be looked up for it.';
+    return;
+  }
+  status.textContent='Not applied — no bundled profile for "'+(exif.model||'this camera')+' · '+exif.lens+'" yet. Using the manual sliders below.';
+}
+window.chromasmithLensStatusRefresh=fxLensStatusRefresh;
 function fxLensAutoToggled(){
   const on=document.getElementById('tg-lens-auto').classList.contains('on');
   window.chromasmithAutoLens=on;
   try{localStorage.setItem('chromasmithAutoLens',on?'1':'0');}catch(e){}
-  const status=document.getElementById('lens-auto-status');
-  if(!window.__TAURI__){if(status)status.textContent='Desktop app only — no effect in the browser/iOS build.';return;}
-  if(!status)return;
+  if(!window.__TAURI__){fxLensStatusRefresh();return;}
   if(!on){
-    status.textContent='';
+    fxLensStatusRefresh();
     if(typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
     return;
   }
-  const exif=(fxImages[fxCurIdx]&&fxImages[fxCurIdx].exif)||{};
-  if(!exif.model||!exif.lens){status.textContent='Load a RAW photo first to check for a lens profile.';return;}
-  // The metadata may carry make+model split (library opener) or combined in model — split it
-  // here so the lensfun lookup gets clean fields either way.
-  let make=exif.make||'',model=exif.model||'';
-  if(!make&&model.includes(' ')){const i=model.indexOf(' ');make=model.slice(0,i);model=model.slice(i+1);}
-  const invoke=window.__TAURI__.core.invoke;
-  status.textContent='Checking lens-profile database…';
-  invoke('lens_profile_available',{make,model,lensModel:exif.lens}).then(avail=>{
-    if(avail){
-      const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
-      status.textContent='Profile match found ✓'+(reloaded?' — reloading this photo…':' — will apply next time you open a photo.');
-    }else{
-      status.textContent=`No profile for "${make} ${model} · ${exif.lens}" in the bundled database yet — falling back to the manual sliders below.`;
-    }
-  }).catch(e=>{status.textContent='Lens DB check failed: '+(e&&e.message||e);});
+  const status=document.getElementById('lens-auto-status');
+  if(status)status.textContent='Reloading this photo to apply…';
+  const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+  if(!reloaded)fxLensStatusRefresh(); // no open photo to reload — show why nothing happened
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const tg=document.getElementById('tg-lens-auto');
   if(tg&&window.chromasmithAutoLens)tg.classList.add('on');
+  fxLensStatusRefresh();
 });
 
 // ── Native (Rust) noise reduction on/off — desktop only. Both the shadow denoise and the
@@ -4356,7 +4371,13 @@ try{window.chromasmithNativeNr=localStorage.getItem('chromasmithNativeNr')!=='0'
 function fxNativeNrToggled(el){
   const on=el.classList.toggle('on');
   window.chromasmithNativeNr=on;
+  // Per-photo, not global: this is now stored in the recipe (getUISnapshot's nativeNr field),
+  // via the SAME auto-persist path a slider drag uses — fxHistoryPush schedules the sidecar
+  // write library-ui.js's openInEditorInner later peeks before re-decoding. localStorage still
+  // gets it too, purely as the starting DEFAULT for a photo that has no saved recipe yet — it
+  // no longer controls an already-edited photo's setting.
   try{localStorage.setItem('chromasmithNativeNr',on?'1':'0');}catch(e){}
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
   const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
   const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
   if(window.__TAURI__)toast((on?'RAW noise reduction on':'RAW noise reduction off')+suffix,true);
@@ -5653,6 +5674,11 @@ function getUISnapshot(){
   s.masks=JSON.parse(JSON.stringify(fxState.masks));      // local-adjustment masks
   s.canvas=JSON.parse(JSON.stringify(fxState.canvas));    // canvas matte (ar/bg/blur)
   s.ver=2; // 2: exposure slider is /20 (±5 stops) — bumped from the unversioned /50 (±2 stops) mapping
+  // Baked into the native RAW decode itself (not a shader term), so it can't live as a normal
+  // toggle read at render time — it has to travel with the per-photo recipe so each photo
+  // remembers its OWN setting instead of one global switch affecting every photo. See
+  // library-ui.js's openInEditorInner, which peeks this from the sidecar BEFORE decoding.
+  s.nativeNr=window.chromasmithNativeNr!==false;
   return s;
 }
 function applyUISnapshot(s){
@@ -5676,6 +5702,10 @@ function applyUISnapshot(s){
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
     const ang=(s.geom&&s.geom.angle)||0;if(ss)ss.value=ang;if(sv)sv.textContent=ang.toFixed(1)+'°';
     if(cropMode)cropExit();updateWork();buildLookGallery();
+  }
+  if(s.nativeNr!==undefined){
+    window.chromasmithNativeNr=s.nativeNr;
+    const tg=document.getElementById('tg-native-nr');if(tg)tg.classList.toggle('on',s.nativeNr);
   }
 }
 function fxHistoryPush(){
@@ -7297,6 +7327,10 @@ function gpTapOpen(uri){ // popup blocked → a real <a> the user taps (fresh ac
     h.style.cssText='position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9999;background:var(--acc);color:#000;font:600 13px system-ui;padding:11px 18px;border-radius:22px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.45)';
     document.body.appendChild(h);}
   h.href=uri;h.textContent='Tap to open the Google Photos picker';
+  // target=_blank is a no-op in the WKWebView shell (no browser chrome to open a tab in) —
+  // this fallback link only did anything in the actual web build. Route through the native
+  // opener under Tauri so the tap actually does something instead of nothing.
+  if(window.__TAURI__)h.onclick=e=>{e.preventDefault();window.__TAURI__.core.invoke('open_url_native',{url:uri}).catch(err=>log('Could not open browser: '+(err&&err.message||err),'err'))};
 }
 function gpTapClear(){const h=document.getElementById('gp-tap-open');if(h)h.remove()}
 async function gpImportPhotos(preWin){
@@ -7305,8 +7339,19 @@ async function gpImportPhotos(preWin){
     await gpAuth();
     const sess=await(await gpFetch('https://photospicker.googleapis.com/v1/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
     let opened=false;
-    if(preWin&&!preWin.closed){try{preWin.location.href=sess.pickerUri;opened=true}catch(e){}}
-    if(!opened){const w=window.open(sess.pickerUri,'_blank');if(w)opened=true}
+    if(window.__TAURI__){
+      // The WKWebView shell has no browser chrome — window.open()/target=_blank silently do
+      // nothing here (same reason the OAuth consent screen needs google_oauth_loopback's
+      // native `open` spawn instead of a popup). Skip the popup dance entirely; go straight to
+      // the system browser. preWin (an about:blank popup, opened only for the web-build path)
+      // is never actually usable under Tauri, so close it rather than leave a blank window.
+      if(preWin&&!preWin.closed)try{preWin.close()}catch(e){}
+      try{await window.__TAURI__.core.invoke('open_url_native',{url:sess.pickerUri});opened=true}
+      catch(e){console.error('open_url_native',e)}
+    }else{
+      if(preWin&&!preWin.closed){try{preWin.location.href=sess.pickerUri;opened=true}catch(e){}}
+      if(!opened){const w=window.open(sess.pickerUri,'_blank');if(w)opened=true}
+    }
     if(!opened)gpTapOpen(sess.pickerUri);
     toast('Pick photos in Google Photos, then hit Done',true);
     log('Waiting for your Google Photos selection…','info');
