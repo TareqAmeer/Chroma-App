@@ -718,6 +718,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
+        <div class="fx-row" title="Manual, off by default. Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes — this is a real limit of the current pipeline, not a slider you forgot to raise. Since real highlight colour is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real colour in bright areas too at high amounts. Per-photo only, so it never touches other images."><div class="fx-label">Highlight Desaturation</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
         <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()"><span class="bdot"></span>Reset noise reduction</button></div>
       </div>
@@ -2922,7 +2923,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-12r';
+const BUILD='2026-07-13b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3679,7 +3680,7 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail,nrScale,nrChromaStep,nrChromaSig;
+uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail,nrScale,nrChromaStep,nrChromaSig,nrHlDesat;
 float yl(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
 void main(){
   vec3 c0=texture(img,uv).rgb; float l0=yl(c0);
@@ -3721,6 +3722,21 @@ void main(){
   vec3 spa=csum/max(cw,1e-4);   // full blur: take its chroma
   float y=mix(l0,yl(bil),clamp(nrLuma,0.,1.));
   vec3 chroma=mix(c0-l0, spa-yl(spa), clamp(nrColor,0.,1.));
+  // Highlight Desaturation — manual, off by default (see the UI tooltip). Demosaic false-color
+  // fringing on bright specular highlights (sunlit water, glints) resists ordinary chroma NR:
+  // the artifact partially survives coarse smoothing/protection tuned to preserve real colored
+  // edges elsewhere, and a global fix for it kept regressing OTHER photos when tried at the
+  // native-decode level (see raw_decode.rs history) — hence a per-photo manual override instead
+  // of a change to the shared pipeline. Real content this bright is near-neutral anyway, so
+  // above ~0.45 luma, fade the chroma toward zero; smoothstep keeps it a smooth blend into
+  // shadows, not a hard cutoff. Threshold measured (not guessed): on a real sunlit-water photo,
+  // 0.45-0.80 brought the highlight chroma-noise band to within ~8% of Lightroom's own level
+  // (a tighter 0.85-0.97 band barely helped, 8%->only 2% closed — most of the visible fringing
+  // sits well below "obviously blown white"). Reaching this far down WILL flatten real midtone
+  // colour too at high Amount — an accepted tradeoff for a manual, off-by-default, per-photo
+  // control the user dials in only when a specific image needs it.
+  float hl=smoothstep(0.45,0.80,y);
+  chroma*=(1.0-hl*clamp(nrHlDesat,0.,1.));
   o=vec4(clamp(vec3(y)+chroma,0.,1.),1.);
 }`);
 
@@ -4094,7 +4110,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // NOISE REDUCTION: denoise into fbs.nr, then the lut pass samples that instead of imgTx.
     // Runs at render resolution (so on export tiles it is full-res/tile-res and correct; the
     // preview is approximate, same as sharpen/grain — the 1:1 loupe is true).
-    const nrP=P.nr, nrOn=!!(nrP&&(nrP.luma>0||nrP.color>0));
+    const nrP=P.nr, nrOn=!!(nrP&&(nrP.luma>0||nrP.color>0||nrP.hlDesat>0));
     if(nrOn){
       // Wider + genuinely stronger than v1: step scales 1x(off)→4x(full amount) instead of
       // 0.75x→1.5x, and the Gaussian sigma (nrChromaSig, in the shader) now tracks the step
@@ -4103,7 +4119,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       const nrChromaSig=nrChromaStep*1.2;
       this._pass(this.progs.nr,this.fbs.nr,
         {img:0,nrLuma:nrP.luma,nrColor:nrP.color,nrDetail:nrP.detail!=null?nrP.detail:0.5,
-         nrScale:sc,nrChromaStep,nrChromaSig,
+         nrScale:sc,nrChromaStep,nrChromaSig,nrHlDesat:nrP.hlDesat||0,
          texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
     }
     const lutSrc=nrOn?'nr':srcAfterLens;
@@ -5132,7 +5148,7 @@ function autoDetectBW(img){
 function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','lens-dist','lens-vig','lens-ca','vig'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','vig'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -5145,7 +5161,7 @@ function resetAdjust(){
   fxUpdate();log('Adjustments reset','info');
 }
 function resetNR(){
-  ['nr-lum','nr-col'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  ['nr-lum','nr-col','nr-hldesat'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
   {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
   fxUpdate();log('Noise reduction reset','info');
 }
@@ -6054,7 +6070,7 @@ function autoEnhance(){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-nr-lum','sl-nr-col','sl-nr-det',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -6195,7 +6211,7 @@ function getFXParams(){return{
     skin:adjVal('sl-adj-skin')/100},
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
-  nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100},
+  nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100, hlDesat:adjVal('sl-nr-hldesat')/100},
   // Lens correction: manual-only (no per-lens profile database — see the shader comment for
   // why). dist/vig/ca in -0.5..0.5, small enough that the single-term radial model stays
   // well-behaved at the frame corners.
