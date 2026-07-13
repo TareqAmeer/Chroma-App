@@ -49,7 +49,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from scipy.ndimage import uniform_filter
+from scipy.ndimage import uniform_filter, median_filter
 
 REPO = Path(__file__).parent.parent
 PROFILE_PATH = Path(__file__).parent / 'noise_profile.json'
@@ -146,6 +146,39 @@ def adaptive_wavelet_denoise(
         var_current = var_smooth
     rebuilt += current  # residual low-pass carries the true (very low variance) signal
     return rebuilt
+
+
+def hybrid_wiener_median(
+    plane: np.ndarray, wiener_out: np.ndarray, var0: np.ndarray, y_noisy: np.ndarray,
+    median_size: int = 3, k_base: float = 3.0, k_min: float = 0.3,
+    y_lo: float = 0.30, y_hi: float = 0.80,
+) -> np.ndarray:
+    """Gemini-review hybrid: BRANCHLESS blend of the Wiener-shrunk wavelet output (Test 1 —
+    best color preservation) and a plain median filter (Test 3 — best bulk chroma-noise/
+    speckle removal), so each technique covers the other's weakness instead of picking one
+    globally.
+
+    Per pixel: `dev = |plane - median| / (k_eff * sigma)`, where sigma = sqrt(var0) is the
+    calibrated model's per-pixel expected noise std. `k_eff` is a LUMA-TRIGGERED outlier
+    threshold — it drops from k_base toward k_min as local luma approaches the highlight/
+    clipping zone (y_lo..y_hi), matching the project's own diagnosis that this artifact is
+    demosaic false-color fringing on bright specular highlights, not generic sensor noise:
+    make the switch to median (which better rejects the resulting speckle) more eager exactly
+    there, while leaving midtone/shadow behavior dominated by the gentler, color-preserving
+    Wiener result. The Wiener<->median blend itself is a smoothstep-weighted `mix()`, not a
+    branch — deliberately, so there's no hard on/off seam at the outlier boundary (this also
+    happens to be branchless/vectorizable, relevant if this technique is ever ported to a
+    GPU shader; the CPU/native Rust port this plan targets doesn't have that constraint, but
+    a smooth blend is good practice regardless of platform)."""
+    med = median_filter(plane, size=median_size)
+    sigma = np.sqrt(np.maximum(var0, 1e-12))
+    highlight = smoothstep(y_lo, y_hi, y_noisy)
+    k_eff = k_base * (1.0 - highlight) + k_min * highlight
+    dev = np.abs(plane - med) / np.maximum(k_eff * sigma, 1e-9)
+    weight = smoothstep(0.5, 1.5, dev)  # 0 well inside expected noise -> keep Wiener;
+    # 1 well past k_eff*sigma -> use median. The 0.5..1.5 band (not a single point) is what
+    # makes this a soft transition rather than a step function.
+    return wiener_out * (1.0 - weight) + med * weight
 
 
 def var_model(signal, a, b):
@@ -299,7 +332,7 @@ def main():
 
     luma_detail = None
     cboost = 0.0
-    if variant in ('luma_gate', 'luma_gate+coarse'):
+    if variant in ('luma_gate', 'luma_gate+coarse', 'hybrid'):
         print('computing luma-edge cascade...')
         luma_detail = luma_detail_cascade(y_noisy, LEVELS)
     if variant == 'luma_gate+coarse':
@@ -310,6 +343,11 @@ def main():
     cb_dn = adaptive_wavelet_denoise(cb_noisy, var_cb0, LEVELS, strength, luma_detail, cboost)
     print('denoising Cr (variance-adaptive)...')
     cr_dn = adaptive_wavelet_denoise(cr_noisy, var_cr0, LEVELS, strength, luma_detail, cboost)
+
+    if variant == 'hybrid':
+        print('blending with median (luma-triggered outlier gate)...')
+        cb_dn = hybrid_wiener_median(cb_noisy, cb_dn, var_cb0, y_noisy)
+        cr_dn = hybrid_wiener_median(cr_noisy, cr_dn, var_cr0, y_noisy)
 
     rgb_final = from_ycbcr(y_noisy, cb_dn, cr_dn)  # luma preserved from the noisy original
     preview_dn = wb_gamma_preview(rgb_final)
