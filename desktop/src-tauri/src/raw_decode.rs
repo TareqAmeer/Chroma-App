@@ -158,6 +158,36 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
             dst[2] = (px[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
         });
 
+    // 4.5) False-color suppression (DEFAULT ON; CS_NO_FALSE_COLOR=1 is the diagnostic escape
+    // hatch). Fixes the user-reported green speckle on sunlit-water sparkle: PPG demosaic
+    // guesses wrong at the extreme-contrast micro-edges the sparkle field is full of,
+    // producing 1-3px false-color (usually green) clumps distinct from the clip-to-white
+    // artifact above (these sit on bright-but-NOT-clipped pixels). Every other raw converter
+    // ships an equivalent pass (dcraw/LibRaw's `-m N`, RawTherapee's "false color suppression
+    // steps") — this decode never had one until now.
+    //
+    // ⚠️ NOT a blanket median — measured (2026-07-13) that a blanket/loosely-gated median
+    // strong enough to fully remove the false-color dots ALSO erases genuine small (1-3px)
+    // saturated color (a real point light, a small colored highlight): both are, by
+    // definition, local chroma outliers and a purely local statistic can't tell them apart.
+    // This is edge-GATED: a pixel is only replaced by its 3x3 chroma median where local LUMA
+    // CONTRAST is also high (the geometric condition under which PPG actually produces false
+    // color — a bright pixel immediately next to a dark one). The thresholds
+    // (contrast=0.5, deviation=0.003, 8 passes) were swept against a synthetic safety battery
+    // (calib/false_color_gate.py) — isolated dots from dim to pure-saturated-on-black, a 2x2
+    // real color cluster — all preserved untouched, while the reproduced false-color-at-edge
+    // case is correctly cleaned. Known residual limitation: a solid 3x3 saturated cluster
+    // (bigger than the tested 2x2) does still get smoothed — accepted as a real, documented
+    // tradeoff after two independent techniques (this gated median AND a from-scratch LMMSE
+    // demosaic prototype) both hit the identical wall for larger isolated features; see the
+    // project's noise-model plan file for the full investigation.
+    if std::env::var_os("CS_NO_FALSE_COLOR").is_none() {
+        let contrast_thresh: f32 = std::env::var("CS_FC_CONTRAST").ok().and_then(|v| v.parse().ok()).unwrap_or(0.5);
+        let dev_thresh: f32 = std::env::var("CS_FC_DEV").ok().and_then(|v| v.parse().ok()).unwrap_or(0.003);
+        let steps: usize = std::env::var("CS_FC_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
+        suppress_false_color(&mut rgb16, out_w, out_h, contrast_thresh, dev_thresh, steps);
+    }
+
     // 5) EXIF orientation. raw_image.orientation is hardcoded Normal in rawler 0.7 (TODO
     //    upstream), so read metadata.exif.orientation. Cameras emit 1/3/6/8 only.
     let orientation = metadata.exif.orientation.unwrap_or(1);
@@ -533,6 +563,85 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         px[0] = (y + 1.402 * r).round().clamp(0.0, 65535.0) as u16;
         px[1] = (y - 0.344_136 * b - 0.714_136 * r).round().clamp(0.0, 65535.0) as u16;
         px[2] = (y + 1.772 * b).round().clamp(0.0, 65535.0) as u16;
+    });
+}
+
+/// Edge-gated false-color suppression — see the call site's doc comment in
+/// decode_rw2_bytes for the full rationale and validation history. Operates on interleaved
+/// u16 RGB (post-demosaic, pre-orientation). `contrast_thresh`/`dev_thresh` are in normalized
+/// 0..1 units (matching calib/false_color_gate.py's Python prototype exactly, so thresholds
+/// swept there carry over directly); `steps` is the number of gated-median passes.
+fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32, dev_thresh: f32, steps: usize) {
+    let npx = w * h;
+    let mut yv = vec![0f32; npx];
+    let mut cb = vec![0f32; npx];
+    let mut cr = vec![0f32; npx];
+    yv.par_iter_mut().zip(cb.par_iter_mut()).zip(cr.par_iter_mut()).enumerate().for_each(|(i, ((py, pcb), pcr))| {
+        let r = rgb[i * 3] as f32 / 65535.0;
+        let g = rgb[i * 3 + 1] as f32 / 65535.0;
+        let b = rgb[i * 3 + 2] as f32 / 65535.0;
+        *py = 0.299 * r + 0.587 * g + 0.114 * b;
+        *pcb = -0.168_736 * r - 0.331_264 * g + 0.5 * b;
+        *pcr = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
+    });
+
+    // Local luma contrast = max-min over a 5x5 window (NOT a box-average diff — measured
+    // directly on real false-color pixels that a box-diff badly under-reports contrast near a
+    // hard edge, since the demosaic itself already smooths the transition over a few pixels).
+    let mut contrast = vec![0f32; npx];
+    contrast.par_iter_mut().enumerate().for_each(|(i, o)| {
+        let (x, y) = (i % w, i / w);
+        let mut lo = f32::MAX;
+        let mut hi = f32::MIN;
+        for dy in -2i32..=2 {
+            let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
+            for dx in -2i32..=2 {
+                let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
+                let v = yv[sy * w + sx];
+                lo = lo.min(v);
+                hi = hi.max(v);
+            }
+        }
+        *o = hi - lo;
+    });
+
+    let median9 = |vals: &mut [f32; 9]| -> f32 {
+        vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        vals[4]
+    };
+
+    for _ in 0..steps {
+        for plane in [&mut cb, &mut cr] {
+            let mut next = plane.clone();
+            next.par_iter_mut().enumerate().for_each(|(i, o)| {
+                if contrast[i] <= contrast_thresh {
+                    return; // not near a hard edge — never a candidate, regardless of deviation
+                }
+                let (x, y) = (i % w, i / w);
+                let mut window = [0f32; 9];
+                let mut k = 0;
+                for dy in -1i32..=1 {
+                    let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
+                    for dx in -1i32..=1 {
+                        let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
+                        window[k] = plane[sy * w + sx];
+                        k += 1;
+                    }
+                }
+                let med = median9(&mut window);
+                if (plane[i] - med).abs() > dev_thresh {
+                    *o = med;
+                }
+            });
+            *plane = next;
+        }
+    }
+
+    rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+        let y = yv[i];
+        px[0] = ((y + 1.402 * cr[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
+        px[1] = ((y - 0.344_136 * cb[i] - 0.714_136 * cr[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
+        px[2] = ((y + 1.772 * cb[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
     });
 }
 

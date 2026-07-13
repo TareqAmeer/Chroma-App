@@ -242,7 +242,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-13c"
+    "2026-07-13d"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
