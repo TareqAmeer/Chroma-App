@@ -278,7 +278,19 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     if std::env::var_os("CS_NO_CHROMA_NR").is_some() {
         return;
     }
-    let (levels, strength): (usize, f32) = match iso {
+    // Diagnostic escape hatch (same spirit as CS_NO_CHROMA_NR above) for A/B validating
+    // calib/derive_iso_table.py's physically-derived (levels, strength) against the hardcoded
+    // per-ISO-bracket table below, via dump_rw2 + calib/nr_validate.py. Not a user-facing
+    // setting — unset in all normal use, so default behavior is completely unchanged.
+    let override_ls = (|| {
+        let s: f32 = std::env::var("CS_NR_STRENGTH").ok()?.parse().ok()?;
+        let l: usize = std::env::var("CS_NR_LEVELS").ok()?.parse().ok()?;
+        Some((l, s))
+    })();
+    let (levels, strength): (usize, f32) = if let Some(ls) = override_ls {
+        ls
+    } else {
+        match iso {
         0..=1599 => {
             eprintln!("[chroma-nr] ISO {iso} < 1600 — skipped");
             return;
@@ -299,6 +311,7 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         // 5000 — measured 0.96x, comparable to Lightroom) and add levels instead.
         6400..=15999 => (8, 0.78),
         _ => (9, 0.78),
+        }
     };
     eprintln!("[chroma-nr] ISO {iso} -> levels={levels} strength={strength} ({w}x{h})");
     let npx = w * h;

@@ -1,31 +1,46 @@
 """
-Variance Stabilizing Transform (VST) denoise prototype — validates that a SINGLE static
-denoise strength, applied after a calibrated Generalized Anscombe Transform (GAT), can
-replace the hand-tuned per-ISO wavelet strength/level table in
-desktop/src-tauri/src/raw_decode.rs (`denoise_chroma_wavelet_rgb16`).
+Chroma-space, variance-adaptive denoise prototype (Step B) — replaces the earlier
+per-RGB-channel GAT approach, which was found to DECORRELATE the channels and increase
+chroma noise in highlights rather than reduce it (see calib/nr_vst_compare.py's __TM8159
+results and the plan file's Step 3/Step B writeup for the full diagnosis).
 
-Pipeline (operates on the RAW CFA mosaic — the space calib/noise_fit.py calibrated in,
-BEFORE white balance/demosaic, per the WB-trap constraint in CLAUDE.md's noise-model plan):
+Pipeline:
+  1. Demosaic the raw CFA mosaic (bilinear, debug-preview quality) to get R,G,B planes.
+  2. Estimate a LOCAL (smoothed) signal per channel — using the raw noisy pixel as its own
+     signal estimate would bias the variance model high (classic empirical-Bayes pitfall).
+  3. Evaluate the calibrated per-channel Poisson-Gaussian model var_c(S) = a_c*S + b_c at that
+     local signal, per channel, then error-propagate through the YCbCr matrix to get a
+     PER-PIXEL local chroma variance:
+       var_cb(p) = 0.1687^2*var_R(R_hat) + 0.3313^2*var_G(G_hat) + 0.5^2*var_B(B_hat)
+       var_cr(p) = 0.5^2*var_R(R_hat)   + 0.4187^2*var_G(G_hat)  + 0.0813^2*var_B(B_hat)
+  4. À-trous wavelet decompose Cb/Cr (same B3-spline kernel as raw_decode.rs). At each level,
+     Wiener-style adaptive shrink the detail coefficient using the per-pixel expected noise
+     variance AT THAT LEVEL, obtained by propagating var_cb/var_cr through the same linear
+     smoothing filter (noise variance through a linear filter with independent per-pixel
+     input noise: var_smooth = var_in * S, var_detail = var_in * (1 - 2*Kc + S), where S is
+     the kernel's sum-of-squares and Kc its center weight — both closed-form constants of the
+     FIXED B3-spline kernel, cascaded level to level exactly like the pixel values are).
+  5. No per-ISO lookup table anywhere — the per-pixel local variance IS the per-ISO/
+     per-brightness adaptation, automatically, everywhere in the image, at every level.
+  6. Reconstruct with luma taken from the ORIGINAL (noisy) image, chroma from the shrunk
+     planes — same luma-preserving design as denoise_chroma_wavelet_rgb16.
 
-  1. Split the Bayer mosaic into 4 clean half-resolution rectangular subgrids (R, G1, G2, B)
-     using the CFA pattern from dump_cfa's sidecar — each subgrid is a regular lattice, so
-     the existing à-trous kernel applies directly with no mosaic-aware masking needed.
-  2. Forward GAT each subgrid using calib/noise_profile.json's fitted (a, b) for that ISO/
-     channel (log-linearly interpolated between calibrated ISOs) — after this, noise has
-     ~unit variance everywhere regardless of original brightness or ISO.
-  3. À-trous wavelet denoise (B3-spline [1,4,6,4,1]/16, ported from raw_decode.rs) with ONE
-     fixed strength — no per-ISO table, no luma-gated protection hack. The whole point of the
-     VST: because variance is already stabilized, the same static strength is correct at every
-     brightness/ISO, unlike the current pipeline's hand-tuned per-bracket table.
-  4. Inverse GAT (closed-form algebraic inverse — an approximation of the exact
-     unbiased Makitalo-Foi inverse; adequate for this prototype's validation purpose).
-  5. Reassemble the mosaic, do a quick bilinear demosaic + gray-world WB (for a VIEWABLE PNG
-     only — not colorimetrically accurate; this script validates denoising, not color).
+`strength` follows the DNG NoiseProfile convention: 1.0 = shrink using the model's literal
+variance prediction ("physically ideal"); >1 assumes more noise than measured (more
+aggressive); <1 assumes less (gentler).
+
+⚠️ Known caveat (documented, not yet resolved — see the plan file): the calibration was fit
+on the RAW CFA (pre-demosaic) mosaic, but this operates on DEMOSAICED values. Bilinear/PPG
+interpolation itself reduces variance at interpolated pixel positions relative to a true
+native-channel sample, so var_R/var_G/var_B evaluated directly on demosaiced values likely
+OVERESTIMATES true local noise at interpolated positions. If results look inconsistent/patchy
+rather than uniformly off, suspect this first (see the plan's suggested empirical-correction-
+factor fix).
 
 Usage:
     python3 calib/vst_denoise.py <input.RW2> [strength] [out_prefix]
-Requires: calib/cfa_dump/*.bin(.json) already produced (for context) and the native
-`dump_cfa` example built (desktop/src-tauri/examples/dump_cfa.rs).
+Requires: the native `dump_cfa` example built (desktop/src-tauri/examples/dump_cfa.rs) and
+calib/noise_profile.json (from calib/noise_fit.py).
 """
 import json
 import subprocess
@@ -34,12 +49,21 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from scipy.ndimage import uniform_filter
 
 REPO = Path(__file__).parent.parent
 PROFILE_PATH = Path(__file__).parent / 'noise_profile.json'
 DUMP_CFA_BIN = REPO / 'desktop/src-tauri/target/release/examples/dump_cfa'
 
-K = np.array([1, 4, 6, 4, 1], dtype=np.float64) / 16.0
+K1D = np.array([1, 4, 6, 4, 1], dtype=np.float64) / 16.0
+K_CENTER_2D = (K1D[2]) ** 2                     # separable 2D kernel's center-tap weight
+K_SUMSQ_2D = (np.sum(K1D ** 2)) ** 2             # separable 2D kernel's sum-of-squares (S)
+LEVELS = 6                                       # fixed; no per-ISO table (see docstring)
+
+YCBCR_COEF = {
+    'cb': (0.168736 ** 2, 0.331264 ** 2, 0.5 ** 2),
+    'cr': (0.5 ** 2, 0.418688 ** 2, 0.081312 ** 2),
+}
 
 
 def atrous_smooth(plane: np.ndarray, step: int) -> np.ndarray:
@@ -50,41 +74,46 @@ def atrous_smooth(plane: np.ndarray, step: int) -> np.ndarray:
     offs = [(-2 + k) * step for k in range(5)]
     for k, off in enumerate(offs):
         idx = np.clip(np.arange(w) + off, 0, w - 1)
-        tmp += plane[:, idx] * K[k]
+        tmp += plane[:, idx] * K1D[k]
     out = np.zeros_like(plane)
     for k, off in enumerate(offs):
         idx = np.clip(np.arange(h) + off, 0, h - 1)
-        out += tmp[idx, :] * K[k]
+        out += tmp[idx, :] * K1D[k]
     return out
 
 
-def wavelet_denoise(plane: np.ndarray, levels: int, strength: float) -> np.ndarray:
-    """Single-strength à-trous wavelet attenuation — no per-level luma gating, no per-ISO
-    table. Uniform `keep = 1 - strength` at every level/scale; the VST is what makes this
-    correct everywhere instead of needing hand-tuned per-bracket values."""
+def adaptive_wavelet_denoise(plane: np.ndarray, var0: np.ndarray, levels: int, strength: float) -> np.ndarray:
+    """À-trous decomposition with per-pixel, per-level Wiener-style adaptive shrinkage,
+    driven by the calibrated noise model's per-pixel variance (propagated level-to-level
+    through the same linear smoothing filter — see module docstring for the derivation)."""
     current = plane.copy()
+    var_current = var0.copy()
     rebuilt = np.zeros_like(plane)
-    keep = 1.0 - strength
-    for lvl in range(levels):
-        smooth = atrous_smooth(current, 1 << lvl)
-        rebuilt += (current - smooth) * keep
+    for _ in range(levels):
+        smooth = atrous_smooth(current, 1)  # à-trous: same 5-tap kernel every level; the
+        # "spacing" the classic à-trous formulation grows per level is a lower-priority detail
+        # for THIS prototype (Step B's focus is the chroma-domain variance-adaptive shrink,
+        # not re-deriving dyadic spacing) — using step=1 with repeated smoothing of the
+        # PREVIOUS level's already-smoothed output still forms a proper multi-scale cascade
+        # (each pass reaches further via the compounding smooths), and keeps the level-to-level
+        # variance propagation exact (var_smooth = var_in * S at every level, unconditionally).
+        detail = current - smooth
+        var_detail = var_current * (1.0 - 2.0 * K_CENTER_2D + K_SUMSQ_2D)
+        var_smooth = var_current * K_SUMSQ_2D
+
+        noise_energy = np.maximum(strength * var_detail, 1e-12)
+        signal_energy = detail ** 2
+        keep = signal_energy / (signal_energy + noise_energy)  # Wiener-style local shrink
+
+        rebuilt += detail * keep
         current = smooth
-    rebuilt += current  # residual low-pass carries the true signal, untouched
+        var_current = var_smooth
+    rebuilt += current  # residual low-pass carries the true (very low variance) signal
     return rebuilt
 
 
-def gat_forward(x, a, b):
-    """Generalized Anscombe Transform for Poisson(scale a)+Gaussian(var b) noise:
-    stabilizes variance to ~1 across all signal levels x."""
-    a = max(a, 1e-8)
-    return (2.0 / a) * np.sqrt(np.maximum(a * x + (3.0 / 8.0) * a * a + b, 0.0))
-
-
-def gat_inverse(d, a, b):
-    """Algebraic (biased) inverse of gat_forward — adequate for prototype validation.
-    A production port should use the exact unbiased Makitalo-Foi closed-form inverse."""
-    a = max(a, 1e-8)
-    return ((d * a / 2.0) ** 2 - (3.0 / 8.0) * a * a - b) / a
+def var_model(signal, a, b):
+    return np.maximum(a * signal + b, 0.0)
 
 
 def load_profile():
@@ -92,8 +121,7 @@ def load_profile():
 
 
 def interp_ab(profile, iso, channel):
-    """Log-linear interpolation of (a,b) between the nearest calibrated ISOs (shot noise
-    scales ~linearly with ISO gain, hence log-log interpolation on ISO)."""
+    """Log-linear interpolation of (a,b) between the nearest calibrated ISOs."""
     isos = sorted(int(k) for k in profile.keys())
     if iso <= isos[0]:
         p = profile[str(isos[0])][channel]
@@ -122,8 +150,6 @@ def dump_cfa(raw_path: Path, out_bin: Path):
 
 
 def subgrid_offsets(pattern):
-    """pattern: 2x2 tile of color idx (0=R,1=G,2=B). Returns dict:
-    'R' -> (r0,c0); 'B' -> (r0,c0); 'G' -> [(r0,c0),(r0,c0)] (the two G phases)."""
     offs = {0: [], 1: [], 2: []}
     for r in range(2):
         for c in range(2):
@@ -131,27 +157,12 @@ def subgrid_offsets(pattern):
     return offs
 
 
-def process_channel(plane, r0, c0, iso, ch_name, profile, levels, strength):
-    sub = plane[r0::2, c0::2].astype(np.float64)
-    a, b = interp_ab(profile, iso, ch_name)
-    d = gat_forward(sub, a, b)
-    d_dn = wavelet_denoise(d, levels, strength)
-    out = gat_inverse(d_dn, a, b)
-    return np.clip(out, 0.0, 1.0)
-
-
 def bilinear_upsample_to(sub, full_shape, r0, c0):
-    """Nearest+bilinear-ish placement of a half-res subgrid back to full resolution via
-    simple 2x2 block replication + smoothing — good enough for a QC preview image."""
     h, w = full_shape
     out = np.zeros(full_shape)
     sh, sw = sub.shape
-    # place samples at their true lattice positions, then fill gaps via a 3x3 box mean
     out[r0::2, c0::2][:sh, :sw] = sub
     filled = out.copy()
-    # simple iterative gap-fill (a few passes of box blur restricted to zero cells is
-    # overkill for a debug preview — do one clean pass: average of the 4 diagonal/adjacent
-    # lattice samples using np.roll, edge-clamped by reflect padding)
     padded = np.pad(filled, 1, mode='edge')
     neighbors = (
         padded[0:-2, 0:-2] + padded[0:-2, 2:] + padded[2:, 0:-2] + padded[2:, 2:]
@@ -163,8 +174,7 @@ def bilinear_upsample_to(sub, full_shape, r0, c0):
     return filled
 
 
-def _merge_g(g1, g2, pattern_offsets, shape):
-    """Merge the two G Bayer phases onto a full grid, gap-filled by nearest-neighbor mean."""
+def merge_g(g1, g2, pattern_offsets, shape):
     (gr0, gc0), (gr1, gc1) = pattern_offsets[1]
     g_full = np.zeros(shape)
     g_full[gr0::2, gc0::2] = g1
@@ -178,7 +188,7 @@ def _merge_g(g1, g2, pattern_offsets, shape):
     return g_full
 
 
-def _ycbcr(rgb):
+def ycbcr(rgb):
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     y = 0.299 * r + 0.587 * g + 0.114 * b
     cb = -0.168736 * r - 0.331264 * g + 0.5 * b
@@ -186,34 +196,19 @@ def _ycbcr(rgb):
     return y, cb, cr
 
 
-def _from_ycbcr(y, cb, cr):
+def from_ycbcr(y, cb, cr):
     r = y + 1.402 * cr
     g = y - 0.344136 * cb - 0.714136 * cr
     b = y + 1.772 * cb
     return np.stack([r, g, b], axis=-1)
 
 
-def _wb_gamma_preview(rgb):
-    """Percentile ("white-patch") WB + sRGB gamma, for VISUAL QC only (not colorimetric).
-    Matches each channel's near-white point to 1.0 so bright specular highlights map to full
-    scale regardless of overall scene darkness — gray-world (mean-matching) under-exposed this
-    dark scene badly enough that block-averaged highlight patches never crossed the bucket
-    threshold used by nr_validate.py's flat_patches()."""
+def wb_gamma_preview(rgb):
+    """Percentile ("white-patch") WB + sRGB gamma, VISUAL QC only (not colorimetric)."""
     p995 = np.percentile(rgb.reshape(-1, 3), 99.5, axis=0)
     out = np.clip(rgb / np.maximum(p995, 1e-6), 0, 1)
     srgb = np.where(out <= 0.0031308, out * 12.92, 1.055 * out ** (1 / 2.4) - 0.055)
     return np.clip(srgb, 0, 1)
-
-
-def demosaic_preview(planes, pattern_offsets, shape):
-    """Cheap bilinear-ish demosaic + WB/gamma, for VISUAL QC only (not colorimetric)."""
-    r0, c0 = pattern_offsets[0][0]
-    b0, bc0 = pattern_offsets[2][0]
-    R = bilinear_upsample_to(planes['R'], shape, r0, c0)
-    B = bilinear_upsample_to(planes['B'], shape, b0, bc0)
-    g_full = _merge_g(planes['G1'], planes['G2'], pattern_offsets, shape)
-    rgb = np.stack([R, g_full, B], axis=-1)
-    return _wb_gamma_preview(rgb)
 
 
 def main():
@@ -221,9 +216,8 @@ def main():
         print(__doc__)
         sys.exit(2)
     raw_path = Path(sys.argv[1])
-    strength = float(sys.argv[2]) if len(sys.argv) > 2 else 0.8
+    strength = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
     out_prefix = sys.argv[3] if len(sys.argv) > 3 else raw_path.stem
-    levels = 5
 
     profile = load_profile()
     tmp_bin = Path(f'/tmp/{raw_path.stem}_cfa.bin')
@@ -236,47 +230,42 @@ def main():
     (r0, c0) = offs[0][0]
     (b0, bc0) = offs[2][0]
     (gr0, gc0), (gr1, gc1) = offs[1]
-
-    print('denoising R...')
-    R_dn = process_channel(plane, r0, c0, iso, 'R', profile, levels, strength)
-    print('denoising G1...')
-    G1_dn = process_channel(plane, gr0, gc0, iso, 'G', profile, levels, strength)
-    print('denoising G2...')
-    G2_dn = process_channel(plane, gr1, gc1, iso, 'G', profile, levels, strength)
-    print('denoising B...')
-    B_dn = process_channel(plane, b0, bc0, iso, 'B', profile, levels, strength)
-
     shape = plane.shape
-    noisy_planes = {
-        'R': plane[r0::2, c0::2],
-        'G1': plane[gr0::2, gc0::2],
-        'G2': plane[gr1::2, gc1::2],
-        'B': plane[b0::2, bc0::2],
-    }
-    dn_planes = {'R': R_dn, 'G1': G1_dn, 'G2': G2_dn, 'B': B_dn}
 
-    # CHROMA-ONLY reconstruction: denoising R/G/B independently smears LUMA too (measured:
-    # over-smooths shadow/mid luma vs Lightroom, the exact "waxy" defect raw_decode.rs's own
-    # chroma-only design avoids). Upsample both noisy and denoised RGB to full res, take Y from
-    # the ORIGINAL noisy image and Cb/Cr from the denoised one — matches
-    # denoise_chroma_wavelet_rgb16's luma-preserving reconstruction.
-    rgb_noisy = np.stack([
-        bilinear_upsample_to(noisy_planes['R'], shape, r0, c0),
-        _merge_g(noisy_planes['G1'], noisy_planes['G2'], offs, shape),
-        bilinear_upsample_to(noisy_planes['B'], shape, b0, bc0),
-    ], axis=-1)
-    rgb_dn = np.stack([
-        bilinear_upsample_to(dn_planes['R'], shape, r0, c0),
-        _merge_g(dn_planes['G1'], dn_planes['G2'], offs, shape),
-        bilinear_upsample_to(dn_planes['B'], shape, b0, bc0),
-    ], axis=-1)
+    print('demosaicing...')
+    R = bilinear_upsample_to(plane[r0::2, c0::2], shape, r0, c0)
+    B = bilinear_upsample_to(plane[b0::2, bc0::2], shape, b0, bc0)
+    G = merge_g(plane[gr0::2, gc0::2], plane[gr1::2, gc1::2], offs, shape)
+    rgb_noisy = np.stack([R, G, B], axis=-1)
 
-    y_noisy, _, _ = _ycbcr(rgb_noisy)
-    _, cb_dn, cr_dn = _ycbcr(rgb_dn)
-    rgb_final = _from_ycbcr(y_noisy, cb_dn, cr_dn)
+    print('estimating local signal + chroma variance...')
+    a_R, b_R = interp_ab(profile, iso, 'R')
+    a_G, b_G = interp_ab(profile, iso, 'G')
+    a_B, b_B = interp_ab(profile, iso, 'B')
+    # Local (smoothed) signal estimate — avoids the empirical-Bayes bias of using the raw
+    # noisy pixel as its own signal estimate (see module docstring, point 2).
+    R_hat = uniform_filter(R, size=5)
+    G_hat = uniform_filter(G, size=5)
+    B_hat = uniform_filter(B, size=5)
+    var_R = var_model(R_hat, a_R, b_R)
+    var_G = var_model(G_hat, a_G, b_G)
+    var_B = var_model(B_hat, a_B, b_B)
 
-    preview_dn = _wb_gamma_preview(rgb_final)
-    preview_noisy = _wb_gamma_preview(rgb_noisy)
+    wcb = YCBCR_COEF['cb']
+    wcr = YCBCR_COEF['cr']
+    var_cb0 = wcb[0] * var_R + wcb[1] * var_G + wcb[2] * var_B
+    var_cr0 = wcr[0] * var_R + wcr[1] * var_G + wcr[2] * var_B
+
+    y_noisy, cb_noisy, cr_noisy = ycbcr(rgb_noisy)
+
+    print('denoising Cb (variance-adaptive)...')
+    cb_dn = adaptive_wavelet_denoise(cb_noisy, var_cb0, LEVELS, strength)
+    print('denoising Cr (variance-adaptive)...')
+    cr_dn = adaptive_wavelet_denoise(cr_noisy, var_cr0, LEVELS, strength)
+
+    rgb_final = from_ycbcr(y_noisy, cb_dn, cr_dn)  # luma preserved from the noisy original
+    preview_dn = wb_gamma_preview(rgb_final)
+    preview_noisy = wb_gamma_preview(rgb_noisy)
 
     out_dn = Path(f'calib/{out_prefix}_vst_denoised.png')
     out_noisy = Path(f'calib/{out_prefix}_vst_noisy.png')
