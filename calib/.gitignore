@@ -9,3 +9,5 @@ cfa_dump/
 cfa_dump_test/
 *_vst_noisy.png
 *_vst_denoised.png
+nr_stage_montage.png
+nr_clipwhite_montage.png

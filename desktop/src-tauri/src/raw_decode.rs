@@ -107,6 +107,37 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
             }
         });
 
+    // 2.5) Pre-demosaic clip-to-white highlight neutralization (DEFAULT ON; CS_NO_CLIP_WHITE=1
+    // is the diagnostic escape hatch reproducing the old decode). Measured on __TM8159's
+    // sunlit-water sparkle patch: 12.6% of pixels were PARTIALLY clipped after WB (some
+    // channels pinned, others not — sensor clipping on specular sparkles, then min-normalized
+    // WB pushes R past full scale first), and those pixels carry strong false chroma (mean
+    // Cb -0.066 / Cr +0.087) that the NR passes then smear into the surrounding dark water —
+    // the user-reported "green mush on wave reflections" regression, which no NR tuning could
+    // fix because NR was spreading the artifact, not creating it. The classic raw-converter
+    // fix: when ANY site in a 2x2 Bayer cell reaches clip, whiten the whole cell so demosaic
+    // sees neutral white instead of a false color. Validated 2026-07-13: full nr_validate
+    // suite PASSes all 7 LR-referenced ISO sets (100-12800) with this on, including the
+    // gold-tag saturation gate (0.86, unchanged — the tag is bright but NOT clipped, so the
+    // cell test never fires on it); sparkle-patch chroma smear (mean |chroma|) drops 26% with
+    // NR on, and luma gradient energy slightly IMPROVES (whitened cells demosaic crisper).
+    if std::env::var_os("CS_NO_CLIP_WHITE").is_none() {
+        const CLIP: f32 = 0.995; // post-WB clip threshold (pack clamps at 1.0)
+        pixels.par_chunks_mut(2 * w).for_each(|rows| {
+            let (top, bot) = rows.split_at_mut(w);
+            for cx in 0..w / 2 {
+                let i0 = 2 * cx;
+                let cell = [top[i0], top[i0 + 1], bot[i0], bot[i0 + 1]];
+                if cell.iter().any(|v| *v >= CLIP) {
+                    top[i0] = 1.0;
+                    top[i0 + 1] = 1.0;
+                    bot[i0] = 1.0;
+                    bot[i0 + 1] = 1.0;
+                }
+            }
+        });
+    }
+
     // 3) PPG demosaic (rawler's own; internally SIMD/rayon-assisted). ROI = full frame to
     //    keep output dimensions identical to the libraw-wasm decode this app already uses.
     let pix = PixF32::new_with(pixels, w, h);
@@ -162,7 +193,13 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
     //    the next decode. Off entirely reproduces the untouched decode, for comparison or if a
     //    photo needs its own manual grain/detail instead.
     if native_nr {
-        denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
+        // Diagnostic escape hatch (mirrors CS_NO_CHROMA_NR inside the wavelet pass): lets the
+        // calib harness isolate each pass's contribution — CS_NO_CHROMA_NR only disables the
+        // wavelet, so the shadow pass alone had never been isolatable before this. Unset in
+        // all normal use; default behavior unchanged.
+        if std::env::var_os("CS_NO_SHADOW_NR").is_none() {
+            denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
+        }
         denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso);
     }
 
