@@ -1,0 +1,11 @@
+preview*.png
+render___TM*.png
+cmp_lumix_*.png
+params.json
+__pycache__/
+*.pyc
+noise_captures/
+cfa_dump/
+cfa_dump_test/
+*_vst_noisy.png
+*_vst_denoised.png
