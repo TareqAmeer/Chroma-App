@@ -82,28 +82,64 @@ def atrous_smooth(plane: np.ndarray, step: int) -> np.ndarray:
     return out
 
 
-def adaptive_wavelet_denoise(plane: np.ndarray, var0: np.ndarray, levels: int, strength: float) -> np.ndarray:
+def smoothstep(lo, hi, x):
+    t = np.clip((x - lo) / max(hi - lo, 1e-9), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def luma_detail_cascade(y: np.ndarray, levels: int):
+    """Per-level |current - smooth| luma-edge magnitude, TRUE dyadic à-trous spacing
+    (step=2^level, matching raw_decode.rs's `1usize << lvl` exactly) — same cascade shape as
+    the Cb/Cr denoise below, so levels line up 1:1. mirrors raw_decode.rs's `luma_detail`."""
+    current = y.copy()
+    details = []
+    for lvl in range(levels):
+        smooth = atrous_smooth(current, 1 << lvl)
+        details.append(np.abs(current - smooth))
+        current = smooth
+    return details
+
+
+def adaptive_wavelet_denoise(
+    plane: np.ndarray, var0: np.ndarray, levels: int, strength: float,
+    luma_detail=None, coarse_boost: float = 0.0,
+    gate_lo: float = 0.0021, gate_hi: float = 0.0046,
+    coarse_lo: float = 0.30, coarse_hi: float = 0.55, keep_protect: float = 0.98,
+) -> np.ndarray:
     """À-trous decomposition with per-pixel, per-level Wiener-style adaptive shrinkage,
     driven by the calibrated noise model's per-pixel variance (propagated level-to-level
-    through the same linear smoothing filter — see module docstring for the derivation)."""
+    through the same linear smoothing filter — see module docstring for the derivation).
+
+    Test 1 (luma_detail passed): ports raw_decode.rs's luma-edge-gated coarse-level
+    protection (`raw_decode.rs:357-431`) — a real luma edge at a coarse scale pulls `keep`
+    toward `keep_protect` regardless of what the Wiener formula alone would do, so real
+    color-carrying structure at luminance edges isn't smoothed away as if it were noise.
+    Test 2 (coarse_boost>0): additionally ramps the ASSUMED noise level up at coarse levels
+    only (RawTherapee's approach — chroma mottling lives at coarse scales; fine scales carry
+    real luma-correlated color texture and should stay gentle)."""
     current = plane.copy()
     var_current = var0.copy()
     rebuilt = np.zeros_like(plane)
-    for _ in range(levels):
-        smooth = atrous_smooth(current, 1)  # à-trous: same 5-tap kernel every level; the
-        # "spacing" the classic à-trous formulation grows per level is a lower-priority detail
-        # for THIS prototype (Step B's focus is the chroma-domain variance-adaptive shrink,
-        # not re-deriving dyadic spacing) — using step=1 with repeated smoothing of the
-        # PREVIOUS level's already-smoothed output still forms a proper multi-scale cascade
-        # (each pass reaches further via the compounding smooths), and keeps the level-to-level
-        # variance propagation exact (var_smooth = var_in * S at every level, unconditionally).
+    ldiv = max(levels - 1, 1)
+    for lvl in range(levels):
+        smooth = atrous_smooth(current, 1 << lvl)  # true dyadic spacing (was step=1 always —
+        # a bug: real edges collapsed to near-zero detail at coarse levels since the signal
+        # was already fully pre-blurred by prior fine-level passes, which silently defeated
+        # the luma-edge gate below at exactly the levels it's meant to protect. Fixed.)
         detail = current - smooth
         var_detail = var_current * (1.0 - 2.0 * K_CENTER_2D + K_SUMSQ_2D)
         var_smooth = var_current * K_SUMSQ_2D
 
-        noise_energy = np.maximum(strength * var_detail, 1e-12)
+        lvl_frac = lvl / ldiv
+        level_strength = strength * (1.0 + coarse_boost * lvl_frac)
+        noise_energy = np.maximum(level_strength * var_detail, 1e-12)
         signal_energy = detail ** 2
         keep = signal_energy / (signal_energy + noise_energy)  # Wiener-style local shrink
+
+        if luma_detail is not None:
+            coarse_gate = smoothstep(coarse_lo, coarse_hi, lvl_frac)
+            edge_gate = smoothstep(gate_lo, gate_hi, luma_detail[lvl])
+            keep = keep + coarse_gate * edge_gate * (keep_protect - keep)
 
         rebuilt += detail * keep
         current = smooth
@@ -218,6 +254,9 @@ def main():
     raw_path = Path(sys.argv[1])
     strength = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
     out_prefix = sys.argv[3] if len(sys.argv) > 3 else raw_path.stem
+    # variant: baseline | luma_gate | luma_gate+coarse  (Gemini-review test 1 / test 1+2)
+    variant = sys.argv[4] if len(sys.argv) > 4 else 'baseline'
+    coarse_boost = float(sys.argv[5]) if len(sys.argv) > 5 else 1.5
 
     profile = load_profile()
     tmp_bin = Path(f'/tmp/{raw_path.stem}_cfa.bin')
@@ -258,10 +297,19 @@ def main():
 
     y_noisy, cb_noisy, cr_noisy = ycbcr(rgb_noisy)
 
+    luma_detail = None
+    cboost = 0.0
+    if variant in ('luma_gate', 'luma_gate+coarse'):
+        print('computing luma-edge cascade...')
+        luma_detail = luma_detail_cascade(y_noisy, LEVELS)
+    if variant == 'luma_gate+coarse':
+        cboost = coarse_boost
+    print(f'variant={variant} coarse_boost={cboost}')
+
     print('denoising Cb (variance-adaptive)...')
-    cb_dn = adaptive_wavelet_denoise(cb_noisy, var_cb0, LEVELS, strength)
+    cb_dn = adaptive_wavelet_denoise(cb_noisy, var_cb0, LEVELS, strength, luma_detail, cboost)
     print('denoising Cr (variance-adaptive)...')
-    cr_dn = adaptive_wavelet_denoise(cr_noisy, var_cr0, LEVELS, strength)
+    cr_dn = adaptive_wavelet_denoise(cr_noisy, var_cr0, LEVELS, strength, luma_detail, cboost)
 
     rgb_final = from_ycbcr(y_noisy, cb_dn, cr_dn)  # luma preserved from the noisy original
     preview_dn = wb_gamma_preview(rgb_final)
