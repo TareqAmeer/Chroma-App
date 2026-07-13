@@ -336,6 +336,21 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         // Strength lowered from 0.85: measured against Lightroom (nr_validate.py), 0.85 over-
         // cleaned chroma (CS kept less chroma than LR) and drained highlight saturation to 0.84
         // ("muted colors"). 0.70 keeps more real color while still killing the noise.
+        //
+        // 2026-07-13: tried raising `levels` (5->6..14) to close a separately-diagnosed
+        // residual-speckle gap in dense-texture scenes (__TM8159's sunlit-water sparkle field,
+        // post clip-to-white fix — see that fix's comment above). Result: NO safe headroom
+        // exists on this single global knob. Measured directly on __TM8159's own flat "high"
+        // bucket (nr_validate.py's own patch-selection, not the sparkle texture): shipped
+        // levels=5 sits at saturation-retention 0.882, already RIGHT AT the muted-color gate
+        // (0.88) with zero margin; levels=6 alone drops it to 0.871 (FAILS). The flat highlight
+        // patch and the textured sparkle patch pull this one knob in opposite directions —
+        // more levels helps the sparkle field's residual chroma variance (Cb std 0.0657->0.0600
+        // at levels=10) but muddies flat highlight saturation on the SAME photo. Fixing the
+        // sparkle case without this regression needs a texture-aware (not global-constant)
+        // mechanism — a median-filter hybrid was prototyped for this in
+        // calib/vst_denoise.py/hybrid_wiener_median but isn't production-ready. Left at the
+        // proven, safe 5/0.70.
         3200..=6399 => (5, 0.70),
         // `keep = 1 - strength*(1 - lvl/levels*0.12)` is steeply nonlinear near strength=1: at
         // the finest level, strength 0.85 keeps 15% of the chroma signal, but 0.97 keeps only
@@ -459,6 +474,23 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     }
     let ldiv = if levels > 1 { (levels - 1) as f32 } else { 1.0 };
 
+    // 2026-07-13: attempted a texture-DENSITY gate here (distinguish an isolated real edge,
+    // e.g. the gold tag's rim, from a densely-packed field of edges, e.g. sunlit-water
+    // sparkle) to suppress over-protection in the latter case without touching the former.
+    // REVERTED — not shippable as attempted: a box-averaged binarized edge-density measure
+    // using the existing yedge_lo threshold put BOTH the sparkle patch (mean density 0.94)
+    // and an ordinary flat highlight patch on a different bucket of the SAME photo (mean
+    // 0.67) far above any reasonable separating threshold — the edge-magnitude threshold
+    // that's fine for gating protection strength is far too permissive to also gate texture
+    // density (ordinary photographic detail already exceeds it almost everywhere). Properly
+    // calibrating a real separator needs more reference examples (isolated-feature vs.
+    // dense-texture crops across multiple photos) than were available this session — don't
+    // reattempt this exact mechanism without that calibration work done first.
+    // Diagnostic-only (unset in normal use): scales the luma-edge protection's ceiling for
+    // A/B testing whether it's over-protecting texture-dense scenes (many real luma edges,
+    // e.g. a sparkle field) the same way it correctly protects a real isolated feature (the
+    // gold tag). 1.0 = shipped behavior.
+    let protect_scale: f32 = std::env::var("CS_NR_PROTECT_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
     let denoise_plane = |plane: &mut Vec<f32>| {
         let mut current = std::mem::take(plane);
         let mut rebuilt = vec![0f32; npx];
@@ -470,7 +502,7 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
             let ld = &luma_detail[lvl];
             rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| {
                 let luma_gate = smoothstep(yedge_lo, yedge_hi, ld[i]);
-                let keep = (base_keep + coarse_gate * luma_gate * (KEEP_PROTECT - base_keep)).min(1.0);
+                let keep = (base_keep + protect_scale * coarse_gate * luma_gate * (KEEP_PROTECT - base_keep)).min(1.0);
                 *o += (current[i] - smooth[i]) * keep;
             });
             current = smooth;
