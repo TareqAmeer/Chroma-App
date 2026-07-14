@@ -361,13 +361,20 @@
     const sc = await getSidecar(path);
     let nativeNrForThisPhoto;
     try { nativeNrForThisPhoto = localStorage.getItem('chromasmithNativeNr') !== '0'; } catch (e) { nativeNrForThisPhoto = true; }
+    // Same decode-time-baked, per-photo reasoning as nativeNr above — the RAW demosaic
+    // algorithm choice ("" Standard / "ahd" Sparkle-optimized) must also be peeked from the
+    // sidecar BEFORE decoding, not restored afterward like the rest of applyUISnapshot.
+    let demosaicAlgoForThisPhoto;
+    try { demosaicAlgoForThisPhoto = localStorage.getItem('chromasmithDemosaicAlgo') || ''; } catch (e) { demosaicAlgoForThisPhoto = ''; }
     if (sc.recipe) {
       try {
         const snap = snapshotFromB64(sc.recipe);
         if (snap.nativeNr !== undefined) nativeNrForThisPhoto = snap.nativeNr;
+        if (snap.demosaicAlgo !== undefined) demosaicAlgoForThisPhoto = snap.demosaicAlgo;
       } catch (e) { /* fall through to default */ }
     }
     window.chromasmithNativeNr = nativeNrForThisPhoto;
+    window.chromasmithDemosaicAlgo = demosaicAlgoForThisPhoto;
     try {
       if (cached) {
         cached.ts = Date.now(); // touch for LRU

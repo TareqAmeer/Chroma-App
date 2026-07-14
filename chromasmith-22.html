@@ -715,6 +715,9 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <div class="fx-row" title="Desktop only: the native Rust-side shadow + chroma-wavelet denoise that runs on the linear RAW data before any tone curve, ahead of these sliders. On by default — turn off to compare against the untouched decode, or if it's oversmoothing. Requires reopening this photo to take effect.">
           <div class="fx-label">RAW Noise Reduction</div><div class="fx-toggle on" id="tg-native-nr" onclick="fxNativeNrToggled(this)"></div>
         </div>
+        <div class="fx-row" title="Desktop only: switches the RAW demosaic algorithm. Standard (default) is safest across all photos. Sparkle-optimized uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect.">
+          <div class="fx-label">Sparkle-optimized RAW</div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
+        </div>
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
@@ -4402,6 +4405,29 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const tg=document.getElementById('tg-native-nr');
   if(tg)tg.classList.toggle('on',window.chromasmithNativeNr);
 });
+
+// ── RAW demosaic algorithm ("" Standard / "ahd" Sparkle-optimized) — desktop only, same
+// decode-time-only constraint as native NR above (raw_decode.rs's demosaic step runs before
+// anything else, so this can't take effect live either). Defaults OFF (unchanged behavior);
+// deliberately per-photo only, never a global default — see raw_decode.rs's doc comment on
+// why AHD isn't safe as the default (it improves dense sparkle-speckle photos but increases
+// general chroma noise on others, measured against the full validation suite).
+try{window.chromasmithDemosaicAlgo=localStorage.getItem('chromasmithDemosaicAlgo')||'';}catch(e){window.chromasmithDemosaicAlgo='';}
+function fxDemosaicToggled(el){
+  const on=el.classList.toggle('on');
+  window.chromasmithDemosaicAlgo=on?'ahd':'';
+  // Per-photo via the recipe (getUISnapshot's demosaicAlgo field), same auto-persist path as
+  // native NR; localStorage is only the starting default for a photo with no saved recipe yet.
+  try{localStorage.setItem('chromasmithDemosaicAlgo',window.chromasmithDemosaicAlgo);}catch(e){}
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+  const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
+  if(window.__TAURI__)toast((on?'Sparkle-optimized RAW processing on':'Standard RAW processing')+suffix,true);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  const tg=document.getElementById('tg-demosaic-ahd');
+  if(tg)tg.classList.toggle('on',window.chromasmithDemosaicAlgo==='ahd');
+});
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
 let fxSplit=false, fxSplitPos=0.5;       // split before/after view
@@ -5698,6 +5724,7 @@ function getUISnapshot(){
   // remembers its OWN setting instead of one global switch affecting every photo. See
   // library-ui.js's openInEditorInner, which peeks this from the sidecar BEFORE decoding.
   s.nativeNr=window.chromasmithNativeNr!==false;
+  s.demosaicAlgo=window.chromasmithDemosaicAlgo||''; // same decode-time-baked reasoning as nativeNr above
   return s;
 }
 function applyUISnapshot(s){
@@ -5725,6 +5752,10 @@ function applyUISnapshot(s){
   if(s.nativeNr!==undefined){
     window.chromasmithNativeNr=s.nativeNr;
     const tg=document.getElementById('tg-native-nr');if(tg)tg.classList.toggle('on',s.nativeNr);
+  }
+  if(s.demosaicAlgo!==undefined){
+    window.chromasmithDemosaicAlgo=s.demosaicAlgo;
+    const tg=document.getElementById('tg-demosaic-ahd');if(tg)tg.classList.toggle('on',s.demosaicAlgo==='ahd');
   }
 }
 function fxHistoryPush(){

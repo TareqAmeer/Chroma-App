@@ -365,6 +365,7 @@ name = "chromasmith"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
+ "demosaic",
  "image",
  "kamadak-exif",
  "lensfun",
@@ -611,6 +612,12 @@ dependencies = [
  "libdbus-sys",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "demosaic"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c8e7c3f4e7042d592a58e82428b4f482680715f75dd0f774664973e8a88f72f"
 
 [[package]]
 name = "deranged"

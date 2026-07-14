@@ -34,17 +34,18 @@ def from_ycbcr(y, cb, cr):
     return np.stack([r, g, b], axis=-1)
 
 
-def suppress_false_color(rgb, contrast_thresh=0.15, dev_thresh=0.012, steps=2, win=5):
+def suppress_false_color(rgb, contrast_thresh=0.15, dev_thresh=0.012, steps=2, win=5, median_win=3):
     """Edge-gated conditional median on Cb/Cr, luma untouched. Mirrors the Rust port:
     contrast = local (max-min) luma RANGE over a `win`x`win` neighborhood (NOT a simple
     box-average diff — measured directly on real demosaic false-color pixels that a 3x3
     box-diff badly under-reports contrast near a hard edge, since demosaic itself already
     smooths the transition over a few pixels; a wider max-min range correctly flags
     "near a hard edge" a few pixels out, not just exactly on the edge line). A pixel is
-    replaced by its own 3x3 chroma median only where contrast > contrast_thresh AND
-    |chroma - median| > dev_thresh — both thresholds calibrated against the REAL
-    per-pixel deviation/contrast distribution at actual false-color pixels (median
-    deviation ~0.012, not the much larger value a synthetic hard-edge test suggested)."""
+    replaced by its `median_win`x`median_win` chroma median only where contrast >
+    contrast_thresh AND |chroma - median| > dev_thresh. `median_win` (Gemini's "Fix B" —
+    clump size): the shipped build used median_win=3, which only removes 1px-wide false
+    color; a 2x2/3x2 demosaic-failure CLUMP survives a 3x3 window (the window mostly sees
+    the clump itself). Widen this to see past clumps up to ~half the window's extent."""
     from scipy.ndimage import maximum_filter, minimum_filter
     y, cb, cr = ycbcr(rgb)
     local_max = maximum_filter(y, size=win)
@@ -54,7 +55,7 @@ def suppress_false_color(rgb, contrast_thresh=0.15, dev_thresh=0.012, steps=2, w
 
     for _ in range(steps):
         for plane in (cb, cr):
-            med = median_filter(plane, size=3)
+            med = median_filter(plane, size=median_win)
             dev = np.abs(plane - med)
             replace = edge_mask & (dev > dev_thresh)
             plane[replace] = med[replace]

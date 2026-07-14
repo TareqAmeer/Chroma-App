@@ -42,7 +42,7 @@ pub struct DecodedRaw {
     pub rgb16: Vec<u16>,
 }
 
-pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Result<DecodedRaw, String> {
+pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic_algo: &str) -> Result<DecodedRaw, String> {
     let source = RawSource::new_from_slice(bytes);
     let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
     let params = RawDecodeParams::default();
@@ -138,20 +138,56 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
         });
     }
 
-    // 3) PPG demosaic (rawler's own; internally SIMD/rayon-assisted). ROI = full frame to
-    //    keep output dimensions identical to the libraw-wasm decode this app already uses.
-    let pix = PixF32::new_with(pixels, w, h);
-    let roi = pix.rect();
-    let rgb = PPGDemosaic::new().demosaic(&pix, &cfa_config.cfa, &cfa_config.colors, roi);
+    // 3) Demosaic. Default: PPG (rawler's own; internally SIMD/rayon-assisted). `demosaic_algo`
+    // ("" | "ahd" | "vng" | "mhc") is the real per-photo control — the desktop UI's "RAW
+    // Processing: Standard / Sparkle-optimized" toggle passes "ahd" here for photos with dense
+    // false-color speckle PPG can't fully avoid (measured 2026-07-13: AHD's homogeneity-
+    // directed adaptive interpolation cuts __TM8159's sparkle speckle much further than PPG,
+    // but increases chroma noise on OTHER photos — see raw_decode.rs's Cargo.toml comment and
+    // the project's noise-model plan file — hence a per-photo opt-in, never a global default).
+    // CS_DEMOSAIC env var overrides the parameter for calibration/diagnostics only.
+    let demosaic_choice = std::env::var("CS_DEMOSAIC").unwrap_or_else(|_| demosaic_algo.to_string());
+    let (out_w, out_h, rgb16_f32): (usize, usize, Vec<f32>) = if demosaic_choice.is_empty() {
+        let pix = PixF32::new_with(pixels, w, h);
+        let roi = pix.rect();
+        let rgb = PPGDemosaic::new().demosaic(&pix, &cfa_config.cfa, &cfa_config.colors, roi);
+        let mut interleaved = vec![0f32; rgb.width * rgb.height * 3];
+        interleaved
+            .par_chunks_mut(3)
+            .zip(rgb.pixels().par_iter())
+            .for_each(|(dst, px)| {
+                dst[0] = px[0];
+                dst[1] = px[1];
+                dst[2] = px[2];
+            });
+        (rgb.width, rgb.height, interleaved)
+    } else {
+        use demosaic::{demosaic as demosaic_fn, Algorithm, CfaPattern};
+        let algo = match demosaic_choice.as_str() {
+            "ahd" => Algorithm::Ahd,
+            "vng" => Algorithm::Vng,
+            "mhc" => Algorithm::Mhc,
+            other => panic!("unknown CS_DEMOSAIC={other} (expected ahd|vng|mhc)"),
+        };
+        let cfa_pattern = CfaPattern::bayer_rggb(); // confirmed RGGB via dump_cfa on this camera
+        let mut planar = vec![0f32; 3 * w * h]; // crate output is planar CHW (R,G,B planes)
+        demosaic_fn(&pixels, w, h, &cfa_pattern, algo, &mut planar)
+            .expect("demosaic crate failed");
+        let mut interleaved = vec![0f32; w * h * 3];
+        interleaved.par_chunks_mut(3).enumerate().for_each(|(i, dst)| {
+            dst[0] = planar[i];
+            dst[1] = planar[w * h + i];
+            dst[2] = planar[2 * w * h + i];
+        });
+        (w, h, interleaved)
+    };
 
     // 4) Pack to interleaved u16. Floor already applied; ceiling (1.0) only here — the one
     //    hard clip, mirroring libraw's CLIP at 65535 after scale_colors.
-    let out_w = rgb.width;
-    let out_h = rgb.height;
     let mut rgb16 = vec![0u16; out_w * out_h * 3];
     rgb16
         .par_chunks_mut(3)
-        .zip(rgb.pixels().par_iter())
+        .zip(rgb16_f32.par_chunks(3))
         .for_each(|(dst, px)| {
             dst[0] = (px[0].clamp(0.0, 1.0) * 65535.0).round() as u16;
             dst[1] = (px[1].clamp(0.0, 1.0) * 65535.0).round() as u16;
@@ -186,6 +222,26 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool) -> Resul
         let dev_thresh: f32 = std::env::var("CS_FC_DEV").ok().and_then(|v| v.parse().ok()).unwrap_or(0.003);
         let steps: usize = std::env::var("CS_FC_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
         suppress_false_color(&mut rgb16, out_w, out_h, contrast_thresh, dev_thresh, steps);
+    }
+
+    // 4.6) Contrast-gated hue-targeted defringe (DEFAULT ON; CS_NO_HUE_DEFRINGE=1 is the
+    // diagnostic escape hatch). A complementary technique to the median above — that catches
+    // spatial OUTLIERS (a pixel that disagrees with its local neighborhood); this catches a
+    // specific false-color SIGNATURE (neon-green hue) regardless of how spatially isolated it
+    // is, still gated to local hard-contrast regions so ordinary saturated real content
+    // (grass, foliage — which sits in flat, low-contrast areas) is structurally left alone.
+    // Prototyped in calib/false_color_gate.py / calib/highlight_rolloff.py; validated
+    // 2026-07-13: full nr_validate suite PASSES all 7 LR-referenced ISO sets (gold-tag gate
+    // unchanged at 0.86) and a synthetic grass patch is correctly untouched. Measured on
+    // __TM8159's worst sparkle hotspot: green-dot fraction 6.2%->0.9-1.7%.
+    // ⚠️ Known scope limit: only targets the GREEN (60-170°) hue band — chosen because it's far
+    // from realistic skin-tone/wood/sky hues, so widening to red/magenta risks false-positiving
+    // on much more common real content. Residual red/blue/magenta false-color speckle in the
+    // worst scenes is NOT addressed by this pass (see the CS_DEMOSAIC=ahd opt-in toggle for a
+    // stronger but riskier alternative for exactly those difficult photos).
+    if std::env::var_os("CS_NO_HUE_DEFRINGE").is_none() {
+        let contrast_thresh: f32 = std::env::var("CS_HD_CONTRAST").ok().and_then(|v| v.parse().ok()).unwrap_or(0.05);
+        hue_defringe_gated(&mut rgb16, out_w, out_h, contrast_thresh);
     }
 
     // 5) EXIF orientation. raw_image.orientation is hardcoded Normal in rawler 0.7 (TODO
@@ -642,6 +698,72 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
         px[0] = ((y + 1.402 * cr[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
         px[1] = ((y - 0.344_136 * cb[i] - 0.714_136 * cr[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
         px[2] = ((y + 1.772 * cb[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
+    });
+}
+
+/// Diagnostic-only contrast-gated hue-targeted defringe — see the call site's doc comment.
+/// Ports calib/false_color_gate.py's `hue_defringe_gated` prototype exactly (hue band, sat
+/// threshold, desaturation amount are the values measured there): only desaturate pixels
+/// whose hue falls in the neon-green/magenta band AND sit at a local hard luma edge.
+fn hue_defringe_gated(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32) {
+    const HUE_LO: f32 = 60.0 / 360.0;
+    const HUE_HI: f32 = 170.0 / 360.0;
+    const SAT_THRESH: f32 = 0.10;
+    const DESAT_AMOUNT: f32 = 0.95;
+
+    let npx = w * h;
+    let mut yv = vec![0f32; npx];
+    yv.par_iter_mut().enumerate().for_each(|(i, py)| {
+        let r = rgb[i * 3] as f32 / 65535.0;
+        let g = rgb[i * 3 + 1] as f32 / 65535.0;
+        let b = rgb[i * 3 + 2] as f32 / 65535.0;
+        *py = 0.299 * r + 0.587 * g + 0.114 * b;
+    });
+
+    let mut contrast = vec![0f32; npx];
+    contrast.par_iter_mut().enumerate().for_each(|(i, o)| {
+        let (x, y) = (i % w, i / w);
+        let mut lo = f32::MAX;
+        let mut hi = f32::MIN;
+        for dy in -2i32..=2 {
+            let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
+            for dx in -2i32..=2 {
+                let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
+                let v = yv[sy * w + sx];
+                lo = lo.min(v);
+                hi = hi.max(v);
+            }
+        }
+        *o = hi - lo;
+    });
+
+    rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+        if contrast[i] <= contrast_thresh {
+            return;
+        }
+        let r = px[0] as f32 / 65535.0;
+        let g = px[1] as f32 / 65535.0;
+        let b = px[2] as f32 / 65535.0;
+        let mx = r.max(g).max(b);
+        let mn = r.min(g).min(b);
+        let delta = (mx - mn).max(1e-9);
+        let hue = if mx == r {
+            (((g - b) / delta).rem_euclid(6.0)) / 6.0
+        } else if mx == g {
+            (((b - r) / delta) + 2.0) / 6.0
+        } else {
+            (((r - g) / delta) + 4.0) / 6.0
+        };
+        let sat = delta / mx.max(1e-9);
+        if hue >= HUE_LO && hue <= HUE_HI && sat > SAT_THRESH {
+            let y = yv[i];
+            let new_r = r * (1.0 - DESAT_AMOUNT) + y * DESAT_AMOUNT;
+            let new_g = g * (1.0 - DESAT_AMOUNT) + y * DESAT_AMOUNT;
+            let new_b = b * (1.0 - DESAT_AMOUNT) + y * DESAT_AMOUNT;
+            px[0] = (new_r * 65535.0).round().clamp(0.0, 65535.0) as u16;
+            px[1] = (new_g * 65535.0).round().clamp(0.0, 65535.0) as u16;
+            px[2] = (new_b * 65535.0).round().clamp(0.0, 65535.0) as u16;
+        }
     });
 }
 

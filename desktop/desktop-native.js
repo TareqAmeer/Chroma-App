@@ -86,7 +86,11 @@
       }
       const autoLens = !!window.chromasmithAutoLens;
       const nativeNr = window.chromasmithNativeNr !== false; // default on
-      const extra = { autoLens, nativeNr };
+      // Per-photo "RAW Processing" mode: "" (Standard/PPG, default) or "ahd" (Sparkle-
+      // optimized — trades some general chroma-noise headroom for much cleaner rendering of
+      // dense sunlit-water/specular sparkle fields; NOT a global default, see raw_decode.rs).
+      const demosaicAlgo = window.chromasmithDemosaicAlgo || '';
+      const extra = { autoLens, nativeNr, demosaicAlgo };
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra } : { mode, ...extra }, bytes);
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this

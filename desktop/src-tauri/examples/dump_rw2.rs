@@ -24,7 +24,7 @@ fn main() {
     let ds: usize = args.get(3).map(|s| s.parse().expect("downscale int")).unwrap_or(1);
     let bytes = std::fs::read(&args[1]).expect("read input");
     let t0 = std::time::Instant::now();
-    let d = raw_decode::decode_rw2_bytes(&bytes, false, std::env::var_os("CS_NO_CHROMA_NR").is_none()).expect("decode");
+    let d = raw_decode::decode_rw2_bytes(&bytes, false, std::env::var_os("CS_NO_CHROMA_NR").is_none(), "").expect("decode");
     eprintln!(
         "{}x{} iso {} decoded in {:.2}s",
         d.width,

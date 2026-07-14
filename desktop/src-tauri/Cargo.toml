@@ -47,6 +47,10 @@ ureq = "2"
 # manual Distortion/Vignette/CA sliders remain the fallback when no profile match is found (this
 # camera/lens pairing — Panasonic DC-S9 + LUMIX S 18-40 — may not be in the community DB yet).
 lensfun = "0.7"
+# Diagnostic-only alternate demosaic algorithms (CS_DEMOSAIC=ahd etc. env override in
+# raw_decode.rs) — testing whether AHD's homogeneity-directed adaptive interpolation reduces
+# the sunlit-water false-color speckle PPG produces, before considering a default swap.
+demosaic = "0.3"
 
 [profile.release]
 strip = true
