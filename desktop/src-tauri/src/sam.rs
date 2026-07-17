@@ -1,9 +1,25 @@
-// AI tap-to-select (Masks panel): MobileSAM point-prompt segmentation via ONNX Runtime.
+// AI tap-to-select (Masks panel): EdgeSAM point-prompt segmentation via ONNX Runtime.
 //
-// Models are vendor/sam/*.onnx (MIT-licensed export from huggingface.co/Acly/MobileSAM — see
-// vendor/sam/README.md for the full I/O contract, verified against the ACTUAL downloaded model
-// files (`strings` on the .onnx protobufs) plus the export source (Meta's segment_anything
-// utils/onnx.py + Acly's onnx_image_encoder.py), not guessed.
+// Models are vendor/sam/edge_sam_{encoder,decoder}.onnx (NTU S-Lab 1.0, non-commercial — see
+// vendor/sam/README.md), exported from huggingface.co/spaces/chongzhou/EdgeSAM/weights. Swapped
+// in from the original MobileSAM implementation (Phase 2 of the AI-select plan) once Phase 1
+// confirmed the raw-FFI ORT path works on real Intel Mac hardware. The encoder is a same-shape
+// drop-in (both output [1,256,64,64] for a 1024x1024 padded input) but the DECODER CONTRACT
+// DIFFERS from MobileSAM's — verified against the actual downloaded .onnx files via onnxruntime
+// (onnx.load() for I/O names/shapes, a real inference run against a real photo for sane output),
+// not guessed, and cross-checked against EdgeSAM's own
+// segment_anything/onnx/predictor_onnx.py (SamPredictorONNX.predict/postprocess_masks):
+//   - Decoder takes only 3 inputs: image_embeddings, point_coords, point_labels. No mask_input /
+//     has_mask_input / orig_im_size — EdgeSAM's ONNX graph does NOT upscale the mask itself.
+//   - Decoder always returns MULTIMASK output: scores [1,4] + low-res mask logits [1,4,256,256]
+//     (no single-mask mode). Caller must argmax the scores to pick the best of the 4 channels.
+//   - Caller must upsample the winning 256x256 channel to the original image resolution in TWO
+//     bilinear steps, exactly mirroring predictor_onnx.py's postprocess_masks: (1) 256x256 →
+//     1024x1024 (full padded canvas), (2) crop to the unpadded (input_h, input_w) region, then
+//     bilinear-resize that crop to (orig_h, orig_w). This is NOT equivalent to a single direct
+//     resize from 256x256 to (orig_h, orig_w) — cv2/PIL bilinear sampling uses a scale-dependent
+//     half-pixel offset, so collapsing the two steps into one shifts every sample position and
+//     produces a visibly different (softer/misaligned) mask boundary.
 //
 // ⚠️ THIS CALLS THE ONNX RUNTIME C API DIRECTLY (via ort-sys + libloading), NOT the `ort` crate's
 // high-level Session/Environment API. `ort` 2.0.0-rc.12's `load-dynamic` feature has a confirmed,
@@ -32,12 +48,17 @@ use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-static ENCODER_BYTES: &[u8] = include_bytes!("../vendor/sam/mobile_sam_image_encoder.onnx");
-static DECODER_BYTES: &[u8] = include_bytes!("../vendor/sam/sam_mask_decoder_single.onnx");
+static ENCODER_BYTES: &[u8] = include_bytes!("../vendor/sam/edge_sam_encoder.onnx");
+static DECODER_BYTES: &[u8] = include_bytes!("../vendor/sam/edge_sam_decoder.onnx");
 
-/// MobileSAM's ViT-t image_encoder.img_size — the model pads to this square canvas internally;
-/// callers resize so the image's LONGEST side equals this before feeding it in.
+/// EdgeSAM's img_size — the model pads to this square canvas internally; callers resize so the
+/// image's LONGEST side equals this before feeding it in. Also the decoder's low-res mask output
+/// side length is SAM_SIZE/4 = 256 (see decode_point()'s two-stage upsample).
 const SAM_SIZE: u32 = 1024;
+/// Side length of the decoder's low-res mask logits output (SAM_SIZE / 4).
+const MASK_SIZE: u32 = 256;
+/// EdgeSAM's decoder always emits this many candidate masks; the highest-scoring one is used.
+const NUM_MASK_CANDIDATES: usize = 4;
 /// ONNX opset / OrtApi ABI version this file's struct layouts (via ort-sys 2.0.0-rc.12) target.
 const ORT_API_VERSION: u32 = 17;
 
@@ -287,12 +308,34 @@ pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
     }
 
     let sess = encoder()?;
-    let mut outputs = run_session(
-        sess,
-        vec![input("input_image", pixels, &[new_h as i64, new_w as i64, 3])],
-        &["image_embeddings"]
-    )?;
+    let mut outputs = run_session(sess, vec![input("image", pixels, &[1, 3, new_h as i64, new_w as i64])], &["image_embeddings"])?;
     Ok(Embedding { data: outputs.remove(0), orig_w: w, orig_h: h })
+}
+
+/// Bilinear-samples `src` (row-major, `src_w`x`src_h`) at floating-point pixel-center coordinates,
+/// using the same half-pixel convention as cv2.resize(INTER_LINEAR)/PIL — `src_x = (dst_x+0.5) *
+/// (src_w/dst_w) - 0.5` — so this matches EdgeSAM's own postprocess_masks() sample-for-sample.
+fn bilinear_resize(src: &[f32], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<f32> {
+    let (sw, sh) = (src_w as f32, src_h as f32);
+    let (dw, dh) = (dst_w as f32, dst_h as f32);
+    let mut out = vec![0f32; (dst_w as usize) * (dst_h as usize)];
+    for dy in 0..dst_h {
+        let sy = (((dy as f32 + 0.5) * sh / dh) - 0.5).clamp(0.0, sh - 1.0);
+        let y0 = sy.floor() as u32;
+        let y1 = (y0 + 1).min(src_h - 1);
+        let fy = sy - y0 as f32;
+        for dx in 0..dst_w {
+            let sx = (((dx as f32 + 0.5) * sw / dw) - 0.5).clamp(0.0, sw - 1.0);
+            let x0 = sx.floor() as u32;
+            let x1 = (x0 + 1).min(src_w - 1);
+            let fx = sx - x0 as f32;
+            let get = |x: u32, y: u32| src[(y * src_w + x) as usize];
+            let top = get(x0, y0) * (1.0 - fx) + get(x1, y0) * fx;
+            let bot = get(x0, y1) * (1.0 - fx) + get(x1, y1) * fx;
+            out[(dy * dst_w + dx) as usize] = top * (1.0 - fy) + bot * fy;
+        }
+    }
+    out
 }
 
 /// Runs the decoder for a SINGLE point prompt (one tap), returning a full-original-resolution
@@ -301,12 +344,18 @@ pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
 ///
 /// `norm_x`/`norm_y` are the tap position as a 0..1 fraction of the ORIGINAL image (matching
 /// this app's existing mask-geometry convention — see chromasmith-22.html's mskA cx/cy). A lone
-/// point is paired with an implicit (0,0)/label=-1 padding point — segment_anything's prompt
-/// encoder was trained expecting that pairing for a single click (see vendor/sam/README.md).
+/// point is paired with an implicit (0,0)/label=-1 padding point, matching MobileSAM's convention
+/// (segment_anything's prompt encoder expects that pairing for a single click — see
+/// vendor/sam/README.md; EdgeSAM shares the same prompt-encoder/mask-decoder architecture).
 pub fn decode_point(embed: &Embedding, norm_x: f32, norm_y: f32, positive: bool) -> Result<Vec<u8>, String> {
     let scale = SAM_SIZE as f32 / embed.orig_w.max(embed.orig_h) as f32;
     let px = norm_x.clamp(0.0, 1.0) * embed.orig_w as f32 * scale;
     let py = norm_y.clamp(0.0, 1.0) * embed.orig_h as f32 * scale;
+    // The unpadded region of the SAM_SIZE square canvas that the resized image actually occupies
+    // — needed to crop the upsampled mask back out of the zero-padded square (see bilinear_resize
+    // doc comment above and predictor_onnx.py's postprocess_masks).
+    let input_w = ((embed.orig_w as f32 * scale).round().max(1.0)) as u32;
+    let input_h = ((embed.orig_h as f32 * scale).round().max(1.0)) as u32;
 
     let sess = decoder()?;
     let mut outputs = run_session(
@@ -315,17 +364,33 @@ pub fn decode_point(embed: &Embedding, norm_x: f32, norm_y: f32, positive: bool)
             input("image_embeddings", embed.data.clone(), &[1, 256, 64, 64]),
             input("point_coords", vec![px, py, 0.0, 0.0], &[1, 2, 2]),
             input("point_labels", vec![if positive { 1.0 } else { 0.0 }, -1.0], &[1, 2]),
-            input("mask_input", vec![0f32; 256 * 256], &[1, 1, 256, 256]),
-            input("has_mask_input", vec![0.0], &[1]),
-            input("orig_im_size", vec![embed.orig_h as f32, embed.orig_w as f32], &[2]),
         ],
-        &["masks"]
+        &["scores", "masks"]
     )?;
-    let masks = outputs.remove(0);
+    let masks = outputs.remove(1);
+    let scores = outputs.remove(0);
 
-    let n = (embed.orig_w as usize) * (embed.orig_h as usize);
-    if masks.len() < n {
-        return Err(format!("SAM mask size mismatch: got {} values, expected {n}", masks.len()));
+    if scores.len() != NUM_MASK_CANDIDATES || masks.len() != NUM_MASK_CANDIDATES * (MASK_SIZE * MASK_SIZE) as usize {
+        return Err(format!(
+            "SAM decoder output size mismatch: {} scores, {} mask values (expected {NUM_MASK_CANDIDATES} candidates of {MASK_SIZE}x{MASK_SIZE})",
+            scores.len(),
+            masks.len()
+        ));
     }
-    Ok(masks[..n].iter().map(|&v| if v > 0.0 { 255u8 } else { 0u8 }).collect())
+    let best = scores.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(i, _)| i).unwrap_or(0);
+    let low_res = &masks[best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
+
+    // Two-stage upsample matching EdgeSAM's own postprocess_masks exactly: low-res → full padded
+    // square → crop to the unpadded input region → original resolution. See the module doc
+    // comment for why this can't be collapsed into a single resize.
+    let full_square = bilinear_resize(low_res, MASK_SIZE, MASK_SIZE, SAM_SIZE, SAM_SIZE);
+    let mut cropped = vec![0f32; (input_w as usize) * (input_h as usize)];
+    for y in 0..input_h {
+        for x in 0..input_w {
+            cropped[(y * input_w + x) as usize] = full_square[(y * SAM_SIZE + x) as usize];
+        }
+    }
+    let full_res = bilinear_resize(&cropped, input_w, input_h, embed.orig_w, embed.orig_h);
+
+    Ok(full_res.iter().map(|&v| if v > 0.0 { 255u8 } else { 0u8 }).collect())
 }
