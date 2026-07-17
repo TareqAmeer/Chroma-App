@@ -133,20 +133,30 @@ struct SamPointResult {
     height: u32,
 }
 
-/// Runs one point-prompt query against the CACHED embedding from the most recent sam_encode
-/// call. Returns the mask raster (one byte per pixel, row-major) as the raw response body, plus
-/// its dimensions as the JSON header — same framed-response idea as decode_raw_v2, just simpler
-/// since there's no variant body format to disambiguate.
+#[derive(serde::Deserialize)]
+struct SamPointIn {
+    x: f32,
+    y: f32,
+    positive: bool
+}
+
+/// Runs a multi-point-prompt query (a Lightroom-style "brush over the object" scribble, sampled
+/// into points by chromasmith-22.html's mskAiScribble* — NOT a single tap) against the CACHED
+/// embedding from the most recent sam_encode call. Returns the mask raster (one byte per pixel,
+/// row-major) as the raw response body, plus its dimensions as the JSON header — same
+/// framed-response idea as decode_raw_v2, just simpler since there's no variant body format to
+/// disambiguate.
 #[tauri::command]
-fn sam_point(token: String, x: f32, y: f32, positive: bool) -> Result<tauri::ipc::Response, String> {
+fn sam_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Response, String> {
     let guard = SAM_EMBED.lock().unwrap();
-    let cache = guard.as_ref().ok_or("sam_point: no photo encoded yet — call sam_encode first")?;
+    let cache = guard.as_ref().ok_or("sam_points: no photo encoded yet — call sam_encode first")?;
     if cache.token != token {
-        return Err("sam_point: the encoded photo has changed — re-encode before tapping".into());
+        return Err("sam_points: the encoded photo has changed — re-encode before scribbling".into());
     }
-    let mask = sam::decode_point(&cache.embedding, x, y, positive)?;
+    let pts: Vec<(f32, f32, bool)> = points.iter().map(|p| (p.x, p.y, p.positive)).collect();
+    let mask = sam::decode_points(&cache.embedding, &pts)?;
     let header = SamPointResult { width: cache.embedding.orig_w, height: cache.embedding.orig_h };
-    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("sam_point header: {e}"))?;
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("sam_points header: {e}"))?;
     let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
     out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
     out.extend_from_slice(&header_bytes);
@@ -320,7 +330,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-17h"
+    "2026-07-17i"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -541,7 +551,7 @@ fn main() {
             library::get_decode_cache,
             library::save_decode_cache,
             sam_encode,
-            sam_point,
+            sam_points,
             save_to_gphotos_downloads,
             gphotos_downloads_dir
         ])

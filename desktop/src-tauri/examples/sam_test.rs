@@ -31,8 +31,8 @@ fn main() {
     let nx: f32 = args[2].parse().expect("norm_x");
     let ny: f32 = args[3].parse().expect("norm_y");
     let t1 = std::time::Instant::now();
-    let mask = sam::decode_point(&embedding, nx, ny, true).expect("sam::decode_point");
-    eprintln!("decode_point: {:.3}s, {} bytes", t1.elapsed().as_secs_f32(), mask.len());
+    let mask = sam::decode_points(&embedding, &[(nx, ny, true)]).expect("sam::decode_points");
+    eprintln!("decode_points: {:.3}s, {} bytes", t1.elapsed().as_secs_f32(), mask.len());
 
     let selected = mask.iter().filter(|&&v| v > 0).count();
     eprintln!("selected pixels: {} / {} ({:.1}%)", selected, mask.len(), 100.0 * selected as f32 / mask.len() as f32);

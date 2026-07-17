@@ -354,19 +354,30 @@ fn bilinear_resize(src: &[f32], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) 
     out
 }
 
-/// Runs the decoder for a SINGLE point prompt (one tap), returning a full-original-resolution
-/// binary mask — one byte per pixel, row-major, 255 = selected / 0 = not, already thresholded
-/// at SAM's standard mask_threshold=0.0 on the raw logit.
+/// Runs the decoder for an arbitrary SET of point prompts (a Lightroom-style "brush over the
+/// object" scribble, sampled by the caller into positive/negative points along the stroke — see
+/// chromasmith-22.html's mskAiScribble* — rather than a single tap), returning a full-original-
+/// resolution binary mask — one byte per pixel, row-major, 255 = selected / 0 = not, already
+/// thresholded at SAM's standard mask_threshold=0.0 on the raw logit.
 ///
-/// `norm_x`/`norm_y` are the tap position as a 0..1 fraction of the ORIGINAL image (matching
-/// this app's existing mask-geometry convention — see chromasmith-22.html's mskA cx/cy). A lone
-/// point is paired with an implicit (0,0)/label=-1 padding point, matching MobileSAM's convention
-/// (segment_anything's prompt encoder expects that pairing for a single click — see
-/// vendor/sam/README.md; EdgeSAM shares the same prompt-encoder/mask-decoder architecture).
-pub fn decode_point(embed: &Embedding, norm_x: f32, norm_y: f32, positive: bool) -> Result<Vec<u8>, String> {
+/// `points` are `(norm_x, norm_y, positive)` as 0..1 fractions of the ORIGINAL image (matching
+/// this app's existing mask-geometry convention — see chromasmith-22.html's mskA cx/cy).
+/// EdgeSAM's decoder takes a dynamic number of points with no required padding point (unlike
+/// MobileSAM's fixed single-point export) — confirmed against EdgeSAM's own app.py, which calls
+/// predict() with exactly the real click points for both single- and multi-point queries.
+pub fn decode_points(embed: &Embedding, points: &[(f32, f32, bool)]) -> Result<Vec<u8>, String> {
+    if points.is_empty() {
+        return Err("SAM decode: no points given".into());
+    }
     let scale = SAM_SIZE as f32 / embed.orig_w.max(embed.orig_h) as f32;
-    let px = norm_x.clamp(0.0, 1.0) * embed.orig_w as f32 * scale;
-    let py = norm_y.clamp(0.0, 1.0) * embed.orig_h as f32 * scale;
+    let mut coords = Vec::with_capacity(points.len() * 2);
+    let mut labels = Vec::with_capacity(points.len());
+    for &(nx, ny, positive) in points {
+        coords.push(nx.clamp(0.0, 1.0) * embed.orig_w as f32 * scale);
+        coords.push(ny.clamp(0.0, 1.0) * embed.orig_h as f32 * scale);
+        labels.push(if positive { 1.0 } else { 0.0 });
+    }
+    let n = points.len() as i64;
     // The unpadded region of the SAM_SIZE square canvas that the resized image actually occupies
     // — needed to crop the upsampled mask back out of the zero-padded square (see bilinear_resize
     // doc comment above and predictor_onnx.py's postprocess_masks).
@@ -378,8 +389,8 @@ pub fn decode_point(embed: &Embedding, norm_x: f32, norm_y: f32, positive: bool)
         sess,
         vec![
             input("image_embeddings", embed.data.clone(), &[1, 256, 64, 64]),
-            input("point_coords", vec![px, py, 0.0, 0.0], &[1, 2, 2]),
-            input("point_labels", vec![if positive { 1.0 } else { 0.0 }, -1.0], &[1, 2]),
+            input("point_coords", coords, &[1, n, 2]),
+            input("point_labels", labels, &[1, n]),
         ],
         &["scores", "masks"]
     )?;

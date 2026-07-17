@@ -798,7 +798,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
             <button class="btn bgh" onclick="mskAdd('linear')"><span class="bdot"></span>+ Linear</button>
             <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye"><span class="bdot"></span>+ Brush</button>
             <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed"><span class="bdot"></span>+ Sky</button>
-            <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Tap an object on the photo to select it (MobileSAM, on-device — desktop app only)" style="display:none"><span class="bdot"></span>+ AI Select</button>
+            <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Brush over an object on the photo to select it (EdgeSAM, on-device — desktop app only)" style="display:none"><span class="bdot"></span>+ AI Select</button>
           </div>
           <div class="fx-row"><div class="fx-label">Show on photo</div>
             <div class="lib-seg msk-prevmode-seg" style="border:1px solid var(--bdr);border-radius:7px;overflow:hidden;display:flex">
@@ -2983,7 +2983,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17h';
+const BUILD='2026-07-17i';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5740,9 +5740,9 @@ function mskAdd(type){
   else if(type==='sky'){ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
     m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
     mskGenerateSky(m);
-  }else{ // AI tap-to-select (desktop only) — starts empty; the first tap runs the segmentation.
+  }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
     const{w,h}=mskTexDims();
-    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
+    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
   }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
@@ -5751,12 +5751,16 @@ function mskAdd(type){
   if(type==='ai'){samEnsureEncoded();mskAiTapToggle(true);}
 }
 
-// ── AI tap-to-select: MobileSAM point-prompt segmentation, native shell only (main.rs's
-// sam_encode/sam_point — see desktop/src-tauri/src/sam.rs). Encodes the CURRENT photo once
+// ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
+// sam_encode/sam_points — see desktop/src-tauri/src/sam.rs). Encodes the CURRENT photo once
 // (a few hundred ms, same working resolution the brush/sky masks already use — mskTexDims,
 // capped at 512px long edge, so the round-trip stays fast and the mask is immediately
-// consistent with the existing resolution-independent brush pipeline), then each tap/click
-// re-queries that cached embedding (~10-30ms) and REPLACES the mask's raster with the result.
+// consistent with the existing resolution-independent brush pipeline). Unlike a single tap,
+// this is Lightroom-style: you brush/scribble roughly over the object (drag a stroke), points
+// are sampled along the stroke path and accumulated in m.aiPoints (persisted across strokes so
+// you can keep refining), and the FULL accumulated point set is resubmitted on every stroke end
+// to REPLACE the mask's raster — normal Alt/Option-drag scribbles are negative (exclude) points,
+// same convention the old tap mode used for Alt-click.
 let _samToken=null,_samEncoding=false,mskAiTapMode=false;
 function _samFramedInvoke(cmd,jsonObj,payload){
   const json=new TextEncoder().encode(JSON.stringify(jsonObj));
@@ -5790,12 +5794,17 @@ async function samEnsureEncoded(){
     log('AI Select: could not prepare this photo — '+(e&&e.message||e),'err');
   }finally{_samEncoding=false;}
 }
-async function samTapAt(m,nx,ny,positive){
+// Resubmits m.aiPoints (the FULL accumulated scribble point set, not just the latest stroke) and
+// replaces m.px with the resulting mask — called once per completed stroke, not per pointermove,
+// so dragging stays smooth (SAM only runs on release).
+async function samRunPoints(m){
   if(!window.__TAURI__)return;
   await samEnsureEncoded();
   if(!_samToken){toast('AI Select is not ready yet — try again in a moment');return;}
+  if(!m.aiPoints||!m.aiPoints.length)return;
   try{
-    const buf=await window.__TAURI__.core.invoke('sam_point',{token:_samToken,x:nx,y:ny,positive});
+    const points=m.aiPoints.map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
+    const buf=await window.__TAURI__.core.invoke('sam_points',{token:_samToken,points});
     // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
     const dv=new DataView(buf);
     const hlen=dv.getUint32(0,true);
@@ -5809,6 +5818,11 @@ async function samTapAt(m,nx,ny,positive){
   }catch(e){
     log('AI Select: '+(e&&e.message||e),'err');
   }
+}
+function mskAiPointsClear(){
+  const m=fxState.masks[mskSel];if(!m||m.origin!=='ai')return;
+  m.aiPoints=[];const{w,h}=mskTexDims();m.px=new Array(w*h).fill(0);m.mtW=w;m.mtH=h;
+  _mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }
 function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
@@ -5928,17 +5942,44 @@ function mskPaintAt(m,nx,ny){
   });
   const end=e=>{if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();};
   cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
-  // AI tap-to-select (desktop only — see main.rs's sam_encode/sam_point, backed by MobileSAM).
-  // A separate click-driven mode from brush painting above: each tap REPLACES the mask's raster
-  // with a fresh SAM segmentation at that point (not additive painting), then the SAME brush
-  // tools already built for Sky masks let you refine the result by hand.
-  cv.addEventListener('click',e=>{
+  // AI brush-select (desktop only — see main.rs's sam_encode/sam_points, backed by EdgeSAM).
+  // Lightroom-style: drag a rough scribble over the object; points are sampled along the stroke
+  // path (min spacing so a slow drag doesn't spam thousands of near-duplicate points) and
+  // appended to m.aiPoints, which PERSISTS across strokes so repeated scribbles refine the same
+  // selection. SAM only runs once, on stroke release (not per pointermove) — dragging stays
+  // smooth even though each query is a real native round-trip.
+  const AI_MIN_SPACING=0.012; // normalized-image-fraction min distance between sampled points
+  let _aiStroke=null,_aiStrokeLast=null,_aiStrokeAdded=false;
+  cv.addEventListener('pointerdown',e=>{
     if(!mskAiTapMode)return;
     const m=fxState.masks[mskSel];if(!m||m.origin!=='ai')return;
-    const p=_mskPointToUV(e);if(!p)return;
     e.preventDefault();e.stopPropagation();
-    samTapAt(m,p.nx,p.ny,!e.altKey); // alt-click = negative point (exclude that area)
+    try{cv.setPointerCapture(e.pointerId)}catch(_){}
+    _aiStroke=m;_aiStrokeLast=null;_aiStrokeAdded=false;
+    const p=_mskPointToUV(e);
+    if(p){
+      if(!m.aiPoints)m.aiPoints=[];
+      m.aiPoints.push({nx:p.nx,ny:p.ny,positive:!e.altKey});
+      _aiStrokeLast=p;_aiStrokeAdded=true;
+    }
   });
+  cv.addEventListener('pointermove',e=>{
+    if(!mskAiTapMode||!_aiStroke)return;
+    const m=_aiStroke;
+    e.preventDefault();e.stopPropagation();
+    const p=_mskPointToUV(e);if(!p)return;
+    if(_aiStrokeLast&&Math.hypot(p.nx-_aiStrokeLast.nx,p.ny-_aiStrokeLast.ny)<AI_MIN_SPACING)return;
+    if(!m.aiPoints)m.aiPoints=[];
+    m.aiPoints.push({nx:p.nx,ny:p.ny,positive:!e.altKey});
+    _aiStrokeLast=p;_aiStrokeAdded=true;
+  });
+  const aiEnd=e=>{
+    if(!_aiStroke)return;
+    const m=_aiStroke;_aiStroke=null;
+    if(_aiStrokeAdded)samRunPoints(m);
+    _aiStrokeLast=null;_aiStrokeAdded=false;
+  };
+  cv.addEventListener('pointerup',aiEnd);cv.addEventListener('pointercancel',aiEnd);
 })();
 function _mskRow(label,k,val,min,max,sc,flip){
   const sv=Math.round(flip?(1-val)*100:val/sc);
@@ -5977,8 +6018,9 @@ function mskRebuild(){
   }else{ // brush / sky / AI raster mask
     if(m.origin==='ai'){
       h+='<div class="btn-row">'
-        +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Click an object on the photo to select it. Alt/Option-click to exclude an area."><span class="bdot"></span>'+(mskAiTapMode?'Tap to select ✓':'◎ Tap to select')+'</button></div>'
-        +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Click an object on the photo to select it (Alt/Option-click excludes an area). Then refine with Paint below if needed.')+'</div>';
+        +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area."><span class="bdot"></span>'+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select')+'</button>'
+        +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over"><span class="bdot"></span>Clear points</button></div>'
+        +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>';
     }
     h+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview"><span class="bdot"></span>'+(mskPaintMode?'Painting ✓':'🖌 Paint')+'</button>'
