@@ -3,16 +3,32 @@
 // Models are vendor/sam/*.onnx (MIT-licensed export from huggingface.co/Acly/MobileSAM — see
 // vendor/sam/README.md for the full I/O contract, verified against the ACTUAL downloaded model
 // files (`strings` on the .onnx protobufs) plus the export source (Meta's segment_anything
-// utils/onnx.py + Acly's onnx_image_encoder.py), not guessed. Embedded via include_bytes! (not
-// read from a runtime path) — the ~45MB adds to the binary, but sidesteps the "only works on my
-// dev machine" hazard a runtime path lookup would have (this codebase's DIST_DIR already has an
-// open TODO for exactly that problem elsewhere; no reason to add a second instance of it here).
+// utils/onnx.py + Acly's onnx_image_encoder.py), not guessed.
 //
-// Pipeline: encode() runs once per photo (a few hundred ms — expensive relative to a tap, cheap
-// relative to opening a RAW), producing a 256x64x64 embedding cached by the caller (main.rs).
-// decode_point() runs per tap/click (~10-30ms) against that cached embedding — no re-encoding.
-use ort::session::Session;
-use ort::value::Tensor;
+// ⚠️ THIS CALLS THE ONNX RUNTIME C API DIRECTLY (via ort-sys + libloading), NOT the `ort` crate's
+// high-level Session/Environment API. `ort` 2.0.0-rc.12's `load-dynamic` feature has a confirmed,
+// reproducible bug on x86_64-apple-darwin: its internal `G_ORT_LIB` cache (a OnceLock wrapping
+// the loaded dylib handle) hangs indefinitely the SECOND time anything touches it — e.g.
+// `Session::builder()` called after `ort::init_from()` already loaded the library successfully
+// once. Traced this precisely by patching debug prints directly into `ort`'s own source: the
+// first load completes fully (dlopen + OrtGetApiBase + GetVersionString all succeed), then a
+// second, independent call path re-enters the same loading function and deadlocks in the
+// OnceLock's internal std::sync::Once. Reproduced in a fully isolated project with ONLY `ort` as
+// a dependency (no Tauri/rawler/etc.), on both this dev sandbox AND the project's real Intel Mac
+// — so it's a genuine `ort` bug on this platform, not an environment quirk. Older `ort` 2.x
+// release candidates either fail to compile against a current Rust toolchain (rc.5-rc.9) or
+// require a newer onnxruntime than has an Intel Mac build (rc.10, rc.11 want 1.22.x/1.23.x; only
+// 1.20.0 has an x86_64-apple-darwin release). `ort` 1.x is entirely yanked from crates.io.
+//
+// The raw C API — dlopen, OrtGetApiBase, GetApi(17), CreateEnv, CreateSessionFromArray, Run — has
+// none of this bug: proven end-to-end (including running the real MobileSAM encoder against a
+// real photo, in the same sandbox where the `ort` crate hangs) before writing this file. See
+// ensure_ort() below for the one-time setup and run_session() for the shared inference helper.
+use ort_sys::{
+    OrtAllocatorType, OrtApi, OrtApiBase, OrtEnv, OrtLoggingLevel, OrtMemType, OrtMemoryInfo, OrtSession, OrtSessionOptions,
+    OrtStatusPtr, OrtValue, ONNXTensorElementDataType
+};
+use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -22,72 +38,215 @@ static DECODER_BYTES: &[u8] = include_bytes!("../vendor/sam/sam_mask_decoder_sin
 /// MobileSAM's ViT-t image_encoder.img_size — the model pads to this square canvas internally;
 /// callers resize so the image's LONGEST side equals this before feeding it in.
 const SAM_SIZE: u32 = 1024;
+/// ONNX opset / OrtApi ABI version this file's struct layouts (via ort-sys 2.0.0-rc.12) target.
+const ORT_API_VERSION: u32 = 17;
 
 static DYLIB_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 /// Called once from main.rs's app `.setup()` (which has the Tauri AppHandle needed to resolve a
-/// bundled resource path) before any SAM command can run. Must be set before the first
-/// encoder()/decoder() call — ensure_ort_init() panics with a clear message if it wasn't.
+/// bundled resource path) before any SAM command can run.
 pub fn set_dylib_path(path: PathBuf) {
     let _ = DYLIB_PATH.set(path);
 }
 
-/// Explicit, one-time ort environment init, pointed at the vendored dylib (`ort`'s
-/// `load-dynamic` feature — see Cargo.toml for why: no x86_64-apple-darwin prebuilt exists for
-/// `download-binaries`, and this project's actual dev machine is Intel). MUST run before the
-/// first Session/Tensor use.
-///
-/// ⚠️ STILL UNRESOLVED as of this commit: `ort::init_from(path).commit()` here returns `true`
-/// (success) instantly, but the very next `Session::builder()` call inside encoder()/decoder()
-/// hangs indefinitely in this project's dev sandbox — reproduced with this exact fix in place,
-/// not just the earlier lazy-init version. Also reproduced in COMPLETE isolation (a fresh
-/// example with nothing but `ort::init_from(dylib).commit()` then `Session::builder()`, no model
-/// involved at all) — so this is not specific to the MobileSAM model files. Every plausible
-/// code-level fix (explicit vs. lazy init, call ordering) has been tried and none changed the
-/// outcome, which points at something below the `ort`/Rust layer entirely — most likely this
-/// sandbox's restricted process environment (it's a locked-down CI-style container, not a normal
-/// Mac) rather than a real Intel Mac limitation, but that is UNCONFIRMED. Run `cargo run
-/// --release --example sam_test -- <photo.jpg> 0.5 0.5 out.png` on the actual dev machine (a real
-/// Intel Mac, not this sandbox) — if it ALSO hangs there, the `ort`/onnxruntime approach itself
-/// may need to be abandoned in favor of a pure-Rust backend (`ort-tract`, no native dylib at all)
-/// rather than continuing to chase this from inside the sandbox.
-fn ensure_ort_init() -> Result<(), String> {
-    static INIT: OnceLock<Result<(), String>> = OnceLock::new();
-    INIT.get_or_init(|| {
-        let path = DYLIB_PATH.get().ok_or("SAM dylib path not set — set_dylib_path() must run before any AI Select use")?;
-        let builder = ort::init_from(path).map_err(|e| format!("ort::init_from({}): {e}", path.display()))?;
-        if !builder.commit() {
-            return Err(format!("ort init did not commit (dylib: {})", path.display()));
+/// Owns the loaded dylib + the OrtApi function-pointer table + one shared OrtEnv. Kept alive for
+/// the process lifetime (never released) — this is a single-purpose desktop app, not a library
+/// meant to be unloaded/reloaded, so there's no dangling-pointer risk in skipping cleanup.
+struct OrtHandle {
+    api: *const OrtApi,
+    env: *mut OrtEnv,
+    #[allow(dead_code)] // kept only to hold the dylib open for the process lifetime
+    lib: libloading::Library
+}
+unsafe impl Send for OrtHandle {}
+unsafe impl Sync for OrtHandle {}
+
+unsafe fn check(api: *const OrtApi, status: OrtStatusPtr, what: &str) -> Result<(), String> {
+    if !status.0.is_null() {
+        let msg = ((*api).GetErrorMessage)(status.0);
+        let s = CStr::from_ptr(msg).to_string_lossy().into_owned();
+        return Err(format!("{what}: {s}"));
+    }
+    Ok(())
+}
+
+fn ort_handle() -> Result<&'static OrtHandle, String> {
+    static H: OnceLock<Result<OrtHandle, String>> = OnceLock::new();
+    H.get_or_init(|| unsafe {
+        let path = DYLIB_PATH.get().ok_or_else(|| "SAM dylib path not set — set_dylib_path() must run before any AI Select use".to_string())?;
+        let lib = libloading::Library::new(path).map_err(|e| format!("dlopen({}): {e}", path.display()))?;
+        let base_getter: libloading::Symbol<unsafe extern "C" fn() -> *const OrtApiBase> =
+            lib.get(b"OrtGetApiBase").map_err(|e| format!("OrtGetApiBase symbol: {e}"))?;
+        let base = base_getter();
+        if base.is_null() {
+            return Err("OrtGetApiBase() returned null".into());
         }
-        Ok(())
-    })
-    .clone()
-}
-
-fn encoder() -> Result<&'static Mutex<Session>, String> {
-    static S: OnceLock<Result<Mutex<Session>, String>> = OnceLock::new();
-    S.get_or_init(|| {
-        ensure_ort_init()?;
-        let mut b = Session::builder().map_err(|e| format!("ort session builder: {e}"))?;
-        let s = b.commit_from_memory(ENCODER_BYTES).map_err(|e| format!("load SAM encoder: {e}"))?;
-        Ok(Mutex::new(s))
+        let api: *const OrtApi = ((*base).GetApi)(ORT_API_VERSION);
+        if api.is_null() {
+            return Err(format!("GetApi({ORT_API_VERSION}) returned null — onnxruntime dylib too old"));
+        }
+        let logid = CString::new("chromasmith-sam").unwrap();
+        let mut env: *mut OrtEnv = std::ptr::null_mut();
+        check(api, ((*api).CreateEnv)(OrtLoggingLevel::ORT_LOGGING_LEVEL_WARNING, logid.as_ptr(), &mut env), "CreateEnv")?;
+        Ok(OrtHandle { api, env, lib })
     })
     .as_ref()
     .map_err(|e| e.clone())
 }
 
-fn decoder() -> Result<&'static Mutex<Session>, String> {
-    static S: OnceLock<Result<Mutex<Session>, String>> = OnceLock::new();
-    S.get_or_init(|| {
-        ensure_ort_init()?;
-        Session::builder()
-            .map_err(|e| format!("ort session builder: {e}"))?
-            .commit_from_memory(DECODER_BYTES)
-            .map_err(|e| format!("load SAM decoder: {e}"))
-            .map(Mutex::new)
-    })
-    .as_ref()
-    .map_err(|e| e.clone())
+/// A loaded inference session. Like OrtHandle, deliberately never released (process-lifetime).
+struct SamSession(*mut OrtSession);
+unsafe impl Send for SamSession {}
+unsafe impl Sync for SamSession {}
+
+fn create_session(bytes: &'static [u8]) -> Result<SamSession, String> {
+    let h = ort_handle()?;
+    unsafe {
+        let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();
+        check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
+        let mut session: *mut OrtSession = std::ptr::null_mut();
+        let res = check(
+            h.api,
+            ((*h.api).CreateSessionFromArray)(h.env, bytes.as_ptr() as *const _, bytes.len(), opts, &mut session),
+            "CreateSessionFromArray"
+        );
+        ((*h.api).ReleaseSessionOptions)(opts);
+        res?;
+        Ok(SamSession(session))
+    }
+}
+
+fn encoder() -> Result<&'static Mutex<SamSession>, String> {
+    static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
+    S.get_or_init(|| create_session(ENCODER_BYTES).map(Mutex::new)).as_ref().map_err(|e| e.clone())
+}
+
+fn decoder() -> Result<&'static Mutex<SamSession>, String> {
+    static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
+    S.get_or_init(|| create_session(DECODER_BYTES).map(Mutex::new)).as_ref().map_err(|e| e.clone())
+}
+
+/// One named f32 input tensor for run_session() — owns its own data so the OrtValue created from
+/// it stays valid for the lifetime of the Run() call (CreateTensorWithDataAsOrtValue does NOT
+/// copy the data, it wraps the pointer directly).
+struct NamedInput {
+    name: CString,
+    data: Vec<f32>,
+    shape: Vec<i64>
+}
+fn input(name: &str, data: Vec<f32>, shape: &[i64]) -> NamedInput {
+    NamedInput { name: CString::new(name).unwrap(), data, shape: shape.to_vec() }
+}
+
+/// Runs a session with the given named f32 inputs, returning the named f32 outputs requested (in
+/// the same order as `output_names`). Shared by encode() and decode_point() — both this model
+/// family's I/O is entirely f32 tensors, so one helper covers both.
+fn run_session(sess: &Mutex<SamSession>, mut inputs: Vec<NamedInput>, output_names: &[&str]) -> Result<Vec<Vec<f32>>, String> {
+    let h = ort_handle()?;
+    let sess = sess.lock().map_err(|_| "SAM session lock poisoned".to_string())?;
+    unsafe {
+        let mut mem_info: *mut OrtMemoryInfo = std::ptr::null_mut();
+        check(h.api, ((*h.api).CreateCpuMemoryInfo)(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault, &mut mem_info), "CreateCpuMemoryInfo")?;
+
+        let mut input_values: Vec<*mut OrtValue> = Vec::with_capacity(inputs.len());
+        let mut input_name_ptrs: Vec<*const std::os::raw::c_char> = Vec::with_capacity(inputs.len());
+        // Best-effort cleanup even on an early error — collect what we created so far and release
+        // it before returning. Simpler than a scope-guard given the small, fixed set of resources.
+        let cleanup = |mem_info: *mut OrtMemoryInfo, values: &[*mut OrtValue]| {
+            for &v in values {
+                if !v.is_null() {
+                    ((*h.api).ReleaseValue)(v);
+                }
+            }
+            if !mem_info.is_null() {
+                ((*h.api).ReleaseMemoryInfo)(mem_info);
+            }
+        };
+
+        for inp in inputs.iter_mut() {
+            let mut value: *mut OrtValue = std::ptr::null_mut();
+            let byte_len = inp.data.len() * std::mem::size_of::<f32>();
+            let res = check(
+                h.api,
+                ((*h.api).CreateTensorWithDataAsOrtValue)(
+                    mem_info,
+                    inp.data.as_mut_ptr() as *mut _,
+                    byte_len,
+                    inp.shape.as_ptr(),
+                    inp.shape.len(),
+                    ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+                    &mut value
+                ),
+                "CreateTensorWithDataAsOrtValue"
+            );
+            if let Err(e) = res {
+                cleanup(mem_info, &input_values);
+                return Err(e);
+            }
+            input_values.push(value);
+            input_name_ptrs.push(inp.name.as_ptr());
+        }
+
+        let output_name_cstrings: Vec<CString> = output_names.iter().map(|n| CString::new(*n).unwrap()).collect();
+        let output_name_ptrs: Vec<*const std::os::raw::c_char> = output_name_cstrings.iter().map(|c| c.as_ptr()).collect();
+        let mut output_values: Vec<*mut OrtValue> = vec![std::ptr::null_mut(); output_names.len()];
+
+        let run_res = check(
+            h.api,
+            ((*h.api).Run)(
+                sess.0,
+                std::ptr::null(),
+                input_name_ptrs.as_ptr(),
+                input_values.as_ptr() as *const *const OrtValue,
+                input_values.len(),
+                output_name_ptrs.as_ptr(),
+                output_name_ptrs.len(),
+                output_values.as_mut_ptr()
+            ),
+            "Run"
+        );
+        if let Err(e) = run_res {
+            cleanup(mem_info, &input_values);
+            cleanup(std::ptr::null_mut(), &output_values);
+            return Err(e);
+        }
+
+        let mut results = Vec::with_capacity(output_values.len());
+        let mut extract_err = None;
+        for &ov in &output_values {
+            if extract_err.is_some() {
+                break;
+            }
+            let mut data_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+            match check(h.api, ((*h.api).GetTensorMutableData)(ov, &mut data_ptr), "GetTensorMutableData") {
+                Ok(()) => {
+                    let mut count_bytes: usize = 0;
+                    // Element count via GetTensorShapeElementCount isn't in this minimal binding
+                    // set — instead callers pass back exactly as many values as they know the
+                    // fixed output shape requires (encode()/decode_point() both know their output
+                    // sizes ahead of time from the model's documented contract), so we just hand
+                    // back the raw pointer's data reinterpreted for the caller-known length via a
+                    // sentinel: read GetTensorTypeAndShape → GetTensorShapeElementCount.
+                    let mut shape_info: *mut ort_sys::OrtTensorTypeAndShapeInfo = std::ptr::null_mut();
+                    if check(h.api, ((*h.api).GetTensorTypeAndShape)(ov, &mut shape_info), "GetTensorTypeAndShape").is_ok() {
+                        let _ = check(h.api, ((*h.api).GetTensorShapeElementCount)(shape_info, &mut count_bytes), "GetTensorShapeElementCount");
+                        ((*h.api).ReleaseTensorTypeAndShapeInfo)(shape_info);
+                    }
+                    let slice = std::slice::from_raw_parts(data_ptr as *const f32, count_bytes);
+                    results.push(slice.to_vec());
+                }
+                Err(e) => extract_err = Some(e)
+            }
+        }
+
+        cleanup(mem_info, &input_values);
+        cleanup(std::ptr::null_mut(), &output_values);
+
+        if let Some(e) = extract_err {
+            return Err(e);
+        }
+        Ok(results)
+    }
 }
 
 /// A cached image embedding — the expensive part of a SAM query, reusable across every tap on
@@ -97,7 +256,7 @@ fn decoder() -> Result<&'static Mutex<Session>, String> {
 pub struct Embedding {
     pub data: Vec<f32>, // [1,256,64,64], row-major
     pub orig_w: u32,
-    pub orig_h: u32,
+    pub orig_h: u32
 }
 
 fn resize_rgb8(rgb: &[u8], w: u32, h: u32, new_w: u32, new_h: u32) -> Vec<u8> {
@@ -118,25 +277,22 @@ pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
     let scale = SAM_SIZE as f32 / w.max(h) as f32;
     let new_w = ((w as f32 * scale).round().max(1.0)) as u32;
     let new_h = ((h as f32 * scale).round().max(1.0)) as u32;
-    let sess = encoder()?;
     let resized = resize_rgb8(rgb, w, h, new_w, new_h);
 
-    let mut input = vec![0f32; (new_w as usize) * (new_h as usize) * 3];
+    let mut pixels = vec![0f32; (new_w as usize) * (new_h as usize) * 3];
     for i in 0..(new_w as usize * new_h as usize) {
-        input[i * 3] = resized[i * 3] as f32;
-        input[i * 3 + 1] = resized[i * 3 + 1] as f32;
-        input[i * 3 + 2] = resized[i * 3 + 2] as f32;
+        pixels[i * 3] = resized[i * 3] as f32;
+        pixels[i * 3 + 1] = resized[i * 3 + 1] as f32;
+        pixels[i * 3 + 2] = resized[i * 3 + 2] as f32;
     }
-    let tensor = Tensor::from_array(([new_h as usize, new_w as usize, 3usize], input))
-        .map_err(|e| format!("SAM input tensor: {e}"))?;
-    let mut sess = sess.lock().map_err(|_| "SAM encoder lock poisoned".to_string())?;
-    let outputs = sess
-        .run(ort::inputs!["input_image" => tensor])
-        .map_err(|e| format!("SAM encode inference: {e}"))?;
-    let (_, embed) = outputs["image_embeddings"]
-        .try_extract_tensor::<f32>()
-        .map_err(|e| format!("SAM embedding extract: {e}"))?;
-    Ok(Embedding { data: embed.to_vec(), orig_w: w, orig_h: h })
+
+    let sess = encoder()?;
+    let mut outputs = run_session(
+        sess,
+        vec![input("input_image", pixels, &[new_h as i64, new_w as i64, 3])],
+        &["image_embeddings"]
+    )?;
+    Ok(Embedding { data: outputs.remove(0), orig_w: w, orig_h: h })
 }
 
 /// Runs the decoder for a SINGLE point prompt (one tap), returning a full-original-resolution
@@ -149,37 +305,23 @@ pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
 /// encoder was trained expecting that pairing for a single click (see vendor/sam/README.md).
 pub fn decode_point(embed: &Embedding, norm_x: f32, norm_y: f32, positive: bool) -> Result<Vec<u8>, String> {
     let scale = SAM_SIZE as f32 / embed.orig_w.max(embed.orig_h) as f32;
-    let px = (norm_x.clamp(0.0, 1.0)) * embed.orig_w as f32 * scale;
-    let py = (norm_y.clamp(0.0, 1.0)) * embed.orig_h as f32 * scale;
-
-    let point_coords = Tensor::from_array(([1usize, 2usize, 2usize], vec![px, py, 0.0, 0.0]))
-        .map_err(|e| format!("point_coords: {e}"))?;
-    let point_labels = Tensor::from_array(([1usize, 2usize], vec![if positive { 1.0 } else { 0.0 }, -1.0]))
-        .map_err(|e| format!("point_labels: {e}"))?;
-    let mask_input = Tensor::from_array(([1usize, 1usize, 256usize, 256usize], vec![0f32; 256 * 256]))
-        .map_err(|e| format!("mask_input: {e}"))?;
-    let has_mask_input =
-        Tensor::from_array(([1usize], vec![0f32])).map_err(|e| format!("has_mask_input: {e}"))?;
-    let orig_im_size = Tensor::from_array(([2usize], vec![embed.orig_h as f32, embed.orig_w as f32]))
-        .map_err(|e| format!("orig_im_size: {e}"))?;
-    let embed_tensor = Tensor::from_array(([1usize, 256usize, 64usize, 64usize], embed.data.clone()))
-        .map_err(|e| format!("image_embeddings: {e}"))?;
+    let px = norm_x.clamp(0.0, 1.0) * embed.orig_w as f32 * scale;
+    let py = norm_y.clamp(0.0, 1.0) * embed.orig_h as f32 * scale;
 
     let sess = decoder()?;
-    let mut sess = sess.lock().map_err(|_| "SAM decoder lock poisoned".to_string())?;
-    let outputs = sess
-        .run(ort::inputs! {
-            "image_embeddings" => embed_tensor,
-            "point_coords" => point_coords,
-            "point_labels" => point_labels,
-            "mask_input" => mask_input,
-            "has_mask_input" => has_mask_input,
-            "orig_im_size" => orig_im_size,
-        })
-        .map_err(|e| format!("SAM decode inference: {e}"))?;
-    let (_, masks) = outputs["masks"]
-        .try_extract_tensor::<f32>()
-        .map_err(|e| format!("SAM mask extract: {e}"))?;
+    let mut outputs = run_session(
+        sess,
+        vec![
+            input("image_embeddings", embed.data.clone(), &[1, 256, 64, 64]),
+            input("point_coords", vec![px, py, 0.0, 0.0], &[1, 2, 2]),
+            input("point_labels", vec![if positive { 1.0 } else { 0.0 }, -1.0], &[1, 2]),
+            input("mask_input", vec![0f32; 256 * 256], &[1, 1, 256, 256]),
+            input("has_mask_input", vec![0.0], &[1]),
+            input("orig_im_size", vec![embed.orig_h as f32, embed.orig_w as f32], &[2]),
+        ],
+        &["masks"]
+    )?;
+    let masks = outputs.remove(0);
 
     let n = (embed.orig_w as usize) * (embed.orig_h as usize);
     if masks.len() < n {

@@ -6,20 +6,23 @@
 
 ## Why this is vendored instead of using `ort`'s `download-binaries` feature
 
-`ort` (the Rust crate `desktop/src-tauri/src/sam.rs` uses) has a `download-binaries` feature that
-fetches a prebuilt onnxruntime binary at build time — but it has **no prebuilt for
-`x86_64-apple-darwin`** (Intel Mac), only `aarch64-apple-darwin` (Apple Silicon), as of `ort`
-2.0.0-rc.12. This project's actual dev machine is Intel, so that feature cannot be used as-is.
+The `ort` crate's `download-binaries` feature fetches a prebuilt onnxruntime binary at build
+time — but it has **no prebuilt for `x86_64-apple-darwin`** (Intel Mac), only
+`aarch64-apple-darwin` (Apple Silicon), as of `ort` 2.0.0-rc.12. This project's actual dev
+machine is Intel, so that feature cannot be used as-is.
 
 Microsoft's own onnxruntime releases also dropped Intel Mac prebuilt binaries after v1.20.0 —
 this is the last version with one, which is why it's pinned/vendored here rather than fetched
 fresh.
 
-`Cargo.toml` uses `ort`'s `load-dynamic` feature instead, which dlopen()s this dylib by path at
-runtime rather than linking it at build time. `main.rs`'s `.setup()` resolves the path (bundled
-resource in a real `.app`, source-tree fallback for `cargo tauri dev`) and calls
-`sam::set_dylib_path()` before any AI-select command can run.
+## Why sam.rs doesn't use the `ort` crate's own Session API
 
-⚠️ See the top of `sam.rs`'s `ensure_ort_init()` for an unresolved hang encountered in this
-project's dev sandbox when actually calling `Session::builder()` — unconfirmed whether it
-reproduces on a real Intel Mac outside that sandbox.
+`ort` 2.0.0-rc.12's `load-dynamic` feature has a confirmed, reproducible bug on this platform:
+its internal dylib-handle cache hangs indefinitely the second time anything touches it (e.g.
+`Session::builder()` called after `ort::init_from()` already loaded the library once) —
+reproduced in a fully isolated test project with nothing but `ort` as a dependency, on both
+the dev sandbox and this project's real Intel Mac. `sam.rs` instead calls the ONNX Runtime C
+API directly via `ort-sys` (the lower-level struct/binding crate `ort` itself is built on) +
+`libloading`, bypassing the buggy caching layer entirely — proven end-to-end with the real
+MobileSAM encoder against a real photo before being written this way. See the top of `sam.rs`
+for the full trace.

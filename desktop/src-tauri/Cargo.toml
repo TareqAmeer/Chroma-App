@@ -52,13 +52,16 @@ lensfun = "0.7"
 # the sunlit-water false-color speckle PPG produces, before considering a default swap.
 demosaic = "0.3"
 # AI tap-to-select (Masks): MobileSAM inference (vendor/sam/*.onnx — MIT-licensed export from
-# huggingface.co/Acly/MobileSAM) via ONNX Runtime. `ort`'s `download-binaries` feature has NO
-# prebuilt binary for x86_64-apple-darwin (Intel Mac — this project's actual dev machine) as of
-# this rc, only aarch64-apple-darwin — confirmed by cargo's own build error, not a guess. Using
-# `load-dynamic` instead + a vendored onnxruntime dylib (vendor/onnxruntime/, MIT-licensed,
-# Microsoft's last release with an Intel Mac build) so the app still needs zero manual install —
-# see sam.rs for how the dylib path is resolved at runtime.
-ort = { version = "=2.0.0-rc.12", features = ["load-dynamic"] }
+# huggingface.co/Acly/MobileSAM) against a vendored onnxruntime dylib (vendor/onnxruntime/,
+# MIT-licensed — see that dir's README for why it's vendored: no x86_64-apple-darwin prebuilt
+# exists via the `ort` crate's download-binaries feature, and this project's actual dev machine
+# is Intel). Calls the ONNX Runtime C API DIRECTLY via ort-sys + libloading, NOT the `ort` crate's
+# own Session/Environment wrapper — `ort` 2.0.0-rc.12's load-dynamic feature has a confirmed,
+# reproducible hang bug in its internal dylib-handle caching on this platform (see sam.rs's
+# top-of-file comment for the full trace). The raw C API has none of this bug and was proven
+# end-to-end (real model, real photo, real inference) before writing sam.rs this way.
+ort-sys = { version = "=2.0.0-rc.12", default-features = false, features = ["disable-linking", "api-17", "std"] }
+libloading = "0.9"
 
 [profile.release]
 strip = true
