@@ -403,10 +403,10 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-db-pri:hover{background:#e8a54a}
 .fx-db-icon{padding:8px;gap:0}
 body.deskx .fx-db-icon{padding:5px}
-.flag-btn{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--bdr);border-radius:6px;cursor:pointer}
+.flag-btn{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--bdr);border-radius:6px;cursor:pointer;color:var(--mut);transition:color .1s,background .1s,border-color .1s}
 .flag-btn svg{width:15px;height:15px}
-.flag-btn-green{color:#3fb556}
-.flag-btn-red{color:#e05a4e}
+.flag-btn-green.on{color:#3fb556;background:rgba(63,181,86,.16);border-color:#3fb556}
+.flag-btn-red.on{color:#e05a4e;background:rgba(224,90,78,.16);border-color:#e05a4e}
 .fx-db-icon{padding:8px 10px}
 .fx-db-icon .fx-db-ic{color:var(--txt)}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
@@ -2983,7 +2983,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17j';
+const BUILD='2026-07-17k';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4390,6 +4390,7 @@ const FX=new FXR();
 // ═══════════════════════════
 const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
+let _fxPristineDefault=null; // captured once at boot, before loadSession() — see loadFXImages
 // Deskbar center title (deskx desktop shell): filename + status suffix. status is either the
 // image dimensions ("6000 × 4000") or, while a decode is in flight, an animated spinner
 // (spinning=true, statusText ignored). Also exposed on window for library-ui.js.
@@ -4424,8 +4425,8 @@ function fxUpdateFlagBtns(){
   r.style.display=g.style.display=has?'':'none';
   if(!has)return;
   const label=window.chromasmithOpenedFlag();
-  r.style.opacity=label==='Red'?'1':'.4';
-  g.style.opacity=label==='Green'?'1':'.4';
+  r.classList.toggle('on',label==='Red');
+  g.classList.toggle('on',label==='Green');
 }
 // ── Auto lens-profile correction (desktop only) — see desktop/src-tauri/src/lens_correct.rs.
 // The actual correction runs server-side in Rust during RAW decode (a geometric per-pixel
@@ -5253,7 +5254,17 @@ function installFXImages(entries,loadKey){
   document.getElementById('fx-preview-tools').style.display='flex';
   document.getElementById('fx-zoom-ctrl').style.display='flex';
   fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');
-  _resetZoom(); fxHistory=[]; fxHistIdx=-1; // reset zoom + history on new image
+  // Seed history with a BASELINE snapshot of the just-loaded (RAW-defaults-applied, no user
+  // edits yet) state immediately — previously fxHistory started empty and only got its first
+  // entry on the user's FIRST edit (fxUpdate->fxHistoryPush), so fxHistory[0] was "state right
+  // after edit #1", not the pristine default. fxResetAll() applied fxHistory[0] believing it
+  // was the baseline, so a single edit followed by Reset was a silent no-op (that field's own
+  // value was already baked into "history[0]"), and fxResetAll() also early-returned entirely
+  // when fxHistory was still empty (the exact single-edit-then-reset case). Recipe restoration
+  // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
+  // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
+  // not back to whatever was last saved.
+  _resetZoom(); fxHistory=[getUISnapshot()]; fxHistIdx=0;
   autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
   showExif(fxImages[0].exif||{});
@@ -5267,6 +5278,16 @@ async function loadFXImages(fileList){
   const IMG_EXT_RE=/\.(png|jpe?g|gif|webp|avif|heic|heif|bmp)$/i;
   const files=[...fileList].filter(f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f));
   if(!files.length)return;
+  // Hoisted above the decode loop (only depends on `files`, not `entries`) so a genuinely NEW
+  // photo can be detected BEFORE applyRawDefaults() runs below. Previously that detection only
+  // happened afterward, inside installFXImages — so applyRawDefaults()'s "only fill a slider
+  // still at 0" check saw whatever the PREVIOUS photo had left every slider/toggle at, not this
+  // photo's true defaults (e.g. Color NR silently inheriting the last photo's value instead of
+  // its own 25 default), and rail icons (tg-adjust/tg-curves/tg-hsl/tg-local/tg-art/tg-vig/
+  // tg-canvas — everything outside the small _ALLFX set) kept showing "enabled" (orange) on a
+  // never-touched photo simply because the LAST photo had left that toggle's DOM class on.
+  const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
+  if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault);
   const entries=[];
   for(const file of files){
     try{
@@ -5308,7 +5329,6 @@ async function loadFXImages(fileList){
   // after the render here would apply the defaults a frame too late, requiring a manual
   // slider nudge before they'd visibly take effect.
   if(entries.some(it=>RAW_FILE_EXT_RE.test('.'+it.ext)))applyRawDefaults();
-  const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
   installFXImages(entries,loadKey);
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
@@ -5804,6 +5824,7 @@ async function samEnsureEncoded(){
 async function samEnsureEncoded2(rgb,w,h){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
   _sam2Encoding=true;
+  if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild(); // show the spinner
   try{
     const token='sam2-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     await _samFramedInvoke('sam2_encode',{token,width:w,height:h},rgb);
@@ -5811,10 +5832,13 @@ async function samEnsureEncoded2(rgb,w,h){
     // Silently upgrade the current mask in place if it already has a scribble — matches the RAW
     // refine's "gets better without asking" UX rather than requiring a fresh stroke.
     const m=fxState.masks[mskSel];
-    if(m&&m.origin==='ai'&&m.aiPoints&&m.aiPoints.length)samRunPoints(m);
+    if(m&&m.origin==='ai'&&m.aiPoints&&m.aiPoints.length)await samRunPoints(m);
   }catch(e){
     log('AI Select (background quality upgrade): '+(e&&e.message||e),'warn'); // non-fatal — EdgeSAM still works
-  }finally{_sam2Encoding=false;}
+  }finally{
+    _sam2Encoding=false;
+    if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild(); // hide the spinner
+  }
 }
 // Resubmits m.aiPoints (the FULL accumulated scribble point set, not just the latest stroke) and
 // replaces m.px with the resulting mask — called once per completed stroke, not per pointermove,
@@ -6044,7 +6068,8 @@ function mskRebuild(){
       h+='<div class="btn-row">'
         +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area."><span class="bdot"></span>'+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over"><span class="bdot"></span>Clear points</button></div>'
-        +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>';
+        +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>'
+        +(_sam2Encoding?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">⟳</span> Improving selection quality in the background…</div>':'');
     }
     h+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview"><span class="bdot"></span>'+(mskPaintMode?'Painting ✓':'🖌 Paint')+'</button>'
@@ -8239,7 +8264,7 @@ const ICONS={
  log:'<path d="M4 6h16M4 12h16M4 18h10"/>',
  reset:'<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-6h6"/>',
  flagGreen:'<path d="M5 21V4" fill="none"/><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="currentColor" stroke="none"/>',
- flagRed:'<path d="M5 21V4" fill="none"/><path d="M6 6l11 11M17 6L6 17" stroke="currentColor" fill="none"/>'
+ flagRed:'<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" fill="none"/>'
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
@@ -8566,6 +8591,7 @@ function dustModeBuildChips(){
   });
 }
 dustModeBuildChips();
+_fxPristineDefault=getUISnapshot(); // factory-default UI state, captured before loadSession touches it
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 initZoomPan();
 initEditableVals();
