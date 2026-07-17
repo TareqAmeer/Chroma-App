@@ -164,6 +164,54 @@ fn sam_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Resp
     Ok(tauri::ipc::Response::new(out))
 }
 
+// ── SAM 2.1 (Phase 3 background quality upgrade) — a SEPARATE cache slot from SAM_EMBED above,
+// not a replacement: chromasmith-22.html fires sam2_encode in the background right after
+// sam_encode (EdgeSAM) returns, so taps/scribbles use whichever embedding is ready — EdgeSAM's
+// immediately, SAM 2.1's automatically once its slower encode lands — mirroring the two-phase
+// "fast display, background refine" pattern desktop-native.js's NativeLibRawShim.refine() already
+// uses for RAW decode. No UI mode toggle: this is meant to be invisible plumbing.
+struct Sam2EmbedCache {
+    token: String,
+    embedding: sam::Sam2Embedding,
+}
+static SAM2_EMBED: Mutex<Option<Sam2EmbedCache>> = Mutex::new(None);
+
+/// Same contract as sam_encode, backed by SAM 2.1 instead of EdgeSAM — see sam.rs's
+/// sam2_encode/sam2_decode_points doc comments for why these need their own cache slot (3 cached
+/// tensors instead of 1, different preprocessing).
+#[tauri::command]
+fn sam2_encode(request: tauri::ipc::Request) -> Result<(), String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let token = json["token"].as_str().ok_or("missing token")?.to_string();
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("sam2_encode: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let embedding = sam::sam2_encode(payload, w, h)?;
+    *SAM2_EMBED.lock().unwrap() = Some(Sam2EmbedCache { token, embedding });
+    Ok(())
+}
+
+/// Same contract as sam_points, against the SAM2_EMBED cache.
+#[tauri::command]
+fn sam2_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Response, String> {
+    let guard = SAM2_EMBED.lock().unwrap();
+    let cache = guard.as_ref().ok_or("sam2_points: no photo encoded yet — call sam2_encode first")?;
+    if cache.token != token {
+        return Err("sam2_points: the encoded photo has changed — re-encode before scribbling".into());
+    }
+    let pts: Vec<(f32, f32, bool)> = points.iter().map(|p| (p.x, p.y, p.positive)).collect();
+    let mask = sam::sam2_decode_points(&cache.embedding, &pts)?;
+    let header = SamPointResult { width: cache.embedding.orig_w, height: cache.embedding.orig_h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("sam2_points header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&mask);
+    Ok(tauri::ipc::Response::new(out))
+}
+
 #[tauri::command]
 fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
@@ -330,7 +378,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-17i"
+    "2026-07-17j"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -552,6 +600,8 @@ fn main() {
             library::save_decode_cache,
             sam_encode,
             sam_points,
+            sam2_encode,
+            sam2_points,
             save_to_gphotos_downloads,
             gphotos_downloads_dir
         ])
@@ -681,6 +731,16 @@ fn main() {
             let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(dylib_rel);
             let dylib_path = bundled.filter(|p| p.exists()).unwrap_or(dev_fallback);
             sam::set_dylib_path(dylib_path);
+
+            // SAM 2.1's ~155MB models (see sam.rs's SAM2_ENCODER_PATH/SAM2_DECODER_PATH doc
+            // comment) — same bundled-resource-with-dev-fallback pattern as the dylib above,
+            // since include_bytes! would be a much bigger compile-time/binary-size hit here.
+            let resolve_vendor = |rel: &str| -> PathBuf {
+                let bundled = handle.path().resource_dir().ok().map(|d| d.join(rel));
+                let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+                bundled.filter(|p| p.exists()).unwrap_or(dev_fallback)
+            };
+            sam::set_sam2_model_paths(resolve_vendor("vendor/sam2/encoder.onnx"), resolve_vendor("vendor/sam2/decoder.onnx"));
 
             Ok(())
         })

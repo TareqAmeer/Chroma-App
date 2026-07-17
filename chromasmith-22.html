@@ -2983,7 +2983,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17i';
+const BUILD='2026-07-17j';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5774,6 +5774,12 @@ function mskAiTapToggle(force){
   const b=document.getElementById('btn-msk-ai-tap');if(b)b.classList.toggle('on',mskAiTapMode);
   if(FX.cv)FX.cv.style.cursor=mskAiTapMode?'crosshair':'';
 }
+// Two-tier fast/quality encode, mirroring desktop-native.js's NativeLibRawShim.refine() pattern
+// for RAW decode: EdgeSAM (fast, ~1s) is awaited so the first scribble has SOMETHING to query
+// immediately; SAM 2.1 (slower, higher quality) is kicked off in the background right after and
+// never awaited by the UI — samRunPoints() below just checks which token is ready at query time
+// and prefers SAM 2.1 once it lands. No user-visible mode toggle, same as the RAW refine.
+let _sam2Token=null,_sam2Encoding=false;
 async function samEnsureEncoded(){
   if(!window.__TAURI__||_samToken||_samEncoding)return;
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
@@ -5790,13 +5796,30 @@ async function samEnsureEncoded(){
     const token='sam-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
     _samToken=token;
+    samEnsureEncoded2(rgb,w,h); // fire-and-forget — NOT awaited, see doc comment above
   }catch(e){
     log('AI Select: could not prepare this photo — '+(e&&e.message||e),'err');
   }finally{_samEncoding=false;}
 }
+async function samEnsureEncoded2(rgb,w,h){
+  if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
+  _sam2Encoding=true;
+  try{
+    const token='sam2-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    await _samFramedInvoke('sam2_encode',{token,width:w,height:h},rgb);
+    _sam2Token=token;
+    // Silently upgrade the current mask in place if it already has a scribble — matches the RAW
+    // refine's "gets better without asking" UX rather than requiring a fresh stroke.
+    const m=fxState.masks[mskSel];
+    if(m&&m.origin==='ai'&&m.aiPoints&&m.aiPoints.length)samRunPoints(m);
+  }catch(e){
+    log('AI Select (background quality upgrade): '+(e&&e.message||e),'warn'); // non-fatal — EdgeSAM still works
+  }finally{_sam2Encoding=false;}
+}
 // Resubmits m.aiPoints (the FULL accumulated scribble point set, not just the latest stroke) and
 // replaces m.px with the resulting mask — called once per completed stroke, not per pointermove,
-// so dragging stays smooth (SAM only runs on release).
+// so dragging stays smooth (SAM only runs on release). Prefers SAM 2.1 once its background encode
+// has landed (see samEnsureEncoded2 above), falling back to EdgeSAM otherwise.
 async function samRunPoints(m){
   if(!window.__TAURI__)return;
   await samEnsureEncoded();
@@ -5804,7 +5827,8 @@ async function samRunPoints(m){
   if(!m.aiPoints||!m.aiPoints.length)return;
   try{
     const points=m.aiPoints.map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
-    const buf=await window.__TAURI__.core.invoke('sam_points',{token:_samToken,points});
+    const useSam2=!!_sam2Token;
+    const buf=await window.__TAURI__.core.invoke(useSam2?'sam2_points':'sam_points',{token:useSam2?_sam2Token:_samToken,points});
     // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
     const dv=new DataView(buf);
     const hlen=dv.getUint32(0,true);

@@ -147,6 +147,58 @@ fn decoder() -> Result<&'static Mutex<SamSession>, String> {
     S.get_or_init(|| create_session(DECODER_BYTES).map(Mutex::new)).as_ref().map_err(|e| e.clone())
 }
 
+// ── SAM 2.1 Hiera-Tiny (Phase 3 background quality upgrade) — see vendor/sam2/README.md for the
+// full I/O contract (verified the same way as EdgeSAM's: onnx.load() on the actual downloaded
+// files + a real inference run, cross-checked against Meta's sam2/utils/transforms.py). At
+// ~155MB combined these are too large for include_bytes! (would bloat link times/binary size),
+// so unlike ENCODER_BYTES/DECODER_BYTES above they're loaded from disk via the ORT C API's
+// CreateSession (file path) — bundled as Tauri resources, same mechanism main.rs already uses
+// for the onnxruntime dylib itself. set_sam2_model_paths() must run before any sam2_* call.
+static SAM2_ENCODER_PATH: OnceLock<PathBuf> = OnceLock::new();
+static SAM2_DECODER_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_sam2_model_paths(encoder_path: PathBuf, decoder_path: PathBuf) {
+    let _ = SAM2_ENCODER_PATH.set(encoder_path);
+    let _ = SAM2_DECODER_PATH.set(decoder_path);
+}
+
+fn create_session_from_path(path: &std::path::Path) -> Result<SamSession, String> {
+    let h = ort_handle()?;
+    // ort_sys::os_char is c_char on macOS (only c_ushort/UTF-16 on Windows), so a plain CString
+    // is the right ABI here — confirmed by reading ort-sys's own os_char cfg rather than assumed.
+    let path_c = CString::new(path.to_str().ok_or_else(|| format!("non-UTF8 model path: {}", path.display()))?)
+        .map_err(|e| format!("model path has embedded NUL: {e}"))?;
+    unsafe {
+        let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();
+        check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
+        let mut session: *mut OrtSession = std::ptr::null_mut();
+        let res = check(h.api, ((*h.api).CreateSession)(h.env, path_c.as_ptr(), opts, &mut session), "CreateSession");
+        ((*h.api).ReleaseSessionOptions)(opts);
+        res?;
+        Ok(SamSession(session))
+    }
+}
+
+fn sam2_encoder() -> Result<&'static Mutex<SamSession>, String> {
+    static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
+    S.get_or_init(|| {
+        let path = SAM2_ENCODER_PATH.get().ok_or("SAM2 encoder path not set — set_sam2_model_paths() must run before any SAM2 use")?;
+        create_session_from_path(path).map(Mutex::new)
+    })
+    .as_ref()
+    .map_err(|e| e.clone())
+}
+
+fn sam2_decoder() -> Result<&'static Mutex<SamSession>, String> {
+    static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
+    S.get_or_init(|| {
+        let path = SAM2_DECODER_PATH.get().ok_or("SAM2 decoder path not set — set_sam2_model_paths() must run before any SAM2 use")?;
+        create_session_from_path(path).map(Mutex::new)
+    })
+    .as_ref()
+    .map_err(|e| e.clone())
+}
+
 /// One named f32 input tensor for run_session() — owns its own data so the OrtValue created from
 /// it stays valid for the lifetime of the Run() call (CreateTensorWithDataAsOrtValue does NOT
 /// copy the data, it wraps the pointer directly).
@@ -419,5 +471,115 @@ pub fn decode_points(embed: &Embedding, points: &[(f32, f32, bool)]) -> Result<V
     }
     let full_res = bilinear_resize(&cropped, input_w, input_h, embed.orig_w, embed.orig_h);
 
+    Ok(full_res.iter().map(|&v| if v > 0.0 { 255u8 } else { 0u8 }).collect())
+}
+
+// ── SAM 2.1 encode/decode — see the module-level SAM2 doc comment and vendor/sam2/README.md.
+// Kept as a separate embedding/query pair (not unified with Embedding/decode_points above)
+// because the contracts are genuinely different: 3 cached tensors instead of 1, a DIRECT square
+// resize instead of resize-longest-side+pad, different normalization constants, and a decoder
+// that (unlike EdgeSAM's) takes mask_input/has_mask_input. The two tiers are invisible plumbing
+// to the caller either way — chromasmith-22.html picks sam_points vs sam2_points per mask query,
+// not per model internals.
+
+const SAM2_MEAN: [f32; 3] = [0.485, 0.456, 0.406];
+const SAM2_STD: [f32; 3] = [0.229, 0.224, 0.225];
+/// SAM 2.1's low-res mask/iou output always has this many candidates (vs EdgeSAM's 4).
+const NUM_SAM2_MASK_CANDIDATES: usize = 3;
+
+pub struct Sam2Embedding {
+    pub image_embed: Vec<f32>,     // [1,256,64,64]
+    pub high_res_feats_0: Vec<f32>, // [1,32,256,256]
+    pub high_res_feats_1: Vec<f32>, // [1,64,128,128]
+    pub orig_w: u32,
+    pub orig_h: u32
+}
+
+/// Encodes a photo for SAM 2.1. Unlike EdgeSAM/MobileSAM's resize-longest-side-then-pad, SAM 2.1
+/// resizes DIRECTLY to a square 1024x1024 (distorting aspect ratio — see Meta's SAM2Transforms),
+/// so callers don't need the input_w/input_h bookkeeping decode_points() needs; sam2_decode_points
+/// below undoes the distortion in point-coordinate space and mask-upsample space independently.
+pub fn sam2_encode(rgb: &[u8], w: u32, h: u32) -> Result<Sam2Embedding, String> {
+    if w == 0 || h == 0 {
+        return Err("SAM2 encode: zero-sized image".into());
+    }
+    let side = SAM_SIZE as usize;
+    let resized = resize_rgb8(rgb, w, h, SAM_SIZE, SAM_SIZE);
+
+    let mut pixels = vec![0f32; 3 * side * side];
+    for y in 0..side {
+        for x in 0..side {
+            let src = (y * side + x) * 3;
+            for c in 0..3 {
+                let v = (resized[src + c] as f32 / 255.0 - SAM2_MEAN[c]) / SAM2_STD[c];
+                pixels[c * side * side + y * side + x] = v;
+            }
+        }
+    }
+
+    let sess = sam2_encoder()?;
+    let mut outputs = run_session(
+        sess,
+        vec![input("image", pixels, &[1, 3, SAM_SIZE as i64, SAM_SIZE as i64])],
+        &["image_embed", "high_res_feats_0", "high_res_feats_1"]
+    )?;
+    Ok(Sam2Embedding {
+        image_embed: outputs.remove(0),
+        high_res_feats_0: outputs.remove(0),
+        high_res_feats_1: outputs.remove(0),
+        orig_w: w,
+        orig_h: h
+    })
+}
+
+/// Same point-set query as decode_points(), against a SAM2Embedding. `points` are `(norm_x,
+/// norm_y, positive)` as 0..1 fractions of the ORIGINAL image, same convention as decode_points.
+pub fn sam2_decode_points(embed: &Sam2Embedding, points: &[(f32, f32, bool)]) -> Result<Vec<u8>, String> {
+    if points.is_empty() {
+        return Err("SAM2 decode: no points given".into());
+    }
+    // Point coords live in the DIRECT-1024-square-resize pixel space: (x/orig_w, y/orig_h)*1024
+    // — independent x/y scale factors, since the encoder resize distorts aspect ratio rather
+    // than preserving it (see Meta's SAM2Transforms.transform_coords).
+    let mut coords = Vec::with_capacity(points.len() * 2);
+    let mut labels = Vec::with_capacity(points.len());
+    for &(nx, ny, positive) in points {
+        coords.push(nx.clamp(0.0, 1.0) * SAM_SIZE as f32);
+        coords.push(ny.clamp(0.0, 1.0) * SAM_SIZE as f32);
+        labels.push(if positive { 1.0 } else { 0.0 });
+    }
+    let n = points.len() as i64;
+
+    let sess = sam2_decoder()?;
+    let mut outputs = run_session(
+        sess,
+        vec![
+            input("image_embed", embed.image_embed.clone(), &[1, 256, 64, 64]),
+            input("high_res_feats_0", embed.high_res_feats_0.clone(), &[1, 32, 256, 256]),
+            input("high_res_feats_1", embed.high_res_feats_1.clone(), &[1, 64, 128, 128]),
+            input("point_coords", coords, &[1, n, 2]),
+            input("point_labels", labels, &[1, n]),
+            input("mask_input", vec![0f32; (MASK_SIZE * MASK_SIZE) as usize], &[1, 1, MASK_SIZE as i64, MASK_SIZE as i64]),
+            input("has_mask_input", vec![0.0], &[1]),
+        ],
+        &["masks", "iou_predictions"]
+    )?;
+    let masks = outputs.remove(0);
+    let iou = outputs.remove(0);
+
+    if iou.len() != NUM_SAM2_MASK_CANDIDATES || masks.len() != NUM_SAM2_MASK_CANDIDATES * (MASK_SIZE * MASK_SIZE) as usize {
+        return Err(format!(
+            "SAM2 decoder output size mismatch: {} iou scores, {} mask values (expected {NUM_SAM2_MASK_CANDIDATES} candidates of {MASK_SIZE}x{MASK_SIZE})",
+            iou.len(),
+            masks.len()
+        ));
+    }
+    let best = iou.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(i, _)| i).unwrap_or(0);
+    let low_res = &masks[best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
+
+    // Single-stage resize is correct here (unlike decode_points' two-stage crop) — the encoder's
+    // direct square resize has no padding to crop back out, so independently rescaling x/y
+    // un-distorts the aspect ratio in one step.
+    let full_res = bilinear_resize(low_res, MASK_SIZE, MASK_SIZE, embed.orig_w, embed.orig_h);
     Ok(full_res.iter().map(|&v| if v > 0.0 { 255u8 } else { 0u8 }).collect())
 }

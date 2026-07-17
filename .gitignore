@@ -42,3 +42,8 @@ www/
 # artifacts (target/, can be multiple GB) are never committed, only source + config.
 desktop/dist/
 desktop/src-tauri/target/
+
+# SAM 2.1 Hiera-Tiny ONNX models (Phase 3 AI-select quality upgrade): encoder.onnx is ~134MB,
+# over GitHub's 100MB hard push limit (no Git LFS set up for this repo) — see
+# desktop/src-tauri/vendor/sam2/README.md for the exact download commands to re-fetch these.
+desktop/src-tauri/vendor/sam2/*.onnx
