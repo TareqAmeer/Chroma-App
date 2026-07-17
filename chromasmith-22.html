@@ -181,6 +181,15 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 /* crop overlay */
 #fx-crop-overlay{position:absolute;inset:0;display:none;touch-action:none}
 #fx-crop-overlay.on{display:block}
+#fx-mask-overlay{position:absolute;display:none;touch-action:none;overflow:visible}
+#fx-mask-overlay.on{display:block}
+.msk-dim{fill:#000;opacity:.6;pointer-events:none}
+.msk-shape{fill:rgba(255,90,60,0);stroke:#fff;stroke-width:.003;vector-effect:non-scaling-stroke;pointer-events:none}
+.msk-shape.filled{fill:rgba(255,90,60,.28)}
+.msk-handle{fill:#fff;stroke:#222;stroke-width:.0015;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}
+.msk-handle:active{cursor:grabbing}
+.msk-handle.center{fill:#ffb454}
+.msk-prevmode-seg button.on{background:var(--acc)!important;color:#000!important}
 .crop-rect{position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55);cursor:move;box-sizing:border-box}
 .crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.5);pointer-events:none}
 .crop-grid-h{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.5);pointer-events:none}
@@ -789,6 +798,13 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
             <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye"><span class="bdot"></span>+ Brush</button>
             <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed"><span class="bdot"></span>+ Sky</button>
           </div>
+          <div class="fx-row"><div class="fx-label">Show on photo</div>
+            <div class="lib-seg msk-prevmode-seg" style="border:1px solid var(--bdr);border-radius:7px;overflow:hidden;display:flex">
+              <button data-v="overlay" class="on" onclick="mskSetPreviewMode('overlay')" style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Overlay</button>
+              <button data-v="isolate" onclick="mskSetPreviewMode('isolate')" style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Isolate</button>
+              <button data-v="off" onclick="mskSetPreviewMode('off')" style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Off</button>
+            </div>
+          </div>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
@@ -1013,6 +1029,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
         <canvas id="fx-hist"></canvas>
         <div id="fx-crop-overlay"></div>
+        <svg id="fx-mask-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
           <button onclick="zoomBy(1/1.25)" title="Zoom out">−</button>
           <input type="range" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)" title="Drag to zoom">
@@ -2964,7 +2981,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17d';
+const BUILD='2026-07-17e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3437,7 +3454,10 @@ uniform float mskN;
 uniform vec4 mskA[4];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full effect at p0, none past p1)
 uniform vec4 mskB[4];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
 uniform vec4 mskC[4];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
-uniform vec4 mskD[4];  // lumLo, lumHi (0..1 range gate), unused, unused
+uniform vec4 mskD[4];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
+uniform vec4 mskE[4];  // x: subtract-previous-mask flag (0/1) — simple "mask inside a mask"
+                        // (this mask's shape minus the shape of the mask listed just before
+                        // it), y/z/w reserved
 uniform vec2 uvOffL,uvScaleL;
 // Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
 // (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
@@ -3510,6 +3530,16 @@ vec3 basicAdjust(vec3 c){
   }
   return clamp(c,0.0,1.0);
 }
+float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-gate/subtract
+  vec4 A=mskA[i],B=mskB[i];
+  float w;
+  if(B.w>0.5){w=texture(maskTex,gm)[i];}      // painted/sky raster mask, packed channel i
+  else if(B.x<0.5){vec2 dd=(gm-A.xy)/max(A.zw,vec2(1e-4));float t=length(dd);
+    float f=clamp(B.y,0.02,1.0);w=1.0-smoothstep(max(1.0-2.0*f,0.0),1.0,t);}
+  else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
+  if(B.z>0.5)w=1.0-w;
+  return w;
+}
 void main(){vec4 c=texture(img,uv);
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
 // adjSharp boosts all frequencies; adjClarity weights by midtone mask (4*lum*(1-lum)).
@@ -3531,17 +3561,19 @@ if(mskN>0.5){
   vec2 gm=uvOffL+uv*uvScaleL;
   for(int i=0;i<4;i++){
     if(float(i)>=mskN)break;
-    vec4 A=mskA[i],B=mskB[i];
-    float w;
-    if(B.w>0.5){w=texture(maskTex,gm)[i];}      // painted/sky raster mask, packed channel i
-    else if(B.x<0.5){vec2 dd=(gm-A.xy)/max(A.zw,vec2(1e-4));float t=length(dd);
-      float f=clamp(B.y,0.02,1.0);w=1.0-smoothstep(max(1.0-2.0*f,0.0),1.0,t);}
-    else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
-    if(B.z>0.5)w=1.0-w;
+    float w=mskShapeWeight(i,gm);
+    if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm));   // "mask inside a mask": subtract the previous mask's shape
     vec4 D=mskD[i];
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
-    if(w>0.001)c.rgb=maskAdjust(c.rgb,w,mskC[i]);
+    if(w>0.001){
+      c.rgb=maskAdjust(c.rgb,w,mskC[i]);
+      if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
+        float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
+        float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
+        c.rgb=clamp(c.rgb+t3,0.0,1.0);
+      }
+    }
   }
 }
 if(useCurve>.5){vec3 t=clamp(c.rgb,0.0,1.0)*(255.0/256.0)+(0.5/256.0);
@@ -4127,14 +4159,16 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Local-adjust masks: pack up to 4 masks into vec4 uniform arrays; global-uv mapped via
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const MK=(P.masks&&P.masks.length)?P.masks.slice(0,4):[];
-    const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16);
+    const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16);
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
       else{mA[o]=m.cx;mA[o+1]=m.cy;mA[o+2]=m.rx;mA[o+3]=m.ry;mB[o]=0;}
       mB[o+1]=m.feather!=null?m.feather:0.5;mB[o+2]=m.invert?1:0;
       mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
-      mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;});
+      mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
+      mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
+      mE[o]=m.subtract?1:0;});
     if(MK.some(m=>m.type==='brush'))mskBuildTex();
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
@@ -4168,7 +4202,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       maskTex:4,
-      mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,
+      mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
@@ -5267,7 +5301,7 @@ function autoDetectBW(img){
   tg.classList.toggle('on',bw);
   if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','vig'].forEach(id=>{
@@ -5673,11 +5707,11 @@ let mskSel=-1;
 function mskAdd(type){
   if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
   let m;
-  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};
-  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};}
+  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
+  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};}
   else{ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
-    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0};
+    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
     mskGenerateSky(m);
   }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
@@ -5851,13 +5885,106 @@ function mskRebuild(){
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
     +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
+    +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
+    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
     +_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
     +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false)
     +'<div class="btn-row" style="margin-top:4px">'
     +'<button class="btn '+(m.invert?'bsec':'bgh')+'" onclick="mskInvert()"><span class="bdot"></span>'+(m.invert?'Inverted ✓':'Invert')+'</button>'
+    +(mskSel>0?'<button class="btn '+(m.subtract?'bsec':'bgh')+'" onclick="mskToggleSubtract()" title="Subtracts the PREVIOUS mask\'s shape from this one — a simple mask-inside-a-mask"><span class="bdot"></span>'+(m.subtract?'− Subtracting ✓':'− Subtract prev')+'</button>':'')
     +'<button class="btn bgh" onclick="mskDelete()"><span class="bdot"></span>Delete mask</button></div>';
   ctl.innerHTML=h;
+  mskOverlaySync();
 }
+function mskToggleSubtract(){const m=fxState.masks[mskSel];if(!m||mskSel<1)return;m.subtract=!m.subtract;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+
+// ── on-canvas mask shape overlay: an SVG sized to exactly match #fx-canvas's rendered rect
+// (viewBox="0 0 1 1" so mask coords — already normalized 0..1 — map directly, no pixel math),
+// with draggable handles so radial/linear masks are visible AND editable on the photo itself
+// instead of being invisible sliders-only edits (the #1 mask complaint). Brush/sky masks have
+// no shape to show (they're already visible via their painted pixels).
+let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside)
+function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
+  document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));}
+function mskOverlayBox(){
+  const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');
+  if(!cv||!wrap||!cv.width||!cv.height)return null;
+  const cr=cv.getBoundingClientRect(),wr=wrap.getBoundingClientRect();
+  if(!cr.width||!cr.height)return null;
+  return{left:cr.left-wr.left,top:cr.top-wr.top,width:cr.width,height:cr.height};
+}
+function mskOverlaySync(){
+  const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
+  // Only draw while the Masks card is actually visible on screen — ff-local's own
+  // display style already reflects both the mobile bottom-sheet and the deskx panel
+  // (toggleFX/fxSection set it), so it's the single source of truth for "is this panel open".
+  const ff=document.getElementById('ff-local');
+  const cardVisible=ff&&ff.offsetParent!==null;
+  const m=fxState.masks[mskSel];
+  const showable=cardVisible&&m&&(m.type==='radial'||m.type==='linear')&&mskPreviewMode!=='off';
+  if(!showable||cropMode||fxLoupe){svg.classList.remove('on');svg.innerHTML='';return;}
+  const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
+  svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+  svg.classList.add('on');
+  const isolate=mskPreviewMode==='isolate';
+  let shapeD='',handles='';
+  if(m.type==='radial'){
+    const{cx,cy,rx,ry}=m;
+    // ellipse approximated as a 48-point polygon (SVG <ellipse> can't be combined with an
+    // evenodd hole in one path element the way a polygon can for the isolate dim layer).
+    const N=48,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;pts.push([cx+rx*Math.cos(a),cy+ry*Math.sin(a)].join(','));}
+    shapeD='M'+pts.join('L')+'Z';
+    handles=`<circle class="msk-handle center" data-h="c" cx="${cx}" cy="${cy}" r="0.012"/>`+
+      `<circle class="msk-handle" data-h="rx" cx="${cx+rx}" cy="${cy}" r="0.01"/>`+
+      `<circle class="msk-handle" data-h="ry" cx="${cx}" cy="${cy+ry}" r="0.01"/>`;
+  }else{ // linear: represent the "full effect" half as a band from p0 back-extended, cut at p1
+    const{x0,y0,x1,y1}=m;
+    const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1e-4,nx=-dy/len,ny=dx/len,W=3; // perpendicular, wide band
+    const ext=(x0- dx/len*4)+','+(y0-dy/len*4); // extend well past p0 so the band covers the "full effect" side
+    const p0a=[x0+nx*W,y0+ny*W],p0b=[x0-nx*W,y0-ny*W],p1a=[x1+nx*W,y1+ny*W],p1b=[x1-nx*W,y1-ny*W];
+    const extA=[x0+dx/len*8+nx*W,y0+dy/len*8+ny*W],extB=[x0+dx/len*8-nx*W,y0+dy/len*8-ny*W];
+    shapeD=`M${extA[0]},${extA[1]} L${p1a[0]},${p1a[1]} L${p1b[0]},${p1b[1]} L${extB[0]},${extB[1]} Z`;
+    handles=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#fff" stroke-width="0.003" vector-effect="non-scaling-stroke"/>`+
+      `<circle class="msk-handle" data-h="p0" cx="${x0}" cy="${y0}" r="0.012"/>`+
+      `<circle class="msk-handle" data-h="p1" cx="${x1}" cy="${y1}" r="0.012"/>`;
+  }
+  const dimLayer=isolate?`<path class="msk-dim" fill-rule="evenodd" d="M-1,-1H2V2H-1Z ${shapeD}"/>`:'';
+  const shapeLayer=`<path class="msk-shape${mskPreviewMode==='overlay'?' filled':''}" d="${shapeD}"/>`;
+  svg.innerHTML=dimLayer+shapeLayer+handles;
+  svg.querySelectorAll('.msk-handle').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
+}
+let _mskDrag=null;
+function mskHandleDown(e){
+  e.stopPropagation();e.preventDefault();
+  const svg=document.getElementById('fx-mask-overlay');
+  _mskDrag={which:e.target.dataset.h,svg};
+  svg.setPointerCapture(e.pointerId);
+  svg.addEventListener('pointermove',mskHandleMove);
+  svg.addEventListener('pointerup',mskHandleUp);
+}
+function mskHandlePos(e){
+  const r=document.getElementById('fx-mask-overlay').getBoundingClientRect();
+  return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height];
+}
+function mskHandleMove(e){
+  if(!_mskDrag)return;const m=fxState.masks[mskSel];if(!m)return;
+  const[px,py]=mskHandlePos(e);
+  if(m.type==='radial'){
+    if(_mskDrag.which==='c'){m.cx=Math.max(0,Math.min(1,px));m.cy=Math.max(0,Math.min(1,py));}
+    else if(_mskDrag.which==='rx')m.rx=Math.max(0.01,Math.abs(px-m.cx));
+    else if(_mskDrag.which==='ry')m.ry=Math.max(0.01,Math.abs(py-m.cy));
+  }else{
+    if(_mskDrag.which==='p0'){m.x0=Math.max(0,Math.min(1,px));m.y0=Math.max(0,Math.min(1,py));}
+    else{m.x1=Math.max(0,Math.min(1,px));m.y1=Math.max(0,Math.min(1,py));}
+  }
+  mskOverlaySync();fxUpdate();
+}
+function mskHandleUp(e){
+  if(!_mskDrag)return;
+  const svg=_mskDrag.svg;svg.removeEventListener('pointermove',mskHandleMove);svg.removeEventListener('pointerup',mskHandleUp);
+  _mskDrag=null;mskRebuild();fxHistoryPush();
+}
+window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskOverlaySync();});
 
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
 const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
@@ -6069,6 +6196,7 @@ function _applyZoom(smooth){
   }
   zw.style.transform=`scale(${fxZoom}) translate(${baseX+fxPanX}px,${baseY+fxPanY}px)`;
   _updateZoomReadout();
+  if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
 }
 function _resetZoom(smooth){fxZoom=1;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 function _updateZoomReadout(){
@@ -6564,6 +6692,7 @@ function renderPreview(){
   document.getElementById('fx-info').textContent=`Preview ${cw}\u00d7${ch} — export will be at full ${iw}\u00d7${ih}`;
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
+  if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
 }
 // ── CANVAS matte (InShot-style): put the (bordered) image on an aspect-ratio canvas with a
 // solid-color or blurred-image background, so e.g. a 2:3 photo + border posts to Instagram's
@@ -8011,6 +8140,7 @@ function fxSection(name,noSheet){
   const cards=members.map(k=>document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`)).filter(Boolean);
   if(!cards.length)return;
   if(members.includes('hsl'))setTimeout(hslBuildHist,60);
+  if(typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);
   const mob=document.body.classList.contains('mobile-fx');
   const isActive=cards.some(c=>c.classList.contains('sec-active'));
   // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
