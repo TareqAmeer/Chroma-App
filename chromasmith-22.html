@@ -130,7 +130,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
 .fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
 /* Color Mixer band swatches: plain circle + colored underline, no bordered chip box */
+.btn-icon{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
+  width:38px;height:38px;font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.btn-icon:hover{border-color:var(--mut)}
 .hsl-chip{display:flex;flex-direction:column;align-items:center;background:none;border:none;border-bottom:2px solid transparent;padding:5px 6px 6px;cursor:pointer}
+#hsl-hist{flex:1}
+.hsl-hist-bar{flex:1;min-width:6px;border-radius:2px 2px 0 0;cursor:pointer;opacity:.45;transition:opacity .1s}
+.hsl-hist-bar:hover{opacity:.75}
+.hsl-hist-bar.on{opacity:1}
 /* Color Mixer sliders: gradient track (Hue = fixed rainbow; Sat/Lum tinted per selected band
    via JS, see hslSyncUI). Track colour comes from the input's own `background`, so appearance
    must be reset to none — WebKit/Safari-focused since the app runs in Safari or a WKWebView shell. */
@@ -175,6 +182,8 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 #fx-crop-overlay{position:absolute;inset:0;display:none;touch-action:none}
 #fx-crop-overlay.on{display:block}
 .crop-rect{position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55);cursor:move;box-sizing:border-box}
+.crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.5);pointer-events:none}
+.crop-grid-h{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.5);pointer-events:none}
 .crop-rect::before,.crop-rect::after{content:'';position:absolute;background:rgba(255,255,255,.4)}
 .crop-rect::before{left:33.33%;right:33.33%;top:0;bottom:0;border-left:1px solid rgba(255,255,255,.4);border-right:1px solid rgba(255,255,255,.4)}
 .crop-rect::after{top:33.33%;bottom:33.33%;left:0;right:0;border-top:1px solid rgba(255,255,255,.4);border-bottom:1px solid rgba(255,255,255,.4)}
@@ -759,6 +768,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <div class="fx-ctrl" data-fxsec="hsl">
         <div class="fx-ctrl-title">Color Mixer <div class="fx-toggle" id="tg-hsl" onclick="toggleFX('hsl')"></div></div>
         <div class="fx-fields" id="ff-hsl">
+          <div id="hsl-hist" style="display:flex;align-items:flex-end;gap:3px;height:26px;margin-bottom:6px"></div>
           <div class="btn-row" id="hsl-chips" style="flex-wrap:wrap;gap:4px"></div>
           <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-h" oninput="hslSlider('hue',this.value)"><div class="fx-val" id="vl-hsl-h">0</div></div>
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-s" oninput="hslSlider('sat',this.value)"><div class="fx-val" id="vl-hsl-s">0</div></div>
@@ -797,27 +807,45 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       </div>
       <!-- CROP & ROTATE -->
       <div class="fx-ctrl" data-fxsec="crop">
-        <div class="fx-ctrl-title">Crop &amp; Rotate</div>
-        <div class="btn-row">
-          <button class="btn bgh" onclick="geomRotate(-90)" title="Rotate left"><span class="bdot"></span>⟲ 90°</button>
-          <button class="btn bgh" onclick="geomRotate(90)" title="Rotate right"><span class="bdot"></span>⟳ 90°</button>
-          <button class="btn bgh" onclick="geomFlip('h')" title="Flip horizontal"><span class="bdot"></span>⇄ Flip</button>
-          <button class="btn bgh" onclick="geomFlip('v')" title="Flip vertical"><span class="bdot"></span>⇅ Flip</button>
+        <div class="fx-ctrl-title">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--mono)">Reset</div></div>
+        <div class="btn-row" style="justify-content:center;gap:14px">
+          <button class="btn-icon" onclick="geomRotate(-90)" title="Rotate left">⟲</button>
+          <button class="btn-icon" onclick="geomRotate(90)" title="Rotate right">⟳</button>
+          <button class="btn-icon" onclick="geomFlip('h')" title="Flip horizontal">⇄</button>
+          <button class="btn-icon" onclick="geomFlip('v')" title="Flip vertical">⇅</button>
         </div>
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraighten(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
-        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Aspect</div>
+        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraighten(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
+        <div class="fx-row"><div class="fx-label">Grid</div>
+          <select class="fx-select" id="sel-crop-grid" onchange="cropSetGrid(this.value)">
+            <option value="3x3">3×3 (Rule of thirds)</option>
+            <option value="4x4">4×4</option>
+            <option value="golden">Golden ratio</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Aspect</div>
           <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value)">
             <option value="0">Free</option>
+            <option value="shot">As shot</option>
+            <option value="custom">Custom…</option>
             <option value="1">1:1 Square</option>
-            <option value="0.8">4:5 Portrait</option>
-            <option value="0.6667">2:3 Portrait</option>
-            <option value="1.5">3:2 Landscape</option>
-            <option value="1.7778">16:9</option>
+            <option value="1.5">3:2</option>
+            <option value="1.3333">4:3</option>
+            <option value="1.25">5:4</option>
+            <option value="1.4">7:5</option>
+            <option value="1.7778">16:9 Widescreen</option>
+            <option value="0.7071">1.414:1 ISO A4</option>
+            <option value="1.2941">11:8.5 US Letter</option>
           </select>
+        </div>
+        <div class="fx-row" id="crop-custom-row" style="display:none">
+          <div class="fx-label">Custom</div>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-w" style="width:56px" oninput="cropCustomChanged()">
+          <span style="color:var(--mut)">:</span>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-h" style="width:56px" oninput="cropCustomChanged()">
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bsec" id="btn-crop" onclick="cropToggle()"><span class="bdot"></span>Crop</button>
-          <button class="btn bgh" onclick="geomReset()"><span class="bdot"></span>Reset geometry</button>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Rotate / flip / straighten / crop apply to every loaded image</div>
       </div>
@@ -2936,7 +2964,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17c';
+const BUILD='2026-07-17d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4324,7 +4352,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]},hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
 let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
 // Deskbar center title (deskx desktop shell): filename + status suffix. status is either the
 // image dimensions ("6000 × 4000") or, while a decode is in flight, an animated spinner
@@ -4473,6 +4501,15 @@ let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // t
 let fxExportCancel=false;                // set by the Cancel button to abort a batch export
 let fxHistory=[], fxHistIdx=-1, _fxHistLocked=false; // undo/redo
 let cropMode=false,cropN=null,cropAR=0,cropBase=null,_cropDrag=null; // interactive crop state
+let cropGrid='3x3'; try{cropGrid=localStorage.getItem('chromasmith_crop_grid')||'3x3';}catch(e){}
+function cropGridLinesHtml(){
+  if(cropGrid==='off')return'';
+  const stops=cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667]; // default 3x3 (rule of thirds)
+  return stops.map(p=>`<div class="crop-grid-v" style="left:${p}%"></div>`).join('')+
+         stops.map(p=>`<div class="crop-grid-h" style="top:${p}%"></div>`).join('');
+}
+function cropSetGrid(v){cropGrid=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
+  const r=document.getElementById('crop-rect');if(r){r.querySelectorAll('.crop-grid-v,.crop-grid-h').forEach(n=>n.remove());r.insertAdjacentHTML('beforeend',cropGridLinesHtml());}}
 // ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
 // Cameras/Lightroom often write resolution into Exif IFD0 (XResolution/
 // ResolutionUnit tags), NOT a JFIF APP0 segment — readDPI must check both,
@@ -5230,7 +5267,7 @@ function autoDetectBW(img){
   tg.classList.toggle('on',bw);
   if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','vig'].forEach(id=>{
@@ -5266,7 +5303,13 @@ function applyRawDefaults(){
 
 // ══ TONE CURVES — master + R/G/B point curves, monotone cubic, baked to a 256×1 LUT ══
 let curveCh='m',_crvDrag=-1;
-function _curveDefault(){return{m:[[0,0],[1,1]],r:[[0,0],[1,1]],g:[[0,0],[1,1]],b:[[0,0],[1,1]]};}
+// 5 pre-seeded points at 0/25/50/75/100% (Blacks/Shadows/Midtones/Highlights/Whites), all on
+// the identity diagonal — Fritsch-Carlson through evenly-spaced collinear points reproduces
+// y=x exactly (matching slopes of 1 throughout), so this bakes byte-identical to the old
+// 2-point [[0,0],[1,1]] default; curvesIdentity() below is updated to match (checks every
+// point, not just a length of 2). Clicking between points still adds more, same as before.
+function _identityCurvePts(){return[[0,0],[0.25,0.25],[0.5,0.5],[0.75,0.75],[1,1]];}
+function _curveDefault(){const p=_identityCurvePts();return{m:p.map(v=>v.slice()),r:p.map(v=>v.slice()),g:p.map(v=>v.slice()),b:p.map(v=>v.slice())};}
 // Monotone cubic (Fritsch–Carlson) through sorted control points — no overshoot/ringing,
 // so a gentle S-curve stays monotone (a Catmull-Rom would overshoot past 0/1 at the toes).
 function curveEval(pts){
@@ -5281,7 +5324,7 @@ function curveEval(pts){
     return ys[i]*(2*t3-3*t2+1)+m[i]*h*(t3-2*t2+t)+ys[i+1]*(3*t2-2*t3)+m[i+1]*h*(t3-t2);};
 }
 function curvesIdentity(){const C=fxState.curves;
-  return['m','r','g','b'].every(k=>{const p=C[k];return p.length===2&&p[0][0]===0&&p[0][1]===0&&p[1][0]===1&&p[1][1]===1;});}
+  return['m','r','g','b'].every(k=>C[k].every(p=>p[0]===p[1]));}
 // Bake: out_c = master(channel_c(v)) per 8-bit level. Identity bakes to i/255 exactly, and the
 // shader samples texel CENTERS, so identity+useCurve is byte-identical to useCurve off.
 function bakeCurves(){
@@ -5293,7 +5336,7 @@ function bakeCurves(){
   if(FX.ok)FX.setCurveTex(d);
 }
 function curveSetCh(ch){curveCh=ch;document.querySelectorAll('.crv-chip').forEach(b=>b.classList.toggle('on',b.dataset.ch===ch));drawCurveEditor();}
-function curveResetCh(){fxState.curves[curveCh]=[[0,0],[1,1]];curveChanged();}
+function curveResetCh(){fxState.curves[curveCh]=_identityCurvePts();curveChanged();}
 function curveResetAll(){fxState.curves=_curveDefault();curveChanged();}
 function curveChanged(){bakeCurves();drawCurveEditor();fxUpdate();}
 function drawCurveEditor(){
@@ -5342,6 +5385,10 @@ function _crvInit(){
 // ══ HSL COLOR MIXER — 8 bands × hue/sat/lum, baked to a 33³ LUT via applyHSL ═══
 const HSL_BANDS=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'];
 const HSL_COLS={Red:'#ff5b5b',Orange:'#ff9f43',Yellow:'#ffd43b',Green:'#51cf66',Aqua:'#3bc9db',Blue:'#4d8bff',Purple:'#9775fa',Magenta:'#f06595'};
+// Center hue (degrees, 0-360) + hue RANGE each band covers — for the population histogram
+// (bucketing image pixels by hue) and the chip's before/after split swatch.
+const HSL_HUE_DEG={Red:0,Orange:30,Yellow:60,Green:120,Aqua:190,Blue:230,Purple:275,Magenta:320};
+const HSL_HUE_RANGE=[[345,15],[15,45],[45,75],[75,165],[165,210],[210,255],[255,290],[290,345]]; // parallel to HSL_BANDS
 let hslBand='Red',_hslBakeT=null;
 function _hslDefault(){return{hue:{},sat:{},lum:{}};}
 function hslIdentity(){const H=fxState.hsl;return['hue','sat','lum'].every(k=>HSL_BANDS.every(b=>!(H[k]&&H[k][b])));}
@@ -5356,6 +5403,16 @@ function bakeHsl(){
     const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
   if(FX.ok)FX.setHslLUT(d);
 }
+// Darkroom-style before/after split swatch: left half is the band's canonical hue, right half
+// is that same hue after the band's current hue/sat/lum shifts — so the chip itself previews
+// the edit instead of staying a flat reference color forever.
+function _hslAfterColor(b){
+  const H=fxState.hsl;
+  const hDeg=(HSL_HUE_DEG[b]+((H.hue&&H.hue[b])||0)*0.45+360)%360;
+  const sPct=Math.max(0,Math.min(100,65+((H.sat&&H.sat[b])||0)*0.35));
+  const lPct=Math.max(0,Math.min(100,55+((H.lum&&H.lum[b])||0)*0.35));
+  return `hsl(${hDeg.toFixed(0)},${sPct.toFixed(0)}%,${lPct.toFixed(0)}%)`;
+}
 function hslBuildChips(){
   const row=document.getElementById('hsl-chips');if(!row)return;row.innerHTML='';
   HSL_BANDS.forEach(b=>{
@@ -5363,14 +5420,57 @@ function hslBuildChips(){
     bt.title=b;
     bt.style.borderBottomColor=(b===hslBand?HSL_COLS[b]:'transparent');
     const edited=['hue','sat','lum'].some(k=>fxState.hsl[k]&&fxState.hsl[k][b]);
-    bt.innerHTML='<span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:'+HSL_COLS[b]+';box-shadow:'+(edited?'0 0 0 2px rgba(255,255,255,.55)':'none')+'"></span>';
+    const after=_hslAfterColor(b);
+    const ring=edited?'0 0 0 2px rgba(255,255,255,.55)':'none';
+    bt.innerHTML=`<span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:${ring};`+
+      `background:linear-gradient(90deg,${HSL_COLS[b]} 50%,${after} 50%)"></span>`;
     bt.onclick=()=>hslSetBand(b);
     row.appendChild(bt);
+  });
+}
+// ── hue-population histogram: how much of the CURRENT image falls in each of the 8 bands,
+// as a clickable bar row above the chips (click a bar = select that band, same as its chip).
+// Sampled from a small offscreen downscale of the graded preview canvas — cheap (a few
+// thousand pixels), recomputed on image load / preset change, not per-slider-drag.
+function hslHistCompute(){
+  const cv=document.getElementById('fx-canvas');if(!cv||!cv.width||!cv.height)return new Array(8).fill(0);
+  const N=64,tmp=document.createElement('canvas');tmp.width=N;tmp.height=N;
+  const tx=tmp.getContext('2d',{willReadFrequently:true});
+  try{tx.drawImage(cv,0,0,N,N);}catch(e){return new Array(8).fill(0);}
+  let px;try{px=tx.getImageData(0,0,N,N).data;}catch(e){return new Array(8).fill(0);}
+  const counts=new Array(8).fill(0);let total=0;
+  for(let i=0;i<px.length;i+=4){
+    const r=px[i]/255,g=px[i+1]/255,b=px[i+2]/255;
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+    if(d<0.03)continue; // near-neutral — doesn't belong to any hue band
+    let h;if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;
+    h=(h*60+360)%360;
+    for(let bi=0;bi<8;bi++){
+      const[lo,hi]=HSL_HUE_RANGE[bi];
+      if(lo>hi?(h>=lo||h<hi):(h>=lo&&h<hi)){counts[bi]++;break;}
+    }
+    total++;
+  }
+  return total?counts.map(c=>c/total):counts;
+}
+function hslBuildHist(){
+  const row=document.getElementById('hsl-hist');if(!row)return;
+  const counts=hslHistCompute(),mx=Math.max(...counts,0.001);
+  row.innerHTML='';
+  HSL_BANDS.forEach((b,i)=>{
+    const bar=document.createElement('div');
+    bar.className='hsl-hist-bar'+(b===hslBand?' on':'');
+    bar.style.height=Math.max(3,Math.round(counts[i]/mx*24))+'px';
+    bar.style.background=HSL_COLS[b];
+    bar.title=b+': '+(counts[i]*100).toFixed(1)+'%';
+    bar.onclick=()=>hslSetBand(b);
+    row.appendChild(bar);
   });
 }
 function hslSetBand(b){hslBand=b;hslSyncUI();}
 function hslSyncUI(){
   hslBuildChips();
+  hslBuildHist();
   [['hue','h'],['sat','s'],['lum','l']].forEach(([k,sfx])=>{
     const v=(fxState.hsl[k]&&fxState.hsl[k][hslBand])||0;
     const sl=document.getElementById('sl-hsl-'+sfx),vl=document.getElementById('vl-hsl-'+sfx);
@@ -6648,7 +6748,7 @@ function cropEnter(){
   cc.getContext('2d').drawImage(cropBase,0,0);cc.style.display='block';
   FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   cropN=saved?{...saved}:cropDefaultForAR();
-  ov.innerHTML='<div class="crop-rect" id="crop-rect"><div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';
+  ov.innerHTML='<div class="crop-rect" id="crop-rect">'+cropGridLinesHtml()+'<div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';
   ov.classList.add('on');ov.onpointerdown=cropDown;
   document.getElementById('fx-crop-tools').style.display='flex';
   document.getElementById('fx-preview-tools').style.display='none';
@@ -6699,7 +6799,26 @@ function cropMove(e){
   positionCropRect();
 }
 function cropUp(){_cropDrag=null;window.removeEventListener('pointermove',cropMove);window.removeEventListener('pointerup',cropUp);}
-function cropSetAspect(v){cropAR=parseFloat(v)||0;if(cropMode){cropN=cropDefaultForAR();positionCropRect();}}
+function cropSetAspect(v){
+  const customRow=document.getElementById('crop-custom-row');
+  if(customRow)customRow.style.display=(v==='custom')?'flex':'none';
+  if(v==='shot'){
+    const it=curItem(),img=it&&it.img;
+    const W=(img&&(img.naturalWidth||img.width))||1,H=(img&&(img.naturalHeight||img.height))||1;
+    cropAR=W/H;
+  }else if(v==='custom'){
+    cropAR=_cropCustomAR();
+  }else{
+    cropAR=parseFloat(v)||0;
+  }
+  if(cropMode){cropN=cropDefaultForAR();positionCropRect();}
+}
+function _cropCustomAR(){
+  const w=parseFloat((document.getElementById('crop-custom-w')||{}).value)||1;
+  const h=parseFloat((document.getElementById('crop-custom-h')||{}).value)||1;
+  return w/Math.max(h,0.0001);
+}
+function cropCustomChanged(){cropAR=_cropCustomAR();if(cropMode){cropN=cropDefaultForAR();positionCropRect();}}
 function cropApply(){
   const it=curItem();if(!it){cropExit();renderPreview();return;}
   const g=it.geom||(it.geom=defGeom());
@@ -7891,6 +8010,7 @@ function fxSection(name,noSheet){
   const members=(dx&&FX_GROUPS[name])?FX_GROUPS[name].members:[name];
   const cards=members.map(k=>document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`)).filter(Boolean);
   if(!cards.length)return;
+  if(members.includes('hsl'))setTimeout(hslBuildHist,60);
   const mob=document.body.classList.contains('mobile-fx');
   const isActive=cards.some(c=>c.classList.contains('sec-active'));
   // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
