@@ -2936,7 +2936,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17a';
+const BUILD='2026-07-17b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5193,13 +5193,15 @@ async function loadFXImages(fileList){
         // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
         // on EVERY open path — library-ui's get_meta refines this later on library opens.
         const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):''}:undefined;
-        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
       const exif=(ext==='jpg'||ext==='jpeg')?readExifTags(bytes):{};
       const img=await loadImg(file);
-      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif});
+      // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
+      // row in the metadata panel at all — only photos opened via the desktop Library set it.
+      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength});
     }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err')} // keep loading the rest of the batch
   }
   if(!entries.length){log('No images loaded','err');return}
@@ -6275,12 +6277,16 @@ function readExifTags(b){
           if(exifOff){
             const ne=r16(exifOff);
             for(let e=0;e<ne;e++){
-              const eo=exifOff+2+e*12,tag=r16(eo),voff=eo+8;
+              const eo=exifOff+2+e*12,tag=r16(eo),type=r16(eo+2),cnt=r32(eo+4),voff=eo+8;
               const doff=base+r32(voff);
               if(tag===0x829A)res.shutter=_fmtShutter(rrat(doff));
               else if(tag===0x829D)res.aperture='f/'+rrat(doff).toFixed(1);
-              else if(tag===0x8827)res.iso='ISO '+r16(voff);
+              // ISO (0x8827) is usually SHORT (type 3, inline) but some cameras write it as
+              // LONG (type 4, also inline at 4 bytes) or an offset-based SHORT array — the old
+              // unconditional r16(voff) silently mis-read those as 0 or garbage.
+              else if(tag===0x8827)res.iso='ISO '+(type===4?r32(voff):(type===3&&cnt>1?r16(doff):r16(voff)));
               else if(tag===0x920A)res.focalLen=rrat(doff).toFixed(0)+'mm';
+              else if(tag===0xA434)res.lens=rstr(doff,cnt); // LensModel — previously never read
               else if(tag===0x9003&&!res.date)res.date=rstr(doff,20).replace('T',' ');
             }
           }
@@ -7569,6 +7575,12 @@ async function gpImportPhotos(preWin){
         }
       }
     };
+    // Consolidated (not per-file) accounting so the log stays scannable — the recurring
+    // complaint was that GP saves silently vanished; the fix is to make every outcome
+    // observable in ONE place at the end, not to spam a line per file mid-import.
+    let savedCount=0,saveFailCount=0,rawTwinCount=0;
+    const lastSavedDir={path:''};
+    const savedPaths=[]; // parallel to `files` — '' when not saved to disk (web build / failure)
     for(let i=0;i<photos.length;i++){
       toast('Downloading '+(i+1)+'/'+photos.length+' from Google Photos…',true);
       const mf=photos[i].mediaFile;
@@ -7578,20 +7590,65 @@ async function gpImportPhotos(preWin){
         const fname=mf.filename||('gphotos_'+(i+1)+'.jpg');
         // Cache to ~/Documents/Google Photos Download/ (Tauri only) so re-opening this photo
         // later — e.g. from the Library's pinned "Google Photos Download" entry — reads it
-        // off disk instead of re-downloading. Best-effort: a cache-write failure never blocks
-        // the import itself, since `files` already has the in-memory blob either way.
+        // off disk instead of re-downloading. A save failure is now surfaced (not swallowed):
+        // it's logged individually since it means the file genuinely isn't on disk, which is
+        // exactly the bug this replaces ("files never appear in the folder", silently).
+        let savedName=fname,savedPath='';
         if(window.__TAURI__){
           try{
             const buf=await blob.arrayBuffer();
-            await window.__TAURI__.core.invoke('save_to_gphotos_downloads',{filename:fname,dataB64:_u8b64(new Uint8Array(buf))});
-          }catch(e){console.error('save_to_gphotos_downloads',e)}
+            const res=await window.__TAURI__.core.invoke('save_to_gphotos_downloads',{filename:fname,dataB64:_u8b64(new Uint8Array(buf))});
+            savedCount++;
+            lastSavedDir.path=res.path;savedPath=res.path;
+            if(res.renamed){rawTwinCount++;savedName=res.path.split('/').pop()}
+          }catch(e){
+            saveFailCount++;
+            log('Could not save "'+fname+'" to the Google Photos Download folder: '+(e&&e.message||e),'err');
+          }
         }
-        files.push(new File([blob],fname,{type:mf.mimeType||blob.type||'image/jpeg'}));
+        savedPaths.push(savedPath);
+        files.push(new File([blob],savedName,{type:mf.mimeType||blob.type||'image/jpeg'}));
       }catch(e){log('Failed to download '+(mf.filename||'a photo')+': '+(e&&e.message||e),'err')}
     }
     gpFetch('https://photospicker.googleapis.com/v1/sessions/'+encodeURIComponent(sess.id),{method:'DELETE'}).catch(()=>{});
     if(!files.length){toast('Google Photos import failed — see log');return}
     await loadFXImages(files);
+    // Unify metadata: the in-browser JPEG EXIF reader (readExifTags) that loadFXImages just
+    // ran is missing LensModel/GPS/etc — the SAME gap "jpegs aren't showing full metadata"
+    // reports. For anything we actually saved to disk this session, re-read it through Rust's
+    // fuller kamadak-exif/rawler parser (the same one the Library uses) and merge it in, so a
+    // Google Photos import shows identical metadata to opening the same file from the Library.
+    if(window.__TAURI__){
+      for(let i=0;i<fxImages.length;i++){
+        const p=savedPaths[i];
+        if(!p)continue;
+        try{
+          const m=await window.__TAURI__.core.invoke('get_meta',{path:p});
+          const prev=fxImages[i].exif||{};
+          fxImages[i].exif={...prev,
+            model:m.model||m.camera||prev.model||'',make:m.make||prev.make||'',
+            lens:m.lens||prev.lens||'',shutter:m.shutter||prev.shutter||'',
+            aperture:m.aperture||prev.aperture||'',iso:m.iso?`ISO ${m.iso}`:(prev.iso||''),
+            focalLen:m.focal_len||prev.focalLen||'',date:m.date||prev.date||''};
+        }catch(e){console.error('get_meta (gp import)',p,e)}
+      }
+      if(typeof showExif==='function'&&fxImages[fxCurIdx])showExif(fxImages[fxCurIdx].exif||{});
+    }
+    if(window.__TAURI__){
+      if(saveFailCount){
+        log(`Saved ${savedCount}/${savedCount+saveFailCount} to the Google Photos Download folder — ${saveFailCount} failed (see above)`,'warn');
+      }else if(savedCount){
+        log(`Saved ${savedCount} photo(s) to the Google Photos Download folder`,'info');
+      }
+    }
+    // Google Photos' Picker API only ever returns whatever base media Google has — for a
+    // RAW+JPEG pair (or iPhone ProRAW) that is very often the JPEG twin, even for a file named
+    // "IMG_1234.DNG". No request parameter fixes this (it's a Picker limitation, not a bug on
+    // our end), so rather than one warning line per affected file, show ONE consolidated
+    // banner explaining why and pointing at the actual fix (Files/USB import).
+    if(rawTwinCount){
+      log(`Google Photos only had a JPEG copy of ${rawTwinCount} RAW file${rawTwinCount>1?'s':''} — imported as JPG (renamed to match). To edit true RAWs, import from Files or a USB card instead.`,'warn');
+    }
     toast('Imported '+files.length+' photo'+(files.length>1?'s':'')+' from Google Photos ✓',true);
   }catch(e){
     log('Google Photos import: '+(e&&e.message||e),'err');

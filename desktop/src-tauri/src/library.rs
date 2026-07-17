@@ -72,6 +72,14 @@ pub struct DirEntry {
     pub is_dir: bool,
     pub is_image: bool,
     pub kind: &'static str, // "raw" | "jpeg" | "png" | "tiff"; "" for dirs
+    /// Filesystem mtime (unix secs) and byte size — cheap (same stat() the thumbnail/meta cache
+    /// keys already pay for), used by the library grid's "Date modified" / size sort+display so
+    /// it doesn't need a separate get_meta round-trip per entry just to sort a folder.
+    pub mtime: u64,
+    pub size: u64,
+    /// Set only by list_edited() below, for an entry whose file no longer exists on disk.
+    #[serde(default)]
+    pub missing: bool,
 }
 
 /// One level of a folder (not recursive — the frontend expands the tree lazily, same UX as
@@ -91,7 +99,11 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
         let is_image = !is_dir && is_image_ext(&ext);
         if is_dir || is_image {
             let kind = if is_dir { "" } else { kind_of(&ext) };
-            out.push(DirEntry { name, path: p.to_string_lossy().into_owned(), is_dir, is_image, kind });
+            let (mtime, size) = entry.metadata().ok().map(|m| {
+                let mt = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                (mt, m.len())
+            }).unwrap_or((0, 0));
+            out.push(DirEntry { name, path: p.to_string_lossy().into_owned(), is_dir, is_image, kind, mtime, size, missing: false });
         }
     }
     out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
@@ -373,5 +385,173 @@ pub fn set_sidecar(
 </x:xmpmeta>
 "#
     );
-    std::fs::write(sidecar_path(&path), xmp).map_err(|e| format!("write sidecar: {e}"))
+    std::fs::write(sidecar_path(&path), xmp).map_err(|e| format!("write sidecar: {e}"))?;
+    registry_set(&path, edited);
+    Ok(())
+}
+
+// ── Cross-folder "All Edited" registry ────────────────────────────────────────────────────
+// A flat JSON list of every photo path that currently has edited:true, kept in the app cache
+// dir (NOT next to the photos — this is app-internal bookkeeping, not a portable sidecar).
+// Lets the library show every edited photo regardless of which folder it lives in, without
+// re-scanning the whole disk: updated incrementally every time set_sidecar changes the
+// edited flag (add on true, remove on false), and backfilled once at startup by scanning
+// recently-used folders for existing .xmp sidecars (see backfill_edited_registry below).
+fn registry_path() -> PathBuf {
+    cache_dir().join("edited_registry.json")
+}
+fn registry_read() -> Vec<String> {
+    std::fs::read_to_string(registry_path())
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+fn registry_write(list: &[String]) {
+    if let Ok(text) = serde_json::to_string(list) {
+        let _ = std::fs::write(registry_path(), text);
+    }
+}
+fn registry_set(path: &str, edited: bool) {
+    let mut list = registry_read();
+    let present = list.iter().any(|p| p == path);
+    if edited && !present {
+        list.push(path.to_string());
+        registry_write(&list);
+    } else if !edited && present {
+        list.retain(|p| p != path);
+        registry_write(&list);
+    }
+}
+
+/// Every photo ever marked edited, across all folders — stat'd fresh so renamed/deleted files
+/// are flagged `missing` instead of silently vanishing or erroring the whole list. Sorted
+/// newest-mtime-first; the frontend re-sorts/filters same as a normal folder view.
+#[tauri::command]
+pub fn list_edited() -> Vec<DirEntry> {
+    let mut out: Vec<DirEntry> = registry_read()
+        .into_iter()
+        .map(|path| {
+            let p = Path::new(&path);
+            let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let ext = ext_lower(p);
+            let kind = kind_of(&ext);
+            match std::fs::metadata(&path) {
+                Ok(m) => {
+                    let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                    DirEntry { name, path, is_dir: false, is_image: true, kind, mtime, size: m.len(), missing: false }
+                }
+                Err(_) => DirEntry { name, path, is_dir: false, is_image: true, kind, mtime: 0, size: 0, missing: true },
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    out
+}
+
+/// One-time backfill for photos edited before the registry existed: scan a set of known
+/// folders (recents + the given root) for `.xmp` sidecars with `chromasmith:Edited="True"`
+/// and register any not already tracked. Cheap (text scan, no image decode); called once by
+/// the frontend on first Library open per session, not on every folder browse.
+#[tauri::command]
+pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
+    let mut list = registry_read();
+    let mut added = 0usize;
+    for folder in folders {
+        let Ok(rd) = std::fs::read_dir(&folder) else { continue };
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("xmp") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&p) else { continue };
+            if xmp_get(&text, "chromasmith:Edited").as_deref() != Some("True") {
+                continue;
+            }
+            let photo = p.with_extension(""); // best-effort; sidecar_path() is <photo>.xmp exactly
+            // Try every image extension the sidecar could belong to (with_extension("") strips
+            // the .xmp but the photo's real extension is unknown from the sidecar name alone).
+            for ext in IMAGE_EXTS {
+                let candidate = photo.with_extension(ext);
+                if candidate.exists() {
+                    let s = candidate.to_string_lossy().into_owned();
+                    if !list.iter().any(|p2| p2 == &s) {
+                        list.push(s);
+                        added += 1;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    if added > 0 {
+        registry_write(&list);
+    }
+    added
+}
+
+/// Duplicates a photo (and its .xmp sidecar, if any) alongside the original with a
+/// "-copy"/"-copy2"/... suffix before the extension. Returns the new file's path so the
+/// caller can refresh the grid and select it.
+#[tauri::command]
+pub fn duplicate_file(path: String) -> Result<String, String> {
+    let src = Path::new(&path);
+    let dir = src.parent().ok_or("no parent directory")?;
+    let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let mut n = 1;
+    let dest = loop {
+        let suffix = if n == 1 { "-copy".to_string() } else { format!("-copy{n}") };
+        let name = if ext.is_empty() { format!("{stem}{suffix}") } else { format!("{stem}{suffix}.{ext}") };
+        let candidate = dir.join(name);
+        if !candidate.exists() {
+            break candidate;
+        }
+        n += 1;
+    };
+    std::fs::copy(src, &dest).map_err(|e| format!("copy {path}: {e}"))?;
+    let sidecar = sidecar_path(&path);
+    if sidecar.exists() {
+        let _ = std::fs::copy(&sidecar, sidecar_path(dest.to_str().unwrap_or_default()));
+    }
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Moves a photo (and its .xmp sidecar) to macOS's Trash — never a hard delete, so it's
+/// recoverable the same way Finder's own Delete is. `~/.Trash` is normally on the same
+/// volume as the user's Documents/Pictures, so a plain rename works; falls back to
+/// copy+remove for the rare cross-volume case (e.g. an external drive).
+#[tauri::command]
+pub fn trash_file(path: String) -> Result<(), String> {
+    let src = Path::new(&path);
+    let trash_dir = dirs_trash().ok_or("could not resolve ~/.Trash")?;
+    std::fs::create_dir_all(&trash_dir).map_err(|e| format!("create trash dir: {e}"))?;
+    let name = src.file_name().ok_or("no filename")?;
+    let mut dest = trash_dir.join(name);
+    let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let mut n = 1;
+    while dest.exists() {
+        n += 1;
+        let name = if ext.is_empty() { format!("{stem} {n}") } else { format!("{stem} {n}.{ext}") };
+        dest = trash_dir.join(name);
+    }
+    move_or_copy(src, &dest)?;
+    let sidecar = sidecar_path(&path);
+    if sidecar.exists() {
+        let sc_name = sidecar.file_name().ok_or("no sidecar filename")?;
+        let _ = move_or_copy(&sidecar, &trash_dir.join(sc_name));
+    }
+    Ok(())
+}
+
+fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
+    if std::fs::rename(src, dest).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(src, dest).map_err(|e| format!("copy {}: {e}", src.display()))?;
+    std::fs::remove_file(src).map_err(|e| format!("remove {}: {e}", src.display()))
+}
+
+fn dirs_trash() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".Trash"))
 }

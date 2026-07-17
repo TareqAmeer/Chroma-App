@@ -3,6 +3,7 @@
 // lives here: this only wires OS-level integration (native menu bar, file dialogs) on top.
 // The frontend listens for the "menu-*" events emitted below (see desktop-native.js) and
 // calls the SAME JS functions the on-screen buttons already call — no duplicated logic.
+use std::path::{Path, PathBuf};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Emitter;
 
@@ -175,7 +176,7 @@ fn open_url_native(url: String) -> Result<(), String> {
 // WKWebView blob-size limit entirely. On a non-2xx the error string carries the HTTP status,
 // so an auth/scope problem (401/403) is distinguishable from the transport problem this fixes.
 #[tauri::command]
-fn download_url_native(url: String, bearer: String) -> Result<tauri::ipc::Response, String> {
+fn download_url_native(app: tauri::AppHandle, url: String, bearer: String) -> Result<tauri::ipc::Response, String> {
     use std::io::Read;
     if !url.starts_with("https://") {
         return Err("refusing to download a non-https URL".into());
@@ -192,9 +193,15 @@ fn download_url_native(url: String, bearer: String) -> Result<tauri::ipc::Respon
             // Diagnostic for the DNG "no decoder found" report: confirms whether the download
             // itself is intact (right size, right magic bytes) before blaming rawler's DNG
             // support — a truncated/wrong-content-type response would explain an empty
-            // make/model just as well as a genuine rawler gap.
-            let head: String = buf.iter().take(8).map(|b| format!("{b:02x}")).collect();
-            eprintln!("[download_url_native] {} bytes, content-type={content_type}, head={head}", buf.len());
+            // make/model just as well as a genuine rawler gap. Emitted as an app event (not
+            // just eprintln!) so it lands in the app's OWN log panel — the packaged .app has
+            // no attached terminal, so eprintln! output was invisible to anyone not running
+            // `cargo run`/`tauri dev` themselves, which is why this diagnostic never actually
+            // got read despite being added a session ago.
+            let head: String = buf.iter().take(16).map(|b| format!("{b:02x}")).collect();
+            let msg = format!("[gphotos download] {} bytes, content-type={content_type}, head={head}", buf.len());
+            eprintln!("{msg}");
+            let _ = app.emit("gphotos-download-diag", &msg);
             Ok(tauri::ipc::Response::new(buf))
         }
         Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code}")),
@@ -245,7 +252,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-14a"
+    "2026-07-14c"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -254,6 +261,108 @@ fn native_build_tag() -> &'static str {
 fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+fn gphotos_downloads_path() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME").ok_or("no HOME")?;
+    Ok(PathBuf::from(home).join("Documents").join("Google Photos Download"))
+}
+
+// Resolves (and creates) the local Google Photos cache folder so the Library's pinned
+// "Google Photos Download" tree entry has a real path to open, even before any import has
+// run yet this session.
+#[tauri::command]
+fn gphotos_downloads_dir() -> Result<String, String> {
+    let dir = gphotos_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create download dir: {e}"))?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Sniffs the first bytes for a REAL image container, the same magic-byte check
+/// chromasmith-22.html's sniffRealImageKind() does client-side — used here so a RAW-named file
+/// that Google Photos actually only had a JPEG copy of (common for RAW+JPEG pairs and iPhone
+/// ProRAW) gets a truthful extension in the saved-to-disk cache, instead of silently sitting on
+/// disk as "IMG_1234.DNG" while actually being JPEG bytes (misleading in Finder/the Library's
+/// type filter forever after).
+fn sniff_real_ext(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("jpg")
+    } else if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+        Some("png")
+    } else {
+        None
+    }
+}
+
+#[derive(serde::Serialize)]
+struct GpSaveResult {
+    path: String,
+    bytes: u64,
+    renamed: bool, // true if the RAW-looking filename actually held JPEG/PNG bytes
+}
+
+// Caches every Google Photos import to ~/Documents/Google Photos Download/ so re-opening a
+// previously-imported photo (e.g. clicking it again in the Library) reads from disk instead
+// of re-downloading from Google. The Library pins this folder at the top of its tree for
+// quick access (see library-ui.js's pinned-row code).
+//
+// PREVIOUSLY this silently no-op'd on a same-name collision (`if !dest.exists()`) and swallowed
+// every error into a bare console.error on the JS side — so a permissions failure, a full disk,
+// or a stale same-named file from a past import all looked identical to "it worked" from the
+// user's perspective, which is exactly why "files never appear in the folder" survived multiple
+// past fixes: nothing made a failure OBSERVABLE. Now: (1) a name collision gets a de-duped
+// "name (2).ext" instead of being dropped, (2) every Err propagates back to JS with a real
+// message instead of being discarded, (3) the actual written path + byte count come back so the
+// caller can log a concrete confirmation line per file instead of hoping.
+//
+// base64, not a raw-body+header invoke: this command is a low-frequency background write (a
+// handful of calls per Google Photos import session, not a hot decode path), so the ~33% size
+// overhead is worth it for a guaranteed-correct argument shape.
+#[tauri::command]
+fn save_to_gphotos_downloads(filename: String, data_b64: String) -> Result<GpSaveResult, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| format!("bad base64 payload: {e}"))?;
+    let dir = gphotos_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create download dir '{}': {e}", dir.display()))?;
+    // Strip any path separators from the filename Google handed back — it's untrusted input.
+    let safe_name = Path::new(&filename)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("gphotos_import");
+    let src_path = Path::new(safe_name);
+    let src_ext = src_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    const RAW_LOOKING: &[&str] = &["raw", "rw2", "dng", "cr2", "cr3", "nef", "arw", "orf"];
+    let mut renamed = false;
+    let final_name = if RAW_LOOKING.contains(&src_ext.as_str()) {
+        if let Some(real_ext) = sniff_real_ext(&bytes) {
+            renamed = true;
+            let stem = src_path.file_stem().and_then(|s| s.to_str()).unwrap_or("gphotos_import");
+            format!("{stem}.{real_ext}")
+        } else {
+            safe_name.to_string()
+        }
+    } else {
+        safe_name.to_string()
+    };
+    let base = Path::new(&final_name);
+    let stem = base.file_stem().and_then(|s| s.to_str()).unwrap_or("gphotos_import").to_string();
+    let ext = base.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+    let mut dest = dir.join(&final_name);
+    let mut n = 2;
+    // De-dupe by name+size: an identical re-import (same photo, same bytes) reuses the existing
+    // file rather than piling up "(2)", "(3)"... copies of the same download every re-run.
+    while dest.exists() {
+        if std::fs::metadata(&dest).map(|m| m.len()).ok() == Some(bytes.len() as u64) {
+            return Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes: bytes.len() as u64, renamed });
+        }
+        let name = if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") };
+        dest = dir.join(name);
+        n += 1;
+    }
+    std::fs::write(&dest, &bytes).map_err(|e| format!("write {}: {e}", dest.display()))?;
+    Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes: bytes.len() as u64, renamed })
 }
 
 // ── Google OAuth for the desktop shell: the web build's popup+redirect flow (gpAuth() in
@@ -356,7 +465,13 @@ fn main() {
             library::get_preview,
             library::get_meta,
             library::get_sidecar,
-            library::set_sidecar
+            library::set_sidecar,
+            library::duplicate_file,
+            library::trash_file,
+            library::list_edited,
+            library::backfill_edited_registry,
+            save_to_gphotos_downloads,
+            gphotos_downloads_dir
         ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
         // on every single response, including the very first navigation — see the Cargo.toml

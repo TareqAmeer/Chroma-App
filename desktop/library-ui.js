@@ -68,6 +68,12 @@
     expanded_view: false,  // full-window library grid (vs the docked 340px strip)
     openedPath: '',        // path of the photo currently loaded into the editor FROM the library
     selected: new Set(),   // multi-selected paths (shift/cmd-click), for batch rate/flag/open
+    source: 'folder',      // 'folder' | 'edited' — the virtual cross-folder "All Edited" view
+    viewMode: localStorage.getItem('chromasmith_lib_view') || 'grid', // 'grid' | 'list'
+    thumbSize: parseInt(localStorage.getItem('chromasmith_lib_thumbsize') || '140', 10),
+    sortBy: localStorage.getItem('chromasmith_lib_sort') || 'name',       // name|mtime|iso|shutter|aperture|focal|edited
+    sortDir: localStorage.getItem('chromasmith_lib_sortdir') || 'asc',    // 'asc' | 'desc'
+    metaDisplay: localStorage.getItem('chromasmith_lib_metadisp') || 'off', // 'off'|'hover'|'always'
   };
 
   // ── styles ──────────────────────────────────────────────────────────────────
@@ -75,63 +81,86 @@
   // RapidRAW-style DOCKED left panel (not a modal overlay): library and editor are visible
   // and usable at the same time. The app's own layout is untouched — body gets padding-left
   // while the dock is open, and a window resize event re-fits the preview.
-  const DOCK_W = 340;
+  const DOCK_W = 356;
   style.textContent = `
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
-      background:#17171b;display:none;border-right:3px solid #55555f;
-      grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:#f0ece2;
+      background:var(--bg);display:none;border-right:3px solid #55555f;
+      grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
       font-family:-apple-system,'Helvetica Neue',sans-serif;transition:width .15s ease;}
     #lib-overlay.on{display:grid}
     #lib-overlay.full{width:100vw;grid-template-rows:auto auto minmax(100px,18%) 1fr 28px}
     #lib-overlay.full #lib-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
-    body.lib-docked{padding-left:${DOCK_W}px}
-    body.lib-docked.lib-full{padding-left:0}
+    /* body padding-left is set from JS (syncDockPadding, below) instead of a hand-maintained
+       px value here — it previously had to be kept in exact sync with #lib-overlay's rendered
+       width across THREE separate modes (default/deskx-filmstrip/full), and a drift between
+       those numbers is exactly what caused the panel to visually overlap the editor instead of
+       pushing it aside. A ResizeObserver on the overlay itself is the single source of truth. */
     #lib-top{display:flex;align-items:center;gap:8px;padding:34px 12px 6px;-webkit-app-region:drag}
     #lib-top button{-webkit-app-region:no-drag}
     #lib-top .lib-title{font-weight:600;font-size:14px;margin-right:auto}
     #lib-filters{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 8px}
     #lib-filters #lib-search{grid-column:1/3}
-    #lib-side{overflow:auto;padding:4px 8px;border-top:1px solid #24242c;border-bottom:1px solid #24242c}
-    #lib-main{overflow:auto;padding:10px}
-    #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid #34343f}
-    .lib-btn{background:#26262d;border:1px solid #34343f;color:#f0ece2;border-radius:8px;
+    #lib-side{overflow:auto;padding:8px 12px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr)}
+    #lib-main{overflow:auto;padding:16px}
+    #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid var(--bdr)}
+    .lib-btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
       padding:5px 10px;font-size:12px;cursor:pointer}
-    .lib-btn:hover{background:#34343f}
+    .lib-btn:hover{background:var(--bdr)}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
     .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
-    .lib-tree-row:hover{background:#26262d}
-    .lib-tree-row.on{background:#34343f}
+    .lib-tree-row:hover{background:var(--sur2)}
+    .lib-tree-row.on{background:var(--bdr)}
     .lib-tree-chev{width:14px;flex:0 0 14px;text-align:center;opacity:.6;font-size:10px}
     .lib-tree-children{margin-left:14px}
-    #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
-    .lib-card{background:#1f1f25;border:2px solid #34343f;border-radius:8px;overflow:hidden;
+    #lib-viewbar{display:flex;align-items:center;gap:8px;padding:0 12px 8px;flex-wrap:wrap}
+    #lib-viewbar select,#lib-viewbar input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
+      border-radius:7px;padding:5px 7px;font-size:11px}
+    #lib-viewbar .lib-seg{display:flex;border:1px solid var(--bdr);border-radius:7px;overflow:hidden}
+    #lib-viewbar .lib-seg button{background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer}
+    #lib-viewbar .lib-seg button.on{background:var(--acc);color:#000}
+    #lib-viewbar .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
+    #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
+    #lib-grid.list-view{display:flex;flex-direction:column;gap:2px}
+    #lib-grid.list-view .lib-card{display:flex;align-items:center;gap:10px;border-width:1px;padding:4px 8px}
+    #lib-grid.list-view .lib-thumb-wrap{width:52px;height:40px;flex:0 0 52px;aspect-ratio:auto}
+    #lib-grid.list-view .lib-name{flex:1;padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #lib-grid.list-view .lib-tagrow{padding:0}
+    #lib-grid.list-view .lib-edited-badge{position:static;margin-right:4px}
+    #lib-grid.list-view .lib-list-meta{font-size:10px;color:var(--mut);font-family:ui-monospace,Menlo,monospace;
+      white-space:nowrap;flex:0 0 auto;margin-right:8px}
+    .lib-meta-strip{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);color:#fff;
+      font-size:9px;font-family:ui-monospace,Menlo,monospace;padding:3px 5px;line-height:1.3;
+      pointer-events:none;opacity:0}
+    .lib-card:hover .lib-meta-strip.hover-mode,.lib-meta-strip.always-mode{opacity:1}
+    .lib-thumb-wrap{position:relative}
+    .lib-card{background:var(--sur);border:2px solid var(--bdr);border-radius:8px;overflow:hidden;
       cursor:pointer;position:relative}
-    .lib-card:hover{border-color:#d4903a}
-    .lib-card.sel{border-color:#d4903a;box-shadow:0 0 0 1px #d4903a}
-    .lib-card.multi{border-color:#5b9bd5;box-shadow:0 0 0 1px #5b9bd5}
-    .lib-card.sel.multi{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #5b9bd5}
+    .lib-card:hover{border-color:var(--acc)}
+    .lib-card.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+    .lib-card.multi{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
+    .lib-card.sel.multi{box-shadow:0 0 0 1px var(--acc),0 0 0 3px var(--acc2)}
     .lib-card.flag-red{box-shadow:0 0 0 2px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
     .lib-card.flag-green{box-shadow:0 0 0 2px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
-    .lib-card.flag-red.sel{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
-    .lib-card.flag-green.sel{box-shadow:0 0 0 1px #d4903a,0 0 0 3px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
+    .lib-card.flag-red.sel{box-shadow:0 0 0 1px var(--acc),0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
+    .lib-card.flag-green.sel{box-shadow:0 0 0 1px var(--acc),0 0 0 3px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
     /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
        photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
-    .lib-thumb-wrap{aspect-ratio:1.3;background:#0c0c0f;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .lib-thumb-wrap{aspect-ratio:1.3;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:contain;display:block}
-    .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:#9a968f;
+    .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:var(--mut);
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-tagrow{display:flex;align-items:center;gap:6px;padding:0 6px 6px}
     .lib-stars{display:flex;gap:1px}
     .lib-star{cursor:pointer;font-size:12px;color:#4a4a55}
-    .lib-star.on{color:#d4903a}
+    .lib-star.on{color:var(--acc)}
     .lib-flags{display:flex;gap:3px;margin-left:auto}
     .lib-flag{cursor:pointer;font-size:11px;opacity:.35;filter:grayscale(1)}
     .lib-flag.on{opacity:1;filter:none}
-    .lib-edited-badge{position:absolute;top:4px;right:4px;background:#d4903a;color:#17171b;
+    .lib-edited-badge{position:absolute;top:4px;right:4px;background:var(--acc);color:var(--bg);
       font-size:8px;font-weight:700;letter-spacing:.03em;border-radius:4px;padding:1px 4px}
-    #lib-empty{color:#9a968f;font-size:12px;padding:30px 10px;text-align:center}
-    #lib-filters select,#lib-filters input{background:#26262d;border:1px solid #34343f;color:#f0ece2;
+    #lib-empty{color:var(--mut);font-size:12px;padding:30px 10px;text-align:center}
+    #lib-filters select,#lib-filters input{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
     /* Provisional preview must fully REPLACE the previous photo, not float over it: it fills
        the whole zoom-wrap with an opaque black backing and hides the canvas underneath —
@@ -145,15 +174,13 @@
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
     body.deskx #lib-overlay:not(.full){width:120px;grid-template-rows:auto 1fr}
-    body.deskx.lib-docked{padding-left:120px}
-    body.deskx.lib-docked.lib-full{padding-left:0}
     body.deskx #lib-overlay:not(.full) #lib-filters,body.deskx #lib-overlay:not(.full) #lib-side,
-    body.deskx #lib-overlay:not(.full) #lib-bottom{display:none}
+    body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar{display:none}
     body.deskx #lib-overlay #lib-top{padding:8px 8px 6px;-webkit-app-region:no-drag} /* strip starts below the deskbar — no traffic-light clearance needed */
     body.deskx #lib-overlay:not(.full) #lib-top{padding:8px 6px 6px;gap:4px}
     body.deskx #lib-overlay:not(.full) #lib-top .lib-title{display:none}
-    body.deskx #lib-overlay:not(.full) #lib-main{padding:6px}
-    body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:1fr;gap:6px}
+    body.deskx #lib-overlay:not(.full) #lib-main{padding:10px}
+    body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:1fr;gap:12px}
     body.deskx #lib-overlay:not(.full) .lib-card .lib-name,
     body.deskx #lib-overlay:not(.full) .lib-tagrow{display:none}
     /* Lightroom-style filmstrip cells: the photo keeps its REAL aspect ratio (no square
@@ -161,7 +188,7 @@
        tall and landscape frames are short, like Lightroom's filmstrip. */
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px}
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{width:100%;height:auto;object-fit:contain}
-    body.deskx #lib-overlay:not(.full) .lib-card{border:1px solid #34343f;border-radius:6px;padding:2px;background:#1f1f25}
+    body.deskx #lib-overlay:not(.full) .lib-card{border:1px solid var(--bdr);border-radius:6px;padding:2px;background:var(--sur)}
     /* the fixed 44px deskbar sits above everything; keep the strip below it */
     body.deskx #lib-overlay{top:44px;z-index:2500}
     body.deskx #lib-overlay.full{top:44px}
@@ -175,11 +202,17 @@
     <div id="lib-top">
       <span class="lib-title">Library</span>
       <button class="lib-btn" id="lib-pick" title="Choose root folder">📁</button>
+      <button class="lib-btn" id="lib-gphotos" title="Import from Google Photos">☁️</button>
+      <button class="lib-btn" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">🕘</button>
       <button class="lib-btn" id="lib-expand" title="Full-window view — G">⛶</button>
       <button class="lib-btn" id="lib-close" title="Hide library panel">⇤</button>
     </div>
     <div id="lib-filters">
       <input id="lib-search" placeholder="Search filename…" />
+      <select id="lib-source" title="Photo source">
+        <option value="folder">This folder</option>
+        <option value="edited">All Edited</option>
+      </select>
       <select id="lib-type-filter" title="Filter by file type">
         <option value="all">All types</option>
         <option value="raw">RAW</option><option value="jpeg">JPEG</option>
@@ -201,11 +234,54 @@
         <option value="5">★★★★★ 5</option>
       </select>
     </div>
+    <div id="lib-viewbar">
+      <div class="lib-seg" id="lib-viewmode-seg">
+        <button data-v="grid" title="Grid view">▦</button>
+        <button data-v="list" title="List view">☰</button>
+      </div>
+      <select id="lib-sort" title="Sort by">
+        <option value="name">Name</option>
+        <option value="mtime">Date modified</option>
+        <option value="date">Date taken</option>
+        <option value="iso">ISO</option>
+        <option value="shutter">Shutter speed</option>
+        <option value="aperture">Aperture</option>
+        <option value="focal">Focal length</option>
+        <option value="edited">Edit status</option>
+      </select>
+      <button class="lib-btn" id="lib-sort-dir" title="Reverse sort order">↑</button>
+      <select id="lib-metadisp" title="Show metadata on cards">
+        <option value="off">Metadata: Off</option>
+        <option value="hover">Metadata: On hover</option>
+        <option value="always">Metadata: Always</option>
+      </select>
+      <div class="lib-thumbsize" id="lib-thumbsize-wrap">
+        <span>Size</span><input type="range" id="lib-thumbsize" min="90" max="320" step="10">
+      </div>
+    </div>
     <div id="lib-side"></div>
     <div id="lib-main"><div id="lib-grid"></div></div>
-    <div id="lib-bottom"><span style="font-size:11px;color:#9a968f" id="lib-count"></span></div>
+    <div id="lib-bottom"><span style="font-size:11px;color:var(--mut)" id="lib-count"></span></div>
   `;
   document.body.appendChild(overlay);
+
+  // Single source of truth for how much the docked panel pushes the editor over.
+  // PREVIOUSLY this read the overlay's own RENDERED width via ResizeObserver — async by
+  // nature, so on any state change that toggles display but doesn't itself change the box
+  // size within the same observed frame (WebKit's ResizeObserver is known to miss/lag
+  // display:none<->grid transitions, especially mid-CSS-transition), the padding update
+  // could land a frame (or more) after the overlay painted, or never fire at all — the panel
+  // then visually overlapped the editor until an unrelated resize nudged the observer. That
+  // is the recurring bug: two independent sources of truth (rendered width vs. applied
+  // padding) that could desync.
+  // FIX: derive the padding synchronously from the SAME state that decides the overlay's own
+  // CSS width (deskx filmstrip / default dock / full-window) — one deterministic switch, set
+  // in the same tick as the class toggle, no observer, no timing race.
+  function syncDockPadding() {
+    const active = state.open && !state.expanded_view;
+    document.body.style.paddingLeft = active ? (document.body.classList.contains('deskx') ? '120px' : DOCK_W + 'px') : '';
+  }
+  window.addEventListener('resize', syncDockPadding);
 
   // ── provisional preview: while a RAW's full native decode (PPG demosaic + DCP LUT,
   // several seconds) runs, show the camera's own embedded JPEG immediately over the preview
@@ -259,11 +335,87 @@
       if (!chosen) return;
       state.root = Array.isArray(chosen) ? chosen[0] : chosen;
       localStorage.setItem(LS_ROOT, state.root);
+      pushRecentFolder(state.root);
       state.expanded.clear();
       state.expanded.add(state.root);
       await renderTree();
       await openFolder(state.root);
     } catch (e) { console.error('pickFolder', e); }
+  }
+
+  // ── quick access: jump straight to a folder (used by the Recent-folders dropdown AND the
+  // Google Photos pinned entry) without going through the OS folder-picker dialog. ──────────
+  async function openAsRoot(path) {
+    state.root = path;
+    localStorage.setItem(LS_ROOT, path);
+    pushRecentFolder(path);
+    state.expanded.clear();
+    state.expanded.add(path);
+    await renderTree();
+    await openFolder(path);
+  }
+
+  // ── recent folders (MRU, capped) — a Darkroom-style quick-access list so re-opening a
+  // folder you browsed earlier this session (or a prior one) doesn't need the OS picker
+  // again. Kept separate from state.root/LS_ROOT (which only remembers the LAST folder). ────
+  const LS_RECENTS = 'chromasmith_lib_recents';
+  const RECENTS_MAX = 8;
+  function getRecentFolders() {
+    try { return JSON.parse(localStorage.getItem(LS_RECENTS) || '[]'); } catch (e) { return []; }
+  }
+  function pushRecentFolder(path) {
+    if (!path) return;
+    const list = getRecentFolders().filter((p) => p !== path);
+    list.unshift(path);
+    try { localStorage.setItem(LS_RECENTS, JSON.stringify(list.slice(0, RECENTS_MAX))); } catch (e) { /* ignore */ }
+  }
+
+  // Top-bar "Recent" dropdown: pinned Google Photos Download entry (always first, created on
+  // demand even if no import ran yet this launch) + the MRU recent-folders list. Lives in
+  // #lib-top rather than the folder tree (#lib-side) because #lib-side is HIDDEN in the
+  // docked filmstrip mode (deskx) — a tree-only quick-access link would be invisible there,
+  // which is exactly the "can't find quick access to the folder" bug this replaces.
+  let gphotosDirCache = null;
+  async function gphotosDownloadsDir() {
+    if (!gphotosDirCache) { try { gphotosDirCache = await invoke('gphotos_downloads_dir'); } catch (e) { console.error('gphotos_downloads_dir', e); } }
+    return gphotosDirCache;
+  }
+  let recentMenu = null;
+  function closeRecentMenu() { if (recentMenu) { recentMenu.remove(); recentMenu = null; } }
+  document.addEventListener('click', closeRecentMenu);
+  async function toggleRecentMenu(e) {
+    e.stopPropagation();
+    if (recentMenu) { closeRecentMenu(); return; }
+    const gDir = await gphotosDownloadsDir();
+    const recents = getRecentFolders().filter((p) => p !== gDir);
+    recentMenu = document.createElement('div');
+    recentMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);' +
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:220px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    const item = (label, path) => {
+      const el = document.createElement('div');
+      el.textContent = label;
+      el.title = path;
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
+      el.onmouseleave = () => { el.style.background = ''; };
+      el.onclick = async (ev) => { ev.stopPropagation(); closeRecentMenu(); await openAsRoot(path); };
+      recentMenu.appendChild(el);
+    };
+    if (gDir) item('☁️ Google Photos Download', gDir);
+    if (recents.length) {
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0';
+      recentMenu.appendChild(sep);
+      recents.forEach((p) => item('📁 ' + baseName(p), p));
+    } else if (!gDir) {
+      item('No recent folders yet', '');
+    }
+    document.body.appendChild(recentMenu);
+    const r = document.getElementById('lib-recent').getBoundingClientRect();
+    const { innerWidth: vw } = window;
+    const mr = recentMenu.getBoundingClientRect();
+    recentMenu.style.left = Math.min(r.left, vw - mr.width - 8) + 'px';
+    recentMenu.style.top = (r.bottom + 4) + 'px';
   }
 
   async function loadThumb(path, imgEl) {
@@ -521,7 +673,7 @@
   async function renderTree() {
     const side = document.getElementById('lib-side');
     side.innerHTML = '';
-    if (!state.root) { side.innerHTML = '<div style="padding:10px;font-size:12px;color:#9a968f">Choose a folder to browse.</div>'; return; }
+    if (!state.root) { side.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--mut)">Choose a folder to browse.</div>'; return; }
     const rootNode = await buildTreeNode(state.root);
     side.appendChild(rootNode);
   }
@@ -588,6 +740,39 @@
     await renderGrid();
   }
 
+  // ── sort ────────────────────────────────────────────────────────────────────
+  function sortKeyOf(entry) {
+    const sc = state.sidecars.get(entry.path) || { edited: false };
+    const m = state.meta.get(entry.path) || {};
+    switch (state.sortBy) {
+      case 'mtime': return entry.mtime || 0;
+      case 'date': return m.date || '';
+      case 'iso': return m.iso || 0;
+      case 'shutter': return (m.shutter || '').startsWith('1/') ? -1 / parseFloat(m.shutter.slice(2) || '1') : parseFloat(m.shutter) || 0;
+      case 'aperture': return parseFloat((m.aperture || '').replace('f/', '')) || 0;
+      case 'focal': return parseFloat(m.focal_len || '') || 0;
+      case 'edited': return sc.edited ? 1 : 0;
+      default: return (entry.name || '').toLowerCase();
+    }
+  }
+  function sortEntries(list) {
+    const dir = state.sortDir === 'desc' ? -1 : 1;
+    return list.slice().sort((a, b) => {
+      const ka = sortKeyOf(a), kb = sortKeyOf(b);
+      if (ka < kb) return -1 * dir;
+      if (ka > kb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  function metaStripHtml(entry) {
+    const m = state.meta.get(entry.path) || {};
+    const parts = [m.iso ? `ISO ${m.iso}` : '', m.shutter || '', m.aperture || '', m.focal_len || ''].filter(Boolean);
+    if (!parts.length) return '';
+    const cls = state.metaDisplay === 'always' ? 'always-mode' : 'hover-mode';
+    return `<div class="lib-meta-strip ${cls}">${parts.join(' · ')}</div>`;
+  }
+
   function passesFilters(entry) {
     const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
     const m = state.meta.get(entry.path) || {};
@@ -625,6 +810,19 @@
       card.classList.toggle('flag-green', label === 'Green');
     }
   }
+  // Exposed so the main editor toolbar (chromasmith-22.html's top bar) can flag the
+  // CURRENTLY OPEN photo without needing the Library panel open — same underlying
+  // setLabel() the grid's own flag icons and context menu use, so it stays in sync either way.
+  window.chromasmithToggleFlag = async (label) => {
+    const path = state.openedPath;
+    if (!path) return;
+    const cur = await getSidecar(path);
+    await setLabel(path, cur.label === label ? '' : label);
+  };
+  window.chromasmithOpenedFlag = () => {
+    const path = state.openedPath;
+    return path ? (state.sidecars.get(path) || {}).label || '' : '';
+  };
   let grid; // set at the top of renderGrid; the helpers above close over it
 
   // ── multi-select: cmd/ctrl toggles one card, shift range-selects from the last-clicked
@@ -650,10 +848,23 @@
       updateCardSelClasses();
       return;
     }
-    state.selected.clear();
+    // Plain click just (de/re)selects — opening now needs a double-click (Darkroom-style
+    // tap-to-select / double-tap-to-open), so a single click can be used to build a multi-
+    // selection without immediately jumping into the editor.
+    if (state.selected.size === 1 && state.selected.has(entry.path)) {
+      state.selected.clear();
+    } else {
+      state.selected.clear();
+      state.selected.add(entry.path);
+    }
     selectAnchor = idx;
     updateCardSelClasses();
-    openInEditor(entry.path); // plain click opens, same as before multi-select existed
+  }
+  function handleCardDblClick(e, entry) {
+    if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; }
+    state.selected.clear();
+    updateCardSelClasses();
+    openInEditor(entry.path);
   }
 
   let ctxMenu = null;
@@ -677,19 +888,19 @@
     closeContextMenu();
     const n = paths.length;
     ctxMenu = document.createElement('div');
-    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:#26262d;border:1px solid #34343f;' +
-      'border-radius:8px;padding:4px;font-size:12px;color:#f0ece2;font-family:-apple-system,sans-serif;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);' +
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)';
     const item = (label, fn) => {
       const el = document.createElement('div');
       el.textContent = label;
       el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
-      el.onmouseenter = () => { el.style.background = '#34343f'; };
+      el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
       el.onmouseleave = () => { el.style.background = ''; };
       el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
       ctxMenu.appendChild(el);
       return el;
     };
-    const sep = () => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:#34343f;margin:4px 0'; ctxMenu.appendChild(s); };
+    const sep = () => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0'; ctxMenu.appendChild(s); };
     if (opts.includeOpen) {
       item(`Open ${n > 1 ? n + ' photos' : 'in editor'}`, async () => {
         if (n <= 1) { await openInEditor(paths[0]); return; }
@@ -755,6 +966,21 @@
       if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(window.__copiedRecipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
     })));
     if (!window.__copiedRecipe) { pasteItem.style.opacity = '.4'; pasteItem.style.pointerEvents = 'none'; }
+    sep();
+    item(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
+      for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
+      if (state.currentFolder) await openFolder(state.currentFolder);
+    });
+    item(`🗑️ Delete ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
+      const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
+      if (!window.confirm(`Move ${label} to the Trash?`)) return;
+      for (const p of paths) {
+        try { await invoke('trash_file', { path: p }); state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p); }
+        catch (e) { console.error('trash_file', p, e); toast('Could not delete ' + baseName(p)); }
+      }
+      state.selected.clear();
+      if (state.currentFolder) await openFolder(state.currentFolder);
+    });
     document.body.appendChild(ctxMenu);
     const { innerWidth: vw, innerHeight: vh } = window;
     const r = ctxMenu.getBoundingClientRect();
@@ -779,23 +1005,39 @@
   async function renderGrid() {
     grid = document.getElementById('lib-grid');
     grid.innerHTML = '';
-    const shown = state.entries.filter(passesFilters);
+    grid.classList.toggle('list-view', state.viewMode === 'list');
+    grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
+    const shown = sortEntries(state.entries.filter(passesFilters));
     shown.forEach((entry, idx) => {
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
-        (sc.label === 'Red' ? ' flag-red' : sc.label === 'Green' ? ' flag-green' : '');
+        (sc.label === 'Red' ? ' flag-red' : sc.label === 'Green' ? ' flag-green' : '') + (entry.missing ? ' lib-missing' : '');
       card.dataset.path = entry.path;
-      card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
-        ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
-        <div class="lib-name">${entry.name}</div>
-        <div class="lib-tagrow">
-          <div class="lib-stars">${starsHtml(Math.max(sc.rating, 0))}</div>
-          <div class="lib-flags">${flagsHtml(sc.label)}</div>
-        </div>`;
+      if (state.viewMode === 'list') {
+        const m = state.meta.get(entry.path) || {};
+        const metaTxt = [m.iso ? `ISO ${m.iso}` : '', m.shutter || '', m.aperture || '', m.focal_len || ''].filter(Boolean).join(' · ');
+        card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
+          ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
+          <div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>
+          <div class="lib-list-meta">${metaTxt}</div>
+          <div class="lib-tagrow">
+            <div class="lib-stars">${starsHtml(Math.max(sc.rating, 0))}</div>
+            <div class="lib-flags">${flagsHtml(sc.label)}</div>
+          </div>`;
+      } else {
+        card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt="">${metaStripHtml(entry)}</div>
+          ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
+          <div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>
+          <div class="lib-tagrow">
+            <div class="lib-stars">${starsHtml(Math.max(sc.rating, 0))}</div>
+            <div class="lib-flags">${flagsHtml(sc.label)}</div>
+          </div>`;
+      }
       const img = card.querySelector('img');
       loadThumb(entry.path, img);
       card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
+      card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
       card.oncontextmenu = (e) => showContextMenu(e, entry, shown);
       card.querySelectorAll('.lib-star').forEach((star) => {
         star.onclick = (e) => {
@@ -823,12 +1065,18 @@
 
   // ── wiring ──────────────────────────────────────────────────────────────────
   overlay.querySelector('#lib-pick').onclick = pickFolder;
+  overlay.querySelector('#lib-gphotos').onclick = () => {
+    // gpImportClick lives in chromasmith-22.html (the web-app half); it's exposed on window.
+    if (typeof window.gpImportClick === 'function') window.gpImportClick();
+  };
+  overlay.querySelector('#lib-recent').onclick = toggleRecentMenu;
   overlay.querySelector('#lib-close').onclick = () => { if (state.open) toggleLibrary(); };
   overlay.querySelector('#lib-expand').onclick = () => toggleExpandedView();
   function toggleExpandedView(force) {
     state.expanded_view = force !== undefined ? force : !state.expanded_view;
     overlay.classList.toggle('full', state.expanded_view);
     document.body.classList.toggle('lib-full', state.expanded_view);
+    syncDockPadding();
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
   document.addEventListener('keydown', (e) => {
@@ -850,11 +1098,72 @@
     searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); }, 150);
   };
 
+  // ── view options: view mode, sort, thumb size, metadata display, source ─────────────────
+  const viewSeg = overlay.querySelector('#lib-viewmode-seg');
+  function syncViewSeg() { viewSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.viewMode)); }
+  viewSeg.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { state.viewMode = b.dataset.v; localStorage.setItem('chromasmith_lib_view', state.viewMode); syncViewSeg(); renderGrid(); };
+  });
+  syncViewSeg();
+
+  const thumbSlider = overlay.querySelector('#lib-thumbsize');
+  thumbSlider.value = state.thumbSize;
+  thumbSlider.oninput = (e) => {
+    state.thumbSize = parseInt(e.target.value, 10);
+    localStorage.setItem('chromasmith_lib_thumbsize', state.thumbSize);
+    if (grid) grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
+  };
+
+  const sortSel = overlay.querySelector('#lib-sort');
+  sortSel.value = state.sortBy;
+  sortSel.onchange = (e) => { state.sortBy = e.target.value; localStorage.setItem('chromasmith_lib_sort', state.sortBy); renderGrid(); };
+  const sortDirBtn = overlay.querySelector('#lib-sort-dir');
+  function syncSortDirBtn() { sortDirBtn.textContent = state.sortDir === 'desc' ? '↓' : '↑'; }
+  syncSortDirBtn();
+  sortDirBtn.onclick = () => {
+    state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+    localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
+    syncSortDirBtn(); renderGrid();
+  };
+
+  const metaSel = overlay.querySelector('#lib-metadisp');
+  metaSel.value = state.metaDisplay;
+  metaSel.onchange = (e) => { state.metaDisplay = e.target.value; localStorage.setItem('chromasmith_lib_metadisp', state.metaDisplay); renderGrid(); };
+
+  // "All Edited": a virtual, cross-folder collection — see Rust's list_edited()/registry_set().
+  // Backfilled once per session (cheap text scan of recent folders' .xmp sidecars) so photos
+  // edited before this feature existed still show up without a manual re-scan step.
+  let backfillDone = false;
+  overlay.querySelector('#lib-source').onchange = async (e) => {
+    state.source = e.target.value;
+    if (state.source === 'edited') {
+      if (!backfillDone) {
+        backfillDone = true;
+        const folders = Array.from(new Set([state.root, ...getRecentFolders()].filter(Boolean)));
+        invoke('backfill_edited_registry', { folders }).catch((err) => console.error('backfill_edited_registry', err));
+      }
+      await openEditedView();
+    } else if (state.currentFolder) {
+      await openFolder(state.currentFolder);
+    }
+  };
+  async function openEditedView() {
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    grid.innerHTML = '<div id="lib-empty">Loading…</div>';
+    let entries;
+    try { entries = await invoke('list_edited'); } catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load edited photos.</div>'; return; }
+    state.entries = entries;
+    await Promise.all(entries.filter((e) => !e.missing).map((e) => Promise.all([getSidecar(e.path), getMeta(e.path)])));
+    await renderGrid();
+  }
+
   async function toggleLibrary() {
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
     document.body.classList.toggle('lib-docked', state.open);
     if (!state.open && state.expanded_view) toggleExpandedView(false); // don't stay full-window for next open
+    syncDockPadding();
     // The dock shifts the app's layout; the preview canvas measures the window to fit, so
     // poke a resize once the CSS has applied.
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
