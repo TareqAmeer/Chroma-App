@@ -771,7 +771,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       </div>
       <!-- LOCAL ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="local">
-        <div class="fx-ctrl-title">Local Adjustments <div class="fx-toggle" id="tg-local" onclick="toggleFX('local')"></div></div>
+        <div class="fx-ctrl-title">Masks <div class="fx-toggle" id="tg-local" onclick="toggleFX('local')"></div></div>
         <div class="fx-fields" id="ff-local">
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAdd('radial')"><span class="bdot"></span>+ Radial</button>
@@ -1089,7 +1089,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <li>Eight colour bands (Red → Magenta). Pick a band chip, then shift its <b>Hue</b>, <b>Saturation</b> and <b>Luminance</b> independently — e.g. tame orange skin, deepen a blue sky, mute distracting greens. Edited bands get a white ring.</li>
     </ul>
 
-    <h3>Local Adjustments</h3>
+    <h3>Masks</h3>
     <ul>
       <li>Up to 4 <b>Radial</b> (faces, subjects) or <b>Linear</b> (skies, foregrounds) masks. Position/size with the X/Y/Width sliders, soften with <b>Feather</b>, flip with <b>Invert</b>, and restrict to a tonal range with <b>Lum floor/ceiling</b> (e.g. brighten only the shadows inside the mask).</li>
       <li>Each mask carries its own Exposure, Contrast, Temp and Saturation. Masks are resolution-independent — exports and the 1:1 loupe match the preview exactly.</li>
@@ -2936,7 +2936,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17b';
+const BUILD='2026-07-17c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -7821,9 +7821,16 @@ const ICONS={
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
-const FX_SECTIONS=[['image','Image'],['looks','Looks'],['canvas','Canvas'],['grain','Grain'],['art','Artifacts'],
-  ['bloom','Bloom'],['hal','Halation'],['borders','Borders'],['adjust','Adjust'],['nr','Noise'],
-  ['curves','Curves'],['hsl','Mixer'],['local','Local'],['vig','Vignette'],['lens','Lens'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
+// Order groups related sections together (Light > Color > Detail > Film > Frame > Masks >
+// Crop > Export), matching the deskx rail groups below — Film specifically in the requested
+// grain > halation > bloom > artifacts > vignette order (render order is unaffected; this is
+// UI ordering only).
+const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Adjust'],
+  ['curves','Curves'],['hsl','Mixer'],
+  ['lens','Lens'],['nr','Noise'],
+  ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Vignette'],
+  ['borders','Borders'],['canvas','Canvas'],
+  ['local','Masks'],['crop','Crop'],['export','Export'],['info','Info'],['diag','Diag']];
 function _eachSection(cb){
   const diagOn=document.body.classList.contains('diag-on');
   FX_SECTIONS.forEach(([key,lb])=>{
@@ -7838,7 +7845,9 @@ function _eachSection(cb){
 // sec-active together, so they stack in the panel under one rail selection. Not used outside
 // deskx (buildSecNav/mobile and the older fx-deskb rail keep the full flat list).
 const FX_GROUPS={color:{label:'Color',icon:'curves',members:['curves','hsl']},
-  film:{label:'Film',icon:'grain',members:['grain','art','bloom','hal']}};
+  detail:{label:'Detail',icon:'lens',members:['lens','nr']},
+  film:{label:'Film',icon:'grain',members:['grain','hal','bloom','art','vig']},
+  frame:{label:'Frame',icon:'borders',members:['borders','canvas']}};
 const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
 function _activeSec(){
   const c=document.querySelector('.fx-ctrl.sec-active');if(!c)return null;
