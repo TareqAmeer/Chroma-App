@@ -1,0 +1,27 @@
+{
+ "base": {
+  "dump": "__TM3329-2.RW2",
+  "corr": 0.992,
+  "iso": 200
+ },
+ "scene2": {
+  "dump": "__TM3238.RW2",
+  "corr": 0.953,
+  "iso": 1250
+ },
+ "scene3": {
+  "dump": "__TM4549.RW2",
+  "corr": 0.975,
+  "iso": 2500
+ },
+ "scene4": {
+  "dump": "__TM3116.RW2",
+  "corr": 0.981,
+  "iso": 500
+ },
+ "scene5": {
+  "dump": "__TM4776.RW2",
+  "corr": 0.989,
+  "iso": 5000
+ }
+}
