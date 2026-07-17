@@ -383,6 +383,12 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-db-pri{background:var(--acc);border-color:var(--acc);color:#000;font-weight:600}
 .fx-db-pri .fx-db-ic{color:#000}
 .fx-db-pri:hover{background:#e8a54a}
+.fx-db-icon{padding:8px;gap:0}
+body.deskx .fx-db-icon{padding:5px}
+.flag-btn{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--bdr);border-radius:6px;cursor:pointer}
+.flag-btn svg{width:15px;height:15px}
+.flag-btn-green{color:#3fb556}
+.flag-btn-red{color:#e05a4e}
 .fx-db-icon{padding:8px 10px}
 .fx-db-icon .fx-db-ic{color:var(--txt)}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
@@ -621,9 +627,9 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
   <!-- DESKTOP persistent quick-access bar -->
   <div id="fx-deskbar">
     <button class="fx-db" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)">🗂</button>
-    <button class="fx-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span>Undo</button>
-    <button class="fx-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span>Redo</button>
-    <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
+    <button class="fx-db fx-db-icon" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
+    <button class="fx-db fx-db-icon" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+    <button class="fx-db fx-db-icon" onclick="fxResetAll()" title="Reset all edits"><span class="fx-db-ic" id="db-reset"></span></button>
     <div style="flex:1"></div>
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
     <div style="flex:1"></div>
@@ -632,6 +638,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       <button class="fx-db" onclick="ovfToggle(event)" title="More — other tools &amp; settings">⋯</button>
       <div id="fx-overflow-menu"></div>
     </div>
+    <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
     <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
   </div>
   <div class="fx-layout">
@@ -980,10 +987,13 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <div id="fx-crop-overlay"></div>
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
           <button onclick="zoomBy(1/1.25)" title="Zoom out">−</button>
+          <input type="range" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)" title="Drag to zoom">
           <span id="fx-zoom-pct" title="Scroll to zoom · drag to pan · double-click to reset">100%</span>
           <button onclick="zoomBy(1.25)" title="Zoom in">+</button>
           <button onclick="zoomFit()" title="Fit the whole image">Fit</button>
           <button id="btn-loupe" onclick="toggleLoupe()" title="True 1:1 view — renders a native-resolution crop through the full pipeline so grain &amp; halation appear at real export scale">1:1</button>
+          <button id="btn-flag-red" class="flag-btn flag-btn-red" onclick="fxToggleFlag('Red')" title="Reject (Library)" style="margin-left:4px;display:none"></button>
+          <button id="btn-flag-green" class="flag-btn flag-btn-green" onclick="fxToggleFlag('Green')" title="Green flag (Library)" style="display:none"></button>
         </div>
         <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
           <button class="btn bgh fx-mini" id="btn-before" title="Press and hold to see the original">○ Compare</button>
@@ -2926,7 +2936,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-13b';
+const BUILD='2026-07-17a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4319,14 +4329,40 @@ let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='
 // Deskbar center title (deskx desktop shell): filename + status suffix. status is either the
 // image dimensions ("6000 × 4000") or, while a decode is in flight, an animated spinner
 // (spinning=true, statusText ignored). Also exposed on window for library-ui.js.
+// File-extension → short format label for the deskbar status (e.g. "RW2", "HEIC", "JPG").
+function fxFormatLabel(name){const m=/\.([a-z0-9]+)$/i.exec(name||'');return m?m[1].toUpperCase():''}
+function fxDimsFmt(name,img){
+  const dims=img?`${img.width} × ${img.height}`:'';
+  const fmt=fxFormatLabel(name);
+  return dims&&fmt?`${dims} · ${fmt}`:(dims||fmt);
+}
 function fxDeskbarTitle(name,statusText,spinning){
   const n=document.getElementById('db-title-name'),s=document.getElementById('db-title-status');
   if(!n||!s)return;
   if(name!==undefined&&name!==null)n.textContent=name;
   s.classList.toggle('spin',!!spinning);
   s.textContent=spinning?'':(statusText||'');
+  fxUpdateFlagBtns();
 }
 window.fxDeskbarTitle=fxDeskbarTitle;
+// Library red/green flag toggle for the currently-open photo — Tauri/Library-only (no-op,
+// buttons hidden, in the browser build where window.chromasmithToggleFlag is never defined).
+async function fxToggleFlag(label){
+  if(typeof window.chromasmithToggleFlag!=='function')return;
+  if(typeof hapt==='function')hapt();
+  await window.chromasmithToggleFlag(label);
+  fxUpdateFlagBtns();
+}
+function fxUpdateFlagBtns(){
+  const has=typeof window.chromasmithOpenedFlag==='function';
+  const r=document.getElementById('btn-flag-red'),g=document.getElementById('btn-flag-green');
+  if(!r||!g)return;
+  r.style.display=g.style.display=has?'':'none';
+  if(!has)return;
+  const label=window.chromasmithOpenedFlag();
+  r.style.opacity=label==='Red'?'1':'.4';
+  g.style.opacity=label==='Green'?'1':'.4';
+}
 // ── Auto lens-profile correction (desktop only) — see desktop/src-tauri/src/lens_correct.rs.
 // The actual correction runs server-side in Rust during RAW decode (a geometric per-pixel
 // remap, not a shader term), so toggling it can't take effect live like the manual sliders —
@@ -4788,6 +4824,18 @@ async function loadTiff(file){
 // main.rs now downgrades gracefully (falls back to linear16, logs a warning) for other makes.
 const RAW_FILE_EXT_RE=/\.(rw2|raw|dng|cr2|cr3|nef|arw|orf)$/i;
 function isRw2File(f){return RAW_FILE_EXT_RE.test(f.name)}
+// Content sniff for the "extension lies" case — confirmed via a Google Photos Picker import:
+// the Picker API can hand back a JPEG rendition under the original RAW filename (e.g.
+// "IMG_7029.DNG" whose bytes start ffd8ff / content-type image/jpeg) instead of true RAW
+// bytes, for iPhone ProRAW and some other RAW+JPEG-pair sources — a known Google Photos API
+// limitation, not something this app's decoder can work around. Real TIFF-based RAW/DNG always
+// starts with the TIFF byte-order marker; anything claiming a RAW extension that ISN'T one of
+// these is a JPEG/PNG (or something else) mislabeled, not a "no decoder" case.
+function sniffRealImageKind(bytes){
+  if(bytes.length>=3&&bytes[0]===0xFF&&bytes[1]===0xD8&&bytes[2]===0xFF)return'jpg';
+  if(bytes.length>=4&&bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4E&&bytes[3]===0x47)return'png';
+  return null; // TIFF-based ("II*\0"/"MM\0*") or unrecognized — trust the extension as-is
+}
 // Stringify any thrown value readably — the libraw worker rejects with plain objects,
 // which would otherwise log as "[object Object]" (exactly what an iPhone user reported).
 function errStr(e){if(e&&e.message)return e.message;if(typeof e==='object'&&e!==null){try{return JSON.stringify(e)}catch(_){return String(e)}}return String(e)}
@@ -5077,7 +5125,7 @@ function installFXImages(entries,loadKey){
   const n=fxImages.length;
   setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
   document.getElementById('fx-fname').value=fxImages[0].name;
-  fxDeskbarTitle(fxImages[0].name,fxImages[0].img?`${fxImages[0].img.width} × ${fxImages[0].img.height}`:'');
+  fxDeskbarTitle(fxImages[0].name,fxDimsFmt(fxImages[0].name,fxImages[0].img));
   // Version restarts only for a GENUINELY new photo/batch — not on every reopen. The docked
   // Library panel (unlike the old full-page overlay) stays visible next to the editor, so
   // clicking the same photo again (to compare after an export, or just re-selecting it) is now
@@ -5126,12 +5174,21 @@ async function loadFXImages(fileList){
     try{
       const bytes=new Uint8Array(await file.arrayBuffer());
       let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
+      // A RAW-extension file whose bytes are actually a JPEG/PNG (see sniffRealImageKind) —
+      // route it through the normal image path instead of the RAW decoder, which would
+      // correctly-but-uselessly reject it as "no decoder". Most commonly a Google Photos
+      // Picker import handing back the JPEG twin of an iPhone ProRAW/RAW+JPEG pair.
+      const sniffedKind=isRw2File(file)?sniffRealImageKind(bytes):null;
+      if(sniffedKind){
+        ext=sniffedKind;
+        log(`${file.name}: this isn't actually RAW data — the source (likely Google Photos) only had a ${sniffedKind.toUpperCase()} copy. Imported as ${sniffedKind.toUpperCase()}; RAW-only adjustments (Color NR, RAW profile) won't apply.`,'warn');
+      }
       if(isTiffFile(file)){
         const{canvas,dpi,icc}=await loadTiff(file);
         entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately
         continue;
       }
-      if(isRw2File(file)){
+      if(isRw2File(file)&&!sniffedKind){
         const{canvas,dpi,meta}=await loadRw2(file);
         // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
         // on EVERY open path — library-ui's get_meta refines this later on library opens.
@@ -5523,12 +5580,15 @@ function mskAdd(type){
   }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
+  if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
 }
 function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
-  fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;mskRebuild();fxUpdate();}
-function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.invert;mskRebuild();fxUpdate();}
+  fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();}
+function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.invert;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
 
 // ── Painted/sky raster masks: up to 4 packed one-per-channel into a single RGBA texture,
 // authored at a fixed resolution independent of image size (see FXR.setMaskTex, lut-pass
@@ -5774,6 +5834,7 @@ function fxUndo(){
   fxHistIdx--;_fxHistLocked=true;
   applyUISnapshot(fxHistory[fxHistIdx]);
   fxUpdate();_fxHistLocked=false;
+  if(typeof hapt==='function')hapt();
   log('Undo','info');
 }
 function fxRedo(){
@@ -5781,7 +5842,19 @@ function fxRedo(){
   fxHistIdx++;_fxHistLocked=true;
   applyUISnapshot(fxHistory[fxHistIdx]);
   fxUpdate();_fxHistLocked=false;
+  if(typeof hapt==='function')hapt();
   log('Redo','info');
+}
+function fxResetAll(){
+  if(!fxHistory.length)return;
+  if(!confirm('Reset all edits on this photo? This cannot be undone.'))return;
+  if(typeof hapt==='function')hapt();
+  _fxHistLocked=true;
+  applyUISnapshot(fxHistory[0]);
+  _fxHistLocked=false;
+  fxHistoryPush();
+  fxUpdate();
+  log('Reset all edits','info');
 }
 
 // ══ SPLIT BEFORE/AFTER ════════════════════════════════════════════════════════
@@ -5871,31 +5944,50 @@ function _applyZoom(smooth){
   // editor; live pinch/pan calls omit it so the image stays glued to the fingers.
   zw.style.transition=smooth?'transform .22s ease':'';
   if(smooth){clearTimeout(zw._smoothT);zw._smoothT=setTimeout(()=>{zw.style.transition='';},260);}
-  if(fxZoom<=1){fxZoom=1;fxPanX=0;fxPanY=0;}
-  else{
+  // transform-origin is 0 0 and translate happens before scale, so a local point x lands at
+  // scale*(x+pan). fxPanX/Y are the raw USER drag offset in both branches below — pointermove
+  // always just adds the screen-delta/zoom to whatever fxPanX/Y already were, regardless of
+  // which regime that offset gets used in here.
+  const cv=document.getElementById('fx-canvas');
+  const w=parseFloat(cv.style.width)||cv.clientWidth||0;
+  const h=parseFloat(cv.style.height)||cv.clientHeight||0;
+  let baseX=0,baseY=0;
+  if(fxZoom<1){
+    // Below 100%: without a correction the shrunk image collapses toward the (0,0)
+    // transform-origin — i.e. the frame's top-left corner — instead of staying centred. This
+    // base offset re-centres it; fxPanX/Y (unclamped here) then layer a free user drag on top,
+    // since there's no "must cover the frame" requirement to enforce when the image is
+    // already smaller than the frame.
+    baseX=w*(1-fxZoom)/(2*fxZoom);baseY=h*(1-fxZoom)/(2*fxZoom);
+  }else if(fxZoom>1){
     // Clamp pan so the image always covers the frame — no black in the corners.
-    // transform-origin is 0 0 and translate happens before scale, so a local point x
-    // lands at scale*(x+pan); covering [0,w] requires pan ∈ [w*(1/zoom-1), 0].
-    const cv=document.getElementById('fx-canvas');
-    const w=parseFloat(cv.style.width)||cv.clientWidth||0;
-    const h=parseFloat(cv.style.height)||cv.clientHeight||0;
+    // covering [0,w] requires pan ∈ [w*(1/zoom-1), 0].
     fxPanX=Math.min(0,Math.max(w*(1/fxZoom-1),fxPanX));
     fxPanY=Math.min(0,Math.max(h*(1/fxZoom-1),fxPanY));
   }
-  zw.style.transform=`scale(${fxZoom}) translate(${fxPanX}px,${fxPanY}px)`;
+  zw.style.transform=`scale(${fxZoom}) translate(${baseX+fxPanX}px,${baseY+fxPanY}px)`;
   _updateZoomReadout();
 }
 function _resetZoom(smooth){fxZoom=1;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
   pct.textContent=fxLoupe?'1:1':Math.round(fxZoom*100)+'%';
+  const sl=document.getElementById('fx-zoom-slider');
+  if(sl&&document.activeElement!==sl)sl.value=Math.round(fxZoom*100);
+}
+// Absolute zoom set (from the slider), anchored on the frame centre.
+function zoomSet(z){
+  if(fxLoupe)toggleLoupe();
+  fxZoom=Math.max(0.25,Math.min(8,z));
+  if(fxZoom<=1){fxPanX=0;fxPanY=0;}
+  _applyZoom();
 }
 // Zoom by a multiplicative step, anchored on the frame centre.
 function zoomBy(factor){
   if(fxLoupe)toggleLoupe();                 // leave loupe before CSS-zooming
   const prev=fxZoom;
-  fxZoom=Math.max(1,Math.min(8,fxZoom*factor));
-  if(fxZoom===1){fxPanX=0;fxPanY=0;}
+  fxZoom=Math.max(0.25,Math.min(8,fxZoom*factor));
+  if(fxZoom<=1){fxPanX=0;fxPanY=0;}
   else{ // keep the centre fixed (ox=oy=0.5 in the cursor-zoom formula)
     const cv=document.getElementById('fx-canvas');
     const cw=parseFloat(cv.style.width)||cv.clientWidth,ch=parseFloat(cv.style.height)||cv.clientHeight;
@@ -5964,8 +6056,8 @@ function initZoomPan(){
     // event), so a 10%-per-tick step compounded dozens of times a second felt like the zoom
     // was slamming in/out almost instantly. 2.5% per tick is ~4x gentler — a full pinch still
     // reaches the same 1x-8x range, it just takes noticeably more travel to get there.
-    fxZoom=Math.max(1,Math.min(8,fxZoom*(e.deltaY<0?1.025:0.975)));
-    if(fxZoom===1){fxPanX=0;fxPanY=0;}else{
+    fxZoom=Math.max(0.25,Math.min(8,fxZoom*(e.deltaY<0?1.025:0.975)));
+    if(fxZoom<=1){fxPanX=0;fxPanY=0;}else{
       // Zoom toward cursor
       const cv=document.getElementById('fx-canvas');
       const cw=parseFloat(cv.style.width)||cv.clientWidth;
@@ -5978,7 +6070,7 @@ function initZoomPan(){
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
-    if(_wbEyedropperActive||mskPaintMode||(!fxLoupe&&fxZoom<=1))return;
+    if(_wbEyedropperActive||mskPaintMode||(!fxLoupe&&fxZoom===1))return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
   });
@@ -6012,8 +6104,8 @@ function initZoomPan(){
       const p0=_pt[t0.identifier]||{x:t0.clientX,y:t0.clientY};
       const p1=_pt[t1.identifier]||{x:t1.clientX,y:t1.clientY};
       const prev=Math.hypot(p0.x-p1.x,p0.y-p1.y)||dist;
-      fxZoom=Math.max(1,Math.min(8,fxZoom*(dist/prev)));
-      if(fxZoom===1){fxPanX=0;fxPanY=0;}
+      fxZoom=Math.max(0.25,Math.min(8,fxZoom*(dist/prev)));
+      if(fxZoom<=1){fxPanX=0;fxPanY=0;}
       _applyZoom();
     }
     [...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});
@@ -6479,7 +6571,7 @@ function fxSelectImage(idx){
   const ss=document.getElementById('sl-straighten');
   if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
   document.getElementById('fx-fname').value=it.name;
-  fxDeskbarTitle(it.name,it.img?`${it.img.width} × ${it.img.height}`:'');
+  fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img));
   setDZ('dz-fx-img','fn-fx-img',fxImages.length>1?`${fxImages.length} images — previewing ${fxCurIdx+1}/${fxImages.length}: ${it.name}`:it.name);
   showExif(it.exif||{});
   renderPreview();buildLookGallery();buildFilmstrip();
@@ -6524,13 +6616,13 @@ function updateWork(){
   fxWork=it?geomCanvas(it):null;
   if(fxWork)FX.setImage(fxWork);
 }
-function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;g.crop=null;broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
-function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;g.crop=null;broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
+function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
+function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
 function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(1)+'°';g.crop=null;broadcastGeom();updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
-function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset (all images)','info');}
+function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset (all images)','info');}
 
 // ── interactive crop overlay ──
-function cropToggle(){cropMode?cropCancel():cropEnter();}
+function cropToggle(){if(typeof hapt==='function')hapt();cropMode?cropCancel():cropEnter();}
 function cropDefaultForAR(){
   const b=cropBase;if(!b)return{x:0,y:0,w:1,h:1};
   const W=b.naturalWidth||b.width,H=b.naturalHeight||b.height;
@@ -6860,6 +6952,7 @@ const _ALLFX=['grain','hal','bloom','borders'];
 function enableAll(){          // toggle: on if any are off, otherwise turn them all off
   const allOn=_ALLFX.every(n=>document.getElementById(`tg-${n}`).classList.contains('on'));
   const target=!allOn;
+  if(typeof hapt==='function')hapt();
   _ALLFX.forEach(name=>{
     const tg=document.getElementById(`tg-${name}`);
     tg.classList.toggle('on',target);
@@ -7482,7 +7575,18 @@ async function gpImportPhotos(preWin){
       try{
         // "=d" = original bytes; the baseUrl needs the Bearer header (a plain img src 403s)
         const blob=await downloadWithRetry(mf.baseUrl+'=d');
-        files.push(new File([blob],mf.filename||('gphotos_'+(i+1)+'.jpg'),{type:mf.mimeType||blob.type||'image/jpeg'}));
+        const fname=mf.filename||('gphotos_'+(i+1)+'.jpg');
+        // Cache to ~/Documents/Google Photos Download/ (Tauri only) so re-opening this photo
+        // later — e.g. from the Library's pinned "Google Photos Download" entry — reads it
+        // off disk instead of re-downloading. Best-effort: a cache-write failure never blocks
+        // the import itself, since `files` already has the in-memory blob either way.
+        if(window.__TAURI__){
+          try{
+            const buf=await blob.arrayBuffer();
+            await window.__TAURI__.core.invoke('save_to_gphotos_downloads',{filename:fname,dataB64:_u8b64(new Uint8Array(buf))});
+          }catch(e){console.error('save_to_gphotos_downloads',e)}
+        }
+        files.push(new File([blob],fname,{type:mf.mimeType||blob.type||'image/jpeg'}));
       }catch(e){log('Failed to download '+(mf.filename||'a photo')+': '+(e&&e.message||e),'err')}
     }
     gpFetch('https://photospicker.googleapis.com/v1/sessions/'+encodeURIComponent(sess.id),{method:'DELETE'}).catch(()=>{});
@@ -7653,7 +7757,10 @@ const ICONS={
  enableAll:'<path d="M5 3v3M3.5 4.5h3"/><path d="M18 14v3M16.5 15.5h3"/><path d="M13 4l2 5.5 5.5 2-5.5 2L13 19l-2-5.5L5.5 11.5 11 9.5z"/>',
  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>',
  moon:'<path d="M21 13a8 8 0 1 1-9.9-9.9 7 7 0 1 0 9.9 9.9z"/>',
- log:'<path d="M4 6h16M4 12h16M4 18h10"/>'
+ log:'<path d="M4 6h16M4 12h16M4 18h10"/>',
+ reset:'<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-6h6"/>',
+ flagGreen:'<path d="M5 21V4" fill="none"/><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="currentColor" stroke="none"/>',
+ flagRed:'<path d="M5 21V4" fill="none"/><path d="M6 6l11 11M17 6L6 17" stroke="currentColor" fill="none"/>'
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
@@ -7975,7 +8082,8 @@ initEditableVals();
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
- set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('hdr-log','log');}
+ set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('hdr-log','log');
+ set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');}
 syncAllFxBtn();
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
