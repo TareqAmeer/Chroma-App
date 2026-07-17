@@ -482,6 +482,7 @@ body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:trans
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
 body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
+body.deskx #btn-msk-add-ai{display:inline-flex!important} /* AI Select needs the native SAM commands — desktop only */
 /* ⋯ overflow menu (deskbar): navigation to the non-editor tabs + utilities */
 #fx-overflow{display:none;position:relative}
 body.deskx #fx-overflow{display:inline-flex}
@@ -797,6 +798,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
             <button class="btn bgh" onclick="mskAdd('linear')"><span class="bdot"></span>+ Linear</button>
             <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye"><span class="bdot"></span>+ Brush</button>
             <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed"><span class="bdot"></span>+ Sky</button>
+            <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Tap an object on the photo to select it (MobileSAM, on-device — desktop app only)" style="display:none"><span class="bdot"></span>+ AI Select</button>
           </div>
           <div class="fx-row"><div class="fx-label">Show on photo</div>
             <div class="lib-seg msk-prevmode-seg" style="border:1px solid var(--bdr);border-radius:7px;overflow:hidden;display:flex">
@@ -2981,7 +2983,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17f';
+const BUILD='2026-07-17g';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5208,6 +5210,10 @@ async function loadRw2(file){
 // genuinely different photo" string loadFXImages computes from file name+size+lastModified.
 function installFXImages(entries,loadKey){
   if(!entries.length)return;
+  // A new photo invalidates any cached AI-select embedding (it belongs to the OUTGOING image) —
+  // the next tap/AI-mask-add re-encodes lazily rather than eagerly here, so opening a photo you
+  // never use AI Select on never pays the encode cost.
+  _samToken=null;mskAiTapMode=false;
   fxImages=entries;
   if(cropMode)cropExit();
   fxImages.forEach(it=>it.geom=defGeom());
@@ -5731,14 +5737,78 @@ function mskAdd(type){
   if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
   else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};}
-  else{ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
+  else if(type==='sky'){ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
     m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
     mskGenerateSky(m);
+  }else{ // AI tap-to-select (desktop only) — starts empty; the first tap runs the segmentation.
+    const{w,h}=mskTexDims();
+    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
   }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
+  if(type==='ai'){samEnsureEncoded();mskAiTapToggle(true);}
+}
+
+// ── AI tap-to-select: MobileSAM point-prompt segmentation, native shell only (main.rs's
+// sam_encode/sam_point — see desktop/src-tauri/src/sam.rs). Encodes the CURRENT photo once
+// (a few hundred ms, same working resolution the brush/sky masks already use — mskTexDims,
+// capped at 512px long edge, so the round-trip stays fast and the mask is immediately
+// consistent with the existing resolution-independent brush pipeline), then each tap/click
+// re-queries that cached embedding (~10-30ms) and REPLACES the mask's raster with the result.
+let _samToken=null,_samEncoding=false,mskAiTapMode=false;
+function _samFramedInvoke(cmd,jsonObj,payload){
+  const json=new TextEncoder().encode(JSON.stringify(jsonObj));
+  const framed=new Uint8Array(4+json.length+payload.length);
+  new DataView(framed.buffer).setUint32(0,json.length,true);
+  framed.set(json,4);framed.set(payload,4+json.length);
+  return window.__TAURI__.core.invoke(cmd,framed);
+}
+function mskAiTapToggle(force){
+  mskAiTapMode=force!==undefined?force:!mskAiTapMode;
+  const b=document.getElementById('btn-msk-ai-tap');if(b)b.classList.toggle('on',mskAiTapMode);
+  if(FX.cv)FX.cv.style.cursor=mskAiTapMode?'crosshair':'';
+}
+async function samEnsureEncoded(){
+  if(!window.__TAURI__||_samToken||_samEncoding)return;
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img)return;
+  _samEncoding=true;
+  if(typeof toast==='function')toast('Preparing AI Select…',true);
+  try{
+    const{w,h}=mskTexDims();
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
+    const d=cx.getImageData(0,0,w,h).data;
+    const rgb=new Uint8Array(w*h*3);
+    for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+    const token='sam-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
+    _samToken=token;
+  }catch(e){
+    log('AI Select: could not prepare this photo — '+(e&&e.message||e),'err');
+  }finally{_samEncoding=false;}
+}
+async function samTapAt(m,nx,ny,positive){
+  if(!window.__TAURI__)return;
+  await samEnsureEncoded();
+  if(!_samToken){toast('AI Select is not ready yet — try again in a moment');return;}
+  try{
+    const buf=await window.__TAURI__.core.invoke('sam_point',{token:_samToken,x:nx,y:ny,positive});
+    // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
+    const dv=new DataView(buf);
+    const hlen=dv.getUint32(0,true);
+    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const mask=new Uint8Array(buf,4+hlen);
+    if(mask.length!==header.width*header.height){log('AI Select: mask size mismatch','err');return;}
+    m.px=Array.from(mask);m.mtW=header.width;m.mtH=header.height;
+    _mskTexDirty=true;
+    if(typeof hapt==='function')hapt();
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+  }catch(e){
+    log('AI Select: '+(e&&e.message||e),'err');
+  }
 }
 function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
@@ -5858,6 +5928,17 @@ function mskPaintAt(m,nx,ny){
   });
   const end=e=>{if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();};
   cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+  // AI tap-to-select (desktop only — see main.rs's sam_encode/sam_point, backed by MobileSAM).
+  // A separate click-driven mode from brush painting above: each tap REPLACES the mask's raster
+  // with a fresh SAM segmentation at that point (not additive painting), then the SAME brush
+  // tools already built for Sky masks let you refine the result by hand.
+  cv.addEventListener('click',e=>{
+    if(!mskAiTapMode)return;
+    const m=fxState.masks[mskSel];if(!m||m.origin!=='ai')return;
+    const p=_mskPointToUV(e);if(!p)return;
+    e.preventDefault();e.stopPropagation();
+    samTapAt(m,p.nx,p.ny,!e.altKey); // alt-click = negative point (exclude that area)
+  });
 })();
 function _mskRow(label,k,val,min,max,sc,flip){
   const sv=Math.round(flip?(1-val)*100:val/sc);
@@ -5876,9 +5957,10 @@ function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
   if(!list||!ctl)return;list.innerHTML='';
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
+  if(mskAiTapMode&&(!fxState.masks[mskSel]||fxState.masks[mskSel].origin!=='ai'))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
-    b.textContent=(m.type==='linear'?'Linear':m.type==='radial'?'Radial':m.origin==='sky'?'Sky':'Brush')+' '+(i+1);
+    b.textContent=(m.type==='linear'?'Linear':m.type==='radial'?'Radial':m.origin==='sky'?'Sky':m.origin==='ai'?'AI':'Brush')+' '+(i+1);
     b.onclick=()=>{mskSel=i;mskRebuild();};list.appendChild(b);
   });
   const m=fxState.masks[mskSel];
@@ -5892,7 +5974,12 @@ function mskRebuild(){
     h+=_mskRow('Start X','x0',m.x0,0,100,0.01,false)+_mskRow('Start Y','y0',m.y0,0,100,0.01,true)
       +_mskRow('End X','x1',m.x1,0,100,0.01,false)+_mskRow('End Y','y1',m.y1,0,100,0.01,true)
       +_mskRow('Feather','feather',m.feather,0,100,0.01,false);
-  }else{ // brush / sky raster mask
+  }else{ // brush / sky / AI raster mask
+    if(m.origin==='ai'){
+      h+='<div class="btn-row">'
+        +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Click an object on the photo to select it. Alt/Option-click to exclude an area."><span class="bdot"></span>'+(mskAiTapMode?'Tap to select ✓':'◎ Tap to select')+'</button></div>'
+        +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Click an object on the photo to select it (Alt/Option-click excludes an area). Then refine with Paint below if needed.')+'</div>';
+    }
     h+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview"><span class="bdot"></span>'+(mskPaintMode?'Painting ✓':'🖌 Paint')+'</button>'
       +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add"><span class="bdot"></span>Erase</button></div>'
@@ -5900,7 +5987,7 @@ function mskRebuild(){
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()"><span class="bdot"></span>Clear paint</button>'
       +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()"><span class="bdot"></span>Re-detect sky</button>':'')+'</div>'
-      +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>';
+      +(m.origin!=='ai'?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
   h+=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)

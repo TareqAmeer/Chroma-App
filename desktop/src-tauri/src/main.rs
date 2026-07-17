@@ -19,6 +19,7 @@ const DIST_DIR: &str = "/Users/tareqameer/Documents/GitHub/Chroma-App/desktop/di
 mod lens_correct;
 mod library;
 mod raw_decode;
+mod sam;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 fn percent_decode(s: &str) -> String {
@@ -91,6 +92,66 @@ fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
     let mut guard = DCP_LUTS.lock().unwrap();
     guard.get_or_insert_with(HashMap::new).insert(key, std::sync::Arc::new(lut));
     Ok(())
+}
+
+// ── AI tap-to-select (Masks panel) — see sam.rs for the model I/O contract. A single-slot
+// cache: only the CURRENTLY open photo's embedding is ever needed (one photo edited at a time),
+// so there's no eviction policy to get wrong — a new sam_encode call for a different photo just
+// overwrites it. Keyed by a caller-supplied token (the photo's path) purely to let sam_point
+// detect "the photo changed since the last encode" and fail loudly instead of silently
+// segmenting the WRONG photo.
+struct SamEmbedCache {
+    token: String,
+    embedding: sam::Embedding,
+}
+static SAM_EMBED: Mutex<Option<SamEmbedCache>> = Mutex::new(None);
+
+/// Encodes a photo for AI tap-to-select. `token` is any caller-chosen identifier for "which
+/// photo is this" (library-ui.js uses the file path) — sam_point checks it matches before using
+/// the cached embedding, so switching photos without re-encoding fails safely instead of
+/// segmenting stale image data. Takes raw RGB8 bytes (already-decoded, e.g. from the preview
+/// canvas) via the framed body — encoding works off whatever resolution the caller hands in
+/// (the model resizes internally to 1024 either way), so callers should downsample to a
+/// reasonable working size (a few hundred px) themselves rather than sending a full-res RAW.
+#[tauri::command]
+fn sam_encode(request: tauri::ipc::Request) -> Result<(), String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let token = json["token"].as_str().ok_or("missing token")?.to_string();
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("sam_encode: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let embedding = sam::encode(payload, w, h)?;
+    *SAM_EMBED.lock().unwrap() = Some(SamEmbedCache { token, embedding });
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct SamPointResult {
+    width: u32,
+    height: u32,
+}
+
+/// Runs one point-prompt query against the CACHED embedding from the most recent sam_encode
+/// call. Returns the mask raster (one byte per pixel, row-major) as the raw response body, plus
+/// its dimensions as the JSON header — same framed-response idea as decode_raw_v2, just simpler
+/// since there's no variant body format to disambiguate.
+#[tauri::command]
+fn sam_point(token: String, x: f32, y: f32, positive: bool) -> Result<tauri::ipc::Response, String> {
+    let guard = SAM_EMBED.lock().unwrap();
+    let cache = guard.as_ref().ok_or("sam_point: no photo encoded yet — call sam_encode first")?;
+    if cache.token != token {
+        return Err("sam_point: the encoded photo has changed — re-encode before tapping".into());
+    }
+    let mask = sam::decode_point(&cache.embedding, x, y, positive)?;
+    let header = SamPointResult { width: cache.embedding.orig_w, height: cache.embedding.orig_h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("sam_point header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&mask);
+    Ok(tauri::ipc::Response::new(out))
 }
 
 #[tauri::command]
@@ -259,7 +320,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-17a"
+    "2026-07-17b"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -479,6 +540,8 @@ fn main() {
             library::backfill_edited_registry,
             library::get_decode_cache,
             library::save_decode_cache,
+            sam_encode,
+            sam_point,
             save_to_gphotos_downloads,
             gphotos_downloads_dir
         ])
