@@ -293,6 +293,35 @@ fn open_url_native(url: String) -> Result<(), String> {
         .map_err(|e| format!("couldn't open the system browser: {e}"))
 }
 
+// Trackpad haptic feedback — hapt() (chromasmith-22.html) previously ONLY fired on
+// window.Capacitor (the iOS shell), so the desktop build had zero haptic feedback on slider
+// detents/flag toggles/etc despite Macs with a Force Touch trackpad supporting exactly this via
+// NSHapticFeedbackManager. .generic is Apple's own "neutral UI event" pattern (same one Finder
+// uses for e.g. snapping icons to a grid) — .alignment/.levelChange read as more specific
+// gestures than a slider nudge or a flag toggle actually are. Silently a no-op on a non-Force-
+// Touch trackpad or an external mouse (defaultPerformer() itself handles that — nothing to
+// detect here). macOS-only; see the JS-side hapt() for the window.__TAURI__ branch that calls
+// this, and Cargo.toml's target.'cfg(target_os = "macos")' dependencies for objc2-app-kit.
+// AppKit calls are main-thread-only — a #[tauri::command] otherwise runs on Tauri's async
+// runtime (not guaranteed to be the main thread), so this dispatches via run_on_main_thread
+// (the same pattern Tauri's own macOS window code uses internally, per app.rs) rather than
+// calling NSHapticFeedbackManager directly from whatever thread invoked this command.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn haptic_feedback(app: tauri::AppHandle) {
+    let _ = app.run_on_main_thread(|| {
+        use objc2_app_kit::{NSHapticFeedbackManager, NSHapticFeedbackPattern, NSHapticFeedbackPerformer};
+        let performer = NSHapticFeedbackManager::defaultPerformer();
+        performer.performFeedbackPattern_performanceTime(
+            NSHapticFeedbackPattern::Generic,
+            objc2_app_kit::NSHapticFeedbackPerformanceTime::Default,
+        );
+    });
+}
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn haptic_feedback(_app: tauri::AppHandle) {}
+
 // Native HTTP download, bypassing the WKWebView network stack. The Google Photos Picker's
 // media bytes live on the `*.googleusercontent.com` user-content CDN; a cross-origin GET with
 // the required `Authorization: Bearer` header forces a CORS preflight the CDN never answers
@@ -583,6 +612,7 @@ fn main() {
             download_url_native,
             native_build_tag,
             open_url_native,
+            haptic_feedback,
             peek_raw_camera,
             read_file_bytes,
             google_oauth_loopback,

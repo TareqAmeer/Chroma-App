@@ -22,12 +22,22 @@
   /* Safe-area insets as overridable custom props: layout rules use var(--sat)/var(--sab)
      instead of env() directly, so desktop-Chrome testing can inject real iPhone values
      (e.g. --sat:47px --sab:34px) and render the exact device geometry Chrome can't emulate. */
-  --sat:env(safe-area-inset-top);--sab:env(safe-area-inset-bottom)}
+  --sat:env(safe-area-inset-top);--sab:env(safe-area-inset-bottom);
+  /* Elevation tokens — a top-light inset (mimics a physical panel catching ambient light from
+     above, the same trick macOS's own translucent materials use) plus a soft drop shadow, so
+     surfaces read as raised trays rather than flat rectangles drawn with a 1px outline. Kept as
+     tokens (not hand-repeated box-shadow lists) so every card/control panel/menu stays visually
+     consistent and any future tuning is a one-line change. */
+  --lift-1:inset 0 1px 0 rgba(255,255,255,.045),0 1px 2px rgba(0,0,0,.3),0 6px 16px -4px rgba(0,0,0,.35);
+  --lift-2:inset 0 1px 0 rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.35),0 14px 32px -8px rgba(0,0,0,.5);
+  --glass-bg:rgba(23,23,27,.72)}
+body.light{--glass-bg:rgba(250,248,244,.72)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
 canvas,img,video,select,input{max-width:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:14px;line-height:1.5}
-header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px}
+header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;
+  position:sticky;top:0;z-index:10;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.3);backdrop-filter:blur(20px) saturate(1.3)}
 .logo{font-family:var(--serif);font-size:20px;letter-spacing:.12em;color:var(--acc);font-style:italic}
 .logo .sub{color:var(--mut);font-size:11px;font-family:var(--mono);letter-spacing:.05em;font-style:normal;margin-left:12px}
 .logo-glow{text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)}
@@ -44,8 +54,8 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
 main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .panel{display:none}.panel.active{display:block}
-.card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:14px}
-.ctitle{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:14px;box-shadow:var(--lift-1)}
+.ctitle{font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt);margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .ctitle::after{content:'';flex:1;height:1px;background:var(--bdr)}
 .cver{font-family:var(--mono);font-size:11px;color:var(--acc);background:rgba(212,144,58,.12);border:1px solid rgba(212,144,58,.25);padding:2px 8px;border-radius:3px;margin-left:auto}
 .dg2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -59,11 +69,13 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .dz-fn{font-family:var(--mono);font-size:10px;color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip-tap{margin-top:0}
-.btn{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;padding:9px 16px;border-radius:5px;border:1px solid;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.btn{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;padding:9px 16px;border-radius:5px;border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:disabled{opacity:.3;cursor:not-allowed}
-.bpri{background:var(--acc);border-color:var(--acc);color:#000;font-weight:600}.bpri:not(:disabled):hover{background:#e8a54a}
+.btn:active:not(:disabled){transform:scale(.96)}
+.bpri{background:linear-gradient(#e8a54a,var(--acc));border-color:var(--acc);color:#000;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 2px rgba(0,0,0,.25)}
+.bpri:not(:disabled):hover{background:linear-gradient(#efb361,#e09a41)}
 .bsec{background:transparent;border-color:var(--acc2);color:var(--acc2)}.bsec:not(:disabled):hover{background:rgba(74,157,220,.1)}
-.bgh{background:transparent;border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt)}.bgh.on{border-color:var(--acc);color:var(--acc)}
+.bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:var(--acc);color:var(--acc);background:rgba(212,144,58,.12)}
 .bdot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
 .pb{height:3px;background:var(--bdr);border-radius:2px;margin-top:10px;overflow:hidden;display:none}
 .pf{height:100%;background:var(--acc);border-radius:2px;transition:width .25s;width:0%}
@@ -71,11 +83,11 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .vlb{font-family:var(--mono);font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
 .vinput{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px 10px;color:var(--txt);font-family:var(--mono);font-size:11px;width:180px}
 .vinput:focus{outline:none;border-color:var(--acc)}
-.step-card{border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:12px;overflow:hidden}
-.step-hdr{background:var(--sur2);padding:9px 14px;display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px}
-.step-badge{background:rgba(212,144,58,.15);border:1px solid rgba(212,144,58,.3);color:var(--acc);padding:2px 8px;border-radius:3px;font-size:10px}
+.step-card{border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:12px;overflow:hidden;box-shadow:var(--lift-1)}
+.step-hdr{background:var(--sur2);padding:9px 14px;display:flex;align-items:center;gap:9px;font-family:var(--sans);font-weight:600;font-size:12px}
+.step-badge{background:rgba(212,144,58,.15);border:1px solid rgba(212,144,58,.3);color:var(--acc);padding:2px 8px;border-radius:3px;font-size:10px;font-family:var(--mono)}
 .step-body{padding:14px}
-.sum-box{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;margin-top:12px}
+.sum-box{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;margin-top:12px;box-shadow:var(--lift-1)}
 .sum-title{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
 .sum-list{list-style:none;display:flex;flex-direction:column;gap:4px}
 .sum-list li{font-size:12px;color:var(--txt);display:flex;align-items:baseline;gap:8px}
@@ -105,16 +117,16 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 /* FX TAB */
 .fx-layout{display:grid;grid-template-columns:640px 1fr;gap:16px;align-items:start}
 .fx-panel{column-count:2;column-gap:10px}
-.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:10px;break-inside:avoid;margin-bottom:10px}
+.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:10px;break-inside:avoid;margin-bottom:18px;box-shadow:var(--lift-1)}
 #panel-fx .dz{min-height:54px;padding:11px 14px}
 #dz-fx-img:not(.loaded){border-color:var(--acc);border-style:solid;background:rgba(212,144,58,.07)}
 #dz-fx-img:not(.loaded):hover{background:rgba(212,144,58,.12)}
 #dz-fx-img:not(.loaded) .dz-ic,#dz-fx-img:not(.loaded) .dz-lb{color:var(--acc)}
 #panel-fx .dz-ic{font-size:16px}
-.fx-ctrl-title{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
-.fx-toggle{width:32px;height:18px;border-radius:9px;background:var(--bdr);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
-.fx-toggle.on{background:var(--acc)}
-.fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .2s}
+.fx-ctrl-title{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.fx-toggle{width:32px;height:18px;border-radius:9px;background:var(--bdr);position:relative;cursor:pointer;transition:background .18s ease;flex-shrink:0;box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.fx-toggle.on{background:var(--acc);box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
+.fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .18s cubic-bezier(.34,1.4,.64,1);box-shadow:0 1px 2px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.06)}
 .fx-toggle.on::after{left:16px}
 .fx-fields{display:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
@@ -190,6 +202,19 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .msk-handle:active{cursor:grabbing}
 .msk-handle.center{fill:#ffb454}
 .msk-prevmode-seg button.on{background:var(--acc)!important;color:#000!important}
+/* Brush/sky/AI painted-mask overlay — a red tint over whatever's actually painted (m.px), the
+   brush-mask equivalent of the radial/linear shape overlay above; same mskPreviewMode segmented
+   control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
+#msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
+#msk-paint-overlay.on{display:block}
+/* Live brush cursor: a ring at the ACTUAL painted radius (matches mskPaintAt's soft falloff),
+   only shown while "Paint" is armed — previously the brush had no visible size/position at all
+   on the canvas itself, just a generic crosshair cursor. */
+#msk-brush-cursor{position:absolute;display:none;pointer-events:none;border-radius:50%;
+  border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),inset 0 0 0 1px rgba(0,0,0,.6);
+  transform:translate(-50%,-50%)}
+#msk-brush-cursor.on{display:block}
+#msk-brush-cursor.erase{border-color:#e5484d}
 .crop-rect{position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55);cursor:move;box-sizing:border-box}
 .crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.5);pointer-events:none}
 .crop-grid-h{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.5);pointer-events:none}
@@ -337,7 +362,7 @@ button,.btn,.fx-toggle,.fx-select,.fx-slider,.fx-sec-btn,.fx-rail-btn,.fx-act,.f
 canvas,img{-webkit-user-drag:none}
 .fx-panel{overscroll-behavior:contain}
 /* toast pills — user-facing feedback (the log stays for diagnostics) */
-#fx-toast{position:fixed;left:50%;bottom:calc(98px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(8px);background:rgba(20,20,22,.94);border:1px solid var(--bdr);color:var(--txt);font-family:var(--mono);font-size:11px;letter-spacing:.05em;padding:9px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;z-index:3000;max-width:80vw;text-align:center}
+#fx-toast{position:fixed;left:50%;bottom:calc(98px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(8px);background:rgba(20,20,22,.72);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);border:1px solid var(--bdr);color:var(--txt);font-family:var(--mono);font-size:11px;letter-spacing:.05em;padding:9px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:3000;max-width:80vw;text-align:center;box-shadow:var(--lift-2)}
 #fx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #fx-toast.ok{border-color:var(--acc);color:var(--acc)}
 /* slider polish: bigger touch targets + a value bubble above the thumb while dragging */
@@ -447,7 +472,8 @@ body.deskx main{max-width:none;margin:0;padding:44px 0 0}
 body.deskx.fx-deskb main{overflow:hidden;height:100vh}
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 100px}
 body.deskx #fx-deskbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:3000;height:44px;
-  margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr);border-radius:0;background:var(--sur)}
+  margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr);border-radius:0;
+  background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.3);backdrop-filter:blur(20px) saturate(1.3)}
 /* The deskbar is INSIDE #panel-fx; on other tabs that panel loses .active (display:none),
    which would take the fixed bar down with it. Keep the panel technically displayed and hide
    its editor content instead, so the top bar (and its ⋯ menu, the only way back) persists. */
@@ -460,15 +486,23 @@ body.deskx .fx-db{padding:5px 10px}
    called on every animation frame (too expensive); fxSection/library-ui.js fire ONE redraw via
    requestAnimationFrame after starting the transition, and the canvas's own max-width:100%;
    height:auto CSS scaling covers the visual interpolation in between. */
-body.deskx .fx-layout{grid-template-columns:1fr 320px 64px;gap:0;height:calc(100vh - 44px);align-items:stretch;
-  transition:grid-template-columns .2s ease}
-body.deskx.panel-closed .fx-layout{grid-template-columns:1fr 0 64px}
+/* Leading dock column for the Library panel (library-ui.js's initDock() makes #lib-overlay
+   the first child of .fx-layout) — --dock-w/--panel-w are the only two things that ever change
+   this row's column widths, so there is exactly one grid-template-columns expression and no
+   second px value anywhere that has to be kept in sync with it (the root cause of 4 previous
+   "library covers the editor" regressions, which all stemmed from a SEPARATE body.paddingLeft
+   value computed in JS). A reserved grid track can never visually overlap a sibling track. */
+body.deskx .fx-layout{--dock-w:0px;--panel-w:320px;grid-template-columns:var(--dock-w) 1fr var(--panel-w) 64px;
+  gap:0;height:calc(100vh - 44px);align-items:stretch;transition:grid-template-columns .2s ease}
+body.deskx.lib-docked:not(.lib-full) .fx-layout{--dock-w:120px}
+body.deskx.panel-closed .fx-layout{--panel-w:0px}
 body.deskx.panel-closed .fx-panel{display:none}
 body.deskx .fx-preview-col{order:1;position:static;top:auto;align-self:stretch;height:100%;display:flex;flex-direction:column;min-width:0;min-height:0}
-body.deskx .fx-panel{order:2;max-height:none;height:100%;overflow-y:auto;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box}
+body.deskx .fx-panel{order:2;max-height:none;height:100%;overflow-y:auto;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
+  background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03),-6px 0 16px -8px rgba(0,0,0,.4)}
 body.deskx #fx-toolrail{order:3;position:static;top:auto;align-self:stretch;width:64px;box-sizing:border-box;
   border:none;border-left:1px solid var(--bdr);border-radius:0;padding:6px 4px;overflow-y:auto;overflow-x:hidden;
-  display:flex;flex-direction:column;gap:2px}
+  display:flex;flex-direction:column;gap:2px;background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03)}
 /* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only. */
 body.deskx .fx-rail-btn{width:100%;flex-direction:column;gap:3px;padding:8px 2px;justify-content:center;font-size:9px}
 body.deskx .fx-rail-btn .fx-rail-lb{white-space:normal;text-align:center;line-height:1.15}
@@ -487,7 +521,8 @@ body.deskx #btn-msk-add-ai{display:inline-flex!important} /* AI Select needs the
 #fx-overflow{display:none;position:relative}
 body.deskx #fx-overflow{display:inline-flex}
 #fx-overflow-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:200px;
-  background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
 #fx-overflow-menu.on{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
   color:var(--txt);cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;
@@ -1032,6 +1067,8 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
         <canvas id="fx-hist"></canvas>
         <div id="fx-crop-overlay"></div>
         <svg id="fx-mask-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
+        <canvas id="msk-paint-overlay"></canvas>
+        <div id="msk-brush-cursor"></div>
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
           <button onclick="zoomBy(1/1.25)" title="Zoom out">−</button>
           <input type="range" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)" title="Drag to zoom">
@@ -2983,7 +3020,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17k';
+const BUILD='2026-07-18a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3483,14 +3520,28 @@ vec3 vlog2rec709(vec3 c){
   return vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
 }
 float gmp(float v,float c,float w){return exp(-(v-c)*(v-c)/(2.0*w*w));}
-vec3 maskAdjust(vec3 c,float w,vec4 A){   // per-mask local adjust (A: exp,con,temp,sat), weighted by w
+// Same hue-rotation matrix the "CSS hue-rotate filter" spec uses (Rec.601 luma weights) — a
+// well-established, cheap approximation; exact for a pure rotation of the RGB cube around the
+// grey axis, which is all a "Hue" slider needs to do.
+vec3 hueRotate(vec3 c,float deg){
+  float a=radians(deg),cs=cos(a),sn=sin(a);
+  mat3 m=mat3(
+    0.213+cs*0.787-sn*0.213, 0.213-cs*0.213+sn*0.143, 0.213-cs*0.213-sn*0.787,
+    0.715-cs*0.715-sn*0.715, 0.715+cs*0.285+sn*0.140, 0.715-cs*0.715+sn*0.715,
+    0.072-cs*0.072+sn*0.928, 0.072-cs*0.072-sn*0.283, 0.072+cs*0.928+sn*0.072);
+  return clamp(m*c,0.0,1.0);
+}
+vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH){ // A: exp,con,temp,sat | TH: tint,hue(deg) — weighted by w
   vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
   lin*=exp2(A.x*w);                                        // exposure (stops), linear light
   lin.r*=1.0+0.22*A.z*w;lin.b*=1.0-0.22*A.z*w;             // temp (matches basicAdjust scaling)
+  lin.g*=1.0-0.14*TH.x*w;lin.r*=1.0+0.05*TH.x*w;lin.b*=1.0+0.05*TH.x*w; // tint (matches basicAdjust)
   c=clamp(vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b)),0.0,1.0);
   c=clamp((c-0.5)*(1.0+A.y*w)+0.5,0.0,1.0);                // contrast around mid-grey
   float l=dot(c,vec3(.2126,.7152,.0722));
-  return clamp(mix(vec3(l),c,1.0+A.w*w),0.0,1.0);          // saturation
+  c=clamp(mix(vec3(l),c,1.0+A.w*w),0.0,1.0);               // saturation
+  if(TH.y!=0.0)c=mix(c,hueRotate(c,TH.y),w);
+  return c;
 }
 vec3 basicAdjust(vec3 c){
   if(adjOn<0.5)return c;
@@ -3569,7 +3620,7 @@ if(mskN>0.5){
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
     if(w>0.001){
-      c.rgb=maskAdjust(c.rgb,w,mskC[i]);
+      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz);
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
         float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
@@ -4170,7 +4221,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
       mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
-      mE[o]=m.subtract?1:0;});
+      mE[o]=m.subtract?1:0;mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;});
     if(MK.some(m=>m.type==='brush'))mskBuildTex();
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
@@ -5265,6 +5316,19 @@ function installFXImages(entries,loadKey){
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
   _resetZoom(); fxHistory=[getUISnapshot()]; fxHistIdx=0;
+  // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
+  // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
+  // CURRENTLY SELECTED photo's own masks array, swapped by fxSelectImage on every filmstrip
+  // click. fxImages[0] gets the array the baseline snapshot/recipe-restore below already
+  // produced (so a saved single-photo recipe's masks land correctly); every OTHER photo in a
+  // freshly loaded batch starts with its own independent empty array — previously ALL photos
+  // in a batch shared the exact same fxState.masks array by reference, so painting/adjusting a
+  // mask on photo 1 silently appeared on every other photo too ("masks transfer from one image
+  // to the next"). mskCopyToAll() is the explicit, opt-in way to actually share a mask set
+  // across a batch now.
+  fxImages[0].masks=fxState.masks;
+  for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
+  if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
   autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
   showExif(fxImages[0].exif||{});
@@ -5584,8 +5648,17 @@ function toast(msg,ok){
   clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1900);
 }
 function fxPickPhotos(){const inp=document.querySelector('#dz-fx-img input[type=file]');if(inp)inp.click();}
-// Haptic tap in the iOS shell (Capacitor Haptics plugin) — silently inert everywhere else.
-function hapt(s){try{if(capNative()&&window.Capacitor.Plugins.Haptics)window.Capacitor.Plugins.Haptics.impact({style:s||'LIGHT'});}catch(e){}}
+// Haptic tap: iOS shell (Capacitor Haptics plugin) OR the Tauri desktop shell (native macOS
+// trackpad haptic via Rust's haptic_feedback() — see desktop/src-tauri/src/main.rs). Previously
+// this only ever checked capNative()/window.Capacitor, so the desktop build had literally no
+// haptic path at all despite Force Touch trackpads supporting exactly this. Silently inert on
+// any other platform (browser/Pages build, or a non-Force-Touch trackpad/mouse under Tauri —
+// NSHapticFeedbackManager itself handles that no-op, nothing to detect on the JS side). Fire-
+// and-forget: a haptic tap is decorative feedback, never worth awaiting or logging a failure for.
+function hapt(s){
+  try{if(capNative()&&window.Capacitor.Plugins.Haptics)window.Capacitor.Plugins.Haptics.impact({style:s||'LIGHT'});}catch(e){}
+  try{if(window.__TAURI__)window.__TAURI__.core.invoke('haptic_feedback').catch(()=>{});}catch(e){}
+}
 // Mobile "⋯" sheet: the editor is the whole app on the phone; the other tabs live here.
 function fxMoreMenu(){
   const old=document.getElementById('fx-more-menu');if(old){old.remove();return;}
@@ -5754,15 +5827,15 @@ let mskSel=-1;
 function mskAdd(type){
   if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
   let m;
-  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
-  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};}
+  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
+  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};}
   else if(type==='sky'){ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
-    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
+    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
     mskGenerateSky(m);
   }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
     const{w,h}=mskTexDims();
-    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,sat:0,hi:0,sh:0,subtract:false};
+    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
   }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
@@ -5878,6 +5951,18 @@ function mskDelete(){if(mskSel<0)return;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();}
 function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.invert;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+// Explicit opt-in for the one case masks ARE meant to be shared across a batch: deep-clones
+// the CURRENT photo's mask set onto every other loaded photo, overwriting whatever masks they
+// had. Masks are per-photo by default (see installFXImages/fxSelectImage) specifically so this
+// never happens silently — this button is the only path that does it, and it says so.
+function mskCopyToAll(){
+  if(fxImages.length<2)return;
+  fxImages[fxCurIdx].masks=fxState.masks; // persist the source photo's own array first
+  const clone=JSON.parse(JSON.stringify(fxState.masks));
+  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=JSON.parse(JSON.stringify(clone));
+  if(typeof hapt==='function')hapt();
+  toast(`Copied ${fxState.masks.length} mask(s) to ${fxImages.length-1} other photo(s)`,true);
+}
 
 // ── Painted/sky raster masks: up to 4 packed one-per-channel into a single RGBA texture,
 // authored at a fixed resolution independent of image size (see FXR.setMaskTex, lut-pass
@@ -5943,9 +6028,11 @@ function mskPaintToggle(){
   mskPaintMode=!mskPaintMode;
   if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
-  if(FX.cv)FX.cv.style.cursor=mskPaintMode?'crosshair':'';
+  if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
+  if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
 }
-function mskPaintStop(){mskPaintMode=false;const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';}
+function mskPaintStop(){mskPaintMode=false;const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
+  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
 function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;const b=document.getElementById('btn-msk-erase');if(b)b.classList.toggle('on',mskPaintErase);}
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Array(m.mtW*m.mtH).fill(0);_mskTexDirty=true;fxUpdate();}
 function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
@@ -5972,7 +6059,32 @@ function mskPaintAt(m,nx,ny){
 (function initMaskPaint(){
   const cv=document.getElementById('fx-canvas');if(!cv)return;
   let renderQueued=false;
-  const queueRender=()=>{if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;renderPreview();});};
+  const queueRender=()=>{if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;renderPreview();if(typeof mskOverlaySync==='function')mskOverlaySync();});};
+  // Live brush cursor: a ring at the photo's actual painted radius, following the pointer
+  // whenever Paint is armed — independent of whether a stroke is currently down, so you can see
+  // the brush size BEFORE clicking, not just while dragging. Diameter mirrors mskPaintAt's own
+  // radius formula ((size/100)*0.25*max(bufferW,bufferH)) as a fraction of the photo's rendered
+  // box, so it tracks size/zoom without needing exact 1:1 buffer-to-screen pixel mapping.
+  const cursorEl=document.getElementById('msk-brush-cursor');
+  function updateBrushCursor(e){
+    if(!cursorEl)return;
+    const m=fxState.masks[mskSel];
+    if(!mskPaintMode||!m||m.type!=='brush'){cursorEl.classList.remove('on');return;}
+    // #msk-brush-cursor is a sibling of #fx-zoom-wrap, both children of #fx-wrap (see
+    // mskOverlayBox's identical convention for #fx-mask-overlay) — it's #fx-wrap that's the
+    // positioned ancestor, NOT #fx-zoom-wrap. #fx-wrap centers the zoom-wrap via flexbox, so
+    // using the wrong container here would offset the ring by that centering gap whenever the
+    // photo's aspect ratio doesn't exactly fill fx-wrap.
+    const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+    const wr=wrap.getBoundingClientRect(),cr=cv.getBoundingClientRect();
+    const diam=(mskBrushSize/100)*0.5*Math.max(cr.width,cr.height);
+    cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
+    cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
+    cursorEl.classList.toggle('erase',!!mskPaintErase);
+    cursorEl.classList.add('on');
+  }
+  cv.addEventListener('pointermove',updateBrushCursor);
+  cv.addEventListener('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');});
   cv.addEventListener('pointerdown',e=>{
     if(!mskPaintMode)return;
     const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;
@@ -6052,9 +6164,14 @@ function mskRebuild(){
     b.textContent=(m.type==='linear'?'Linear':m.type==='radial'?'Radial':m.origin==='sky'?'Sky':m.origin==='ai'?'AI':'Brush')+' '+(i+1);
     b.onclick=()=>{mskSel=i;mskRebuild();};list.appendChild(b);
   });
+  // Masks are per-photo by default (see installFXImages/fxSelectImage) — this is the one
+  // explicit, opt-in way to share the current photo's mask set across the rest of a batch.
+  const batchBtn=(fxImages.length>1&&fxState.masks.length)
+    ?'<button class="btn bgh" onclick="mskCopyToAll()" title="Copies this photo\'s mask set onto every other loaded photo, overwriting theirs"><span class="bdot"></span>Copy masks to the other '+(fxImages.length-1)+' photo'+(fxImages.length>2?'s':'')+'</button>'
+    :'';
   const m=fxState.masks[mskSel];
-  if(!m){ctl.innerHTML='<div style="font-size:10px;color:var(--mut);font-family:var(--mono)">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div>';return;}
-  let h='';
+  if(!m){ctl.innerHTML=(batchBtn?'<div class="btn-row">'+batchBtn+'</div>':'')+'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div>';return;}
+  let h=batchBtn?'<div class="btn-row" style="margin-bottom:8px">'+batchBtn+'</div>':'';
   if(m.type==='radial'){
     h+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
       +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false)
@@ -6083,7 +6200,9 @@ function mskRebuild(){
   h+=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
     +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
+    +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
     +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
+    +_mskRow('Hue','hue',m.hue,-100,100,1,false)
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
     +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
     +_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
@@ -6112,15 +6231,44 @@ function mskOverlayBox(){
   if(!cr.width||!cr.height)return null;
   return{left:cr.left-wr.left,top:cr.top-wr.top,width:cr.width,height:cr.height};
 }
+// Red painted-area overlay for brush/sky/AI masks — the same idea as the radial/linear SVG
+// shape below, but there's no analytic shape to draw, only the raster m.px buffer, so it's a
+// separate <canvas> scaled up from the mask's own (small, resolution-independent) working
+// buffer onto the rendered photo's screen rect. Previously brush masks had NO visual feedback
+// at all besides the effect itself — you couldn't tell what area was actually painted without
+// toggling the adjustment sliders to extremes and looking for the edge.
+function mskPaintOverlaySync(m,box,isolate){
+  const cv=document.getElementById('msk-paint-overlay');if(!cv)return;
+  if(!m||m.type!=='brush'||!m.px||!box){cv.classList.remove('on');return;}
+  cv.style.left=box.left+'px';cv.style.top=box.top+'px';cv.style.width=box.width+'px';cv.style.height=box.height+'px';
+  cv.width=m.mtW;cv.height=m.mtH;
+  const x=cv.getContext('2d');
+  const id=x.createImageData(m.mtW,m.mtH);
+  for(let i=0;i<m.px.length;i++){
+    const v=m.px[i],j=i*4;
+    id.data[j]=255;id.data[j+1]=40;id.data[j+2]=40;
+    id.data[j+3]=isolate?255:Math.round(v*0.65); // isolate mode: opaque red (matches the shape-mask "filled" look); overlay mode: proportional to paint strength
+  }
+  x.putImageData(id,0,0);
+  cv.classList.add('on');
+}
 function mskOverlaySync(){
   const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
+  const paintCv=document.getElementById('msk-paint-overlay');
   // Only draw while the Masks card is actually visible on screen — ff-local's own
   // display style already reflects both the mobile bottom-sheet and the deskx panel
   // (toggleFX/fxSection set it), so it's the single source of truth for "is this panel open".
   const ff=document.getElementById('ff-local');
   const cardVisible=ff&&ff.offsetParent!==null;
   const m=fxState.masks[mskSel];
-  const showable=cardVisible&&m&&(m.type==='radial'||m.type==='linear')&&mskPreviewMode!=='off';
+  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&!cropMode&&!fxLoupe;
+  if(m&&m.type==='brush'){
+    svg.classList.remove('on');svg.innerHTML='';
+    if(paintCv)mskPaintOverlaySync(anyShowable?m:null,mskOverlayBox(),mskPreviewMode==='isolate');
+    return;
+  }
+  if(paintCv)paintCv.classList.remove('on');
+  const showable=anyShowable&&(m.type==='radial'||m.type==='linear');
   if(!showable||cropMode||fxLoupe){svg.classList.remove('on');svg.innerHTML='';return;}
   const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
   svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
@@ -6229,7 +6377,8 @@ function applyUISnapshot(s){
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
-  if(s.masks){fxState.masks=JSON.parse(JSON.stringify(s.masks));mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();}
+  if(s.masks){fxState.masks=JSON.parse(JSON.stringify(s.masks));mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
+    if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;} // keep the per-photo array reference (fxSelectImage/installFXImages) in sync with a restored recipe
   if(s.canvas){fxState.canvas=JSON.parse(JSON.stringify(s.canvas));cvBuildChips();}
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten)
     fxImages.forEach(it=>it.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom());
@@ -6998,8 +7147,17 @@ function fxSelectImage(idx){
   // rather than trying to coordinate two independent async flows.
   if(window.chromasmithLibraryBusy)return;
   if(idx<0||idx>=fxImages.length||idx===fxCurIdx)return;
+  // Persist the OUTGOING photo's own masks (fxState.masks may have been reassigned to a new
+  // array by mskAdd/mskDelete, not just mutated in place, so this can't be skipped as "already
+  // the same reference") before swapping fxState.masks to the incoming photo's own array — see
+  // the per-photo masks comment in installFXImages. mskSel is clamped since the incoming photo
+  // likely has a different (often shorter/empty) mask list than the outgoing one.
+  if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;
   fxCurIdx=idx;
   const it=fxImages[fxCurIdx];
+  fxState.masks=it.masks||(it.masks=[]);
+  mskSel=Math.min(mskSel,fxState.masks.length-1);
+  if(typeof mskRebuild==='function')mskRebuild();
   if(cropMode)cropExit();
   fxImg=it.img;updateWork();
   const ss=document.getElementById('sl-straighten');
@@ -8094,7 +8252,13 @@ async function gpImportPhotos(preWin){
     // our end), so rather than one warning line per affected file, show ONE consolidated
     // banner explaining why and pointing at the actual fix (Files/USB import).
     if(rawTwinCount){
-      log(`Google Photos only had a JPEG copy of ${rawTwinCount} RAW file${rawTwinCount>1?'s':''} — imported as JPG (renamed to match). To edit true RAWs, import from Files or a USB card instead.`,'warn');
+      // Confirmed against Google's own API behaviour (issuetracker.google.com/issues/112096115):
+      // the Picker/Library API's baseUrl+"=d" is documented to sometimes serve the JPEG half of
+      // a RAW+JPEG pair instead of the RAW original, even when photos.google.com's own Download
+      // button on the SAME item does return the real RAW — it's a longstanding Google API gap,
+      // not a Chromasmith transport bug (this app already downloads natively in Rust with the
+      // exact "=d" original-quality parameter Google's docs specify).
+      log(`Google's Photos API only served a JPEG copy of ${rawTwinCount} RAW file${rawTwinCount>1?'s':''} — imported as JPG (renamed to match). This is a known limitation of Google's Picker API (it can silently substitute the JPEG half of a RAW+JPEG pair); photos.google.com's own "Download" button on the same photo usually gets the true RAW. Download it there and import via Files or a USB card instead.`,'warn');
     }
     toast('Imported '+files.length+' photo'+(files.length>1?'s':'')+' from Google Photos ✓',true);
   }catch(e){
@@ -8604,6 +8768,17 @@ syncAllFxBtn();
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
+  // "O" cycles the mask overlay (Overlay -> Isolate -> Off -> Overlay…), same Lightroom-style
+  // convention the Masks panel's own segmented control offers by click — only while that panel
+  // is actually open and the user isn't typing somewhere else.
+  if(e.key==='o'||e.key==='O'){
+    if(e.metaKey||e.ctrlKey||e.altKey)return;
+    const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
+    const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return;
+    e.preventDefault();
+    const next={overlay:'isolate',isolate:'off',off:'overlay'}[mskPreviewMode]||'overlay';
+    mskSetPreviewMode(next);
+  }
 });
 log(`Chromasmith ready (build ${BUILD}) — all processing runs locally in your browser`,'ok');
 

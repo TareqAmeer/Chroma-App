@@ -65,6 +65,11 @@ libloading = "0.9"
 
 [profile.release]
 strip = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
 # NOTE: opt-level="s" + codegen-units=1 + lto=true were dropped for now — rawler's dependency
 # tree (jxl/image codecs etc.) made whole-program LTO builds take 10+ minutes, too slow while
 # iterating. Reinstate these once the native RAW pipeline is verified working, for a smaller

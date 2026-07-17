@@ -79,27 +79,56 @@
   // ── styles ──────────────────────────────────────────────────────────────────
   const style = document.createElement('style');
   // RapidRAW-style DOCKED left panel (not a modal overlay): library and editor are visible
-  // and usable at the same time. The app's own layout is untouched — body gets padding-left
-  // while the dock is open, and a window resize event re-fits the preview.
+  // and usable at the same time.
+  //
+  // STRUCTURAL FIX (4th reported overlap regression): this used to be position:fixed, pushed
+  // aside by setting body.style.paddingLeft to a JS-computed px value kept "in sync" with the
+  // overlay's own rendered width across three separate modes (default/deskx-filmstrip/full) —
+  // two independent numbers that had to agree by construction, and every previous "fix" was
+  // another attempt to keep those two numbers in sync (a ResizeObserver, then a synchronous
+  // derive-from-state function). Any path that changed one without the other overlapped the
+  // editor. Eliminated the second number entirely: initDock() below moves this overlay to be
+  // the FIRST CHILD of .fx-layout — chromasmith-22.html's own existing CSS Grid for the
+  // preview/panel/rail row (body.deskx .fx-layout{grid-template-columns:...}) now reserves a
+  // LEADING column for it, sized by the existing body.lib-docked/body.deskx classes the JS
+  // already toggles (see chromasmith-22.html's own CSS, which owns those two rules — this file
+  // only supplies the dock's own content and its `order:0` default DOM position, which sorts
+  // it ahead of the preview(order:1)/panel(order:2)/rail(order:3) siblings automatically). A
+  // reserved grid TRACK can never overlap another track by construction — there is no padding
+  // value left to keep in sync, and nothing left to drift. Only the FULL (expanded_view)
+  // takeover mode still uses position:fixed below — that's a deliberate full-screen
+  // replacement of the editor, not a coexistence case, so overlap can't apply there either.
   const DOCK_W = 356;
   style.textContent = `
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
-      background:var(--bg);display:none;border-right:3px solid #55555f;
+      background:var(--bg);display:none;border-right:1px solid var(--bdr);
+      box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
       font-family:-apple-system,'Helvetica Neue',sans-serif;transition:width .15s ease;}
     #lib-overlay.on{display:grid}
     #lib-overlay.full{width:100vw;grid-template-rows:auto auto minmax(100px,18%) 1fr 28px}
     #lib-overlay.full #lib-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
-    /* body padding-left is set from JS (syncDockPadding, below) instead of a hand-maintained
-       px value here — it previously had to be kept in exact sync with #lib-overlay's rendered
-       width across THREE separate modes (default/deskx-filmstrip/full), and a drift between
-       those numbers is exactly what caused the panel to visually overlap the editor instead of
-       pushing it aside. A ResizeObserver on the overlay itself is the single source of truth. */
+    /* Folder tree collapses to zero height by default — the photo grid is the page; the tree
+       is navigation chrome you reach for occasionally, not something that should permanently
+       eat a fixed 18-26% vertical slice above an otherwise-empty-looking grid. #lib-tree-toggle
+       (in #lib-top) flips this. */
+    #lib-overlay.full.tree-collapsed{grid-template-rows:auto auto 0 1fr 28px}
+    #lib-overlay.full.tree-collapsed #lib-side{display:none}
+    #lib-tree-toggle.on{border-color:var(--acc);color:var(--acc)}
+    /* deskx docked (non-full): a real grid-column sibling of the preview/panel/rail, placed by
+       initDock() as the first child of .fx-layout — see chromasmith-22.html's own
+       body.deskx .fx-layout / body.lib-docked rules for the reserved column width. */
+    body.deskx #lib-overlay:not(.full){position:static;top:auto;left:auto;bottom:auto;height:100%}
+    body.deskx #lib-overlay.full{position:fixed} /* full takeover: back to covering everything */
     #lib-top{display:flex;align-items:center;gap:8px;padding:34px 12px 6px;-webkit-app-region:drag}
     #lib-top button{-webkit-app-region:no-drag}
     #lib-top .lib-title{font-weight:600;font-size:14px;margin-right:auto}
-    #lib-filters{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 8px}
-    #lib-filters #lib-search{grid-column:1/3}
+    /* Single wrapping toolbar row, not a 2-column grid — the "wall of filters" complaint was
+       largely this stacking into 3+ visual rows above an otherwise-empty-looking grid. Search
+       gets first claim on width (flex-grow); every select shrinks to its content. */
+    #lib-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 12px 8px}
+    #lib-filters #lib-search{flex:1 1 160px;min-width:120px}
+    #lib-filters select{flex:0 1 auto;width:auto;min-width:0}
     #lib-side{overflow:auto;padding:8px 12px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr)}
     #lib-main{overflow:auto;padding:16px}
     #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid var(--bdr)}
@@ -134,8 +163,8 @@
     .lib-card:hover .lib-meta-strip.hover-mode,.lib-meta-strip.always-mode{opacity:1}
     .lib-thumb-wrap{position:relative}
     .lib-card{background:var(--sur);border:2px solid var(--bdr);border-radius:8px;overflow:hidden;
-      cursor:pointer;position:relative}
-    .lib-card:hover{border-color:var(--acc)}
+      cursor:pointer;position:relative;box-shadow:var(--lift-1);transition:border-color .15s ease,transform .1s ease}
+    .lib-card:hover{border-color:var(--acc);transform:translateY(-1px)}
     .lib-card.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
     .lib-card.multi{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
     .lib-card.sel.multi{box-shadow:0 0 0 1px var(--acc),0 0 0 3px var(--acc2)}
@@ -179,6 +208,9 @@
     body.deskx #lib-overlay #lib-top{padding:8px 8px 6px;-webkit-app-region:no-drag} /* strip starts below the deskbar — no traffic-light clearance needed */
     body.deskx #lib-overlay:not(.full) #lib-top{padding:8px 6px 6px;gap:4px}
     body.deskx #lib-overlay:not(.full) #lib-top .lib-title{display:none}
+    /* The tree toggle only means anything in full mode (the filmstrip already force-hides
+       #lib-side below) — its text label doesn't fit the 120px filmstrip's icon-only top bar. */
+    body.deskx #lib-overlay:not(.full) #lib-tree-toggle{display:none}
     body.deskx #lib-overlay:not(.full) #lib-main{padding:10px}
     body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:1fr;gap:12px}
     body.deskx #lib-overlay:not(.full) .lib-card .lib-name,
@@ -201,6 +233,7 @@
   overlay.innerHTML = `
     <div id="lib-top">
       <span class="lib-title">Library</span>
+      <button class="lib-btn" id="lib-tree-toggle" title="Show/hide the folder tree">☰ Folders</button>
       <button class="lib-btn" id="lib-pick" title="Choose root folder">📁</button>
       <button class="lib-btn" id="lib-gphotos" title="Import from Google Photos">☁️</button>
       <button class="lib-btn" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">🕘</button>
@@ -263,25 +296,21 @@
     <div id="lib-main"><div id="lib-grid"></div></div>
     <div id="lib-bottom"><span style="font-size:11px;color:var(--mut)" id="lib-count"></span></div>
   `;
-  document.body.appendChild(overlay);
+  // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
+  // body-level overlay — see the big comment above the style block. .fx-layout already exists
+  // in the DOM by the time this script runs (injected just before </body>, after the app's own
+  // markup). Falls back to a plain body-append if .fx-layout is ever missing (e.g. this file
+  // loaded standalone for testing) so the panel still renders, just without the grid-column
+  // placement — better than a hard failure.
+  const fxLayoutEl = document.querySelector('.fx-layout');
+  if (fxLayoutEl) fxLayoutEl.insertBefore(overlay, fxLayoutEl.firstChild);
+  else document.body.appendChild(overlay);
 
-  // Single source of truth for how much the docked panel pushes the editor over.
-  // PREVIOUSLY this read the overlay's own RENDERED width via ResizeObserver — async by
-  // nature, so on any state change that toggles display but doesn't itself change the box
-  // size within the same observed frame (WebKit's ResizeObserver is known to miss/lag
-  // display:none<->grid transitions, especially mid-CSS-transition), the padding update
-  // could land a frame (or more) after the overlay painted, or never fire at all — the panel
-  // then visually overlapped the editor until an unrelated resize nudged the observer. That
-  // is the recurring bug: two independent sources of truth (rendered width vs. applied
-  // padding) that could desync.
-  // FIX: derive the padding synchronously from the SAME state that decides the overlay's own
-  // CSS width (deskx filmstrip / default dock / full-window) — one deterministic switch, set
-  // in the same tick as the class toggle, no observer, no timing race.
-  function syncDockPadding() {
-    const active = state.open && !state.expanded_view;
-    document.body.style.paddingLeft = active ? (document.body.classList.contains('deskx') ? '120px' : DOCK_W + 'px') : '';
-  }
-  window.addEventListener('resize', syncDockPadding);
+  // No JS-computed padding/width to keep in sync anymore — chromasmith-22.html's own
+  // body.lib-docked/body.lib-full selectors (toggled below) size the reserved grid column
+  // directly. Kept as a harmless no-op stub since a couple of call sites below still poke it
+  // after a state change; deleting them individually isn't worth the risk of missing one.
+  function syncDockPadding() {}
 
   // ── provisional preview: while a RAW's full native decode (PPG demosaic + DCP LUT,
   // several seconds) runs, show the camera's own embedded JPEG immediately over the preview
@@ -409,8 +438,8 @@
     const gDir = await gphotosDownloadsDir();
     const recents = getRecentFolders().filter((p) => p !== gDir);
     recentMenu = document.createElement('div');
-    recentMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);' +
-      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:220px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    recentMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:220px;max-width:320px;box-shadow:var(--lift-2)';
     const item = (label, path) => {
       const el = document.createElement('div');
       el.textContent = label;
@@ -893,6 +922,10 @@
   function updateCardSelClasses() {
     grid.querySelectorAll('.lib-card').forEach((c) => c.classList.toggle('multi', state.selected.has(c.dataset.path)));
   }
+  // Single click opens the editor immediately (no double-click needed). ⌘/Ctrl-click instead
+  // multi-selects WITHOUT opening, building up a batch; ⌘/Ctrl-double-click opens that whole
+  // batch selection in the editor. Shift-click range-selects (also without opening), extending
+  // from the last ⌘-click/shift-click anchor — same anchor plain single-click opens don't move.
   function handleCardClick(e, entry, idx, shown) {
     if (e.shiftKey && selectAnchor >= 0) {
       const [lo, hi] = [selectAnchor, idx].sort((a, b) => a - b);
@@ -907,23 +940,35 @@
       updateCardSelClasses();
       return;
     }
-    // Plain click just (de/re)selects — opening now needs a double-click (Darkroom-style
-    // tap-to-select / double-tap-to-open), so a single click can be used to build a multi-
-    // selection without immediately jumping into the editor.
-    if (state.selected.size === 1 && state.selected.has(entry.path)) {
-      state.selected.clear();
-    } else {
-      state.selected.clear();
-      state.selected.add(entry.path);
-    }
-    selectAnchor = idx;
-    updateCardSelClasses();
-  }
-  function handleCardDblClick(e, entry) {
     if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; }
     state.selected.clear();
     updateCardSelClasses();
     openInEditor(entry.path);
+  }
+  // Plain double-click on a single (non-multi-selected) card is just a second single-click —
+  // already opened by handleCardClick, nothing further to do here. ⌘/Ctrl-double-click opens
+  // the CURRENT multi-selection as a batch (mirrors the context menu's "Open N photos").
+  async function handleCardDblClick(e, entry) {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    // The two `click` events a double-click also fires each ran handleCardClick with the SAME
+    // modifier held, which toggles this exact entry in/out of state.selected an ODD number of
+    // times overall relative to before the gesture started — so whether this card ends up IN
+    // the selection by the time dblclick fires depends on whether it was already selected
+    // beforehand (a real, confirmed bug: double-clicking a card NOT already in the multi-
+    // selection silently toggled it back OUT right before opening, excluding it from its own
+    // batch open). Always re-add it here so the card you double-click is unconditionally part
+    // of what opens, regardless of that toggle parity.
+    state.selected.add(entry.path);
+    const paths = Array.from(state.selected);
+    if (paths.length <= 1) { if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; } openInEditor(paths[0] || entry.path); return; }
+    const files = [];
+    for (const p of paths) {
+      try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
+      catch (err) { console.error('read_file_bytes', p, err); }
+    }
+    if (files.length) { state.openedPath = ''; await loadFXImages(files); }
+    state.selected.clear();
+    updateCardSelClasses();
   }
 
   let ctxMenu = null;
@@ -947,8 +992,8 @@
     closeContextMenu();
     const n = paths.length;
     ctxMenu = document.createElement('div');
-    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);' +
-      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:180px;box-shadow:var(--lift-2)';
     const item = (label, fn) => {
       const el = document.createElement('div');
       el.textContent = label;
@@ -1123,6 +1168,21 @@
   }
 
   // ── wiring ──────────────────────────────────────────────────────────────────
+  // Folder tree starts collapsed — the photo grid is the page, the tree is occasional
+  // navigation (see the CSS comment above #lib-overlay.tree-collapsed). Persisted so the
+  // choice sticks across relaunches, same treatment as view mode/sort/thumb size below.
+  const treeToggleBtn = overlay.querySelector('#lib-tree-toggle');
+  let treeCollapsed = localStorage.getItem('chromasmith_lib_tree_collapsed') !== '0';
+  function syncTreeToggle() {
+    overlay.classList.toggle('tree-collapsed', treeCollapsed);
+    treeToggleBtn.classList.toggle('on', !treeCollapsed);
+  }
+  syncTreeToggle();
+  treeToggleBtn.onclick = () => {
+    treeCollapsed = !treeCollapsed;
+    localStorage.setItem('chromasmith_lib_tree_collapsed', treeCollapsed ? '1' : '0');
+    syncTreeToggle();
+  };
   overlay.querySelector('#lib-pick').onclick = pickFolder;
   overlay.querySelector('#lib-gphotos').onclick = () => {
     // gpImportClick lives in chromasmith-22.html (the web-app half); it's exposed on window.
