@@ -287,10 +287,20 @@ fn resize_rgb8(rgb: &[u8], w: u32, h: u32, new_w: u32, new_h: u32) -> Vec<u8> {
     image::imageops::resize(&img, new_w, new_h, FilterType::Triangle).into_raw()
 }
 
+/// Per-channel ImageNet-ish normalization EdgeSAM's predictor_onnx.py applies BEFORE feeding the
+/// encoder — unlike MobileSAM's export, this graph has no internal normalization/padding, so the
+/// caller must do both. Order matters: normalize first, THEN zero-pad (i.e. the padded border is
+/// 0 in NORMALIZED space, not raw pixel value 0 — matches `np.pad(..., constant_values=0)` being
+/// applied after `(x - pixel_mean) / pixel_std` in preprocess()).
+const PIXEL_MEAN: [f32; 3] = [123.675, 116.28, 103.53];
+const PIXEL_STD: [f32; 3] = [58.395, 57.12, 57.375];
+
 /// Encodes an already-decoded RGB8 image (interleaved, row-major, no alpha) into a SAM
 /// embedding. Resizes so the longest side is exactly `SAM_SIZE` (`resize_longest_image_size` in
-/// Meta's export) — the ONNX graph itself handles pixel normalization and zero-padding to a
-/// square 1024x1024 canvas, so this only ever hands it raw 0..255 values.
+/// Meta's export), normalizes, and zero-pads to a fixed 1024x1024 CHW tensor — EdgeSAM's ONNX
+/// graph takes a fixed-size input (unlike MobileSAM's, which padded internally and accepted any
+/// size ≤1024), confirmed by a real `Run()` shape-mismatch error against a non-square photo
+/// before this padding was added.
 pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
     if w == 0 || h == 0 {
         return Err("SAM encode: zero-sized image".into());
@@ -300,15 +310,21 @@ pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
     let new_h = ((h as f32 * scale).round().max(1.0)) as u32;
     let resized = resize_rgb8(rgb, w, h, new_w, new_h);
 
-    let mut pixels = vec![0f32; (new_w as usize) * (new_h as usize) * 3];
-    for i in 0..(new_w as usize * new_h as usize) {
-        pixels[i * 3] = resized[i * 3] as f32;
-        pixels[i * 3 + 1] = resized[i * 3 + 1] as f32;
-        pixels[i * 3 + 2] = resized[i * 3 + 2] as f32;
+    // CHW, zero-padded to SAM_SIZE x SAM_SIZE, normalized per channel.
+    let side = SAM_SIZE as usize;
+    let mut pixels = vec![0f32; 3 * side * side];
+    for y in 0..new_h as usize {
+        for x in 0..new_w as usize {
+            let src = (y * new_w as usize + x) * 3;
+            for c in 0..3 {
+                let v = (resized[src + c] as f32 - PIXEL_MEAN[c]) / PIXEL_STD[c];
+                pixels[c * side * side + y * side + x] = v;
+            }
+        }
     }
 
     let sess = encoder()?;
-    let mut outputs = run_session(sess, vec![input("image", pixels, &[1, 3, new_h as i64, new_w as i64])], &["image_embeddings"])?;
+    let mut outputs = run_session(sess, vec![input("image", pixels, &[1, 3, SAM_SIZE as i64, SAM_SIZE as i64])], &["image_embeddings"])?;
     Ok(Embedding { data: outputs.remove(0), orig_w: w, orig_h: h })
 }
 
