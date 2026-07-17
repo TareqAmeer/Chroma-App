@@ -65,17 +65,25 @@
       // it unconditionally means every open path gets lens into fxImages[].exif via metadata()
       // below, so the metadata panel shows lens no matter how the photo was opened — not just
       // the single library-card path that separately calls get_meta.
+      // Timing breakdown for the "RAW load takes up to 15s" report, logged into the app's own
+      // log panel (not console — the packaged .app has no attached terminal for anyone to read
+      // console.log from) so the actual slow stage is visible without a profiler attached.
+      const _t0 = performance.now();
+      const _lap = (label) => { if (typeof log === 'function') log(`RAW load: ${label} ${(performance.now() - _t0).toFixed(0)}ms`, 'info'); };
       this._ident = { make: '', model: '', lens: '' };
       try { this._ident = await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
+      _lap('peek_raw_camera done at');
       if (settings && settings.outputBps === 16) {
         const camPrefix = (typeof cameraDcpPrefix === 'function') ? cameraDcpPrefix(this._ident.make, this._ident.model) : null;
         if (profile && camPrefix) {
           mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
           if (!_rustLuts[lutKey]) {
             const lut = await getDcpLUT(camPrefix, profile, 200); // iso arg vestigial (constants ISO-independent)
+            _lap('DCP LUT baked (JS) at');
             await framedInvoke('store_dcp_lut', { key: lutKey },
               new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
             _rustLuts[lutKey] = true;
+            _lap('DCP LUT registered with Rust at');
           }
         } else {
           mode = 'linear16';
@@ -91,7 +99,16 @@
       // dense sunlit-water/specular sparkle fields; NOT a global default, see raw_decode.rs).
       const demosaicAlgo = window.chromasmithDemosaicAlgo || '';
       const extra = { autoLens, nativeNr, demosaicAlgo };
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra } : { mode, ...extra }, bytes);
+      // Two-phase decode ("RAW load takes 15s"): the FIRST decode always requests `fast:true`
+      // — Rust skips the false-color-suppression / hue-defringe / native-NR passes (the serial
+      // full-frame CPU work that dominates decode time), so this returns in roughly the time a
+      // plain demosaic takes. If native NR is actually wanted, refine() below re-decodes the
+      // SAME bytes at full quality in the background and loadRw2() swaps the pixels in once it
+      // lands — the user sees a photo almost immediately instead of staring at a spinner.
+      this._mode = mode; this._lutKey = lutKey; this._bytes = bytes; this._extra = extra;
+      this._needsRefine = nativeNr; // full quality still gets applied — just not before first paint
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
+      _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
       // peek_raw_camera pre-check above ever disagrees with it — read the flag rather than
@@ -125,6 +142,24 @@
       return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 20) };
     }
     get worker() { return { terminate() {} }; }
+    // Second phase of the two-phase decode: re-decodes the SAME bytes at full quality
+    // (fast:false — false-color suppression + hue defringe + native NR all run) and returns
+    // pixels in the identical shape imageData() does, so loadRw2() can swap them into the
+    // already-displayed canvas without any new pixel-format handling. Returns null if this
+    // instance's first decode didn't actually need refining (NR was off) or already failed.
+    async refine() {
+      if (!this._needsRefine || !this._bytes) return null;
+      const { _mode: mode, _lutKey: lutKey, _extra: extra, _bytes: bytes } = this;
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra, fast: false } : { mode, ...extra, fast: false }, bytes);
+      const head = new Uint32Array(buf, 0, 5);
+      const w = head[0], h = head[1];
+      const usedLut = head[3] === 1;
+      const effMode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
+      if (effMode === 'linear16') {
+        return { width: w, height: h, colors: 3, bits: 16, data: new Uint16Array(buf, 20) };
+      }
+      return { width: w, height: h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(buf, 20) };
+    }
   }
   window.getLibRaw = async function () { return NativeLibRawShim; };
 
@@ -176,6 +211,12 @@
   wire('menu-export', () => typeof exportFX === 'function' && exportFX());
   wire('menu-undo', () => typeof fxUndo === 'function' && fxUndo());
   wire('menu-redo', () => typeof fxRedo === 'function' && fxRedo());
+  // Surfaces download_url_native's (main.rs) byte-count/content-type/hex-header diagnostic
+  // for Google Photos RAW downloads into the app's OWN log panel — it previously only went to
+  // eprintln!, which is invisible in the packaged .app (no attached terminal), so a "DNG won't
+  // load" report had no way to tell a genuine rawler gap from Google returning bad/re-encoded
+  // bytes without the reporter running `cargo run`/`tauri dev` themselves.
+  listen('gphotos-download-diag', (e) => { if (typeof log === 'function') log(e.payload, 'info'); });
 
   // ── Native-feeling right-click: no bare WKWebView context menu on chrome, but text
   // fields/log keep normal editing (Cut/Copy/Paste) behaviour. ─────────────────────

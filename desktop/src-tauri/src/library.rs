@@ -168,6 +168,67 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+fn decode_cache_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let dir = PathBuf::from(home).join("Library/Caches/com.tareq.chromasmith/decode");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+fn decode_cache_key(path: &str, mtime: u64, size: u64, recipe_key: &str) -> String {
+    let mut h = DefaultHasher::new();
+    path.hash(&mut h);
+    mtime.hash(&mut h);
+    size.hash(&mut h);
+    recipe_key.hash(&mut h); // RAW profile / native-NR / demosaic-algo / auto-lens — anything that changes decoded pixels
+    "v1".hash(&mut h);
+    format!("{:016x}.jpg", h.finish())
+}
+
+/// Persistent full-resolution decode cache — the "photos re-decode on every relaunch" fix.
+/// PREVIOUSLY the only persistent cache was the ~360px grid thumbnail; the actual expensive
+/// full-res RAW decode (demosaic + NR, several seconds) lived ONLY in the in-memory imgCache
+/// (library-ui.js), which is gone the instant the app quits — so reopening a photo you viewed
+/// last session re-ran the entire native pipeline from scratch every time. This caches the
+/// finished, graded-ready pixels as a quality-95 JPEG (a 24MP RGBA8 frame is ~96MB raw vs
+/// ~5-15MB JPEG) keyed on path+mtime+size+recipe_key, so a relaunch can skip straight to a
+/// ~100-200ms JPEG decode instead of the multi-second native RAW pipeline. `recipe_key` is
+/// whatever RAW-stage settings (profile, native NR, demosaic algo, auto-lens) were in effect
+/// when it was cached — changing any of them changes the key, so a stale cache is never served.
+#[tauri::command]
+pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let key = decode_cache_key(&path, mtime, meta.len(), &recipe_key);
+    let bytes = std::fs::read(decode_cache_dir().join(&key)).map_err(|_| "no cached decode".to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Writes the decode cache — framed raw body (JSON header + JPEG bytes) like store_dcp_lut, to
+/// avoid a multi-megabyte JSON-array argument. Best-effort: the caller (library-ui.js) fires
+/// this in the background after a successful decode and doesn't block on it; a write failure
+/// just means the next open re-decodes, same as today.
+#[tauri::command]
+pub fn save_decode_cache(request: tauri::ipc::Request) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected raw invoke body".into());
+    };
+    if bytes.len() < 4 {
+        return Err("framed body too short".into());
+    }
+    let jlen = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+    if bytes.len() < 4 + jlen {
+        return Err("framed body truncated".into());
+    }
+    let json: serde_json::Value = serde_json::from_slice(&bytes[4..4 + jlen]).map_err(|e| format!("frame json: {e}"))?;
+    let payload = &bytes[4 + jlen..];
+    let path = json["path"].as_str().ok_or("missing path")?;
+    let recipe_key = json["recipeKey"].as_str().unwrap_or("");
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    std::fs::write(decode_cache_dir().join(&key), payload).map_err(|e| format!("write decode cache: {e}"))
+}
+
 /// Fast provisional preview for opening a RAW into the editor: the camera's own embedded
 /// JPEG (rawler's extract_preview_pixels — bigger than the grid thumbnail, no demosaic), so
 /// the editor shows *something* in well under a second while the full native decode (PPG

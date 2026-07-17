@@ -299,6 +299,26 @@
     return provisionalImg;
   }
   const RAW_EXT_RE = /\.(rw2|raw|dng|cr2|cr3|nef|arw|orf)$/i;
+  // Minimal framed raw-body invoke (JSON header + binary payload) — same wire format
+  // desktop-native.js's framedInvoke uses for store_dcp_lut, duplicated here (not exposed on
+  // window there) since it's a one-liner and this file is meant to stay self-contained.
+  function framedInvoke(cmd, jsonObj, payload) {
+    const json = new TextEncoder().encode(JSON.stringify(jsonObj));
+    const framed = new Uint8Array(4 + json.length + payload.length);
+    new DataView(framed.buffer).setUint32(0, json.length, true);
+    framed.set(json, 4);
+    framed.set(payload, 4 + json.length);
+    return invoke(cmd, framed);
+  }
+  // Everything that changes what a RAW decode actually PRODUCES — the persistent decode cache
+  // (see get_decode_cache/save_decode_cache in library.rs) is keyed on this alongside
+  // path+mtime+size, so switching RAW profile / native NR / demosaic algo / auto-lens can never
+  // serve a stale cached decode.
+  function rawRecipeKey() {
+    const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+    return [profile, window.chromasmithNativeNr !== false ? 1 : 0,
+      window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0].join('|');
+  }
   async function showProvisional(path) {
     if (!RAW_EXT_RE.test(path)) return () => {};
     const myToken = ++provisionalToken;
@@ -527,10 +547,32 @@
     }
     window.chromasmithNativeNr = nativeNrForThisPhoto;
     window.chromasmithDemosaicAlgo = demosaicAlgoForThisPhoto;
+    // Persistent decode cache ("photos re-decode on every relaunch"): the in-memory imgCache
+    // above only survives within THIS session. For a RAW that isn't in it (first open, or a
+    // fresh app launch), check the on-disk cache — a quality-95 JPEG of the fully-decoded
+    // result keyed on path+mtime+size+recipe (see library.rs's get_decode_cache) — before
+    // falling back to the full native RAW pipeline. A hit is a plain JPEG decode (~100-200ms)
+    // instead of several seconds of demosaic+NR.
+    const isRaw = RAW_EXT_RE.test(path);
+    const recipeKey = isRaw ? rawRecipeKey() : '';
+    let diskCached = null;
+    if (!cached && isRaw) {
+      try {
+        const jpegBuf = await invoke('get_decode_cache', { path, recipeKey });
+        const bmp = await createImageBitmap(new Blob([jpegBuf], { type: 'image/jpeg' }));
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d').drawImage(bmp, 0, 0);
+        diskCached = { img: c, name: baseName(path).replace(/\.[^.]+$/, ''), ext: 'jpg', dpi: 240, bytes: null, exif: {} };
+      } catch (e) { /* no cache yet, or it's stale — fall through to a full decode below */ }
+    }
     try {
       if (cached) {
         cached.ts = Date.now(); // touch for LRU
         installFXImages([cached.entry], cached.loadKey);
+      } else if (diskCached) {
+        const loadKey = `${baseName(path)}:diskcache:${recipeKey}`;
+        installFXImages([diskCached], loadKey);
+        imgCacheStore(path, diskCached, loadKey); // warm the in-memory cache too, for this session
       } else {
         const buf = await invoke('read_file_bytes', { path });
         // lastModified:0 (not the default Date.now()) — chromasmith-22.html's loadFXImages()
@@ -545,6 +587,23 @@
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
           const loadKey = `${baseName(path)}:${buf.byteLength}:0`; // must match loadFXImages' own key formula
           imgCacheStore(path, fxImages[0], loadKey);
+          // Write the disk cache in the background — best-effort, never blocks the UI. Only for
+          // RAWs (a JPEG/PNG/TIFF decode is already fast; caching those buys nothing). Waits a
+          // beat for the two-phase RAW decode's background NR refine (desktop-native.js) to
+          // land first, so the CACHED copy is full quality, not the fast/no-NR first pass.
+          if (isRaw && fxImages[0].img) {
+            setTimeout(() => {
+              const img = fxImages[0] && fxImages[0].img;
+              if (!img || !img.toBlob) return;
+              img.toBlob((blob) => {
+                if (!blob) return;
+                blob.arrayBuffer().then((ab) => {
+                  framedInvoke('save_decode_cache', { path, recipeKey }, new Uint8Array(ab))
+                    .catch((e) => console.error('save_decode_cache', e));
+                });
+              }, 'image/jpeg', 0.95);
+            }, 1500);
+          }
         }
       }
       state.openedPath = path;

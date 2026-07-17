@@ -2981,7 +2981,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-17e';
+const BUILD='2026-07-17f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5176,6 +5176,27 @@ async function loadRw2(file){
   const c=document.createElement('canvas');c.width=w;c.height=h;
   c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
   log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
+  // Two-phase decode, phase 2: the decode above intentionally skipped false-color-suppression/
+  // hue-defringe/native-NR to get a photo on screen fast (see desktop-native.js's
+  // NativeLibRawShim.open()). If that quality gap actually matters here (native NR is on),
+  // silently re-decode the SAME bytes at full quality in the background and swap the pixels
+  // into THIS canvas once it lands — fire-and-forget, matched back by object identity (`c`) so
+  // a since-closed/replaced photo is a safe no-op instead of corrupting the wrong image.
+  if(window.__TAURI__&&typeof raw.refine==='function'){
+    raw.refine().then(refined=>{
+      if(!refined)return; // this decode didn't need refining (NR was off)
+      const stillCurrent=fxImages.some(it=>it.img===c);
+      if(!stillCurrent)return; // user switched photos while refine was running
+      let rgba2;
+      if(refined.rgba){rgba2=refined.data;}
+      else{const rgb2=refined.data,ch2=refined.colors||3;rgba2=new Uint8ClampedArray(refined.width*refined.height*4);
+        for(let i=0,j=0;i<refined.width*refined.height;i++){const s=i*ch2;rgba2[j++]=rgb2[s]>>8;rgba2[j++]=ch2>1?rgb2[s+1]>>8:rgb2[s]>>8;rgba2[j++]=ch2>2?rgb2[s+2]>>8:rgb2[s]>>8;rgba2[j++]=255;}}
+      c.getContext('2d').putImageData(new ImageData(rgba2,refined.width,refined.height),0,0);
+      if(typeof updateWork==='function')updateWork();
+      if(typeof renderPreview==='function')renderPreview();
+      log('RAW refined (noise reduction applied)','info');
+    }).catch(e=>console.error('RAW background refine failed',e));
+  }
   return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
 }
 // Installs already-decoded entries as the active fxImages and renders — the second half of

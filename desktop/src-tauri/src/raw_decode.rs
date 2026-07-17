@@ -42,7 +42,7 @@ pub struct DecodedRaw {
     pub rgb16: Vec<u16>,
 }
 
-pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic_algo: &str) -> Result<DecodedRaw, String> {
+pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic_algo: &str, fast: bool) -> Result<DecodedRaw, String> {
     let source = RawSource::new_from_slice(bytes);
     let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
     let params = RawDecodeParams::default();
@@ -217,7 +217,9 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic
     // tradeoff after two independent techniques (this gated median AND a from-scratch LMMSE
     // demosaic prototype) both hit the identical wall for larger isolated features; see the
     // project's noise-model plan file for the full investigation.
-    if std::env::var_os("CS_NO_FALSE_COLOR").is_none() {
+    // `fast` skips this and the two passes below (hue defringe, native NR) — see the `fast`
+    // param's doc comment on decode_rw2_bytes / main.rs's decode_raw_v2 for why.
+    if !fast && std::env::var_os("CS_NO_FALSE_COLOR").is_none() {
         let contrast_thresh: f32 = std::env::var("CS_FC_CONTRAST").ok().and_then(|v| v.parse().ok()).unwrap_or(0.5);
         let dev_thresh: f32 = std::env::var("CS_FC_DEV").ok().and_then(|v| v.parse().ok()).unwrap_or(0.003);
         let steps: usize = std::env::var("CS_FC_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
@@ -239,7 +241,7 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic
     // on much more common real content. Residual red/blue/magenta false-color speckle in the
     // worst scenes is NOT addressed by this pass (see the CS_DEMOSAIC=ahd opt-in toggle for a
     // stronger but riskier alternative for exactly those difficult photos).
-    if std::env::var_os("CS_NO_HUE_DEFRINGE").is_none() {
+    if !fast && std::env::var_os("CS_NO_HUE_DEFRINGE").is_none() {
         let contrast_thresh: f32 = std::env::var("CS_HD_CONTRAST").ok().and_then(|v| v.parse().ok()).unwrap_or(0.05);
         hue_defringe_gated(&mut rgb16, out_w, out_h, contrast_thresh);
     }
@@ -278,7 +280,7 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic
     //    function's doc comment) — but that also means the toggle can't be live, only apply on
     //    the next decode. Off entirely reproduces the untouched decode, for comparison or if a
     //    photo needs its own manual grain/detail instead.
-    if native_nr {
+    if native_nr && !fast {
         // Diagnostic escape hatch (mirrors CS_NO_CHROMA_NR inside the wavelet pass): lets the
         // calib harness isolate each pass's contribution — CS_NO_CHROMA_NR only disables the
         // wavelet, so the shadow pass alone had never been isolatable before this. Unset in

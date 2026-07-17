@@ -102,7 +102,14 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // Per-photo "RAW Processing" mode ("" = Standard/PPG, "ahd" = Sparkle-optimized) — see
     // raw_decode.rs's decode_rw2_bytes doc comment for why this is opt-in, not a global default.
     let demosaic_algo = json["demosaicAlgo"].as_str().unwrap_or("");
-    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, native_nr, demosaic_algo)?;
+    // Two-phase decode: `fast=true` skips the false-color-suppression / hue-defringe / native-NR
+    // passes (the serial, full-frame CPU work that made RAW opens take up to ~15s) so the shell
+    // can display a photo almost immediately, then request a `fast=false` decode of the SAME
+    // bytes in the background to silently upgrade to full quality once it lands (see
+    // desktop/desktop-native.js's NativeLibRawShim.open()/refine()). Defaults to false so any
+    // caller that doesn't set it gets today's unchanged, full-quality-only behavior.
+    let fast = json["fast"].as_bool().unwrap_or(false);
+    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, native_nr, demosaic_algo, fast)?;
     // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files
     // for (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a
     // DIFFERENT sensor's data wouldn't error — it would just silently produce wrong colors (a
@@ -252,7 +259,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-14c"
+    "2026-07-17a"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -470,6 +477,8 @@ fn main() {
             library::trash_file,
             library::list_edited,
             library::backfill_edited_registry,
+            library::get_decode_cache,
+            library::save_decode_cache,
             save_to_gphotos_downloads,
             gphotos_downloads_dir
         ])
