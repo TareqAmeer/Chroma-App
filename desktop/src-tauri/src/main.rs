@@ -5,7 +5,7 @@
 // calls the SAME JS functions the on-screen buttons already call — no duplicated logic.
 use std::path::{Path, PathBuf};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 // DEV-ITERATION MODE: read dist/ straight off disk on every request instead of embedding it
 // into the binary at compile time. include_dir!'s compile-time byte-literal embedding of the
@@ -320,7 +320,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-17b"
+    "2026-07-17c"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -658,6 +658,19 @@ fn main() {
                     let _ = handle2.emit(id, ());
                 }
             });
+
+            // AI tap-to-select's onnxruntime dylib (see sam.rs): a bundled RESOURCE (declared in
+            // tauri.conf.json's bundle.resources), not embedded in the binary — `ort`'s
+            // load-dynamic feature dlopen()s it by path at first use, and 28MB is fine as a
+            // resource file but not worth doubling the binary's link time via include_bytes!.
+            // Prefer the packaged resource_dir() (a real distributed .app); fall back to the
+            // source tree's vendor/ directly for `cargo tauri dev`, where resource_dir() may not
+            // point at a populated location.
+            let dylib_rel = "vendor/onnxruntime/libonnxruntime.dylib";
+            let bundled = handle.path().resource_dir().ok().map(|d| d.join(dylib_rel));
+            let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(dylib_rel);
+            let dylib_path = bundled.filter(|p| p.exists()).unwrap_or(dev_fallback);
+            sam::set_dylib_path(dylib_path);
 
             Ok(())
         })

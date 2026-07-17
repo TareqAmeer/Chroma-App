@@ -39,6 +39,9 @@
     ],
     "macOS": {
       "minimumSystemVersion": "13.0"
+    },
+    "resources": {
+      "vendor/onnxruntime/libonnxruntime.dylib": "vendor/onnxruntime/libonnxruntime.dylib"
     }
   }
 }

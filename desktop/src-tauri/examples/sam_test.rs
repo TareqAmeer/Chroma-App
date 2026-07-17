@@ -10,6 +10,14 @@ fn main() {
         eprintln!("usage: sam_test <input.jpg> <norm_x> <norm_y> <output_mask.png>");
         std::process::exit(2);
     }
+    // Standalone harness: no Tauri AppHandle here to resolve a bundled resource path, so point
+    // straight at the vendored dylib in the source tree (matches main.rs's dev-mode fallback).
+    let dylib = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib");
+    if !dylib.exists() {
+        eprintln!("WARNING: vendored dylib not found at {} — set ORT_DYLIB_PATH manually if this fails", dylib.display());
+    }
+    sam::set_dylib_path(dylib);
+
     eprintln!("loading image...");
     let img = image::open(&args[1]).expect("open input image").to_rgb8();
     let (w, h) = (img.width(), img.height());

@@ -13,6 +13,7 @@
 // decode_point() runs per tap/click (~10-30ms) against that cached embedding — no re-encoding.
 use ort::session::Session;
 use ort::value::Tensor;
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 static ENCODER_BYTES: &[u8] = include_bytes!("../vendor/sam/mobile_sam_image_encoder.onnx");
@@ -22,33 +23,51 @@ static DECODER_BYTES: &[u8] = include_bytes!("../vendor/sam/sam_mask_decoder_sin
 /// callers resize so the image's LONGEST side equals this before feeding it in.
 const SAM_SIZE: u32 = 1024;
 
-/// Explicit, one-time ort environment init, called before the first Session use. Cheap/
-/// idempotent either way (`commit()` no-ops if already committed) — kept as a defensive
-/// first step since ort's docs recommend it, though see the ⚠️ below for the actual open
-/// issue this does NOT fix.
-fn ensure_ort_init() {
-    static INIT: OnceLock<()> = OnceLock::new();
-    INIT.get_or_init(|| {
-        let _ = ort::init().commit();
-    });
+static DYLIB_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+/// Called once from main.rs's app `.setup()` (which has the Tauri AppHandle needed to resolve a
+/// bundled resource path) before any SAM command can run. Must be set before the first
+/// encoder()/decoder() call — ensure_ort_init() panics with a clear message if it wasn't.
+pub fn set_dylib_path(path: PathBuf) {
+    let _ = DYLIB_PATH.set(path);
 }
 
-// ⚠️ UNVERIFIED ON REAL HARDWARE. In this project's dev sandbox (x86_64-apple-darwin, onnxruntime
-// v1.20.0 manually sourced since ort's own download-binaries feature has no x86_64-apple-darwin
-// prebuilt — see Cargo.toml), `Session::builder()` itself hangs indefinitely — reproduced in
-// total isolation (a bare `ort::init().commit()` returns instantly; the very next
-// `Session::builder()` call, with no model involved at all, never returns). Reordering
-// init/tensor-construction did not help. This is almost certainly an environment/sandbox
-// limitation (this box is a restricted CI-style sandbox, not a normal dev machine) rather than a
-// logic bug — the tensor shapes/names/preprocessing above are verified against the ACTUAL
-// downloaded model files and the real export source, not guessed — but it means live inference
-// has NEVER been observed to complete here. Run `cargo run --example sam_test -- <photo.jpg> 0.5
-// 0.5 out.png` on a real machine (ideally Apple Silicon, where `download-binaries` actually has a
-// prebuilt) as the FIRST thing to check before relying on this feature.
+/// Explicit, one-time ort environment init, pointed at the vendored dylib (`ort`'s
+/// `load-dynamic` feature — see Cargo.toml for why: no x86_64-apple-darwin prebuilt exists for
+/// `download-binaries`, and this project's actual dev machine is Intel). MUST run before the
+/// first Session/Tensor use.
+///
+/// ⚠️ STILL UNRESOLVED as of this commit: `ort::init_from(path).commit()` here returns `true`
+/// (success) instantly, but the very next `Session::builder()` call inside encoder()/decoder()
+/// hangs indefinitely in this project's dev sandbox — reproduced with this exact fix in place,
+/// not just the earlier lazy-init version. Also reproduced in COMPLETE isolation (a fresh
+/// example with nothing but `ort::init_from(dylib).commit()` then `Session::builder()`, no model
+/// involved at all) — so this is not specific to the MobileSAM model files. Every plausible
+/// code-level fix (explicit vs. lazy init, call ordering) has been tried and none changed the
+/// outcome, which points at something below the `ort`/Rust layer entirely — most likely this
+/// sandbox's restricted process environment (it's a locked-down CI-style container, not a normal
+/// Mac) rather than a real Intel Mac limitation, but that is UNCONFIRMED. Run `cargo run
+/// --release --example sam_test -- <photo.jpg> 0.5 0.5 out.png` on the actual dev machine (a real
+/// Intel Mac, not this sandbox) — if it ALSO hangs there, the `ort`/onnxruntime approach itself
+/// may need to be abandoned in favor of a pure-Rust backend (`ort-tract`, no native dylib at all)
+/// rather than continuing to chase this from inside the sandbox.
+fn ensure_ort_init() -> Result<(), String> {
+    static INIT: OnceLock<Result<(), String>> = OnceLock::new();
+    INIT.get_or_init(|| {
+        let path = DYLIB_PATH.get().ok_or("SAM dylib path not set — set_dylib_path() must run before any AI Select use")?;
+        let builder = ort::init_from(path).map_err(|e| format!("ort::init_from({}): {e}", path.display()))?;
+        if !builder.commit() {
+            return Err(format!("ort init did not commit (dylib: {})", path.display()));
+        }
+        Ok(())
+    })
+    .clone()
+}
+
 fn encoder() -> Result<&'static Mutex<Session>, String> {
     static S: OnceLock<Result<Mutex<Session>, String>> = OnceLock::new();
     S.get_or_init(|| {
-        ensure_ort_init();
+        ensure_ort_init()?;
         let mut b = Session::builder().map_err(|e| format!("ort session builder: {e}"))?;
         let s = b.commit_from_memory(ENCODER_BYTES).map_err(|e| format!("load SAM encoder: {e}"))?;
         Ok(Mutex::new(s))
@@ -60,7 +79,7 @@ fn encoder() -> Result<&'static Mutex<Session>, String> {
 fn decoder() -> Result<&'static Mutex<Session>, String> {
     static S: OnceLock<Result<Mutex<Session>, String>> = OnceLock::new();
     S.get_or_init(|| {
-        ensure_ort_init();
+        ensure_ort_init()?;
         Session::builder()
             .map_err(|e| format!("ort session builder: {e}"))?
             .commit_from_memory(DECODER_BYTES)

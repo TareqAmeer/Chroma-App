@@ -52,14 +52,13 @@ lensfun = "0.7"
 # the sunlit-water false-color speckle PPG produces, before considering a default swap.
 demosaic = "0.3"
 # AI tap-to-select (Masks): MobileSAM inference (vendor/sam/*.onnx — MIT-licensed export from
-# huggingface.co/Acly/MobileSAM) via ONNX Runtime. `download-binaries` fetches the prebuilt
-# onnxruntime dylib at build time (no system libonnxruntime install needed) — same "just works"
-# philosophy as the rest of this native shell's dependencies. NOTE: ort has no prebuilt binary
-# for x86_64-apple-darwin (Intel Mac) as of this rc — only aarch64-apple-darwin (Apple Silicon).
-# An Intel Mac build needs `features = ["load-dynamic"]` plus a manually-supplied onnxruntime
-# dylib (ORT_DYLIB_PATH) instead; see sam.rs's top-of-file comment for the (unresolved, sandbox-
-# reproduced) Session::builder() hang hit while dev-testing under that fallback.
-ort = { version = "=2.0.0-rc.12", features = ["download-binaries"] }
+# huggingface.co/Acly/MobileSAM) via ONNX Runtime. `ort`'s `download-binaries` feature has NO
+# prebuilt binary for x86_64-apple-darwin (Intel Mac — this project's actual dev machine) as of
+# this rc, only aarch64-apple-darwin — confirmed by cargo's own build error, not a guess. Using
+# `load-dynamic` instead + a vendored onnxruntime dylib (vendor/onnxruntime/, MIT-licensed,
+# Microsoft's last release with an Intel Mac build) so the app still needs zero manual install —
+# see sam.rs for how the dylib path is resolved at runtime.
+ort = { version = "=2.0.0-rc.12", features = ["load-dynamic"] }
 
 [profile.release]
 strip = true
