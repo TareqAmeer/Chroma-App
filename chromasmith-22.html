@@ -497,10 +497,19 @@ body.deskx .fx-layout{--dock-w:0px;--panel-w:320px;grid-template-columns:var(--d
 body.deskx.lib-docked:not(.lib-full) .fx-layout{--dock-w:120px}
 body.deskx.panel-closed .fx-layout{--panel-w:0px}
 body.deskx.panel-closed .fx-panel{display:none}
-body.deskx .fx-preview-col{order:1;position:static;top:auto;align-self:stretch;height:100%;display:flex;flex-direction:column;min-width:0;min-height:0}
-body.deskx .fx-panel{order:2;max-height:none;height:100%;overflow-y:auto;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
+/* Explicit grid-column (not just `order`, which only sequences auto-placement — it doesn't
+   pin a track) on all 4 potential .fx-layout children: #lib-overlay is only actually IN the
+   DOM once library-ui.js's initDock() has run — which is AFTER this layout's very first paint
+   on every real launch, and NEVER in the plain browser/iOS builds. Auto-placement with only 3
+   of the 4 intended items present filled tracks 1-3 (i.e. the 0px dock track, then panel's
+   track, then rail's track) instead of 2-4, collapsing the actual preview column to 0 width —
+   a real, confirmed bug (found by testing the ?deskx=1 browser mode, where the canvas was
+   entirely blank despite a photo loading successfully). Pinning each item to its own numbered
+   track makes every one of them independent of whether the other three exist in the DOM at all. */
+body.deskx .fx-preview-col{grid-column:2;order:1;position:static;top:auto;align-self:stretch;height:100%;display:flex;flex-direction:column;min-width:0;min-height:0}
+body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;overflow-y:auto;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
   background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03),-6px 0 16px -8px rgba(0,0,0,.4)}
-body.deskx #fx-toolrail{order:3;position:static;top:auto;align-self:stretch;width:64px;box-sizing:border-box;
+body.deskx #fx-toolrail{grid-column:4;order:3;position:static;top:auto;align-self:stretch;width:64px;box-sizing:border-box;
   border:none;border-left:1px solid var(--bdr);border-radius:0;padding:6px 4px;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:2px;background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03)}
 /* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only. */
@@ -593,6 +602,42 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
 </style>
 </head>
 <body>
+<!-- Boot splash — visible IMMEDIATELY on first paint (inline styles, no stylesheet/JS dependency)
+     so the desktop shell's boot sequence (web-layout paint -> deskx class added -> async
+     toggleLibrary()/toggleExpandedView(true) settling into the Library) is covered instead of
+     visibly flickering through each intermediate layout. Hidden by desktop-native.js once the
+     app has actually settled (see hideBootSplash() there) — the browser/iOS builds have no such
+     multi-stage boot and hide it right away below, so this never delays their existing startup. -->
+<div id="boot-splash" style="position:fixed;inset:0;z-index:99999;background:#17171b;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  transition:opacity .35s ease;opacity:1">
+  <div style="font-family:Palatino,'Palatino Linotype',Georgia,serif;font-style:italic;
+    font-size:30px;letter-spacing:.12em;color:#f0ece2;
+    text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)">
+    Chroma<span style="color:#d4903a;text-shadow:none">smith</span>
+  </div>
+  <div style="width:22px;height:22px;border:2px solid rgba(212,144,58,.25);border-top-color:#d4903a;
+    border-radius:50%;animation:boot-splash-spin .8s linear infinite"></div>
+</div>
+<style>@keyframes boot-splash-spin{to{transform:rotate(360deg)}}</style>
+<script>
+// Web/iOS builds: no multi-stage boot to hide, so drop the splash the instant this parses
+// (right after the element above — no waiting on DOMContentLoaded) rather than leaving it
+// covering the page indefinitely. desktop-native.js overrides this by calling
+// hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
+// ISN'T the Tauri shell), this inline fallback is what removes the splash.
+window.hideBootSplash=function(){const s=document.getElementById('boot-splash');if(!s)return;s.style.opacity='0';setTimeout(()=>s.remove(),400);};
+// Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
+// this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
+// would otherwise leave the splash on screen forever.
+if(!window.__TAURI__)window.hideBootSplash();
+// Safety net: if library-ui.js's own hide call (after its async open+expand settles) never
+// fires — an unexpected exception in that chain, a folder-picker dialog that never resolves,
+// anything — this splash must not be able to permanently block the entire app behind a
+// spinner forever. Whichever fires first wins; hideBootSplash() itself is a no-op once the
+// element's already gone.
+setTimeout(()=>window.hideBootSplash(),6000);
+</script>
 <div id="status-cap"></div>
 <header>
   <div class="logo"><span class="logo-glow">Chroma</span>smith <span class="sub">film simulation tool</span></div>

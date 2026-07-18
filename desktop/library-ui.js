@@ -118,7 +118,7 @@
     /* deskx docked (non-full): a real grid-column sibling of the preview/panel/rail, placed by
        initDock() as the first child of .fx-layout — see chromasmith-22.html's own
        body.deskx .fx-layout / body.lib-docked rules for the reserved column width. */
-    body.deskx #lib-overlay:not(.full){position:static;top:auto;left:auto;bottom:auto;height:100%}
+    body.deskx #lib-overlay:not(.full){grid-column:1;position:static;top:auto;left:auto;bottom:auto;height:100%}
     body.deskx #lib-overlay.full{position:fixed} /* full takeover: back to covering everything */
     #lib-top{display:flex;align-items:center;gap:8px;padding:34px 12px 6px;-webkit-app-region:drag}
     #lib-top button{-webkit-app-region:no-drag}
@@ -1303,6 +1303,14 @@
   // here. Runs once at startup only — afterward the user's own open/close/expand actions own
   // the state. ──
   if (document.body.classList.contains('deskx')) {
-    toggleLibrary().then(() => toggleExpandedView(true));
+    // Boot splash (chromasmith-22.html's #boot-splash, shown by default with no JS needed):
+    // covers the flicker between the web layout's first paint, deskx switching in, and this
+    // async open+expand actually landing — previously the user watched all of that happen
+    // live. Hidden here, right after the Library has actually settled into its final
+    // full-window state, not a moment earlier.
+    toggleLibrary().then(() => {
+      toggleExpandedView(true);
+      if (typeof window.hideBootSplash === 'function') window.hideBootSplash();
+    });
   }
 })();
