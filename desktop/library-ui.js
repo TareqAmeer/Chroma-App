@@ -100,7 +100,9 @@
   // replacement of the editor, not a coexistence case, so overlap can't apply there either.
   const DOCK_W = 356;
   style.textContent = `
-    #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
+    /* overflow:hidden — nothing (grid blowout, an oversized top bar) can ever paint past this
+       column into the editor preview, whatever mode/width it's in. */
+    #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;overflow:hidden;
       background:var(--bg);display:none;border-right:1px solid var(--bdr);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
@@ -223,20 +225,31 @@
     /* deskx (Darkroom shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
-    body.deskx #lib-overlay:not(.full){width:120px;grid-template-rows:auto 1fr}
+    /* Definite height, not content-driven: #lib-overlay sits inside .fx-layout{align-items:start}
+       as a grid item, so without this its height grows with the filmstrip's own content — the
+       "auto 1fr" row split never resolves, #lib-main{overflow:auto} has nothing to overflow
+       against, and everything below the fold is simply unreachable ("can't scroll the sidebar").
+       44px = the fixed deskbar height (see body.deskx #lib-overlay{top:44px} below). */
+    body.deskx #lib-overlay:not(.full){width:120px;height:calc(100vh - 44px);grid-template-rows:auto 1fr}
     /* the filmstrip hides filters/viewbar/side/bottom, so re-pin the two visible children */
     body.deskx #lib-overlay:not(.full) #lib-top{grid-row:1}
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
     body.deskx #lib-overlay:not(.full) #lib-filters,body.deskx #lib-overlay:not(.full) #lib-side,
     body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar{display:none}
     body.deskx #lib-overlay #lib-top{padding:8px 8px 6px;-webkit-app-region:no-drag} /* strip starts below the deskbar — no traffic-light clearance needed */
-    body.deskx #lib-overlay:not(.full) #lib-top{padding:8px 6px 6px;gap:4px}
+    body.deskx #lib-overlay:not(.full) #lib-top{padding:8px 6px 6px;gap:4px;flex-wrap:wrap}
+    body.deskx #lib-overlay:not(.full) #lib-top .lib-btn{padding:5px 7px}
     body.deskx #lib-overlay:not(.full) #lib-top .lib-title{display:none}
     /* The tree toggle only means anything in full mode (the filmstrip already force-hides
        #lib-side below) — its text label doesn't fit the 120px filmstrip's icon-only top bar. */
     body.deskx #lib-overlay:not(.full) #lib-tree-toggle{display:none}
     body.deskx #lib-overlay:not(.full) #lib-main{padding:10px}
-    body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:1fr;gap:12px}
+    /* minmax(0,1fr), not 1fr — a bare 1fr track never shrinks below its content's min-content
+       size, so a wide thumbnail image blew the grid (and the whole 120px column) out past the
+       editor preview it sits in front of ("images covering the editor"). min-width:0 on the
+       card is the matching fix for the flex/grid item itself. */
+    body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:minmax(0,1fr);gap:12px}
+    body.deskx #lib-overlay:not(.full) .lib-card{min-width:0}
     body.deskx #lib-overlay:not(.full) .lib-card .lib-name,
     body.deskx #lib-overlay:not(.full) .lib-tagrow{display:none}
     /* Lightroom-style filmstrip cells: the photo keeps its REAL aspect ratio (no square
