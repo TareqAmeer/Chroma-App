@@ -118,6 +118,9 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-layout{display:grid;grid-template-columns:640px 1fr;gap:16px;align-items:start}
 .fx-panel{column-count:2;column-gap:10px}
 .fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:10px;break-inside:avoid;margin-bottom:18px;box-shadow:var(--lift-1)}
+/* Detail/Highlight-Desat are real no-ops while both NR gate sliders (Luminance, Color) sit at 0
+   — the shader skips the whole NR pass then. Dim them so that's visible instead of silent. */
+.nr-gated.gate-off{opacity:.4}
 #panel-fx .dz{min-height:54px;padding:11px 14px}
 #dz-fx-img:not(.loaded){border-color:var(--acc);border-style:solid;background:rgba(212,144,58,.07)}
 #dz-fx-img:not(.loaded):hover{background:rgba(212,144,58,.12)}
@@ -828,11 +831,11 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row" title="Desktop only: switches the RAW demosaic algorithm. Standard (default) is safest across all photos. Sparkle-optimized uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect.">
           <div class="fx-label">Sparkle-optimized RAW</div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
         </div>
-        <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
-        <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-col">0</div></div>
-        <div class="fx-row"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
-        <div class="fx-row" title="Manual, off by default. Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes — this is a real limit of the current pipeline, not a slider you forgot to raise. Since real highlight colour is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real colour in bright areas too at high amounts. Per-photo only, so it never touches other images."><div class="fx-label">Highlight Desaturation</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
+        <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
+        <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
+        <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
+        <div class="fx-row nr-gated" id="row-nr-hldesat" title="Manual, off by default. Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes — this is a real limit of the current pipeline, not a slider you forgot to raise. Since real highlight colour is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real colour in bright areas too at high amounts. Per-photo only, so it never touches other images."><div class="fx-label">Highlight Desaturation</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
+        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
         <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()"><span class="bdot"></span>Reset noise reduction</button></div>
       </div>
       <!-- TONE CURVES -->
@@ -5380,6 +5383,7 @@ function installFXImages(entries,loadKey){
   if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
   autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
+  if(typeof nrSyncGate==='function')nrSyncGate(); // this photo's own NR sliders just landed in the DOM — refresh the Detail/HL-Desat dim state for them
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
@@ -5468,6 +5472,7 @@ function fxUpdate(){
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
+  if(typeof nrSyncGate==='function')nrSyncGate();
   fxHistoryPush();
   clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
 }
@@ -5479,7 +5484,17 @@ function resetAdjust(){
 function resetNR(){
   ['nr-lum','nr-col','nr-hldesat'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
   {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
-  fxUpdate();log('Noise reduction reset','info');
+  fxUpdate();nrSyncGate();log('Noise reduction reset','info');
+}
+// Detail/Highlight-Desat only have an effect while Luminance or Color is >0 (the shader NR pass
+// is skipped entirely otherwise — see the comment above the NR shader). Dim them + show a hint
+// when both gate sliders are 0, so "moving the slider does nothing" is visible, not silent.
+function nrSyncGate(){
+  const on=adjVal('sl-nr-lum')>0||adjVal('sl-nr-col')>0;
+  ['row-nr-det','row-nr-hldesat'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('gate-off',!on);});
+  const hint=document.getElementById('nr-gate-hint');
+  if(hint)hint.textContent=on?'Tames RAW sensor noise (esp. high ISO) before the film look.':
+    'Detail & Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.';
 }
 function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}
 // RAW-only baseline (Lightroom applies Color NR 25 + capture sharpening by default on import;
@@ -6450,6 +6465,7 @@ function applyUISnapshot(s){
     window.chromasmithDemosaicAlgo=s.demosaicAlgo;
     const tg=document.getElementById('tg-demosaic-ahd');if(tg)tg.classList.toggle('on',s.demosaicAlgo==='ahd');
   }
+  if(typeof nrSyncGate==='function')nrSyncGate();
 }
 function fxHistoryPush(){
   if(_fxHistLocked)return;
@@ -7735,7 +7751,9 @@ async function loadTestPhoto(){
     document.getElementById('fx-preview-tools').style.display='flex';
     document.getElementById('fx-zoom-ctrl').style.display='flex';
     fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');_resetZoom();
-    renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();log('Test photo loaded — grain/halation/bloom test chart','ok');
+    renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
+    if(typeof nrSyncGate==='function')nrSyncGate();
+    log('Test photo loaded — grain/halation/bloom test chart','ok');
   };
   img.src=tc.toDataURL('image/png');
 }
