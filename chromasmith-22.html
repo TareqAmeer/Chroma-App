@@ -196,11 +196,18 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 /* crop overlay */
 #fx-crop-overlay{position:absolute;inset:0;display:none;touch-action:none}
 #fx-crop-overlay.on{display:block}
-#fx-mask-overlay{position:absolute;display:none;touch-action:none;overflow:visible}
+/* overflow:hidden (was :visible) — the linear-mask band and the isolate dim rect both extend
+   well past the 0..1 photo box by design (see mskOverlaySync), and with no clipping that
+   geometry painted straight across the surrounding viewport, worst at low zoom where the photo
+   box itself is small. Clipping to the box is what "confusing overlay flooding the screen" was
+   actually asking to be fixed — the coordinate math itself was already correct. */
+#fx-mask-overlay{position:absolute;display:none;touch-action:none;overflow:hidden}
 #fx-mask-overlay.on{display:block}
 .msk-dim{fill:#000;opacity:.6;pointer-events:none}
 .msk-shape{fill:rgba(255,90,60,0);stroke:#fff;stroke-width:.003;vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-shape.filled{fill:rgba(255,90,60,.28)}
+.msk-feather{fill:none;stroke:#fff;stroke-width:.0015;stroke-dasharray:.01 .008;opacity:.65;vector-effect:non-scaling-stroke;pointer-events:none}
+.msk-feather-mid{stroke-dasharray:none;opacity:.9}
 .msk-handle{fill:#fff;stroke:#222;stroke-width:.0015;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}
 .msk-handle:active{cursor:grabbing}
 .msk-handle.center{fill:#ffb454}
@@ -3548,7 +3555,8 @@ uniform vec4 mskC[4];  // exposure (stops), contrast, temp, sat  (each -1..1-ish
 uniform vec4 mskD[4];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
 uniform vec4 mskE[4];  // x: subtract-previous-mask flag (0/1) — simple "mask inside a mask"
                         // (this mask's shape minus the shape of the mask listed just before
-                        // it), y/z/w reserved
+                        // it), y: tint, z: hue(deg), w reserved
+uniform vec4 mskF[4];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z/w unused
 uniform vec2 uvOffL,uvScaleL;
 // Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
 // (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
@@ -3583,7 +3591,30 @@ vec3 hueRotate(vec3 c,float deg){
     0.072-cs*0.072+sn*0.928, 0.072-cs*0.072-sn*0.283, 0.072+cs*0.928+sn*0.072);
   return clamp(m*c,0.0,1.0);
 }
-vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH){ // A: exp,con,temp,sat | TH: tint,hue(deg) — weighted by w
+// Lightroom-style Color paint: mixes toward a FIXED target hue at the pixel's own luminance
+// (not a rotation of whatever hue is already there, like TH.y/hueRotate above) — a genuine
+// tint-with-a-chosen-color control per mask, distinct from the existing Temp/Tint white-balance
+// sliders.
+vec3 hsl2rgb(vec3 hsl){
+  float h=hsl.x,s=hsl.y,l=hsl.z;
+  float cc=(1.0-abs(2.0*l-1.0))*s;
+  float x=cc*(1.0-abs(mod(h*6.0,2.0)-1.0));
+  float m=l-cc*0.5;
+  vec3 rgb;
+  if(h<1.0/6.0)rgb=vec3(cc,x,0.0);
+  else if(h<2.0/6.0)rgb=vec3(x,cc,0.0);
+  else if(h<3.0/6.0)rgb=vec3(0.0,cc,x);
+  else if(h<4.0/6.0)rgb=vec3(0.0,x,cc);
+  else if(h<5.0/6.0)rgb=vec3(x,0.0,cc);
+  else rgb=vec3(cc,0.0,x);
+  return rgb+m;
+}
+vec3 tintToward(vec3 c,float hueDeg,float amt){
+  float l=dot(c,vec3(.2126,.7152,.0722));
+  vec3 target=hsl2rgb(vec3(mod(hueDeg,360.0)/360.0,0.65,l));
+  return mix(c,target,clamp(amt,0.0,1.0));
+}
+vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec2 CT){ // A: exp,con,temp,sat | TH: tint,hue(deg) | CT: colHue(deg),colAmt — weighted by w
   vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
   lin*=exp2(A.x*w);                                        // exposure (stops), linear light
   lin.r*=1.0+0.22*A.z*w;lin.b*=1.0-0.22*A.z*w;             // temp (matches basicAdjust scaling)
@@ -3593,6 +3624,7 @@ vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH){ // A: exp,con,temp,sat | TH: tin
   float l=dot(c,vec3(.2126,.7152,.0722));
   c=clamp(mix(vec3(l),c,1.0+A.w*w),0.0,1.0);               // saturation
   if(TH.y!=0.0)c=mix(c,hueRotate(c,TH.y),w);
+  if(CT.y>0.0)c=tintToward(c,CT.x,CT.y*w);
   return c;
 }
 vec3 basicAdjust(vec3 c){
@@ -3672,7 +3704,7 @@ if(mskN>0.5){
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
     if(w>0.001){
-      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz);
+      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i].xy);
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
         float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
@@ -4264,7 +4296,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Local-adjust masks: pack up to 4 masks into vec4 uniform arrays; global-uv mapped via
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const MK=(P.masks&&P.masks.length)?P.masks.slice(0,4):[];
-    const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16);
+    const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16),mF=new Float32Array(16);
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
@@ -4273,7 +4305,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
       mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
-      mE[o]=m.subtract?1:0;mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;});
+      mE[o]=m.subtract?1:0;mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
+      mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;});
     if(MK.some(m=>m.type==='brush'))mskBuildTex();
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
@@ -4307,7 +4340,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       maskTex:4,
-      mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,
+      mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
@@ -5898,21 +5931,21 @@ let mskSel=-1;
 function mskAdd(type){
   if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
   let m;
-  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
-  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};}
+  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
+  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};}
   else if(type==='sky'){ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
-    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
+    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
     mskGenerateSky(m);
   }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
     const{w,h}=mskTexDims();
-    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false};
+    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
   }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
-  if(type==='ai'){samEnsureEncoded();mskAiTapToggle(true);}
+  if(type==='ai'){_samLastError=null;samEnsureEncoded();mskAiTapToggle(true);}
 }
 
 // ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
@@ -5925,7 +5958,7 @@ function mskAdd(type){
 // you can keep refining), and the FULL accumulated point set is resubmitted on every stroke end
 // to REPLACE the mask's raster — normal Alt/Option-drag scribbles are negative (exclude) points,
 // same convention the old tap mode used for Alt-click.
-let _samToken=null,_samEncoding=false,mskAiTapMode=false;
+let _samToken=null,_samEncoding=false,mskAiTapMode=false,_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
 function _samFramedInvoke(cmd,jsonObj,payload){
   const json=new TextEncoder().encode(JSON.stringify(jsonObj));
   const framed=new Uint8Array(4+json.length+payload.length);
@@ -5962,7 +5995,10 @@ async function samEnsureEncoded(){
     _samToken=token;
     samEnsureEncoded2(rgb,w,h); // fire-and-forget — NOT awaited, see doc comment above
   }catch(e){
-    log('AI Select: could not prepare this photo — '+(e&&e.message||e),'err');
+    const msg='AI Select: could not prepare this photo — '+(e&&e.message||e);
+    log(msg,'err');_samLastError=msg;
+    if(typeof toast==='function')toast(msg);
+    if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild();
   }finally{_samEncoding=false;}
 }
 async function samEnsureEncoded2(rgb,w,h){
@@ -5991,7 +6027,10 @@ async function samEnsureEncoded2(rgb,w,h){
 async function samRunPoints(m){
   if(!window.__TAURI__)return;
   await samEnsureEncoded();
-  if(!_samToken){toast('AI Select is not ready yet — try again in a moment');return;}
+  if(!_samToken){
+    const msg='AI Select is not ready yet — try again in a moment';
+    toast(msg);_samLastError=msg;mskRebuild();return;
+  }
   if(!m.aiPoints||!m.aiPoints.length)return;
   try{
     const points=m.aiPoints.map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
@@ -6002,19 +6041,25 @@ async function samRunPoints(m){
     const hlen=dv.getUint32(0,true);
     const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
     const mask=new Uint8Array(buf,4+hlen);
-    if(mask.length!==header.width*header.height){log('AI Select: mask size mismatch','err');return;}
+    if(mask.length!==header.width*header.height){
+      const msg='AI Select: mask size mismatch — try scribbling again';
+      log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();return;
+    }
     m.px=Array.from(mask);m.mtW=header.width;m.mtH=header.height;
-    _mskTexDirty=true;
+    _mskTexDirty=true;_samLastError=null;
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
   }catch(e){
-    log('AI Select: '+(e&&e.message||e),'err');
+    const msg='AI Select failed — '+(e&&e.message||e);
+    log(msg,'err');_samLastError=msg;
+    if(typeof toast==='function')toast(msg);
+    mskRebuild();
   }
 }
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||m.origin!=='ai')return;
   m.aiPoints=[];const{w,h}=mskTexDims();m.px=new Array(w*h).fill(0);m.mtW=w;m.mtH=h;
-  _mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+  _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }
 function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
@@ -6222,8 +6267,15 @@ function mskSlide(el){
   const m=fxState.masks[mskSel];if(!m)return;
   const v=parseFloat(el.value),sc=parseFloat(el.dataset.sc);
   m[el.dataset.k]=el.dataset.fl==='1'?1-v/100:v*sc;
-  el.nextElementSibling.textContent=Math.round(v);
+  el.nextElementSibling.textContent=el.dataset.k==='colHue'?Math.round(v)+'°':Math.round(v);
   fxUpdate();
+}
+// Color-paint swatch preview: shown at a fixed mid-lightness (independent of Amount, which only
+// scales how strongly it's mixed into the image — the swatch is "what color", not "how much").
+function _mskColSwatchCss(m){return 'hsl('+Math.round(m.colHue||0)+',65%,50%)';}
+function mskColSwatchSync(){
+  const sw=document.getElementById('msk-col-swatch'),m=fxState.masks[mskSel];
+  if(sw&&m)sw.style.background=_mskColSwatchCss(m);
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
@@ -6257,7 +6309,10 @@ function mskRebuild(){
         +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area."><span class="bdot"></span>'+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over"><span class="bdot"></span>Clear points</button></div>'
         +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>'
-        +(_sam2Encoding?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">⟳</span> Improving selection quality in the background…</div>':'');
+        +(_sam2Encoding?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">⟳</span> Improving selection quality in the background…</div>':'')
+        // Previously a failed encode/select was only logged to the hidden diagnostics panel — a
+        // scribble that silently did nothing looked identical to one that just hadn't run yet.
+        +(_samLastError?'<div style="font-size:10px;color:var(--err);font-family:var(--mono);margin-top:4px">⚠ '+_samLastError.replace(/</g,'&lt;')+'</div>':'');
     }
     h+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview"><span class="bdot"></span>'+(mskPaintMode?'Painting ✓':'🖌 Paint')+'</button>'
@@ -6274,6 +6329,14 @@ function mskRebuild(){
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
     +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
+    // Color paint: a Lightroom-style "tint the masked area toward this color" control —
+    // distinct from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already
+    // there). The swatch previews the target color at the current Amount.
+    +'<div class="fx-row"><div class="fx-label">Color</div>'
+    +'<span id="msk-col-swatch" style="display:inline-block;width:18px;height:18px;border-radius:50%;border:1px solid var(--bdr);flex:0 0 auto;margin-right:6px;background:'+_mskColSwatchCss(m)+'"></span>'
+    +'<input class="fx-slider fx-slider-grad" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
+    +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
+    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false)
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
     +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
     +_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
@@ -6346,8 +6409,9 @@ function mskOverlaySync(){
   svg.classList.add('on');
   const isolate=mskPreviewMode==='isolate';
   let shapeD='',handles='';
+  let featherLayer='';
   if(m.type==='radial'){
-    const{cx,cy,rx,ry}=m;
+    const{cx,cy,rx,ry,feather}=m;
     // ellipse approximated as a 48-point polygon (SVG <ellipse> can't be combined with an
     // evenodd hole in one path element the way a polygon can for the isolate dim layer).
     const N=48,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;pts.push([cx+rx*Math.cos(a),cy+ry*Math.sin(a)].join(','));}
@@ -6355,20 +6419,40 @@ function mskOverlaySync(){
     handles=`<circle class="msk-handle center" data-h="c" cx="${cx}" cy="${cy}" r="0.012"/>`+
       `<circle class="msk-handle" data-h="rx" cx="${cx+rx}" cy="${cy}" r="0.01"/>`+
       `<circle class="msk-handle" data-h="ry" cx="${cx}" cy="${cy+ry}" r="0.01"/>`;
+    // Feather ring: the shader's falloff starts at t = max(1-2*feather, 0) of the outer radius
+    // (mskShapeWeight) and reaches full effect at t=1 — draw that inner bound as a dashed
+    // ellipse so the feather amount is actually visible, not just a number on a slider.
+    const ft=Math.max(1-2*(feather!=null?feather:0.5),0);
+    if(ft>0.001){
+      const irx=rx*ft,iry=ry*ft,ipts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;ipts.push([cx+irx*Math.cos(a),cy+iry*Math.sin(a)].join(','));}
+      featherLayer=`<path class="msk-feather" d="M${ipts.join('L')}Z"/>`;
+    }
   }else{ // linear: represent the "full effect" half as a band from p0 back-extended, cut at p1
-    const{x0,y0,x1,y1}=m;
-    const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1e-4,nx=-dy/len,ny=dx/len,W=3; // perpendicular, wide band
-    const ext=(x0- dx/len*4)+','+(y0-dy/len*4); // extend well past p0 so the band covers the "full effect" side
-    const p0a=[x0+nx*W,y0+ny*W],p0b=[x0-nx*W,y0-ny*W],p1a=[x1+nx*W,y1+ny*W],p1b=[x1-nx*W,y1-ny*W];
-    const extA=[x0+dx/len*8+nx*W,y0+dy/len*8+ny*W],extB=[x0+dx/len*8-nx*W,y0+dy/len*8-ny*W];
-    shapeD=`M${extA[0]},${extA[1]} L${p1a[0]},${p1a[1]} L${p1b[0]},${p1b[1]} L${extB[0]},${extB[1]} Z`;
+    const{x0,y0,x1,y1,feather}=m;
+    const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1e-4,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+    // Lightroom idiom: three parallel guide lines (full-effect edge, midline, zero-effect edge)
+    // spanning a fixed on-screen width, clipped to the photo box below — not a flooding band.
+    const G=0.35; // half-length of each guide line, in the 0..1 image box
+    const mid=[(x0+x1)/2,(y0+y1)/2];
+    const line=(cx0,cy0)=>`M${cx0-nx*G},${cy0-ny*G} L${cx0+nx*G},${cy0+ny*G}`;
     handles=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#fff" stroke-width="0.003" vector-effect="non-scaling-stroke"/>`+
+      `<path class="msk-feather" d="${line(x0,y0)}"/>`+
+      `<path class="msk-feather msk-feather-mid" d="${line(mid[0],mid[1])}"/>`+
+      `<path class="msk-feather" d="${line(x1,y1)}"/>`+
       `<circle class="msk-handle" data-h="p0" cx="${x0}" cy="${y0}" r="0.012"/>`+
       `<circle class="msk-handle" data-h="p1" cx="${x1}" cy="${y1}" r="0.012"/>`;
+    // Fixed, generous half-width so the isolate dim/fill still reads as "this side vs that
+    // side" without the old geometry (W=3, ±8 extension) bleeding far outside the photo box —
+    // #fx-mask-overlay itself is now clipped to the photo rect (see CSS), so this only needs to
+    // cover the box, not flood past it.
+    const W=2;
+    const p0a=[x0+nx*W,y0+ny*W],p0b=[x0-nx*W,y0-ny*W],p1a=[x1+nx*W,y1+ny*W],p1b=[x1-nx*W,y1-ny*W];
+    const extA=[x0-ux*4+nx*W,y0-uy*4+ny*W],extB=[x0-ux*4-nx*W,y0-uy*4-ny*W];
+    shapeD=`M${extA[0]},${extA[1]} L${p1a[0]},${p1a[1]} L${p1b[0]},${p1b[1]} L${extB[0]},${extB[1]} Z`;
   }
   const dimLayer=isolate?`<path class="msk-dim" fill-rule="evenodd" d="M-1,-1H2V2H-1Z ${shapeD}"/>`:'';
   const shapeLayer=`<path class="msk-shape${mskPreviewMode==='overlay'?' filled':''}" d="${shapeD}"/>`;
-  svg.innerHTML=dimLayer+shapeLayer+handles;
+  svg.innerHTML=dimLayer+shapeLayer+featherLayer+handles;
   svg.querySelectorAll('.msk-handle').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
 }
 let _mskDrag=null;
