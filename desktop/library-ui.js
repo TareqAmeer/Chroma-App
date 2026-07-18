@@ -103,17 +103,23 @@
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;
       background:var(--bg);display:none;border-right:1px solid var(--bdr);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
-      grid-template-rows:auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
+      grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
       font-family:-apple-system,'Helvetica Neue',sans-serif;transition:width .15s ease;}
     #lib-overlay.on{display:grid}
-    #lib-overlay.full{width:100vw;grid-template-rows:auto auto minmax(100px,18%) 1fr 28px}
-    #lib-overlay.full #lib-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+    /* 6 children = 6 tracks (top, filters, viewbar, side, main, bottom) — and each child is
+       PINNED to its row so a future DOM insertion can never silently shift everything again
+       (auto-placement has mis-stacked this panel twice). */
+    #lib-top{grid-row:1}#lib-filters{grid-row:2}#lib-viewbar{grid-row:3}
+    #lib-side{grid-row:4}#lib-main{grid-row:5}#lib-bottom{grid-row:6}
+    #lib-overlay.full{width:100vw;grid-template-rows:auto auto auto minmax(100px,18%) 1fr 28px}
+    #lib-overlay.full #lib-grid{grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,200px),1fr))}
     /* Folder tree collapses to zero height by default — the photo grid is the page; the tree
        is navigation chrome you reach for occasionally, not something that should permanently
        eat a fixed 18-26% vertical slice above an otherwise-empty-looking grid. #lib-tree-toggle
        (in #lib-top) flips this. */
-    #lib-overlay.full.tree-collapsed{grid-template-rows:auto auto 0 1fr 28px}
-    #lib-overlay.full.tree-collapsed #lib-side{display:none}
+    #lib-overlay.tree-collapsed{grid-template-rows:auto auto auto 0 1fr 28px}
+    #lib-overlay.full.tree-collapsed{grid-template-rows:auto auto auto 0 1fr 28px}
+    #lib-overlay.tree-collapsed #lib-side{display:none}
     #lib-tree-toggle.on{border-color:var(--acc);color:var(--acc)}
     /* deskx docked (non-full): a real grid-column sibling of the preview/panel/rail, placed by
        initDock() as the first child of .fx-layout — see chromasmith-22.html's own
@@ -203,6 +209,9 @@
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
     body.deskx #lib-overlay:not(.full){width:120px;grid-template-rows:auto 1fr}
+    /* the filmstrip hides filters/viewbar/side/bottom, so re-pin the two visible children */
+    body.deskx #lib-overlay:not(.full) #lib-top{grid-row:1}
+    body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
     body.deskx #lib-overlay:not(.full) #lib-filters,body.deskx #lib-overlay:not(.full) #lib-side,
     body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar{display:none}
     body.deskx #lib-overlay #lib-top{padding:8px 8px 6px;-webkit-app-region:no-drag} /* strip starts below the deskbar — no traffic-light clearance needed */
