@@ -583,3 +583,95 @@ pub fn sam2_decode_points(embed: &Sam2Embedding, points: &[(f32, f32, bool)]) ->
     let full_res = bilinear_resize(low_res, MASK_SIZE, MASK_SIZE, embed.orig_w, embed.orig_h);
     Ok(full_res.iter().map(|&v| if v > 0.0 { 255u8 } else { 0u8 }).collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn setup_models() {
+        let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib");
+        set_dylib_path(dylib);
+        set_sam2_model_paths(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/sam2/encoder.onnx"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/sam2/decoder.onnx"),
+        );
+    }
+
+    /// A synthetic photo with an unambiguous, off-center white square on a black background —
+    /// a real-world "AI select doesn't select the right thing" bug (coordinate mismatch, crop
+    /// error, axis swap) should show up as the returned mask NOT lining up with the square's
+    /// known true bounds. Off-center (not a centered square) so a bug that silently centers or
+    /// mirrors the query would be caught, not accidentally still line up by symmetry.
+    struct SyntheticImage {
+        rgb: Vec<u8>,
+        w: u32,
+        h: u32,
+        sq_x0: u32,
+        sq_y0: u32,
+        sq_x1: u32,
+        sq_y1: u32,
+    }
+    fn make_square_image() -> SyntheticImage {
+        let (w, h) = (400u32, 300u32);
+        let (sq_x0, sq_y0, sq_x1, sq_y1) = (250u32, 60u32, 350u32, 160u32); // off-center square
+        let mut rgb = vec![0u8; (w * h * 3) as usize];
+        for y in sq_y0..sq_y1 {
+            for x in sq_x0..sq_x1 {
+                let o = ((y * w + x) * 3) as usize;
+                rgb[o] = 255;
+                rgb[o + 1] = 255;
+                rgb[o + 2] = 255;
+            }
+        }
+        SyntheticImage { rgb, w, h, sq_x0, sq_y0, sq_x1, sq_y1 }
+    }
+    /// Fraction of `mask` (row-major, w*h, 0/255) that falls inside vs outside the square's true
+    /// bounds — (inside_hit_rate, outside_false_positive_rate). A correct point-select on the
+    /// square's center should score high inside, low outside.
+    fn score_mask(mask: &[u8], img: &SyntheticImage) -> (f32, f32) {
+        let (mut inside_hit, mut inside_total, mut outside_hit, mut outside_total) = (0u32, 0u32, 0u32, 0u32);
+        for y in 0..img.h {
+            for x in 0..img.w {
+                let inside = x >= img.sq_x0 && x < img.sq_x1 && y >= img.sq_y0 && y < img.sq_y1;
+                let on = mask[(y * img.w + x) as usize] > 0;
+                if inside {
+                    inside_total += 1;
+                    if on { inside_hit += 1; }
+                } else {
+                    outside_total += 1;
+                    if on { outside_hit += 1; }
+                }
+            }
+        }
+        (inside_hit as f32 / inside_total.max(1) as f32, outside_hit as f32 / outside_total.max(1) as f32)
+    }
+
+    #[test]
+    fn edgesam_point_select_lands_on_square() {
+        setup_models();
+        let img = make_square_image();
+        let embed = encode(&img.rgb, img.w, img.h).expect("EdgeSAM encode failed");
+        let cx = (img.sq_x0 + img.sq_x1) as f32 / 2.0 / img.w as f32;
+        let cy = (img.sq_y0 + img.sq_y1) as f32 / 2.0 / img.h as f32;
+        let mask = decode_points(&embed, &[(cx, cy, true)]).expect("EdgeSAM decode failed");
+        let (inside, outside) = score_mask(&mask, &img);
+        println!("EdgeSAM: inside={inside:.3} outside={outside:.3}");
+        assert!(inside > 0.5, "EdgeSAM mask should cover most of the square (center-tapped), got inside={inside:.3}");
+        assert!(outside < 0.2, "EdgeSAM mask should mostly avoid the background, got outside={outside:.3}");
+    }
+
+    #[test]
+    fn sam2_point_select_lands_on_square() {
+        setup_models();
+        let img = make_square_image();
+        let embed = sam2_encode(&img.rgb, img.w, img.h).expect("SAM2 encode failed");
+        let cx = (img.sq_x0 + img.sq_x1) as f32 / 2.0 / img.w as f32;
+        let cy = (img.sq_y0 + img.sq_y1) as f32 / 2.0 / img.h as f32;
+        let mask = sam2_decode_points(&embed, &[(cx, cy, true)]).expect("SAM2 decode failed");
+        let (inside, outside) = score_mask(&mask, &img);
+        println!("SAM2: inside={inside:.3} outside={outside:.3}");
+        assert!(inside > 0.5, "SAM2 mask should cover most of the square (center-tapped), got inside={inside:.3}");
+        assert!(outside < 0.2, "SAM2 mask should mostly avoid the background, got outside={outside:.3}");
+    }
+}

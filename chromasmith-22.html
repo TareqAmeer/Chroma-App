@@ -6117,6 +6117,25 @@ async function samEnsureEncoded2(rgb,w,h){
 // replaces m.px with the resulting mask — called once per completed stroke, not per pointermove,
 // so dragging stays smooth (SAM only runs on release). Prefers SAM 2.1 once its background encode
 // has landed (see samEnsureEncoded2 above), falling back to EdgeSAM otherwise.
+// SAM-family point decoders are designed around a handful of clean point prompts (a click or
+// two) — the "drag a rough scribble" UI, at AI_MIN_SPACING sampling, accumulates dozens of raw
+// path points for even a short drag, many of which stray past the true object edge on anything
+// but a very precise trace. Feeding the model 20+ noisy positive points (each one a "there's an
+// object HERE" signal it tries to satisfy) degrades the result — the mask overreaches or picks
+// a different combined region — matching the reported "AI select doesn't actually select the
+// item". Cap to a small, evenly-spaced subset per polarity (preserves both the drag's overall
+// shape AND any exclude/positive intent) instead of every sampled point.
+const AI_MAX_POINTS_PER_POLARITY=6;
+function samSubsamplePoints(points){
+  const pos=points.filter(p=>p.positive),neg=points.filter(p=>!p.positive);
+  const pick=arr=>{
+    if(arr.length<=AI_MAX_POINTS_PER_POLARITY)return arr;
+    const out=[];
+    for(let i=0;i<AI_MAX_POINTS_PER_POLARITY;i++)out.push(arr[Math.round(i*(arr.length-1)/(AI_MAX_POINTS_PER_POLARITY-1))]);
+    return out;
+  };
+  return pick(pos).concat(pick(neg));
+}
 async function samRunPoints(m){
   if(!window.__TAURI__)return;
   await samEnsureEncoded();
@@ -6126,7 +6145,7 @@ async function samRunPoints(m){
   }
   if(!m.aiPoints||!m.aiPoints.length)return;
   try{
-    const points=m.aiPoints.map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
+    const points=samSubsamplePoints(m.aiPoints).map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
     const useSam2=!!_sam2Token;
     const buf=await window.__TAURI__.core.invoke(useSam2?'sam2_points':'sam_points',{token:useSam2?_sam2Token:_samToken,points});
     // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
