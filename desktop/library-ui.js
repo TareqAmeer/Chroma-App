@@ -155,14 +155,29 @@
     #lib-viewbar .lib-seg button.on{background:var(--acc);color:#000}
     #lib-viewbar .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
+    /* Real table: header row (#lib-list-head) and every .lib-card in list mode share this exact
+       column template, so clicking a header lines up with the data underneath it. */
+    :root{--lib-list-cols:52px minmax(120px,1fr) 92px 132px 56px 68px 60px 56px 92px 56px 60px}
+    #lib-list-head{display:none;position:sticky;top:0;z-index:5;background:var(--bg);
+      grid-template-columns:var(--lib-list-cols);gap:10px;padding:4px 8px 6px;
+      border-bottom:1px solid var(--bdr);font-size:10px;color:var(--mut);font-family:var(--mono,ui-monospace,Menlo,monospace);
+      text-transform:uppercase;letter-spacing:.04em}
+    #lib-list-head.on{display:grid}
+    .lib-lh-cell{cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lib-lh-cell:hover{color:var(--txt)}
+    .lib-lh-cell.lib-lh-thumb,.lib-lh-cell.lib-lh-flags{cursor:default}
+    .lib-lh-cell.lib-lh-flags:hover{color:var(--mut)}
+    .lib-lh-cell.sorted{color:var(--acc)}
+    .lib-lh-cell.sorted::after{content:' ▲';font-size:8px}
+    .lib-lh-cell.sorted.desc::after{content:' ▼'}
     #lib-grid.list-view{display:flex;flex-direction:column;gap:2px}
-    #lib-grid.list-view .lib-card{display:flex;align-items:center;gap:10px;border-width:1px;padding:4px 8px}
-    #lib-grid.list-view .lib-thumb-wrap{width:52px;height:40px;flex:0 0 52px;aspect-ratio:auto}
-    #lib-grid.list-view .lib-name{flex:1;padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    #lib-grid.list-view .lib-tagrow{padding:0}
-    #lib-grid.list-view .lib-edited-badge{position:static;margin-right:4px}
-    #lib-grid.list-view .lib-list-meta{font-size:10px;color:var(--mut);font-family:ui-monospace,Menlo,monospace;
-      white-space:nowrap;flex:0 0 auto;margin-right:8px}
+    #lib-grid.list-view .lib-card{display:grid;grid-template-columns:var(--lib-list-cols);align-items:center;gap:10px;border-width:1px;padding:4px 8px}
+    #lib-grid.list-view .lib-thumb-wrap{width:52px;height:40px;aspect-ratio:auto}
+    #lib-grid.list-view .lib-name{padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
+    #lib-grid.list-view .lib-tagrow{padding:0;display:contents}
+    #lib-grid.list-view .lib-edited-badge{position:static}
+    #lib-grid.list-view .lib-col{font-size:10px;color:var(--mut);font-family:ui-monospace,Menlo,monospace;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .lib-meta-strip{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);color:#fff;
       font-size:9px;font-family:ui-monospace,Menlo,monospace;padding:3px 5px;line-height:1.3;
       pointer-events:none;opacity:0}
@@ -289,6 +304,8 @@
         <option value="shutter">Shutter speed</option>
         <option value="aperture">Aperture</option>
         <option value="focal">Focal length</option>
+        <option value="rating">Rating</option>
+        <option value="camera">Camera</option>
         <option value="edited">Edit status</option>
       </select>
       <button class="lib-btn" id="lib-sort-dir" title="Reverse sort order">↑</button>
@@ -302,7 +319,22 @@
       </div>
     </div>
     <div id="lib-side"></div>
-    <div id="lib-main"><div id="lib-grid"></div></div>
+    <div id="lib-main">
+      <div id="lib-list-head">
+        <div class="lib-lh-cell lib-lh-thumb"></div>
+        <div class="lib-lh-cell" data-sort="name">Name</div>
+        <div class="lib-lh-cell" data-sort="date">Date</div>
+        <div class="lib-lh-cell" data-sort="camera">Camera</div>
+        <div class="lib-lh-cell" data-sort="iso">ISO</div>
+        <div class="lib-lh-cell" data-sort="shutter">Shutter</div>
+        <div class="lib-lh-cell" data-sort="aperture">Aperture</div>
+        <div class="lib-lh-cell" data-sort="focal">Focal</div>
+        <div class="lib-lh-cell" data-sort="rating">Rating</div>
+        <div class="lib-lh-cell lib-lh-flags">Flags</div>
+        <div class="lib-lh-cell" data-sort="edited">Edited</div>
+      </div>
+      <div id="lib-grid"></div>
+    </div>
     <div id="lib-bottom"><span style="font-size:11px;color:var(--mut)" id="lib-count"></span></div>
   `;
   // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
@@ -861,6 +893,8 @@
       case 'aperture': return parseFloat((m.aperture || '').replace('f/', '')) || 0;
       case 'focal': return parseFloat(m.focal_len || '') || 0;
       case 'edited': return sc.edited ? 1 : 0;
+      case 'rating': return sc.rating || 0;
+      case 'camera': return (m.camera || '').toLowerCase();
       default: return (entry.name || '').toLowerCase();
     }
   }
@@ -1130,8 +1164,11 @@
   async function renderGrid() {
     grid = document.getElementById('lib-grid');
     grid.innerHTML = '';
-    grid.classList.toggle('list-view', state.viewMode === 'list');
+    const isList = state.viewMode === 'list';
+    grid.classList.toggle('list-view', isList);
     grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
+    const listHead = document.getElementById('lib-list-head');
+    if (listHead) { listHead.classList.toggle('on', isList); syncListHead(); }
     const shown = sortEntries(state.entries.filter(passesFilters));
     shown.forEach((entry, idx) => {
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
@@ -1141,15 +1178,18 @@
       card.dataset.path = entry.path;
       if (state.viewMode === 'list') {
         const m = state.meta.get(entry.path) || {};
-        const metaTxt = [m.iso ? `ISO ${m.iso}` : '', m.shutter || '', m.aperture || '', m.focal_len || ''].filter(Boolean).join(' · ');
+        const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
         card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
-          ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
-          <div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>
-          <div class="lib-list-meta">${metaTxt}</div>
-          <div class="lib-tagrow">
-            <div class="lib-stars">${starsHtml(Math.max(sc.rating, 0))}</div>
-            <div class="lib-flags">${flagsHtml(sc.label)}</div>
-          </div>`;
+          <div class="lib-name">${esc(entry.name)}${entry.missing ? ' (missing)' : ''}${sc.edited ? '<span class="lib-edited-badge">EDITED</span>' : ''}</div>
+          <div class="lib-col">${esc(m.date)}</div>
+          <div class="lib-col">${esc(m.camera)}</div>
+          <div class="lib-col">${m.iso ? esc(m.iso) : ''}</div>
+          <div class="lib-col">${esc(m.shutter)}</div>
+          <div class="lib-col">${esc(m.aperture)}</div>
+          <div class="lib-col">${esc(m.focal_len)}</div>
+          <div class="lib-tagrow"><div class="lib-stars">${starsHtml(Math.max(sc.rating, 0))}</div></div>
+          <div class="lib-flags">${flagsHtml(sc.label)}</div>
+          <div class="lib-col">${sc.edited ? 'Yes' : ''}</div>`;
       } else {
         card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt="">${metaStripHtml(entry)}</div>
           ${sc.edited ? '<div class="lib-edited-badge">EDITED</div>' : ''}
@@ -1269,6 +1309,29 @@
   const metaSel = overlay.querySelector('#lib-metadisp');
   metaSel.value = state.metaDisplay;
   metaSel.onchange = (e) => { state.metaDisplay = e.target.value; localStorage.setItem('chromasmith_lib_metadisp', state.metaDisplay); renderGrid(); };
+
+  // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
+  // #lib-sort-dir button — reusing their own handlers keeps grid view and list view unable to
+  // disagree about how the collection is sorted (single source of truth: state.sortBy/sortDir).
+  const listHead = overlay.querySelector('#lib-list-head');
+  listHead.querySelectorAll('.lib-lh-cell[data-sort]').forEach((cell) => {
+    cell.onclick = () => {
+      const key = cell.dataset.sort;
+      if (state.sortBy === key) {
+        sortDirBtn.onclick(); // toggle direction — already re-renders
+      } else {
+        sortSel.value = key;
+        sortSel.onchange({ target: sortSel }); // sets state.sortBy + re-renders
+      }
+    };
+  });
+  function syncListHead() {
+    listHead.querySelectorAll('.lib-lh-cell[data-sort]').forEach((cell) => {
+      const on = cell.dataset.sort === state.sortBy;
+      cell.classList.toggle('sorted', on);
+      cell.classList.toggle('desc', on && state.sortDir === 'desc');
+    });
+  }
 
   // "All Edited": a virtual, cross-folder collection — see Rust's list_edited()/registry_set().
   // Backfilled once per session (cheap text scan of recent folders' .xmp sidecars) so photos
