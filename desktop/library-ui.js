@@ -264,8 +264,8 @@
       <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
       <select id="lib-tag-filter" title="Filter by tag">
         <option value="all">All tags</option>
-        <option value="red">🚩 Red flag</option>
-        <option value="green">🟢 Green flag</option>
+        <option value="red">Rejected (X)</option>
+        <option value="green">Picked (flag)</option>
         <option value="edited">Edited</option>
         <option value="noedited">Not edited</option>
       </select>
@@ -489,9 +489,11 @@
     for (let i = 1; i <= 5; i++) h += `<span class="lib-star${i <= rating ? ' on' : ''}" data-i="${i}">★</span>`;
     return h;
   }
+  const FLAG_SVG_GREEN = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"/><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"/></svg>';
+  const FLAG_SVG_RED = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>';
   function flagsHtml(label) {
-    return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Red flag">🚩</span>` +
-           `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Green flag">🟢</span>`;
+    return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Reject (X)">${FLAG_SVG_RED}</span>` +
+           `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Pick (flag)">${FLAG_SVG_GREEN}</span>`;
   }
 
   // ── options for a <select> populated with the distinct values present in this folder ─────
@@ -600,7 +602,17 @@
         const bmp = await createImageBitmap(new Blob([jpegBuf], { type: 'image/jpeg' }));
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
         c.getContext('2d').drawImage(bmp, 0, 0);
-        diskCached = { img: c, name: baseName(path).replace(/\.[^.]+$/, ''), ext: 'jpg', dpi: 240, bytes: null, exif: {} };
+        // The cache itself is a re-encoded JPEG, but the SOURCE FILE is the real RAW — ext/exif
+        // must reflect that (showExif reads it.ext for "File Format" and it.exif for the EXIF
+        // rows), or a reopened RAW from this cache path shows "JPG" with blank metadata even
+        // though the fresh-decode path (below) gets it right.
+        const realExt = (path.match(/\.([^.\/]+)$/) || [, 'jpg'])[1].toLowerCase();
+        const m = await getMeta(path).catch(() => ({}));
+        diskCached = {
+          img: c, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240, bytes: null,
+          exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
+                   date: m.date, lens: m.lens, make: m.make, model: m.model },
+        };
       } catch (e) { /* no cache yet, or it's stale — fall through to a full decode below */ }
     }
     try {
@@ -1029,8 +1041,8 @@
     for (let r = 1; r <= 5; r++) item(`${'★'.repeat(r)} Rate ${r}`, () => Promise.all(paths.map((p) => setRating(p, r))));
     item('Clear rating', () => Promise.all(paths.map((p) => setRating(p, 0))));
     sep();
-    item('🚩 Red flag', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))));
-    item('🟢 Green flag', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))));
+    item('Reject (X)', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))));
+    item('Pick (flag)', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))));
     item('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))));
     sep();
     item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
