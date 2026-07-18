@@ -228,7 +228,15 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // desktop/desktop-native.js's NativeLibRawShim.open()/refine()). Defaults to false so any
     // caller that doesn't set it gets today's unchanged, full-quality-only behavior.
     let fast = json["fast"].as_bool().unwrap_or(false);
-    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, native_nr, demosaic_algo, fast)?;
+    // Manual lens override (see list_lens_profiles below): a "Maker Model" string the user
+    // picked from the bundled DB's own lens list, paired with a focal length in mm — for
+    // manual/adapted lenses (TTArtisan and similar) that write no lens EXIF at all, so no
+    // amount of EXIF fallback can recover a tag the camera never wrote.
+    let lens_override = match (json["lensOverride"].as_str(), json["lensOverrideFocal"].as_f64()) {
+        (Some(l), Some(f)) if !l.is_empty() && f > 0.0 => Some((l, f as f32)),
+        _ => None,
+    };
+    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, native_nr, demosaic_algo, fast, lens_override)?;
     // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files
     // for (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a
     // DIFFERENT sensor's data wouldn't error — it would just silently produce wrong colors (a
@@ -274,6 +282,11 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 #[tauri::command]
 fn lens_profile_available(make: String, model: String, lens_model: String) -> bool {
     lens_correct::profile_available(&make, &model, &lens_model)
+}
+
+#[tauri::command]
+fn list_lens_profiles() -> Vec<lens_correct::LensProfileEntry> {
+    lens_correct::list_lens_profiles()
 }
 
 // Open a URL in the user's default system browser. Needed because the WKWebView shell has no
@@ -407,7 +420,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-17j"
+    "2026-07-18a"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -609,6 +622,7 @@ fn main() {
             store_dcp_lut,
             decode_raw_v2,
             lens_profile_available,
+            list_lens_profiles,
             download_url_native,
             native_build_tag,
             open_url_native,

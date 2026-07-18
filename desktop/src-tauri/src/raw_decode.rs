@@ -42,7 +42,14 @@ pub struct DecodedRaw {
     pub rgb16: Vec<u16>,
 }
 
-pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic_algo: &str, fast: bool) -> Result<DecodedRaw, String> {
+pub fn decode_rw2_bytes(
+    bytes: &[u8],
+    auto_lens: bool,
+    native_nr: bool,
+    demosaic_algo: &str,
+    fast: bool,
+    lens_override: Option<(&str, f32)>, // (lensfun "Maker Model" string, focal length mm) — see main.rs decode_raw_v2
+) -> Result<DecodedRaw, String> {
     let source = RawSource::new_from_slice(bytes);
     let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
     let params = RawDecodeParams::default();
@@ -258,15 +265,38 @@ pub fn decode_rw2_bytes(bytes: &[u8], auto_lens: bool, native_nr: bool, demosaic
     // drift from what the decode actually did.
     let mut lens_applied = false;
     if auto_lens {
-        let lens_model = metadata
-            .exif
-            .lens_model
-            .clone()
-            .or_else(|| metadata.lens.as_ref().map(|l| l.lens_model.clone()))
-            .or_else(|| crate::lens_correct::exif_lens_model_fallback(bytes))
-            .unwrap_or_default();
-        let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
-        let focal_len = metadata.exif.focal_length.as_ref().map(ratio).unwrap_or(0.0);
+        // Manual/adapted lenses (e.g. TTArtisan, other fully-mechanical primes with no
+        // electronic contacts) write no lens EXIF at all — no fallback can recover a tag the
+        // camera never wrote. `lens_override` lets the user pick a lens directly (from the
+        // bundled DB's own list — see main.rs's list_lens_profiles) instead of relying on
+        // detection; the camera body itself (make/model, for mount+crop-factor) still comes
+        // from the real file metadata below.
+        let (lens_model, focal_len) = if let Some((ov_lens, ov_focal)) = lens_override {
+            (ov_lens.to_string(), ov_focal)
+        } else {
+            let lens_model = metadata
+                .exif
+                .lens_model
+                .clone()
+                .or_else(|| metadata.lens.as_ref().map(|l| l.lens_model.clone()))
+                .or_else(|| crate::lens_correct::exif_lens_model_fallback(bytes))
+                .unwrap_or_default();
+            let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
+            // Same rawler gap as lens_model above: focal_length also comes back empty for at
+            // least one real DC-S9 RW2 that DOES carry the tag, so the correction gate below
+            // silently no-op'd even when the lens profile itself matched — the exact "Auto
+            // shows available but nothing happens" symptom. Fall back to the same patched-EXIF
+            // read.
+            let focal_len = metadata
+                .exif
+                .focal_length
+                .as_ref()
+                .map(ratio)
+                .filter(|f| *f > 0.0)
+                .or_else(|| crate::lens_correct::exif_focal_length_fallback(bytes))
+                .unwrap_or(0.0);
+            (lens_model, focal_len)
+        };
         if !lens_model.is_empty() && focal_len > 0.0 {
             lens_applied = crate::lens_correct::correct_distortion(
                 &mut rgb16, out_w, out_h, &metadata.make, &metadata.model, &lens_model, focal_len,

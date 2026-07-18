@@ -98,7 +98,13 @@
       // optimized — trades some general chroma-noise headroom for much cleaner rendering of
       // dense sunlit-water/specular sparkle fields; NOT a global default, see raw_decode.rs).
       const demosaicAlgo = window.chromasmithDemosaicAlgo || '';
-      const extra = { autoLens, nativeNr, demosaicAlgo };
+      // Manual lens override — a "Maker Model" string from list_lens_profiles + a focal length
+      // in mm, set by the Lens Correction panel when EXIF auto-detection has nothing to go on
+      // (manual/adapted lenses like TTArtisan write no lens EXIF at all). Empty/0 means "use
+      // EXIF detection as normal" — see raw_decode.rs's lens_override param.
+      const lensOverride = window.chromasmithLensOverride || '';
+      const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
+      const extra = { autoLens, nativeNr, demosaicAlgo, lensOverride, lensOverrideFocal };
       // Two-phase decode ("RAW load takes 15s"): the FIRST decode always requests `fast:true`
       // — Rust skips the false-color-suppression / hue-defringe / native-NR passes (the serial
       // full-frame CPU work that dominates decode time), so this returns in roughly the time a

@@ -21,16 +21,34 @@ use std::sync::OnceLock;
 // 18-40/F4.5-6.3" in the raw bytes rawler's own parse missed) — a rawler gap, not a missing
 // tag. Patch the magic number in a scratch copy and hand it to kamadak-exif (already a
 // dependency, used for JPEG/TIFF elsewhere) as a fallback when rawler comes back empty.
-pub fn exif_lens_model_fallback(bytes: &[u8]) -> Option<String> {
+fn read_patched_rw2_exif(bytes: &[u8]) -> Option<exif::Exif> {
     if bytes.len() < 4 || bytes[0] != b'I' || bytes[1] != b'I' || bytes[2] != 0x55 || bytes[3] != 0x00 {
         return None; // not an RW2-shaped header — don't guess at other RAW formats' quirks
     }
     let mut patched = bytes.to_vec();
     patched[2] = 0x2A;
-    let exif = exif::Reader::new().read_raw(patched).ok()?;
+    exif::Reader::new().read_raw(patched).ok()
+}
+
+pub fn exif_lens_model_fallback(bytes: &[u8]) -> Option<String> {
+    let exif = read_patched_rw2_exif(bytes)?;
     let v = exif.get_field(exif::Tag::LensModel, exif::In::PRIMARY)?.display_value().to_string();
     let cleaned = v.trim().trim_matches('"').trim().to_string();
     if cleaned.is_empty() { None } else { Some(cleaned) }
+}
+
+// Same root cause as exif_lens_model_fallback above (rawler's structured EXIF comes back empty
+// for at least one real DC-S9 RW2 that DOES carry the tag): the lens NAME already had a
+// fallback, but FocalLength didn't, so correct_distortion's `focal_len > 0.0` gate silently
+// skipped correction even when profile_available() reported the camera+lens pairing as present
+// in the DB — the exact "Auto shows available but nothing happens" symptom.
+pub fn exif_focal_length_fallback(bytes: &[u8]) -> Option<f32> {
+    let exif = read_patched_rw2_exif(bytes)?;
+    let field = exif.get_field(exif::Tag::FocalLength, exif::In::PRIMARY)?;
+    match &field.value {
+        exif::Value::Rational(v) => v.first().map(|r| r.to_f32()).filter(|f| *f > 0.0),
+        _ => None,
+    }
 }
 
 static DB: OnceLock<Option<Database>> = OnceLock::new();
@@ -42,6 +60,37 @@ fn db() -> Option<&'static Database> {
             .ok()
     })
     .as_ref()
+}
+
+#[derive(serde::Serialize)]
+pub struct LensProfileEntry {
+    pub maker: String,
+    pub model: String,
+    /// Prime lens (focal_min == focal_max): the UI can auto-fill the focal-length field instead
+    /// of asking the user to type a number they may not know for an old manual lens.
+    pub focal_min: f32,
+    pub focal_max: f32,
+}
+
+/// Every lens in the bundled lensfun DB, for the manual lens-override picker (Lens Correction
+/// panel) — a fallback for manual/adapted lenses (TTArtisan and similar mechanical-only optics)
+/// that write no lens EXIF at all, so the auto-detect fallbacks in this file have nothing to
+/// recover. Sorted by maker then model so the dropdown reads like a catalog, not DB insertion
+/// order.
+pub fn list_lens_profiles() -> Vec<LensProfileEntry> {
+    let Some(db) = db() else { return Vec::new() };
+    let mut out: Vec<LensProfileEntry> = db
+        .lenses
+        .iter()
+        .map(|l| LensProfileEntry {
+            maker: l.maker.clone(),
+            model: l.model.clone(),
+            focal_min: l.focal_min,
+            focal_max: l.focal_max,
+        })
+        .collect();
+    out.sort_by(|a, b| (&a.maker, &a.model).cmp(&(&b.maker, &b.model)));
+    out
 }
 
 /// Whether a lens profile exists for this camera+lens pairing — lets the UI show "Auto" as
@@ -184,4 +233,53 @@ mod tests {
         let cams = db().map(|d| d.find_cameras(Some("Panasonic"), "DC-S9").len()).unwrap_or(0);
         println!("Panasonic DC-S9 camera entries in DB: {cams}");
     }
+
+    // The DC-S9 + LUMIX S 18-40 pairing has a real calibrated profile in the bundled lensfun DB
+    // (mil-panasonic.xml) — this pins that down as a permanent regression guard, since
+    // exif_focal_length_fallback below is only worth having if the DB match actually exists.
+    #[test]
+    fn dc_s9_profile_is_in_bundled_db() {
+        assert!(
+            profile_available("Panasonic", "DC-S9", "LUMIX S 18-40/F4.5-6.3"),
+            "DC-S9 + LUMIX S 18-40/F4.5-6.3 must resolve in the bundled lensfun DB"
+        );
+    }
+
+    // Root-cause regression guard for issue #8 ("lens auto-correction shows Available but never
+    // applies"): rawler's structured EXIF comes back empty for focal_length on real DC-S9 RW2s,
+    // same gap as the lens-name fallback above. Gated on the repo's own test RW2 existing so
+    // this doesn't break CI/checkouts that don't carry the sample photos.
+    #[test]
+    fn focal_length_fallback_reads_real_rw2() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../__TM8519.RW2");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present in this checkout", path.display());
+            return;
+        };
+        let lens = exif_lens_model_fallback(&bytes);
+        println!("fallback lens_model: {lens:?}");
+        assert_eq!(lens.as_deref(), Some("LUMIX S 18-40/F4.5-6.3"));
+        let focal = exif_focal_length_fallback(&bytes);
+        println!("fallback focal_length: {focal:?}");
+        assert!(focal.is_some_and(|f| f > 0.0), "focal length fallback must recover a positive value, got {focal:?}");
+    }
+
+    // End-to-end regression guard for issue #8: calls the EXACT function main.rs's decode_raw_v2
+    // command calls, with the same auto_lens=true argument, on a real DC-S9 RW2 that has a real
+    // lensfun profile — proves the whole pipeline (metadata read -> fallback -> DB lookup ->
+    // distortion correction) actually applies, not just the individual pieces in isolation.
+    #[test]
+    fn tm6917_full_decode_applies_lens_correction() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../__TM6917.RW2");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present in this checkout", path.display());
+            return;
+        };
+        let decoded = crate::raw_decode::decode_rw2_bytes(&bytes, true, true, "", true, None)
+            .expect("decode should succeed");
+        assert!(decoded.lens_applied, "expected lens correction to apply on __TM6917.RW2 with auto_lens=true");
+    }
 }
+
+
+

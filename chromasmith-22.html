@@ -912,6 +912,17 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="fx-label">Auto (lens profile)</div><div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div>
         </div>
         <div id="lens-auto-status" style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:-4px 0 6px"></div>
+        <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
+             EXIF at all, so auto-detection has nothing to recover — this lets you pick a lens
+             directly from the bundled lensfun database instead. Desktop only; hidden elsewhere. -->
+        <div class="fx-row" id="row-lens-manual" style="display:none" title="Overrides EXIF auto-detection with a lens you pick directly — for manual/adapted lenses that write no lens EXIF at all. Picking one also turns Auto on.">
+          <div class="fx-label">Manual lens</div>
+          <select class="fx-select" id="sel-lens-manual" onchange="fxLensManualChanged()" style="flex:1"><option value="">None (auto-detect)</option></select>
+        </div>
+        <div class="fx-row" id="row-lens-manual-focal" style="display:none" title="Focal length in mm — required for distortion correction. Auto-filled for fixed (prime) lenses.">
+          <div class="fx-label">Focal length (mm)</div>
+          <input class="fx-slider" type="number" min="1" max="2000" step="0.1" id="in-lens-manual-focal" oninput="fxLensManualFocalChanged()" style="max-width:80px;flex:0 0 auto">
+        </div>
         <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-dist" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-dist">0</div></div>
         <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-vig">0</div></div>
         <div class="fx-row" title="Corrects red/blue fringing near high-contrast edges, worst in the corners."><div class="fx-label">Chromatic Aberration</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ca" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ca">0</div></div>
@@ -4587,15 +4598,19 @@ function fxLensStatusRefresh(){
     return;
   }
   status.style.color='';
+  if(window.chromasmithLensOverride){
+    status.textContent='Not applied — no distortion calibration for "'+window.chromasmithLensOverride+'" in the bundled database (it may still be listed for vignette/CA-only data). Using the manual sliders below.';
+    return;
+  }
   if(!exif.model&&!exif.lens){
     status.textContent='This photo hasn’t finished loading its metadata yet — status will update automatically.';
     return;
   }
   if(!exif.lens){
-    status.textContent='This photo’s RAW metadata has no lens model recorded, so a profile can’t be looked up for it.';
+    status.textContent='This photo’s RAW metadata has no lens model recorded — try the Manual lens picker above if you\'re using an adapted/manual lens.';
     return;
   }
-  status.textContent='Not applied — no bundled profile for "'+(exif.model||'this camera')+' · '+exif.lens+'" yet. Using the manual sliders below.';
+  status.textContent='Not applied — no bundled profile for "'+(exif.model||'this camera')+' · '+exif.lens+'" yet. Using the manual sliders below, or try the Manual lens picker above.';
 }
 window.chromasmithLensStatusRefresh=fxLensStatusRefresh;
 function fxLensAutoToggled(){
@@ -4617,7 +4632,85 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const tg=document.getElementById('tg-lens-auto');
   if(tg&&window.chromasmithAutoLens)tg.classList.add('on');
   fxLensStatusRefresh();
+  fxLensManualInit();
 });
+
+// ── Manual lens override (desktop only) — for manual/adapted lenses (TTArtisan and similar)
+// that write no lens EXIF at all, so the fallbacks in lens_correct.rs have nothing to recover.
+// Lets the user pick a lens directly from the bundled lensfun DB's own list instead.
+let _fxLensProfiles=null;
+async function fxLensManualInit(){
+  const row=document.getElementById('row-lens-manual');
+  if(!row||!window.__TAURI__)return; // stays hidden in browser/iOS builds — matches Auto's own gating
+  row.style.display='flex';
+  try{
+    _fxLensProfiles=await window.__TAURI__.core.invoke('list_lens_profiles');
+    if(typeof log==='function')log('Manual lens list: loaded '+(_fxLensProfiles&&_fxLensProfiles.length)+' entries','info');
+  }catch(e){
+    if(typeof log==='function')log('Manual lens list: '+(e&&e.message||e),'err');
+    return;
+  }
+  const sel=document.getElementById('sel-lens-manual');
+  if(!sel||!_fxLensProfiles)return;
+  const frag=document.createDocumentFragment();
+  _fxLensProfiles.forEach((l,i)=>{
+    const o=document.createElement('option');
+    o.value=String(i);o.textContent=l.maker+' '+l.model;
+    frag.appendChild(o);
+  });
+  sel.appendChild(frag);
+  try{
+    const savedIdx=localStorage.getItem('chromasmithLensManualIdx');
+    const savedFocal=localStorage.getItem('chromasmithLensManualFocal');
+    if(savedIdx!=null&&savedIdx!==''){
+      sel.value=savedIdx;
+      const focalEl=document.getElementById('in-lens-manual-focal');
+      if(focalEl&&savedFocal)focalEl.value=savedFocal;
+      fxLensManualApply(false);
+    }
+  }catch(e){}
+}
+function fxLensManualChanged(){
+  const sel=document.getElementById('sel-lens-manual');
+  const idx=sel&&sel.value;
+  const focalRow=document.getElementById('row-lens-manual-focal');
+  if(!idx){ // "None (auto-detect)"
+    if(focalRow)focalRow.style.display='none';
+    try{localStorage.removeItem('chromasmithLensManualIdx');}catch(e){}
+    window.chromasmithLensOverride='';window.chromasmithLensOverrideFocal=0;
+    if(typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
+    return;
+  }
+  const l=_fxLensProfiles&&_fxLensProfiles[parseInt(idx,10)];
+  if(!l)return;
+  if(focalRow)focalRow.style.display='flex';
+  const focalEl=document.getElementById('in-lens-manual-focal');
+  // Prime lens (fixed focal length) — auto-fill so the user isn't asked for a number they may
+  // not know off-hand for an old manual lens. Zooms (focal_min!==focal_max) start blank.
+  if(focalEl&&l.focal_min===l.focal_max)focalEl.value=l.focal_min;
+  try{localStorage.setItem('chromasmithLensManualIdx',idx);}catch(e){}
+  fxLensManualApply(true);
+}
+function fxLensManualFocalChanged(){
+  const focalEl=document.getElementById('in-lens-manual-focal');
+  try{if(focalEl)localStorage.setItem('chromasmithLensManualFocal',focalEl.value);}catch(e){}
+  fxLensManualApply(true);
+}
+function fxLensManualApply(reload){
+  const sel=document.getElementById('sel-lens-manual');
+  const idx=sel&&sel.value;
+  const l=idx?_fxLensProfiles&&_fxLensProfiles[parseInt(idx,10)]:null;
+  const focalEl=document.getElementById('in-lens-manual-focal');
+  const focal=focalEl?parseFloat(focalEl.value)||0:0;
+  if(!l||focal<=0){window.chromasmithLensOverride='';window.chromasmithLensOverrideFocal=0;return;}
+  window.chromasmithLensOverride=l.maker+' '+l.model;
+  window.chromasmithLensOverrideFocal=focal;
+  // Picking a manual lens only has an effect while Auto is on — the correction pass itself is
+  // gated on auto_lens in raw_decode.rs, same as EXIF-detected lenses.
+  const tg=document.getElementById('tg-lens-auto');
+  if(tg&&!tg.classList.contains('on')){tg.classList.add('on');window.chromasmithAutoLens=true;try{localStorage.setItem('chromasmithAutoLens','1');}catch(e){}}
+  if(reload&&typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
+}
 
 // ── Native (Rust) noise reduction on/off — desktop only. Both the shadow denoise and the
 // chroma-wavelet denoise (see raw_decode.rs) run on linear RAW data during decode, before
