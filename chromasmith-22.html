@@ -30,14 +30,14 @@
      consistent and any future tuning is a one-line change. */
   --lift-1:inset 0 1px 0 rgba(255,255,255,.045),0 1px 2px rgba(0,0,0,.3),0 6px 16px -4px rgba(0,0,0,.35);
   --lift-2:inset 0 1px 0 rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.35),0 14px 32px -8px rgba(0,0,0,.5);
-  --glass-bg:rgba(23,23,27,.72)}
-body.light{--glass-bg:rgba(250,248,244,.72)}
+  --glass-bg:#1f1f25}
+body.light{--glass-bg:#ffffff}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
 canvas,img,video,select,input{max-width:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:14px;line-height:1.5}
 header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;
-  position:sticky;top:0;z-index:10;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.3);backdrop-filter:blur(20px) saturate(1.3)}
+  position:sticky;top:0;z-index:10;background:var(--glass-bg)}
 .logo{font-family:var(--serif);font-size:20px;letter-spacing:.12em;color:var(--acc);font-style:italic}
 .logo .sub{color:var(--mut);font-size:11px;font-family:var(--mono);letter-spacing:.05em;font-style:normal;margin-left:12px}
 .logo-glow{text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)}
@@ -362,7 +362,7 @@ button,.btn,.fx-toggle,.fx-select,.fx-slider,.fx-sec-btn,.fx-rail-btn,.fx-act,.f
 canvas,img{-webkit-user-drag:none}
 .fx-panel{overscroll-behavior:contain}
 /* toast pills — user-facing feedback (the log stays for diagnostics) */
-#fx-toast{position:fixed;left:50%;bottom:calc(98px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(8px);background:rgba(20,20,22,.72);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);border:1px solid var(--bdr);color:var(--txt);font-family:var(--mono);font-size:11px;letter-spacing:.05em;padding:9px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:3000;max-width:80vw;text-align:center;box-shadow:var(--lift-2)}
+#fx-toast{position:fixed;left:50%;bottom:calc(98px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(8px);background:#141416;border:1px solid var(--bdr);color:var(--txt);font-family:var(--mono);font-size:11px;letter-spacing:.05em;padding:9px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:3000;max-width:80vw;text-align:center;box-shadow:var(--lift-2)}
 #fx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #fx-toast.ok{border-color:var(--acc);color:var(--acc)}
 /* slider polish: bigger touch targets + a value bubble above the thumb while dragging */
@@ -393,7 +393,11 @@ body.mobile-fx .fx-sec-btn.on{background:rgba(212,144,58,.14)}
 body.mobile-fx #fx-looks{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;max-height:none;padding:2px 1px}
 body.mobile-fx .look-cell{flex:0 0 72px}
 body.fx-single .fx-ctrl{display:none}
-body.fx-single .fx-ctrl.sec-active{display:block;margin-bottom:0}
+/* A FX_GROUPS group (e.g. Lens + Noise Reduction) can show MULTIPLE .sec-active cards at once
+   — zeroing every one of them made stacked cards touch with no gap. Only the last one in the
+   group should sit flush against the panel's own bottom padding. */
+body.fx-single .fx-ctrl.sec-active{display:block}
+body.fx-single .fx-ctrl.sec-active:last-of-type{margin-bottom:0}
 body.fx-single.diag-on .fx-diag{display:none}
 body.fx-single.diag-on .fx-diag.sec-active{display:block}
 /* compact compare/split/hist as small overlay chips on the image */
@@ -442,7 +446,7 @@ body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:s
 .fx-rail-btn .fx-rail-ic{display:inline-flex;flex-shrink:0}
 .fx-rail-btn .fx-rail-lb{white-space:nowrap}
 body.fx-deskb .fx-panel{column-count:1;max-height:calc(100vh - 130px);overflow-y:auto;align-self:start}
-body.fx-deskb .fx-ctrl.sec-active{margin-bottom:0}
+body.fx-deskb .fx-ctrl.sec-active:last-of-type{margin-bottom:0}
 body.fx-deskb .looks-grid{grid-template-columns:repeat(2,1fr);max-height:none}
 body.fx-deskb #fx-actionbar,body.fx-deskb #fx-secnav{display:none}
 /* image always fits the viewport — no page scroll to see it */
@@ -473,7 +477,7 @@ body.deskx.fx-deskb main{overflow:hidden;height:100vh}
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 100px}
 body.deskx #fx-deskbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:3000;height:44px;
   margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr);border-radius:0;
-  background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.3);backdrop-filter:blur(20px) saturate(1.3)}
+  background:var(--glass-bg)}
 /* The deskbar is INSIDE #panel-fx; on other tabs that panel loses .active (display:none),
    which would take the fixed bar down with it. Keep the panel technically displayed and hide
    its editor content instead, so the top bar (and its ⋯ menu, the only way back) persists. */
@@ -530,7 +534,7 @@ body.deskx #btn-msk-add-ai{display:inline-flex!important} /* AI Select needs the
 #fx-overflow{display:none;position:relative}
 body.deskx #fx-overflow{display:inline-flex}
 #fx-overflow-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:200px;
-  background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  background:var(--glass-bg);
   border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
 #fx-overflow-menu.on{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
@@ -5595,13 +5599,19 @@ function bakeHsl(){
 }
 // Darkroom-style before/after split swatch: left half is the band's canonical hue, right half
 // is that same hue after the band's current hue/sat/lum shifts — so the chip itself previews
-// the edit instead of staying a flat reference color forever.
+// the edit instead of staying a flat reference color forever. Both halves are the SAME formula
+// (only the deltas differ) so at hue=sat=lum=0 they resolve to one flat color, not a two-tone
+// split — the old left half came from an unrelated hardcoded HSL_COLS hex that never agreed
+// with the hsl()-computed right half even with zero edits.
+function _hslColorAt(b,hue,sat,lum){
+  const hDeg=(HSL_HUE_DEG[b]+(hue||0)*0.45+360)%360;
+  const sPct=Math.max(0,Math.min(100,65+(sat||0)*0.35));
+  const lPct=Math.max(0,Math.min(100,55+(lum||0)*0.35));
+  return `hsl(${hDeg.toFixed(0)},${sPct.toFixed(0)}%,${lPct.toFixed(0)}%)`;
+}
 function _hslAfterColor(b){
   const H=fxState.hsl;
-  const hDeg=(HSL_HUE_DEG[b]+((H.hue&&H.hue[b])||0)*0.45+360)%360;
-  const sPct=Math.max(0,Math.min(100,65+((H.sat&&H.sat[b])||0)*0.35));
-  const lPct=Math.max(0,Math.min(100,55+((H.lum&&H.lum[b])||0)*0.35));
-  return `hsl(${hDeg.toFixed(0)},${sPct.toFixed(0)}%,${lPct.toFixed(0)}%)`;
+  return _hslColorAt(b,(H.hue&&H.hue[b])||0,(H.sat&&H.sat[b])||0,(H.lum&&H.lum[b])||0);
 }
 function hslBuildChips(){
   const row=document.getElementById('hsl-chips');if(!row)return;row.innerHTML='';
@@ -5610,10 +5620,11 @@ function hslBuildChips(){
     bt.title=b;
     bt.style.borderBottomColor=(b===hslBand?HSL_COLS[b]:'transparent');
     const edited=['hue','sat','lum'].some(k=>fxState.hsl[k]&&fxState.hsl[k][b]);
+    const before=_hslColorAt(b,0,0,0);
     const after=_hslAfterColor(b);
     const ring=edited?'0 0 0 2px rgba(255,255,255,.55)':'none';
     bt.innerHTML=`<span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:${ring};`+
-      `background:linear-gradient(90deg,${HSL_COLS[b]} 50%,${after} 50%)"></span>`;
+      `background:linear-gradient(90deg,${before} 50%,${after} 50%)"></span>`;
     bt.onclick=()=>hslSetBand(b);
     row.appendChild(bt);
   });
@@ -6474,6 +6485,7 @@ function fxResetAll(){
   _fxHistLocked=true;
   applyUISnapshot(fxHistory[0]);
   _fxHistLocked=false;
+  if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
   fxHistoryPush();
   fxUpdate();
   log('Reset all edits','info');
