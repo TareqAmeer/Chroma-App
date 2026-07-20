@@ -3166,7 +3166,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-19b';
+const BUILD='2026-07-20a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4937,11 +4937,7 @@ function fxFullResPreviewToggle(){
   fxFullResPreview=!fxFullResPreview;
   try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
-  // At Fit (fxZoom<=1) a full-res backing store is CSS-downscaled right back to the same
-  // on-screen pixels — indistinguishable from the capped path, so the toggle looked like a
-  // no-op. It only has a visible effect once zoomed in past 100%; say so instead of silently
-  // doing nothing at the default zoom level.
-  if(fxFullResPreview&&fxZoom<=1&&typeof toast==='function')toast('Full res on — zoom in to see native detail');
+  if(fxFullResPreview&&typeof toast==='function')toast('Full res preview on');
   renderPreview();
 }
 // Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no
@@ -6100,6 +6096,14 @@ document.addEventListener('pointerdown',e=>{
   _fxPreviewInteracting=true;
 });
 document.addEventListener('pointerup',e=>{
+  if(!_fxPreviewInteracting)return;
+  _fxPreviewInteracting=false;
+  if(fxFullResPreview)renderPreview();
+});
+// pointerup doesn't fire if the gesture is interrupted (e.g. dragged off-window, browser takes
+// over for a system gesture) — without this, _fxPreviewInteracting can stick `true` forever and
+// silently pin the preview to the cheap capped backing store even with Full res toggled on.
+document.addEventListener('pointercancel',e=>{
   if(!_fxPreviewInteracting)return;
   _fxPreviewInteracting=false;
   if(fxFullResPreview)renderPreview();
@@ -7750,14 +7754,19 @@ function renderPreview(){
   // a 1440p window at dpr 2) instead of letting cw*dpr grow unbounded.
   let dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
   if(deskx&&cw>0)dpr=Math.min(dpr,3200/cw);
+  // Full-res preview at Fit: the dpr/3200px caps above exist to bound GPU cost for the DEFAULT
+  // preview; when the user has explicitly opted into Full res, honor that even at Fit by lifting
+  // both caps (still clamped to the source's own resolution — no point exceeding iw×ih) instead
+  // of silently falling back to the capped backing store. This is what was making the preview
+  // look pixelated next to the export even with Full res toggled on.
+  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom<=1){
+    dpr=Math.min(iw/(cw||1),ih/(ch||1));
+  }
   let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
   // Full-res preview: render at the true source resolution instead of the capped backing store
   // — but not WHILE a slider/pan/zoom drag is in flight (_fxPreviewInteracting), since that would
   // pay the full ~dpr² cost on every intermediate frame of the drag. Falls back to the normal
   // capped size until the interaction ends, then renderPreview() is re-invoked at full res.
-  // Also gated on fxZoom>1: at Fit the backing store is CSS-downscaled straight back to cw×ch
-  // regardless of source resolution (indistinguishable from the capped path, and it collapses
-  // the grain's fixed-pixel cells) — full-res only has a visible effect once zoomed in.
   if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1){pw=iw;ph=ih;}
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
   const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
