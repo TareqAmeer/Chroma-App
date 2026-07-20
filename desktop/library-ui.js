@@ -154,6 +154,18 @@
     .lib-coll-sep{height:1px;background:var(--bdr);margin:8px 2px}
     .lib-coll-heading{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:2px 8px 6px}
     #lib-main{overflow:auto;padding:16px}
+    /* List mode's sticky header (#lib-list-head, top:0 below) vs #lib-main's own padding: a
+       padded overflow:auto container only masks scrolled-behind content within its padding band
+       AT THE SCROLL EXTREMES (scrollTop 0 or max) — at any mid-scroll position that band is just
+       regular viewport, showing whatever row currently sits there. Sticky "top:0" is measured
+       from the padding EDGE, so the header always sat 16px below the true scrollport edge,
+       permanently exposing a 16px strip where scrolled-past thumbnails visibly slid through
+       ABOVE the header on every scroll, not just at the top ("images scroll behind/above it").
+       Drop #lib-main's top padding whenever the list header is showing so it sits flush with the
+       real scroll edge and fully masks everything above it — #lib-list-head's own bottom
+       padding/border-bottom already gives the visual gap before the first row, nothing else
+       needs to move. (:has() already used elsewhere in this file — same runtime.) */
+    #lib-overlay:has(#lib-list-head.on) #lib-main{padding-top:0}
     #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid var(--bdr)}
     .lib-btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
       padding:5px 10px;font-size:12px;cursor:pointer}
