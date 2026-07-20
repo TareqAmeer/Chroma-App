@@ -26,6 +26,10 @@ There is an in-app **Guide** tab documenting every control and a full FAQ.
 - **Desktop app:** Lightroom "Edit In" support — right-click a photo in Lightroom (Classic or
   cloud/CC) → Edit In → Chromasmith, edit as normal, then **Save to Lightroom** writes the
   render straight back over the handed-off file so Lightroom re-imports and syncs it.
+- **Desktop app:** optional "Connect Lightroom" cloud browser (Image Input panel) — sign in
+  with your own Adobe API client, pick an album, click a photo to pull it straight into the
+  editor. Needs Adobe's Lightroom APIs added to your project (partner-gated, not just a
+  self-serve Adobe Developer Console signup).
 - Exported `.cube` files are **Lumix Lab–ready** (carry the `#LUMIXPHOTOSTYLE STD` tag).
 
 ## Running it

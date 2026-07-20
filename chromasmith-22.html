@@ -601,6 +601,7 @@ body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:trans
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
 body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
+body.deskx #lr-section{display:block!important} /* Lightroom connect panel — desktop-only, see #lr-section's own comment */
 body.deskx #btn-msk-add-ai{display:inline-flex!important} /* AI Select needs the native SAM commands — desktop only */
 /* ⋯ overflow menu (deskbar): navigation to the non-editor tabs + utilities */
 #fx-overflow{display:none;position:relative}
@@ -1205,6 +1206,22 @@ setTimeout(()=>window.hideBootSplash(),6000);
           </div>
           <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.</div>
         </div>
+        <!-- Desktop-only: needs the native OS-browser + loopback-redirect OAuth flow (see
+             lrAuthNative), which a sandboxed browser tab can't do. Hidden by inline style;
+             #lib-lr-section{display:...!important} in body.deskx below un-hides it — same
+             pattern as #db-lib-btn. -->
+        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px;display:none" id="lr-section">
+          <div class="fx-label" style="width:auto;margin-bottom:6px">Lightroom</div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn bgh" id="btn-lr-connect" onclick="lrConnectToggle()" title="Sign in to browse your Lightroom cloud photos"><span class="bdot"></span>Connect</button>
+            <button class="btn bgh" onclick="lrAskClientId(true)" title="Set or change your Adobe API client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px"><span class="bdot"></span>ID…</button>
+          </div>
+          <div id="lr-browse" style="display:none;margin-top:8px">
+            <select class="fx-select" id="sel-lr-album" onchange="lrOpenAlbum(this.value)" style="width:100%;margin-bottom:8px"></select>
+            <div id="lr-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;max-height:260px;overflow-y:auto"></div>
+          </div>
+          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Desktop app only. Optional &amp; off by default. Needs your own free Adobe API client ID (Lightroom APIs specifically require Adobe's approval, not just a self-serve project — see Guide → “Can I browse my Lightroom cloud photos?”).</div>
+        </div>
       </div>
       <!-- INFO / METADATA -->
       <div class="fx-ctrl" data-fxsec="info">
@@ -1426,6 +1443,9 @@ setTimeout(()=>window.hideBootSplash(),6000);
 
       <div class="faq-q">Can I edit a photo in Chromasmith from inside Lightroom?</div>
       <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal — a new <b>Save to Lightroom</b> button appears next to the regular Export button while a handoff photo is open. Use it to write straight back over the file Lightroom gave you (Lightroom re-imports and syncs the result automatically); the normal Export button is still there too, unchanged, for a regular local export of the same photo.</div>
+
+      <div class="faq-q">Can I browse my Lightroom cloud photos?</div>
+      <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → add the <b>Lightroom APIs</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. Once connected (Image Input → <b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the editor.</div>
 
       <div class="faq-q">My RW2 / RAW colours don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
@@ -3198,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-20g';
+const BUILD='2026-07-20h';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -9365,6 +9385,190 @@ function gpUpdateUI(){
   if(s){s.className='btn '+(gpSaveEnabled()?'bsec':'bgh');s.innerHTML='<span class="bdot"></span>Upload exports: '+(gpSaveEnabled()?'On':'Off');}
 }
 gpUpdateUI();
+
+// ═══════════════════════════
+// LIGHTROOM CLOUD BROWSER ("Connect Lightroom")
+// ═══════════════════════════
+// Desktop-only (see #lr-section's inline style + the deskx CSS override) — needs the same
+// native OS-browser + loopback-redirect OAuth flow as Google Photos above (adobe_oauth_loopback
+// in main.rs is a thin copy of google_oauth_loopback; RFC 8252 loopback redirect_uris are
+// provider-agnostic). Reuses askTextModal/pkceVerifier/pkceChallenge as-is — those helpers were
+// already generic, not Google-specific.
+// ⚠️ Unlike Google Cloud Console's self-serve "Testing" mode, Adobe's Lightroom Partner APIs
+// (the lr_partner_apis/lr_partner_rendition_apis scopes below) have historically required
+// Adobe's own partner approval on top of just creating a project — a real project alone may not
+// be enough to actually call these endpoints. Built and wired end-to-end, but NOT verified
+// against a live Adobe account/approved integration (no way to get one in this environment) —
+// treat the exact scope string / endpoint paths as best-effort from Adobe's documented API
+// shape, and expect to debug the token exchange or a 403 on first real use.
+const LR_IMS_AUTH='https://ims-na1.adobelogin.com/ims/authorize/v2';
+const LR_IMS_TOKEN='https://ims-na1.adobelogin.com/ims/token/v3';
+const LR_API='https://lr.adobe.io/v2';
+const LR_SCOPES='openid,AdobeID,lr_partner_apis,lr_partner_rendition_apis,offline_access';
+function lrClientId(){try{return(localStorage.getItem('lrClientId')||'').trim()}catch(e){return''}}
+async function lrAskClientId(force){
+  let cid=lrClientId();
+  if(cid&&!force)return cid;
+  const msg='Paste your Adobe API client ID (Developer Console → your project → Credentials).\n\nMust have the Lightroom APIs added — these require Adobe partner approval beyond a self-serve project (Adobe Developer Console → your project → Add API → Lightroom APIs). See Guide → "Can I browse my Lightroom cloud photos?".';
+  const picked=await askTextModal('Adobe API Client ID',msg,cid||'');
+  cid=(picked||'').trim();
+  if(cid){try{localStorage.setItem('lrClientId',cid)}catch(e){}}
+  return cid;
+}
+function lrTok(){try{const t=JSON.parse(sessionStorage.getItem('lrTok')||'null');if(t&&t.at&&t.exp>Date.now()+60e3)return t}catch(e){}return null}
+function lrConnected(){return!!lrTok()}
+// Same loopback/PKCE mechanics as gpAuthNative — see that function's comments for why each
+// piece (loopback redirect, code_verifier/challenge, optional client_secret retry) is there.
+async function lrAuthNative(cid){
+  const verifier=pkceVerifier(),challenge=await pkceChallenge(verifier);
+  const template=LR_IMS_AUTH+'?'+new URLSearchParams({
+    client_id:cid,redirect_uri:'http://127.0.0.1:{PORT}',response_type:'code',
+    scope:LR_SCOPES,state:'lrcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
+  const invoke=window.__TAURI__.core.invoke;
+  let result;
+  try{result=await invoke('adobe_oauth_loopback',{authUrlTemplate:template})}
+  catch(e){throw new Error('Lightroom sign-in failed: '+(e&&e.message||e))}
+  const params=new URLSearchParams(result.query);
+  if(params.get('error'))throw new Error('Lightroom sign-in failed: '+params.get('error'));
+  const code=params.get('code');
+  if(!code)throw new Error('Lightroom sign-in failed: no authorization code returned');
+  const redirect_uri=`http://127.0.0.1:${result.port}`;
+  const exchange=async(secret)=>{
+    const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri};
+    if(secret)body.client_secret=secret;
+    const r=await fetch(LR_IMS_TOKEN,{method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams(body).toString()});
+    return{ok:r.ok,json:await r.json().catch(()=>({})),status:r.status};
+  };
+  let secret='';try{secret=(localStorage.getItem('lrClientSecret')||'').trim()}catch(e){}
+  let res2=await exchange(secret);
+  const needsSecret=!res2.ok&&/client_secret/i.test(res2.json.error_description||res2.json.error||'')&&!secret;
+  if(needsSecret){
+    const picked=await askTextModal('Adobe client secret',
+      'Adobe also needs this API client\'s secret for the sign-in exchange (Developer Console → your project → Credentials → "Client secret"). It stays on this device.','');
+    secret=(picked||'').trim();
+    if(secret){try{localStorage.setItem('lrClientSecret',secret)}catch(e){}res2=await exchange(secret);}
+  }
+  const tokJson=res2.json;
+  if(!res2.ok||!tokJson.access_token)throw new Error('Lightroom token exchange failed: '+(tokJson.error_description||tokJson.error||res2.status));
+  const tok={at:tokJson.access_token,exp:Date.now()+(tokJson.expires_in||3600)*1000,cid};
+  try{sessionStorage.setItem('lrTok',JSON.stringify(tok))}catch(e){}
+  return tok;
+}
+async function lrAuth(){
+  const cached=lrTok();if(cached)return cached;
+  // The panel itself is only ever visible under body.deskx (native shell, or the ?deskx=1 test
+  // flag which CAN be set in a plain browser — see the flag's own comment) — guard here too so
+  // clicking Connect there fails with a clean message instead of a raw TypeError on the missing
+  // window.__TAURI__ bridge, same reasoning as gpAuth's window.__TAURI__ check.
+  if(!window.__TAURI__)throw new Error('Lightroom cloud browsing is desktop-app only');
+  const cid=await lrAskClientId();
+  if(!cid)throw new Error('No Adobe client ID set');
+  return lrAuthNative(cid);
+}
+// Lightroom's API prefixes every JSON response with `while (1) {}` (JSON-hijacking protection,
+// documented Adobe behavior) — must be stripped before parsing, or JSON.parse throws on every
+// single call.
+async function lrApiGet(path){
+  const tok=await lrAuth();
+  const r=await fetch(LR_API+path,{headers:{Authorization:'Bearer '+tok.at,'X-API-Key':tok.cid}});
+  const text=(await r.text()).replace(/^while\s*\(1\)\s*\{\s*\}\s*/,'');
+  let json;try{json=JSON.parse(text)}catch(e){throw new Error('Lightroom API returned unparsable data (status '+r.status+')')}
+  if(!r.ok)throw new Error('Lightroom API error: '+(json.message||r.status));
+  return json;
+}
+let lrCatalogId=null;
+async function lrConnectToggle(){
+  if(lrConnected()){
+    try{sessionStorage.removeItem('lrTok')}catch(e){}
+    lrCatalogId=null;
+    document.getElementById('lr-browse').style.display='none';
+    lrUpdateUI();toast('Lightroom disconnected',true);
+    return;
+  }
+  try{
+    await lrAuth();
+    const account=await lrApiGet('/account');
+    lrCatalogId=account.catalog&&account.catalog.id;
+    if(!lrCatalogId)throw new Error('No Lightroom catalog found on this account');
+    await lrPopulateAlbums();
+    document.getElementById('lr-browse').style.display='block';
+    lrUpdateUI();toast('Lightroom connected ✓',true);
+  }catch(e){
+    log('Lightroom connect failed: '+(e&&e.message||e),'err');
+    toast('Lightroom connect failed — see log');
+  }
+}
+async function lrPopulateAlbums(){
+  const sel=document.getElementById('sel-lr-album');if(!sel)return;
+  sel.innerHTML='';
+  const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums?subtype=collection`);
+  const albums=(data.resources||[]);
+  if(!albums.length){sel.innerHTML='<option value="">No albums found</option>';return;}
+  // Built via DOM (textContent), not innerHTML — album names come from the user's own Lightroom
+  // account via the API, but still untrusted external data, no reason to risk it.
+  albums.forEach(a=>{
+    const opt=document.createElement('option');
+    opt.value=a.id;
+    opt.textContent=(a.payload&&a.payload.name)||a.id;
+    sel.appendChild(opt);
+  });
+  lrOpenAlbum(albums[0].id);
+}
+async function lrOpenAlbum(albumId){
+  const grid=document.getElementById('lr-grid');if(!grid||!albumId)return;
+  grid.innerHTML='<div style="grid-column:1/-1;font-size:10px;color:var(--mut)">Loading…</div>';
+  try{
+    const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums/${albumId}/assets?limit=60&embed=asset`);
+    const assets=(data.resources||[]).map(r=>r.asset).filter(Boolean);
+    grid.innerHTML='';
+    assets.forEach(a=>{
+      const cell=document.createElement('div');
+      cell.style.cssText='aspect-ratio:1;border-radius:5px;overflow:hidden;cursor:pointer;background:var(--sur2);position:relative';
+      cell.title=(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id;
+      const img=document.createElement('img');
+      img.style.cssText='width:100%;height:100%;object-fit:cover;display:block';
+      cell.appendChild(img);
+      grid.appendChild(cell);
+      lrRenditionUrl(a.id,'thumbnail2x').then(u=>{if(u)img.src=u;}).catch(()=>{});
+      cell.onclick=()=>lrImportAsset(a.id,cell.title);
+    });
+    if(!assets.length)grid.innerHTML='<div style="grid-column:1/-1;font-size:10px;color:var(--mut)">No photos in this album</div>';
+  }catch(e){
+    grid.innerHTML='<div style="grid-column:1/-1;font-size:10px;color:var(--mut)">Failed to load album</div>';
+    log('Lightroom album load failed: '+(e&&e.message||e),'err');
+  }
+}
+async function lrRenditionUrl(assetId,type){
+  const tok=await lrAuth();
+  const r=await fetch(`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
+    {headers:{Authorization:'Bearer '+tok.at,'X-API-Key':tok.cid}});
+  if(!r.ok)return null;
+  const blob=await r.blob();
+  return URL.createObjectURL(blob);
+}
+async function lrImportAsset(assetId,name){
+  try{
+    toast('Downloading from Lightroom…');
+    const tok=await lrAuth();
+    const r=await fetch(`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/2560`,
+      {headers:{Authorization:'Bearer '+tok.at,'X-API-Key':tok.cid}});
+    if(!r.ok)throw new Error('rendition download failed: '+r.status);
+    const blob=await r.blob();
+    const file=new File([blob],(name||assetId)+'.jpg',{type:'image/jpeg'});
+    await loadFXImages([file]);
+    log(`Imported from Lightroom: ${name||assetId}`,'ok');
+  }catch(e){
+    log('Lightroom import failed: '+(e&&e.message||e),'err');
+    toast('Lightroom import failed — see log');
+  }
+}
+function lrUpdateUI(){
+  const c=document.getElementById('btn-lr-connect');
+  if(c){c.className='btn '+(lrConnected()?'bsec':'bgh');c.innerHTML='<span class="bdot"></span>'+(lrConnected()?'Connected ✓':'Connect');}
+}
+lrUpdateUI();
 
 // ═══════════════════════════
 // FILE HANDLING

@@ -581,6 +581,19 @@ struct OAuthResult {
 
 #[tauri::command]
 async fn google_oauth_loopback(auth_url_template: String) -> Result<OAuthResult, String> {
+    oauth_loopback_flow(auth_url_template).await
+}
+
+// Adobe Lightroom "Connect Lightroom" sign-in (see chromasmith-22.html's lrAuthNative) — same
+// RFC 8252 loopback-redirect/PKCE flow as Google above, just a differently-named command so the
+// two integrations don't read as confusingly cross-wired. Adobe IMS's loopback redirect_uri
+// format is identical (http://127.0.0.1:{PORT}), so the underlying flow needs no changes at all.
+#[tauri::command]
+async fn adobe_oauth_loopback(auth_url_template: String) -> Result<OAuthResult, String> {
+    oauth_loopback_flow(auth_url_template).await
+}
+
+async fn oauth_loopback_flow(auth_url_template: String) -> Result<OAuthResult, String> {
     use std::io::{Read, Write};
     use std::net::TcpListener;
 
@@ -662,6 +675,7 @@ fn main() {
             write_file_bytes,
             take_pending_open_path,
             google_oauth_loopback,
+            adobe_oauth_loopback,
             library::list_dir,
             library::get_thumbnail,
             library::get_preview,
