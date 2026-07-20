@@ -1425,7 +1425,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <br><br>Either way, paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (the app re-prompts automatically); on the browser build, allow pop-ups for this site.</div>
 
       <div class="faq-q">Can I edit a photo in Chromasmith from inside Lightroom?</div>
-      <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal, then click <b>Save to Lightroom</b> (replaces the regular Export button while a handoff photo is open) instead of Export — it writes straight back over the file Lightroom gave you, and Lightroom re-imports and syncs the result automatically.</div>
+      <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal — a new <b>Save to Lightroom</b> button appears next to the regular Export button while a handoff photo is open. Use it to write straight back over the file Lightroom gave you (Lightroom re-imports and syncs the result automatically); the normal Export button is still there too, unchanged, for a regular local export of the same photo.</div>
 
       <div class="faq-q">My RW2 / RAW colours don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
@@ -3198,7 +3198,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-20e';
+const BUILD='2026-07-20f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
