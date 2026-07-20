@@ -636,9 +636,16 @@ fn main() {
             library::get_meta,
             library::get_sidecar,
             library::set_sidecar,
+            library::get_export_history,
+            library::append_export_history,
             library::duplicate_file,
             library::trash_file,
+            library::reveal_in_finder,
             library::list_edited,
+            library::list_collection,
+            library::list_exported,
+            library::collection_counts,
+            library::touch_recent,
             library::backfill_edited_registry,
             library::get_decode_cache,
             library::save_decode_cache,
@@ -682,6 +689,14 @@ fn main() {
         })
         .setup(|app| {
             let handle = app.handle();
+
+            // Prune unbounded caches (thumbnails/decode JPEGs) in the background — see
+            // library::prune_caches for the caps. Never blocks startup.
+            // TEMP DISABLED: added today, only new code touching the thumbnail cache dir;
+            // suspected of racing get_thumbnail's own reads/writes to the same directory right
+            // at startup (the exact moment thumbnails were reported broken). Re-enable once
+            // thumbnail loading is confirmed fixed without it.
+            // std::thread::spawn(library::prune_caches);
 
             let open_item =
                 MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Some("CmdOrCtrl+O"))?;

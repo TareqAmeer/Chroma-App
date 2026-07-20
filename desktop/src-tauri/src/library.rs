@@ -3,12 +3,13 @@
 // RAWs on disk before editing. Native-only (arbitrary filesystem folder browsing isn't a thing
 // in a sandboxed browser), so this lives entirely in the desktop shell, not chromasmith-22.html.
 use rawler::decoders::RawDecodeParams;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const IMAGE_EXTS: &[&str] = &[
     "rw2", "raw", "dng", "cr2", "cr3", "nef", "arw", "orf", "jpg", "jpeg", "png", "tif", "tiff",
@@ -80,6 +81,20 @@ pub struct DirEntry {
     /// Set only by list_edited() below, for an entry whose file no longer exists on disk.
     #[serde(default)]
     pub missing: bool,
+    /// mtime of the .xmp sidecar (0 if none exists yet) — the "Date edited" list-view column.
+    /// Not the photo file's own mtime: a re-export doesn't touch the source file, only the
+    /// sidecar's recipe/rating/flags, so the sidecar's own mtime is the only honest "last
+    /// edited" signal.
+    pub edited_ts: u64,
+}
+
+fn edited_ts_of(photo_path: &str) -> u64 {
+    std::fs::metadata(sidecar_path(photo_path))
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// One level of a folder (not recursive — the frontend expands the tree lazily, same UX as
@@ -103,7 +118,9 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
                 let mt = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
                 (mt, m.len())
             }).unwrap_or((0, 0));
-            out.push(DirEntry { name, path: p.to_string_lossy().into_owned(), is_dir, is_image, kind, mtime, size, missing: false });
+            let path_s = p.to_string_lossy().into_owned();
+            let edited_ts = if is_image { edited_ts_of(&path_s) } else { 0 };
+            out.push(DirEntry { name, path: path_s, is_dir, is_image, kind, mtime, size, missing: false, edited_ts });
         }
     }
     out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
@@ -380,6 +397,7 @@ pub struct Sidecar {
     pub label: String,  // "" | "Red" | "Green" | "Star"
     pub edited: bool,
     pub recipe: String, // base64 FX-snapshot JSON, "" if none
+    pub favorite: bool,
 }
 
 /// Pull one XML attribute value out of the sidecar text (attribute or element form).
@@ -407,11 +425,13 @@ pub fn get_sidecar(path: String) -> Sidecar {
         label: xmp_get(&text, "xmp:Label").unwrap_or_default(),
         edited: xmp_get(&text, "chromasmith:Edited").as_deref() == Some("True"),
         recipe: xmp_get(&text, "chromasmith:Recipe").unwrap_or_default(),
+        favorite: xmp_get(&text, "chromasmith:Favorite").as_deref() == Some("True"),
     }
 }
 
 /// Writes the whole sidecar in one shot. `recipe: None` keeps the existing recipe (so a
 /// rating/label click never clobbers stored edits); `Some("")` explicitly clears it.
+/// `favorite: None` likewise keeps whatever favorite state was already saved.
 #[tauri::command]
 pub fn set_sidecar(
     path: String,
@@ -419,9 +439,11 @@ pub fn set_sidecar(
     label: String,
     edited: bool,
     recipe: Option<String>,
+    favorite: Option<bool>,
 ) -> Result<(), String> {
     let existing = get_sidecar(path.clone());
     let recipe = recipe.unwrap_or(existing.recipe);
+    let favorite = favorite.unwrap_or(existing.favorite);
     let rating = rating.clamp(-1, 5);
     let label = match label.as_str() {
         "Red" | "Green" | "Star" => label,
@@ -433,6 +455,9 @@ pub fn set_sidecar(
     }
     if edited {
         attrs.push_str(" chromasmith:Edited=\"True\"");
+    }
+    if favorite {
+        attrs.push_str(" chromasmith:Favorite=\"True\"");
     }
     if !recipe.is_empty() {
         // base64 payload — XML-attribute-safe by construction
@@ -447,61 +472,157 @@ pub fn set_sidecar(
 "#
     );
     std::fs::write(sidecar_path(&path), xmp).map_err(|e| format!("write sidecar: {e}"))?;
-    registry_set(&path, edited);
+    registry_set("edited", &path, edited);
+    registry_set("favorites", &path, favorite);
+    registry_set("flagged", &path, label == "Green");
+    registry_set("rejected", &path, label == "Red");
     Ok(())
 }
 
-// ── Cross-folder "All Edited" registry ────────────────────────────────────────────────────
-// A flat JSON list of every photo path that currently has edited:true, kept in the app cache
-// dir (NOT next to the photos — this is app-internal bookkeeping, not a portable sidecar).
-// Lets the library show every edited photo regardless of which folder it lives in, without
-// re-scanning the whole disk: updated incrementally every time set_sidecar changes the
-// edited flag (add on true, remove on false), and backfilled once at startup by scanning
-// recently-used folders for existing .xmp sidecars (see backfill_edited_registry below).
-fn registry_path() -> PathBuf {
-    cache_dir().join("edited_registry.json")
+// ── Cross-folder smart collections (Edited/Favorites/Flagged/Rejected) ───────────────────
+// One flat JSON list PER collection of every photo path currently in it, kept in the app
+// cache dir (NOT next to the photos — this is app-internal bookkeeping, not a portable
+// sidecar). Lets the library show a collection regardless of which folder a photo lives in,
+// without re-scanning the whole disk: updated incrementally every time set_sidecar changes
+// the relevant flag (add on true, remove on false), and backfilled once at startup by
+// scanning recently-used folders for existing .xmp sidecars (see backfill_edited_registry).
+// `name` is one of "edited"/"favorites"/"flagged"/"rejected" — a small fixed set, not
+// user-supplied, so no path-traversal concern in the cache filename.
+fn registry_path(name: &str) -> PathBuf {
+    cache_dir().join(format!("{name}_registry.json"))
 }
-fn registry_read() -> Vec<String> {
-    std::fs::read_to_string(registry_path())
+fn registry_read(name: &str) -> Vec<String> {
+    std::fs::read_to_string(registry_path(name))
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default()
 }
-fn registry_write(list: &[String]) {
+fn registry_write(name: &str, list: &[String]) {
     if let Ok(text) = serde_json::to_string(list) {
-        let _ = std::fs::write(registry_path(), text);
+        let _ = std::fs::write(registry_path(name), text);
     }
 }
-fn registry_set(path: &str, edited: bool) {
-    let mut list = registry_read();
+fn registry_set(name: &str, path: &str, present_target: bool) {
+    let mut list = registry_read(name);
     let present = list.iter().any(|p| p == path);
-    if edited && !present {
+    if present_target && !present {
         list.push(path.to_string());
-        registry_write(&list);
-    } else if !edited && present {
+        registry_write(name, &list);
+    } else if !present_target && present {
         list.retain(|p| p != path);
-        registry_write(&list);
+        registry_write(name, &list);
     }
 }
 
-/// Every photo ever marked edited, across all folders — stat'd fresh so renamed/deleted files
-/// are flagged `missing` instead of silently vanishing or erroring the whole list. Sorted
-/// newest-mtime-first; the frontend re-sorts/filters same as a normal folder view.
+// ── Export/version history ────────────────────────────────────────────────────────────────
+// Recipe-only, not pixel copies: each successful export appends {ts, version, recipe} for that
+// photo. `recipe` is the same base64 FX-snapshot JSON already used by the XMP sidecar/undo
+// history, so "restoring" a version just loads the recipe back into the live editor (no
+// re-render happens automatically) — cheap to store, unlike keeping full rendered images.
+// Kept in the app cache dir (like edited_registry.json above), NOT as a portable sidecar,
+// since it's bookkeeping about past exports rather than the photo's current edit state.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ExportHistoryEntry {
+    pub ts: u64,
+    pub version: String,
+    pub recipe: String,
+}
+fn export_history_store_path() -> PathBuf {
+    cache_dir().join("export_history.json")
+}
+fn export_history_read_all() -> HashMap<String, Vec<ExportHistoryEntry>> {
+    std::fs::read_to_string(export_history_store_path())
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+fn export_history_write_all(map: &HashMap<String, Vec<ExportHistoryEntry>>) {
+    if let Ok(text) = serde_json::to_string(map) {
+        let _ = std::fs::write(export_history_store_path(), text);
+    }
+}
+
 #[tauri::command]
-pub fn list_edited() -> Vec<DirEntry> {
-    let mut out: Vec<DirEntry> = registry_read()
+pub fn get_export_history(path: String) -> Vec<ExportHistoryEntry> {
+    export_history_read_all().remove(&path).unwrap_or_default()
+}
+
+/// Capped at 30 entries per photo (newest last) — plenty of undo depth without the store
+/// growing unbounded for a photo re-exported hundreds of times.
+#[tauri::command]
+pub fn append_export_history(path: String, version: String, recipe: String) -> Result<(), String> {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut all = export_history_read_all();
+    let list = all.entry(path).or_default();
+    list.push(ExportHistoryEntry { ts, version, recipe });
+    if list.len() > 30 {
+        let drop = list.len() - 30;
+        list.drain(0..drop);
+    }
+    export_history_write_all(&all);
+    Ok(())
+}
+
+/// Every photo path in a given cross-folder smart collection ("edited"/"favorites"/"flagged"/
+/// "rejected"/"recents") — stat'd fresh so renamed/deleted files are flagged `missing` instead
+/// of silently vanishing or erroring the whole list. Sorted newest-mtime-first; the frontend
+/// re-sorts/filters same as a normal folder view.
+#[tauri::command]
+pub fn list_collection(name: String) -> Vec<DirEntry> {
+    let mut out: Vec<DirEntry> = registry_read(&name)
         .into_iter()
         .map(|path| {
             let p = Path::new(&path);
-            let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
             let ext = ext_lower(p);
             let kind = kind_of(&ext);
+            let edited_ts = edited_ts_of(&path);
             match std::fs::metadata(&path) {
                 Ok(m) => {
                     let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-                    DirEntry { name, path, is_dir: false, is_image: true, kind, mtime, size: m.len(), missing: false }
+                    DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime, size: m.len(), missing: false, edited_ts }
                 }
-                Err(_) => DirEntry { name, path, is_dir: false, is_image: true, kind, mtime: 0, size: 0, missing: true },
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime: 0, size: 0, missing: true, edited_ts },
+            }
+        })
+        .collect();
+    if name == "recents" {
+        out.reverse(); // registry order is oldest-touched-first (touch_recent pushes to the end)
+    } else {
+        out.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    }
+    out
+}
+
+/// Kept for backward compat with the frontend's original "All Edited" call site — equivalent
+/// to `list_collection("edited")`.
+#[tauri::command]
+pub fn list_edited() -> Vec<DirEntry> {
+    list_collection("edited".to_string())
+}
+
+/// Photo paths that have at least one export-history entry (see append_export_history above) —
+/// the "Exported" smart collection. Reuses the same stat-fresh/missing-tolerant mapping as
+/// list_collection, just sourced from export_history.json's keys instead of a registry file.
+#[tauri::command]
+pub fn list_exported() -> Vec<DirEntry> {
+    let mut out: Vec<DirEntry> = export_history_read_all()
+        .into_keys()
+        .map(|path| {
+            let p = Path::new(&path);
+            let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let ext = ext_lower(p);
+            let kind = kind_of(&ext);
+            let edited_ts = edited_ts_of(&path);
+            match std::fs::metadata(&path) {
+                Ok(m) => {
+                    let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                    DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime, size: m.len(), missing: false, edited_ts }
+                }
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime: 0, size: 0, missing: true, edited_ts },
             }
         })
         .collect();
@@ -509,13 +630,46 @@ pub fn list_edited() -> Vec<DirEntry> {
     out
 }
 
-/// One-time backfill for photos edited before the registry existed: scan a set of known
-/// folders (recents + the given root) for `.xmp` sidecars with `chromasmith:Edited="True"`
-/// and register any not already tracked. Cheap (text scan, no image decode); called once by
+/// Counts for every smart collection's sidebar badge — cheap (list lengths from disk, no
+/// per-photo stat) so it can be refreshed after every sidecar write/export without cost.
+#[tauri::command]
+pub fn collection_counts() -> std::collections::HashMap<String, usize> {
+    let mut m = std::collections::HashMap::new();
+    m.insert("edited".to_string(), registry_read("edited").len());
+    m.insert("favorites".to_string(), registry_read("favorites").len());
+    m.insert("flagged".to_string(), registry_read("flagged").len());
+    m.insert("rejected".to_string(), registry_read("rejected").len());
+    m.insert("exported".to_string(), export_history_read_all().len());
+    m.insert("recents".to_string(), registry_read("recents").len());
+    m
+}
+
+/// Most-recently-opened photos, capped at 50 (oldest dropped first) — called once per photo
+/// open (see openInEditorInner in library-ui.js). A photo re-opened moves back to the front
+/// instead of appearing twice.
+#[tauri::command]
+pub fn touch_recent(path: String) {
+    let mut list = registry_read("recents");
+    list.retain(|p| p != &path);
+    list.push(path);
+    if list.len() > 50 {
+        let drop = list.len() - 50;
+        list.drain(0..drop);
+    }
+    registry_write("recents", &list);
+}
+
+/// One-time backfill for photos edited/favorited/flagged/rejected before their registries
+/// existed: scan a set of known folders (recents + the given root) for `.xmp` sidecars and
+/// register any not already tracked in the relevant collection(s) — a sidecar can match more
+/// than one (e.g. edited AND favorited). Cheap (text scan, no image decode); called once by
 /// the frontend on first Library open per session, not on every folder browse.
 #[tauri::command]
 pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
-    let mut list = registry_read();
+    let mut edited = registry_read("edited");
+    let mut favorites = registry_read("favorites");
+    let mut flagged = registry_read("flagged");
+    let mut rejected = registry_read("rejected");
     let mut added = 0usize;
     for folder in folders {
         let Ok(rd) = std::fs::read_dir(&folder) else { continue };
@@ -525,7 +679,12 @@ pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
                 continue;
             }
             let Ok(text) = std::fs::read_to_string(&p) else { continue };
-            if xmp_get(&text, "chromasmith:Edited").as_deref() != Some("True") {
+            let is_edited = xmp_get(&text, "chromasmith:Edited").as_deref() == Some("True");
+            let is_favorite = xmp_get(&text, "chromasmith:Favorite").as_deref() == Some("True");
+            let label = xmp_get(&text, "xmp:Label").unwrap_or_default();
+            let is_flagged = label == "Green";
+            let is_rejected = label == "Red";
+            if !(is_edited || is_favorite || is_flagged || is_rejected) {
                 continue;
             }
             let photo = p.with_extension(""); // best-effort; sidecar_path() is <photo>.xmp exactly
@@ -535,17 +694,22 @@ pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
                 let candidate = photo.with_extension(ext);
                 if candidate.exists() {
                     let s = candidate.to_string_lossy().into_owned();
-                    if !list.iter().any(|p2| p2 == &s) {
-                        list.push(s);
-                        added += 1;
-                    }
+                    let mut matched = false;
+                    if is_edited && !edited.iter().any(|p2| p2 == &s) { edited.push(s.clone()); matched = true; }
+                    if is_favorite && !favorites.iter().any(|p2| p2 == &s) { favorites.push(s.clone()); matched = true; }
+                    if is_flagged && !flagged.iter().any(|p2| p2 == &s) { flagged.push(s.clone()); matched = true; }
+                    if is_rejected && !rejected.iter().any(|p2| p2 == &s) { rejected.push(s); matched = true; }
+                    if matched { added += 1; }
                     break;
                 }
             }
         }
     }
     if added > 0 {
-        registry_write(&list);
+        registry_write("edited", &edited);
+        registry_write("favorites", &favorites);
+        registry_write("flagged", &flagged);
+        registry_write("rejected", &rejected);
     }
     added
 }
@@ -603,6 +767,48 @@ pub fn trash_file(path: String) -> Result<(), String> {
         let _ = move_or_copy(&sidecar, &trash_dir.join(sc_name));
     }
     Ok(())
+}
+
+/// Launch-time cache pruning — both cache dirs were unbounded (thumbnails ~50-150KB each,
+/// decode-cache JPEGs 5-15MB each; stale mtime/recipe keys accumulate forever since keys change
+/// whenever the source file or its RAW-stage settings do). Cap each dir and evict oldest-mtime
+/// first. Called once from main()'s setup on a background thread — never blocks startup.
+pub fn prune_caches() {
+    const THUMB_CAP: u64 = 500 * 1024 * 1024; // 500MB
+    const DECODE_CAP: u64 = 2 * 1024 * 1024 * 1024; // 2GB
+    for (dir, cap) in [(cache_dir(), THUMB_CAP), (decode_cache_dir(), DECODE_CAP)] {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = rd
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let m = e.metadata().ok()?;
+                if !m.is_file() { return None; }
+                Some((m.modified().ok()?, m.len(), e.path()))
+            })
+            .collect();
+        let total: u64 = files.iter().map(|f| f.1).sum();
+        if total <= cap { continue }
+        files.sort_by_key(|f| f.0); // oldest first
+        let mut freed = 0u64;
+        for (_, len, p) in files {
+            if total - freed <= cap { break }
+            if std::fs::remove_file(&p).is_ok() {
+                freed += len;
+            }
+        }
+        eprintln!("cache prune: freed {}MB from {}", freed / (1024 * 1024), dir.display());
+    }
+}
+
+/// Reveal a file in Finder (macOS `open -R`) — standard file-browser context-menu expectation.
+#[tauri::command]
+pub fn reveal_in_finder(path: String) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("open -R: {e}"))
 }
 
 fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {

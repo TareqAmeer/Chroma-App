@@ -34,6 +34,11 @@
 body.light{--glass-bg:#ffffff}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
+/* Mirrors of body.mobile-fx/body.mobile-cl, toggled onto <html> alongside <body> (see
+   applyFxLayout()) — html has no overflow-y constraint otherwise, so it remains a second,
+   unguarded scroll container even once body itself is capped. See body.mobile-fx/mobile-cl
+   below for why min-height:100vh on the base body{} rule (below) can't just be left alone. */
+html.mobile-fx,html.mobile-cl{overflow:hidden;height:var(--app-h,100svh)}
 canvas,img,video,select,input{max-width:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:14px;line-height:1.5}
 header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;
@@ -131,24 +136,40 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-toggle.on{background:var(--acc);box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
 .fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .18s cubic-bezier(.34,1.4,.64,1);box-shadow:0 1px 2px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.06)}
 .fx-toggle.on::after{left:16px}
+/* The 32x18 track is a precise mouse target but a cramped touch one — scale up to roughly
+   native iOS switch proportions on mobile rather than adding an invisible hit-area hack. */
+body.mobile-fx .fx-toggle{width:44px;height:24px;border-radius:12px}
+body.mobile-fx .fx-toggle::after{width:20px;height:20px;top:2px;left:2px}
+body.mobile-fx .fx-toggle.on::after{left:22px}
 .fx-fields{display:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
 /* Two-line slider layout: label + value share a top row, the track spans full width below —
    DOM order (label, slider, val) is unchanged, `order` just re-flows them visually so the
    existing contenteditable tap-to-type value div needs no markup changes. */
-.fx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px}
+.fx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;margin-bottom:7px;min-height:20px}
+.fx-row:last-child{margin-bottom:0}
 .fx-label{order:1;font-size:11px;color:var(--mut);flex-shrink:0}
 .fx-slider{order:3;flex:1 1 100%;width:100%;accent-color:var(--acc);cursor:pointer;margin-top:1px}
+/* Guards a vertical drag on the thumb from being captured by the bottom sheet's own vertical
+   scroll if a slider ever ends up inside that scrollable area — horizontal-only touch handling,
+   consistent with touch-action:none already used on the zoom/mask/curve drag surfaces. */
+body.mobile-fx .fx-slider{touch-action:pan-x}
 .fx-val{order:2;font-family:var(--mono);font-size:11px;color:var(--acc);text-align:right;flex-shrink:0}
 .fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
 .fx-val[contenteditable]:hover{background:var(--sur2)}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
+/* The tap-to-type numeric entry only hints itself via the :hover background above, which never
+   fires on a touchscreen — without this, mobile users have no way to discover it exists. */
+body.mobile-fx .fx-val[contenteditable]{border-bottom:1px dotted var(--mut)}
+body.mobile-fx .fx-val[contenteditable]:focus{border-bottom-style:solid}
 .fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
 /* Color Mixer band swatches: plain circle + colored underline, no bordered chip box */
 .btn-icon{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
   width:38px;height:38px;font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .btn-icon:hover{border-color:var(--mut)}
 .hsl-chip{display:flex;flex-direction:column;align-items:center;background:none;border:none;border-bottom:2px solid transparent;padding:5px 6px 6px;cursor:pointer}
+/* ~28-30px at the base padding — below the ~44px comfortable touch target. */
+body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center}
 #hsl-hist{flex:1}
 .hsl-hist-bar{flex:1;min-width:6px;border-radius:2px 2px 0 0;cursor:pointer;opacity:.45;transition:opacity .1s}
 .hsl-hist-bar:hover{opacity:.75}
@@ -172,7 +193,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:rgba(0,0,0,.5);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:11;font-family:var(--mono)}
 .fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px 7px;border-radius:4px;line-height:1}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
-.fx-zoom-ctrl button#btn-loupe.on{background:var(--acc);color:#000}
+.fx-zoom-ctrl button#btn-loupe.on,.fx-zoom-ctrl button#btn-fx-fullres.on{background:var(--acc);color:#000}
 .fx-zoom-ctrl #fx-zoom-pct{font-size:10px;color:var(--mut);min-width:36px;text-align:center;cursor:default}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px;position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:2}
 .ni-logo{font-family:var(--serif);font-size:26px;letter-spacing:.12em;color:var(--acc);font-style:italic;margin-bottom:2px}
@@ -204,11 +225,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 #fx-mask-overlay{position:absolute;display:none;touch-action:none;overflow:hidden}
 #fx-mask-overlay.on{display:block}
 .msk-dim{fill:#000;opacity:.6;pointer-events:none}
+.msk-scribble-dot{pointer-events:none}
 .msk-shape{fill:rgba(255,90,60,0);stroke:#fff;stroke-width:.003;vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-shape.filled{fill:rgba(255,90,60,.28)}
 .msk-feather{fill:none;stroke:#fff;stroke-width:.0015;stroke-dasharray:.01 .008;opacity:.65;vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-feather-mid{stroke-dasharray:none;opacity:.9}
+.msk-feather-50{fill:none;stroke:#fff;stroke-width:.001;stroke-dasharray:.004 .01;opacity:.32;vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-handle{fill:#fff;stroke:#222;stroke-width:.0015;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}
+.msk-handle.rot{fill:var(--acc,#e8a33d);cursor:alias}
 .msk-handle:active{cursor:grabbing}
 .msk-handle.center{fill:#ffb454}
 .msk-prevmode-seg button.on{background:var(--acc)!important;color:#000!important}
@@ -314,7 +338,14 @@ body.diag-on .fx-diag{display:block}
    largest viewport mid toolbar-transition, svh/vh disagree in standalone). 100svh is only
    the pre-JS first-paint fallback. The layout is a flex column whose ONLY flexible row is
    the photo, so with a correct total height the fixed rows can never be pushed off-screen. */
-body.mobile-fx{height:var(--app-h,100svh);display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
+/* min-height:0 is load-bearing: the base body{} rule (top of file) sets min-height:100vh
+   unconditionally, and min-height wins over a conflicting height when it computes larger.
+   100vh on iOS Safari is the LARGEST possible viewport (address bar hidden) — whenever the
+   address bar is visible, 100vh exceeds the real visible viewport, so without this override
+   body is always clamped back up to 100vh tall regardless of the correct --app-h height set
+   here, and the whole page scrolls/bounces instead of just the inner panels. This is why this
+   bug kept regressing: earlier fixes touched --app-h/height but never this competing rule. */
+body.mobile-fx{height:var(--app-h,100svh);min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
 body.mobile-fx header{display:none}
 body.mobile-fx .tabs{flex:0 0 auto}
 body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
@@ -349,6 +380,19 @@ body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;col
    padding floor until something forces a paint (e.g. a screenshot) — disable transitions
    or force a frame before measuring sheet geometry in automated checks. */
 body.mobile-fx.sheet-open .fx-panel{height:34vh;max-height:min(360px,calc(var(--app-h,100svh)*.45));overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 10px max(30px,calc(var(--sab) + 10px))}
+/* InShot-style: get the chrome out of the way while a tool is actually being edited — the top
+   action bar shrinks (still fully usable, just less visually prominent) once a sheet is open. */
+body.mobile-fx.sheet-open #fx-actionbar{padding:4px 6px 2px}
+body.mobile-fx.sheet-open .fx-act{padding:4px 10px;min-height:38px}
+body.mobile-fx.sheet-open .fx-act-ic{font-size:19px}
+/* Per-section reset control (injected once at boot, see the bottom of the script) — InShot
+   shows an explicit discard (✕) per tool sub-panel; sliders here apply live with no separate
+   confirm step by design, so this is the "discard just this section" half instead of a full
+   commit/cancel pair. Hidden outside the mobile sheet — desktop already has fxResetAll(). */
+.fx-ctrl-title-reset{display:none}
+body.mobile-fx.sheet-open .fx-ctrl-title-reset{display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:26px;border-radius:6px;background:none;border:none;color:var(--mut);cursor:pointer}
+body.mobile-fx.sheet-open .fx-ctrl-title-reset:active{background:var(--sur2);color:var(--txt)}
 #fx-sheet-handle{display:none}
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
@@ -425,6 +469,19 @@ body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:10px 4px;justify-content
 /* bottom padding = home-indicator safe area: without it the tool row's lower half sits
    under the iPhone home indicator (34px) — the "bottom bar not visible" report. */
 body.mobile-fx #fx-secnav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px 4px max(10px,var(--sab));border-top:1px solid var(--bdr);background:var(--sur)}
+#fx-fab-export{display:none}
+/* One-handed reach: #fx-actionbar (with Undo/Redo/Export/etc.) is top-anchored on mobile so its
+   height is reserved before the photo lays out (fxPreviewMaxH()) — export, the most-tapped and
+   most consequential action, otherwise needs a two-handed stretch on a large phone. This FAB
+   duplicates just Export in comfortable bottom-of-screen thumb range without touching that
+   top-bar layout math. */
+body.mobile-fx #fx-fab-export{display:flex;align-items:center;justify-content:center;
+  position:fixed;right:14px;bottom:calc(64px + max(10px,var(--sab)));z-index:30;
+  width:50px;height:50px;border-radius:50%;background:var(--acc);color:#000;border:none;
+  box-shadow:var(--lift-2);cursor:pointer}
+body.mobile-fx #fx-fab-export:disabled{opacity:.4;background:var(--sur2);color:var(--mut)}
+body.mobile-fx #fx-fab-export .fx-act-ic{font-size:22px}
+body.mobile-fx.sheet-open #fx-fab-export{display:none} /* the sheet already has its own controls in reach */
 .fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;color:var(--mut);cursor:pointer;padding:6px 12px;font-family:var(--mono);border-radius:8px;min-width:60px;min-height:44px}
 .fx-sec-btn .fx-sec-ic{font-size:24px;line-height:1}
 .fx-sec-btn .fx-sec-lb{font-size:9px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
@@ -446,6 +503,7 @@ body.deskx .fx-db-icon{padding:5px}
 .flag-btn svg{width:15px;height:15px}
 .flag-btn-green.on{color:#3fb556;background:rgba(63,181,86,.16);border-color:#3fb556}
 .flag-btn-red.on{color:#e05a4e;background:rgba(224,90,78,.16);border-color:#e05a4e}
+.flag-btn-fav.on{color:#e5484d;background:rgba(229,72,77,.16);border-color:#e5484d}
 .fx-db-icon{padding:8px 10px}
 .fx-db-icon .fx-db-ic{color:var(--txt)}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
@@ -594,7 +652,8 @@ body.light #status-cap{background:#000}
 .cl-swatches{display:flex;gap:4px;flex-wrap:wrap}
 .cl-swatches button{width:20px;height:20px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;padding:0}
 /* ── MOBILE COLLAGE: pinned stage on top + section strip (mirrors the FX editor) ── */
-body.mobile-cl{height:var(--app-h,100svh);display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
+/* min-height:0 override — see body.mobile-fx above for why this is required, not cosmetic. */
+body.mobile-cl{height:var(--app-h,100svh);min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
 body.mobile-cl header{display:none}
 body.mobile-cl .tabs{flex:0 0 auto}
 body.mobile-cl main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
@@ -743,6 +802,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
     <button class="fx-db fx-db-icon" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
     <button class="fx-db fx-db-icon" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
     <button class="fx-db fx-db-icon" onclick="fxResetAll()" title="Reset all edits"><span class="fx-db-ic" id="db-reset"></span></button>
+    <div style="position:relative;display:inline-flex" id="db-history-wrap">
+      <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleHistoryPopover()" title="Exported versions of this photo (Library-only)" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
+      <div id="fx-history-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:220px;max-height:280px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+    </div>
     <div style="flex:1"></div>
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
     <div style="flex:1"></div>
@@ -818,7 +881,6 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
           <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
-          <div class="fx-row"><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
           <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a colour-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance"><span class="bdot"></span>WB Eyedropper</button>
@@ -841,6 +903,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
+        <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-hldesat" title="Manual, off by default. Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes — this is a real limit of the current pipeline, not a slider you forgot to raise. Since real highlight colour is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real colour in bright areas too at high amounts. Per-photo only, so it never touches other images."><div class="fx-label">Highlight Desaturation</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
         <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()"><span class="bdot"></span>Reset noise reduction</button></div>
@@ -911,7 +974,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">
           <div class="fx-label">Auto (lens profile)</div><div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div>
         </div>
-        <div id="lens-auto-status" style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:-4px 0 6px"></div>
+        <div id="lens-auto-status" style="font-size:10px;color:var(--mut);font-family:var(--mono);line-height:1.5;margin:2px 0 8px"></div>
         <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
              EXIF at all, so auto-detection has nothing to recover — this lets you pick a lens
              directly from the bundled lensfun database instead. Desktop only; hidden elsewhere. -->
@@ -1072,7 +1135,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-ctrl-title">Export</div>
         <div class="vrow">
           <div class="vlb">Filename</div>
-          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px" title="Export filename. Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD; add {nover} to drop the _vN.N version suffix.">
           <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
@@ -1132,12 +1195,17 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="ni-add-lb">Add Photos</div>
           <div class="ni-hint">Drop an image to start · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
-        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas" onclick="wbEyedropperClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas></div>
+        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas" onclick="wbEyedropperClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+          <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
+               CSS transform as the canvas — glued to it by the compositor during zoom/pan with
+               no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
+               behind the transform (the "zooming moves the mask" bug). See mskOverlayBox(). -->
+          <svg id="fx-mask-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
+          <canvas id="msk-paint-overlay"></canvas>
+        </div>
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
         <canvas id="fx-hist"></canvas>
         <div id="fx-crop-overlay"></div>
-        <svg id="fx-mask-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
-        <canvas id="msk-paint-overlay"></canvas>
         <div id="msk-brush-cursor"></div>
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
           <button onclick="zoomBy(1/1.25)" title="Zoom out">−</button>
@@ -1146,8 +1214,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button onclick="zoomBy(1.25)" title="Zoom in">+</button>
           <button onclick="zoomFit()" title="Fit the whole image">Fit</button>
           <button id="btn-loupe" onclick="toggleLoupe()" title="True 1:1 view — renders a native-resolution crop through the full pipeline so grain &amp; halation appear at real export scale">1:1</button>
+          <button id="btn-fx-fullres" onclick="fxFullResPreviewToggle()" title="Render the whole preview at full source resolution instead of the usual capped size — costs more GPU time, drops to the capped size automatically while dragging a slider">Full res</button>
           <button id="btn-flag-red" class="flag-btn flag-btn-red" onclick="fxToggleFlag('Red')" title="Reject (Library)" style="margin-left:4px;display:none"></button>
           <button id="btn-flag-green" class="flag-btn flag-btn-green" onclick="fxToggleFlag('Green')" title="Green flag (Library)" style="display:none"></button>
+          <button id="btn-favorite" class="flag-btn flag-btn-fav" onclick="fxToggleFavorite()" title="Favorite (Library)" style="display:none"></button>
         </div>
         <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
           <button class="btn bgh fx-mini" id="btn-before" title="Press and hold to see the original">○ Compare</button>
@@ -1170,6 +1240,12 @@ setTimeout(()=>window.hideBootSplash(),6000);
       </div>
       <!-- HORIZONTAL SECTION STRIP (mobile) -->
       <div id="fx-secnav"></div>
+      <!-- One-handed-reach export: the primary #fx-actionbar (with the same Export button) is
+           top-anchored on mobile so its height can be reserved before the photo lays out — see
+           fxPreviewMaxH(). Reordering that bar risked breaking that calc, so this is a separate,
+           purely additive bottom-pinned duplicate for thumb reach, guarded on the same disabled
+           state as the real button rather than duplicating exportFX()'s own guards. -->
+      <button id="fx-fab-export" onclick="if(!this.disabled)exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span></button>
     </div>
   </div>
 </div>
@@ -3090,13 +3166,33 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-18b';
+const BUILD='2026-07-19b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
 // deskx (Darkroom-style desktop layout): normally applied by the Tauri shell
 // (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
 try{if(new URLSearchParams(location.search).has('deskx'))document.body.classList.add('deskx');}catch(e){}
+// Also give a plain (non-Tauri) wide browser window the same grouped-rail, photo-left layout
+// as the real desktop shell — previously only Tauri or the explicit ?deskx=1 escape hatch got
+// it, so a wide GitHub Pages window fell back to fx-deskb's un-grouped section list with
+// tools on the left instead. Every `deskx`-gated branch in this file (buildToolRail's
+// FX_GROUPS consolidation, fxSection, fxPreviewMaxH/renderPreview sizing) is pure layout
+// logic — none of it touches a Tauri-only API — so it's safe to widen the same class rather
+// than fork a separate one. Skipped entirely when the real Tauri shell is present (it owns
+// the class there, including on a narrower window where deskx should still apply).
+try{
+  if(!window.__TAURI__){
+    const _mqDeskx=window.matchMedia('(min-width:900px)');
+    const _applyDeskxWidth=()=>{
+      if(new URLSearchParams(location.search).has('deskx'))return; // explicit override always wins
+      document.body.classList.toggle('deskx',_mqDeskx.matches);
+      if(typeof applyFxLayout==='function')applyFxLayout();
+    };
+    _applyDeskxWidth();
+    _mqDeskx.addEventListener('change',_applyDeskxWidth);
+  }
+}catch(e){}
 // ── Google Photos OAuth callback (runs in the SIGN-IN POPUP, not the app) ─────
 // This page is cross-origin isolated (coi-serviceworker sets COOP same-origin for
 // SharedArrayBuffer), which DISOWNS every popup — window.opener/postMessage can never reach
@@ -3567,7 +3663,7 @@ uniform vec4 mskD[4];  // lumLo, lumHi (0..1 range gate), highlights, shadows (t
 uniform vec4 mskE[4];  // x: subtract-previous-mask flag (0/1) — simple "mask inside a mask"
                         // (this mask's shape minus the shape of the mask listed just before
                         // it), y: tint, z: hue(deg), w reserved
-uniform vec4 mskF[4];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z/w unused
+uniform vec4 mskF[4];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z: radial rotation (rad), w unused
 uniform vec2 uvOffL,uvScaleL;
 // Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
 // (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
@@ -3620,12 +3716,12 @@ vec3 hsl2rgb(vec3 hsl){
   else rgb=vec3(cc,0.0,x);
   return rgb+m;
 }
-vec3 tintToward(vec3 c,float hueDeg,float amt){
+vec3 tintToward(vec3 c,float hueDeg,float amt,float sat){
   float l=dot(c,vec3(.2126,.7152,.0722));
-  vec3 target=hsl2rgb(vec3(mod(hueDeg,360.0)/360.0,0.65,l));
+  vec3 target=hsl2rgb(vec3(mod(hueDeg,360.0)/360.0,clamp(sat,0.0,1.0),l));
   return mix(c,target,clamp(amt,0.0,1.0));
 }
-vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec2 CT){ // A: exp,con,temp,sat | TH: tint,hue(deg) | CT: colHue(deg),colAmt — weighted by w
+vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec4 CT){ // A: exp,con,temp,sat | TH: tint,hue(deg) | CT: colHue(deg),colAmt,rot(unused here),colSat — weighted by w
   vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
   lin*=exp2(A.x*w);                                        // exposure (stops), linear light
   lin.r*=1.0+0.22*A.z*w;lin.b*=1.0-0.22*A.z*w;             // temp (matches basicAdjust scaling)
@@ -3635,7 +3731,7 @@ vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec2 CT){ // A: exp,con,temp,sat |
   float l=dot(c,vec3(.2126,.7152,.0722));
   c=clamp(mix(vec3(l),c,1.0+A.w*w),0.0,1.0);               // saturation
   if(TH.y!=0.0)c=mix(c,hueRotate(c,TH.y),w);
-  if(CT.y>0.0)c=tintToward(c,CT.x,CT.y*w);
+  if(CT.y>0.0)c=tintToward(c,CT.x,CT.y*w,CT.w);
   return c;
 }
 vec3 basicAdjust(vec3 c){
@@ -3682,7 +3778,9 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
   vec4 A=mskA[i],B=mskB[i];
   float w;
   if(B.w>0.5){w=texture(maskTex,gm)[i];}      // painted/sky raster mask, packed channel i
-  else if(B.x<0.5){vec2 dd=(gm-A.xy)/max(A.zw,vec2(1e-4));float t=length(dd);
+  else if(B.x<0.5){vec2 d0=gm-A.xy;float rot=mskF[i].z;float cr=cos(rot),sr=sin(rot);
+    vec2 d1=vec2(d0.x*cr+d0.y*sr,-d0.x*sr+d0.y*cr); // rotate into the ellipse's own (unrotated) axes
+    vec2 dd=d1/max(A.zw,vec2(1e-4));float t=length(dd);
     float f=clamp(B.y,0.02,1.0);w=1.0-smoothstep(max(1.0-2.0*f,0.0),1.0,t);}
   else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
   if(B.z>0.5)w=1.0-w;
@@ -3715,7 +3813,7 @@ if(mskN>0.5){
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
     if(w>0.001){
-      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i].xy);
+      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
         float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
@@ -4317,7 +4415,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
       mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
       mE[o]=m.subtract?1:0;mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
-      mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;});
+      mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;});
     if(MK.some(m=>m.type==='brush'))mskBuildTex();
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
@@ -4536,16 +4634,21 @@ const FX=new FXR();
 // FX UI
 // ═══════════════════════════
 const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
-let fxImg=null,fxTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
+let fxImg=null,fxTimer=null,_fxHistPushTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
 let _fxPristineDefault=null; // captured once at boot, before loadSession() — see loadFXImages
 // Deskbar center title (deskx desktop shell): filename + status suffix. status is either the
 // image dimensions ("6000 × 4000") or, while a decode is in flight, an animated spinner
 // (spinning=true, statusText ignored). Also exposed on window for library-ui.js.
 // File-extension → short format label for the deskbar status (e.g. "RW2", "HEIC", "JPG").
 function fxFormatLabel(name){const m=/\.([a-z0-9]+)$/i.exec(name||'');return m?m[1].toUpperCase():''}
-function fxDimsFmt(name,img){
+function fxDimsFmt(name,img,ext){
   const dims=img?`${img.width} × ${img.height}`:'';
-  const fmt=fxFormatLabel(name);
+  // `name` has its extension stripped by the time entries are built (installFXImages/
+  // fxSelectImage), so deriving the format from it here always came back empty — the
+  // format only ever appeared during the pre-load spinner title (which shows the raw
+  // filename). Prefer the item's own `ext` field, falling back to name-sniffing for any
+  // caller that doesn't have one.
+  const fmt=ext?ext.toUpperCase():fxFormatLabel(name);
   return dims&&fmt?`${dims} · ${fmt}`:(dims||fmt);
 }
 function fxDeskbarTitle(name,statusText,spinning){
@@ -4555,6 +4658,7 @@ function fxDeskbarTitle(name,statusText,spinning){
   s.classList.toggle('spin',!!spinning);
   s.textContent=spinning?'':(statusText||'');
   fxUpdateFlagBtns();
+  fxUpdateHistoryBtn();
 }
 window.fxDeskbarTitle=fxDeskbarTitle;
 // Library red/green flag toggle for the currently-open photo — Tauri/Library-only (no-op,
@@ -4567,14 +4671,70 @@ async function fxToggleFlag(label){
 }
 function fxUpdateFlagBtns(){
   const has=typeof window.chromasmithOpenedFlag==='function';
-  const r=document.getElementById('btn-flag-red'),g=document.getElementById('btn-flag-green');
-  if(!r||!g)return;
-  r.style.display=g.style.display=has?'':'none';
-  if(!has)return;
-  const label=window.chromasmithOpenedFlag();
-  r.classList.toggle('on',label==='Red');
-  g.classList.toggle('on',label==='Green');
+  const r=document.getElementById('btn-flag-red'),g=document.getElementById('btn-flag-green'),f=document.getElementById('btn-favorite');
+  if(r&&g){
+    r.style.display=g.style.display=has?'':'none';
+    if(has){
+      const label=window.chromasmithOpenedFlag();
+      r.classList.toggle('on',label==='Red');
+      g.classList.toggle('on',label==='Green');
+    }
+  }
+  if(f){
+    const hasFav=typeof window.chromasmithOpenedFavorite==='function';
+    f.style.display=hasFav?'':'none';
+    if(hasFav)f.classList.toggle('on',window.chromasmithOpenedFavorite());
+  }
 }
+// Library favorite (heart) toggle for the currently-open photo — same Tauri/Library-only
+// gating as fxToggleFlag above.
+async function fxToggleFavorite(){
+  if(typeof window.chromasmithToggleFavorite!=='function')return;
+  if(typeof hapt==='function')hapt();
+  await window.chromasmithToggleFavorite();
+  fxUpdateFlagBtns();
+}
+// ── Export/version history (Library-only, recipe-based — see library.rs's
+// get_export_history/append_export_history). Separate from the in-session fxHistory undo
+// stack: this only grows on a successful EXPORT and survives across relaunches, so you can
+// come back later and reload the recipe that produced a specific past export. Restoring a
+// version loads the recipe into the live editor only — it does NOT re-export automatically.
+function fxUpdateHistoryBtn(){
+  const b=document.getElementById('btn-export-history');
+  if(!b)return;
+  b.style.display=(typeof window.chromasmithGetExportHistory==='function')?'':'none';
+}
+async function fxToggleHistoryPopover(){
+  const pop=document.getElementById('fx-history-popover');
+  if(!pop)return;
+  if(pop.style.display!=='none'){pop.style.display='none';return;}
+  if(typeof window.chromasmithGetExportHistory!=='function')return;
+  const list=await window.chromasmithGetExportHistory();
+  pop.innerHTML='';
+  if(!list||!list.length){
+    pop.innerHTML='<div style="padding:8px;font-size:11px;color:var(--mut)">No exports yet</div>';
+  }else{
+    [...list].reverse().forEach(entry=>{
+      const row=document.createElement('div');
+      row.style.cssText='padding:7px 9px;font-size:11px;font-family:var(--mono);cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:10px';
+      row.onmouseenter=()=>row.style.background='var(--sur3,rgba(255,255,255,.08))';
+      row.onmouseleave=()=>row.style.background='';
+      const d=new Date(entry.ts*1000);
+      row.innerHTML=`<span>v${entry.version}</span><span style="color:var(--mut)">${d.toLocaleDateString()} ${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
+      row.onclick=()=>{
+        try{const snap=JSON.parse(decodeURIComponent(escape(atob(entry.recipe))));applyUISnapshot(snap);fxUpdate();log(`Restored v${entry.version} recipe`,'info');}
+        catch(e){log('Failed to restore that version: '+(e&&e.message||e),'err');}
+        pop.style.display='none';
+      };
+      pop.appendChild(row);
+    });
+  }
+  pop.style.display='block';
+}
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('db-history-wrap');
+  if(wrap&&!wrap.contains(e.target)){const pop=document.getElementById('fx-history-popover');if(pop)pop.style.display='none';}
+});
 // ── Auto lens-profile correction (desktop only) — see desktop/src-tauri/src/lens_correct.rs.
 // The actual correction runs server-side in Rust during RAW decode (a geometric per-pixel
 // remap, not a shader term), so toggling it can't take effect live like the manual sliders —
@@ -4764,6 +4924,38 @@ let fxSplit=false, fxSplitPos=0.5;       // split before/after view
 let fxHistOn=false;                        // live histogram toggle
 let fxZoom=1, fxPanX=0, fxPanY=0;        // CSS-zoom/pan state (upscales the preview buffer)
 let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // true 1:1 native-res loupe
+// Full-res preview: unlike the 1:1 loupe (a fixed cropped zoom for pixel-peeping), this swaps
+// the MAIN preview's backing store to the full source resolution so the whole composed image
+// can actually be seen/judged at full detail, not just a ~1800px-capped downsample. Costly per
+// frame (scales ~dpr²), so it's opt-in and drops back to the normal capped preview while a
+// slider/pan/zoom drag is actively in progress (see _fxPreviewInteracting below), snapping back
+// to full res once the interaction ends — same idiom Lightroom/Capture One use for their
+// full-quality preview toggle.
+let fxFullResPreview=false; try{fxFullResPreview=localStorage.getItem('chromasmith_fullres_preview')==='1';}catch(e){}
+let _fxPreviewInteracting=false;
+function fxFullResPreviewToggle(){
+  fxFullResPreview=!fxFullResPreview;
+  try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
+  const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
+  // At Fit (fxZoom<=1) a full-res backing store is CSS-downscaled right back to the same
+  // on-screen pixels — indistinguishable from the capped path, so the toggle looked like a
+  // no-op. It only has a visible effect once zoomed in past 100%; say so instead of silently
+  // doing nothing at the default zoom level.
+  if(fxFullResPreview&&fxZoom<=1&&typeof toast==='function')toast('Full res on — zoom in to see native detail');
+  renderPreview();
+}
+// Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no
+// backing-store change), so crossing the fxZoom>1 threshold needs an explicit re-render to
+// actually swap backing-store resolution — but not on every wheel/pinch tick (60+/s mid-gesture).
+let _fxZoomRenderTimer=null;
+function _fxZoomRenderDebounced(){
+  if(!fxFullResPreview)return;
+  clearTimeout(_fxZoomRenderTimer);
+  _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)renderPreview();},180);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
+});
 let fxExportCancel=false;                // set by the Cancel button to abort a batch export
 let fxHistory=[], fxHistIdx=-1, _fxHistLocked=false; // undo/redo
 let cropMode=false,cropN=null,cropAR=0,cropBase=null,_cropDrag=null; // interactive crop state
@@ -5423,6 +5615,10 @@ async function loadRw2(file){
       if(refined.rgba){rgba2=refined.data;}
       else{const rgb2=refined.data,ch2=refined.colors||3;rgba2=new Uint8ClampedArray(refined.width*refined.height*4);
         for(let i=0,j=0;i<refined.width*refined.height;i++){const s=i*ch2;rgba2[j++]=rgb2[s]>>8;rgba2[j++]=ch2>1?rgb2[s+1]>>8:rgb2[s]>>8;rgba2[j++]=ch2>2?rgb2[s+2]>>8:rgb2[s]>>8;rgba2[j++]=255;}}
+      // Defensive resize (fast and refined decodes are the same resolution today — see
+      // raw_decode.rs's decode_rw2_bytes — but putImageData does NOT resize its target canvas,
+      // so if that ever changes again this stays correct instead of silently clipping).
+      if(c.width!==refined.width||c.height!==refined.height){c.width=refined.width;c.height=refined.height;}
       c.getContext('2d').putImageData(new ImageData(rgba2,refined.width,refined.height),0,0);
       if(typeof updateWork==='function')updateWork();
       if(typeof renderPreview==='function')renderPreview();
@@ -5443,7 +5639,7 @@ function installFXImages(entries,loadKey){
   // A new photo invalidates any cached AI-select embedding (it belongs to the OUTGOING image) —
   // the next tap/AI-mask-add re-encodes lazily rather than eagerly here, so opening a photo you
   // never use AI Select on never pays the encode cost.
-  _samToken=null;mskAiTapMode=false;
+  samInvalidate();mskAiTapMode=false;
   fxImages=entries;
   if(cropMode)cropExit();
   fxImages.forEach(it=>it.geom=defGeom());
@@ -5453,7 +5649,7 @@ function installFXImages(entries,loadKey){
   const n=fxImages.length;
   setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
   document.getElementById('fx-fname').value=fxImages[0].name;
-  fxDeskbarTitle(fxImages[0].name,fxDimsFmt(fxImages[0].name,fxImages[0].img));
+  fxDeskbarTitle(fxImages[0].name,fxDimsFmt(fxImages[0].name,fxImages[0].img,fxImages[0].ext));
   // Version restarts only for a GENUINELY new photo/batch — not on every reopen. The docked
   // Library panel (unlike the old full-page overlay) stays visible next to the editor, so
   // clicking the same photo again (to compare after an export, or just re-selecting it) is now
@@ -5493,7 +5689,7 @@ function installFXImages(entries,loadKey){
   // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
-  _resetZoom(); fxHistory=[getUISnapshot()]; fxHistIdx=0;
+  _resetZoom(); fxHistory=[JSON.stringify(getUISnapshot())]; fxHistIdx=0; // history stores JSON strings — see fxHistoryPush
   // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
   // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
   // CURRENTLY SELECTED photo's own masks array, swapped by fxSelectImage on every filmstrip
@@ -5508,6 +5704,7 @@ function installFXImages(entries,loadKey){
   for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
   if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
   autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
+  if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
   renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
   if(typeof nrSyncGate==='function')nrSyncGate(); // this photo's own NR sliders just landed in the DOM — refresh the Detail/HL-Desat dim state for them
   showExif(fxImages[0].exif||{});
@@ -5599,17 +5796,27 @@ function fxUpdate(){
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
   if(typeof nrSyncGate==='function')nrSyncGate();
-  fxHistoryPush();
+  // History push is debounced here (unlike the curve editor/brush, which push explicitly on
+  // pointerup) because every one of the ~35 sliders above calls fxUpdate() on `oninput` —
+  // dozens of times per second while dragging. fxHistoryPush() stringifies the whole UI
+  // snapshot, including any brush mask's full mtW*mtH pixel array, so doing that per-tick
+  // was the single biggest cause of slider lag on photos with a brush mask. Same 400ms
+  // cadence as the render debounce below — fires once, ~400ms after the user stops moving
+  // the slider, not on every tick.
+  clearTimeout(_fxHistPushTimer);_fxHistPushTimer=setTimeout(fxHistoryPush,400);
   clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
 }
 function resetAdjust(){
-  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin']
+  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin']
     .forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
   fxUpdate();log('Adjustments reset','info');
 }
 function resetNR(){
   ['nr-lum','nr-col','nr-hldesat'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
   {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
+  // Sharpen lives in this panel now; RAW photos default to 40 (matches applyRawDefaults), others to 0.
+  {const s=document.getElementById('sl-adj-sharp'),vs=document.getElementById('vl-adj-sharp');
+   if(s){const it=curItem();const isRaw=it&&RAW_FILE_EXT_RE.test('.'+(it.ext||''));s.value=isRaw?40:0;if(vs)vs.textContent=s.value;}}
   fxUpdate();nrSyncGate();log('Noise reduction reset','info');
 }
 // Detail/Highlight-Desat only have an effect while Luminance or Color is >0 (the shader NR pass
@@ -5886,6 +6093,17 @@ document.addEventListener('dblclick',e=>{
   const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
   s.value=s.defaultValue;s.dispatchEvent(new Event('input',{bubbles:true}));hapt();toast('Reset');
 });
+// Tracks "a slider is actively being dragged" so the full-res preview toggle can temporarily
+// fall back to the cheap capped backing store during the drag (see fxFullResPreview/renderPreview).
+document.addEventListener('pointerdown',e=>{
+  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
+  _fxPreviewInteracting=true;
+});
+document.addEventListener('pointerup',e=>{
+  if(!_fxPreviewInteracting)return;
+  _fxPreviewInteracting=false;
+  if(fxFullResPreview)renderPreview();
+});
 // De-webification bits that need JS: lock page zoom on touch/native (the app pinch-zooms the
 // PHOTO, the page itself must not zoom), and kill the long-press context menu on the preview.
 (function(){
@@ -6024,15 +6242,22 @@ let mskSel=-1;
 function mskAdd(type){
   if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
   let m;
-  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
-  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};}
-  else if(type==='sky'){ // sky: a brush-type raster mask auto-seeded from a colour/position heuristic
-    m={type:'brush',origin:'sky',invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
-    mskGenerateSky(m);
+  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
+  else if(type==='sky'){ // sky: brush-type raster mask, seeded from a colour/position heuristic,
+    // then handed to SAM (same segmentation the AI Select tool uses) for a real object-aware
+    // boundary — the heuristic alone (row-weight + blueness) is unreliable on anything but a
+    // clean flat horizon (buildings/trees breaking the skyline, overcast, sky mid-frame, etc).
+    m={type:'brush',origin:'sky',aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+    mskGenerateSky(m); // instant heuristic raster — shown immediately, and doubles as the SAM seed source
+    if(window.__TAURI__){
+      m.aiPoints=_skySeedPoints(m);
+      if(m.aiPoints.length){samEnsureEncoded();samRunPoints(m);} // replaces m.px with the SAM result on success; on failure samRunPoints toasts and leaves the heuristic raster in place
+    }
   }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
     const{w,h}=mskTexDims();
-    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0};
+    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
@@ -6052,6 +6277,14 @@ function mskAdd(type){
 // to REPLACE the mask's raster — normal Alt/Option-drag scribbles are negative (exclude) points,
 // same convention the old tap mode used for Alt-click.
 let _samToken=null,_samEncoding=false,mskAiTapMode=false,_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
+// Invalidates BOTH cached SAM embeddings — must be called on every photo change (new load AND
+// filmstrip/arrow-key switching within a batch), not just _samToken alone. Missing sam2Token
+// here was the "AI Select masks a different photo" bug: samRunPoints prefers sam2Token whenever
+// it exists, so once photo A's background sam2 encode landed, EVERY later photo's scribbles
+// queried photo A's embedding until app restart — sam_points' token check can't catch this
+// because the frontend faithfully resubmits its own (stale) token, which still matches the
+// stale cached embedding on the Rust side.
+function samInvalidate(){_samToken=null;_sam2Token=null;}
 function _samFramedInvoke(cmd,jsonObj,payload){
   const json=new TextEncoder().encode(JSON.stringify(jsonObj));
   const framed=new Uint8Array(4+json.length+payload.length);
@@ -6085,8 +6318,11 @@ async function samEnsureEncoded(){
     for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
     const token='sam-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
-    _samToken=token;
-    samEnsureEncoded2(rgb,w,h); // fire-and-forget — NOT awaited, see doc comment above
+    // The user may have switched photos while this awaited (a filmstrip click, an arrow key) —
+    // re-check identity before caching the token, or a slow encode of the OUTGOING photo would
+    // land after the switch and get used for the new one.
+    const stillCurrent=((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg)===img;
+    if(stillCurrent){_samToken=token;samEnsureEncoded2(img,rgb,w,h);} // fire-and-forget — NOT awaited, see doc comment above
   }catch(e){
     const msg='AI Select: could not prepare this photo — '+(e&&e.message||e);
     log(msg,'err');_samLastError=msg;
@@ -6094,13 +6330,17 @@ async function samEnsureEncoded(){
     if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild();
   }finally{_samEncoding=false;}
 }
-async function samEnsureEncoded2(rgb,w,h){
+async function samEnsureEncoded2(img,rgb,w,h){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
   _sam2Encoding=true;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild(); // show the spinner
   try{
     const token='sam2-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     await _samFramedInvoke('sam2_encode',{token,width:w,height:h},rgb);
+    // Same stale-completion guard as samEnsureEncoded — this encode can take a while, plenty of
+    // time for the user to have moved on to a different photo before it lands.
+    const stillCurrent=((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg)===img;
+    if(!stillCurrent)return;
     _sam2Token=token;
     // Silently upgrade the current mask in place if it already has a scribble — matches the RAW
     // refine's "gets better without asking" UX rather than requiring a fresh stroke.
@@ -6136,6 +6376,68 @@ function samSubsamplePoints(points){
   };
   return pick(pos).concat(pick(neg));
 }
+// Edge-aware refinement (guided filter, He et al.) — snaps SAM's feathered-but-still-generic
+// mask boundary onto the PHOTO's actual edges. O(N) via cumulative-sum box filters, ~30-60ms
+// at 1MP. `guide` and `input` are same-size Float32Arrays in [0,1]; returns a new Float32Array.
+function _boxFilterMean(src,w,h,r){
+  const cs=new Float64Array((w+1)*(h+1));
+  for(let y=0;y<h;y++){
+    let rowSum=0;
+    for(let x=0;x<w;x++){rowSum+=src[y*w+x];cs[(y+1)*(w+1)+(x+1)]=cs[y*(w+1)+(x+1)]+rowSum;}
+  }
+  const out=new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    const y0=Math.max(0,y-r),y1=Math.min(h-1,y+r);
+    for(let x=0;x<w;x++){
+      const x0=Math.max(0,x-r),x1=Math.min(w-1,x+r);
+      const area=(x1-x0+1)*(y1-y0+1);
+      out[y*w+x]=(cs[(y1+1)*(w+1)+(x1+1)]-cs[y0*(w+1)+(x1+1)]-cs[(y1+1)*(w+1)+x0]+cs[y0*(w+1)+x0])/area;
+    }
+  }
+  return out;
+}
+function _guidedFilter(guide,input,w,h,r,eps){
+  const meanI=_boxFilterMean(guide,w,h,r),meanP=_boxFilterMean(input,w,h,r);
+  const n=w*h,II=new Float32Array(n),IP=new Float32Array(n);
+  for(let i=0;i<n;i++){II[i]=guide[i]*guide[i];IP[i]=guide[i]*input[i];}
+  const meanII=_boxFilterMean(II,w,h,r),meanIP=_boxFilterMean(IP,w,h,r);
+  const a=new Float32Array(n),b=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const varI=meanII[i]-meanI[i]*meanI[i],covIp=meanIP[i]-meanI[i]*meanP[i];
+    a[i]=covIp/(varI+eps);b[i]=meanP[i]-a[i]*meanI[i];
+  }
+  const meanA=_boxFilterMean(a,w,h,r),meanB=_boxFilterMean(b,w,h,r);
+  const out=new Float32Array(n);
+  for(let i=0;i<n;i++)out[i]=meanA[i]*guide[i]+meanB[i];
+  return out;
+}
+// Redraws the CURRENT photo (same source samEnsureEncoded uses) at w×h and returns its
+// grayscale luminance as a [0,1] Float32Array — the guide image for _guidedFilter.
+function _samGuideGray(w,h){
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img)return null;
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h).data;
+  const g=new Float32Array(w*h);
+  for(let i=0,j=0;i<w*h;i++,j+=4)g[i]=(0.2126*d[j]+0.7152*d[j+1]+0.0722*d[j+2])/255;
+  return g;
+}
+// Refines a raw SAM mask (Uint8Array 0-255) in place against the photo's own edges. Cheap
+// enough to run on every scribble release; falls back to the raw mask on any failure (e.g. a
+// mismatched guide size) rather than blocking the result.
+function _samRefineMask(mask,w,h){
+  try{
+    const guide=_samGuideGray(w,h);
+    if(!guide||guide.length!==mask.length)return mask;
+    const input=new Float32Array(mask.length);
+    for(let i=0;i<mask.length;i++)input[i]=mask[i]/255;
+    const refined=_guidedFilter(guide,input,w,h,8,1e-3);
+    const out=new Uint8ClampedArray(mask.length);
+    for(let i=0;i<mask.length;i++)out[i]=refined[i]*255;
+    return out;
+  }catch(e){log('AI Select: guided-filter refine skipped — '+(e&&e.message||e),'warn');return mask;}
+}
 async function samRunPoints(m){
   if(!window.__TAURI__)return;
   await samEnsureEncoded();
@@ -6157,7 +6459,8 @@ async function samRunPoints(m){
       const msg='AI Select: mask size mismatch — try scribbling again';
       log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();return;
     }
-    m.px=Array.from(mask);m.mtW=header.width;m.mtH=header.height;
+    const refined=_samRefineMask(mask,header.width,header.height);
+    m.px=Array.from(refined);m.mtW=header.width;m.mtH=header.height;
     _mskTexDirty=true;_samLastError=null;
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
@@ -6200,7 +6503,7 @@ let _mskTexDirty=true;
 function mskTexDims(){
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
-  const MAXD=512,s=Math.min(1,MAXD/Math.max(iw,ih));
+  const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih)); // matches EdgeSAM/SAM2's own internal working resolution
   return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
 }
 function mskEnsureDims(m){
@@ -6247,6 +6550,28 @@ function mskGenerateSky(m){
     }
   }
   m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;
+}
+// Turns the heuristic's per-pixel score raster (m.px, already 0-255) into a handful of
+// positive/negative point prompts for SAM: a coarse grid over the top portion of the frame
+// (where sky realistically lives) picks each cell's best-scoring pixel as a positive point if
+// it clears a confidence floor, plus a couple of negative points from the strongest LOW-score
+// pixels near the bottom of the frame so SAM has an explicit "not this" signal too.
+function _skySeedPoints(m){
+  const w=m.mtW,h=m.mtH,px=m.px;if(!w||!h||!px||!px.length)return[];
+  const pts=[];
+  const COLS=4,ROWS=3,POS_THRESH=110;
+  for(let ry=0;ry<ROWS;ry++)for(let rx=0;rx<COLS;rx++){
+    const x0=Math.floor(rx*w/COLS),x1=Math.floor((rx+1)*w/COLS);
+    const y0=Math.floor(ry*h/ROWS),y1=Math.floor((ry+1)*h/ROWS);
+    let best=-1,bx=0,by=0;
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const v=px[y*w+x];if(v>best){best=v;bx=x;by=y;}}
+    if(best>=POS_THRESH)pts.push({nx:(bx+0.5)/w,ny:(by+0.5)/h,positive:true});
+  }
+  // negative seeds: lowest-scoring pixels in the bottom third (ground/foreground, never sky)
+  const by0=Math.floor(h*2/3);let worst=256,wx=0,wy=by0;
+  for(let y=by0;y<h;y++)for(let x=0;x<w;x++){const v=px[y*w+x];if(v<worst){worst=v;wx=x;wy=y;}}
+  if(worst<40)pts.push({nx:(wx+0.5)/w,ny:(wy+0.5)/h,positive:false});
+  return pts;
 }
 // ── Brush painting: pointer-drag stamps a soft circular falloff into the selected brush
 // mask's pixel array. Coordinates are mapped CSS→canvas→normalized image fraction the same
@@ -6337,18 +6662,33 @@ function mskPaintAt(m,nx,ny){
   // selection. SAM only runs once, on stroke release (not per pointermove) — dragging stays
   // smooth even though each query is a real native round-trip.
   const AI_MIN_SPACING=0.012; // normalized-image-fraction min distance between sampled points
-  let _aiStroke=null,_aiStrokeLast=null,_aiStrokeAdded=false;
+  let _aiStroke=null,_aiStrokeLast=null,_aiStrokeAdded=false,_aiStrokeStartLen=0;
+  // Live scribble feedback: the actual mask (m.px) only updates after a real async SAM round
+  // trip on stroke release, so without this the user drags blind and sees nothing until it
+  // resolves. This draws the raw traced points immediately into #fx-mask-overlay (same
+  // normalized 0..1 SVG used for radial/linear handles — viewBox="0 0 1 1", no pixel math
+  // needed) as small dots — cleared automatically once mskRebuild()/mskOverlaySync() runs
+  // after samRunPoints replaces m.px with the real mask.
+  function _aiRenderLiveStroke(m){
+    const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
+    const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
+    svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+    svg.classList.add('on');
+    const pts=m.aiPoints||[];
+    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.006" fill="${p.positive?'#ff5a3c':'#3ca0ff'}" stroke="#fff" stroke-width="0.0015" vector-effect="non-scaling-stroke"/>`).join('');
+  }
   cv.addEventListener('pointerdown',e=>{
     if(!mskAiTapMode)return;
     const m=fxState.masks[mskSel];if(!m||m.origin!=='ai')return;
     e.preventDefault();e.stopPropagation();
     try{cv.setPointerCapture(e.pointerId)}catch(_){}
-    _aiStroke=m;_aiStrokeLast=null;_aiStrokeAdded=false;
+    _aiStroke=m;_aiStrokeLast=null;_aiStrokeAdded=false;_aiStrokeStartLen=(m.aiPoints||[]).length;
     const p=_mskPointToUV(e);
     if(p){
       if(!m.aiPoints)m.aiPoints=[];
       m.aiPoints.push({nx:p.nx,ny:p.ny,positive:!e.altKey});
       _aiStrokeLast=p;_aiStrokeAdded=true;
+      _aiRenderLiveStroke(m);
     }
   });
   cv.addEventListener('pointermove',e=>{
@@ -6360,6 +6700,7 @@ function mskPaintAt(m,nx,ny){
     if(!m.aiPoints)m.aiPoints=[];
     m.aiPoints.push({nx:p.nx,ny:p.ny,positive:!e.altKey});
     _aiStrokeLast=p;_aiStrokeAdded=true;
+    _aiRenderLiveStroke(m);
   });
   const aiEnd=e=>{
     if(!_aiStroke)return;
@@ -6368,6 +6709,20 @@ function mskPaintAt(m,nx,ny){
     _aiStrokeLast=null;_aiStrokeAdded=false;
   };
   cv.addEventListener('pointerup',aiEnd);cv.addEventListener('pointercancel',aiEnd);
+  // Called from the pinch-zoom touchmove handler (initZoomPan) the moment a second finger
+  // lands: a touch pinch's FIRST finger fires pointerdown before the second finger arrives, so
+  // it briefly starts a paint/scribble stroke — this discards whatever that partial stroke
+  // added (no samRunPoints call, no history push) instead of segmenting/painting a pinch as a
+  // gesture on the mask.
+  window.chromasmithAbortMaskStroke=function(){
+    if(_mskStroke){_mskStroke=null;}
+    if(_aiStroke){
+      const m=_aiStroke;
+      if(m.aiPoints)m.aiPoints.length=_aiStrokeStartLen;
+      _aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;
+      if(typeof mskOverlaySync==='function')mskOverlaySync(); // clear the live-stroke dots drawn so far
+    }
+  };
 })();
 function _mskRow(label,k,val,min,max,sc,flip){
   const sv=Math.round(flip?(1-val)*100:val/sc);
@@ -6382,12 +6737,32 @@ function mskSlide(el){
   el.nextElementSibling.textContent=el.dataset.k==='colHue'?Math.round(v)+'°':Math.round(v);
   fxUpdate();
 }
-// Color-paint swatch preview: shown at a fixed mid-lightness (independent of Amount, which only
-// scales how strongly it's mixed into the image — the swatch is "what color", not "how much").
-function _mskColSwatchCss(m){return 'hsl('+Math.round(m.colHue||0)+',65%,50%)';}
+// hue(0-360)+sat(0-1) at a fixed 50% lightness -> #rrggbb, for the native <input type="color"> picker.
+function _hslToHex(h,s){
+  h=((h%360)+360)%360;const c=(1-Math.abs(2*0.5-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=0.5-c/2;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+  const to255=v=>Math.round((v+m)*255).toString(16).padStart(2,'0');
+  return '#'+to255(r)+to255(g)+to255(b);
+}
+function _hexToHueSat(hex){
+  const n=parseInt(hex.slice(1),16),r=((n>>16)&255)/255,g=((n>>8)&255)/255,b=(n&255)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  let h=0;if(d>0){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;if(h<0)h+=360;}
+  const l=(mx+mn)/2,s=d===0?0:d/(1-Math.abs(2*l-1));
+  return[h,s];
+}
 function mskColSwatchSync(){
-  const sw=document.getElementById('msk-col-swatch'),m=fxState.masks[mskSel];
-  if(sw&&m)sw.style.background=_mskColSwatchCss(m);
+  const pk=document.getElementById('msk-col-picker'),m=fxState.masks[mskSel];
+  if(pk&&m)pk.value=_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65);
+}
+function mskColPicked(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const[h,s]=_hexToHueSat(el.value);
+  m.colHue=h;m.colSat=Math.max(0.08,s); // floor sat so a near-grey pick still reads as a color, not a no-op tint
+  const hueSl=document.getElementById('msk-col-hue');
+  if(hueSl){hueSl.value=Math.round(h);hueSl.nextElementSibling.textContent=Math.round(h)+'°';}
+  fxUpdate();
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
@@ -6444,9 +6819,10 @@ function mskRebuild(){
     // Color paint: a Lightroom-style "tint the masked area toward this color" control —
     // distinct from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already
     // there). The swatch previews the target color at the current Amount.
-    +'<div class="fx-row"><div class="fx-label">Color</div>'
-    +'<span id="msk-col-swatch" style="display:inline-block;width:18px;height:18px;border-radius:50%;border:1px solid var(--bdr);flex:0 0 auto;margin-right:6px;background:'+_mskColSwatchCss(m)+'"></span>'
-    +'<input class="fx-slider fx-slider-grad" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
+    +'<div class="fx-row" title="Pick any color (hue+saturation+lightness) to tint the masked area toward — the hue slider below is a quick fine-tune once a color is picked."><div class="fx-label">Color</div>'
+    +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" style="width:28px;height:22px;padding:0;border:1px solid var(--bdr);border-radius:5px;background:none;flex:0 0 auto;margin-right:6px;cursor:pointer" oninput="mskColPicked(this)"></div>'
+    +'<div class="fx-row"><div class="fx-label">Hue (fine-tune)</div>'
+    +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
     +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
     +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false)
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
@@ -6471,11 +6847,15 @@ let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (d
 function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
   document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));}
 function mskOverlayBox(){
-  const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');
-  if(!cv||!wrap||!cv.width||!cv.height)return null;
-  const cr=cv.getBoundingClientRect(),wr=wrap.getBoundingClientRect();
-  if(!cr.width||!cr.height)return null;
-  return{left:cr.left-wr.left,top:cr.top-wr.top,width:cr.width,height:cr.height};
+  // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
+  // they ride the same CSS transform as the canvas by construction — no getBoundingClientRect
+  // math needed (that approach lagged a frame behind the transform during zoom/pan, the
+  // "zooming moves the mask" bug). The canvas's own CSS size (set in renderPreview) is the box.
+  const cv=document.getElementById('fx-canvas');
+  if(!cv||!cv.width||!cv.height)return null;
+  const w=parseFloat(cv.style.width)||cv.clientWidth,h=parseFloat(cv.style.height)||cv.clientHeight;
+  if(!w||!h)return null;
+  return{left:0,top:0,width:w,height:h};
 }
 // Red painted-area overlay for brush/sky/AI masks — the same idea as the radial/linear SVG
 // shape below, but there's no analytic shape to draw, only the raster m.px buffer, so it's a
@@ -6490,10 +6870,22 @@ function mskPaintOverlaySync(m,box,isolate){
   cv.width=m.mtW;cv.height=m.mtH;
   const x=cv.getContext('2d');
   const id=x.createImageData(m.mtW,m.mtH);
+  // Isolate mode mirrors the radial/linear ".msk-dim" treatment: black out everything OUTSIDE
+  // the painted region (alpha ~0.6, matching .msk-dim's opacity) and show the real photo through
+  // where the mask is actually painted — not a flat opaque red fill over the whole buffer (that
+  // was the "isolate shows solid red" bug: alpha was hard-coded 255 for every pixel regardless
+  // of paint value v, so unpainted pixels looked identical to painted ones).
+  const ISO_THRESH=8; // 0-255 paint-strength floor below which a pixel counts as "unpainted"
   for(let i=0;i<m.px.length;i++){
     const v=m.px[i],j=i*4;
-    id.data[j]=255;id.data[j+1]=40;id.data[j+2]=40;
-    id.data[j+3]=isolate?255:Math.round(v*0.65); // isolate mode: opaque red (matches the shape-mask "filled" look); overlay mode: proportional to paint strength
+    if(isolate){
+      const outside=v<ISO_THRESH;
+      id.data[j]=0;id.data[j+1]=0;id.data[j+2]=0;
+      id.data[j+3]=outside?153:0; // .6*255≈153 dim outside; fully transparent (real photo shows) inside
+    }else{
+      id.data[j]=255;id.data[j+1]=40;id.data[j+2]=40;
+      id.data[j+3]=Math.round(v*0.65); // overlay mode: red tint proportional to paint strength
+    }
   }
   x.putImageData(id,0,0);
   cv.classList.add('on');
@@ -6523,22 +6915,33 @@ function mskOverlaySync(){
   let shapeD='',handles='';
   let featherLayer='';
   if(m.type==='radial'){
-    const{cx,cy,rx,ry,feather}=m;
+    const{cx,cy,rx,ry,feather}=m,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot);
+    // rotate a point (dx,dy) in the ellipse's own axes into image space around (cx,cy) —
+    // must be the inverse of the shader's mskShapeWeight rotation (which rotates gm-A.xy BY
+    // -rot into ellipse axes), so a positive rot here visually matches the shader's fill.
+    const rp=(dx,dy)=>[cx+dx*cr-dy*sr,cy+dx*sr+dy*cr];
+    const ring=(rrx,rry)=>{const N=48,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;pts.push(rp(rrx*Math.cos(a),rry*Math.sin(a)).join(','));}return 'M'+pts.join('L')+'Z';};
     // ellipse approximated as a 48-point polygon (SVG <ellipse> can't be combined with an
     // evenodd hole in one path element the way a polygon can for the isolate dim layer).
-    const N=48,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;pts.push([cx+rx*Math.cos(a),cy+ry*Math.sin(a)].join(','));}
-    shapeD='M'+pts.join('L')+'Z';
+    shapeD=ring(rx,ry);
+    const rxH=rp(rx,0),ryH=rp(0,ry),rotH=rp(rx*1.18,0); // rotation handle sits just past the rx handle
     handles=`<circle class="msk-handle center" data-h="c" cx="${cx}" cy="${cy}" r="0.012"/>`+
-      `<circle class="msk-handle" data-h="rx" cx="${cx+rx}" cy="${cy}" r="0.01"/>`+
-      `<circle class="msk-handle" data-h="ry" cx="${cx}" cy="${cy+ry}" r="0.01"/>`;
+      `<circle class="msk-handle" data-h="rx" cx="${rxH[0]}" cy="${rxH[1]}" r="0.01"/>`+
+      `<circle class="msk-handle" data-h="ry" cx="${ryH[0]}" cy="${ryH[1]}" r="0.01"/>`+
+      `<line x1="${cx}" y1="${cy}" x2="${rotH[0]}" y2="${rotH[1]}" stroke="#fff" stroke-width="0.0012" opacity=".5" vector-effect="non-scaling-stroke"/>`+
+      `<circle class="msk-handle rot" data-h="rot" cx="${rotH[0]}" cy="${rotH[1]}" r="0.011"/>`;
     // Feather ring: the shader's falloff starts at t = max(1-2*feather, 0) of the outer radius
     // (mskShapeWeight) and reaches full effect at t=1 — draw that inner bound as a dashed
     // ellipse so the feather amount is actually visible, not just a number on a slider.
+    // Always draw the feather ring (even at ft≈0, where it just coincides with the outer edge)
+    // so the feather control has visible on-canvas feedback at any slider position — it used to
+    // be gated off exactly at the default feather value (0.5 → ft=0), which read as "missing".
     const ft=Math.max(1-2*(feather!=null?feather:0.5),0);
-    if(ft>0.001){
-      const irx=rx*ft,iry=ry*ft,ipts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;ipts.push([cx+irx*Math.cos(a),cy+iry*Math.sin(a)].join(','));}
-      featherLayer=`<path class="msk-feather" d="M${ipts.join('L')}Z"/>`;
-    }
+    featherLayer=`<path class="msk-feather" d="${ring(rx*ft,ry*ft)}"/>`;
+    // 50%-coverage guide ring (Capture One-style inner/mid/outer read): smoothstep(ft,1,t) is
+    // symmetric around its midpoint, so the falloff crosses ~0.5 at t=(ft+1)/2.
+    const ft50=(ft+1)/2;
+    featherLayer+=`<path class="msk-feather-50" d="${ring(rx*ft50,ry*ft50)}"/>`;
   }else{ // linear: represent the "full effect" half as a band from p0 back-extended, cut at p1
     const{x0,y0,x1,y1,feather}=m;
     const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1e-4,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
@@ -6572,6 +6975,11 @@ function mskHandleDown(e){
   e.stopPropagation();e.preventDefault();
   const svg=document.getElementById('fx-mask-overlay');
   _mskDrag={which:e.target.dataset.h,svg};
+  // Lock history for the drag: every pointermove calls fxUpdate → fxHistoryPush, which was
+  // recording an undo snapshot per mouse-movement (each including a full JSON of the masks) —
+  // one drag could flood all 20 history slots with intermediate positions. mskHandleUp pushes
+  // exactly one snapshot on release instead (same pattern fxUndo/fxRedo use).
+  _fxHistLocked=true;
   svg.setPointerCapture(e.pointerId);
   svg.addEventListener('pointermove',mskHandleMove);
   svg.addEventListener('pointerup',mskHandleUp);
@@ -6585,8 +6993,16 @@ function mskHandleMove(e){
   const[px,py]=mskHandlePos(e);
   if(m.type==='radial'){
     if(_mskDrag.which==='c'){m.cx=Math.max(0,Math.min(1,px));m.cy=Math.max(0,Math.min(1,py));}
-    else if(_mskDrag.which==='rx')m.rx=Math.max(0.01,Math.abs(px-m.cx));
-    else if(_mskDrag.which==='ry')m.ry=Math.max(0.01,Math.abs(py-m.cy));
+    else if(_mskDrag.which==='rot'){m.rot=Math.atan2(py-m.cy,px-m.cx);}
+    else if(_mskDrag.which==='rx'||_mskDrag.which==='ry'){
+      // project the pointer delta into the ellipse's own (rotated) axes — must match the
+      // shader's rotation convention (mskShapeWeight) so dragging rx/ry after a rotation
+      // resizes along the visually-rotated axis, not the raw image axis.
+      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),ddx=px-m.cx,ddy=py-m.cy;
+      const lx=ddx*cr+ddy*sr,ly=-ddx*sr+ddy*cr;
+      if(_mskDrag.which==='rx')m.rx=Math.max(0.01,Math.abs(lx));
+      else m.ry=Math.max(0.01,Math.abs(ly));
+    }
   }else{
     if(_mskDrag.which==='p0'){m.x0=Math.max(0,Math.min(1,px));m.y0=Math.max(0,Math.min(1,py));}
     else{m.x1=Math.max(0,Math.min(1,px));m.y1=Math.max(0,Math.min(1,py));}
@@ -6596,7 +7012,7 @@ function mskHandleMove(e){
 function mskHandleUp(e){
   if(!_mskDrag)return;
   const svg=_mskDrag.svg;svg.removeEventListener('pointermove',mskHandleMove);svg.removeEventListener('pointerup',mskHandleUp);
-  _mskDrag=null;mskRebuild();fxHistoryPush();
+  _mskDrag=null;_fxHistLocked=false;mskRebuild();fxHistoryPush();
 }
 window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskOverlaySync();});
 
@@ -6619,6 +7035,7 @@ function getUISnapshot(){
   s.curves=JSON.parse(JSON.stringify(fxState.curves));   // tone-curve control points
   s.hsl=JSON.parse(JSON.stringify(fxState.hsl));         // HSL mixer band settings
   s.artSeed=fxState.artSeed;                              // artifact placement seed
+  s.dustMode=fxState.dustMode||0;                         // dust speck colour mode (0 both,1 black,2 white) — was missing, so it wasn't undoable and undo clobbered it
   s.masks=JSON.parse(JSON.stringify(fxState.masks));      // local-adjustment masks
   s.canvas=JSON.parse(JSON.stringify(fxState.canvas));    // canvas matte (ar/bg/blur)
   s.ver=2; // 2: exposure slider is /20 (±5 stops) — bumped from the unversioned /50 (±2 stops) mapping
@@ -6644,6 +7061,7 @@ function applyUISnapshot(s){
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
+  if(s.dustMode!==undefined){fxState.dustMode=s.dustMode;if(typeof dustModeBuildChips==='function')dustModeBuildChips();}
   if(s.masks){fxState.masks=JSON.parse(JSON.stringify(s.masks));mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
     if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;} // keep the per-photo array reference (fxSelectImage/installFXImages) in sync with a restored recipe
   if(s.canvas){fxState.canvas=JSON.parse(JSON.stringify(s.canvas));cvBuildChips();}
@@ -6663,21 +7081,29 @@ function applyUISnapshot(s){
   }
   if(typeof nrSyncGate==='function')nrSyncGate();
 }
+// History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by
+// brush masks carrying full w*h pixel arrays in the snapshot: (1) the dedup check used to
+// re-stringify the stored previous entry on EVERY push — a second full serialization of a
+// potentially multi-hundred-KB snapshot per slider tick; storing the string makes it a plain
+// string compare. (2) 20 retained parsed object trees (each with brush pixel arrays) cost far
+// more RAM than 20 strings. applyUISnapshot deep-copies out of whatever it's given, so parsing
+// on undo/redo (rare) is safe and cheap relative to pushing (every edit).
 function fxHistoryPush(){
   if(_fxHistLocked)return;
   const snap=getUISnapshot();
   const j=JSON.stringify(snap);
-  if(fxHistory.length&&JSON.stringify(fxHistory[fxHistIdx])===j)return;
+  if(fxHistory.length&&fxHistory[fxHistIdx]===j)return;
   fxHistory=fxHistory.slice(0,fxHistIdx+1);
-  fxHistory.push(snap);
+  fxHistory.push(j);
   if(fxHistory.length>20){fxHistory.shift();}
   fxHistIdx=fxHistory.length-1;
   if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(snap); // native-shell Library auto-save hook; no-op elsewhere
+  if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
 }
 function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}
   fxHistIdx--;_fxHistLocked=true;
-  applyUISnapshot(fxHistory[fxHistIdx]);
+  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx]));
   fxUpdate();_fxHistLocked=false;
   if(typeof hapt==='function')hapt();
   log('Undo','info');
@@ -6685,7 +7111,7 @@ function fxUndo(){
 function fxRedo(){
   if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
   fxHistIdx++;_fxHistLocked=true;
-  applyUISnapshot(fxHistory[fxHistIdx]);
+  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx]));
   fxUpdate();_fxHistLocked=false;
   if(typeof hapt==='function')hapt();
   log('Redo','info');
@@ -6695,7 +7121,7 @@ function fxResetAll(){
   if(!confirm('Reset all edits on this photo? This cannot be undone.'))return;
   if(typeof hapt==='function')hapt();
   _fxHistLocked=true;
-  applyUISnapshot(fxHistory[0]);
+  applyUISnapshot(JSON.parse(fxHistory[0]));
   _fxHistLocked=false;
   if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
   fxHistoryPush();
@@ -6763,13 +7189,16 @@ function drawHistogram(){
   const W=180,H=80,N=256;
   hc.width=W;hc.height=H;
   const ctx=hc.getContext('2d');
-  // Sample a downscaled copy
-  const tmp=document.createElement('canvas');
+  // Sample a downscaled copy — into ONE persistent scratch canvas (runs on every renderPreview
+  // while the histogram overlay is open; allocating a fresh canvas + context each time churned
+  // the allocator for no benefit).
+  const tmp=drawHistogram._tmp||(drawHistogram._tmp=document.createElement('canvas'));
   const scale=Math.min(1,200/src.width);
   tmp.width=Math.max(1,(src.width*scale)|0);
   tmp.height=Math.max(1,(src.height*scale)|0);
-  tmp.getContext('2d').drawImage(src,0,0,tmp.width,tmp.height);
-  const px=tmp.getContext('2d').getImageData(0,0,tmp.width,tmp.height).data;
+  const tctx=tmp.getContext('2d',{willReadFrequently:true});
+  tctx.drawImage(src,0,0,tmp.width,tmp.height);
+  const px=tctx.getImageData(0,0,tmp.width,tmp.height).data;
   const rH=new Float32Array(N),gH=new Float32Array(N),bH=new Float32Array(N);
   for(let i=0;i<px.length;i+=4){rH[px[i]]++;gH[px[i+1]]++;bH[px[i+2]]++;}
   const peak=Math.max(1,...rH,...gH,...bH);
@@ -6814,6 +7243,7 @@ function _applyZoom(smooth){
   zw.style.transform=`scale(${fxZoom}) translate(${baseX+fxPanX}px,${baseY+fxPanY}px)`;
   _updateZoomReadout();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
+  if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
 function _resetZoom(smooth){fxZoom=1;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 function _updateZoomReadout(){
@@ -6946,6 +7376,10 @@ function initZoomPan(){
   wrap.addEventListener('touchmove',e=>{
     if(e.touches.length===2&&!fxLoupe){
       e.preventDefault();
+      // A pinch's first finger fires pointerdown before the second lands, briefly starting a
+      // paint/AI-scribble stroke on that first touch — discard it now that this is clearly a
+      // 2-finger zoom, not a mask gesture.
+      if(typeof window.chromasmithAbortMaskStroke==='function')window.chromasmithAbortMaskStroke();
       const [t0,t1]=[e.touches[0],e.touches[1]];
       const dist=Math.hypot(t0.clientX-t1.clientX,t0.clientY-t1.clientY);
       const p0=_pt[t0.identifier]||{x:t0.clientX,y:t0.clientY};
@@ -6984,11 +7418,17 @@ function wbEyedropperClick(e){
   const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
   const sx=Math.min(sw-1,Math.max(0,Math.round(cx*sw/FX.cv.width)));
   const sy=Math.min(sh-1,Math.max(0,Math.round(cy*sh/FX.cv.height)));
-  const tc=document.createElement('canvas');tc.width=1;tc.height=1;
-  tc.getContext('2d').drawImage(src,sx,sy,1,1,0,0,1,1);
-  const d=tc.getContext('2d').getImageData(0,0,1,1).data;
+  // Average a 5x5 neighborhood, not a single pixel — one pixel is noisy on grainy/high-ISO
+  // sources, so two clicks on the SAME visually-neutral patch could produce different WB.
+  const K=5,half=(K-1)/2;
+  const bx=Math.min(sw-K,Math.max(0,sx-half)),by=Math.min(sh-K,Math.max(0,sy-half));
+  const tc=document.createElement('canvas');tc.width=K;tc.height=K;
+  tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
+  const d5=tc.getContext('2d').getImageData(0,0,K,K).data;
   const s2l=c=>(c/=255,c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4));
-  const lr=s2l(d[0]),lg=s2l(d[1]),lb=s2l(d[2]);
+  let lr=0,lg=0,lb=0;
+  for(let i=0;i<d5.length;i+=4){lr+=s2l(d5[i]);lg+=s2l(d5[i+1]);lb+=s2l(d5[i+2]);}
+  const n5=K*K;lr/=n5;lg/=n5;lb/=n5;
   if(lg<0.002){log('Sampled area is too dark for WB — pick a lighter neutral','warn');return;}
   // Solve: make sampled pixel neutral after the shader's temp/tint shifts
   // lin.r *= (1+0.22*t), lin.b *= (1-0.22*t) → solve for t to equalise R & B
@@ -7047,7 +7487,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
 const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
 const _SESS_SELECTS=['sel-input','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
-function saveSession(){
+function saveSession(quiet){
   const s={};
   _SESS_SLIDERS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
   _SESS_TOGGLES.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.classList.contains('on');});
@@ -7059,9 +7499,21 @@ function saveSession(){
   s._dustMode=fxState.dustMode; // dust speck colour mode (0 both,1 black,2 white)
   s._masks=fxState.masks;     // local-adjustment masks
   s._canvas=fxState.canvas;   // canvas matte (ar/bg/blur)
+  // Geometry (crop/rotate/flip/straighten) was the one edit surface sessions LOST on reload.
+  // It can't be restored blindly at boot (no photo is loaded yet, and a later-loaded different
+  // photo must not inherit a stale crop) — so it's saved keyed to the photo's name and applied
+  // by loadSessionGeomFor() only when a matching photo is actually (re)loaded.
+  const git=fxImages[0];
+  s._geom=(git&&git.geom)?git.geom:null;
+  s._geomFor=git?git.name:null;
   s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
-  try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));log('Session saved','ok');}catch(e){log('Session save failed: '+e.message,'warn');}
+  try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));if(!quiet)log('Session saved','ok');}catch(e){if(!quiet)log('Session save failed: '+e.message,'warn');}
 }
+// Browser autosave: a reload mid-edit used to lose everything (saveSession was button-only; the
+// chromasmithOnEdit auto-save hook only exists in the native shell). Debounced off every history
+// push so at most one localStorage write ~2s after the last edit.
+let _sessAutoT=null;
+function sessionAutosave(){clearTimeout(_sessAutoT);_sessAutoT=setTimeout(()=>saveSession(true),2000);}
 function loadSession(userTriggered){
   try{
     const raw=localStorage.getItem(_SESS_KEY);if(!raw)return;
@@ -7087,6 +7539,21 @@ function loadSession(userTriggered){
     if(s['sel-print'])selectPrint(s['sel-print']);
     if(userTriggered)log('Session restored','ok');
   }catch(e){if(userTriggered)log('No saved session found','info');}
+}
+// Apply the session's saved geometry to a just-loaded photo IF it's the same photo the session
+// was saved from (matched by name) — called from installFXImages. See saveSession's note on why
+// geometry can't restore at boot like the other session state.
+function loadSessionGeomFor(){
+  try{
+    const raw=localStorage.getItem(_SESS_KEY);if(!raw)return;
+    const s=JSON.parse(raw);
+    if(!s._geom||!s._geomFor||!fxImages.length)return;
+    if(fxImages[0].name!==s._geomFor)return;
+    fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
+    const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
+    const ang=s._geom.angle||0;if(ss)ss.value=ang;if(sv)sv.textContent=ang.toFixed(1)+'°';
+    updateWork();
+  }catch(e){/* geometry restore is best-effort */}
 }
 
 // ── EXIF parser (JPEG only) ────────────────────────────────────────────────────
@@ -7174,7 +7641,7 @@ function getFXParams(){return{
   curves:!!(document.getElementById('tg-curves')||{classList:{contains:()=>false}}).classList.contains('on')&&!curvesIdentity(),
   hsl:!!(document.getElementById('tg-hsl')||{classList:{contains:()=>false}}).classList.contains('on')&&!hslIdentity(),
   masks:(document.getElementById('tg-local')||{classList:{contains:()=>false}}).classList.contains('on')?fxState.masks:[],
-  adjust:{enabled:document.getElementById('tg-adjust').classList.contains('on'),
+  adjust:{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
     exposure:adjVal('sl-adj-exp')/20,   // ±5 stops (slider stays -100..100)
     contrast:adjVal('sl-adj-con')/200,  // ±0.5
     highlights:adjVal('sl-adj-hi')/100, shadows:adjVal('sl-adj-sh')/100,
@@ -7283,7 +7750,15 @@ function renderPreview(){
   // a 1440p window at dpr 2) instead of letting cw*dpr grow unbounded.
   let dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
   if(deskx&&cw>0)dpr=Math.min(dpr,3200/cw);
-  const pw=(cw*dpr)|0,ph=(ch*dpr)|0;                   // WebGL backing store
+  let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
+  // Full-res preview: render at the true source resolution instead of the capped backing store
+  // — but not WHILE a slider/pan/zoom drag is in flight (_fxPreviewInteracting), since that would
+  // pay the full ~dpr² cost on every intermediate frame of the drag. Falls back to the normal
+  // capped size until the interaction ends, then renderPreview() is re-invoked at full res.
+  // Also gated on fxZoom>1: at Fit the backing store is CSS-downscaled straight back to cw×ch
+  // regardless of source resolution (indistinguishable from the capped path, and it collapses
+  // the grain's fixed-pixel cells) — full-res only has a visible effect once zoomed in.
+  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1){pw=iw;ph=ih;}
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
   const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
@@ -7423,6 +7898,7 @@ function fxSelectImage(idx){
   // likely has a different (often shorter/empty) mask list than the outgoing one.
   if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;
   fxCurIdx=idx;
+  samInvalidate(); // AI Select embeddings belong to the OUTGOING photo — see samInvalidate's doc comment
   const it=fxImages[fxCurIdx];
   fxState.masks=it.masks||(it.masks=[]);
   mskSel=Math.min(mskSel,fxState.masks.length-1);
@@ -7432,7 +7908,7 @@ function fxSelectImage(idx){
   const ss=document.getElementById('sl-straighten');
   if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
   document.getElementById('fx-fname').value=it.name;
-  fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img));
+  fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext));
   setDZ('dz-fx-img','fn-fx-img',fxImages.length>1?`${fxImages.length} images — previewing ${fxCurIdx+1}/${fxImages.length}: ${it.name}`:it.name);
   showExif(it.exif||{});
   renderPreview();buildLookGallery();buildFilmstrip();
@@ -7574,10 +8050,30 @@ function _cropCustomAR(){
   return w/Math.max(h,0.0001);
 }
 function cropCustomChanged(){cropAR=_cropCustomAR();if(cropMode){cropN=cropDefaultForAR();positionCropRect();}}
+// Radial/linear mask coordinates are normalized (0..1) against the CURRENT working image
+// (fxWork). Cropping rebuilds fxWork to a smaller sub-region (updateWork→geomCanvas), so a
+// mask placed before the crop silently points at the wrong region afterward — this is the
+// concrete cause of "radial mask applied outside the circle": the mask's own coords never
+// moved to follow the new frame. Remap them by the same crop rect used to rebuild fxWork.
+// (Raster brush/sky/AI masks are tied to their own working-resolution buffer and aren't
+// remapped here — following a crop would need a full resample, left as a known follow-up.)
+function mskRemapForCrop(crop){
+  if(!crop)return;
+  const{x,y,w,h}=crop;
+  if(!(w>0)||!(h>0))return;
+  (fxState.masks||[]).forEach(m=>{
+    if(m.type==='radial'){
+      m.cx=(m.cx-x)/w;m.cy=(m.cy-y)/h;m.rx=m.rx/w;m.ry=m.ry/h;
+    }else if(m.type==='linear'){
+      m.x0=(m.x0-x)/w;m.y0=(m.y0-y)/h;m.x1=(m.x1-x)/w;m.y1=(m.y1-y)/h;
+    }
+  });
+}
 function cropApply(){
   const it=curItem();if(!it){cropExit();renderPreview();return;}
   const g=it.geom||(it.geom=defGeom());
   const full=cropN&&cropN.x<=0.001&&cropN.y<=0.001&&cropN.w>=0.999&&cropN.h>=0.999;
+  if(cropN)mskRemapForCrop(cropN);
   g.crop=full?null:{...cropN};
   broadcastGeom();
   cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log(fxImages.length>1?`Crop applied to all ${fxImages.length} images`:'Crop applied','ok');
@@ -7604,17 +8100,30 @@ function buildLookGallery(){
   let pxd;try{pxd=getPx(work,132);}catch(e){ctrl.style.display='none';return;}
   const{px,w,h}=pxd,cur=(document.getElementById('sel-lut')||{}).value||'';
   const entries=[['','Original']].concat(Object.keys(LUT_PRESETS).map(k=>['p:'+k,prettyLUT(k)]));
+  // Cells are created immediately (so layout/click targets exist), but the per-preset LUT
+  // renders are spread across rAF frames instead of running synchronously — 12 applyLUTtoPx
+  // passes in one tick visibly janked photo load / crop apply / geometry undo (all of which
+  // retrigger this). A rebuild during rendering (gen check) just abandons the stale queue.
+  const gen=(buildLookGallery._gen=(buildLookGallery._gen||0)+1);
+  const jobs=[];
   entries.forEach(([val,label])=>{
     const cell=document.createElement('div');cell.className='look-cell'+(val===cur?' sel':'');
     const cv=document.createElement('canvas');cv.width=w;cv.height=h;
-    const out=val?applyLUTtoPx(px,presetLut(val.slice(2))):px;
-    cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out),w,h),0,0);
     cell.appendChild(cv);
     const nm=document.createElement('div');nm.className='look-nm';nm.textContent=label;cell.appendChild(nm);
     cell.onclick=()=>{const sel=document.getElementById('sel-lut');if(sel)sel.value=val;selectLUT(val);
       host.querySelectorAll('.look-cell').forEach(c=>c.classList.remove('sel'));cell.classList.add('sel');};
     host.appendChild(cell);
+    jobs.push({val,cv});
   });
+  const step=()=>{
+    if(gen!==buildLookGallery._gen)return; // gallery was rebuilt — drop this stale queue
+    const job=jobs.shift();if(!job)return;
+    const out=job.val?applyLUTtoPx(px,presetLut(job.val.slice(2))):px;
+    job.cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out),w,h),0,0);
+    if(jobs.length)requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 // ── "hold to compare" before/after ──
@@ -7642,8 +8151,8 @@ function fxGlowScale(){return isMemoryConstrained()?2:1;}           // 2× reduc
 // what was killing the tab on 24–48MP iPhone photos. Tiles keep peak memory small & constant.
 function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}
 // Produce the processed FULL-RES image as a canvas (no borders). Picks tiled vs single-shot.
-async function processToCanvas(P,src,iw,ih){
-  if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih);
+async function processToCanvas(P,src,iw,ih,onTile){
+  if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile);
   FX.setImage(src);
   FX.render(P,iw,ih,{glowScale:fxGlowScale()});
   const{px,w,h}=FX.getPixels();
@@ -7660,7 +8169,7 @@ async function processToCanvas(P,src,iw,ih){
 // seamless by construction. (The old design did grain as a final FULL-RES FX pass over the
 // assembled image, which allocated ~4 full-res GPU buffers and was exactly what crashed the
 // tab on large iPhone photos — the very thing tiling exists to avoid.)
-async function renderTiled(P,src,iw,ih){
+async function renderTiled(P,src,iw,ih,onTile){
   const REF=FXR.CAL.refWidth,sc=iw/REF;
   const H=FXR.CAL.halation,B=FXR.CAL.bloom;
   const maxSig=Math.max((P.halation&&P.halation.radius||H.sigmaR)*sc,(P.bloom&&P.bloom.radius||B.sigma)*sc);
@@ -7686,6 +8195,12 @@ async function renderTiled(P,src,iw,ih){
     octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th); // keep only the central (halo-free) region
     tileSrc.width=tileSrc.height=rc.width=rc.height=0;
     tiles++;log(`  tile ${tiles}/${total}`,'info');
+    if(onTile)onTile(tiles,total);
+    // Cancel used to be checked only BETWEEN images in exportFX — a huge single-photo tiled
+    // export ignored the Cancel button entirely until it finished. Throwing here unwinds
+    // through processToCanvas into exportFX's per-photo try/catch, which logs and moves on
+    // (and its own between-images cancel check then stops the batch).
+    if(typeof fxExportCancel!=='undefined'&&fxExportCancel)throw new Error('export cancelled');
     await new Promise(r=>requestAnimationFrame(r));
   }
   return out;
@@ -7729,7 +8244,11 @@ async function exportFX(){
   }
   try{
     const P=getFXParams();
-    const ver=`v${fxVersion.toFixed(1)}`;
+    // Filename-safe version tag: a literal dot ("v1.0") reads as a second, bogus extension
+    // to OS de-dup logic — a re-export/re-download of the same name gets "(2)" spliced in
+    // right before the dot instead of before the real extension (e.g. "photo_v1 (2).0.jpg"),
+    // which is exactly the mangled name users were seeing. Dash keeps the version unambiguous.
+    const ver=`v${fxVersion.toFixed(1).replace('.','-')}`;
     const single=N===1;
     const results=[];
     // ── Phase 1: render every image to bytes at FULL resolution (no share yet). Each image is
@@ -7747,7 +8266,10 @@ async function exportFX(){
         setProg(idx,`Rendering ${idx+1}/${N}: ${it.name}…`);
         log(`Rendering ${idx+1}/${N}: ${it.name} at ${iw}×${ih}${shouldTile(iw,ih)?' (tiled)':''}…`,'info');
         await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
-        const proc=await processToCanvas(P,src,iw,ih);   // full-res processed image (no border)
+        // Per-tile progress: a big tiled photo used to freeze the bar for its whole render
+        // (setProg was image-granular only) — feed the tile fraction in as a fractional image.
+        const proc=await processToCanvas(P,src,iw,ih,
+          (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`));
         const w=proc.width,h=proc.height;
         const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
         // Only allocate a second full-res canvas when borders actually need one; free `proc`
@@ -7781,8 +8303,25 @@ async function exportFX(){
         if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
         if(it.icc)out=await embedICC(out,it.icc,outExt); // TIFF source: re-embed its ICC (no source bytes to splice from)
         out=injectDPI(out,outExt,it.dpi);
-        const base=single?(document.getElementById('fx-fname').value||it.name):it.name;
-        results.push({content:out,fname:`${base}_${ver}.${outExt}`,mime});
+        // Filename pattern: the rename field now applies to BATCH exports too (it used to be
+        // single-export only — batch files were always forced to the source name + _vN.N).
+        // Tokens: {name} = source filename, {seq} = 1-based position in the batch, {date} =
+        // YYYY-MM-DD. A pattern without {name} or {seq} in a batch gets _{seq} appended so
+        // files can't overwrite each other. Leaving the field at its default ("photo") or empty
+        // keeps the old behavior (source name). "_vN.N" is only added when the field doesn't
+        // contain "{nover}" — typing {nover} anywhere opts out of the version suffix.
+        const fld=(document.getElementById('fx-fname').value||'').trim();
+        const noVer=fld.includes('{nover}');
+        const pat=fld.replace('{nover}','').trim();
+        const usesPattern=pat&&pat!=='photo'&&(single||pat.includes('{')); // batch only honors real patterns, not a leftover single-photo rename
+        let base;
+        if(usesPattern){
+          base=pat.replace(/\{name\}/g,it.name).replace(/\{seq\}/g,String(idx+1)).replace(/\{date\}/g,new Date().toISOString().slice(0,10));
+          if(!single&&!pat.includes('{name}')&&!pat.includes('{seq}'))base+='_'+(idx+1);
+        }else{
+          base=single?(fld||it.name):it.name;
+        }
+        results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime});
         ec.width=ec.height=0; // free big intermediates promptly
         setProg(idx+1,`Rendered ${idx+1}/${N}`);
         log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
@@ -7792,8 +8331,25 @@ async function exportFX(){
         console.error(e);
       }
     }
+    // Dedupe filenames before saving: without a custom {name}/{seq} pattern, batch items fall
+    // back to their own source name (`base=it.name`) — two source photos from different
+    // folders/extensions but the same base name collide on the same rendered filename and would
+    // silently overwrite one another on save. Append _2/_3/... on any repeat.
+    {
+      const seen=new Map();
+      for(const r of results){
+        const n=(seen.get(r.fname)||0)+1;seen.set(r.fname,n);
+        if(n>1){const dot=r.fname.lastIndexOf('.');r.fname=dot<0?`${r.fname}_${n}`:`${r.fname.slice(0,dot)}_${n}${r.fname.slice(dot)}`;}
+      }
+    }
     // ── Phase 2: save all at once (one share sheet → Save to Photos) ──
     if(results.length){setProg(N,`Saving ${results.length} file(s)…`);await saveFiles(results);}
+    // Recipe-only export history (Library-only — see chromasmithRecordExport in library-ui.js).
+    // Only tracks the single currently-open Library photo (state.openedPath); a multi-photo
+    // batch export doesn't map each rendered frame back to its own on-disk path here.
+    if(results.length&&typeof window.chromasmithRecordExport==='function'){
+      try{await window.chromasmithRecordExport(fxVersion.toFixed(1),getUISnapshot());}catch(e){}
+    }
     // ── Phase 3 (optional): mirror the exports to Google Photos. Failures here must never
     // read as an export failure — the files above are already saved locally.
     if(results.length&&gpSaveEnabled()&&gpTok()){
@@ -8637,7 +9193,11 @@ function yd(){return new Promise(r=>setTimeout(r,0))}
 function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Math.round(v)+'%'}
 function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
 function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
-function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${msg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
+function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';
+  // msg routinely embeds user-controlled filenames (export progress, load errors, etc.) — escape
+  // before building the span so a filename containing "<"/">" can't inject markup into the log.
+  const escMsg=String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${escMsg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight}
 function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','collage','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();}
 
 // ── FX editor: section model, mobile strip + desktop tool rail ────────────────
@@ -8699,7 +9259,9 @@ const ICONS={
  log:'<path d="M4 6h16M4 12h16M4 18h10"/>',
  reset:'<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-6h6"/>',
  flagGreen:'<path d="M5 21V4" fill="none"/><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="currentColor" stroke="none"/>',
- flagRed:'<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" fill="none"/>'
+ flagRed:'<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" fill="none"/>',
+ heart:'<path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z" fill="currentColor" stroke="none"/>',
+ history:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // label per section, in rail / strip order
@@ -8935,6 +9497,10 @@ function applyFxLayout(){
   const onFx=document.getElementById('panel-fx').classList.contains('active');
   const mob=_mqMobile.matches&&onFx, desk=!_mqMobile.matches&&onFx;
   document.body.classList.toggle('mobile-fx',mob);
+  // Mirrored onto <html> too — html has no overflow-y constraint of its own otherwise, so it
+  // stays a second scrollable ancestor even once body is height-capped (see the CSS comment
+  // at html.mobile-fx/html.mobile-cl, top of file).
+  document.documentElement.classList.toggle('mobile-fx',mob);
   document.body.classList.toggle('fx-deskb',desk);
   document.body.classList.toggle('fx-single',mob||desk);
   if(!mob)document.body.classList.remove('sheet-open'); // sheet state is mobile-only
@@ -9031,10 +9597,48 @@ loadSession();       // restore saved slider state (silent — no image loaded y
 initZoomPan();
 initEditableVals();
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
+// Per-section reset (mobile bottom sheet only — see .fx-ctrl-title-reset CSS): resets just the
+// sliders/toggles inside ONE section back to their factory-default value (_fxPristineDefault,
+// captured above before loadSession touched anything), not the whole photo like fxResetAll().
+// Generic by design — walks whatever sl-*/tg-* ids happen to live inside the clicked section's
+// card, so it needs no per-section list to keep in sync as sliders are added/removed.
+function fxResetSection(cardOrName){
+  const card=typeof cardOrName==='string'?document.querySelector(`.fx-ctrl[data-fxsec="${cardOrName}"]`):cardOrName.closest('.fx-ctrl');
+  if(!card||!_fxPristineDefault)return;
+  card.querySelectorAll('input[type=range][id^="sl-"]').forEach(sl=>{
+    const id=sl.id.slice(3);
+    if(_fxPristineDefault.sliders&&_fxPristineDefault.sliders[id]!==undefined)sl.value=_fxPristineDefault.sliders[id];
+  });
+  card.querySelectorAll('[id^="tg-"]').forEach(tg=>{
+    const id=tg.id.slice(3);
+    if(_fxPristineDefault.toggles&&_fxPristineDefault.toggles[id]!==undefined){
+      const on=_fxPristineDefault.toggles[id];tg.classList.toggle('on',on);
+      const ff=document.getElementById('ff-'+id);if(ff)ff.style.display=on?'flex':'none';
+    }
+  });
+  if(typeof hapt==='function')hapt();
+  fxUpdate();
+  log('Section reset','info');
+}
+document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title=>{
+  const b=document.createElement('button');
+  b.type='button';b.className='fx-ctrl-title-reset';b.title='Reset this section';
+  b.innerHTML=icon('reset',14);
+  b.onclick=(e)=>{e.stopPropagation();fxResetSection(title.parentElement);};
+  title.appendChild(b);
+});
+// Mirror #btn-fx-export's disabled state onto the bottom-pinned #fx-fab-export duplicate — an
+// observer instead of touching every one of the several places that toggle the real button, so
+// the two can never drift out of sync.
+{const realBtn=document.getElementById('btn-fx-export'),fab=document.getElementById('fx-fab-export');
+ if(realBtn&&fab){
+   fab.disabled=realBtn.disabled;
+   new MutationObserver(()=>{fab.disabled=realBtn.disabled;}).observe(realBtn,{attributes:true,attributeFilter:['disabled']});
+ }}
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
  set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('hdr-log','log');
- set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');}
+ set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');}
 syncAllFxBtn();
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
@@ -9049,6 +9653,33 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();
     const next={overlay:'isolate',isolate:'off',off:'overlay'}[mskPreviewMode]||'overlay';
     mskSetPreviewMode(next);
+  }
+  // ── Editor shortcuts (Lightroom/Capture One idiom). All skip when typing in an input, and
+  // (except Esc) when a modifier is held, so they never fight text fields or browser combos.
+  const inInput=e.target&&e.target.closest&&e.target.closest('input,textarea,select,[contenteditable]');
+  if(e.key==='Escape'){
+    // Exit whatever modal-ish editing state is active, most specific first.
+    if(typeof _wbEyedropperActive!=='undefined'&&_wbEyedropperActive&&typeof wbEyedropper==='function'){e.preventDefault();wbEyedropper();return;}
+    if(typeof cropMode!=='undefined'&&cropMode){e.preventDefault();cropCancel();return;}
+    if(typeof fxLoupe!=='undefined'&&fxLoupe&&typeof toggleLoupe==='function'){e.preventDefault();toggleLoupe();return;}
+    if(typeof mskAiTapMode!=='undefined'&&mskAiTapMode&&typeof mskAiTapToggle==='function'){e.preventDefault();mskAiTapToggle(false);return;}
+    return;
+  }
+  if(inInput||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(!fxImages.length)return;
+  if(e.key==='ArrowLeft'&&fxImages.length>1){e.preventDefault();fxSelectImage((fxCurIdx-1+fxImages.length)%fxImages.length);return;}
+  if(e.key==='ArrowRight'&&fxImages.length>1){e.preventDefault();fxSelectImage((fxCurIdx+1)%fxImages.length);return;}
+  if(e.key===' '&&!e.repeat){ // hold Space = before/after compare (keyup releases below)
+    e.preventDefault();if(!fxCompare){fxCompare=true;renderPreview();}return;
+  }
+  if((e.key==='c'||e.key==='C')&&typeof cropToggle==='function'&&!cropMode){e.preventDefault();cropToggle();return;}
+  if(e.key==='1'&&typeof toggleLoupe==='function'&&!fxLoupe){e.preventDefault();toggleLoupe();return;}
+  if((e.key==='0'||e.key==='f'||e.key==='F')&&typeof _resetZoom==='function'){e.preventDefault();_resetZoom();if(fxLoupe&&typeof toggleLoupe==='function')toggleLoupe();return;}
+});
+document.addEventListener('keyup',e=>{
+  if(e.key===' '&&typeof fxCompare!=='undefined'&&fxCompare){
+    const t=e.target;if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable]'))return;
+    fxCompare=false;renderPreview();
   }
 });
 log(`Chromasmith ready (build ${BUILD}) — all processing runs locally in your browser`,'ok');
@@ -9123,6 +9754,7 @@ let _mqCl=window.matchMedia('(max-width:700px)'),_clMqWired=false;
 function applyClLayout(){
   const on=_mqCl.matches&&document.getElementById('panel-collage').classList.contains('active');
   document.body.classList.toggle('mobile-cl',on);
+  document.documentElement.classList.toggle('mobile-cl',on); // see html.mobile-fx/mobile-cl CSS comment
   if(on){clBuildNav();clRenderFrame();}
   if(!_clMqWired){_clMqWired=true;_mqCl.addEventListener('change',applyClLayout);window.addEventListener('orientationchange',()=>setTimeout(applyClLayout,120));}
 }
