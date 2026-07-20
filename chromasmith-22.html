@@ -3198,7 +3198,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-20f';
+const BUILD='2026-07-20g';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -7503,22 +7503,38 @@ function initZoomPan(){
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
   });
+  // Loupe pan used to call renderPreview() — a full re-render through the WHOLE effects
+  // pipeline (LUT/HSL/curves/masks/halation's multi-pass blur/grain/artifacts) at full loupe
+  // resolution — on EVERY pointermove, dozens of times/sec while dragging. Lightroom's 1:1 view
+  // never recomputes on pan at all: it just slides an already-rendered bitmap. Same idea here —
+  // slide the CURRENT canvas content via a cheap CSS translate for instant feedback during the
+  // drag, and debounce the real recompute (which actually moves the source crop) to fire once
+  // the drag pauses, same "cheap during interaction, real render once it settles" pattern
+  // _fxZoomRenderDebounced already uses for the normal full-res preview.
+  let _loupeDragT=null;
   zw.addEventListener('pointermove',e=>{
     if(!pd)return;
     if(fxLoupe){
-      // 1 CSS px of drag = dpr image px (crop shows dpr image px per CSS px); drag right → see left
+      const dx=e.clientX-pd.x,dy=e.clientY-pd.y;
+      // Divide by fxZoom: this translate lands INSIDE the wrapper's own scale(fxZoom) transform,
+      // so without compensating, panning would visually track the mouse fxZoom× too fast.
+      FX.cv.style.transform=`translate(${dx/fxZoom}px,${dy/fxZoom}px)`;
       const dpr=Math.min(window.devicePixelRatio||1,2);
       const src=fxWork,fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
-      loupeCX=Math.min(1,Math.max(0,pd.lcx-(e.clientX-pd.x)*dpr/fw));
-      loupeCY=Math.min(1,Math.max(0,pd.lcy-(e.clientY-pd.y)*dpr/fh));
-      renderPreview();
+      loupeCX=Math.min(1,Math.max(0,pd.lcx-dx*dpr/fw));
+      loupeCY=Math.min(1,Math.max(0,pd.lcy-dy*dpr/fh));
+      clearTimeout(_loupeDragT);
+      _loupeDragT=setTimeout(()=>{FX.cv.style.transform='';renderPreview();},120);
     } else {
       fxPanX=pd.px+(e.clientX-pd.x)/fxZoom;
       fxPanY=pd.py+(e.clientY-pd.y)/fxZoom;
       _applyZoom();
     }
   });
-  const pup=()=>{pd=null;zw.classList.remove('dragging');};
+  const pup=()=>{
+    pd=null;zw.classList.remove('dragging');
+    if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';renderPreview();}
+  };
   zw.addEventListener('pointerup',pup);zw.addEventListener('pointercancel',pup);
   // Double-click to reset
   wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(fxZoom>1){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();fxZoom=2.5;_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
