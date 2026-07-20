@@ -3166,7 +3166,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-20a';
+const BUILD='2026-07-20b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -3225,7 +3225,12 @@ function contrast(v,c,p=.18){const e=1e-9;return v<=p?p*Math.pow(Math.max(v/p,e)
 function applyHSL(r,g,b,hA,sA,lA){
   const[h,s,v]=r2hsv(r,g,b),C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],CE=[0,30/360,60/360,120/360,180/360,220/360,280/360,320/360],LS=[.05,.05,.09,.11,.12,.12,.11,.09];
   let dh=0,ds=0,dv=0;
-  for(let i=0;i<8;i++){let df=Math.abs(h-CE[i]);if(df>.5)df=1-df;const w=Math.max(0,1-Math.pow(df/.075,2))*Math.min(1,s*3);dh+=w*(hA[C[i]]||0)/360;ds+=w*((sA[C[i]]||0)/100)*.55;dv+=w*((lA[C[i]]||0)/100)*LS[i]}
+  // Band half-width .10 (36°) — wide enough that adjacent bands always overlap with margin, even
+  // across the widest 60° center-to-center gaps (Yellow-Green, Green-Aqua, Blue-Purple). At the
+  // old .075 (27°) half-width those gaps left ~6-18° dead zones with ZERO response from any band
+  // — exactly where common real-world hues sit (olive/dry-grass green ≈85-90°, sitting between
+  // Yellow's and Green's reach), which read as the mixer slider silently doing nothing.
+  for(let i=0;i<8;i++){let df=Math.abs(h-CE[i]);if(df>.5)df=1-df;const w=Math.max(0,1-Math.pow(df/.10,2))*Math.min(1,s*3);dh+=w*(hA[C[i]]||0)/360;ds+=w*((sA[C[i]]||0)/100)*.55;dv+=w*((lA[C[i]]||0)/100)*LS[i]}
   return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
 }
 // Color Grading (3-way) — equiluminant hue/sat rotation + independent luminance
