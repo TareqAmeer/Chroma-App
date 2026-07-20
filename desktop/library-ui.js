@@ -66,6 +66,10 @@
     open: false,
     expanded_view: false,  // full-window library grid (vs the docked 340px strip)
     openedPath: '',        // path of the photo currently loaded into the editor FROM the library
+    openedPaths: [],       // paths of ALL photos currently loaded when opened as a multi-photo
+                            // batch (openedPath stays '' for a batch — see the three call sites
+                            // that clear it). Lets chromasmithRecordExport still log an export-
+                            // history entry per photo instead of silently recording nothing.
     selected: new Set(),   // multi-selected paths (shift/cmd-click), for batch rate/flag/open
     source: 'folder',      // 'folder' | 'edited' — the virtual cross-folder "All Edited" view
     viewMode: localStorage.getItem('chromasmith_lib_view') || 'grid', // 'grid' | 'list'
@@ -853,6 +857,7 @@
         }
       }
       state.openedPath = path;
+      state.openedPaths = [];
       invoke('touch_recent', { path }).then(() => { if (state.source === 'recents') renderCollectionCounts(); }).catch(() => {});
       if (sc.recipe) {
         try {
@@ -1181,10 +1186,20 @@
   // append_export_history) — a persisted, coarser-grained log distinct from the in-session
   // fxHistory undo stack: it only grows on a successful export and survives relaunches.
   window.chromasmithRecordExport = async (version, snap) => {
+    // A multi-photo batch (Open N photos / Export N photos / cmd-dbl-click) clears openedPath
+    // to '' (see the three call sites that set it) since there's no single "current" photo to
+    // auto-persist to — but that previously ALSO made every export from a batch record nothing
+    // at all in export history, for any photo in the batch, silently (caught below). Fall back
+    // to openedPaths and log the same just-exported recipe against every photo in the batch —
+    // not perfectly accurate for the "Export N photos" context-menu flow (which restores each
+    // photo's own prior recipe before rendering, so the true per-photo recipes can differ), but
+    // infinitely better than the previous blank history for every batch export.
     const path = state.openedPath;
-    if (!path) return;
-    await invoke('append_export_history', { path, version, recipe: snapshotToB64(snap) }).catch((e) => console.error('append_export_history', e));
-    renderCollectionCounts(); // this photo may be newly counted in the "Exported" collection
+    const paths = path ? [path] : (state.openedPaths || []);
+    if (!paths.length) return;
+    const recipe = snapshotToB64(snap);
+    await Promise.all(paths.map((p) => invoke('append_export_history', { path: p, version, recipe }).catch((e) => console.error('append_export_history', p, e))));
+    renderCollectionCounts(); // these photos may be newly counted in the "Exported" collection
   };
   window.chromasmithGetExportHistory = async () => {
     const path = state.openedPath;
@@ -1246,7 +1261,7 @@
       try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
       catch (err) { console.error('read_file_bytes', p, err); }
     }
-    if (files.length) { state.openedPath = ''; await loadFXImages(files); }
+    if (files.length) { state.openedPath = ''; state.openedPaths = paths; await loadFXImages(files); }
     state.selected.clear();
     updateCardSelClasses();
   }
@@ -1293,7 +1308,7 @@
           try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
           catch (e) { console.error('read_file_bytes', p, e); }
         }
-        if (files.length) { state.openedPath = ''; await loadFXImages(files); } // batch: no single auto-persist target
+        if (files.length) { state.openedPath = ''; state.openedPaths = paths; await loadFXImages(files); } // batch: no single auto-persist target
       });
       sep();
     }
@@ -1311,6 +1326,7 @@
       }
       if (!files.length) return;
       state.openedPath = '';
+      state.openedPaths = paths;
       await loadFXImages(files);
       // restore each photo's saved recipe before exporting, same as opening one normally
       for (let i = 0; i < paths.length; i++) {
