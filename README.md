@@ -23,6 +23,9 @@ There is an in-app **Guide** tab documenting every control and a full FAQ.
 - **Panasonic RW2 / RAW** input, decoded locally (LibRaw → WebAssembly) with selectable
   in-camera DCP colour profiles, so RAW colour matches Lightroom.
 - Undo/redo, split before/after, live histogram, zoom/pan, session save, EXIF readout.
+- **Desktop app:** Lightroom "Edit In" support — right-click a photo in Lightroom (Classic or
+  cloud/CC) → Edit In → Chromasmith, edit as normal, then **Save to Lightroom** writes the
+  render straight back over the handed-off file so Lightroom re-imports and syncs it.
 - Exported `.cube` files are **Lumix Lab–ready** (carry the `#LUMIXPHOTOSTYLE STD` tag).
 
 ## Running it

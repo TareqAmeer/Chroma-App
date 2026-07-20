@@ -755,6 +755,12 @@
     return true;
   };
   async function openInEditorInner(path) {
+    // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
+    // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
+    // handoff path) after the user has already navigated to something else.
+    window.chromasmithEditInPath = null;
+    const saveLrBtn = document.getElementById('db-save-lr');
+    if (saveLrBtn) saveLrBtn.style.display = 'none';
     // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
     // off it — otherwise a quick edit right before switching photos could be dropped.
     await flushPendingSave();
@@ -1194,6 +1200,32 @@
     const path = state.openedPath;
     return path ? !!(state.sidecars.get(path) || {}).favorite : false;
   };
+  // ── Lightroom "Edit In" handoff ──────────────────────────────────────────────────────────
+  // A file handed to us by Launch Services (Lightroom's "Edit In", Finder's "Open With", or a
+  // direct `open -a Chromasmith file.tif`) — see main.rs's PendingOpen/take_pending_open_path
+  // (cold-launch case, pulled once below since an emitted event this early could arrive before
+  // any listener is attached) and the "open-file-path" event (already-running-app case, where
+  // a listener reliably already exists). Loading it is the SAME read_file_bytes -> File ->
+  // loadFXImages path openInEditorInner uses for a normal Library open, just for a path that
+  // isn't necessarily inside state.root.
+  async function openEditInHandoff(path) {
+    try {
+      const buf = await invoke('read_file_bytes', { path });
+      const file = new File([buf], baseName(path), { type: mimeFromName(path), lastModified: 0 });
+      await loadFXImages([file]);
+      window.chromasmithEditInPath = path;
+      const btn = document.getElementById('db-save-lr');
+      if (btn) btn.style.display = '';
+      if (typeof log === 'function') log(`Opened from Lightroom: ${baseName(path)} — use "Save to Lightroom" when done`, 'ok');
+      if (typeof toast === 'function') toast('Opened from Lightroom', true);
+    } catch (e) {
+      console.error('Edit-In handoff load failed', path, e);
+      if (typeof log === 'function') log(`Failed to open Lightroom handoff file: ${e && e.message || e}`, 'err');
+    }
+  }
+  invoke('take_pending_open_path').then((path) => { if (path) openEditInHandoff(path); }).catch(() => {});
+  window.__TAURI__.event.listen('open-file-path', (e) => { if (e && e.payload) openEditInHandoff(e.payload); });
+
   // Recipe-only export/version history (see library.rs's get_export_history/
   // append_export_history) — a persisted, coarser-grained log distinct from the in-session
   // fxHistory undo stack: it only grows on a successful export and survives relaunches.

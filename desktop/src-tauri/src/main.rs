@@ -420,7 +420,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-18a"
+    "2026-07-20a"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -429,6 +429,35 @@ fn native_build_tag() -> &'static str {
 fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+// Overwrites a file in place with rendered export bytes — used by "Save to Lightroom" (see
+// library-ui.js's Edit-In handoff wiring) to write the finished render straight back over the
+// TIFF Lightroom handed us, so Lightroom's own file-watcher re-imports and cloud-syncs it.
+// data_b64 (not a raw-bytes IPC body) mirrors the "recipe" base64 round-trip already used
+// elsewhere in this codebase (get_export_history/set_sidecar) — a proven-simple pattern here,
+// at the cost of ~33% transfer overhead which is a non-issue for a single-photo TIFF write.
+#[tauri::command]
+fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| format!("decode base64: {e}"))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("write {path}: {e}"))
+}
+
+// A file handed to us at launch (Lightroom's "Edit In", Finder's "Open With", or `open -a
+// Chromasmith file.tif` from a terminal) — see RunEvent::Opened in main() below, which is the
+// real macOS Launch-Services path all three of those go through, plus the args() fallback in
+// .setup() for direct CLI launches. Stashed here instead of emitted as a bare event because
+// RunEvent::Opened can fire on a cold start BEFORE the webview's JS has finished loading and
+// registered a listener — an emitted event with no listener yet is just lost. library-ui.js
+// pulls this once at its own startup instead, so timing can't drop it either way.
+struct PendingOpen(Mutex<Option<String>>);
+
+#[tauri::command]
+fn take_pending_open_path(state: tauri::State<PendingOpen>) -> Option<String> {
+    state.0.lock().unwrap().take()
 }
 
 fn gphotos_downloads_path() -> Result<PathBuf, String> {
@@ -616,6 +645,7 @@ fn main() {
     // a full quit + relaunch (real recompile) is needed before any native-side fix applies.
     eprintln!("=== Chromasmith native build: {} ===", native_build_tag());
     tauri::Builder::default()
+        .manage(PendingOpen(Mutex::new(None)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
@@ -629,6 +659,8 @@ fn main() {
             haptic_feedback,
             peek_raw_camera,
             read_file_bytes,
+            write_file_bytes,
+            take_pending_open_path,
             google_oauth_loopback,
             library::list_dir,
             library::get_thumbnail,
@@ -689,6 +721,15 @@ fn main() {
         })
         .setup(|app| {
             let handle = app.handle();
+
+            // CLI/manual-launch fallback for the Lightroom "Edit In" handoff (see PendingOpen
+            // above) — `open -a Chromasmith file.tif` or a direct binary launch with a path
+            // argument. RunEvent::Opened in run() below is the real Launch-Services path
+            // Lightroom/Finder actually use; this just covers the same handoff when testing
+            // from a terminal, where no Opened event fires at all.
+            if let Some(arg) = std::env::args().skip(1).find(|a| Path::new(a).is_file()) {
+                *handle.state::<PendingOpen>().0.lock().unwrap() = Some(arg);
+            }
 
             // Prune unbounded caches (thumbnails/decode JPEGs) in the background — see
             // library::prune_caches for the caps. Never blocks startup.
@@ -803,6 +844,23 @@ fn main() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Chromasmith");
+        .build(tauri::generate_context!())
+        .expect("error while building Chromasmith")
+        .run(|app_handle, event| {
+            // macOS Launch-Services "open this document" — the actual mechanism behind Finder's
+            // "Open With", and (once tauri.conf.json's fileAssociations register Chromasmith as
+            // an editor) Lightroom's "Edit In" handoff. Fires both on a cold launch WITH a file
+            // and on a already-running app being handed a new one. Stash it via PendingOpen
+            // (see above) rather than emitting straight to the webview — on a cold launch this
+            // can arrive before the frontend has attached any listener, so an emitted event
+            // would just be silently dropped; also emit it for the already-running case, where
+            // a listener reliably exists already and the extra immediacy is worth it.
+            if let tauri::RunEvent::Opened { urls } = event {
+                if let Some(path) = urls.into_iter().find_map(|u| u.to_file_path().ok()) {
+                    let path_s = path.to_string_lossy().into_owned();
+                    *app_handle.state::<PendingOpen>().0.lock().unwrap() = Some(path_s.clone());
+                    let _ = app_handle.emit("open-file-path", path_s);
+                }
+            }
+        });
 }

@@ -44,6 +44,32 @@
       "vendor/onnxruntime/libonnxruntime.dylib": "vendor/onnxruntime/libonnxruntime.dylib",
       "vendor/sam2/encoder.onnx": "vendor/sam2/encoder.onnx",
       "vendor/sam2/decoder.onnx": "vendor/sam2/decoder.onnx"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["tif", "tiff"],
+        "name": "TIFF Image",
+        "description": "TIFF Image",
+        "role": "Editor"
+      },
+      {
+        "ext": ["jpg", "jpeg"],
+        "name": "JPEG Image",
+        "description": "JPEG Image",
+        "role": "Editor"
+      },
+      {
+        "ext": ["png"],
+        "name": "PNG Image",
+        "description": "PNG Image",
+        "role": "Editor"
+      },
+      {
+        "ext": ["rw2", "raw"],
+        "name": "RAW Photo",
+        "description": "Panasonic RAW Photo",
+        "role": "Editor"
+      }
+    ]
   }
 }

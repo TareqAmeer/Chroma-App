@@ -194,6 +194,7 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
 .fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none}
 .fx-zoom-wrap.dragging{cursor:grabbing}
 .fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:rgba(0,0,0,.5);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:11;font-family:var(--mono)}
+.fx-zoom-ctrl #fx-zoom-slider{width:70px}
 .fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px 7px;border-radius:4px;line-height:1}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
 .fx-zoom-ctrl button#btn-loupe.on,.fx-zoom-ctrl button#btn-fx-fullres.on{background:var(--acc);color:#000}
@@ -818,6 +819,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <div id="fx-overflow-menu"></div>
     </div>
     <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
+    <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
+         window.chromasmithEditInPath and un-hides this) — writes the render straight back over
+         the file Lightroom handed us instead of the normal share-sheet save. -->
+    <button class="fx-db fx-db-pri" id="db-save-lr" style="display:none" onclick="chromasmithSaveToLightroom()" title="Save back to the file Lightroom handed off — Lightroom will re-import and sync it"><span class="fx-db-ic" id="db-export-lr"></span>Save to Lightroom</button>
     <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
   </div>
   <div class="fx-layout">
@@ -1244,9 +1249,9 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button id="btn-favorite" class="flag-btn flag-btn-fav" onclick="fxToggleFavorite()" title="Favorite (Library)" style="display:none"></button>
         </div>
         <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
-          <button class="btn bgh fx-mini" id="btn-before" title="Press and hold to see the original">○ Compare</button>
-          <button class="btn bgh fx-mini" id="btn-split" onclick="toggleSplit()" title="Split before/after view">⇔ Split</button>
-          <button class="btn bgh fx-mini" id="btn-hist" onclick="toggleHist()" title="Toggle RGB histogram overlay">▦ Histogram</button>
+          <button class="btn bgh fx-mini" id="btn-before" title="Press and hold to see the original">○</button>
+          <button class="btn bgh fx-mini" id="btn-split" onclick="toggleSplit()" title="Split before/after view">⇔</button>
+          <button class="btn bgh fx-mini" id="btn-hist" onclick="toggleHist()" title="Toggle RGB histogram overlay">▦</button>
         </div>
       </div>
       <div id="fx-filmstrip" title="Click a photo to preview it"></div>
@@ -1418,6 +1423,9 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <br><br><u>Browser / GitHub Pages:</u> create <b>Credentials → OAuth client ID → Web application</b> and add this app's address to BOTH lists — <i>Authorized JavaScript origins</i> gets the origin (e.g. <code>https://yourname.github.io</code>) and <i>Authorized redirect URIs</i> gets the full page URL (e.g. <code>https://yourname.github.io/Chroma-App/chromasmith-22.html</code>).
       <br><br><u>Desktop app:</u> create <b>Credentials → OAuth client ID → Desktop app</b> instead — no origins or redirect URIs to register at all; sign-in opens your system's default browser and completes over a local loopback connection (127.0.0.1), then hands control back to the app.
       <br><br>Either way, paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (the app re-prompts automatically); on the browser build, allow pop-ups for this site.</div>
+
+      <div class="faq-q">Can I edit a photo in Chromasmith from inside Lightroom?</div>
+      <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal, then click <b>Save to Lightroom</b> (replaces the regular Export button while a handoff photo is open) instead of Export — it writes straight back over the file Lightroom gave you, and Lightroom re-imports and syncs the result automatically.</div>
 
       <div class="faq-q">My RW2 / RAW colours don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
@@ -3190,7 +3198,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-20c';
+const BUILD='2026-07-20e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -7837,10 +7845,21 @@ function renderLoupe(){
   const src=fxWork;if(!src||!FX.ok)return;
   const fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
   const wrap=document.getElementById('fx-wrap');
-  const maxW=Math.min(900,wrap.clientWidth||900);
-  const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint (matches normal preview)
+  // deskx: don't cap at 900 — same reasoning as renderPreview's own maxW (a large desktop window
+  // has far more than 900px to show real detail in); web/mobile keep the 900 cap.
+  const deskx=document.body.classList.contains('deskx');
+  const maxW=deskx?(wrap.clientWidth||900):Math.min(900,wrap.clientWidth||900);
+  const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
   const dpr=Math.min(window.devicePixelRatio||1,2);
-  const cropW=Math.min(Math.round(cw*dpr),fw),cropH=Math.min(Math.round(ch*dpr),fh);
+  // fxZoom used to be pure CSS (transform:scale on the wrapper) applied ON TOP of a crop that
+  // was ALWAYS captured/rendered at this same fixed cw×ch×dpr resolution — so zooming the loupe
+  // past 100% just stretched an unchanged buffer with GPU bilinear, and the more you zoomed the
+  // blurrier it got relative to the real export (which always renders at true native res). Fix:
+  // re-render AT the zoomed-to resolution from a proportionally TIGHTER source crop, so higher
+  // zoom means more magnification of real source detail, not a stretched fixed buffer.
+  const z=Math.max(0.25,Math.min(8,fxZoom||1));
+  const outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
+  const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z),fh));
   const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
   const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
   const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
@@ -7849,11 +7868,14 @@ function renderLoupe(){
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,cropW,cropH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,
+  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]}); // export-scale grain & glow
   FX.setImage(fxWork);                                              // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
-  FX.cv.style.width=(cropW/dpr)+'px';FX.cv.style.height=(cropH/dpr)+'px';
+  // Unscaled (fxZoom=1) footprint — the wrapper's own transform:scale(fxZoom) (see _applyZoom)
+  // brings this to outW/outH's actual device-pixel size on screen, matching what was just
+  // rendered 1:1 instead of double-applying zoom (once here, once via CSS).
+  FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px';
   const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
   const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   document.getElementById('fx-no-img').style.display='none';
@@ -8378,6 +8400,16 @@ function syncExportScopeUI(){
   const btn=document.getElementById('btn-fx-export');if(!btn)return;
   btn.innerHTML='<span class="bdot"></span>Export'+(n>1?(scope==='current'?' current photo':` all (${n})`):'');
 }
+// Lightroom "Edit In" handoff — see library-ui.js's window.chromasmithEditInPath wiring and
+// the write-back redirect inside exportFX's save phase below. Just arms the flag and reuses
+// the normal single-photo export path (scope forced to 'current' — an Edit-In session is
+// always exactly one photo) so it gets the exact same render pipeline as a real export.
+async function chromasmithSaveToLightroom(){
+  if(!window.chromasmithEditInPath){log('Not a Lightroom Edit-In session','warn');return;}
+  window.chromasmithSaveToLightroomPending=true;
+  fxExportScope='current';
+  await exportFX();
+}
 async function exportFX(){
   if(!fxImages.length){log('No image loaded','warn');return}
   const scope=fxImages.length>1?fxExportScope:'all';
@@ -8501,8 +8533,21 @@ async function exportFX(){
         if(n>1){const dot=r.fname.lastIndexOf('.');r.fname=dot<0?`${r.fname}_${n}`:`${r.fname.slice(0,dot)}_${n}${r.fname.slice(dot)}`;}
       }
     }
-    // ── Phase 2: save all at once (one share sheet → Save to Photos) ──
-    if(results.length){setProg(N,`Saving ${results.length} file(s)…`);await saveFiles(results);}
+    // ── Phase 2: save ──
+    // Lightroom "Edit In" handoff (see library-ui.js's Save-to-Lightroom wiring): write the
+    // render straight back over the file Lightroom handed us instead of the normal share-sheet
+    // save, so Lightroom's own file-watcher re-imports and cloud-syncs it. Single-photo only —
+    // an Edit-In session is always exactly one photo.
+    if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath&&results.length){
+      setProg(N,'Saving to Lightroom…');
+      try{
+        const b64=_u8b64(results[0].content);
+        await window.__TAURI__.core.invoke('write_file_bytes',{path:window.chromasmithEditInPath,data_b64:b64});
+        log('Saved back to Lightroom: '+window.chromasmithEditInPath,'ok');
+        if(typeof toast==='function')toast('Saved to Lightroom');
+      }catch(e){log('Save to Lightroom failed: '+(e&&e.message||e),'err');}
+      window.chromasmithSaveToLightroomPending=false;
+    }else if(results.length){setProg(N,`Saving ${results.length} file(s)…`);await saveFiles(results);}
     // Recipe-only export history (Library-only — see chromasmithRecordExport in library-ui.js).
     // Only tracks the single currently-open Library photo (state.openedPath); a multi-photo
     // batch export doesn't map each rendered frame back to its own on-disk path here.
@@ -9797,7 +9842,7 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
  }}
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
- set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('hdr-log','log');
+ set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');set('hdr-log','log');
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');}
 syncAllFxBtn();
 document.addEventListener('keydown',e=>{
