@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21a';
+const BUILD='2026-07-21b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -8941,25 +8941,28 @@ function showSaveButton(files,items){
   host.innerHTML='';
   // Whole-batch share() may fail purely because of file COUNT/SIZE, while each photo shared
   // ALONE is well within the same browser's own limits (exactly what saveFile's single-photo
-  // path already relies on) — so per-photo buttons, each a fresh real tap, reliably work even
-  // when the combined share() doesn't. Only worth the extra taps for a genuine batch; a single
-  // failed photo still gets the simple one-button retry.
+  // path already relies on) — so ONE tap still works: loop share() per photo instead of once
+  // for the whole array. Each iteration is a fresh call, so even if a browser's transient-
+  // activation window doesn't survive past the first native share sheet, the catch below just
+  // downloads that one (and every remaining one) directly instead of stalling — the user never
+  // has to tap again regardless of how the browser behaves.
   if(items.length>1&&useShareSheet()){
-    const lbl=document.createElement('div');
-    lbl.style.cssText='font-size:11px;color:var(--mut);margin-bottom:6px';
-    lbl.textContent=`This browser can't save ${items.length} photos at once — tap each one:`;
-    host.appendChild(lbl);
-    items.forEach((it,i)=>{
-      const b=document.createElement('button');b.className='btn bgh';b.style.cssText='width:100%;margin-bottom:4px';
-      b.innerHTML=`<span class="bdot"></span>Save ${it.fname}`;
-      b.onclick=async()=>{
+    const b=document.createElement('button');b.className='btn bpri';b.style.width='100%';
+    b.innerHTML=`<span class="bdot"></span>Tap to save ${items.length} photos to Photos`;
+    b.onclick=async()=>{
+      b.disabled=true;
+      for(let i=0;i<items.length;i++){
+        b.innerHTML=`<span class="bdot"></span>Saving ${i+1} of ${items.length}…`;
         try{await navigator.share({files:[files[i]],title:'Chromasmith export'});}
-        catch(e){if(e&&e.name==='AbortError')return;anchorDownload(it.content,it.fname,it.mime);}
-        b.disabled=true;b.innerHTML=`<span class="bdot"></span>✓ Saved`;
-      };
-      host.appendChild(b);
-    });
-    log(`Tap each photo below to save it — this browser can't share all ${items.length} at once`,'info');
+        catch(e){
+          if(e&&e.name==='AbortError')continue; // this one photo skipped — keep going with the rest
+          anchorDownload(items[i].content,items[i].fname,items[i].mime);
+        }
+      }
+      host.innerHTML='';log(`Saved ${items.length} photos`,'ok');
+    };
+    host.appendChild(b);
+    log(`Tap "Save ${items.length} photos" — this browser can't share them all in one native sheet, so it'll step through them automatically`,'info');
     return;
   }
   const b=document.createElement('button');b.className='btn bpri';b.style.width='100%';
