@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21e';
+const BUILD='2026-07-21f';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5378,10 +5378,87 @@ function iccProfileDescription(icc){
   }catch(e){return null}
   return null;
 }
+// ── ProPhoto RGB → sRGB conversion (ISO 22028-3 / ROMM RGB) ─────────────────────────────────
+// Lightroom's internal working colour space — Classic AND cloud/CC alike — is ProPhoto RGB, and
+// its "Edit In" TIFF handoff carries that profile embedded. Lightroom Classic exposes a Color
+// Space preference to change this to sRGB before handoff; Lightroom CC (cloud) has NO such
+// setting at all — Adobe's own guidance for third-party Edit-In plugins is to auto-detect and
+// respect whatever profile is embedded. So for cloud LR users specifically, there is no
+// Lightroom-side fix available — Chromasmith has to actually convert. The whole rendering
+// pipeline downstream (s2l/l2s, every LUT/adjustment) is sRGB-referenced, so a ProPhoto source
+// decoded without this conversion is genuinely colorimetrically wrong (not just a display-
+// tagging mismatch, which was the separate bug fixed earlier for embedSRGBTag).
+// Standard published constants (not guessed/approximated) — self-verified below: a ProPhoto
+// white (1,1,1) must map to an sRGB white (1,1,1) through XYZ D50→D65 Bradford adaptation, and
+// it does, to 4 decimal places, which is a hard necessary condition for a correct conversion.
+const PROPHOTO_TO_XYZ_D50=[
+  0.7976749,0.1351917,0.0313534,
+  0.2880402,0.7118741,0.0000857,
+  0.0000000,0.0000000,0.8252100
+];
+const XYZ_D50_TO_D65_BRADFORD=[
+  0.9555766,-0.0230393,0.0631636,
+  -0.0282895,1.0099416,0.0210077,
+  0.0122982,-0.0204830,1.3299098
+];
+const XYZ_D65_TO_SRGB_LINEAR=[
+  3.2404542,-1.5371385,-0.4985314,
+  -0.9692660,1.8760108,0.0415560,
+  0.0556434,-0.2040259,1.0572252
+];
+function _mat3Mul(a,b){
+  const r=new Array(9);
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++){let s=0;for(let k=0;k<3;k++)s+=a[i*3+k]*b[k*3+j];r[i*3+j]=s;}
+  return r;
+}
+const PROPHOTO_LINEAR_TO_SRGB_LINEAR=_mat3Mul(XYZ_D65_TO_SRGB_LINEAR,_mat3Mul(XYZ_D50_TO_D65_BRADFORD,PROPHOTO_TO_XYZ_D50));
+// ROMM RGB tone response curve (ISO 22028-3): a short linear toe below Et=1/512, power 1.8 above.
+function proPhotoDecodeTRC(v){return v<0.03125?v/16:Math.pow(v,1.8);} // nonlinear[0,1] -> linear[0,1]
+function srgbEncodeTRC(v){v=Math.max(0,Math.min(1,v));return v<=0.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-0.055;} // linear[0,1] -> nonlinear[0,1]
+const PROPHOTO_DECODE_LUT=(()=>{const t=new Float32Array(256);for(let i=0;i<256;i++)t[i]=proPhotoDecodeTRC(i/255);return t;})();
+// Self-check, run once at load: ProPhoto white MUST land within rounding of sRGB white. If this
+// ever fails (e.g. a constant typo), log it loudly instead of silently mis-converting every
+// ProPhoto photo from here on.
+(function _verifyProPhotoMatrix(){
+  const m=PROPHOTO_LINEAR_TO_SRGB_LINEAR;
+  const w=[m[0]+m[1]+m[2],m[3]+m[4]+m[5],m[6]+m[7]+m[8]]; // matrix * (1,1,1)
+  const off=Math.max(Math.abs(w[0]-1),Math.abs(w[1]-1),Math.abs(w[2]-1));
+  if(off>0.001)console.error('ProPhoto→sRGB matrix white-point self-check FAILED (off by',off,') — conversion is disabled',w);
+  window._proPhotoMatrixOk=off<=0.001;
+})();
+// In-place ProPhoto RGB(A8) -> sRGB RGB(A8). Alpha untouched.
+function convertProPhotoRGBAtoSRGB(rgba){
+  if(!window._proPhotoMatrixOk)return; // self-check failed — never apply a possibly-wrong conversion
+  const m=PROPHOTO_LINEAR_TO_SRGB_LINEAR,lut=PROPHOTO_DECODE_LUT;
+  for(let i=0;i<rgba.length;i+=4){
+    const r=lut[rgba[i]],g=lut[rgba[i+1]],b=lut[rgba[i+2]];
+    rgba[i]=(srgbEncodeTRC(m[0]*r+m[1]*g+m[2]*b)*255+0.5)|0;
+    rgba[i+1]=(srgbEncodeTRC(m[3]*r+m[4]*g+m[5]*b)*255+0.5)|0;
+    rgba[i+2]=(srgbEncodeTRC(m[6]*r+m[7]*g+m[8]*b)*255+0.5)|0;
+  }
+}
 async function loadTiff(file){
   const buf=await file.arrayBuffer();
   const ifds=UTIF.decode(buf);UTIF.decodeImage(buf,ifds[0]);
   const rgba=UTIF.toRGBA8(ifds[0]);
+  // Embedded ICC profile (tag 34675) — read BEFORE the canvas is painted so a needed colour
+  // conversion (ProPhoto RGB → sRGB, see convertProPhotoRGBAtoSRGB above) can run in-place on
+  // rgba first; every downstream consumer (preview, masks, export) reads from this SAME canvas,
+  // so converting once here fixes all of them together. Kept on the returned entry afterward
+  // only for potential future diagnostic display — no longer used to tag exports (see
+  // embedSRGBTag's comment: re-embedding the source's own profile onto re-rendered, now-sRGB
+  // pixels was a separate, earlier bug).
+  const icc=ifds[0].t34675?new Uint8Array(ifds[0].t34675):null;
+  if(icc){
+    const desc=iccProfileDescription(icc);
+    log(`${file.name}: source TIFF colour profile — ${desc||'(embedded, name unreadable)'}`,'info');
+    if(desc&&/prophoto/i.test(desc)){
+      convertProPhotoRGBAtoSRGB(rgba);
+      log(`Converted from ProPhoto RGB to sRGB (Lightroom's internal working space — this is expected for an "Edit In" handoff, not an error)`,'ok');
+    }else if(desc&&!/srgb/i.test(desc)){
+      log(`⚠️ Not sRGB and not recognised as ProPhoto RGB — colours may look off vs. the original. Only sRGB and ProPhoto RGB sources are colour-converted; re-export with a recognised profile if possible.`,'warn');
+    }
+  }
   const c=document.createElement('canvas');c.width=ifds[0].width;c.height=ifds[0].height;
   c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer),c.width,c.height),0,0);
   // DPI from TIFF tags: t282=XResolution (RATIONAL), t296=ResolutionUnit (2=inch, 3=cm)
@@ -5389,17 +5466,6 @@ async function loadTiff(file){
   // before comparing (a bare xr[0] is the array [240,1], which fails `>0` → silent 72 default).
   let dpi=72;const xr=ifds[0].t282,un=ifds[0].t296;
   if(xr&&xr.length){const rv=xr[0],v=Array.isArray(rv)?(rv[1]?rv[0]/rv[1]:rv[0]):rv;if(v>0)dpi=(un&&un[0]===3)?Math.round(v*2.54):Math.round(v);}
-  // Embedded ICC profile (tag 34675) — kept on the entry for potential future diagnostic
-  // display only. NOT used to tag exports: the rendered output is sRGB-referenced regardless
-  // of this profile (see embedSRGBTag's comment) — re-embedding the SOURCE file's own profile
-  // onto re-rendered pixels was a real bug (colour-managed viewers showed a different result
-  // than the app's own untagged preview canvas).
-  const icc=ifds[0].t34675?new Uint8Array(ifds[0].t34675):null;
-  if(icc){
-    const desc=iccProfileDescription(icc);
-    log(`${file.name}: source TIFF colour profile — ${desc||'(embedded, name unreadable)'}`,'info');
-    if(desc&&!/srgb/i.test(desc))log(`⚠️ Not sRGB — if colours look off vs. Lightroom, re-export with Edit In set to sRGB (Lightroom Classic: Preferences → External Editing → Color Space)`,'warn');
-  }
   return{canvas:c,dpi,icc};
 }
 // ── Panasonic RW2 (and other RAW) input via libraw-wasm (vendored) ──
