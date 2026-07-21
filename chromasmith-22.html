@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21f';
+const BUILD='2026-07-21g';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5437,6 +5437,32 @@ function convertProPhotoRGBAtoSRGB(rgba){
     rgba[i+2]=(srgbEncodeTRC(m[6]*r+m[7]*g+m[8]*b)*255+0.5)|0;
   }
 }
+// A safe, ASCII-only subset of a decoded TIFF's basic descriptive EXIF tags — for "Save to
+// Lightroom" (see UTIF.encodeImage's caller in exportFX) to carry forward into the re-encoded
+// TIFF, instead of the previous behaviour of losing ALL metadata (the file being written back
+// wasn't even a real TIFF — see exportFX's comment). Deliberately narrow: UTIF.encodeImage is a
+// minimal encoder, empirically verified (see git history) to round-trip plain-ASCII string tags
+// perfectly at any length, but to CORRUPT the specific tag containing any non-ASCII byte (e.g.
+// "©") — not a size-limit issue, a character-set one. So every value is ASCII-stripped before
+// being included, and only simple flat string/rational tags are attempted at all — no XMP (t700,
+// often many KB), IPTC, GPS, or the EXIF sub-IFD (t34665, an offset-based substructure that isn't
+// safe to blindly relocate into a freshly re-encoded file). Partial metadata preservation beats
+// the previous total loss, without risking a corrupted file Lightroom can't even open.
+function _asciiOnly(s){return typeof s==='string'?s.replace(/[^\x20-\x7e]/g,'').trim():'';}
+function safeTiffMetaFrom(ifd0){
+  const out={};
+  const strTag=(key,tag)=>{
+    const v=ifd0[tag];
+    if(Array.isArray(v)&&typeof v[0]==='string'){const s=_asciiOnly(v[0]);if(s)out[key]=[s];}
+  };
+  strTag('t271','t271'); // Make
+  strTag('t272','t272'); // Model
+  strTag('t306','t306'); // DateTime
+  strTag('t315','t315'); // Artist
+  strTag('t33432','t33432'); // Copyright
+  strTag('t270','t270'); // ImageDescription
+  return out;
+}
 async function loadTiff(file){
   const buf=await file.arrayBuffer();
   const ifds=UTIF.decode(buf);UTIF.decodeImage(buf,ifds[0]);
@@ -5466,7 +5492,8 @@ async function loadTiff(file){
   // before comparing (a bare xr[0] is the array [240,1], which fails `>0` → silent 72 default).
   let dpi=72;const xr=ifds[0].t282,un=ifds[0].t296;
   if(xr&&xr.length){const rv=xr[0],v=Array.isArray(rv)?(rv[1]?rv[0]/rv[1]:rv[0]):rv;if(v>0)dpi=(un&&un[0]===3)?Math.round(v*2.54):Math.round(v);}
-  return{canvas:c,dpi,icc};
+  const tiffMeta=safeTiffMetaFrom(ifds[0]); // basic EXIF subset for "Save to Lightroom" — see safeTiffMetaFrom's comment
+  return{canvas:c,dpi,icc,tiffMeta};
 }
 // ── Panasonic RW2 (and other RAW) input via libraw-wasm (vendored) ──
 // LibRaw runs in a Web Worker. Its wasm uses SharedArrayBuffer → needs cross-origin
@@ -5903,8 +5930,8 @@ async function loadFXImages(fileList){
         log(`${file.name}: this isn't actually RAW data — the source (likely Google Photos) only had a ${sniffedKind.toUpperCase()} copy. Imported as ${sniffedKind.toUpperCase()}; RAW-only adjustments (Color NR, RAW profile) won't apply.`,'warn');
       }
       if(isTiffFile(file)){
-        const{canvas,dpi,icc}=await loadTiff(file);
-        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately
+        const{canvas,dpi,icc,tiffMeta}=await loadTiff(file);
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc,tiffMeta}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately; tiffMeta → Save to Lightroom's real-TIFF re-encode
         continue;
       }
       if(isRw2File(file)&&!sniffedKind){
@@ -8602,19 +8629,38 @@ async function exportFX(){
           const matted=canvasCompose(ec,P.canvas);
           if(matted!==ec){ec.width=ec.height=0;ec=matted;}
         }
-        const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
-        const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||RAW_FILE_EXT_RE.test('.'+it.ext)):fmt==='png'; // lossless source → lossless out
-        const mime=isPng?'image/png':'image/jpeg',outExt=isPng?'png':'jpg';
-        let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
-        // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
-        // fails to save the result to Photos — cap at 0.99 on touch devices.
-        if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
-        const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q));
-        if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;continue;}
-        let out=new Uint8Array(await blob.arrayBuffer());
-        if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
-        out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
-        out=injectDPI(out,outExt,it.dpi);
+        let out,outExt,mime;
+        if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath){
+          // Write back a REAL TIFF — this used to encode PNG bytes and overwrite the .tif path
+          // with them anyway (format/extension mismatch), which is why ALL of the original
+          // file's metadata came back empty: PNG has no equivalent storage for TIFF/EXIF tags,
+          // and Lightroom's file-watcher expects the SAME format it handed off. UTIF.js (already
+          // bundled for TIFF import) can also ENCODE — see safeTiffMetaFrom's comment for exactly
+          // which tags are carried forward and why (ASCII-only subset; UTIF's minimal encoder
+          // was empirically verified to corrupt any tag containing a non-ASCII byte).
+          outExt='tif';mime='image/tiff';
+          const w=ec.width,h=ec.height;
+          const rgba=ec.getContext('2d').getImageData(0,0,w,h).data;
+          const meta=Object.assign({},it.tiffMeta,{
+            t282:[[it.dpi||72,1]],t283:[[it.dpi||72,1]],t296:[1], // XResolution/YResolution/ResolutionUnit(inches)
+            t305:['Chromasmith'], // Software — honest about provenance, not copied from the source
+          });
+          out=new Uint8Array(UTIF.encodeImage(rgba.buffer,w,h,meta));
+        }else{
+          const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+          const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||RAW_FILE_EXT_RE.test('.'+it.ext)):fmt==='png'; // lossless source → lossless out
+          mime=isPng?'image/png':'image/jpeg';outExt=isPng?'png':'jpg';
+          let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
+          // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
+          // fails to save the result to Photos — cap at 0.99 on touch devices.
+          if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
+          const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q));
+          if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;continue;}
+          out=new Uint8Array(await blob.arrayBuffer());
+          if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
+          out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
+          out=injectDPI(out,outExt,it.dpi);
+        }
         // Filename pattern: the rename field now applies to BATCH exports too (it used to be
         // single-export only — batch files were always forced to the source name + _vN.N).
         // Tokens: {name} = source filename, {seq} = 1-based position in the batch, {date} =
