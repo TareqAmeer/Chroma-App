@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21d';
+const BUILD='2026-07-21e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5346,6 +5346,38 @@ async function deleteLUTFromLibrary(){
 // TIFF: browsers can't decode TIFF natively — use the embedded UTIF (incl. 16-bit and
 // LZW/ZIP-compressed Lightroom exports; 16-bit is converted to the pipeline's 8-bit).
 function isTiffFile(f){return /\.tiff?$/i.test(f.name)||f.type==='image/tiff'}
+// Best-effort read of an ICC profile's human-readable name (the 'desc' tag — textDescriptionType
+// in ICC v2, multiLocalizedUnicodeType in v4) — diagnostic only, not used for any colour math.
+// Lets us SEE what colour space a source file actually claims (e.g. "ProPhoto RGB" — Lightroom
+// Classic's External Editing default unless changed to sRGB) instead of guessing blind.
+function iccProfileDescription(icc){
+  try{
+    if(!icc||icc.length<132)return null;
+    const dv=new DataView(icc.buffer,icc.byteOffset,icc.byteLength);
+    const tagCount=dv.getUint32(128);
+    for(let i=0;i<tagCount;i++){
+      const off=132+i*12;
+      if(off+12>icc.length)break;
+      const sig=String.fromCharCode(icc[off],icc[off+1],icc[off+2],icc[off+3]);
+      if(sig!=='desc')continue;
+      const tagOff=dv.getUint32(off+4),typeSig=String.fromCharCode(icc[tagOff],icc[tagOff+1],icc[tagOff+2],icc[tagOff+3]);
+      if(typeSig==='desc'){ // ICC v2: 4 type + 4 reserved + 4 ASCII-count, then ASCII (nul-terminated)
+        const n=dv.getUint32(tagOff+8);
+        let s='';for(let k=0;k<n-1;k++)s+=String.fromCharCode(icc[tagOff+12+k]);
+        return s.trim()||null;
+      }
+      if(typeSig==='mluc'){ // ICC v4: 4 type + 4 reserved + 4 record-count + 4 record-size, then records
+        const recCount=dv.getUint32(tagOff+8),recSize=dv.getUint32(tagOff+12)||12;
+        if(recCount<1)return null;
+        const len=dv.getUint32(tagOff+16+4),strOff=dv.getUint32(tagOff+16+8);
+        let s='';for(let k=0;k<len;k+=2)s+=String.fromCharCode(dv.getUint16(tagOff+strOff+k)); // UTF-16BE
+        return s.trim()||null;
+      }
+      return null;
+    }
+  }catch(e){return null}
+  return null;
+}
 async function loadTiff(file){
   const buf=await file.arrayBuffer();
   const ifds=UTIF.decode(buf);UTIF.decodeImage(buf,ifds[0]);
@@ -5363,6 +5395,11 @@ async function loadTiff(file){
   // onto re-rendered pixels was a real bug (colour-managed viewers showed a different result
   // than the app's own untagged preview canvas).
   const icc=ifds[0].t34675?new Uint8Array(ifds[0].t34675):null;
+  if(icc){
+    const desc=iccProfileDescription(icc);
+    log(`${file.name}: source TIFF colour profile — ${desc||'(embedded, name unreadable)'}`,'info');
+    if(desc&&!/srgb/i.test(desc))log(`⚠️ Not sRGB — if colours look off vs. Lightroom, re-export with Edit In set to sRGB (Lightroom Classic: Preferences → External Editing → Color Space)`,'warn');
+  }
   return{canvas:c,dpi,icc};
 }
 // ── Panasonic RW2 (and other RAW) input via libraw-wasm (vendored) ──
