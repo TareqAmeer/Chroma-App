@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21b';
+const BUILD='2026-07-21c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -8578,7 +8578,7 @@ async function exportFX(){
       setProg(N,'Saving to Lightroom…');
       try{
         const b64=_u8b64(results[0].content);
-        await window.__TAURI__.core.invoke('write_file_bytes',{path:window.chromasmithEditInPath,data_b64:b64});
+        await window.__TAURI__.core.invoke('write_file_bytes',{path:window.chromasmithEditInPath,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
         log('Saved back to Lightroom: '+window.chromasmithEditInPath,'ok');
         if(typeof toast==='function')toast('Saved to Lightroom');
       }catch(e){log('Save to Lightroom failed: '+(e&&e.message||e),'err');}
