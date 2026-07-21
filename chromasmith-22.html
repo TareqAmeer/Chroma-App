@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21c';
+const BUILD='2026-07-21d';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5193,41 +5193,20 @@ function pngSpliceAfterIHDR(out,chunk){ // sig(8)+IHDR(25) = 33 bytes
   res.set(out.subarray(0,33),0);res.set(chunk,33);res.set(out.subarray(33),33+chunk.length);
   return res;
 }
-async function deflateZlib(bytes){ // zlib-wrapped deflate via native CompressionStream
-  if(typeof CompressionStream==='undefined')throw new Error('no CompressionStream');
-  const cs=new CompressionStream('deflate'); // 'deflate' = zlib (with header/adler32), what iCCP needs
-  const w=cs.writable.getWriter();w.write(bytes);w.close();
-  const buf=await new Response(cs.readable).arrayBuffer();
-  return new Uint8Array(buf);
-}
-// Embed an ICC profile into already-encoded PNG/JPEG bytes. Returns a (possibly new) Uint8Array.
-async function embedICC(out,icc,ext){
-  if(!icc||!icc.length)return out;
-  try{
-    if(ext==='png'){
-      try{
-        const comp=await deflateZlib(icc);
-        // iCCP: profile name + 0 + compression method(0) + zlib datastream
-        const name='ICC',data=new Uint8Array(name.length+2+comp.length);
-        for(let i=0;i<name.length;i++)data[i]=name.charCodeAt(i);
-        data[name.length]=0;data[name.length+1]=0;data.set(comp,name.length+2);
-        return pngSpliceAfterIHDR(out,pngChunk('iCCP',data));
-      }catch(e){ // fallback: sRGB chunk (rendering intent 0) — correct for our sRGB TIFF decodes
-        return pngSpliceAfterIHDR(out,pngChunk('sRGB',new Uint8Array([0])));
-      }
-    } else { // JPEG: APP2 ICC_PROFILE segment (single chunk 1/1; profiles here are <64KB)
-      const sig='ICC_PROFILE\0',hdr=new Uint8Array(sig.length+2);
-      for(let i=0;i<sig.length;i++)hdr[i]=sig.charCodeAt(i);
-      hdr[sig.length]=1;hdr[sig.length+1]=1; // seq 1 of 1
-      const payload=new Uint8Array(hdr.length+icc.length);payload.set(hdr,0);payload.set(icc,hdr.length);
-      const segLen=payload.length+2; // length field includes its own 2 bytes
-      const seg=new Uint8Array(4+payload.length);
-      seg[0]=0xFF;seg[1]=0xE2;seg[2]=(segLen>>8)&255;seg[3]=segLen&255;seg.set(payload,4);
-      const res=new Uint8Array(out.length+seg.length);
-      res.set(out.subarray(0,2),0);res.set(seg,2);res.set(out.subarray(2),2+seg.length); // after SOI
-      return res;
-    }
-  }catch(e){return out}
+// The rendering pipeline always outputs sRGB-referenced pixels (s2l/l2s gamma conversion
+// throughout, applyTone/applyGrade etc.), REGARDLESS of what colour space the ORIGINAL source
+// file was actually in. Tag every export sRGB explicitly instead of leaving it untagged (belt-
+// and-suspenders against a stricter viewer assuming something else) — and never re-embed a TIFF
+// source's OWN icc profile (Adobe RGB/ProPhoto/a camera profile — see loadTiff's icc capture)
+// onto the re-rendered output, which is no longer actually in that profile. This function used
+// to do exactly that (embedICC, now removed) — colour-managed viewers (Preview.app, Photoshop,
+// any browser honouring embedded profiles) reinterpreted sRGB-intended pixels through the wrong,
+// foreign profile, while the app's own on-screen canvas has no such colour management and shows
+// the same values as-is, producing "the export looks different from the preview".
+function embedSRGBTag(out,ext){
+  if(ext!=='png')return out; // untagged JPEG already defaults to sRGB in virtually every viewer
+  try{return pngSpliceAfterIHDR(out,pngChunk('sRGB',new Uint8Array([0])));}
+  catch(e){return out}
 }
 function injectDPI(b,ext,dpi){
   dpi=Math.max(1,Math.round(dpi||72));
@@ -5378,8 +5357,11 @@ async function loadTiff(file){
   // before comparing (a bare xr[0] is the array [240,1], which fails `>0` → silent 72 default).
   let dpi=72;const xr=ifds[0].t282,un=ifds[0].t296;
   if(xr&&xr.length){const rv=xr[0],v=Array.isArray(rv)?(rv[1]?rv[0]/rv[1]:rv[0]):rv;if(v>0)dpi=(un&&un[0]===3)?Math.round(v*2.54):Math.round(v);}
-  // Embedded ICC profile (tag 34675) — carry it through so the export can be tagged with
-  // the source colour space; otherwise an untagged file looks "off" on wide-gamut displays.
+  // Embedded ICC profile (tag 34675) — kept on the entry for potential future diagnostic
+  // display only. NOT used to tag exports: the rendered output is sRGB-referenced regardless
+  // of this profile (see embedSRGBTag's comment) — re-embedding the SOURCE file's own profile
+  // onto re-rendered pixels was a real bug (colour-managed viewers showed a different result
+  // than the app's own untagged preview canvas).
   const icc=ifds[0].t34675?new Uint8Array(ifds[0].t34675):null;
   return{canvas:c,dpi,icc};
 }
@@ -8528,7 +8510,7 @@ async function exportFX(){
         if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;continue;}
         let out=new Uint8Array(await blob.arrayBuffer());
         if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
-        if(it.icc)out=await embedICC(out,it.icc,outExt); // TIFF source: re-embed its ICC (no source bytes to splice from)
+        out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
         out=injectDPI(out,outExt,it.dpi);
         // Filename pattern: the rename field now applies to BATCH exports too (it used to be
         // single-export only — batch files were always forced to the source name + _vN.N).
