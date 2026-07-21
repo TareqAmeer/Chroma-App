@@ -31,6 +31,13 @@
       }
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["adobe+5e575447f1fc4a4228c93a157e8422d9f310dd31"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["dmg", "app"],

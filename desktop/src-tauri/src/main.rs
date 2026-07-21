@@ -460,6 +460,20 @@ fn take_pending_open_path(state: tauri::State<PendingOpen>) -> Option<String> {
     state.0.lock().unwrap().take()
 }
 
+// Adobe Lightroom OAuth callback — Adobe's "Native App" credential type (see chromasmith-22.html's
+// lrAuthNative) redirects to a registered custom URL scheme (adobe+<id>://...), NOT an HTTP
+// loopback like Google's "Desktop app" client type. macOS routes a custom-scheme open through the
+// SAME Launch-Services mechanism as a file open — see RunEvent::Opened below, which now branches
+// on url.scheme() to tell the two apart. Same PendingX-mutex-plus-live-event pattern as
+// PendingOpen above, for the same reason (a cold-launch race is unlikely for an interactive
+// sign-in flow the user just triggered, but costs nothing to guard against anyway).
+struct PendingOAuth(Mutex<Option<String>>);
+
+#[tauri::command]
+fn take_pending_oauth_callback(state: tauri::State<PendingOAuth>) -> Option<String> {
+    state.0.lock().unwrap().take()
+}
+
 fn gphotos_downloads_path() -> Result<PathBuf, String> {
     let home = std::env::var_os("HOME").ok_or("no HOME")?;
     Ok(PathBuf::from(home).join("Documents").join("Google Photos Download"))
@@ -579,17 +593,14 @@ struct OAuthResult {
     query: String,
 }
 
+// Google's "Desktop app" OAuth client type uses a plain HTTP loopback redirect (RFC 8252) — an
+// ephemeral 127.0.0.1 port this process listens on directly. Adobe's Lightroom integration turned
+// out to use a DIFFERENT credential type ("Native App") that redirects to a registered custom URL
+// scheme instead (adobe+<id>://...) — see PendingOAuth/RunEvent::Opened below for that flow; it
+// doesn't go through this loopback listener at all (an adobe_oauth_loopback command used to live
+// here, sharing this same function, before that was discovered).
 #[tauri::command]
 async fn google_oauth_loopback(auth_url_template: String) -> Result<OAuthResult, String> {
-    oauth_loopback_flow(auth_url_template).await
-}
-
-// Adobe Lightroom "Connect Lightroom" sign-in (see chromasmith-22.html's lrAuthNative) — same
-// RFC 8252 loopback-redirect/PKCE flow as Google above, just a differently-named command so the
-// two integrations don't read as confusingly cross-wired. Adobe IMS's loopback redirect_uri
-// format is identical (http://127.0.0.1:{PORT}), so the underlying flow needs no changes at all.
-#[tauri::command]
-async fn adobe_oauth_loopback(auth_url_template: String) -> Result<OAuthResult, String> {
     oauth_loopback_flow(auth_url_template).await
 }
 
@@ -659,8 +670,10 @@ fn main() {
     eprintln!("=== Chromasmith native build: {} ===", native_build_tag());
     tauri::Builder::default()
         .manage(PendingOpen(Mutex::new(None)))
+        .manage(PendingOAuth(Mutex::new(None)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
             store_dcp_lut,
             decode_raw_v2,
@@ -674,8 +687,8 @@ fn main() {
             read_file_bytes,
             write_file_bytes,
             take_pending_open_path,
+            take_pending_oauth_callback,
             google_oauth_loopback,
-            adobe_oauth_loopback,
             library::list_dir,
             library::get_thumbnail,
             library::get_preview,
@@ -870,10 +883,21 @@ fn main() {
             // would just be silently dropped; also emit it for the already-running case, where
             // a listener reliably exists already and the extra immediacy is worth it.
             if let tauri::RunEvent::Opened { urls } = event {
-                if let Some(path) = urls.into_iter().find_map(|u| u.to_file_path().ok()) {
-                    let path_s = path.to_string_lossy().into_owned();
-                    *app_handle.state::<PendingOpen>().0.lock().unwrap() = Some(path_s.clone());
-                    let _ = app_handle.emit("open-file-path", path_s);
+                // A file:// URL (Lightroom Edit-In / Finder "Open With" / CLI open) goes to
+                // PendingOpen as before. Anything else — currently just Adobe's Lightroom OAuth
+                // custom-scheme callback (adobe+<id>://...), registered via tauri-plugin-deep-link
+                // in tauri.conf.json — goes to PendingOAuth instead. Iterates every url (not just
+                // the first) since these could in principle arrive in the same batch.
+                for u in urls {
+                    if let Ok(path) = u.to_file_path() {
+                        let path_s = path.to_string_lossy().into_owned();
+                        *app_handle.state::<PendingOpen>().0.lock().unwrap() = Some(path_s.clone());
+                        let _ = app_handle.emit("open-file-path", path_s);
+                    } else {
+                        let url_s = u.to_string();
+                        *app_handle.state::<PendingOAuth>().0.lock().unwrap() = Some(url_s.clone());
+                        let _ = app_handle.emit("adobe-oauth-callback", url_s);
+                    }
                 }
             }
         });

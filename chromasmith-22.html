@@ -1445,7 +1445,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal — a new <b>Save to Lightroom</b> button appears next to the regular Export button while a handoff photo is open. Use it to write straight back over the file Lightroom gave you (Lightroom re-imports and syncs the result automatically); the normal Export button is still there too, unchanged, for a regular local export of the same photo.</div>
 
       <div class="faq-q">Can I browse my Lightroom cloud photos?</div>
-      <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → add the <b>Lightroom APIs</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. Once connected (Image Input → <b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the editor.</div>
+      <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → Add API → <b>Lightroom Services</b> → OAuth credential type <b>Native App</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. A Native App credential redirects through a custom URL scheme (not a plain localhost port like Google's), which is fixed per-project — if you create your own Adobe integration rather than using an existing one, the app's redirect URI constant needs updating to match yours. Once connected (Image Input → <b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the editor.</div>
 
       <div class="faq-q">My RW2 / RAW colours don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21g';
+const BUILD='2026-07-21h';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -9561,20 +9561,25 @@ gpUpdateUI();
 // already generic, not Google-specific.
 // ⚠️ Unlike Google Cloud Console's self-serve "Testing" mode, Adobe's Lightroom Partner APIs
 // (the lr_partner_apis/lr_partner_rendition_apis scopes below) have historically required
-// Adobe's own partner approval on top of just creating a project — a real project alone may not
-// be enough to actually call these endpoints. Built and wired end-to-end, but NOT verified
-// against a live Adobe account/approved integration (no way to get one in this environment) —
-// treat the exact scope string / endpoint paths as best-effort from Adobe's documented API
-// shape, and expect to debug the token exchange or a 403 on first real use.
+// Adobe's own partner approval on top of just creating a project.
+// ⚠️ Adobe's "Native App" OAuth credential type (what a Lightroom-API project actually issues)
+// does NOT use an HTTP loopback redirect like Google's "Desktop app" client type — it redirects
+// to a registered CUSTOM URL SCHEME instead (adobe+<id>://adobeid/<client-id>). macOS routes that
+// through Launch Services exactly like a file-open, which main.rs's RunEvent::Opened handler
+// picks up (see PendingOAuth there) via tauri-plugin-deep-link's scheme registration
+// (tauri.conf.json's plugins.deep-link.desktop.schemes). LR_REDIRECT_URI below is the EXACT
+// string Adobe's console shows for THIS integration — it's fixed per-project, not something we
+// construct; a different Adobe project would need this updated to match.
 const LR_IMS_AUTH='https://ims-na1.adobelogin.com/ims/authorize/v2';
 const LR_IMS_TOKEN='https://ims-na1.adobelogin.com/ims/token/v3';
 const LR_API='https://lr.adobe.io/v2';
 const LR_SCOPES='openid,AdobeID,lr_partner_apis,lr_partner_rendition_apis,offline_access';
+const LR_REDIRECT_URI='adobe+5e575447f1fc4a4228c93a157e8422d9f310dd31://adobeid/d89cbea4405644259449bd17670da630';
 function lrClientId(){try{return(localStorage.getItem('lrClientId')||'').trim()}catch(e){return''}}
 async function lrAskClientId(force){
   let cid=lrClientId();
   if(cid&&!force)return cid;
-  const msg='Paste your Adobe API client ID (Developer Console → your project → Credentials).\n\nMust have the Lightroom APIs added — these require Adobe partner approval beyond a self-serve project (Adobe Developer Console → your project → Add API → Lightroom APIs). See Guide → "Can I browse my Lightroom cloud photos?".';
+  const msg='Paste your Adobe API client ID (Developer Console → your project → Credentials).\n\nMust have the Lightroom APIs added — these require Adobe partner approval beyond a self-serve project (Adobe Developer Console → your project → Add API → Lightroom APIs). See Guide → "Can I browse my Lightroom cloud photos?". Note: LR_REDIRECT_URI in this file is fixed to ONE specific Adobe integration — a different client ID from a DIFFERENT Adobe project needs that constant updated to match, not just the ID pasted here.';
   const picked=await askTextModal('Adobe API Client ID',msg,cid||'');
   cid=(picked||'').trim();
   if(cid){try{localStorage.setItem('lrClientId',cid)}catch(e){}}
@@ -9582,24 +9587,36 @@ async function lrAskClientId(force){
 }
 function lrTok(){try{const t=JSON.parse(sessionStorage.getItem('lrTok')||'null');if(t&&t.at&&t.exp>Date.now()+60e3)return t}catch(e){}return null}
 function lrConnected(){return!!lrTok()}
-// Same loopback/PKCE mechanics as gpAuthNative — see that function's comments for why each
-// piece (loopback redirect, code_verifier/challenge, optional client_secret retry) is there.
+// Opens the system browser at Adobe's consent screen, then waits for the custom-scheme callback
+// (see the comment above LR_REDIRECT_URI) via a live event listener — registered BEFORE the
+// browser opens, so unlike PendingOpen's cold-launch file-handoff case there's no listener-not-
+// attached-yet race to guard against here (the callback can only arrive after the user finishes
+// an interactive sign-in in the browser, well after this function has already set up its
+// listener). client_secret retry logic mirrors gpAuthNative's — see that function's comments.
 async function lrAuthNative(cid){
   const verifier=pkceVerifier(),challenge=await pkceChallenge(verifier);
-  const template=LR_IMS_AUTH+'?'+new URLSearchParams({
-    client_id:cid,redirect_uri:'http://127.0.0.1:{PORT}',response_type:'code',
+  const authUrl=LR_IMS_AUTH+'?'+new URLSearchParams({
+    client_id:cid,redirect_uri:LR_REDIRECT_URI,response_type:'code',
     scope:LR_SCOPES,state:'lrcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
   const invoke=window.__TAURI__.core.invoke;
-  let result;
-  try{result=await invoke('adobe_oauth_loopback',{authUrlTemplate:template})}
-  catch(e){throw new Error('Lightroom sign-in failed: '+(e&&e.message||e))}
-  const params=new URLSearchParams(result.query);
+  const callbackPromise=new Promise((resolve,reject)=>{
+    let unlisten=null;
+    const timeout=setTimeout(()=>{if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
+    window.__TAURI__.event.listen('adobe-oauth-callback',(e)=>{
+      clearTimeout(timeout);if(unlisten)unlisten();resolve(e.payload);
+    }).then(un=>{unlisten=un;});
+  });
+  try{await invoke('open_url_native',{url:authUrl})}
+  catch(e){throw new Error('Could not open the sign-in page: '+(e&&e.message||e))}
+  const callbackUrl=await callbackPromise;
+  let params;
+  try{params=new URL(callbackUrl).searchParams}
+  catch(e){throw new Error('Lightroom sign-in failed: could not parse the callback URL')}
   if(params.get('error'))throw new Error('Lightroom sign-in failed: '+params.get('error'));
   const code=params.get('code');
   if(!code)throw new Error('Lightroom sign-in failed: no authorization code returned');
-  const redirect_uri=`http://127.0.0.1:${result.port}`;
   const exchange=async(secret)=>{
-    const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri};
+    const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri:LR_REDIRECT_URI};
     if(secret)body.client_secret=secret;
     const r=await fetch(LR_IMS_TOKEN,{method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
