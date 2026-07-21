@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-20h';
+const BUILD='2026-07-21a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -8924,6 +8924,14 @@ async function saveFiles(items){ // items: [{content,fname,mime}]
       return;
     }
   }
+  // Mobile/touch browsers commonly cap navigator.canShare({files}) at a smaller file-count or
+  // total-size than a full-res batch export hits — canShare returns false for the WHOLE batch
+  // even though single-photo exports (saveFile, one file) are well under that cap and share
+  // fine. The desktop staggered-anchorDownload loop below is a silent no-op here: iOS Safari has
+  // no "Downloads" UI for it, and every click() after the first happens outside the original tap's
+  // user-activation window, so nothing visible happens — a batch export just looked "finished"
+  // with nothing to show for it. Offer an explicit per-photo save instead of falling through.
+  if(useShareSheet()){showSaveButton(files,items);return;}
   // Desktop path: Chrome/Safari block a burst of same-tick downloads as "multiple automatic
   // downloads" after the first one, so the 2nd+ files silently never save. Stagger them.
   for(const it of items){anchorDownload(it.content,it.fname,it.mime);await new Promise(r=>setTimeout(r,300))}
@@ -8931,6 +8939,29 @@ async function saveFiles(items){ // items: [{content,fname,mime}]
 function showSaveButton(files,items){
   const host=document.getElementById('fx-save-prompt')||(()=>{const d=document.createElement('div');d.id='fx-save-prompt';d.style.cssText='margin:10px 0';const ex=document.getElementById('btn-fx-export');ex&&ex.parentNode.appendChild(d);return d})();
   host.innerHTML='';
+  // Whole-batch share() may fail purely because of file COUNT/SIZE, while each photo shared
+  // ALONE is well within the same browser's own limits (exactly what saveFile's single-photo
+  // path already relies on) — so per-photo buttons, each a fresh real tap, reliably work even
+  // when the combined share() doesn't. Only worth the extra taps for a genuine batch; a single
+  // failed photo still gets the simple one-button retry.
+  if(items.length>1&&useShareSheet()){
+    const lbl=document.createElement('div');
+    lbl.style.cssText='font-size:11px;color:var(--mut);margin-bottom:6px';
+    lbl.textContent=`This browser can't save ${items.length} photos at once — tap each one:`;
+    host.appendChild(lbl);
+    items.forEach((it,i)=>{
+      const b=document.createElement('button');b.className='btn bgh';b.style.cssText='width:100%;margin-bottom:4px';
+      b.innerHTML=`<span class="bdot"></span>Save ${it.fname}`;
+      b.onclick=async()=>{
+        try{await navigator.share({files:[files[i]],title:'Chromasmith export'});}
+        catch(e){if(e&&e.name==='AbortError')return;anchorDownload(it.content,it.fname,it.mime);}
+        b.disabled=true;b.innerHTML=`<span class="bdot"></span>✓ Saved`;
+      };
+      host.appendChild(b);
+    });
+    log(`Tap each photo below to save it — this browser can't share all ${items.length} at once`,'info');
+    return;
+  }
   const b=document.createElement('button');b.className='btn bpri';b.style.width='100%';
   b.innerHTML=`<span class="bdot"></span>Tap to save ${items.length} photo${items.length>1?'s':''} to Photos`;
   b.onclick=async()=>{try{await navigator.share({files,title:'Chromasmith export'});host.innerHTML='';log('Saved to Photos','ok');}
