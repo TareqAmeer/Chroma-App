@@ -20,6 +20,7 @@ mod lens_correct;
 mod library;
 mod raw_decode;
 mod sam;
+mod tiff_meta;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 fn percent_decode(s: &str) -> String {
@@ -343,13 +344,23 @@ fn haptic_feedback(_app: tauri::AppHandle) {}
 // pattern as google_oauth_loopback/open_url_native) sidesteps CORS, redirects, and any
 // WKWebView blob-size limit entirely. On a non-2xx the error string carries the HTTP status,
 // so an auth/scope problem (401/403) is distinguishable from the transport problem this fixes.
+// `headers`: optional extra request headers (e.g. Lightroom's X-API-Key) — existing callers
+// that don't pass it are unaffected (Tauri maps a missing invoke arg to None).
 #[tauri::command]
-fn download_url_native(app: tauri::AppHandle, url: String, bearer: String) -> Result<tauri::ipc::Response, String> {
+fn download_url_native(
+    app: tauri::AppHandle,
+    url: String,
+    bearer: String,
+    headers: Option<Vec<(String, String)>>,
+) -> Result<tauri::ipc::Response, String> {
     use std::io::Read;
     if !url.starts_with("https://") {
         return Err("refusing to download a non-https URL".into());
     }
-    let req = ureq::get(&url).set("Authorization", &format!("Bearer {bearer}"));
+    let mut req = ureq::get(&url).set("Authorization", &format!("Bearer {bearer}"));
+    for (k, v) in headers.unwrap_or_default() {
+        req = req.set(&k, &v);
+    }
     match req.call() {
         Ok(resp) => {
             let content_type = resp.header("content-type").unwrap_or("?").to_string();
@@ -420,7 +431,7 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
 // it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
 #[tauri::command]
 fn native_build_tag() -> &'static str {
-    "2026-07-20a"
+    "2026-07-22a"
 }
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
@@ -444,6 +455,85 @@ fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
         .decode(data_b64)
         .map_err(|e| format!("decode base64: {e}"))?;
     std::fs::write(&path, bytes).map_err(|e| format!("write {path}: {e}"))
+}
+
+// "Save to Lightroom" writer: like write_file_bytes, but first reads the ORIGINAL TIFF still
+// sitting at `path` (the Edit-In file we're about to overwrite) and splices its EXIF sub-IFD
+// (shutter/aperture/ISO/focal length/lens/DateTimeOriginal — everything Lightroom's Info panel
+// shows), GPS, XMP and IPTC into the rendered TIFF — see tiff_meta.rs. The read MUST happen
+// before the write: the command overwrites its own metadata source. A splice failure never
+// blocks the save — the rendered bytes are written unmodified, same as before this existed.
+#[tauri::command]
+fn write_lightroom_tiff(path: String, data_b64: String) -> Result<(), String> {
+    use base64::Engine;
+    let rendered = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| format!("decode base64: {e}"))?;
+    let out = match std::fs::read(&path) {
+        Ok(source) => match tiff_meta::splice_metadata(&rendered, &source) {
+            Some(spliced) => {
+                eprintln!(
+                    "[lightroom save] spliced metadata from original ({} -> {} bytes)",
+                    rendered.len(),
+                    spliced.len()
+                );
+                spliced
+            }
+            None => {
+                eprintln!("[lightroom save] no metadata spliced (source had none or parse failed) — writing render as-is");
+                rendered
+            }
+        },
+        Err(e) => {
+            eprintln!("[lightroom save] could not read original for metadata ({e}) — writing render as-is");
+            rendered
+        }
+    };
+    std::fs::write(&path, out).map_err(|e| format!("write {path}: {e}"))
+}
+
+#[derive(serde::Serialize)]
+struct HttpNativeResult {
+    status: u16,
+    body: String,
+}
+
+// Generic native HTTP for the Lightroom cloud integration — Adobe's IMS token endpoint and
+// lr.adobe.io don't answer CORS preflights for the tauri:// origin, so WKWebView fetch() dies
+// with its generic "Load failed" (the exact same failure mode download_url_native fixes for
+// the Google Photos CDN). Non-2xx statuses are returned as data (status + body), NOT as an
+// Err — the JS callers need Adobe's JSON error bodies (error_description etc.) to drive their
+// own retry/secret-prompt logic; only a genuine transport failure errors.
+#[tauri::command]
+fn http_native(
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    body: Option<String>,
+) -> Result<HttpNativeResult, String> {
+    if !url.starts_with("https://") {
+        return Err("refusing a non-https URL".into());
+    }
+    let mut req = ureq::request(&method, &url);
+    for (k, v) in &headers {
+        req = req.set(k, v);
+    }
+    let resp = match body {
+        Some(b) => req.send_string(&b),
+        None => req.call(),
+    };
+    match resp {
+        Ok(r) => {
+            let status = r.status();
+            let body = r.into_string().map_err(|e| format!("read body: {e}"))?;
+            Ok(HttpNativeResult { status, body })
+        }
+        Err(ureq::Error::Status(status, r)) => {
+            let body = r.into_string().unwrap_or_default();
+            Ok(HttpNativeResult { status, body })
+        }
+        Err(e) => Err(format!("network: {e}")),
+    }
 }
 
 // A file handed to us at launch (Lightroom's "Edit In", Finder's "Open With", or `open -a
@@ -686,6 +776,8 @@ fn main() {
             peek_raw_camera,
             read_file_bytes,
             write_file_bytes,
+            write_lightroom_tiff,
+            http_native,
             take_pending_open_path,
             take_pending_oauth_callback,
             google_oauth_loopback,

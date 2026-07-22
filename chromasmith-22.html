@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-21h';
+const BUILD='2026-07-22a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5448,6 +5448,10 @@ function convertProPhotoRGBAtoSRGB(rgba){
 // often many KB), IPTC, GPS, or the EXIF sub-IFD (t34665, an offset-based substructure that isn't
 // safe to blindly relocate into a freshly re-encoded file). Partial metadata preservation beats
 // the previous total loss, without risking a corrupted file Lightroom can't even open.
+// NOTE: the EXIF sub-IFD/GPS/XMP/IPTC (shutter/aperture/ISO/lens/capture date) ARE now restored,
+// but NATIVELY: write_lightroom_tiff in main.rs re-reads the original Edit-In TIFF off disk and
+// splices those structures into UTIF's output (tiff_meta.rs) — this JS whitelist stays as-is,
+// feeding UTIF only what it can safely encode.
 function _asciiOnly(s){return typeof s==='string'?s.replace(/[^\x20-\x7e]/g,'').trim():'';}
 function safeTiffMetaFrom(ifd0){
   const out={};
@@ -8709,7 +8713,19 @@ async function exportFX(){
       setProg(N,'Saving to Lightroom…');
       try{
         const b64=_u8b64(results[0].content);
-        await window.__TAURI__.core.invoke('write_file_bytes',{path:window.chromasmithEditInPath,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
+        // write_lightroom_tiff (not write_file_bytes): reads the ORIGINAL Edit-In TIFF still on
+        // disk and splices its EXIF sub-IFD (shutter/aperture/ISO/focal/lens/DateTimeOriginal —
+        // the capture date, so Lightroom's "Captured" shows shot time, not export time), GPS,
+        // XMP and IPTC into our render before overwriting — see tiff_meta.rs. UTIF can't carry
+        // these (safeTiffMetaFrom's ASCII-only limit). Fallback for an older native shell that
+        // doesn't have the command compiled in yet.
+        try{
+          await window.__TAURI__.core.invoke('write_lightroom_tiff',{path:window.chromasmithEditInPath,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
+        }catch(e){
+          if(!/write_lightroom_tiff/.test(e&&e.message||String(e)))throw e;
+          log('Native shell predates write_lightroom_tiff — saved without EXIF splice (restart the app after updating)','warn');
+          await window.__TAURI__.core.invoke('write_file_bytes',{path:window.chromasmithEditInPath,dataB64:b64});
+        }
         log('Saved back to Lightroom: '+window.chromasmithEditInPath,'ok');
         if(typeof toast==='function')toast('Saved to Lightroom');
       }catch(e){log('Save to Lightroom failed: '+(e&&e.message||e),'err');}
@@ -9618,10 +9634,16 @@ async function lrAuthNative(cid){
   const exchange=async(secret)=>{
     const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri:LR_REDIRECT_URI};
     if(secret)body.client_secret=secret;
-    const r=await fetch(LR_IMS_TOKEN,{method:'POST',
-      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    // http_native, not fetch(): Adobe's IMS token endpoint doesn't answer the CORS preflight
+    // for the tauri:// origin, so WKWebView fetch() dies with its generic "Load failed" — the
+    // exact failure mode download_url_native already fixes for Google Photos. Native HTTP has
+    // no CORS; non-2xx comes back as data (status+body) so the secret-retry logic below still
+    // sees Adobe's JSON error_description.
+    const r=await invoke('http_native',{method:'POST',url:LR_IMS_TOKEN,
+      headers:[['Content-Type','application/x-www-form-urlencoded']],
       body:new URLSearchParams(body).toString()});
-    return{ok:r.ok,json:await r.json().catch(()=>({})),status:r.status};
+    let json={};try{json=JSON.parse(r.body)}catch(e){}
+    return{ok:r.status>=200&&r.status<300,json,status:r.status};
   };
   let secret='';try{secret=(localStorage.getItem('lrClientSecret')||'').trim()}catch(e){}
   let res2=await exchange(secret);
@@ -9654,10 +9676,13 @@ async function lrAuth(){
 // single call.
 async function lrApiGet(path){
   const tok=await lrAuth();
-  const r=await fetch(LR_API+path,{headers:{Authorization:'Bearer '+tok.at,'X-API-Key':tok.cid}});
-  const text=(await r.text()).replace(/^while\s*\(1\)\s*\{\s*\}\s*/,'');
+  // Native HTTP (see exchange() above): lr.adobe.io also rejects the tauri:// CORS preflight.
+  const r=await window.__TAURI__.core.invoke('http_native',{method:'GET',url:LR_API+path,
+    headers:[['Authorization','Bearer '+tok.at],['X-API-Key',tok.cid]],body:null});
+  const text=r.body.replace(/^while\s*\(1\)\s*\{\s*\}\s*/,'');
+  const ok=r.status>=200&&r.status<300;
   let json;try{json=JSON.parse(text)}catch(e){throw new Error('Lightroom API returned unparsable data (status '+r.status+')')}
-  if(!r.ok)throw new Error('Lightroom API error: '+(json.message||r.status));
+  if(!ok)throw new Error('Lightroom API error: '+(json.message||r.status));
   return json;
 }
 let lrCatalogId=null;
@@ -9722,22 +9747,23 @@ async function lrOpenAlbum(albumId){
     log('Lightroom album load failed: '+(e&&e.message||e),'err');
   }
 }
-async function lrRenditionUrl(assetId,type){
+// Binary rendition GET via download_url_native (same no-CORS reasoning as lrApiGet; the extra
+// headers param carries Lightroom's required X-API-Key). Throws "HTTP nnn" on a non-2xx.
+async function lrRenditionBlob(assetId,type){
   const tok=await lrAuth();
-  const r=await fetch(`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
-    {headers:{Authorization:'Bearer '+tok.at,'X-API-Key':tok.cid}});
-  if(!r.ok)return null;
-  const blob=await r.blob();
-  return URL.createObjectURL(blob);
+  const buf=await window.__TAURI__.core.invoke('download_url_native',
+    {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
+     bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
+  return new Blob([buf],{type:'image/jpeg'});
+}
+async function lrRenditionUrl(assetId,type){
+  try{return URL.createObjectURL(await lrRenditionBlob(assetId,type))}
+  catch(e){return null}
 }
 async function lrImportAsset(assetId,name){
   try{
     toast('Downloading from Lightroom…');
-    const tok=await lrAuth();
-    const r=await fetch(`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/2560`,
-      {headers:{Authorization:'Bearer '+tok.at,'X-API-Key':tok.cid}});
-    if(!r.ok)throw new Error('rendition download failed: '+r.status);
-    const blob=await r.blob();
+    const blob=await lrRenditionBlob(assetId,'2560');
     const file=new File([blob],(name||assetId)+'.jpg',{type:'image/jpeg'});
     await loadFXImages([file]);
     log(`Imported from Lightroom: ${name||assetId}`,'ok');
