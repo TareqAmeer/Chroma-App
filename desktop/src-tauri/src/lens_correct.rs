@@ -72,16 +72,51 @@ pub struct LensProfileEntry {
     pub focal_max: f32,
 }
 
-/// Every lens in the bundled lensfun DB, for the manual lens-override picker (Lens Correction
-/// panel) — a fallback for manual/adapted lenses (TTArtisan and similar mechanical-only optics)
-/// that write no lens EXIF at all, so the auto-detect fallbacks in this file have nothing to
-/// recover. Sorted by maker then model so the dropdown reads like a catalog, not DB insertion
-/// order.
+/// Case-insensitive substring patterns for the 5 lenses actually owned (TTArtisan 14mm manual,
+/// Panasonic LUMIX S 18-40 AF, a 7Artisans/SG-image 35mm AF, Sony RX100 V, Panasonic LUMIX
+/// TZ60/ZS60 built-in). The bundled lensfun DB has hundreds of entries across every maker; the
+/// manual-lens dropdown only needs to show these.
+///
+/// Verified against the ACTUAL bundled DB contents (see `examples/dump_lenses.rs` — run with
+/// `cargo run --example dump_lenses` to reprint this list against a future lensfun DB update):
+/// - Panasonic 18-40 matches exactly: "LUMIX S 18-40/F4.5-6.3". Good.
+/// - TTArtisan has NO 14mm entry at all (closest: 23mm/25mm/27mm/35mm/40mm/50mm/7.5mm fisheye) —
+///   the "ttartisan" pattern surfaces all 7 as the closest available substitute; there's no
+///   distortion profile for the actual 14mm to select even with an exact-match filter.
+/// - 7Artisans has no AF 35mm — only "35mm f/1.4 APS-C (manual)" and "35mm f/0.95"; no exact
+///   "SG image" maker exists in this DB at all (the sgimage/sg-image patterns currently match
+///   nothing and are kept only in case a future DB revision adds it).
+/// - Sony RX100 has II/III/VI/"Standard" (covers I) but curiously NO "V" entry — the broad
+///   "rx100" pattern surfaces all 4 as the closest available since an exact V match doesn't exist.
+/// - Panasonic TZ60/ZS60 has ZERO entries — lensfun's DB is built for interchangeable lenses,
+///   not fixed-lens compact cameras, so this camera's built-in zoom has no distortion profile in
+///   this database at all; the dropdown will simply show nothing for it (no crash).
+const OWNED_LENS_PATTERNS: &[&str] = &[
+    "ttartisan",              // TTArtisan (no exact 14mm in DB — shows closest available, see above)
+    "18-40",                  // Panasonic LUMIX S 18-40/F4.5-6.3 — exact match
+    "7artisan",                // 7Artisans (no AF 35mm in DB — shows closest available, see above)
+    "sgimage", "sg image", "sg-image", // not present in DB today; kept for a future DB update
+    "rx100",                  // Sony RX100 (no exact "V" in DB — shows closest available, see above)
+    "tz60", "zs60",           // Panasonic LUMIX TZ60/ZS60 — NOT in this DB (fixed-lens compact); dropdown will be empty for it
+];
+
+fn is_owned_lens(maker: &str, model: &str) -> bool {
+    let hay = format!("{} {}", maker.to_lowercase(), model.to_lowercase());
+    OWNED_LENS_PATTERNS.iter().any(|p| hay.contains(p))
+}
+
+/// The 5 owned lenses, for the manual lens-override picker (Lens Correction panel) — a fallback
+/// for manual/adapted lenses (TTArtisan and similar mechanical-only optics) that write no lens
+/// EXIF at all, so the auto-detect fallbacks in this file have nothing to recover. Filtered down
+/// from the full bundled lensfun DB (hundreds of entries across every maker) via
+/// `is_owned_lens`, since the dropdown previously listed everything. Sorted by maker then model
+/// so it reads like a small catalog, not DB insertion order.
 pub fn list_lens_profiles() -> Vec<LensProfileEntry> {
     let Some(db) = db() else { return Vec::new() };
     let mut out: Vec<LensProfileEntry> = db
         .lenses
         .iter()
+        .filter(|l| is_owned_lens(&l.maker, &l.model))
         .map(|l| LensProfileEntry {
             maker: l.maker.clone(),
             model: l.model.clone(),
@@ -90,15 +125,45 @@ pub fn list_lens_profiles() -> Vec<LensProfileEntry> {
         })
         .collect();
     out.sort_by(|a, b| (&a.maker, &a.model).cmp(&(&b.maker, &b.model)));
+    if out.is_empty() {
+        eprintln!("lens_correct: owned-lens filter matched 0 of {} bundled entries — patterns in OWNED_LENS_PATTERNS likely don't match this DB's naming; check list_lens_profiles' unfiltered output", db.lenses.len());
+    }
     out
 }
 
 /// Whether a lens profile exists for this camera+lens pairing — lets the UI show "Auto" as
 /// available/unavailable without doing the (cheap but pointless) full correction pass.
+///
+/// Diagnostic eprintln!s below exist because auto-detect has been reported to fail for a real
+/// camera+lens pairing (Panasonic LUMIX S 18-40) even though the EXIF fallback chain
+/// (exif_lens_model_fallback/exif_focal_length_fallback above) successfully recovers the lens
+/// name and focal length from the RW2 bytes. The lensfun crate does its own internal
+/// fuzzy/normalized matching inside find_cameras/find_lenses, so the mismatch is most likely a
+/// naming-convention difference between what EXIF reports and what the bundled DB stores (e.g.
+/// camera model string, or lens string punctuation/spacing) — these logs surface the exact
+/// strings on both sides so that can be confirmed against a real RW2 next test run, rather than
+/// guessing at a "fix" to the matching logic itself.
 pub fn profile_available(make: &str, model: &str, lens_model: &str) -> bool {
-    let Some(db) = db() else { return false };
-    let Some(camera) = db.find_cameras(Some(make), model).into_iter().next() else { return false };
-    db.find_lenses(Some(camera), lens_model).into_iter().next().is_some()
+    let Some(db) = db() else {
+        eprintln!("lens_correct: profile_available({make:?}, {model:?}, {lens_model:?}) — bundled DB failed to load");
+        return false;
+    };
+    let cameras = db.find_cameras(Some(make), model);
+    let Some(camera) = cameras.into_iter().next() else {
+        eprintln!("lens_correct: profile_available — no camera match for make={make:?} model={model:?} (0 candidates from find_cameras)");
+        return false;
+    };
+    eprintln!("lens_correct: profile_available — camera matched: db maker={:?} model={:?} (looked up make={make:?} model={model:?})", camera.maker, camera.model);
+    let lenses = db.find_lenses(Some(camera), lens_model);
+    let found = lenses.first();
+    eprintln!(
+        "lens_correct: profile_available — lens lookup for lens_model={lens_model:?}: {}",
+        match found {
+            Some(l) => format!("MATCHED db maker={:?} model={:?}", l.maker, l.model),
+            None => "NO MATCH (0 candidates from find_lenses)".to_string(),
+        }
+    );
+    found.is_some()
 }
 
 fn bilinear_sample(src: &[u16], w: usize, h: usize, x: f32, y: f32) -> [u16; 3] {
@@ -268,6 +333,9 @@ mod tests {
     // command calls, with the same auto_lens=true argument, on a real DC-S9 RW2 that has a real
     // lensfun profile — proves the whole pipeline (metadata read -> fallback -> DB lookup ->
     // distortion correction) actually applies, not just the individual pieces in isolation.
+    // fast=false: lens correction is deliberately DEFERRED to the full-quality refine pass
+    // (see raw_decode.rs's "auto_lens && !fast" gate) — the fast first-paint decode skips the
+    // full-frame resample because refine() replaces that buffer ~1s later anyway.
     #[test]
     fn tm6917_full_decode_applies_lens_correction() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../__TM6917.RW2");
@@ -275,9 +343,14 @@ mod tests {
             eprintln!("skipping: {} not present in this checkout", path.display());
             return;
         };
-        let decoded = crate::raw_decode::decode_rw2_bytes(&bytes, true, true, "", true, None)
-            .expect("decode should succeed");
-        assert!(decoded.lens_applied, "expected lens correction to apply on __TM6917.RW2 with auto_lens=true");
+        // The fast pass must NOT apply it (that's the deferral working, not a detection failure)…
+        let fast = crate::raw_decode::decode_rw2_bytes(&bytes, true, true, "", true, None)
+            .expect("fast decode should succeed");
+        assert!(!fast.lens_applied, "fast pass should defer lens correction to the refine pass");
+        // …and the refine pass must.
+        let refined = crate::raw_decode::decode_rw2_bytes(&bytes, true, true, "", false, None)
+            .expect("refine decode should succeed");
+        assert!(refined.lens_applied, "expected lens correction to apply on __TM6917.RW2 with auto_lens=true (refine pass)");
     }
 }
 
