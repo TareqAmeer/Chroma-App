@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-22a';
+const BUILD='2026-07-22b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -9696,8 +9696,11 @@ async function lrConnectToggle(){
   }
   try{
     await lrAuth();
-    const account=await lrApiGet('/account');
-    lrCatalogId=account.catalog&&account.catalog.id;
+    // GET /v2/catalog (singular) is the documented way to get the user's cloud catalog — the
+    // /account response does NOT carry a catalog object (the old `account.catalog.id` read
+    // always came back undefined → "No Lightroom catalog found" even on a working account).
+    const cat=await lrApiGet('/catalog');
+    lrCatalogId=cat&&cat.id;
     if(!lrCatalogId)throw new Error('No Lightroom catalog found on this account');
     await lrPopulateAlbums();
     document.getElementById('lr-browse').style.display='block';
