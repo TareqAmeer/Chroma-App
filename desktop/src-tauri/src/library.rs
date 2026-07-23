@@ -185,6 +185,34 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+// Lightroom cloud thumbnails, cached by asset id. Renditions are immutable (an asset id always
+// yields the same thumbnail2x bytes), so no mtime/size in the key — the id alone is stable.
+// Reuses the same thumbnails cache dir, so prune_caches() sweeps these too. Keeps the raw asset
+// id out of the filename (it can contain odd chars) by hashing it.
+fn lr_thumb_path(asset_id: &str) -> PathBuf {
+    let mut h = DefaultHasher::new();
+    asset_id.hash(&mut h);
+    "lr-thumb-v1".hash(&mut h);
+    cache_dir().join(format!("lr_{:016x}.jpg", h.finish()))
+}
+
+// Err = cache miss (JS falls back to the network fetch); Ok = cached JPEG bytes.
+#[tauri::command]
+pub fn get_lr_thumb(asset_id: String) -> Result<tauri::ipc::Response, String> {
+    std::fs::read(lr_thumb_path(&asset_id))
+        .map(tauri::ipc::Response::new)
+        .map_err(|_| "miss".into())
+}
+
+#[tauri::command]
+pub fn save_lr_thumb(asset_id: String, data_b64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| format!("bad base64: {e}"))?;
+    std::fs::write(lr_thumb_path(&asset_id), &bytes).map_err(|e| format!("write lr thumb: {e}"))
+}
+
 fn decode_cache_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     let dir = PathBuf::from(home).join("Library/Caches/com.tareq.chromasmith/decode");

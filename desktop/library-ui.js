@@ -27,11 +27,14 @@
         return Promise.resolve(out);
       }
       case 'get_thumbnail': return Promise.resolve(png.buffer);
+      case 'read_file_bytes': return Promise.resolve(png.buffer);
       case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false });
       case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
       case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0 });
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
       case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
+      case 'get_lr_thumb': return Promise.reject(new Error('miss')); // always a miss → exercises the network+save path
+      case 'save_lr_thumb': return Promise.resolve();
       case 'list_collection': case 'list_exported': return Promise.resolve([]);
       case 'get_export_history': return Promise.resolve([]);
       default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
@@ -45,7 +48,7 @@
     // state with fake albums/assets so every Cloud UI state is screenshottable.
     let ltConnected = false;
     const ltAlbums = [{ id: 'al1', name: 'Dogs 2026' }, { id: 'al2', name: 'Travel' }, { id: 'al3', name: 'Film scans' }];
-    const ltAssets = (n) => Array.from({ length: n }, (_, i) => ({ id: 'as' + i, name: `__TM${4700 + i}.RW2`, captured: '2026-07-2' + (i % 9) }));
+    const ltAssets = (n) => Array.from({ length: n }, (_, i) => ({ id: 'as' + i, name: `__TM${4700 + i}.RW2`, captured: '2026-07-2' + (i % 9), meta: { make: 'Panasonic', model: 'DC-S9', lens: 'LUMIX S 18-40', iso: 'ISO 200', aperture: 'f/5.6', shutter: '1/250', focalLen: '28mm', date: '2026-07-2' + (i % 9) } }));
     window.lrCloud = {
       connected: () => ltConnected,
       connect: async () => { ltConnected = !ltConnected; },
@@ -828,6 +831,7 @@
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
     // handoff path) after the user has already navigated to something else.
     window.chromasmithEditInPath = null;
+    window.chromasmithOpenedOrigin = { source: 'folder' }; // opening a local photo clears any LR-album origin (see toggleLibrary)
     const saveLrBtn = document.getElementById('db-save-lr');
     if (saveLrBtn) saveLrBtn.style.display = 'none';
     // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
@@ -1338,6 +1342,19 @@
   // multi-selects WITHOUT opening, building up a batch; ⌘/Ctrl-double-click opens that whole
   // batch selection in the editor. Shift-click range-selects (also without opening), extending
   // from the last ⌘-click/shift-click anchor — same anchor plain single-click opens don't move.
+  // Force Touch discriminator (the user's requested "light tap = select, firm press = open").
+  // Apple's non-standard MouseEvent.webkitForce: a real button press reads ≥ WEBKIT_FORCE_AT_
+  // MOUSE_DOWN (1); a tap-to-click registers lower. Returns 'press' | 'tap' | null (no sensor —
+  // mice, non-Force-Touch trackpads, the libtest browser → caller uses the click-again fallback).
+  function classifyPress(e) {
+    const f = e && e.webkitForce;
+    if (typeof f !== 'number' || f <= 0) return null;
+    const threshold = (typeof MouseEvent !== 'undefined' && MouseEvent.WEBKIT_FORCE_AT_MOUSE_DOWN) || 1;
+    return f >= threshold ? 'press' : 'tap';
+  }
+  // Selection model (both grids): light tap selects, firm press opens. Where Force Touch isn't
+  // available, degrade to "click selects; clicking the already-sole-selected card opens"
+  // (double-click always opens). shift/cmd extend multi-select and never open.
   function handleCardClick(e, entry, idx, shown) {
     if (e.shiftKey && selectAnchor >= 0) {
       const [lo, hi] = [selectAnchor, idx].sort((a, b) => a - b);
@@ -1352,16 +1369,31 @@
       updateCardSelClasses();
       return;
     }
-    if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; }
-    state.selected.clear();
-    updateCardSelClasses();
-    openInEditor(entry.path);
+    const openIt = () => {
+      if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; }
+      state.selected.clear(); updateCardSelClasses();
+      openInEditor(entry.path);
+    };
+    const selectIt = () => {
+      state.selected.clear(); state.selected.add(entry.path);
+      selectAnchor = idx; state._kbCursor = entry.path; updateCardSelClasses();
+    };
+    const cls = classifyPress(e);
+    if (cls === 'press') { openIt(); return; }
+    if (cls === 'tap') { selectIt(); return; }
+    // No force sensor: click-to-select, click-the-selected-again to open.
+    if (state.selected.size === 1 && state.selected.has(entry.path)) openIt(); else selectIt();
   }
   // Plain double-click on a single (non-multi-selected) card is just a second single-click —
   // already opened by handleCardClick, nothing further to do here. ⌘/Ctrl-double-click opens
   // the CURRENT multi-selection as a batch (mirrors the context menu's "Open N photos").
   async function handleCardDblClick(e, entry) {
-    if (!(e.metaKey || e.ctrlKey)) return;
+    // Plain double-click always opens (shortcut regardless of Force Touch); the single-image
+    // case falls through to openInEditor below.
+    if (!(e.metaKey || e.ctrlKey) && state.selected.size <= 1) {
+      if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; }
+      openInEditor(entry.path); return;
+    }
     // The two `click` events a double-click also fires each ran handleCardClick with the SAME
     // modifier held, which toggles this exact entry in/out of state.selected an ODD number of
     // times overall relative to before the gesture started — so whether this card ends up IN
@@ -1921,21 +1953,87 @@
   async function lrThumbPump(cards) {
     const gen = ++lrThumbGen;
     const queue = cards.slice();
+    const setImg = (img, blob) => {
+      if (gen !== lrThumbGen || !img.isConnected) return;
+      const url = URL.createObjectURL(blob);
+      img.onload = () => URL.revokeObjectURL(url);
+      img.onerror = () => URL.revokeObjectURL(url); // decode failure must not leak the URL
+      img.src = url;
+    };
     const worker = async () => {
       while (queue.length && gen === lrThumbGen) {
         const { asset, img } = queue.shift();
         if (!img.isConnected) continue;
         try {
+          // Disk cache first (renditions are immutable → keyed by asset id). Re-opening an album
+          // reads thumbs off disk instead of re-hitting the Adobe API every time.
+          let bytes = null;
+          try { bytes = await invoke('get_lr_thumb', { assetId: asset.id }); } catch (e) { /* miss */ }
+          if (bytes) { setImg(img, new Blob([bytes], { type: 'image/jpeg' })); continue; }
           const blob = await window.lrCloud.thumbBlob(asset.id);
-          if (gen !== lrThumbGen || !img.isConnected) return;
-          const url = URL.createObjectURL(blob);
-          img.onload = () => URL.revokeObjectURL(url);
-          img.onerror = () => URL.revokeObjectURL(url); // decode failure must not leak the URL
-          img.src = url;
+          setImg(img, blob);
+          try {
+            const buf = new Uint8Array(await blob.arrayBuffer());
+            let bin = ''; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+            await invoke('save_lr_thumb', { assetId: asset.id, dataB64: btoa(bin) });
+          } catch (e) { /* cache write is best-effort */ }
         } catch (e) { /* thumb failure is cosmetic */ }
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
+  }
+  // Cloud multi-select (by asset id) + the import quality chooser. Kept separate from the local
+  // `state.selected` (which is disk paths). One import action can carry several assets.
+  lrState.selected = lrState.selected || new Set();
+  function lrUpdateCloudSel() {
+    document.querySelectorAll('#lib-grid .lib-card[data-lr-id]').forEach((c) => c.classList.toggle('multi', lrState.selected.has(c.dataset.lrId)));
+  }
+  // Small centered chooser → resolves 'raw' | 'fullsize' | null(cancel). Remembers the last
+  // pick as the session default (still shown so the user can change it per import).
+  let lrLastQuality = null;
+  function lrChooseQuality(count) {
+    return new Promise((resolve) => {
+      closeContextMenu();
+      const back = document.createElement('div');
+      back.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px;min-width:300px;font-family:-apple-system,sans-serif;color:var(--txt);box-shadow:var(--lift-2)';
+      box.innerHTML = `<div style="font-weight:600;font-size:14px;margin-bottom:4px">Import ${count > 1 ? count + ' photos' : 'photo'} from Lightroom</div>
+        <div style="font-size:12px;color:var(--mut);margin-bottom:14px">Choose what to download.</div>`;
+      const mk = (label, desc, val) => {
+        const b = document.createElement('button');
+        b.style.cssText = 'display:block;width:100%;text-align:left;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer';
+        b.innerHTML = `<div style="font-weight:600;font-size:13px">${label}</div><div style="font-size:11px;color:var(--mut)">${desc}</div>`;
+        b.onclick = () => { lrLastQuality = val; cleanup(); resolve(val); };
+        box.appendChild(b);
+      };
+      mk('Original RAW', 'Untouched RW2 — full RAW pipeline, no Lightroom edits.', 'raw');
+      mk('Edited full-size (JPEG)', 'Lightroom develop edits baked in, full resolution.', 'fullsize');
+      const cancel = document.createElement('div');
+      cancel.textContent = 'Cancel';
+      cancel.style.cssText = 'text-align:center;font-size:12px;color:var(--mut);cursor:pointer;padding:6px';
+      cancel.onclick = () => { cleanup(); resolve(null); };
+      box.appendChild(cancel);
+      const cleanup = () => { document.removeEventListener('keydown', onKey); back.remove(); };
+      const onKey = (ev) => { if (ev.key === 'Escape') { cleanup(); resolve(null); } };
+      document.addEventListener('keydown', onKey);
+      back.onclick = (ev) => { if (ev.target === back) { cleanup(); resolve(null); } };
+      back.appendChild(box); document.body.appendChild(back);
+    });
+  }
+  async function lrImportAssets(assets) {
+    if (!assets.length) return;
+    const quality = await lrChooseQuality(assets.length);
+    if (!quality) return;
+    for (const a of assets) {
+      const card = document.querySelector(`#lib-grid .lib-card[data-lr-id="${(window.CSS && CSS.escape) ? CSS.escape(a.id) : a.id}"]`);
+      const prog = card && card.querySelector('.lib-lr-prog');
+      if (card) card.style.opacity = '0.7'; if (prog) prog.style.display = 'block';
+      try { await window.lrCloud.importAsset(a.id, a.name, quality, { albumId: lrState.album, albumName: (lrState.albums || []).find((al) => al.id === lrState.album)?.name || '', meta: a.meta }); }
+      finally { if (card) card.style.opacity = ''; if (prog) prog.style.display = 'none'; }
+      const nameEl = card && card.querySelector('.lib-name');
+      if (nameEl && !/✓/.test(nameEl.innerHTML)) nameEl.innerHTML += ' <span title="Downloaded" style="color:var(--ok,#59c98a)">✓</span>';
+    }
   }
   async function openLrAlbum(albumId) {
     state.source = 'lr';
@@ -1972,29 +2070,59 @@
     } catch (e) { /* fresh install: no dir yet */ }
     grid.innerHTML = '';
     if (!assets.length) { grid.innerHTML = '<div id="lib-empty">No photos in this album.</div>'; return; }
+    lrState.selected.clear();
     const cards = [];
     assets.forEach((a) => {
       const stem = String(a.name || a.id).replace(/\.[^.]+$/, '');
       const card = document.createElement('div');
       card.className = 'lib-card';
       card.dataset.lrStem = stem;
+      card.dataset.lrId = a.id;
       card.innerHTML = `<div class="lib-thumb-wrap" style="position:relative"><img loading="lazy" alt="">
           <div class="lib-lr-prog" style="display:none;position:absolute;left:0;right:0;bottom:0;height:3px;overflow:hidden"><div style="height:100%;width:40%;background:var(--acc);animation:lib-lr-slide 1s linear infinite"></div></div>
         </div>
         <div class="lib-name">${String(a.name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}${onDisk.has(stem) ? ' <span title="Already in Lightroom Download" style="color:var(--ok,#59c98a)">✓</span>' : ''}</div>`;
-      card.title = a.name + (onDisk.has(stem) ? ' — already downloaded' : ' — click to import & open');
-      card.querySelector('.lib-thumb-wrap').onclick = async () => {
-        const prog = card.querySelector('.lib-lr-prog');
-        card.style.opacity = '0.7'; if (prog) prog.style.display = 'block';
-        try { await window.lrCloud.importAsset(a.id, a.name); }
-        finally { card.style.opacity = ''; if (prog) prog.style.display = 'none'; }
-        const nameEl = card.querySelector('.lib-name');
-        if (nameEl && !/✓/.test(nameEl.innerHTML)) nameEl.innerHTML += ' <span title="Downloaded" style="color:var(--ok,#59c98a)">✓</span>';
+      card.title = a.name + (onDisk.has(stem) ? ' — already downloaded' : ' — tap to select, click to import');
+      const wrap = card.querySelector('.lib-thumb-wrap');
+      // Same select-vs-open model as local cards: tap (or click-once) selects, firm press (or
+      // click-the-selected-again / double-click) imports. cmd/shift extend the cloud selection.
+      wrap.onclick = (e) => {
+        if (e.metaKey || e.ctrlKey) { if (lrState.selected.has(a.id)) lrState.selected.delete(a.id); else lrState.selected.add(a.id); lrUpdateCloudSel(); return; }
+        const cls = classifyPress(e);
+        const selectIt = () => { lrState.selected.clear(); lrState.selected.add(a.id); lrUpdateCloudSel(); };
+        if (cls === 'press') { lrImportAssets([a]); return; }
+        if (cls === 'tap') { selectIt(); return; }
+        if (lrState.selected.size === 1 && lrState.selected.has(a.id)) lrImportAssets([a]); else selectIt();
+      };
+      wrap.ondblclick = (e) => { e.stopPropagation(); lrImportAssets([a]); };
+      card.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (!lrState.selected.has(a.id)) { lrState.selected.clear(); lrState.selected.add(a.id); lrUpdateCloudSel(); }
+        const chosen = assets.filter((x) => lrState.selected.has(x.id));
+        buildCloudMenu(e.clientX, e.clientY, chosen);
       };
       grid.appendChild(card);
       cards.push({ asset: a, img: card.querySelector('img') });
     });
     lrThumbPump(cards);
+  }
+  function buildCloudMenu(x, y, assets) {
+    closeContextMenu();
+    const n = assets.length;
+    ctxMenu = document.createElement('div');
+    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:180px;box-shadow:var(--lift-2)';
+    const item = (label, fn) => {
+      const el = document.createElement('div');
+      el.textContent = label;
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
+      el.onmouseleave = () => { el.style.background = ''; };
+      el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
+      ctxMenu.appendChild(el);
+    };
+    item(`Import ${n > 1 ? n + ' photos' : 'photo'}`, () => lrImportAssets(assets));
+    ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px';
+    document.body.appendChild(ctxMenu);
   }
   window.addEventListener('lr-cloud-state', () => { if (!window.lrCloud || !window.lrCloud.connected()) { lrState.albums = null; lrState.album = null; } renderCollections(); });
   // Background full-size upgrade indicator (chromasmith-22.html's lrUpgradeToFullsize
@@ -2060,6 +2188,53 @@
   renderCollections();
   renderCollectionCounts();
 
+  // ── Marquee (drag-rectangle) multi-select over the grid. Works in both the folder grid
+  // (selects by data-path into state.selected) and the cloud grid (data-lr-id into
+  // lrState.selected). Starts only when the drag begins on empty grid background and moves
+  // past a small threshold, so a normal click on a card still selects/opens as usual.
+  function setupMarquee() {
+    const main = document.getElementById('lib-main');
+    if (!main || main._marqueeWired) return;
+    main._marqueeWired = true;
+    let box = null, sx = 0, sy = 0, add = false, active = false;
+    main.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest('.lib-card')) return;       // a card handles its own click
+      if (e.target.closest('#lib-list-head')) return;
+      sx = e.clientX; sy = e.clientY; add = e.shiftKey; active = false;
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (sx === 0 && sy === 0) return;
+      if (!(e.buttons & 1)) { sx = sy = 0; return; }
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!active && Math.hypot(dx, dy) < 5) return;    // below threshold → not a marquee yet
+      active = true;
+      if (!box) {
+        box = document.createElement('div');
+        box.style.cssText = 'position:fixed;z-index:9998;border:1px solid var(--acc);background:rgba(212,144,58,.14);pointer-events:none';
+        document.body.appendChild(box);
+        if (!add) { if (state.source === 'lr') { lrState.selected.clear(); } else { state.selected.clear(); } }
+      }
+      const x0 = Math.min(sx, e.clientX), y0 = Math.min(sy, e.clientY), x1 = Math.max(sx, e.clientX), y1 = Math.max(sy, e.clientY);
+      box.style.left = x0 + 'px'; box.style.top = y0 + 'px'; box.style.width = (x1 - x0) + 'px'; box.style.height = (y1 - y0) + 'px';
+      const cloud = state.source === 'lr';
+      document.querySelectorAll('#lib-grid .lib-card').forEach((c) => {
+        const r = c.getBoundingClientRect();
+        const hit = r.left < x1 && r.right > x0 && r.top < y1 && r.bottom > y0;
+        const key = cloud ? c.dataset.lrId : c.dataset.path;
+        if (!key) return;
+        const set = cloud ? lrState.selected : state.selected;
+        if (hit) set.add(key); else if (!add) set.delete(key);
+        c.classList.toggle('multi', set.has(key));
+      });
+    });
+    document.addEventListener('pointerup', () => {
+      sx = sy = 0;
+      if (box) { box.remove(); box = null; active = false; }
+    });
+  }
+  setupMarquee();
+
   async function toggleLibrary() {
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
@@ -2070,8 +2245,19 @@
     // poke a resize once the CSS has applied.
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     if (state.open) {
-      if (!state.root) { await pickFolder(); return; }
       await renderTree();
+      // If the currently-open photo came from a Lightroom album, return to that album instead
+      // of the last local folder (chromasmith-22.html's lrImportAsset stamps the origin).
+      const origin = window.chromasmithOpenedOrigin;
+      if (origin && origin.source === 'lr' && window.lrCloud && window.lrCloud.connected()) {
+        try {
+          if (!lrState.albums) lrState.albums = await window.lrCloud.albums();
+          renderCollections();
+          await openLrAlbum(origin.albumId || (lrState.albums[0] && lrState.albums[0].id));
+          return;
+        } catch (e) { console.error('reopen lr album', e); /* fall through to folder */ }
+      }
+      if (!state.root) { await pickFolder(); return; }
       if (state.currentFolder) await openFolder(state.currentFolder);
       else await openFolder(state.root);
     }

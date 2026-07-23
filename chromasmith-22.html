@@ -1228,7 +1228,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="ni-add-lb">Add Photos</div>
           <div class="ni-hint">Drop an image to start · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
-        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas" onclick="fxCanvasClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas" onclick="fxCanvasClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
                CSS transform as the canvas — glued to it by the compositor during zoom/pan with
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
@@ -3205,7 +3205,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-23d';
+const BUILD='2026-07-23e';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -5013,7 +5013,7 @@ let _fxZoomRenderTimer=null;
 function _fxZoomRenderDebounced(){
   if(!fxFullResPreview)return;
   clearTimeout(_fxZoomRenderTimer);
-  _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)renderPreview();},180);
+  _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)renderPreview();},90);
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
@@ -5982,6 +5982,7 @@ function fxUpdate(){
   // cadence as the render debounce below — fires once, ~400ms after the user stops moving
   // the slider, not on every tick.
   clearTimeout(_fxHistPushTimer);_fxHistPushTimer=setTimeout(fxHistoryPush,400);
+  if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // grading changed → coarse full-res underlay is stale
   clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
 }
 function resetAdjust(){
@@ -8050,6 +8051,43 @@ function fxPreviewMaxH(){
 // the grain. Cost is now proportional to the viewport, so pans re-render quickly too.
 // A 30% padding halo around the visible region keeps small pans showing real pixels until the
 // debounced re-render lands. Returns false if the crop degenerates (caller falls through).
+// Coarse full-frame underlay for smooth full-res panning. The crisp crop (renderFullResCrop)
+// only covers the visible viewport + a small halo, so during a pan the CSS transform used to
+// drag that small tile across the BLACK preview background (the "void"), and the crisp
+// re-render only fired ~180ms AFTER motion stopped — the felt "slowness". Instead we render the
+// WHOLE frame through the FX chain ONCE at a moderate resolution into a 2D underlay canvas that
+// lives inside the zoom wrapper (so it rides the same scale·translate). During a pan the
+// underlay always shows content (soft but present, GPU-FX-free); the crisp native crop lands on
+// top the moment motion settles. Rebuilt only when the image/params/geometry change (dirty flag).
+let _fxFullBase={canvas:null,dirty:true,w:0,h:0};
+function fxInvalidateFullBase(){_fxFullBase.dirty=true;}
+function _fxEnsureFullResBase(iw,ih){
+  if(!_fxFullBase.dirty&&_fxFullBase.canvas&&_fxFullBase.w===iw&&_fxFullBase.h===ih)return _fxFullBase.canvas;
+  // Moderate cap: 2560px long edge is enough to look reasonable while dragging, cheap to render
+  // once and to 2D-scale per frame. Uses the SAME grading params as the crisp path.
+  const cap=2560,sc=Math.min(1,cap/Math.max(iw,ih));
+  const bw=Math.max(1,Math.round(iw*sc)),bh=Math.max(1,Math.round(ih*sc));
+  const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
+    bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
+  FX.render(P,bw,bh,{glowScale:fxGlowScale()}); // whole frame, moderate res, one time
+  let c=_fxFullBase.canvas;
+  if(!c){c=document.createElement('canvas');_fxFullBase.canvas=c;}
+  c.width=bw;c.height=bh;
+  c.getContext('2d').drawImage(FX.cv,0,0,FX.cv.width,FX.cv.height,0,0,bw,bh);
+  _fxFullBase.dirty=false;_fxFullBase.w=iw;_fxFullBase.h=ih;
+  return c;
+}
+// Show the coarse underlay at the full-frame footprint (cw×ch) so any pan keeps content on
+// screen. Sits behind FX.cv inside the zoom wrapper, inheriting its transform.
+function _fxShowFullBase(iw,ih,cw,ch){
+  const base=_fxEnsureFullResBase(iw,ih);
+  const el=document.getElementById('fx-canvas-fullbase');
+  if(!el)return;
+  if(el.width!==base.width||el.height!==base.height){el.width=base.width;el.height=base.height;}
+  el.getContext('2d').drawImage(base,0,0);
+  el.style.width=cw+'px';el.style.height=ch+'px';el.style.display='block';
+}
+function _fxHideFullBase(){const el=document.getElementById('fx-canvas-fullbase');if(el)el.style.display='none';}
 function renderFullResCrop(P,iw,ih,cw,ch){
   const src=fxWork;
   const wrap=document.getElementById('fx-wrap');
@@ -8106,6 +8144,7 @@ function renderPreview(){
   if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit){
     const Pc=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
       bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
+    _fxShowFullBase(iw,ih,cw,ch);                       // coarse underlay behind the crisp crop (smooth panning)
     if(renderFullResCrop(Pc,iw,ih,cw,ch)){
       const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
       const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
@@ -8116,6 +8155,7 @@ function renderPreview(){
       return;
     }
   }
+  _fxHideFullBase();fxInvalidateFullBase();             // leaving crop mode — underlay stale, hide it
   FX.cv.style.transform='';                            // clear any full-res-crop offset
   // Render the backing store at devicePixelRatio (capped at 2x in-browser so the preview is
   // crisp on HiDPI screens without costing much: 2×900=1800px is still ~1/13 of a 24MP
@@ -8330,6 +8370,7 @@ function updateWork(){
   const it=curItem();
   fxWork=it?geomCanvas(it):null;
   if(fxWork)FX.setImage(fxWork);
+  if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry
 }
 function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
 function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
@@ -9775,12 +9816,35 @@ async function lrListAssets(albumId){
     (data.resources||[]).map(r=>r.asset).filter(Boolean).forEach(a=>out.push({
       id:a.id,
       name:(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id,
-      captured:(a.payload&&a.payload.captureDate)||''
+      captured:(a.payload&&a.payload.captureDate)||'',
+      meta:lrAssetMeta(a.payload||{})
     }));
     const next=data.links&&data.links.next&&data.links.next.href;
     path=next?('/'+String(next).replace(/^\/?(v2\/)?/,'')):null;
   }
   return out;
+}
+// Defensive metadata pull from a Lightroom asset payload — the shape varies by import source,
+// so read every place a field commonly lives and take the first hit. Used to fill the metadata
+// panel while a soft 2048 preview is showing (the 2048 rendition carries no EXIF); the RAW
+// master and the full-size JPEG both carry real EXIF, so this is a fallback, not the main path.
+function lrAssetMeta(p){
+  const src=p.importSource||{},dev=p.develop||{},xmp=p.xmp||{},x=xmp.tiff||xmp.exif||{};
+  const num=(v)=>typeof v==='number'?v:(parseFloat(v)||0);
+  const iso=src.iso||x.ISOSpeedRatings||x.ISO;
+  const fnum=src.fNumber||x.FNumber||x.ApertureValue;
+  const exp=src.exposureTime||x.ExposureTime;
+  const foc=src.focalLength||x.FocalLength;
+  return {
+    make:src.cameraMake||x.Make||'',
+    model:src.cameraModel||src.camera||x.Model||'',
+    lens:src.lens||src.lensModel||x.Lens||x.LensModel||'',
+    iso:iso?('ISO '+iso):'',
+    aperture:fnum?('f/'+num(fnum)):'',
+    shutter:exp?(num(exp)<1?('1/'+Math.round(1/num(exp))):(num(exp)+'s')):'',
+    focalLen:foc?(Math.round(num(foc))+'mm'):'',
+    date:p.captureDate||''
+  };
 }
 // Binary rendition GET via download_url_native (same no-CORS reasoning as lrApiGet; the extra
 // headers param carries Lightroom's required X-API-Key). Throws "HTTP nnn" on a non-2xx.
@@ -9790,6 +9854,16 @@ async function lrRenditionBlob(assetId,type){
     {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
      bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
   return new Blob([buf],{type:'image/jpeg'});
+}
+// The untouched ORIGINAL (for these assets, the RW2) via the master endpoint. ⚠️ Adobe's
+// partner API commonly returns 403 here on non-elevated tiers (documented limitation) — the
+// caller surfaces that as "original download not permitted, use Edited full-size instead".
+async function lrMasterBlob(assetId){
+  const tok=await lrAuth();
+  const buf=await window.__TAURI__.core.invoke('download_url_native',
+    {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/master`,
+     bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
+  return new Blob([buf]);
 }
 async function lrRenditionUrl(assetId,type){
   try{return URL.createObjectURL(await lrRenditionBlob(assetId,type))}
@@ -9807,21 +9881,60 @@ async function lrGenerateRendition(assetId,type){
     url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions`,
     headers:[['Authorization','Bearer '+tok.at],['X-API-Key',tok.cid],['X-Generate-Renditions',type]],
     body:''});
-  return r.status>=200&&r.status<300;
+  const ok=r.status>=200&&r.status<300;
+  if(!ok)log(`Lightroom generate-rendition (${type}) → HTTP ${r.status}${r.body?': '+String(r.body).slice(0,120):''}`,'warn');
+  return ok;
 }
-// Two-stage import: the pre-generated 2048 opens INSTANTLY; full-size (with LR edits) is
-// generated in the background, polled with backoff, and swapped in when ready. If generation
-// is denied (basic API access) or times out, the 2048 stays — still a working import.
-async function lrImportAsset(assetId,name){
+// Records that the currently-open editor photo came from a Lightroom album, so opening the
+// Library afterward returns to that album instead of the last local folder (see library-ui.js
+// toggleLibrary). Cleared to a folder origin whenever a local photo is opened.
+function lrMarkOrigin(albumId,albumName){
+  window.chromasmithOpenedOrigin={source:'lr',albumId:albumId||'',albumName:albumName||''};
+}
+// Import a cloud asset at the chosen quality.
+//   quality 'raw'      → the untouched original (RW2) via the master endpoint (full RAW+DCP
+//                        pipeline; no LR develop edits). 403 on some tiers → clear message.
+//   quality 'fullsize' → the edited full-size JPEG (LR develop baked in): instant 2048 preview,
+//                        then generate+poll+swap the full-size. Metadata comes with the JPEG.
+// `opts` carries {albumId, albumName, meta} for origin tracking + the 2048 metadata fallback.
+async function lrImportAsset(assetId,name,quality,opts){
+  quality=quality||'fullsize';opts=opts||{};
   const base=(name||assetId).replace(/\.[^.]+$/,'');
   try{
     toast('Importing from Lightroom…',true);
+    if(quality==='raw'){
+      let blob;
+      try{blob=await lrMasterBlob(assetId);}
+      catch(e){
+        if(/HTTP 40[13]/.test(e&&e.message||'')){
+          log('Original (RAW) download isn’t permitted on this Lightroom API tier — choose Edited full-size instead','warn');
+          toast('Original download not allowed — use Edited full-size');return;
+        }
+        throw e;
+      }
+      // Keep the true extension so the RAW decode + DCP path runs (fall back to .jpg on doubt).
+      const ext=(name&&/\.(rw2|raw|dng|cr2|cr3|nef|arw|orf|tif|tiff|jpg|jpeg)$/i.test(name))?name.split('.').pop():'RW2';
+      const fname=`${base}.${ext}`;
+      const saved=await lrSaveToDisk(fname,blob);
+      lrMarkOrigin(opts.albumId,opts.albumName);
+      await loadFXImages([new File([blob],fname)]);
+      log(`Imported original RAW from Lightroom: ${fname}${saved?' → '+saved:''}`,'ok');
+      return;
+    }
+    // Edited full-size: instant 2048 first.
     const blob=await lrRenditionBlob(assetId,'2048');
     const fname=base+'.jpg';
     const saved=await lrSaveToDisk(fname,blob);
+    lrMarkOrigin(opts.albumId,opts.albumName);
     await loadFXImages([new File([blob],fname,{type:'image/jpeg'})]);
+    // The 2048 rendition carries no EXIF — fill the panel from the asset payload meanwhile.
+    if(opts.meta&&fxImages[fxCurIdx]){
+      const prev=fxImages[fxCurIdx].exif||{};
+      fxImages[fxCurIdx].exif={...prev,...Object.fromEntries(Object.entries(opts.meta).filter(([,v])=>v))};
+      if(typeof showExif==='function')showExif(fxImages[fxCurIdx].exif);
+    }
     log(`Imported from Lightroom at 2048px: ${fname}${saved?' → '+saved:''}`,'ok');
-    lrUpgradeToFullsize(assetId,base,saved).catch(e=>log('Full-size fetch failed: '+(e&&e.message||e),'warn'));
+    lrUpgradeToFullsize(assetId,base,saved).catch(e=>log('Edited full-size unavailable — kept 2048px ('+(e&&e.message||e)+')','warn'));
   }catch(e){
     log('Lightroom import failed: '+(e&&e.message||e),'err');
     toast('Lightroom import failed — see log');

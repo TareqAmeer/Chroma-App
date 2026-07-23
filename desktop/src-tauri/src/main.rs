@@ -833,6 +833,8 @@ fn main() {
             library::backfill_edited_registry,
             library::get_decode_cache,
             library::save_decode_cache,
+            library::get_lr_thumb,
+            library::save_lr_thumb,
             sam_encode,
             sam_points,
             sam2_encode,
