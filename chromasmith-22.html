@@ -3218,7 +3218,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-22b';
+const BUILD='2026-07-23a';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -8055,6 +8055,48 @@ function fxPreviewMaxH(){
   }
   return Math.max(360,window.innerHeight-150);
 }
+// Full-res zoomed preview = render ONLY the visible crop at native scale (the 1:1 loupe's
+// recipe: FX.setImage(crop) + uvOff/uvScale for grain/artifact continuity + scOverride so
+// halation/grain blur at true export scale). The previous approach — render the ENTIRE image
+// (24MP+) through the whole FX chain, then let CSS scale it — was seconds-per-frame on an
+// Intel iGPU AND looked mushy: the giant canvas got GPU-minified into the viewport, aliasing
+// the grain. Cost is now proportional to the viewport, so pans re-render quickly too.
+// A 30% padding halo around the visible region keeps small pans showing real pixels until the
+// debounced re-render lands. Returns false if the crop degenerates (caller falls through).
+function renderFullResCrop(P,iw,ih,cw,ch){
+  const src=fxWork;
+  const wrap=document.getElementById('fx-wrap');
+  const z=fxZoom;
+  // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
+  const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
+  const padX=visW*0.3,padY=visH*0.3;
+  const x0=Math.max(0,-fxPanX-padX),y0=Math.max(0,-fxPanY-padY);
+  const x1=Math.min(cw,-fxPanX+visW+padX),y1=Math.min(ch,-fxPanY+visH+padY);
+  if(x1-x0<2||y1-y0<2)return false;
+  const cropX=Math.max(0,Math.round(x0/cw*iw)),cropY=Math.max(0,Math.round(y0/ch*ih));
+  const cropW=Math.min(iw-cropX,Math.round((x1-x0)/cw*iw)),cropH=Math.min(ih-cropY,Math.round((y1-y0)/ch*ih));
+  if(cropW<2||cropH<2)return false;
+  // Output at displayed device resolution, capped at 2× the crop's native pixels (beyond-native
+  // zoom magnifies real detail like the loupe, no point rendering further) and a GPU-safe 8192.
+  const sysdpr=Math.min(window.devicePixelRatio||1,2);
+  let outW=(x1-x0)*z*sysdpr,outH=(y1-y0)*z*sysdpr;
+  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH);
+  outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
+  const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
+  crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
+  const REF=FXR.CAL.refWidth;
+  FX.setImage(crop);
+  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,
+    uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]});
+  FX.setImage(fxWork);
+  // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
+  // and translate it there — the zoom wrapper's own scale/translate then lands it exactly
+  // where that part of the full image belongs. Cleared by the normal render path.
+  FX.cv.style.display='block';FX.cv.style.clipPath='';
+  FX.cv.style.width=(x1-x0)+'px';FX.cv.style.height=(y1-y0)+'px';
+  FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
+  return true;
+}
 function renderPreview(){
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
@@ -8069,6 +8111,22 @@ function renderPreview(){
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
+  // Full-res + zoomed in: visible-crop render (see renderFullResCrop). Falls through to the
+  // normal full-frame path only if the crop degenerates.
+  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit){
+    const Pc=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
+      bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
+    if(renderFullResCrop(Pc,iw,ih,cw,ch)){
+      const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
+      const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
+      document.getElementById('fx-no-img').style.display='none';
+      document.getElementById('fx-info').textContent=`Full res ${Math.round(fxZoom*100)}% — native-quality crop of ${iw}×${ih}`;
+      document.getElementById('btn-fx-export').disabled=false;
+      if(fxHistOn)drawHistogram();
+      return;
+    }
+  }
+  FX.cv.style.transform='';                            // clear any full-res-crop offset
   // Render the backing store at devicePixelRatio (capped at 2x in-browser so the preview is
   // crisp on HiDPI screens without costing much: 2×900=1800px is still ~1/13 of a 24MP
   // export). Native iOS GPUs handle full-res live preview comfortably, so the Capacitor
@@ -8087,11 +8145,8 @@ function renderPreview(){
     dpr=Math.min(iw/(cw||1),ih/(ch||1));
   }
   let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
-  // Full-res preview: render at the true source resolution instead of the capped backing store
-  // — but not WHILE a slider/pan/zoom drag is in flight (_fxPreviewInteracting), since that would
-  // pay the full ~dpr² cost on every intermediate frame of the drag. Falls back to the normal
-  // capped size until the interaction ends, then renderPreview() is re-invoked at full res.
-  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1){pw=iw;ph=ih;}
+  // (fxZoom>1 full-res now renders a visible crop — see renderFullResCrop above; this path
+  // only handles Fit and the split/interacting fallbacks.)
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
   const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
