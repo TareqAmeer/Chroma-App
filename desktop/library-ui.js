@@ -71,7 +71,7 @@
                             // that clear it). Lets chromasmithRecordExport still log an export-
                             // history entry per photo instead of silently recording nothing.
     selected: new Set(),   // multi-selected paths (shift/cmd-click), for batch rate/flag/open
-    source: 'folder',      // 'folder' | 'edited' — the virtual cross-folder "All Edited" view
+    source: 'folder',      // 'folder' | a smart collection ('recents'/'favorites'/'edited'/'exported'/'flagged'/'rejected') | 'lr' (Lightroom cloud album)
     viewMode: localStorage.getItem('chromasmith_lib_view') || 'grid', // 'grid' | 'list'
     thumbSize: parseInt(localStorage.getItem('chromasmith_lib_thumbsize') || '140', 10),
     sortBy: localStorage.getItem('chromasmith_lib_sort') || 'name',       // name|mtime|iso|shutter|aperture|focal|edited
@@ -117,16 +117,30 @@
        (auto-placement has mis-stacked this panel twice). */
     #lib-top{grid-row:1}#lib-filters{grid-row:2}#lib-viewbar{grid-row:3}
     #lib-side{grid-row:4}#lib-main{grid-row:5}#lib-bottom{grid-row:6}
-    #lib-overlay.full{width:100vw;grid-template-rows:auto auto auto minmax(100px,18%) 1fr 28px}
+    /* FULL (expanded) mode: real LEFT SIDEBAR layout (approved Lightroom-in-Library wireframe)
+       — #lib-side becomes a 230px left column spanning the filters/viewbar/main rows, instead
+       of the old horizontal band squeezed above the grid ("top bar only, no sidebar"). The
+       docked 356px filmstrip keeps the vertical stacking below — a left column can't fit there. */
+    #lib-overlay.full{width:100vw;grid-template-columns:230px 1fr;grid-template-rows:auto auto auto 1fr 28px}
+    #lib-overlay.full #lib-top{grid-column:1/3;grid-row:1}
+    #lib-overlay.full #lib-side{grid-column:1;grid-row:2/5;border-right:1px solid var(--bdr);border-top:none;border-bottom:none}
+    #lib-overlay.full #lib-filters{grid-column:2;grid-row:2}
+    #lib-overlay.full #lib-viewbar{grid-column:2;grid-row:3}
+    #lib-overlay.full #lib-main{grid-column:2;grid-row:4}
+    #lib-overlay.full #lib-bottom{grid-column:1/3;grid-row:5}
+    #lib-overlay.full.tree-collapsed{grid-template-columns:0 1fr;grid-template-rows:auto auto auto 1fr 28px}
     #lib-overlay.full #lib-grid{grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,200px),1fr))}
-    /* Folder tree collapses to zero height by default — the photo grid is the page; the tree
-       is navigation chrome you reach for occasionally, not something that should permanently
-       eat a fixed 18-26% vertical slice above an otherwise-empty-looking grid. #lib-tree-toggle
-       (in #lib-top) flips this. */
-    #lib-overlay.tree-collapsed{grid-template-rows:auto auto auto 0 1fr 28px}
-    #lib-overlay.full.tree-collapsed{grid-template-rows:auto auto auto 0 1fr 28px}
+    /* Sidebar collapse. Docked (non-full) mode zeroes the ROW (old vertical layout); full mode
+       zeroes the COLUMN (rule above at .full.tree-collapsed — its row template must stay the
+       5-row full-mode one: a stale 6-row override here once put #lib-main in the 0 track and
+       collapsed the whole photo grid). :not(.full) scoping keeps the two modes from crossing. */
+    #lib-overlay.tree-collapsed:not(.full){grid-template-rows:auto auto auto 0 1fr 28px}
     #lib-overlay.tree-collapsed #lib-side{display:none}
     #lib-tree-toggle.on{border-color:var(--acc);color:var(--acc)}
+    @keyframes lib-lr-slide{from{transform:translateX(-100%)}to{transform:translateX(350%)}}
+    #lib-lr-chip{display:none;align-items:center;gap:6px;margin-left:auto;font-size:10px;color:var(--ok,#59c98a)}
+    #lib-lr-chip .lib-lr-signout{color:var(--mut);cursor:pointer;text-decoration:underline}
+    #lib-overlay.lr-mode #lib-lr-chip{display:inline-flex}
     /* deskx docked (non-full): a real grid-column sibling of the preview/panel/rail, placed by
        initDock() as the first child of .fx-layout — see chromasmith-22.html's own
        body.deskx .fx-layout / body.lib-docked rules for the reserved column width. */
@@ -375,6 +389,7 @@
       <div class="lib-thumbsize" id="lib-thumbsize-wrap">
         <span>Size</span><input type="range" id="lib-thumbsize" min="90" max="320" step="10">
       </div>
+      <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
     </div>
     <div id="lib-side"><div id="lib-collections"></div><div id="lib-tree"></div></div>
     <div id="lib-main">
@@ -1061,6 +1076,7 @@
 
   async function openFolder(path) {
     state.currentFolder = path;
+    state.source = 'folder'; // leaving a collection/cloud view — clears their sidebar highlight below
     state.selected.clear();
     const grid = document.getElementById('lib-grid');
     grid.innerHTML = '<div id="lib-empty">Loading…</div>';
@@ -1082,8 +1098,11 @@
     await Promise.all(state.entries.map((e) => getSidecar(e.path)));
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     await renderGrid();
+    if (typeof renderCollections === 'function') renderCollections(); // drop stale collection/album highlight
     Promise.all(state.entries.map((e) => getMeta(e.path).catch(() => ({})))).then(() => {
-      if (state._openToken !== openToken || state.currentFolder !== path) return; // user moved on
+      // source check: without it, opening a folder then clicking a Lightroom album while this
+      // background meta pass was still running clobbered the cloud grid seconds later.
+      if (state._openToken !== openToken || state.currentFolder !== path || state.source !== 'folder') return; // user moved on
       populateSelect(document.getElementById('lib-camera-filter'), state.entries.map((e) => state.meta.get(e.path)?.camera), 'All cameras');
       populateSelect(document.getElementById('lib-lens-filter'), state.entries.map((e) => state.meta.get(e.path)?.lens), 'All lenses');
       renderGrid();
@@ -1449,6 +1468,10 @@
   }
 
   async function renderGrid() {
+    // Cloud album on screen: every filter/sort/search/view-mode handler funnels through here,
+    // and rebuilding from state.entries (the previous FOLDER's files) would silently replace
+    // the cloud grid. Delegate to the cloud renderer instead (lrState.assets, no refetch).
+    if (state.source === 'lr') { if (typeof renderLrGrid === 'function') await renderLrGrid(); return; }
     grid = document.getElementById('lib-grid');
     grid.innerHTML = '';
     thumbQueueReset(); // drop queued thumbnail jobs from the previous grid/folder
@@ -1520,11 +1543,13 @@
   }
 
   // ── wiring ──────────────────────────────────────────────────────────────────
-  // Folder tree starts collapsed — the photo grid is the page, the tree is occasional
-  // navigation (see the CSS comment above #lib-overlay.tree-collapsed). Persisted so the
-  // choice sticks across relaunches, same treatment as view mode/sort/thumb size below.
+  // Sidebar starts OPEN — in the full-mode left-sidebar layout it IS the navigation
+  // (Collections/Cloud/Folders, per the approved wireframe); collapsing is the occasional
+  // choice now, not the default. Persisted so the choice sticks across relaunches. (The old
+  // default was collapsed-unless-'0', which is why the redesigned sidebar appeared "missing"
+  // on first run — the stored default hid it.)
   const treeToggleBtn = overlay.querySelector('#lib-tree-toggle');
-  let treeCollapsed = localStorage.getItem('chromasmith_lib_tree_collapsed') !== '0';
+  let treeCollapsed = localStorage.getItem('chromasmith_lib_tree_collapsed') === '1';
   function syncTreeToggle() {
     overlay.classList.toggle('tree-collapsed', treeCollapsed);
     treeToggleBtn.classList.toggle('on', !treeCollapsed);
@@ -1555,6 +1580,14 @@
     const t = e.target;
     if (t && t.closest && t.closest('input,textarea,[contenteditable]')) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // Cloud album view: state.entries still holds the previous FOLDER's files — arrows/Enter/
+    // X/P/U would act on invisible photos (Enter even opened one; X/P wrote its sidecar).
+    // Only the view toggles stay live.
+    if (state.source === 'lr') {
+      if (e.key === 'g' || e.key === 'G') toggleExpandedView();
+      else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
+      return;
+    }
     // ── Grid keyboard culling (Lightroom idiom): arrows move a highlight through the CURRENT
     // sorted/filtered order, Enter opens it, X rejects / P picks / U clears the flag on it (or
     // on the multi-selection when one exists). The highlight rides on state.openedPath when a
@@ -1716,6 +1749,7 @@
   };
   async function openCollectionView(name) {
     state.source = name;
+    lrState.album = null; // leaving the cloud view — don't re-highlight a stale album later
     state.selected.clear();
     grid = document.getElementById('lib-grid');
     grid.innerHTML = '<div id="lib-empty">Loading…</div>';
@@ -1780,17 +1814,50 @@
     return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Cloud</div>' + rows;
   }
   async function lrConnectAndLoad() {
-    if (!window.lrCloud) return;
+    if (!window.lrCloud || lrState.loading) return; // in-flight guard: double-click fired two OAuth flows
     lrState.loading = true; renderCollections();
     try {
       if (!window.lrCloud.connected()) await window.lrCloud.connect();
       lrState.albums = await window.lrCloud.albums();
       lrState.loading = false; renderCollections();
       if (lrState.albums && lrState.albums.length) openLrAlbum(lrState.albums[0].id);
+      else showLrEmptyState('No albums found in this catalog.');
     } catch (e) {
       lrState.loading = false; renderCollections();
       console.error('lr connect', e);
+      showLrEmptyState('Connection failed — see the log in the editor view.');
     }
+  }
+  function lrSignOut() {
+    if (!(window.lrCloud && window.lrCloud.connected())) return;
+    window.lrCloud.connect(); // toggle: disconnects when connected
+    lrState.albums = null; lrState.album = null; lrState.assets = [];
+    renderCollections();
+    showLrEmptyState();
+  }
+  // Disconnected (or error) empty state in the MAIN area, per the approved wireframe — the
+  // sidebar row alone silently kicking off OAuth was undiscoverable and gave errors nowhere
+  // to land.
+  function showLrEmptyState(msg) {
+    state.source = 'lr'; lrState.album = null;
+    grid = document.getElementById('lib-grid');
+    thumbQueueReset();
+    grid.classList.remove('list-view');
+    grid.innerHTML = `
+      <div id="lib-empty" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px 20px">
+        <div style="color:var(--mut)">${CLOUD_SVG.replace('width="14" height="14"', 'width="34" height="34"')}</div>
+        <div style="font-weight:600;font-size:14px;color:var(--txt)">Browse your Lightroom cloud photos</div>
+        <div style="font-size:11px;color:var(--mut)">${msg ? String(msg).replace(/</g, '&lt;') : 'Sign in with Adobe. Albums and photos appear here.'}</div>
+        <button class="lib-btn" id="lib-lr-connect" style="background:var(--acc);color:#000;border-color:var(--acc);font-weight:600">Connect Lightroom</button>
+        <a id="lib-lr-clientid" style="font-size:10px;color:var(--mut);cursor:pointer;text-decoration:underline">API ID…</a>
+      </div>`;
+    const btn = grid.querySelector('#lib-lr-connect');
+    if (btn) btn.onclick = () => lrConnectAndLoad();
+    const cid = grid.querySelector('#lib-lr-clientid');
+    if (cid) cid.onclick = () => window.lrCloud && window.lrCloud.askClientId(true);
+    const count = document.getElementById('lib-count');
+    if (count) count.textContent = 'Adobe Lightroom — not connected';
+    renderCollections();
   }
   // Simple bounded-concurrency thumb loader for cloud cards (the disk thumb pool is keyed on
   // file paths; cloud thumbs are API blobs, so they get their own tiny pump).
@@ -1805,8 +1872,10 @@
         try {
           const blob = await window.lrCloud.thumbBlob(asset.id);
           if (gen !== lrThumbGen || !img.isConnected) return;
-          img.src = URL.createObjectURL(blob);
-          img.onload = () => URL.revokeObjectURL(img.src);
+          const url = URL.createObjectURL(blob);
+          img.onload = () => URL.revokeObjectURL(url);
+          img.onerror = () => URL.revokeObjectURL(url); // decode failure must not leak the URL
+          img.src = url;
         } catch (e) { /* thumb failure is cosmetic */ }
       }
     };
@@ -1824,7 +1893,20 @@
     let assets;
     try { assets = await window.lrCloud.assets(albumId); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this album.</div>'; console.error('lr assets', e); return; }
+    if (state.source !== 'lr' || lrState.album !== albumId) return; // user navigated away mid-fetch
     lrState.assets = assets;
+    await renderLrGrid();
+  }
+  // Renders the current cloud album from lrState.assets (no refetch) — ALSO what renderGrid()
+  // delegates to while state.source==='lr', so a filter/sort/search handler re-running
+  // renderGrid can't clobber the cloud view with the previous folder's entries.
+  async function renderLrGrid() {
+    grid = document.getElementById('lib-grid');
+    grid.classList.remove('list-view');
+    const assets = lrState.assets || [];
+    const albumName = (lrState.albums || []).find((a) => a.id === lrState.album)?.name || '';
+    const count = document.getElementById('lib-count');
+    if (count) count.textContent = `${assets.length} cloud photo(s)${albumName ? ' — ' + albumName : ''} · connected to Adobe Lightroom`;
     // "on disk" badge: compare against what's already in ~/Documents/Lightroom Download.
     const onDisk = new Set();
     try {
@@ -1839,12 +1921,17 @@
       const stem = String(a.name || a.id).replace(/\.[^.]+$/, '');
       const card = document.createElement('div');
       card.className = 'lib-card';
-      card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
+      card.dataset.lrStem = stem;
+      card.innerHTML = `<div class="lib-thumb-wrap" style="position:relative"><img loading="lazy" alt="">
+          <div class="lib-lr-prog" style="display:none;position:absolute;left:0;right:0;bottom:0;height:3px;overflow:hidden"><div style="height:100%;width:40%;background:var(--acc);animation:lib-lr-slide 1s linear infinite"></div></div>
+        </div>
         <div class="lib-name">${String(a.name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}${onDisk.has(stem) ? ' <span title="Already in Lightroom Download" style="color:var(--ok,#59c98a)">✓</span>' : ''}</div>`;
       card.title = a.name + (onDisk.has(stem) ? ' — already downloaded' : ' — click to import & open');
       card.querySelector('.lib-thumb-wrap').onclick = async () => {
-        card.style.opacity = '0.55';
-        try { await window.lrCloud.importAsset(a.id, a.name); } finally { card.style.opacity = ''; }
+        const prog = card.querySelector('.lib-lr-prog');
+        card.style.opacity = '0.7'; if (prog) prog.style.display = 'block';
+        try { await window.lrCloud.importAsset(a.id, a.name); }
+        finally { card.style.opacity = ''; if (prog) prog.style.display = 'none'; }
         const nameEl = card.querySelector('.lib-name');
         if (nameEl && !/✓/.test(nameEl.innerHTML)) nameEl.innerHTML += ' <span title="Downloaded" style="color:var(--ok,#59c98a)">✓</span>';
       };
@@ -1854,6 +1941,27 @@
     lrThumbPump(cards);
   }
   window.addEventListener('lr-cloud-state', () => { if (!window.lrCloud || !window.lrCloud.connected()) { lrState.albums = null; lrState.album = null; } renderCollections(); });
+  // Background full-size upgrade indicator (chromasmith-22.html's lrUpgradeToFullsize
+  // dispatches these): mini badge on the matching card while the higher-quality rendition
+  // is being generated/downloaded.
+  window.addEventListener('lr-fullsize-state', (e) => {
+    const d = e.detail || {};
+    const card = document.querySelector(`.lib-card[data-lr-stem="${(CSS && CSS.escape) ? CSS.escape(d.stem || '') : (d.stem || '')}"]`);
+    if (!card) return;
+    let badge = card.querySelector('.lib-lr-full');
+    if (d.phase === 'start') {
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'lib-lr-full';
+        badge.style.cssText = 'position:absolute;top:6px;right:6px;font-size:9px;padding:2px 7px;border-radius:8px;background:rgba(0,0,0,.6);color:var(--acc)';
+        badge.textContent = 'fetching full-size…';
+        card.querySelector('.lib-thumb-wrap').appendChild(badge);
+      }
+    } else if (badge) {
+      if (d.phase === 'done') { badge.textContent = 'full-size ✓'; badge.style.color = 'var(--ok,#59c98a)'; setTimeout(() => badge.remove(), 4000); }
+      else badge.remove();
+    }
+  });
 
   function renderCollections() {
     const host = document.getElementById('lib-collections');
@@ -1873,10 +1981,22 @@
     });
     const root = host.querySelector('[data-lr-root]');
     if (root) {
-      root.onclick = () => lrConnectAndLoad();
-      root.oncontextmenu = (e) => { e.preventDefault(); if (window.lrCloud && window.lrCloud.connected()) { window.lrCloud.connect(); lrState.albums = null; lrState.album = null; renderCollections(); } };
+      // Disconnected → wireframe empty state in the main area (the Connect button there starts
+      // OAuth); connected with albums loaded → jump to the first album; loading → ignore.
+      root.onclick = () => {
+        if (!window.lrCloud) return;
+        if (!window.lrCloud.connected()) { showLrEmptyState(); return; }
+        if (lrState.loading) return;
+        if (lrState.albums && lrState.albums.length) openLrAlbum(lrState.albums[0].id);
+        else lrConnectAndLoad();
+      };
+      root.oncontextmenu = (e) => { e.preventDefault(); lrSignOut(); };
     }
     host.querySelectorAll('[data-lr-album]').forEach((row) => { row.onclick = () => openLrAlbum(row.dataset.lrAlbum); });
+    // Connected chip (viewbar, right-aligned) — visible only while browsing the cloud source.
+    overlay.classList.toggle('lr-mode', state.source === 'lr' && !!(window.lrCloud && window.lrCloud.connected()));
+    const chipOut = document.querySelector('#lib-lr-chip .lib-lr-signout');
+    if (chipOut && !chipOut._wired) { chipOut._wired = true; chipOut.onclick = lrSignOut; }
   }
   function renderCollectionCounts() {
     invoke('collection_counts').then((counts) => { collectionCounts = counts; renderCollections(); }).catch(() => {});

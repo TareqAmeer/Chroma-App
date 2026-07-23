@@ -3205,7 +3205,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-23a';
+const BUILD='2026-07-23c';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -8056,7 +8056,7 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   const z=fxZoom;
   // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
   const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
-  const padX=visW*0.3,padY=visH*0.3;
+  const padX=visW*0.18,padY=visH*0.18;
   const x0=Math.max(0,-fxPanX-padX),y0=Math.max(0,-fxPanY-padY);
   const x1=Math.min(cw,-fxPanX+visW+padX),y1=Math.min(ch,-fxPanY+visH+padY);
   if(x1-x0<2||y1-y0<2)return false;
@@ -8067,7 +8067,10 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   // zoom magnifies real detail like the loupe, no point rendering further) and a GPU-safe 8192.
   const sysdpr=Math.min(window.devicePixelRatio||1,2);
   let outW=(x1-x0)*z*sysdpr,outH=(y1-y0)*z*sysdpr;
-  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH);
+  // Caps: never beyond 2× the crop's native pixels, never past GPU-safe 8192, and a ~5MP
+  // total-pixel budget — the full FX chain (halation/bloom blurs) runs per re-render on every
+  // pan settle, and an uncapped 4K-wide render made deep zooms feel sluggish on Intel iGPUs.
+  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(5e6/(outW*outH)));
   outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
   const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
@@ -9763,12 +9766,21 @@ async function lrListAlbums(){
 }
 async function lrListAssets(albumId){
   await lrEnsureCatalog();
-  const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums/${albumId}/assets?limit=100&embed=asset`);
-  return (data.resources||[]).map(r=>r.asset).filter(Boolean).map(a=>({
-    id:a.id,
-    name:(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id,
-    captured:(a.payload&&a.payload.captureDate)||''
-  }));
+  // Paginated (links.next) — a single limit=100 page silently truncated big albums. Capped at
+  // 5 pages (500 assets) to bound the sidebar-click cost; links.next.href is relative to /v2.
+  let path=`/catalogs/${lrCatalogId}/albums/${albumId}/assets?limit=100&embed=asset`;
+  const out=[];
+  for(let page=0;page<5&&path;page++){
+    const data=await lrApiGet(path);
+    (data.resources||[]).map(r=>r.asset).filter(Boolean).forEach(a=>out.push({
+      id:a.id,
+      name:(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id,
+      captured:(a.payload&&a.payload.captureDate)||''
+    }));
+    const next=data.links&&data.links.next&&data.links.next.href;
+    path=next?('/'+String(next).replace(/^\/?(v2\/)?/,'')):null;
+  }
+  return out;
 }
 // Binary rendition GET via download_url_native (same no-CORS reasoning as lrApiGet; the extra
 // headers param carries Lightroom's required X-API-Key). Throws "HTTP nnn" on a non-2xx.
@@ -9824,26 +9836,33 @@ async function lrSaveToDisk(fname,blob){
   }catch(e){log('Could not save "'+fname+'" to the Lightroom Download folder: '+(e&&e.message||e),'warn');return ''}
 }
 async function lrUpgradeToFullsize(assetId,base,savedPath){
+  // Progress events for the Library's cloud cards (library-ui.js listens): start/done/fail.
+  const emit=(phase)=>{try{window.dispatchEvent(new CustomEvent('lr-fullsize-state',{detail:{stem:base,phase}}))}catch(e){}};
+  emit('start');
   if(!await lrGenerateRendition(assetId,'fullsize')){
-    log('Full-size rendition unavailable for this account — keeping 2048px','warn');return;
+    log('Full-size rendition unavailable for this account — keeping 2048px','warn');emit('fail');return;
   }
   // Poll with backoff (generation is async; docs say up to minutes). ~2min budget.
   let blob=null;
-  for(let wait=2000,total=0;total<120000;total+=wait,wait=Math.min(wait*2,15000)){
-    await new Promise(r=>setTimeout(r,wait));
-    try{blob=await lrRenditionBlob(assetId,'fullsize');break}
-    catch(e){if(!/HTTP 404/.test(e&&e.message||''))throw e}
-  }
-  if(!blob){log('Full-size rendition not ready after 2min — keeping 2048px','warn');return;}
+  try{
+    for(let wait=2000,total=0;total<120000;total+=wait,wait=Math.min(wait*2,15000)){
+      await new Promise(r=>setTimeout(r,wait));
+      try{blob=await lrRenditionBlob(assetId,'fullsize');break}
+      catch(e){if(!/HTTP 404/.test(e&&e.message||''))throw e}
+    }
+  }catch(e){emit('fail');throw e}
+  if(!blob){log('Full-size rendition not ready after 2min — keeping 2048px','warn');emit('fail');return;}
   const fname=base+'.jpg';
   const saved=await lrSaveToDisk(fname,blob);
-  // Swap the in-editor image if this photo is still the one open.
+  // Swap the in-editor image only if this photo is still the one open. Name-based identity —
+  // fname is exactly what lrImportAsset loaded, so a same-stem match means "same import".
   const cur=fxImages[fxCurIdx];
-  if(cur&&(cur.name===fname||cur.name===base+'.jpg')){
+  if(cur&&cur.name===fname){
     await loadFXImages([new File([blob],fname,{type:'image/jpeg'})]);
   }
   log(`Full-size ready: ${fname}${saved?' → '+saved:''}`,'ok');
   toast('Full-size version loaded',true);
+  emit('done');
 }
 // The Export-panel widget is gone — the Library's Cloud section (library-ui.js) is the UI now.
 // lrUpdateUI just notifies it to re-render its connect state.
