@@ -1,0 +1,250 @@
+{
+  "lut_size": 33,
+  "presets": [
+    {
+      "name": "portra_160_endura_premier",
+      "category": "C41 Still",
+      "negative": "Kodak Portra 160",
+      "print": "Kodak Endura Premier Paper",
+      "file": "portra_160_endura_premier.cube"
+    },
+    {
+      "name": "portra_400_endura_premier",
+      "category": "C41 Still",
+      "negative": "Kodak Portra 400",
+      "print": "Kodak Endura Premier Paper",
+      "file": "portra_400_endura_premier.cube"
+    },
+    {
+      "name": "portra_800_endura_premier",
+      "category": "C41 Still",
+      "negative": "Kodak Portra 800",
+      "print": "Kodak Endura Premier Paper",
+      "file": "portra_800_endura_premier.cube"
+    },
+    {
+      "name": "portra_400_supra_endura",
+      "category": "C41 Still",
+      "negative": "Kodak Portra 400",
+      "print": "Kodak Supra Endura Paper",
+      "file": "portra_400_supra_endura.cube"
+    },
+    {
+      "name": "portra_400_portra_endura",
+      "category": "C41 Still",
+      "negative": "Kodak Portra 400",
+      "print": "Kodak Portra Endura Paper",
+      "file": "portra_400_portra_endura.cube"
+    },
+    {
+      "name": "ektar_100_endura_premier",
+      "category": "C41 Still",
+      "negative": "Kodak Ektar 100",
+      "print": "Kodak Endura Premier Paper",
+      "file": "ektar_100_endura_premier.cube"
+    },
+    {
+      "name": "gold_200_endura_premier",
+      "category": "C41 Still",
+      "negative": "Kodak Gold 200",
+      "print": "Kodak Endura Premier Paper",
+      "file": "gold_200_endura_premier.cube"
+    },
+    {
+      "name": "ultramax_500_endura_premier",
+      "category": "C41 Still",
+      "negative": "Kodak Ultramax 500",
+      "print": "Kodak Endura Premier Paper",
+      "file": "ultramax_500_endura_premier.cube"
+    },
+    {
+      "name": "vericolor_iii_endura_premier",
+      "category": "C41 Still",
+      "negative": "Kodak Vericolor III",
+      "print": "Kodak Endura Premier Paper",
+      "file": "vericolor_iii_endura_premier.cube"
+    },
+    {
+      "name": "fuji_pro_400h_ca_maxima",
+      "category": "C41 Still",
+      "negative": "Fuji Pro 400H",
+      "print": "Fuji Crystal Archive Maxima",
+      "file": "fuji_pro_400h_ca_maxima.cube"
+    },
+    {
+      "name": "fuji_pro_160c_ca_maxima",
+      "category": "C41 Still",
+      "negative": "Fuji Pro 160C",
+      "print": "Fuji Crystal Archive Maxima",
+      "file": "fuji_pro_160c_ca_maxima.cube"
+    },
+    {
+      "name": "fuji_pro_160s_ca_dpii",
+      "category": "C41 Still",
+      "negative": "Fuji Pro 160S",
+      "print": "Fuji Crystal Archive DPII",
+      "file": "fuji_pro_160s_ca_dpii.cube"
+    },
+    {
+      "name": "fuji_c200_ca_dpii",
+      "category": "C41 Still",
+      "negative": "Fuji C200",
+      "print": "Fuji Crystal Archive DPII",
+      "file": "fuji_c200_ca_dpii.cube"
+    },
+    {
+      "name": "fuji_superia_reala_ca_pro_pdii",
+      "category": "C41 Still",
+      "negative": "Fuji Superia Reala",
+      "print": "Fuji Crystal Archive Pro PDII",
+      "file": "fuji_superia_reala_ca_pro_pdii.cube"
+    },
+    {
+      "name": "fuji_superia_xtra_400_ca_dpii",
+      "category": "C41 Still",
+      "negative": "Fuji Superia X-Tra 400",
+      "print": "Fuji Crystal Archive DPII",
+      "file": "fuji_superia_xtra_400_ca_dpii.cube"
+    },
+    {
+      "name": "fuji_natura_1600_ca_dpii",
+      "category": "C41 Still",
+      "negative": "Fuji Natura 1600",
+      "print": "Fuji Crystal Archive DPII",
+      "file": "fuji_natura_1600_ca_dpii.cube"
+    },
+    {
+      "name": "vision3_50d_2383",
+      "category": "Cinema",
+      "negative": "Kodak Vision3 50D 5203",
+      "print": "Kodak Vision 2383",
+      "file": "vision3_50d_2383.cube"
+    },
+    {
+      "name": "vision3_200t_2383",
+      "category": "Cinema",
+      "negative": "Kodak Vision3 200T 5213",
+      "print": "Kodak Vision 2383",
+      "file": "vision3_200t_2383.cube"
+    },
+    {
+      "name": "vision3_250d_2383",
+      "category": "Cinema",
+      "negative": "Kodak Vision3 250D 5207",
+      "print": "Kodak Vision 2383",
+      "file": "vision3_250d_2383.cube"
+    },
+    {
+      "name": "vision3_250d_2393",
+      "category": "Cinema",
+      "negative": "Kodak Vision3 250D 5207",
+      "print": "Kodak Vision Premier 2393",
+      "file": "vision3_250d_2393.cube"
+    },
+    {
+      "name": "vision3_500t_2383",
+      "category": "Cinema",
+      "negative": "Kodak Vision3 500T 5219",
+      "print": "Kodak Vision 2383",
+      "file": "vision3_500t_2383.cube"
+    },
+    {
+      "name": "vision3_500t_2393",
+      "category": "Cinema",
+      "negative": "Kodak Vision3 500T 5219",
+      "print": "Kodak Vision Premier 2393",
+      "file": "vision3_500t_2393.cube"
+    },
+    {
+      "name": "velvia_50_ilfochrome_m",
+      "category": "Reversal",
+      "negative": "Fuji Velvia 50",
+      "print": "Ilfochrome Micrographic M",
+      "file": "velvia_50_ilfochrome_m.cube"
+    },
+    {
+      "name": "provia_100f_ilfochrome_m",
+      "category": "Reversal",
+      "negative": "Fuji Provia 100F",
+      "print": "Ilfochrome Micrographic M",
+      "file": "provia_100f_ilfochrome_m.cube"
+    },
+    {
+      "name": "ektachrome_100d_radiance_iii",
+      "category": "Reversal",
+      "negative": "Kodak Ektachrome 100D",
+      "print": "Kodak Ektachrome Radiance III Paper",
+      "file": "ektachrome_100d_radiance_iii.cube"
+    },
+    {
+      "name": "kodachrome_64_radiance_iii",
+      "category": "Reversal",
+      "negative": "Kodachrome 64",
+      "print": "Kodak Ektachrome Radiance III Paper",
+      "file": "kodachrome_64_radiance_iii.cube"
+    },
+    {
+      "name": "fp100c_fujiflex_new",
+      "category": "Instant",
+      "negative": "Fuji FP-100C",
+      "print": "Fujiflex Crystal Archive New Version",
+      "file": "fp100c_fujiflex_new.cube"
+    },
+    {
+      "name": "instax_color_fujiflex_new",
+      "category": "Instant",
+      "negative": "Fuji Instax color",
+      "print": "Fujiflex Crystal Archive New Version",
+      "file": "instax_color_fujiflex_new.cube"
+    },
+    {
+      "name": "aerocolor_endura_premier",
+      "category": "Niche",
+      "negative": "Kodak Aerocolor IV 2460",
+      "print": "Kodak Endura Premier Paper",
+      "file": "aerocolor_endura_premier.cube"
+    },
+    {
+      "name": "aerocolor_high_endura_premier",
+      "category": "Niche",
+      "negative": "Kodak Aerocolor IV 2460 High",
+      "print": "Kodak Endura Premier Paper",
+      "file": "aerocolor_high_endura_premier.cube"
+    },
+    {
+      "name": "agfa_vista_100_ca_dpii",
+      "category": "Niche",
+      "negative": "Agfa Vista 100",
+      "print": "Fuji Crystal Archive DPII",
+      "file": "agfa_vista_100_ca_dpii.cube"
+    },
+    {
+      "name": "trix_400_polymax_grade_2",
+      "category": "B&W",
+      "negative": "Kodak Tri-X 400",
+      "print": "Kodak Polymax Fine-Art Paper Grade 2",
+      "file": "trix_400_polymax_grade_2.cube"
+    },
+    {
+      "name": "trix_400_polymax_grade_3",
+      "category": "B&W",
+      "negative": "Kodak Tri-X 400",
+      "print": "Kodak Polymax Fine-Art Paper Grade 3",
+      "file": "trix_400_polymax_grade_3.cube"
+    },
+    {
+      "name": "kodak_5222_polymax_grade_2",
+      "category": "B&W",
+      "negative": "Kodak 5222",
+      "print": "Kodak Polymax Fine-Art Paper Grade 2",
+      "file": "kodak_5222_polymax_grade_2.cube"
+    },
+    {
+      "name": "kodak_5222_2302_dev_5",
+      "category": "B&W",
+      "negative": "Kodak 5222",
+      "print": "Kodak 2302 Dev 5",
+      "file": "kodak_5222_2302_dev_5.cube"
+    }
+  ]
+}
