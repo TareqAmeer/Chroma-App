@@ -40,7 +40,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app"],
+    "targets": ["app"],
     "icon": [
       "icons/icon.icns"
     ],
