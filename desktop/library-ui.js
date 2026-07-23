@@ -4,8 +4,59 @@
 // in a sandboxed browser); injected only into the Tauri build, gated on window.__TAURI__, so
 // this file is a safe no-op anywhere else. chromasmith-22.html is never touched.
 (function () {
-  if (!window.__TAURI__) return;
-  const invoke = window.__TAURI__.core.invoke;
+  // ?libtest=1 — browser-only visual test harness. The Library is native-gated, which meant NO
+  // pre-ship way to SEE a layout change: every check ran in a plain browser where this file
+  // no-ops, and layout bugs (the "sidebar missing" regression) survived to the packaged app.
+  // The flag swaps in tiny mocks for the handful of Tauri commands the Library needs so the
+  // real DOM/CSS renders and can be screenshotted against the wireframes. Production is
+  // untouched: the flag only exists via URL and the Tauri path never evaluates the mocks.
+  const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
+  if (!window.__TAURI__ && !LIBTEST) return;
+  const invoke = LIBTEST ? libtestInvoke : window.__TAURI__.core.invoke;
+  function libtestInvoke(cmd, args) {
+    const A = args || {};
+    const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
+    const png = Uint8Array.from(atob(px), (c) => c.charCodeAt(0));
+    switch (cmd) {
+      case 'list_dir': {
+        const dir = String(A.path || '/test');
+        if (/Folders only/.test(dir)) return Promise.resolve([]);
+        const out = [];
+        for (let i = 1; i <= 18; i++) out.push({ path: `${dir}/IMG_${1000 + i}.RW2`, name: `IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, kind: 'raw', ext: 'rw2', mtime: 1700000000 + i, size: 1000 + i });
+        out.push({ path: `${dir}/sub`, name: 'sub', is_dir: true, is_image: false, kind: '', ext: '', mtime: 0, size: 0 });
+        return Promise.resolve(out);
+      }
+      case 'get_thumbnail': return Promise.resolve(png.buffer);
+      case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false });
+      case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
+      case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0 });
+      case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
+      case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
+      case 'list_collection': case 'list_exported': return Promise.resolve([]);
+      case 'get_export_history': return Promise.resolve([]);
+      default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
+    }
+  }
+  if (LIBTEST) {
+    document.body.classList.add('deskx');
+    // Minimal event shim (menu-library listener registration).
+    window.__TAURI__ = { core: { invoke: libtestInvoke }, event: { listen: () => Promise.resolve(() => {}) } };
+    // Cloud mock: disconnected by default; window.libtestLrConnect() flips to a connected
+    // state with fake albums/assets so every Cloud UI state is screenshottable.
+    let ltConnected = false;
+    const ltAlbums = [{ id: 'al1', name: 'Dogs 2026' }, { id: 'al2', name: 'Travel' }, { id: 'al3', name: 'Film scans' }];
+    const ltAssets = (n) => Array.from({ length: n }, (_, i) => ({ id: 'as' + i, name: `__TM${4700 + i}.RW2`, captured: '2026-07-2' + (i % 9) }));
+    window.lrCloud = {
+      connected: () => ltConnected,
+      connect: async () => { ltConnected = !ltConnected; },
+      askClientId: async () => 'test-client',
+      albums: async () => ltAlbums,
+      assets: async () => ltAssets(9),
+      thumbBlob: async () => new Blob([png], { type: 'image/png' }),
+      importAsset: async () => { await new Promise((r) => setTimeout(r, 800)); },
+    };
+    window.libtestLrConnect = () => { ltConnected = true; window.dispatchEvent(new CustomEvent('lr-cloud-state')); };
+  }
 
   // ── decoded-image cache: reopening a photo you've already viewed this session skips the
   // full decode (RW2: PPG demosaic + DCP LUT bake, several seconds) entirely — the SAME
@@ -52,7 +103,7 @@
 
   const LS_ROOT = 'chromasmith_lib_root';
   const state = {
-    root: localStorage.getItem(LS_ROOT) || '',
+    root: LIBTEST ? '/test/Photos' : (localStorage.getItem(LS_ROOT) || ''),
     expanded: new Set(),
     currentFolder: '',
     entries: [],           // image entries in the currently-viewed folder
@@ -331,7 +382,7 @@
   overlay.innerHTML = `
     <div id="lib-top">
       <span class="lib-title">Library</span>
-      <button class="lib-btn" id="lib-tree-toggle" title="Show/hide the folder tree">☰ Folders</button>
+      <button class="lib-btn" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)">☰ Sidebar</button>
       <button class="lib-btn" id="lib-pick" title="Choose root folder">📁</button>
       <button class="lib-btn" id="lib-gphotos" title="Import from Google Photos">☁️</button>
       <button class="lib-btn" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">🕘</button>
@@ -1545,11 +1596,16 @@
   // ── wiring ──────────────────────────────────────────────────────────────────
   // Sidebar starts OPEN — in the full-mode left-sidebar layout it IS the navigation
   // (Collections/Cloud/Folders, per the approved wireframe); collapsing is the occasional
-  // choice now, not the default. Persisted so the choice sticks across relaunches. (The old
-  // default was collapsed-unless-'0', which is why the redesigned sidebar appeared "missing"
-  // on first run — the stored default hid it.)
+  // choice now, not the default.
+  // ⚠️ NEW KEY, deliberate: the pre-redesign key ('chromasmith_lib_tree_collapsed') has '1'
+  // persisted on real machines (collapsed WAS the old default, so any toggle round-trip stored
+  // it) — merely changing the default couldn't un-hide the sidebar there, which is exactly how
+  // build 23c still looked "old layout, no sidebar". A redesign must MIGRATE persisted UI
+  // state, not just change defaults: everyone gets the open sidebar once, then the toggle
+  // persists under the new key.
   const treeToggleBtn = overlay.querySelector('#lib-tree-toggle');
-  let treeCollapsed = localStorage.getItem('chromasmith_lib_tree_collapsed') === '1';
+  try { localStorage.removeItem('chromasmith_lib_tree_collapsed'); } catch (e) {}
+  let treeCollapsed = localStorage.getItem('chromasmith_lib_sidebar') === 'collapsed';
   function syncTreeToggle() {
     overlay.classList.toggle('tree-collapsed', treeCollapsed);
     treeToggleBtn.classList.toggle('on', !treeCollapsed);
@@ -1557,7 +1613,7 @@
   syncTreeToggle();
   treeToggleBtn.onclick = () => {
     treeCollapsed = !treeCollapsed;
-    localStorage.setItem('chromasmith_lib_tree_collapsed', treeCollapsed ? '1' : '0');
+    localStorage.setItem('chromasmith_lib_sidebar', treeCollapsed ? 'collapsed' : 'open');
     syncTreeToggle();
   };
   overlay.querySelector('#lib-pick').onclick = pickFolder;
@@ -1844,7 +1900,7 @@
     thumbQueueReset();
     grid.classList.remove('list-view');
     grid.innerHTML = `
-      <div id="lib-empty" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px 20px">
+      <div id="lib-empty" style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:60px 20px;min-height:50vh">
         <div style="color:var(--mut)">${CLOUD_SVG.replace('width="14" height="14"', 'width="34" height="34"')}</div>
         <div style="font-weight:600;font-size:14px;color:var(--txt)">Browse your Lightroom cloud photos</div>
         <div style="font-size:11px;color:var(--mut)">${msg ? String(msg).replace(/</g, '&lt;') : 'Sign in with Adobe. Albums and photos appear here.'}</div>
