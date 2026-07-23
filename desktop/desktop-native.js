@@ -223,6 +223,9 @@
   // load" report had no way to tell a genuine rawler gap from Google returning bad/re-encoded
   // bytes without the reporter running `cargo run`/`tauri dev` themselves.
   listen('gphotos-download-diag', (e) => { if (typeof log === 'function') log(e.payload, 'info'); });
+  // Same reasoning for the Save-to-Lightroom metadata splice: its outcome must be visible in
+  // the in-app log, not just stderr (a silent splice-skip cost a day of debugging).
+  listen('lr-save-diag', (e) => { if (typeof log === 'function') log(e.payload, /NO metadata|could not read/.test(e.payload||'') ? 'warn' : 'info'); });
 
   // ── Native-feeling right-click: no bare WKWebView context menu on chrome, but text
   // fields/log keep normal editing (Cut/Copy/Paste) behaviour. ─────────────────────

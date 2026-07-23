@@ -140,9 +140,34 @@ impl<'a> Reader<'a> {
     }
 }
 
-// Serializes one sub-IFD (entries must be plain values, no pointers) appended to `out`,
-// returning the IFD's absolute offset.
-fn write_ifd(out: &mut Vec<u8>, mut entries: Vec<Entry>) -> u32 {
+// Endian-aware integer writers: everything appended to the rendered file must be in ITS byte
+// order — UTIF.js writes BIG-endian ("MM") TIFFs, a fact discovered the hard way (the first
+// version of this module assumed "II" and silently skipped the splice on every real save).
+fn put16(out: &mut Vec<u8>, le: bool, v: u16) {
+    out.extend_from_slice(&if le { v.to_le_bytes() } else { v.to_be_bytes() });
+}
+fn put32(out: &mut Vec<u8>, le: bool, v: u32) {
+    out.extend_from_slice(&if le { v.to_le_bytes() } else { v.to_be_bytes() });
+}
+
+// Entry.value is normalized little-endian at parse time; re-swap per element when the target
+// file is big-endian.
+fn value_in_order(e: &Entry, le: bool) -> Vec<u8> {
+    let mut v = e.value.clone();
+    if !le {
+        let unit = swap_unit(e.typ);
+        if unit > 1 {
+            for chunk in v.chunks_exact_mut(unit) {
+                chunk.reverse();
+            }
+        }
+    }
+    v
+}
+
+// Serializes one sub-IFD (entries must be plain values, no pointers) appended to `out` in the
+// given byte order, returning the IFD's absolute offset.
+fn write_ifd(out: &mut Vec<u8>, le: bool, mut entries: Vec<Entry>) -> u32 {
     if out.len() % 2 == 1 {
         out.push(0);
     }
@@ -152,14 +177,15 @@ fn write_ifd(out: &mut Vec<u8>, mut entries: Vec<Entry>) -> u32 {
     let table_len = 2 + n * 12 + 4;
     // Value area starts right after the table.
     let mut val_off = ifd_off as usize + table_len;
-    out.extend_from_slice(&(n as u16).to_le_bytes());
+    put16(out, le, n as u16);
     let mut overflow: Vec<u8> = Vec::new();
     for e in &entries {
-        out.extend_from_slice(&e.tag.to_le_bytes());
-        out.extend_from_slice(&e.typ.to_le_bytes());
-        out.extend_from_slice(&e.count.to_le_bytes());
-        if e.value.len() <= 4 {
-            let mut v = e.value.clone();
+        put16(out, le, e.tag);
+        put16(out, le, e.typ);
+        put32(out, le, e.count);
+        let val = value_in_order(e, le);
+        if val.len() <= 4 {
+            let mut v = val;
             v.resize(4, 0);
             out.extend_from_slice(&v);
         } else {
@@ -167,12 +193,12 @@ fn write_ifd(out: &mut Vec<u8>, mut entries: Vec<Entry>) -> u32 {
                 overflow.push(0);
                 val_off += 1;
             }
-            out.extend_from_slice(&(val_off as u32).to_le_bytes());
-            overflow.extend_from_slice(&e.value);
-            val_off += e.value.len();
+            put32(out, le, val_off as u32);
+            overflow.extend_from_slice(&val);
+            val_off += val.len();
         }
     }
-    out.extend_from_slice(&0u32.to_le_bytes()); // next-IFD = none
+    put32(out, le, 0); // next-IFD = none
     out.extend_from_slice(&overflow);
     ifd_off
 }
@@ -222,11 +248,10 @@ pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
         return None; // nothing to add
     }
 
-    // The rendered file is UTIF output: always little-endian.
+    // The rendered file is UTIF output — which writes BIG-endian ("MM"). Support both orders
+    // anyway: all appended structures below are serialized in the rendered file's own order.
     let ren = Reader::new(rendered)?;
-    if !ren.le {
-        return None;
-    }
+    let rle = ren.le;
     let ren_ifd0_off = ren.ifd0()?;
     let ren_n = ren.u16(ren_ifd0_off)? as usize;
     // Copy the rendered IFD0's entries verbatim (raw 12-byte records — their inline values and
@@ -242,21 +267,27 @@ pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
 
     let mut out = rendered.to_vec();
 
-    let mut push_ptr = |records: &mut Vec<[u8; 12]>, tag: u16, typ: u16, count: u32, val: u32| {
+    // Pointer/blob records for the new IFD0, in the RENDERED file's byte order.
+    let push_ptr = |records: &mut Vec<[u8; 12]>, tag: u16, typ: u16, count: u32, val: u32| {
         let mut rec = [0u8; 12];
-        rec[0..2].copy_from_slice(&tag.to_le_bytes());
-        rec[2..4].copy_from_slice(&typ.to_le_bytes());
-        rec[4..8].copy_from_slice(&count.to_le_bytes());
-        rec[8..12].copy_from_slice(&val.to_le_bytes());
+        let (t, ty, c, v) = if rle {
+            (tag.to_le_bytes(), typ.to_le_bytes(), count.to_le_bytes(), val.to_le_bytes())
+        } else {
+            (tag.to_be_bytes(), typ.to_be_bytes(), count.to_be_bytes(), val.to_be_bytes())
+        };
+        rec[0..2].copy_from_slice(&t);
+        rec[2..4].copy_from_slice(&ty);
+        rec[4..8].copy_from_slice(&c);
+        rec[8..12].copy_from_slice(&v);
         records.push(rec);
     };
 
     if !exif_entries.is_empty() && !existing_tags.contains(&T_EXIF_IFD) {
-        let off = write_ifd(&mut out, exif_entries);
+        let off = write_ifd(&mut out, rle, exif_entries);
         push_ptr(&mut ifd0_records, T_EXIF_IFD, 4, 1, off);
     }
     if !gps_entries.is_empty() && !existing_tags.contains(&T_GPS_IFD) {
-        let off = write_ifd(&mut out, gps_entries);
+        let off = write_ifd(&mut out, rle, gps_entries);
         push_ptr(&mut ifd0_records, T_GPS_IFD, 4, 1, off);
     }
     if let Some(x) = xmp {
@@ -275,18 +306,22 @@ pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
         return None; // nothing actually added
     }
 
-    // New IFD0: sorted records, next-IFD = 0, header patched to point at it.
-    ifd0_records.sort_by_key(|r| u16::from_le_bytes([r[0], r[1]]));
+    // New IFD0: sorted records, next-IFD = 0, header patched to point at it — all in the
+    // rendered file's byte order (records are raw 12-byte copies already in that order).
+    ifd0_records.sort_by_key(|r| {
+        if rle { u16::from_le_bytes([r[0], r[1]]) } else { u16::from_be_bytes([r[0], r[1]]) }
+    });
     if out.len() % 2 == 1 {
         out.push(0);
     }
     let new_ifd0 = out.len() as u32;
-    out.extend_from_slice(&(ifd0_records.len() as u16).to_le_bytes());
+    put16(&mut out, rle, ifd0_records.len() as u16);
     for rec in &ifd0_records {
         out.extend_from_slice(rec);
     }
-    out.extend_from_slice(&0u32.to_le_bytes());
-    out[4..8].copy_from_slice(&new_ifd0.to_le_bytes());
+    put32(&mut out, rle, 0);
+    let hdr = if rle { new_ifd0.to_le_bytes() } else { new_ifd0.to_be_bytes() };
+    out[4..8].copy_from_slice(&hdr);
     Some(out)
 }
 
@@ -306,12 +341,12 @@ mod tests {
             Entry { tag: 42036, typ: 2, count: 8, value: b"S 26mm \0".to_vec() },               // LensModel
             Entry { tag: T_MAKERNOTE, typ: 7, count: 4, value: vec![1, 2, 3, 4] },              // must be dropped
         ];
-        let exif_off = write_ifd(&mut out, exif);
+        let exif_off = write_ifd(&mut out, true, exif);
         let ifd0 = vec![
             Entry { tag: 256, typ: 4, count: 1, value: 1u32.to_le_bytes().to_vec() },
             Entry { tag: T_EXIF_IFD, typ: 4, count: 1, value: exif_off.to_le_bytes().to_vec() },
         ];
-        let ifd0_off = write_ifd(&mut out, ifd0);
+        let ifd0_off = write_ifd(&mut out, true, ifd0);
         out[4..8].copy_from_slice(&ifd0_off.to_le_bytes());
         out
     }
@@ -325,7 +360,7 @@ mod tests {
             Entry { tag: 257, typ: 4, count: 1, value: 1u32.to_le_bytes().to_vec() },
             Entry { tag: 305, typ: 2, count: 12, value: b"Chromasmith\0".to_vec() },
         ];
-        let off = write_ifd(&mut out, ifd0);
+        let off = write_ifd(&mut out, true, ifd0);
         out[4..8].copy_from_slice(&off.to_le_bytes());
         out
     }
@@ -388,6 +423,52 @@ mod tests {
         let exif = r.ifd_entries(off).unwrap();
         let iso = exif.iter().find(|e| e.tag == 34855).unwrap();
         assert_eq!(iso.value, 640u16.to_le_bytes());
+    }
+
+    // The shape that actually ships: UTIF.js writes BIG-endian ("MM") TIFFs. The first version
+    // of this module bailed on any non-LE rendered file — every real save skipped the splice.
+    fn tiny_rendered_be() -> Vec<u8> {
+        let mut out = vec![b'M', b'M', 0, 42, 0, 0, 0, 0];
+        let ifd0_off = out.len() as u32;
+        let entries: [(u16, u16, u32, [u8; 4]); 3] = [
+            (256, 4, 1, 1u32.to_be_bytes()),
+            (257, 4, 1, 1u32.to_be_bytes()),
+            (296, 3, 1, {
+                let mut v = [0u8; 4];
+                v[..2].copy_from_slice(&2u16.to_be_bytes());
+                v
+            }),
+        ];
+        out.extend_from_slice(&(entries.len() as u16).to_be_bytes());
+        for (tag, typ, count, val) in entries {
+            out.extend_from_slice(&tag.to_be_bytes());
+            out.extend_from_slice(&typ.to_be_bytes());
+            out.extend_from_slice(&count.to_be_bytes());
+            out.extend_from_slice(&val);
+        }
+        out.extend_from_slice(&0u32.to_be_bytes());
+        out[4..8].copy_from_slice(&ifd0_off.to_be_bytes());
+        out
+    }
+
+    #[test]
+    fn splices_into_big_endian_rendered() {
+        let source = tiny_tiff_with_exif(); // LE source with full EXIF
+        let spliced = splice_metadata(&tiny_rendered_be(), &source).expect("splice into MM");
+        assert_eq!(&spliced[0..2], b"MM"); // stays big-endian
+        let r = Reader::new(&spliced).unwrap();
+        let ifd0 = r.ifd_entries(r.ifd0().unwrap()).unwrap();
+        let ptr = ifd0.iter().find(|e| e.tag == T_EXIF_IFD).expect("exif ptr");
+        let off = u32::from_le_bytes(ptr.value[..4].try_into().unwrap()) as usize;
+        let exif = r.ifd_entries(off).unwrap();
+        assert!(exif.iter().any(|e| e.tag == 34855 && e.value == 400u16.to_le_bytes())); // ISO
+        let dto = exif.iter().find(|e| e.tag == 36867).expect("DateTimeOriginal");
+        assert_eq!(&dto.value, b"2026:07:20 10:11:12\0");
+        assert!(ifd0.iter().any(|e| e.tag == 296)); // rendered's own tags survive
+        // kamadak-exif parses the MM result and sees the capture date.
+        let ex = exif::Reader::new().read_raw(spliced).expect("kamadak parse MM");
+        let f = ex.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY).expect("dto");
+        assert!(format!("{}", f.display_value()).contains("2026-07-20"));
     }
 
     #[test]

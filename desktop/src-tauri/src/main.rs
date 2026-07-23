@@ -464,32 +464,42 @@ fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
 // before the write: the command overwrites its own metadata source. A splice failure never
 // blocks the save — the rendered bytes are written unmodified, same as before this existed.
 #[tauri::command]
-fn write_lightroom_tiff(path: String, data_b64: String) -> Result<(), String> {
+fn write_lightroom_tiff(app: tauri::AppHandle, path: String, data_b64: String) -> Result<(), String> {
     use base64::Engine;
     let rendered = base64::engine::general_purpose::STANDARD
         .decode(data_b64)
         .map_err(|e| format!("decode base64: {e}"))?;
+    // Splice outcome goes to the app's OWN log panel via an event (same pattern as
+    // gphotos-download-diag) — the packaged .app has no terminal, so eprintln! alone made the
+    // silent-skip bug (UTIF's big-endian output being rejected) invisible for a whole day.
+    let mut diag;
     let out = match std::fs::read(&path) {
         Ok(source) => match tiff_meta::splice_metadata(&rendered, &source) {
             Some(spliced) => {
-                eprintln!(
-                    "[lightroom save] spliced metadata from original ({} -> {} bytes)",
+                diag = format!(
+                    "metadata spliced from original ({} -> {} bytes)",
                     rendered.len(),
                     spliced.len()
                 );
                 spliced
             }
             None => {
-                eprintln!("[lightroom save] no metadata spliced (source had none or parse failed) — writing render as-is");
+                diag = "NO metadata spliced (source carried none, or parse failed) — wrote render as-is".into();
                 rendered
             }
         },
         Err(e) => {
-            eprintln!("[lightroom save] could not read original for metadata ({e}) — writing render as-is");
+            diag = format!("could not read original for metadata ({e}) — wrote render as-is");
             rendered
         }
     };
-    std::fs::write(&path, out).map_err(|e| format!("write {path}: {e}"))
+    if let Err(e) = std::fs::write(&path, &out) {
+        return Err(format!("write {path}: {e}"));
+    }
+    diag = format!("[lightroom save] {diag}");
+    eprintln!("{diag}");
+    let _ = app.emit("lr-save-diag", &diag);
+    Ok(())
 }
 
 #[derive(serde::Serialize)]
