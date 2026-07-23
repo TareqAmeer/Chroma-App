@@ -601,7 +601,6 @@ body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:trans
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
 body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
-body.deskx #lr-section{display:block!important} /* Lightroom connect panel — desktop-only, see #lr-section's own comment */
 body.deskx #btn-msk-add-ai{display:inline-flex!important} /* AI Select needs the native SAM commands — desktop only */
 /* ⋯ overflow menu (deskbar): navigation to the non-editor tabs + utilities */
 #fx-overflow{display:none;position:relative}
@@ -1206,22 +1205,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
           </div>
           <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.</div>
         </div>
-        <!-- Desktop-only: needs the native OS-browser + loopback-redirect OAuth flow (see
-             lrAuthNative), which a sandboxed browser tab can't do. Hidden by inline style;
-             #lib-lr-section{display:...!important} in body.deskx below un-hides it — same
-             pattern as #db-lib-btn. -->
-        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px;display:none" id="lr-section">
-          <div class="fx-label" style="width:auto;margin-bottom:6px">Lightroom</div>
-          <div class="btn-row" style="margin-top:0">
-            <button class="btn bgh" id="btn-lr-connect" onclick="lrConnectToggle()" title="Sign in to browse your Lightroom cloud photos"><span class="bdot"></span>Connect</button>
-            <button class="btn bgh" onclick="lrAskClientId(true)" title="Set or change your Adobe API client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px"><span class="bdot"></span>ID…</button>
-          </div>
-          <div id="lr-browse" style="display:none;margin-top:8px">
-            <select class="fx-select" id="sel-lr-album" onchange="lrOpenAlbum(this.value)" style="width:100%;margin-bottom:8px"></select>
-            <div id="lr-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;max-height:260px;overflow-y:auto"></div>
-          </div>
-          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Desktop app only. Optional &amp; off by default. Needs your own free Adobe API client ID (Lightroom APIs specifically require Adobe's approval, not just a self-serve project — see Guide → “Can I browse my Lightroom cloud photos?”).</div>
-        </div>
+        <!-- Lightroom cloud browsing moved into the desktop LIBRARY sidebar (see library-ui.js's
+             Cloud section + window.lrCloud below) — the old cramped Export-panel widget
+             (#lr-section: Connect button + album dropdown + 72px grid) is gone. -->
+
       </div>
       <!-- INFO / METADATA -->
       <div class="fx-ctrl" data-fxsec="info">
@@ -9741,69 +9728,47 @@ async function lrApiGet(path){
   return json;
 }
 let lrCatalogId=null;
+// Ensures token + catalog id — the shared precondition for every cloud call.
+async function lrEnsureCatalog(){
+  await lrAuth();
+  if(lrCatalogId)return lrCatalogId;
+  // GET /v2/catalog (singular) is the documented way to get the user's cloud catalog — the
+  // /account response does NOT carry a catalog object (the old `account.catalog.id` read
+  // always came back undefined → "No Lightroom catalog found" even on a working account).
+  const cat=await lrApiGet('/catalog');
+  lrCatalogId=cat&&cat.id;
+  if(!lrCatalogId)throw new Error('No Lightroom catalog found on this account');
+  return lrCatalogId;
+}
 async function lrConnectToggle(){
   if(lrConnected()){
     try{sessionStorage.removeItem('lrTok')}catch(e){}
     lrCatalogId=null;
-    document.getElementById('lr-browse').style.display='none';
     lrUpdateUI();toast('Lightroom disconnected',true);
     return;
   }
   try{
-    await lrAuth();
-    // GET /v2/catalog (singular) is the documented way to get the user's cloud catalog — the
-    // /account response does NOT carry a catalog object (the old `account.catalog.id` read
-    // always came back undefined → "No Lightroom catalog found" even on a working account).
-    const cat=await lrApiGet('/catalog');
-    lrCatalogId=cat&&cat.id;
-    if(!lrCatalogId)throw new Error('No Lightroom catalog found on this account');
-    await lrPopulateAlbums();
-    document.getElementById('lr-browse').style.display='block';
+    await lrEnsureCatalog();
     lrUpdateUI();toast('Lightroom connected ✓',true);
   }catch(e){
     log('Lightroom connect failed: '+(e&&e.message||e),'err');
     toast('Lightroom connect failed — see log');
+    throw e;
   }
 }
-async function lrPopulateAlbums(){
-  const sel=document.getElementById('sel-lr-album');if(!sel)return;
-  sel.innerHTML='';
+async function lrListAlbums(){
+  await lrEnsureCatalog();
   const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums?subtype=collection`);
-  const albums=(data.resources||[]);
-  if(!albums.length){sel.innerHTML='<option value="">No albums found</option>';return;}
-  // Built via DOM (textContent), not innerHTML — album names come from the user's own Lightroom
-  // account via the API, but still untrusted external data, no reason to risk it.
-  albums.forEach(a=>{
-    const opt=document.createElement('option');
-    opt.value=a.id;
-    opt.textContent=(a.payload&&a.payload.name)||a.id;
-    sel.appendChild(opt);
-  });
-  lrOpenAlbum(albums[0].id);
+  return (data.resources||[]).map(a=>({id:a.id,name:(a.payload&&a.payload.name)||a.id}));
 }
-async function lrOpenAlbum(albumId){
-  const grid=document.getElementById('lr-grid');if(!grid||!albumId)return;
-  grid.innerHTML='<div style="grid-column:1/-1;font-size:10px;color:var(--mut)">Loading…</div>';
-  try{
-    const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums/${albumId}/assets?limit=60&embed=asset`);
-    const assets=(data.resources||[]).map(r=>r.asset).filter(Boolean);
-    grid.innerHTML='';
-    assets.forEach(a=>{
-      const cell=document.createElement('div');
-      cell.style.cssText='aspect-ratio:1;border-radius:5px;overflow:hidden;cursor:pointer;background:var(--sur2);position:relative';
-      cell.title=(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id;
-      const img=document.createElement('img');
-      img.style.cssText='width:100%;height:100%;object-fit:cover;display:block';
-      cell.appendChild(img);
-      grid.appendChild(cell);
-      lrRenditionUrl(a.id,'thumbnail2x').then(u=>{if(u)img.src=u;}).catch(()=>{});
-      cell.onclick=()=>lrImportAsset(a.id,cell.title);
-    });
-    if(!assets.length)grid.innerHTML='<div style="grid-column:1/-1;font-size:10px;color:var(--mut)">No photos in this album</div>';
-  }catch(e){
-    grid.innerHTML='<div style="grid-column:1/-1;font-size:10px;color:var(--mut)">Failed to load album</div>';
-    log('Lightroom album load failed: '+(e&&e.message||e),'err');
-  }
+async function lrListAssets(albumId){
+  await lrEnsureCatalog();
+  const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums/${albumId}/assets?limit=100&embed=asset`);
+  return (data.resources||[]).map(r=>r.asset).filter(Boolean).map(a=>({
+    id:a.id,
+    name:(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id,
+    captured:(a.payload&&a.payload.captureDate)||''
+  }));
 }
 // Binary rendition GET via download_url_native (same no-CORS reasoning as lrApiGet; the extra
 // headers param carries Lightroom's required X-API-Key). Throws "HTTP nnn" on a non-2xx.
@@ -9818,23 +9783,83 @@ async function lrRenditionUrl(assetId,type){
   try{return URL.createObjectURL(await lrRenditionBlob(assetId,type))}
   catch(e){return null}
 }
+// ⚠️ Rendition availability (root-caused via Adobe docs after "HTTP 404" reports): Lightroom
+// cloud PRE-generates only thumbnail2x/640/1280/2048 on upload. "2560" and "fullsize" exist
+// only AFTER an async POST …/renditions with an X-Generate-Renditions header — a plain GET
+// for them (the old code requested 2560) 404s on every asset, always. Renditions carry the
+// user's Lightroom develop edits baked in — which is the point of this import ("edit in LR,
+// finish in Chromasmith") — so `master` (the untouched original) is deliberately NOT used.
+async function lrGenerateRendition(assetId,type){
+  const tok=await lrAuth();
+  const r=await window.__TAURI__.core.invoke('http_native',{method:'POST',
+    url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions`,
+    headers:[['Authorization','Bearer '+tok.at],['X-API-Key',tok.cid],['X-Generate-Renditions',type]],
+    body:''});
+  return r.status>=200&&r.status<300;
+}
+// Two-stage import: the pre-generated 2048 opens INSTANTLY; full-size (with LR edits) is
+// generated in the background, polled with backoff, and swapped in when ready. If generation
+// is denied (basic API access) or times out, the 2048 stays — still a working import.
 async function lrImportAsset(assetId,name){
+  const base=(name||assetId).replace(/\.[^.]+$/,'');
   try{
-    toast('Downloading from Lightroom…');
-    const blob=await lrRenditionBlob(assetId,'2560');
-    const file=new File([blob],(name||assetId)+'.jpg',{type:'image/jpeg'});
-    await loadFXImages([file]);
-    log(`Imported from Lightroom: ${name||assetId}`,'ok');
+    toast('Importing from Lightroom…',true);
+    const blob=await lrRenditionBlob(assetId,'2048');
+    const fname=base+'.jpg';
+    const saved=await lrSaveToDisk(fname,blob);
+    await loadFXImages([new File([blob],fname,{type:'image/jpeg'})]);
+    log(`Imported from Lightroom at 2048px: ${fname}${saved?' → '+saved:''}`,'ok');
+    lrUpgradeToFullsize(assetId,base,saved).catch(e=>log('Full-size fetch failed: '+(e&&e.message||e),'warn'));
   }catch(e){
     log('Lightroom import failed: '+(e&&e.message||e),'err');
     toast('Lightroom import failed — see log');
   }
 }
-function lrUpdateUI(){
-  const c=document.getElementById('btn-lr-connect');
-  if(c){c.className='btn '+(lrConnected()?'bsec':'bgh');c.innerHTML='<span class="bdot"></span>'+(lrConnected()?'Connected ✓':'Connect');}
+async function lrSaveToDisk(fname,blob){
+  if(!window.__TAURI__)return '';
+  try{
+    const buf=new Uint8Array(await blob.arrayBuffer());
+    const res=await window.__TAURI__.core.invoke('save_to_lr_downloads',{filename:fname,dataB64:_u8b64(buf)});
+    return res.path||'';
+  }catch(e){log('Could not save "'+fname+'" to the Lightroom Download folder: '+(e&&e.message||e),'warn');return ''}
 }
-lrUpdateUI();
+async function lrUpgradeToFullsize(assetId,base,savedPath){
+  if(!await lrGenerateRendition(assetId,'fullsize')){
+    log('Full-size rendition unavailable for this account — keeping 2048px','warn');return;
+  }
+  // Poll with backoff (generation is async; docs say up to minutes). ~2min budget.
+  let blob=null;
+  for(let wait=2000,total=0;total<120000;total+=wait,wait=Math.min(wait*2,15000)){
+    await new Promise(r=>setTimeout(r,wait));
+    try{blob=await lrRenditionBlob(assetId,'fullsize');break}
+    catch(e){if(!/HTTP 404/.test(e&&e.message||''))throw e}
+  }
+  if(!blob){log('Full-size rendition not ready after 2min — keeping 2048px','warn');return;}
+  const fname=base+'.jpg';
+  const saved=await lrSaveToDisk(fname,blob);
+  // Swap the in-editor image if this photo is still the one open.
+  const cur=fxImages[fxCurIdx];
+  if(cur&&(cur.name===fname||cur.name===base+'.jpg')){
+    await loadFXImages([new File([blob],fname,{type:'image/jpeg'})]);
+  }
+  log(`Full-size ready: ${fname}${saved?' → '+saved:''}`,'ok');
+  toast('Full-size version loaded',true);
+}
+// The Export-panel widget is gone — the Library's Cloud section (library-ui.js) is the UI now.
+// lrUpdateUI just notifies it to re-render its connect state.
+function lrUpdateUI(){
+  try{window.dispatchEvent(new CustomEvent('lr-cloud-state'))}catch(e){}
+}
+// Clean API surface for library-ui.js (desktop-only; every call is __TAURI__-gated upstream).
+window.lrCloud={
+  connected:lrConnected,
+  connect:lrConnectToggle,        // toggles: connects when disconnected, disconnects when connected
+  askClientId:lrAskClientId,
+  albums:lrListAlbums,
+  assets:lrListAssets,
+  thumbBlob:(id)=>lrRenditionBlob(id,'thumbnail2x'),
+  importAsset:lrImportAsset,
+};
 
 // ═══════════════════════════
 // FILE HANDLING

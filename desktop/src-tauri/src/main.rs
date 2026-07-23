@@ -631,11 +631,34 @@ struct GpSaveResult {
 // overhead is worth it for a guaranteed-correct argument shape.
 #[tauri::command]
 fn save_to_gphotos_downloads(filename: String, data_b64: String) -> Result<GpSaveResult, String> {
+    save_to_download_dir(gphotos_downloads_path()?, filename, data_b64)
+}
+
+// Same disk-cache pattern for Lightroom cloud imports: every import lands in
+// ~/Documents/Lightroom Download/ so re-opening reads from disk (thumbnails, sidecar ratings
+// and the decode cache all work on it like any local photo) instead of re-downloading.
+fn lr_downloads_path() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME").ok_or("no HOME")?;
+    Ok(PathBuf::from(home).join("Documents").join("Lightroom Download"))
+}
+
+#[tauri::command]
+fn lr_downloads_dir() -> Result<String, String> {
+    let dir = lr_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create download dir: {e}"))?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn save_to_lr_downloads(filename: String, data_b64: String) -> Result<GpSaveResult, String> {
+    save_to_download_dir(lr_downloads_path()?, filename, data_b64)
+}
+
+fn save_to_download_dir(dir: PathBuf, filename: String, data_b64: String) -> Result<GpSaveResult, String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data_b64)
         .map_err(|e| format!("bad base64 payload: {e}"))?;
-    let dir = gphotos_downloads_path()?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("create download dir '{}': {e}", dir.display()))?;
     // Strip any path separators from the filename Google handed back — it's untrusted input.
     let safe_name = Path::new(&filename)
@@ -815,7 +838,9 @@ fn main() {
             sam2_encode,
             sam2_points,
             save_to_gphotos_downloads,
-            gphotos_downloads_dir
+            gphotos_downloads_dir,
+            save_to_lr_downloads,
+            lr_downloads_dir
         ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
         // on every single response, including the very first navigation — see the Cargo.toml
