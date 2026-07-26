@@ -546,18 +546,20 @@ fn http_native(
     }
 }
 
-// A file handed to us at launch (Lightroom's "Edit In", Finder's "Open With", or `open -a
-// Chromasmith file.tif` from a terminal) — see RunEvent::Opened in main() below, which is the
-// real macOS Launch-Services path all three of those go through, plus the args() fallback in
-// .setup() for direct CLI launches. Stashed here instead of emitted as a bare event because
-// RunEvent::Opened can fire on a cold start BEFORE the webview's JS has finished loading and
-// registered a listener — an emitted event with no listener yet is just lost. library-ui.js
-// pulls this once at its own startup instead, so timing can't drop it either way.
-struct PendingOpen(Mutex<Option<String>>);
+// File(s) handed to us at launch (Lightroom's "Edit In" — which can hand off several selected
+// photos at once, Finder's "Open With", or `open -a Chromasmith file.tif` from a terminal) —
+// see RunEvent::Opened in main() below, which is the real macOS Launch-Services path all three
+// of those go through, plus the args() fallback in .setup() for direct CLI launches. A Vec (not
+// a single Option<String>) so a multi-file Lightroom handoff isn't collapsed to just the last
+// path. Stashed here instead of emitted as a bare event because RunEvent::Opened can fire on a
+// cold start BEFORE the webview's JS has finished loading and registered a listener — an
+// emitted event with no listener yet is just lost. library-ui.js pulls this once at its own
+// startup instead, so timing can't drop it either way.
+struct PendingOpen(Mutex<Vec<String>>);
 
 #[tauri::command]
-fn take_pending_open_path(state: tauri::State<PendingOpen>) -> Option<String> {
-    state.0.lock().unwrap().take()
+fn take_pending_open_path(state: tauri::State<PendingOpen>) -> Vec<String> {
+    std::mem::take(&mut *state.0.lock().unwrap())
 }
 
 // Adobe Lightroom OAuth callback — Adobe's "Native App" credential type (see chromasmith-22.html's
@@ -792,7 +794,7 @@ fn main() {
     // a full quit + relaunch (real recompile) is needed before any native-side fix applies.
     eprintln!("=== Chromasmith native build: {} ===", native_build_tag());
     tauri::Builder::default()
-        .manage(PendingOpen(Mutex::new(None)))
+        .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(PendingOAuth(Mutex::new(None)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -879,12 +881,17 @@ fn main() {
             let handle = app.handle();
 
             // CLI/manual-launch fallback for the Lightroom "Edit In" handoff (see PendingOpen
-            // above) — `open -a Chromasmith file.tif` or a direct binary launch with a path
-            // argument. RunEvent::Opened in run() below is the real Launch-Services path
-            // Lightroom/Finder actually use; this just covers the same handoff when testing
-            // from a terminal, where no Opened event fires at all.
-            if let Some(arg) = std::env::args().skip(1).find(|a| Path::new(a).is_file()) {
-                *handle.state::<PendingOpen>().0.lock().unwrap() = Some(arg);
+            // above) — `open -a Chromasmith file1.tif file2.tif` or a direct binary launch with
+            // path arguments (plural — a multi-select Edit-In can hand off several). RunEvent::
+            // Opened in run() below is the real Launch-Services path Lightroom/Finder actually
+            // use; this just covers the same handoff when testing from a terminal, where no
+            // Opened event fires at all.
+            let cli_paths: Vec<String> = std::env::args()
+                .skip(1)
+                .filter(|a| Path::new(a).is_file())
+                .collect();
+            if !cli_paths.is_empty() {
+                *handle.state::<PendingOpen>().0.lock().unwrap() = cli_paths;
             }
 
             // Prune unbounded caches (thumbnails/decode JPEGs) in the background — see
@@ -1013,20 +1020,27 @@ fn main() {
             // a listener reliably exists already and the extra immediacy is worth it.
             if let tauri::RunEvent::Opened { urls } = event {
                 // A file:// URL (Lightroom Edit-In / Finder "Open With" / CLI open) goes to
-                // PendingOpen as before. Anything else — currently just Adobe's Lightroom OAuth
+                // PendingOpen. Anything else — currently just Adobe's Lightroom OAuth
                 // custom-scheme callback (adobe+<id>://...), registered via tauri-plugin-deep-link
-                // in tauri.conf.json — goes to PendingOAuth instead. Iterates every url (not just
-                // the first) since these could in principle arrive in the same batch.
+                // in tauri.conf.json — goes to PendingOAuth instead. A single Opened event can
+                // carry MULTIPLE file:// urls at once (Lightroom's "Edit In" with several photos
+                // selected hands them all off together) — collect every file path from this
+                // event into one batch instead of overwriting PendingOpen per-url (which used to
+                // silently drop every file but the last one) and emit it as a single array so the
+                // frontend opens them together as one batch, not N separate single-photo opens.
+                let mut file_paths: Vec<String> = Vec::new();
                 for u in urls {
                     if let Ok(path) = u.to_file_path() {
-                        let path_s = path.to_string_lossy().into_owned();
-                        *app_handle.state::<PendingOpen>().0.lock().unwrap() = Some(path_s.clone());
-                        let _ = app_handle.emit("open-file-path", path_s);
+                        file_paths.push(path.to_string_lossy().into_owned());
                     } else {
                         let url_s = u.to_string();
                         *app_handle.state::<PendingOAuth>().0.lock().unwrap() = Some(url_s.clone());
                         let _ = app_handle.emit("adobe-oauth-callback", url_s);
                     }
+                }
+                if !file_paths.is_empty() {
+                    *app_handle.state::<PendingOpen>().0.lock().unwrap() = file_paths.clone();
+                    let _ = app_handle.emit("open-file-path", file_paths);
                 }
             }
         });

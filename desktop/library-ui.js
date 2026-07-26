@@ -1060,9 +1060,19 @@
       // geomApplyToAll) — the snapshot captured at edit time reflects only the CURRENTLY
       // previewed photo's crop/rotate/flip/straighten, so swap in this path's own geom before
       // persisting its sidecar or a batch edit would silently overwrite every other photo's
-      // saved crop with whichever one happened to be on screen.
+      // saved crop with whichever one happened to be on screen. Basic Adjustments can ALSO be
+      // made independent per photo (adjToggleScope/"This photo only") — if this photo has its
+      // own override, patch its Adjust sliders + the independence flag in too, same reasoning.
       const it = fxImages[i];
-      const perPhotoSnap = (it && it.geom) ? { ...snap, geom: JSON.parse(JSON.stringify(it.geom)) } : snap;
+      const perPhotoSnap = { ...snap };
+      if (it && it.geom) perPhotoSnap.geom = JSON.parse(JSON.stringify(it.geom));
+      if (it && it.adjustOverride) {
+        perPhotoSnap.sliders = { ...snap.sliders };
+        ADJ_FIELDS.forEach((f) => { perPhotoSnap.sliders['adj-' + f] = it.adjustOverride[f]; });
+        perPhotoSnap.adjustIndependent = true;
+      } else {
+        perPhotoSnap.adjustIndependent = false;
+      }
       const recipe = snapshotToB64(perPhotoSnap);
       const cur = await getSidecar(path);
       const updated = { ...cur, edited: true, recipe };
@@ -1304,44 +1314,70 @@
     return path ? !!(state.sidecars.get(path) || {}).favorite : false;
   };
   // ── Lightroom "Edit In" handoff ──────────────────────────────────────────────────────────
-  // A file handed to us by Launch Services (Lightroom's "Edit In", Finder's "Open With", or a
-  // direct `open -a Chromasmith file.tif`) — see main.rs's PendingOpen/take_pending_open_path
-  // (cold-launch case, pulled once below since an emitted event this early could arrive before
-  // any listener is attached) and the "open-file-path" event (already-running-app case, where
-  // a listener reliably already exists). Loading it is the SAME read_file_bytes -> File ->
-  // loadFXImages path openInEditorInner uses for a normal Library open, just for a path that
-  // isn't necessarily inside state.root.
-  async function openEditInHandoff(path) {
+  // File(s) handed to us by Launch Services (Lightroom's "Edit In" — which can hand off SEVERAL
+  // selected photos at once, Finder's "Open With", or a direct `open -a Chromasmith file.tif`)
+  // — see main.rs's PendingOpen/take_pending_open_path (cold-launch case, pulled once below
+  // since an emitted event this early could arrive before any listener is attached) and the
+  // "open-file-path" event (already-running-app case, where a listener reliably already
+  // exists). Both now carry an ARRAY of paths (a single-file handoff is just a 1-element
+  // array) — previously only the LAST file of a multi-select Edit-In survived at all.
+  async function openEditInHandoff(paths) {
+    if (!paths || !paths.length) return;
     try {
-      const buf = await invoke('read_file_bytes', { path });
-      const file = new File([buf], baseName(path), { type: mimeFromName(path), lastModified: 0 });
-      await loadFXImages([file]);
-      window.chromasmithEditInPath = path;
+      if (paths.length === 1) {
+        const [path] = paths;
+        const buf = await invoke('read_file_bytes', { path });
+        const file = new File([buf], baseName(path), { type: mimeFromName(path), lastModified: 0 });
+        await loadFXImages([file]);
+        window.chromasmithEditInPath = path;
+        state.openedPath = path;
+        state.openedPaths = [];
+        const sc = await getSidecar(path);
+        if (sc.recipe) {
+          try { applyUISnapshot(snapshotFromB64(sc.recipe)); if (typeof fxUpdate === 'function') fxUpdate(); }
+          catch (e) { console.error('restore handoff recipe', e); }
+        }
+      } else {
+        // Multi-file Edit-In: load as a batch (registers Recents for each — openPathsInEditor)
+        // and restore each photo's own crop/masks/independent-adjust, same as "Export N photos".
+        await openPathsInEditor(paths);
+        window.chromasmithEditInPath = paths.slice(); // array form — see chromasmithSaveToLightroom's write-back loop
+        for (let i = 0; i < paths.length; i++) {
+          const sc = await getSidecar(paths[i]);
+          if (!sc.recipe || !fxImages[i]) continue;
+          try {
+            const snap = snapshotFromB64(sc.recipe);
+            if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
+            if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
+            if (snap.adjustIndependent && snap.sliders) {
+              const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; });
+              fxImages[i].adjustOverride = v;
+            }
+          } catch (e) { console.error('restore handoff recipe', e); }
+        }
+      }
       const btn = document.getElementById('db-save-lr');
       if (btn) btn.style.display = '';
       // A photo handed off from Lightroom's "Edit in Chromasmith" used to bypass the Library
-      // entirely — no Recents entry, no recent-folder entry, and any prior Chromasmith edit on
-      // this same file was ignored. Register it the same way openInEditorInner does for a
-      // normal Library open, so it behaves like one everywhere else in the app.
-      state.openedPath = path;
-      state.openedPaths = [];
-      invoke('touch_recent', { path }).then(() => { if (state.source === 'recents') renderCollectionCounts(); }).catch(() => {});
-      const dir = path.replace(/[\\/][^\\/]*$/, '');
-      if (dir && dir !== path) pushRecentFolder(dir);
-      const sc = await getSidecar(path);
-      if (sc.recipe) {
-        try { applyUISnapshot(snapshotFromB64(sc.recipe)); if (typeof fxUpdate === 'function') fxUpdate(); }
-        catch (e) { console.error('restore handoff recipe', e); }
+      // entirely — no Recents entry, no recent-folder entry. openPathsInEditor already handles
+      // touch_recent for the multi-file branch; the single-file branch does it here.
+      if (paths.length === 1) {
+        invoke('touch_recent', { path: paths[0] }).then(() => { if (state.source === 'recents') renderCollectionCounts(); }).catch(() => {});
       }
-      if (typeof log === 'function') log(`Opened from Lightroom: ${baseName(path)} — use "Save to Lightroom" when done`, 'ok');
+      paths.forEach((path) => {
+        const dir = path.replace(/[\\/][^\\/]*$/, '');
+        if (dir && dir !== path) pushRecentFolder(dir);
+      });
+      const label = paths.length > 1 ? `${paths.length} photos` : baseName(paths[0]);
+      if (typeof log === 'function') log(`Opened from Lightroom: ${label} — use "Save to Lightroom" when done`, 'ok');
       if (typeof toast === 'function') toast('Opened from Lightroom', true);
     } catch (e) {
-      console.error('Edit-In handoff load failed', path, e);
-      if (typeof log === 'function') log(`Failed to open Lightroom handoff file: ${e && e.message || e}`, 'err');
+      console.error('Edit-In handoff load failed', paths, e);
+      if (typeof log === 'function') log(`Failed to open Lightroom handoff file(s): ${e && e.message || e}`, 'err');
     }
   }
-  invoke('take_pending_open_path').then((path) => { if (path) openEditInHandoff(path); }).catch(() => {});
-  window.__TAURI__.event.listen('open-file-path', (e) => { if (e && e.payload) openEditInHandoff(e.payload); });
+  invoke('take_pending_open_path').then((paths) => { if (paths && paths.length) openEditInHandoff(paths); }).catch(() => {});
+  window.__TAURI__.event.listen('open-file-path', (e) => { if (e && e.payload && e.payload.length) openEditInHandoff(e.payload); });
 
   // Recipe-only export/version history (see library.rs's get_export_history/
   // append_export_history) — a persisted, coarser-grained log distinct from the in-session
@@ -1528,11 +1564,12 @@
       state.openedPath = '';
       state.openedPaths = paths;
       await loadFXImages(files);
-      // Restore each photo's own saved CROP/MASKS before exporting (geometry+masks are
-      // per-photo — see chromasmith-22.html's geomApplyToAll/mskCopyToAll). FX/adjustments are
-      // shared across the batch by design, so unlike the old code this does NOT run the saved
-      // recipe's sliders/LUT/curves through applyUISnapshot — doing that per photo just made
-      // the LAST photo's saved FX silently overwrite every other photo's render.
+      // Restore each photo's own saved CROP/MASKS/independent-ADJUST before exporting (all
+      // three are per-photo — see chromasmith-22.html's geomApplyToAll/mskCopyToAll/
+      // adjToggleScope). FX/adjustments are otherwise shared across the batch by design, so
+      // unlike the old code this does NOT run the saved recipe's sliders/LUT/curves through
+      // applyUISnapshot — doing that per photo just made the LAST photo's saved FX silently
+      // overwrite every other photo's render.
       for (let i = 0; i < paths.length; i++) {
         const sc = await getSidecar(paths[i]);
         if (!sc.recipe || !fxImages[i]) continue;
@@ -1540,6 +1577,10 @@
           const snap = snapshotFromB64(sc.recipe);
           if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
           if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
+          if (snap.adjustIndependent && snap.sliders) {
+            const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; });
+            fxImages[i].adjustOverride = v;
+          }
         } catch (e) { console.error('restore recipe', e); }
       }
       setExportScope(n > 1 ? 'all' : 'current');

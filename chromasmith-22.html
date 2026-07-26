@@ -886,6 +886,9 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- BASIC ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="adjust">
         <div class="fx-ctrl-title">Basic Adjustments <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
+        <div class="btn-row" id="adj-scope-row" style="display:none;margin-bottom:8px">
+          <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Basic Adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value."><span class="bdot"></span>This photo only</button>
+        </div>
         <div class="fx-fields" id="ff-adjust">
           <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
           <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
@@ -1203,6 +1206,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div id="fx-export-prog" style="display:none;margin-top:8px">
           <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:4px" id="fx-export-prog-txt"></div>
           <div style="height:4px;background:var(--bdr);border-radius:2px;overflow:hidden"><div id="fx-export-prog-bar" style="height:100%;width:0;background:var(--acc);transition:width .15s"></div></div>
+          <!-- Per-photo status list — only populated (see setExportPhotoStatus) for a >1-photo
+               export, so a partial/mixed-result batch is visible at a glance instead of a single
+               bar that just reads "done" whether 1 or all-but-one photos actually saved. -->
+          <div id="fx-export-photolist" style="display:none;margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mono);font-size:10px"></div>
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" onclick="saveSession()" title="Save all slider settings to localStorage"><span class="bdot"></span>Save session</button>
@@ -3503,7 +3510,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-26a';
+const BUILD='2026-07-26b';
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -4997,7 +5004,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},pointColors:[],artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null};
+const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},pointColors:[],artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null,sharedAdjust:null};
 let fxImg=null,fxTimer=null,_fxHistPushTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
 let _fxAmtTouched=false; // true once the user manually moves grain/halation/bloom Amount after a look pick
 let _fxPristineDefault=null; // captured once at boot, before loadSession() — see loadFXImages
@@ -6153,7 +6160,8 @@ function installFXImages(entries,loadKey){
   samInvalidate();mskAiTapMode=false;
   fxImages=entries;
   if(cropMode)cropExit();
-  fxImages.forEach(it=>it.geom=defGeom());
+  fxImages.forEach(it=>{it.geom=defGeom();if(it.adjustOverride===undefined)it.adjustOverride=null;});
+  fxState.sharedAdjust=null; // fresh batch/photo → Adjust panel starts from whatever's on the sliders (RAW defaults etc.)
   fxCurIdx=0;fxExportScope='all';
   fxImg=fxImages[0].img;updateWork();
   resetGeomUI();
@@ -6307,6 +6315,13 @@ function fxUpdate(){
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
   if(typeof nrSyncGate==='function')nrSyncGate();
+  // Persist the live Adjust sliders into whichever store the CURRENT photo actually reads at
+  // render/export time: its own it.adjustOverride if it's been made independent (adjToggleScope),
+  // else the shared batch-wide baseline — otherwise switching photos would lose whatever was
+  // just typed the moment fxSelectImage overwrites these same DOM elements for the next photo.
+  {const it=typeof curItem==='function'?curItem():null;
+   if(it&&it.adjustOverride)it.adjustOverride=domAdjustVals();
+   else fxState.sharedAdjust=domAdjustVals();}
   // History push is debounced here (unlike the curve editor/brush, which push explicitly on
   // pointerup) because every one of the ~35 sliders above calls fxUpdate() on `oninput` —
   // dozens of times per second while dragging. fxHistoryPush() stringifies the whole UI
@@ -6322,6 +6337,31 @@ function resetAdjust(){
   ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin']
     .forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
   fxUpdate();log('Adjustments reset','info');
+}
+// Basic Adjustments default to shared-across-the-batch (like every other FX section), but
+// sometimes only ONE photo needs a nudge (e.g. exposure) without dragging the rest of the batch
+// along — this is the explicit, opt-in per-photo escape hatch, same pattern as mskCopyToAll/
+// geomApplyToAll but inverted (there you opt IN to sharing; here you opt IN to independence).
+function adjToggleScope(){
+  const it=curItem();if(!it)return;
+  if(it.adjustOverride){
+    it.adjustOverride=null; // revert to following the shared batch value
+    applyAdjustVals(fxState.sharedAdjust||domAdjustVals());
+    toast('Adjustments now follow the shared batch value','info');
+  }else{
+    it.adjustOverride=domAdjustVals(); // snapshot the CURRENT (shared) values as this photo's own starting point
+    toast("This photo's Adjustments are now independent — changes here won't affect the rest of the batch",true);
+  }
+  adjSyncScopeUI();
+  fxUpdate();
+}
+function adjSyncScopeUI(){
+  const row=document.getElementById('adj-scope-row');if(!row)return;
+  row.style.display=fxImages.length>1?'flex':'none';
+  const btn=document.getElementById('btn-adj-scope');if(!btn)return;
+  const it=curItem();const on=!!(it&&it.adjustOverride);
+  btn.classList.toggle('bpri',on);btn.classList.toggle('bgh',!on);
+  btn.innerHTML='<span class="bdot"></span>'+(on?'Independent — click to sync to shared':'This photo only');
 }
 function resetNR(){
   ['nr-lum','nr-col','nr-hldesat'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
@@ -7639,6 +7679,7 @@ function getUISnapshot(){
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s.selects[id]=el.value;});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s.colors[id]=el.value;});
   const it=curItem();s.geom=(it&&it.geom)?JSON.parse(JSON.stringify(it.geom)):null; // this photo's own geometry (crop/rotate/flip/straighten) — per-photo, see broadcastGeom
+  s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
   s.curves=JSON.parse(JSON.stringify(fxState.curves));   // tone-curve control points
   s.hsl=JSON.parse(JSON.stringify(fxState.hsl));         // HSL mixer band settings
   s.pointColors=JSON.parse(JSON.stringify(fxState.pointColors||[])); // point color picks
@@ -7679,6 +7720,17 @@ function applyUISnapshot(s){
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
     const ang=(s.geom&&s.geom.angle)||0;if(ss)ss.value=ang;if(sv)sv.textContent=ang.toFixed(1)+'°';
     if(cropMode)cropExit();updateWork();buildLookGallery();
+  }
+  // Restore whether THIS photo's Basic Adjustments were independent — must run AFTER the
+  // sliders above are already written to the DOM (domAdjustVals() reads them live), or an
+  // undo/redo/recipe restore could silently flip a photo back to tracking the shared value.
+  if(s.adjustIndependent!==undefined&&fxImages.length){
+    const cit=curItem();
+    if(cit){
+      if(s.adjustIndependent)cit.adjustOverride=domAdjustVals();
+      else{cit.adjustOverride=null;fxState.sharedAdjust=domAdjustVals();}
+      if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
+    }
   }
   if(s.nativeNr!==undefined){
     window.chromasmithNativeNr=s.nativeNr;
@@ -8268,7 +8320,28 @@ function showExif(exif){
     row('File Format',it.ext?it.ext.toUpperCase():'')+
     row('Lens Model',exif.lens)+row('Camera Make',make)+row('Camera Model',model);
 }
-function getFXParams(){return{
+// The Basic Adjustments panel (exposure/contrast/.../skin) is the one FX section that can be
+// made INDEPENDENT per photo (adjScopeToggle) — everything else (LUT, curves, HSL, grain,
+// halation, bloom, etc.) still applies to the whole batch automatically. `adjValsOverride`, when
+// given, is a raw-slider-value object (see domAdjustVals) sourced from that photo's own
+// it.adjustOverride instead of the live DOM — used by exportFX so each photo renders with ITS
+// own Adjust values instead of whichever photo happens to be previewed at export time.
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','skin'];
+function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
+function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:0;if(sl)sl.value=val;if(vl)vl.textContent=val;});}
+function computeAdjustBlock(v){
+  v=v||domAdjustVals();
+  return{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
+    exposure:(v.exp||0)/20,   // ±5 stops (slider stays -100..100)
+    contrast:(v.con||0)/200,  // ±0.5
+    highlights:(v.hi||0)/100, shadows:(v.sh||0)/100,
+    whites:(v.wh||0)/100, blacks:(v.bl||0)/100,
+    temp:(v.temp||0)/100, tint:(v.tint||0)/100,
+    vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
+    sharpness:(v.sharp||0)/500, clarity:(v.clarity||0)/500,
+    skin:(v.skin||0)/100};
+}
+function getFXParams(adjValsOverride){return{
   lut:fxState.lut,
   print:fxState.print,
   input:(document.getElementById('sel-input')||{}).value||'',   // '' standard | 'vlog' V-Log source
@@ -8276,15 +8349,7 @@ function getFXParams(){return{
   hsl:(!!(document.getElementById('tg-hsl')||{classList:{contains:()=>false}}).classList.contains('on')&&!hslIdentity())||
       (!!(document.getElementById('tg-pointcolor')||{classList:{contains:()=>false}}).classList.contains('on')&&!pointColorsIdentity()),
   masks:(document.getElementById('tg-local')||{classList:{contains:()=>false}}).classList.contains('on')?fxState.masks:[],
-  adjust:{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
-    exposure:adjVal('sl-adj-exp')/20,   // ±5 stops (slider stays -100..100)
-    contrast:adjVal('sl-adj-con')/200,  // ±0.5
-    highlights:adjVal('sl-adj-hi')/100, shadows:adjVal('sl-adj-sh')/100,
-    whites:adjVal('sl-adj-wh')/100, blacks:adjVal('sl-adj-bl')/100,
-    temp:adjVal('sl-adj-temp')/100, tint:adjVal('sl-adj-tint')/100,
-    vibrance:adjVal('sl-adj-vib')/100, saturation:adjVal('sl-adj-sat')/100,
-    sharpness:adjVal('sl-adj-sharp')/500, clarity:adjVal('sl-adj-clarity')/500,
-    skin:adjVal('sl-adj-skin')/100},
+  adjust:computeAdjustBlock(adjValsOverride),
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
   nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100, hlDesat:adjVal('sl-nr-hldesat')/100},
@@ -8628,6 +8693,7 @@ function buildFilmstrip(){
   el.innerHTML='';
   const applyAllRow=document.getElementById('btn-geom-apply-all-row');
   if(applyAllRow)applyAllRow.style.display=fxImages.length>1?'flex':'none';
+  if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
   if(fxImages.length<2){el.style.display='none';return;}
   el.style.display='flex';
   fxImages.forEach((it,i)=>{
@@ -8660,6 +8726,11 @@ function fxSelectImage(idx){
   // the per-photo masks comment in installFXImages. mskSel is clamped since the incoming photo
   // likely has a different (often shorter/empty) mask list than the outgoing one.
   if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;
+  // Persist the OUTGOING photo's live Adjust values the same way fxUpdate() does on every slider
+  // input — belt-and-braces (fxUpdate already keeps this in sync) before the DOM is overwritten
+  // with the incoming photo's own values below.
+  {const outIt=fxImages[fxCurIdx];
+   if(outIt){if(outIt.adjustOverride)outIt.adjustOverride=domAdjustVals();else fxState.sharedAdjust=domAdjustVals();}}
   fxCurIdx=idx;
   samInvalidate(); // AI Select embeddings belong to the OUTGOING photo — see samInvalidate's doc comment
   const it=fxImages[fxCurIdx];
@@ -8670,6 +8741,10 @@ function fxSelectImage(idx){
   fxImg=it.img;updateWork();
   const ss=document.getElementById('sl-straighten');
   if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
+  // Basic Adjustments: show THIS photo's own values if it's been made independent
+  // (adjToggleScope), else the shared batch-wide baseline.
+  applyAdjustVals(it.adjustOverride||fxState.sharedAdjust||domAdjustVals());
+  if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
   document.getElementById('fx-fname').value=it.name;
   fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext));
   setDZ('dz-fx-img','fn-fx-img',fxImages.length>1?`${fxImages.length} images — previewing ${fxCurIdx+1}/${fxImages.length}: ${it.name}`:it.name);
@@ -9018,12 +9093,15 @@ function syncExportScopeUI(){
 }
 // Lightroom "Edit In" handoff — see library-ui.js's window.chromasmithEditInPath wiring and
 // the write-back redirect inside exportFX's save phase below. Just arms the flag and reuses
-// the normal single-photo export path (scope forced to 'current' — an Edit-In session is
-// always exactly one photo) so it gets the exact same render pipeline as a real export.
+// the normal export path so it gets the exact same render pipeline as a real export.
+// window.chromasmithEditInPath is EITHER a single path string (one photo handed off — scope
+// forced to 'current', matching the export index against the single result) OR an array (a
+// multi-select Lightroom Edit-In — scope forced to 'all' so every handed-off photo gets
+// written back, in the same order it was opened).
 async function chromasmithSaveToLightroom(){
   if(!window.chromasmithEditInPath){log('Not a Lightroom Edit-In session','warn');return;}
   window.chromasmithSaveToLightroomPending=true;
-  fxExportScope='current';
+  fxExportScope=Array.isArray(window.chromasmithEditInPath)?'all':'current';
   await exportFX();
 }
 async function exportFX(){
@@ -9042,6 +9120,25 @@ async function exportFX(){
   const setProg=(done,label)=>{if(progBar)progBar.style.width=Math.round(done/N*100)+'%';if(progTxt)progTxt.textContent=label;
     const ef=document.getElementById('eo-fill'),et=document.getElementById('eo-txt');
     if(ef)ef.style.width=Math.round(done/N*100)+'%';if(et)et.textContent=label;};
+  // Per-photo status list: a single progress bar reads "done" the same way whether every photo
+  // actually saved or a few silently didn't — the exact bug report this fixes ("log says
+  // successful but some photos don't get exported"). Only shown for N>1; a single-photo export
+  // still uses just the bar+text above.
+  const photoListEl=document.getElementById('fx-export-photolist');
+  const STATUS_ICON={pending:'· ',rendering:'… ',rendered:'✓ ',saving:'… ',saved:'✓ ',failed:'✗ '};
+  const STATUS_COLOR={pending:'var(--mut)',rendering:'var(--acc)',rendered:'var(--mut)',saving:'var(--acc)',saved:'#4caf50',failed:'#e05252'};
+  function setExportPhotoStatus(idx,status,detail){
+    if(!photoListEl)return;
+    const row=photoListEl.children[idx];if(!row)return;
+    row.style.color=STATUS_COLOR[status]||'var(--mut)';
+    row.textContent=(STATUS_ICON[status]||'')+items[idx].name+(detail?' — '+detail:'');
+  }
+  if(photoListEl){
+    if(N>1){
+      photoListEl.style.display='block';
+      photoListEl.innerHTML=items.map(it=>`<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 0">· ${it.name}</div>`).join('');
+    }else{photoListEl.style.display='none';photoListEl.innerHTML='';}
+  }
   let failed=0;
   // Google Photos upload is on → grab/refresh the token NOW, under this click's activation
   // (the sign-in popup would be blocked after a long multi-photo render).
@@ -9071,11 +9168,15 @@ async function exportFX(){
         // masks are per-photo (fxState.masks normally tracks whichever photo is CURRENTLY
         // selected in the editor) — swap it to this item's own masks before reading params so
         // a batch export doesn't render every photo with just the selected photo's masks.
+        // Basic Adjustments can ALSO be made per-photo (adjToggleScope/"This photo only") — pass
+        // this item's own override (or undefined to fall back to the shared DOM value) so an
+        // independent exposure tweak on one photo doesn't leak into the rest of the export.
         const savedMasks=fxState.masks;fxState.masks=it.masks||[];
-        const P=getFXParams();
+        const P=getFXParams(it.adjustOverride||undefined);
         fxState.masks=savedMasks;
         const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+        setExportPhotoStatus(idx,'rendering');
         setProg(idx,`Rendering ${idx+1}/${N}: ${it.name}…`);
         log(`Rendering ${idx+1}/${N}: ${it.name} at ${iw}×${ih}${shouldTile(iw,ih)?' (tiled)':''}…`,'info');
         await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
@@ -9153,12 +9254,14 @@ async function exportFX(){
         }else{
           base=single?(fld||it.name):it.name;
         }
-        results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime});
+        results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime,srcIdx:idx}); // srcIdx: which item/status-row this came from — see setExportPhotoStatus below
         ec.width=ec.height=0; // free big intermediates promptly
         setProg(idx+1,`Rendered ${idx+1}/${N}`);
+        setExportPhotoStatus(idx,'rendered');
         log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
       }catch(e){
         failed++;
+        setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
         log(`Failed to render ${it.name}: ${e&&e.message||e} — skipping, continuing with the rest of the batch`,'err');
         console.error(e);
       }
@@ -9175,32 +9278,51 @@ async function exportFX(){
       }
     }
     // ── Phase 2: save ──
-    // Lightroom "Edit In" handoff (see library-ui.js's Save-to-Lightroom wiring): write the
-    // render straight back over the file Lightroom handed us instead of the normal share-sheet
-    // save, so Lightroom's own file-watcher re-imports and cloud-syncs it. Single-photo only —
-    // an Edit-In session is always exactly one photo.
+    // Lightroom "Edit In" handoff (see library-ui.js's Save-to-Lightroom wiring): write each
+    // render straight back over the file(s) Lightroom handed us instead of the normal
+    // share-sheet save, so Lightroom's own file-watcher re-imports and cloud-syncs them.
+    // window.chromasmithEditInPath is a single path (one photo) OR an array (a multi-select
+    // Edit-In) — normalize to an array and zip it against `results` in the same order items
+    // were rendered (both ultimately come from the same paths array the handoff opened).
     if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath&&results.length){
-      setProg(N,'Saving to Lightroom…');
-      try{
-        const b64=_u8b64(results[0].content);
-        // write_lightroom_tiff (not write_file_bytes): reads the ORIGINAL Edit-In TIFF still on
-        // disk and splices its EXIF sub-IFD (shutter/aperture/ISO/focal/lens/DateTimeOriginal —
-        // the capture date, so Lightroom's "Captured" shows shot time, not export time), GPS,
-        // XMP and IPTC into our render before overwriting — see tiff_meta.rs. UTIF can't carry
-        // these (safeTiffMetaFrom's ASCII-only limit). Fallback for an older native shell that
-        // doesn't have the command compiled in yet.
+      const editInPaths=Array.isArray(window.chromasmithEditInPath)?window.chromasmithEditInPath:[window.chromasmithEditInPath];
+      setProg(N,editInPaths.length>1?`Saving ${results.length} to Lightroom…`:'Saving to Lightroom…');
+      let lrFailed=0;
+      for(let i=0;i<results.length;i++){
+        const path=editInPaths[i];
+        if(!path){lrFailed++;log(`No Lightroom handoff path for rendered photo ${i+1} — skipped`,'err');continue;}
+        setExportPhotoStatus(results[i].srcIdx,'saving');
         try{
-          await window.__TAURI__.core.invoke('write_lightroom_tiff',{path:window.chromasmithEditInPath,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
-        }catch(e){
-          if(!/write_lightroom_tiff/.test(e&&e.message||String(e)))throw e;
-          log('Native shell predates write_lightroom_tiff — saved without EXIF splice (restart the app after updating)','warn');
-          await window.__TAURI__.core.invoke('write_file_bytes',{path:window.chromasmithEditInPath,dataB64:b64});
-        }
-        log('Saved back to Lightroom: '+window.chromasmithEditInPath,'ok');
-        if(typeof toast==='function')toast('Saved to Lightroom');
-      }catch(e){log('Save to Lightroom failed: '+(e&&e.message||e),'err');}
+          const b64=_u8b64(results[i].content);
+          // write_lightroom_tiff (not write_file_bytes): reads the ORIGINAL Edit-In TIFF still on
+          // disk and splices its EXIF sub-IFD (shutter/aperture/ISO/focal/lens/DateTimeOriginal —
+          // the capture date, so Lightroom's "Captured" shows shot time, not export time), GPS,
+          // XMP and IPTC into our render before overwriting — see tiff_meta.rs. UTIF can't carry
+          // these (safeTiffMetaFrom's ASCII-only limit). Fallback for an older native shell that
+          // doesn't have the command compiled in yet.
+          try{
+            await window.__TAURI__.core.invoke('write_lightroom_tiff',{path,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
+          }catch(e){
+            if(!/write_lightroom_tiff/.test(e&&e.message||String(e)))throw e;
+            log('Native shell predates write_lightroom_tiff — saved without EXIF splice (restart the app after updating)','warn');
+            await window.__TAURI__.core.invoke('write_file_bytes',{path,dataB64:b64});
+          }
+          setExportPhotoStatus(results[i].srcIdx,'saved');
+          log('Saved back to Lightroom: '+path,'ok');
+        }catch(e){lrFailed++;setExportPhotoStatus(results[i].srcIdx,'failed',(e&&e.message||String(e)).slice(0,60));log(`Save to Lightroom failed for ${path}: `+(e&&e.message||e),'err');}
+      }
+      if(typeof toast==='function')toast(lrFailed?`Saved ${results.length-lrFailed}/${results.length} to Lightroom — ${lrFailed} failed`:'Saved to Lightroom',!lrFailed);
       window.chromasmithSaveToLightroomPending=false;
-    }else if(results.length){setProg(N,`Saving ${results.length} file(s)…`);await saveFiles(results);}
+    }else if(results.length){
+      setProg(N,`Saving ${results.length} file(s)…`);
+      results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saving'));
+      await saveFiles(results);
+      // saveFiles' desktop/anchorDownload and iOS share-sheet paths don't report per-file
+      // success back to the caller (see saveFiles' own comments) — mark every rendered photo
+      // 'saved' once the call returns; a render FAILURE (the far more common real-world cause of
+      // "photos go missing") is still tracked precisely above, per-item, as it happens.
+      results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saved'));
+    }
     // Recipe-only export history (Library-only — see chromasmithRecordExport in library-ui.js).
     // Only tracks the single currently-open Library photo (state.openedPath); a multi-photo
     // batch export doesn't map each rendered frame back to its own on-disk path here.
