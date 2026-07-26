@@ -1017,6 +1017,12 @@
   // only: it just swaps the <img> src client-side, never touches the Rust-side thumbnail cache. ──
   const thumbBlobUrls = new Map(); // path -> last objectURL, so we can revoke it
   function refreshCardThumbFromCanvas(path) {
+    // Zoomed-in (fxZoom>1), the 1:1 loupe, and interactive crop all leave only a CROPPED
+    // sub-region of the frame in the live canvas's backing store (renderFullResCrop /
+    // renderLoupe) — grabbing it here would silently overwrite the Library thumbnail with a
+    // zoomed crop instead of the full photo. Skip the refresh in that state; the thumbnail
+    // just stays as it was until the next safe (zoomed-out) edit.
+    if ((typeof fxZoom !== 'undefined' && fxZoom > 1) || (typeof fxLoupe !== 'undefined' && fxLoupe) || (typeof cropMode !== 'undefined' && cropMode)) return;
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     // Borders / the Canvas matte are composited onto a SEPARATE overlay canvas (#fx-canvas-bd,
     // see chromasmith-22.html's applyPreviewBorders) which is shown INSTEAD of #fx-canvas while
@@ -1047,21 +1053,41 @@
   async function flushPendingSave() {
     if (!pendingSave) return;
     clearTimeout(saveTimer);
-    const { path, recipe } = pendingSave;
+    const { paths, snap, thumbPath } = pendingSave;
     pendingSave = null;
-    const cur = await getSidecar(path);
-    const updated = { ...cur, edited: true, recipe };
-    state.sidecars.set(path, updated);
-    await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
-    refreshCardThumbFromCanvas(path);
+    await Promise.all(paths.map(async (path, i) => {
+      // FX/adjustments are shared, but geometry is per-photo (see chromasmith-22.html's
+      // geomApplyToAll) — the snapshot captured at edit time reflects only the CURRENTLY
+      // previewed photo's crop/rotate/flip/straighten, so swap in this path's own geom before
+      // persisting its sidecar or a batch edit would silently overwrite every other photo's
+      // saved crop with whichever one happened to be on screen.
+      const it = fxImages[i];
+      const perPhotoSnap = (it && it.geom) ? { ...snap, geom: JSON.parse(JSON.stringify(it.geom)) } : snap;
+      const recipe = snapshotToB64(perPhotoSnap);
+      const cur = await getSidecar(path);
+      const updated = { ...cur, edited: true, recipe };
+      state.sidecars.set(path, updated);
+      await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
+    }));
+    // The live canvas only ever shows ONE photo (the currently previewed one) — refreshing
+    // every batch photo's thumbnail from it would overwrite the rest with the wrong image.
+    if (thumbPath) refreshCardThumbFromCanvas(thumbPath);
   }
   window.chromasmithOnEdit = (snap) => {
-    if (!state.openedPath) return;
-    const path = state.openedPath;
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, recipe: '' };
-    if (!cur.edited) { state.sidecars.set(path, { ...cur, edited: true }); markCardEdited(path); }
+    // FX/adjustments apply to the whole batch automatically, so a batch edit persists against
+    // every open photo — mirrors chromasmithRecordExport's existing batch behavior — instead of
+    // doing nothing just because no single `openedPath` is set (the old bug: batch edits never
+    // got a badge, sidecar, or history at all). Geometry is patched in per-photo in
+    // flushPendingSave above.
+    const paths = state.openedPath ? [state.openedPath] : (state.openedPaths || []);
+    if (!paths.length) return;
+    const thumbPath = state.openedPath || (state.openedPaths && state.openedPaths[fxCurIdx]) || null;
+    paths.forEach((path) => {
+      const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, recipe: '' };
+      if (!cur.edited) { state.sidecars.set(path, { ...cur, edited: true }); markCardEdited(path); }
+    });
     clearTimeout(saveTimer);
-    pendingSave = { path, recipe: snapshotToB64(snap) };
+    pendingSave = { paths, snap, thumbPath };
     saveTimer = setTimeout(flushPendingSave, 2000);
   };
   // A pending write must not be silently dropped by switching photos (or quitting) inside
@@ -1293,6 +1319,20 @@
       window.chromasmithEditInPath = path;
       const btn = document.getElementById('db-save-lr');
       if (btn) btn.style.display = '';
+      // A photo handed off from Lightroom's "Edit in Chromasmith" used to bypass the Library
+      // entirely — no Recents entry, no recent-folder entry, and any prior Chromasmith edit on
+      // this same file was ignored. Register it the same way openInEditorInner does for a
+      // normal Library open, so it behaves like one everywhere else in the app.
+      state.openedPath = path;
+      state.openedPaths = [];
+      invoke('touch_recent', { path }).then(() => { if (state.source === 'recents') renderCollectionCounts(); }).catch(() => {});
+      const dir = path.replace(/[\\/][^\\/]*$/, '');
+      if (dir && dir !== path) pushRecentFolder(dir);
+      const sc = await getSidecar(path);
+      if (sc.recipe) {
+        try { applyUISnapshot(snapshotFromB64(sc.recipe)); if (typeof fxUpdate === 'function') fxUpdate(); }
+        catch (e) { console.error('restore handoff recipe', e); }
+      }
       if (typeof log === 'function') log(`Opened from Lightroom: ${baseName(path)} — use "Save to Lightroom" when done`, 'ok');
       if (typeof toast === 'function') toast('Opened from Lightroom', true);
     } catch (e) {
@@ -1405,14 +1445,34 @@
     state.selected.add(entry.path);
     const paths = Array.from(state.selected);
     if (paths.length <= 1) { if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; } openInEditor(paths[0] || entry.path); return; }
-    const files = [];
-    for (const p of paths) {
-      try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
-      catch (err) { console.error('read_file_bytes', p, err); }
-    }
-    if (files.length) { state.openedPath = ''; state.openedPaths = paths; await loadFXImages(files); }
+    await openPathsInEditor(paths);
     state.selected.clear();
     updateCardSelClasses();
+  }
+
+  // Shared read for a batch-open/export: reads every path, logs+returns any that failed
+  // instead of just console.error-ing them so a shrunk batch is never silently swallowed.
+  async function readPathsAsFiles(paths) {
+    const files = []; const failed = [];
+    for (const p of paths) {
+      try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
+      catch (e) { console.error('read_file_bytes', p, e); failed.push(p); }
+    }
+    if (failed.length) toast(`Could not read ${failed.length} of ${paths.length} photo(s)`, false);
+    return files;
+  }
+  // Shared batch-open: reads paths, loads them into the editor, and registers each in Recents
+  // (touch_recent) — batch opens used to skip this entirely, so an externally-opened or
+  // multi-selected batch never showed up in the Recents smart collection.
+  async function openPathsInEditor(paths) {
+    const files = await readPathsAsFiles(paths);
+    if (!files.length) return files;
+    state.openedPath = '';
+    state.openedPaths = paths;
+    await loadFXImages(files);
+    paths.forEach((p) => invoke('touch_recent', { path: p }).catch(() => {}));
+    if (state.source === 'recents') renderCollectionCounts();
+    return files;
   }
 
   let ctxMenu = null;
@@ -1450,14 +1510,9 @@
     };
     const sep = () => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0'; ctxMenu.appendChild(s); };
     if (opts.includeOpen) {
-      item(`Open ${n > 1 ? n + ' photos' : 'in editor'}`, async () => {
+      item(`Edit ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
         if (n <= 1) { await openInEditor(paths[0]); return; }
-        const files = [];
-        for (const p of paths) {
-          try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
-          catch (e) { console.error('read_file_bytes', p, e); }
-        }
-        if (files.length) { state.openedPath = ''; state.openedPaths = paths; await loadFXImages(files); } // batch: no single auto-persist target
+        await openPathsInEditor(paths); // batch: no single auto-persist target
       });
       sep();
     }
@@ -1468,28 +1523,29 @@
     item('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
     sep();
     item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
-      const files = [];
-      for (const p of paths) {
-        try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
-        catch (e) { console.error('read_file_bytes', p, e); }
-      }
+      const files = await readPathsAsFiles(paths);
       if (!files.length) return;
       state.openedPath = '';
       state.openedPaths = paths;
       await loadFXImages(files);
-      // restore each photo's saved recipe before exporting, same as opening one normally
+      // Restore each photo's own saved CROP/MASKS before exporting (geometry+masks are
+      // per-photo — see chromasmith-22.html's geomApplyToAll/mskCopyToAll). FX/adjustments are
+      // shared across the batch by design, so unlike the old code this does NOT run the saved
+      // recipe's sliders/LUT/curves through applyUISnapshot — doing that per photo just made
+      // the LAST photo's saved FX silently overwrite every other photo's render.
       for (let i = 0; i < paths.length; i++) {
         const sc = await getSidecar(paths[i]);
-        if (sc.recipe && fxImages[i]) {
-          const savedIdx = fxCurIdx; fxCurIdx = i;
-          try { applyUISnapshot(snapshotFromB64(sc.recipe)); } catch (e) { console.error('restore recipe', e); }
-          fxCurIdx = savedIdx;
-        }
+        if (!sc.recipe || !fxImages[i]) continue;
+        try {
+          const snap = snapshotFromB64(sc.recipe);
+          if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
+          if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
+        } catch (e) { console.error('restore recipe', e); }
       }
       setExportScope(n > 1 ? 'all' : 'current');
       await exportFX();
     });
-    item('Reset edit', () => Promise.all(paths.map(async (p) => {
+    const resetItem = item('Reset edit', () => Promise.all(paths.map(async (p) => {
       const cur = await getSidecar(p);
       const updated = { ...cur, edited: false, recipe: '' };
       state.sidecars.set(p, updated);
@@ -1499,6 +1555,7 @@
       if (badge) badge.remove();
       if (p === state.openedPath) { openInEditor(p); } // re-open to fall back to RAW defaults
     })));
+    if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
     sep();
     item('Copy edit', async () => {
       const sc = await getSidecar(paths[0]);
