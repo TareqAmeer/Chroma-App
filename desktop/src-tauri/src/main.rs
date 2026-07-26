@@ -10,11 +10,19 @@ use tauri::{Emitter, Manager};
 // DEV-ITERATION MODE: read dist/ straight off disk on every request instead of embedding it
 // into the binary at compile time. include_dir!'s compile-time byte-literal embedding of the
 // ~7MB dist/ folder made every JS/HTML-only tweak force an 10+ minute full Rust rebuild — far
-// too slow while the native RAW pipeline is still being iterated on. Trade-off: this hardcodes
-// this dev machine's path, so it only works here, not as a portable double-clickable app.
-// TODO before shipping: switch to Tauri's bundled "resources" (tauri.conf.json bundle.resources
-// + app.path().resource_dir()) so the built .app is portable to any Mac.
-const DIST_DIR: &str = "/Users/tareqameer/Documents/GitHub/Chroma-App/desktop/dist";
+// too slow while the native RAW pipeline is still being iterated on. Resolved once at startup
+// (see DIST_DIR_RESOLVED/dist_dir below, set from .setup()) instead of a compile-time constant:
+// prefers the bundled "dist" resource (declared in tauri.conf.json's bundle.resources, same
+// pattern as the onnxruntime dylib below) so a packaged .app is portable to any Mac, and falls
+// back to $CARGO_MANIFEST_DIR/dist for `cargo tauri dev` — a path relative to wherever THIS repo
+// is checked out, not hardcoded to one specific dev machine.
+static DIST_DIR_RESOLVED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+fn dist_dir() -> PathBuf {
+    DIST_DIR_RESOLVED
+        .get()
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dist"))
+}
 
 mod lens_correct;
 mod library;
@@ -857,7 +865,7 @@ fn main() {
             // Standard.dcp") but std::fs::read needs the literal decoded path. Forgetting this
             // silently 404s every asset whose name needs encoding.
             let path = percent_decode(raw_path);
-            let full = format!("{DIST_DIR}/{path}");
+            let full = format!("{}/{path}", dist_dir().display());
             let (body, mime, status): (Vec<u8>, String, u16) = match std::fs::read(&full) {
                 Ok(b) => (
                     b,
@@ -879,6 +887,14 @@ fn main() {
         })
         .setup(|app| {
             let handle = app.handle();
+
+            // Resolve dist_dir() once — see DIST_DIR_RESOLVED's doc comment above. Same
+            // bundled-resource-with-dev-fallback pattern as the onnxruntime dylib below.
+            let bundled_dist = handle.path().resource_dir().ok().map(|d| d.join("dist"));
+            let dist = bundled_dist
+                .filter(|p| p.exists())
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dist"));
+            let _ = DIST_DIR_RESOLVED.set(dist);
 
             // CLI/manual-launch fallback for the Lightroom "Edit In" handoff (see PendingOpen
             // above) — `open -a Chromasmith file1.tif file2.tif` or a direct binary launch with
@@ -944,6 +960,74 @@ fn main() {
                 ],
             )?;
 
+            // Photo: culling flags + geometry, mirroring the Library grid's right-click menu and
+            // its keyboard culling (X/P/U, already handled in library-ui.js's own keydown
+            // listener — which correctly ignores keystrokes while a text field is focused).
+            // Deliberately NO accelerator on Reject/Pick/Clear/Toggle-Full-Library here: a bare,
+            // modifier-less menu key-equivalent is intercepted by AppKit's performKeyEquivalent:
+            // BEFORE it ever reaches a focused text field, so "X"/"P"/"U"/"G" as native menu
+            // shortcuts would silently eat those letters everywhere in the app (renaming a file,
+            // typing in search, the filename-pattern field) — exactly the class of bug this
+            // project's CLAUDE.md warns about re-testing in a real browser/app after a change.
+            // The menu items stay reachable by click; the real keyboard shortcuts are the
+            // existing JS-side, focus-aware ones.
+            let reject_item = MenuItem::with_id(handle, "menu-reject", "Reject", true, Option::<&str>::None)?;
+            let pick_item = MenuItem::with_id(handle, "menu-pick", "Pick (Flag)", true, Option::<&str>::None)?;
+            let clear_flag_item = MenuItem::with_id(handle, "menu-clear-flag", "Clear Flag", true, Option::<&str>::None)?;
+            let reset_edit_item = MenuItem::with_id(handle, "menu-reset-edit", "Reset Edit", true, Option::<&str>::None)?;
+            let rotate_left_item = MenuItem::with_id(handle, "menu-rotate-left", "Rotate Left", true, Some("CmdOrCtrl+["))?;
+            let rotate_right_item = MenuItem::with_id(handle, "menu-rotate-right", "Rotate Right", true, Some("CmdOrCtrl+]"))?;
+            let flip_h_item = MenuItem::with_id(handle, "menu-flip-h", "Flip Horizontal", true, Option::<&str>::None)?;
+            let flip_v_item = MenuItem::with_id(handle, "menu-flip-v", "Flip Vertical", true, Option::<&str>::None)?;
+            let copy_edit_item = MenuItem::with_id(handle, "menu-copy-edit", "Copy Edit", true, Some("CmdOrCtrl+Shift+C"))?;
+            let paste_edit_item = MenuItem::with_id(handle, "menu-paste-edit", "Paste Edit", true, Some("CmdOrCtrl+Shift+V"))?;
+            let photo_menu = Submenu::with_items(
+                handle,
+                "Photo",
+                true,
+                &[
+                    &reject_item,
+                    &pick_item,
+                    &clear_flag_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &rotate_left_item,
+                    &rotate_right_item,
+                    &flip_h_item,
+                    &flip_v_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &copy_edit_item,
+                    &paste_edit_item,
+                    &reset_edit_item,
+                ],
+            )?;
+
+            // View: zoom, split/compare, histogram, and the Library's expanded/grid view — the
+            // on-screen buttons for most of these already exist (fx-wrap zoom controls, the ○/⇔/▦
+            // preview-tools row, the ⛶ Library-expand button); this just gives them menu-bar
+            // discoverability and real shortcuts, same idiom as darktable/RawTherapee/digiKam.
+            let zoom_in_item = MenuItem::with_id(handle, "menu-zoom-in", "Zoom In", true, Some("CmdOrCtrl+Plus"))?;
+            let zoom_out_item = MenuItem::with_id(handle, "menu-zoom-out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
+            let zoom_fit_item = MenuItem::with_id(handle, "menu-zoom-fit", "Zoom to Fit", true, Some("CmdOrCtrl+0"))?;
+            let zoom_100_item = MenuItem::with_id(handle, "menu-zoom-100", "Zoom to 100%", true, Some("CmdOrCtrl+1"))?;
+            let split_item = MenuItem::with_id(handle, "menu-split", "Toggle Before/After Split", true, Some("CmdOrCtrl+\\"))?;
+            let hist_item = MenuItem::with_id(handle, "menu-histogram", "Toggle Histogram", true, Some("CmdOrCtrl+H"))?;
+            let expand_lib_item = MenuItem::with_id(handle, "menu-expand-library", "Toggle Full Library", true, Option::<&str>::None)?; // bare "G" is already the JS-side shortcut — see the Photo-menu comment above on why it can't ALSO be a native accelerator
+            let view_menu = Submenu::with_items(
+                handle,
+                "View",
+                true,
+                &[
+                    &zoom_in_item,
+                    &zoom_out_item,
+                    &zoom_fit_item,
+                    &zoom_100_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &split_item,
+                    &hist_item,
+                    &expand_lib_item,
+                ],
+            )?;
+
             let window_menu = Submenu::with_items(
                 handle,
                 "Window",
@@ -954,6 +1038,16 @@ fn main() {
                     &PredefinedMenuItem::separator(handle)?,
                     &PredefinedMenuItem::fullscreen(handle, None)?,
                 ],
+            )?;
+
+            let shortcuts_item = MenuItem::with_id(handle, "menu-shortcuts", "Keyboard Shortcuts…", true, Some("CmdOrCtrl+/"))?;
+            let guide_item = MenuItem::with_id(handle, "menu-guide", "Chromasmith Guide", true, Option::<&str>::None)?;
+            let whatsnew_item = MenuItem::with_id(handle, "menu-whatsnew", "What's New", true, Option::<&str>::None)?;
+            let help_menu = Submenu::with_items(
+                handle,
+                "Help",
+                true,
+                &[&shortcuts_item, &guide_item, &whatsnew_item],
             )?;
 
             let app_menu = Submenu::with_items(
@@ -971,13 +1065,25 @@ fn main() {
                 ],
             )?;
 
-            let menu = Menu::with_items(handle, &[&app_menu, &file_menu, &edit_menu, &window_menu])?;
+            let menu = Menu::with_items(
+                handle,
+                &[&app_menu, &file_menu, &edit_menu, &photo_menu, &view_menu, &window_menu, &help_menu],
+            )?;
             app.set_menu(menu)?;
 
             let handle2 = handle.clone();
             app.on_menu_event(move |_app, event| {
                 let id = event.id().0.as_str();
-                if matches!(id, "menu-open" | "menu-library" | "menu-export" | "menu-undo" | "menu-redo") {
+                if matches!(
+                    id,
+                    "menu-open" | "menu-library" | "menu-export" | "menu-undo" | "menu-redo"
+                        | "menu-reject" | "menu-pick" | "menu-clear-flag" | "menu-reset-edit"
+                        | "menu-rotate-left" | "menu-rotate-right" | "menu-flip-h" | "menu-flip-v"
+                        | "menu-copy-edit" | "menu-paste-edit"
+                        | "menu-zoom-in" | "menu-zoom-out" | "menu-zoom-fit" | "menu-zoom-100"
+                        | "menu-split" | "menu-histogram" | "menu-expand-library"
+                        | "menu-shortcuts" | "menu-guide" | "menu-whatsnew"
+                ) {
                     let _ = handle2.emit(id, ());
                 }
             });

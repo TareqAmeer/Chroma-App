@@ -1215,6 +1215,21 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button class="btn bgh" onclick="saveSession()" title="Save all slider settings to localStorage"><span class="bdot"></span>Save session</button>
           <button class="btn bgh" onclick="loadSession(true)" title="Restore saved slider settings"><span class="bdot"></span>Load session</button>
         </div>
+        <!-- STYLES: named, reusable, re-editable recipes (curves/HSL/masks/grain/halation/bloom/
+             adjust/etc — everything a LUT preset does NOT capture, since a LUT is a baked 3D
+             lookup table). Distinct from "Save session" above (session is one slot, auto-
+             restored on relaunch); a Style is a permanent, named, list entry you apply on demand
+             to ANY photo, and can export/import as a .json to share between devices. Modelled on
+             darktable's Styles (a saved history-stack, separate from per-module presets). -->
+        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
+          <div class="fx-label" style="width:auto;margin-bottom:6px">Styles</div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style"><span class="bdot"></span>Save as Style…</button>
+            <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from Chromasmith"><span class="bdot"></span>Import…</button>
+          </div>
+          <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+          <input type="file" id="style-import-input" accept="application/json,.json" style="display:none" onchange="styleImportFile(this.files[0])">
+        </div>
         <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
           <div class="fx-label" style="width:auto;margin-bottom:6px">Google Photos</div>
           <div class="btn-row" style="margin-top:0">
@@ -3510,7 +3525,26 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-26b';
+const BUILD='2026-07-26c';
+// User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
+// PREPEND a short entry here in any session that ships a user-visible change, same discipline as
+// bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
+const WHATSNEW=[
+  {date:'2026-07-26',items:[
+    'Mac menu bar: new Photo, View and Help menus (culling flags, rotate/flip, copy/paste edit, zoom, split/histogram toggles, this shortcuts panel).',
+    'Basic Adjustments can now be made independent per photo in a batch ("This photo only") instead of always applying to the whole batch.',
+    'Batch export shows a per-photo status list (rendering/saved/failed) instead of one bar that reads "done" either way.',
+    'Lightroom "Edit In" now supports selecting several photos at once.',
+    'Crop/rotate/flip/straighten are per-photo with an "Apply to all photos" button; FX/adjustments still apply to the whole batch automatically.',
+    'Batch edits now show the Edited badge and save history for every photo in the batch, not just a single open photo.',
+    '"Edit in Chromasmith" from Lightroom now shows up in Recents.',
+    'LUT categories renamed: Fujify Looks → User Looks, Dehancer Online → Dehancer.',
+  ]},
+];
+function whatsNewHtml(){
+  return WHATSNEW.map(e=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);margin-bottom:4px">${e.date}</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.5">${e.items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`).join('');
+}
+window.chromasmithShowWhatsNew=function(){if(typeof _csModal==='function')_csModal("What's New",whatsNewHtml());};
 document.getElementById('build-stamp').textContent='build '+BUILD;
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
@@ -6690,6 +6724,40 @@ function toast(msg,ok){
   t.textContent=msg;t.classList.toggle('ok',!!ok);t.classList.add('show');
   clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1900);
 }
+// Minimal reusable modal — used by the Keyboard Shortcuts and What's New panels (Help menu).
+// Deliberately not a "framework": one dismissible glass panel, styled to match the app's
+// existing dark-glass surfaces (context menu, toast) rather than pulling in new CSS classes.
+function _csModal(title,bodyHtml){
+  const prev=document.getElementById('cs-modal-ov');if(prev)prev.remove();
+  const ov=document.createElement('div');ov.id='cs-modal-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  const panel=document.createElement('div');
+  panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:-apple-system,sans-serif;box-shadow:var(--lift-2)';
+  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1">×</button></div>${bodyHtml}`;
+  ov.appendChild(panel);document.body.appendChild(ov);
+  panel.querySelector('#cs-modal-x').onclick=()=>ov.remove();
+  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
+}
+// Keyboard Shortcuts panel (Help menu / Cmd+/ / bare "?") — every shortcut below is real and
+// already wired elsewhere (desktop-native.js's menu-* wiring, library-ui.js's grid keydown
+// handler, or an on-page oninput/onclick); this is purely a discoverability surface, not new
+// behavior. Grouped to match the new Photo/View menus.
+function shortcutsHtml(){
+  const rows=(pairs)=>pairs.map(([k,d])=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 0;font-size:13px"><span>${d}</span><kbd style="font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--bdr);border-radius:4px;padding:2px 6px;white-space:nowrap">${k}</kbd></div>`).join('');
+  const group=(title,pairs)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">${title}</div>${rows(pairs)}</div>`;
+  return group('File',[['⌘O','Open photo(s)'],['⌘L','Toggle Library'],['⌘E','Export']])
+    +group('Edit',[['⌘Z','Undo'],['⇧⌘Z','Redo'],['⇧⌘C','Copy edit'],['⇧⌘V','Paste edit']])
+    +group('Photo (Library grid)',[['X','Reject'],['P','Pick / flag'],['U','Clear flag'],['←/→','Move culling cursor'],['Enter','Open selected'],['⌘[ / ⌘]','Rotate left / right']])
+    +group('View',[['⌘+ / ⌘-','Zoom in / out'],['⌘0','Zoom to fit'],['⌘1','Zoom to 100%'],['⌘\\','Toggle before/after split'],['⌘H','Toggle histogram'],['G','Toggle full Library'],['Esc','Close full Library / dialogs']])
+    +group('Help',[['⌘/','This panel']]);
+}
+window.chromasmithShowShortcuts=function(){_csModal('Keyboard Shortcuts',shortcutsHtml());};
+document.addEventListener('keydown',e=>{
+  if(e.key!=='?'&&!(e.key==='/'&&(e.metaKey||e.ctrlKey)))return;
+  const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
+  e.preventDefault();window.chromasmithShowShortcuts();
+});
 function fxPickPhotos(){const inp=document.querySelector('#dz-fx-img input[type=file]');if(inp)inp.click();}
 // Haptic tap: iOS shell (Capacitor Haptics plugin) OR the Tauri desktop shell (native macOS
 // trackpad haptic via Rust's haptic_feedback() — see desktop/src-tauri/src/main.rs). Previously
@@ -7696,6 +7764,53 @@ function getUISnapshot(){
   s.demosaicAlgo=window.chromasmithDemosaicAlgo||''; // same decode-time-baked reasoning as nativeNr above
   return s;
 }
+// ── Selective paste (darktable idiom: choose WHICH parts of a copied recipe to apply, rather
+// than all-or-nothing) — each category's apply() copies its own slice of a SOURCE snapshot onto
+// a BASE snapshot (the current live state), so unchecked categories are left exactly as they
+// were instead of being overwritten. Field lists mirror getFXParams'/_FX_SNAP_*'s own grouping.
+const PASTE_CATEGORIES=[
+  {key:'lut',label:'Look (LUT + Print profile)',sliders:[],toggles:[],selects:['sel-lut','sel-print']},
+  {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','hsl','pointColors']},
+  {key:'adjust',label:'Basic Adjustments',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin'],toggles:['tg-adjust'],selects:[]},
+  {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:[],selects:[]},
+  {key:'grain',label:'Film Grain',sliders:['grain-a','grain-sz'],toggles:['tg-grain'],selects:['sel-grain-fmt']},
+  {key:'artifacts',label:'Film Artifacts',sliders:['art-du','art-sc','art-lk'],toggles:['tg-art'],selects:[],extra:['artSeed','dustMode']},
+  {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
+  {key:'bloom',label:'Bloom',sliders:['bloom-a','bloom-th','bloom-r'],toggles:['tg-bloom'],selects:[]},
+  {key:'masks',label:'Local Adjustments (masks)',sliders:[],toggles:['tg-local'],selects:[],extra:['masks']},
+  {key:'canvas',label:'Canvas / Borders / Vignette',sliders:['b1-t','b2-t','vig'],toggles:['tg-vig','tg-borders','tg-canvas'],selects:[],extra:['canvas'],colors:['cl-b1','cl-b2']},
+];
+function pasteEditSelectiveApply(base,src,checkedKeys){
+  PASTE_CATEGORIES.filter(c=>checkedKeys.includes(c.key)).forEach(c=>{
+    c.sliders.forEach(id=>{if(src.sliders&&src.sliders[id]!==undefined){base.sliders=base.sliders||{};base.sliders[id]=src.sliders[id];}});
+    c.toggles.forEach(id=>{if(src.toggles&&src.toggles[id]!==undefined){base.toggles=base.toggles||{};base.toggles[id]=src.toggles[id];}});
+    (c.selects||[]).forEach(id=>{if(src.selects&&src.selects[id]!==undefined){base.selects=base.selects||{};base.selects[id]=src.selects[id];}});
+    (c.colors||[]).forEach(id=>{if(src.colors&&src.colors[id]!==undefined){base.colors=base.colors||{};base.colors[id]=src.colors[id];}});
+    (c.extra||[]).forEach(k=>{if(src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
+  });
+  return base;
+}
+// Shows the category picker, then calls onConfirm(mergedSnapshot) — the caller applies it to the
+// live editor AND/OR writes it to sidecar(s), since that differs between the single-photo
+// context-menu paste and the Photo-menu paste (see library-ui.js).
+window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
+  let src;try{src=snapshotFromB64(recipeB64);}catch(e){log('Could not read copied edit: '+e.message,'err');return;}
+  const rows=PASTE_CATEGORIES.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="paste-cat-cb" value="${c.key}" checked>${c.label}</label>`).join('');
+  _csModal('Paste Edit — choose what to apply',
+    `<div>${rows}</div><div class="btn-row" style="margin-top:14px;justify-content:flex-end">`
+    +`<button class="btn bgh" id="paste-cancel">Cancel</button>`
+    +`<button class="btn bpri" id="paste-confirm"><span class="bdot"></span>Paste</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  ov.querySelector('#paste-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#paste-confirm').onclick=()=>{
+    const checked=[...ov.querySelectorAll('.paste-cat-cb:checked')].map(cb=>cb.value);
+    ov.remove();
+    if(!checked.length)return;
+    const base=getUISnapshot();
+    const merged=pasteEditSelectiveApply(base,src,checked);
+    onConfirm(merged);
+  };
+};
 function applyUISnapshot(s){
   // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
   // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
@@ -8161,6 +8276,77 @@ function autoEnhance(){
   log(`Auto-enhance: exp ${expAdj}, blacks ${blacksAdj}, whites ${whitesAdj}, temp ${tempAdj}, tint ${tintAdj}`,'ok');
 }
 
+// ── Styles: named, reusable, re-editable recipes (darktable-style "styles") ──────
+// A LUT preset is a baked 3D lookup table — global colour/tone only (see CLAUDE.md §8). A Style
+// is the OPPOSITE: the full editable recipe (curves/HSL/masks/grain/halation/bloom/adjust/LUT
+// selection/etc, via getUISnapshot — the same structure undo history and sidecars already use),
+// minus geometry (crop/rotate is per-photo and meaningless to carry between different photos)
+// and the per-photo "adjustIndependent" flag (meaningless outside a specific batch). Saved to
+// localStorage as a flat list; exportable/importable as .json so a Style can move between
+// devices or be shared with another Chromasmith user.
+const _STYLES_KEY='chromasmith-styles-v1';
+function stylesList(){try{return JSON.parse(localStorage.getItem(_STYLES_KEY)||'[]')}catch(e){return[]}}
+function stylesSave(list){try{localStorage.setItem(_STYLES_KEY,JSON.stringify(list))}catch(e){log('Could not save styles: '+e.message,'err')}}
+function styleSaveCurrent(){
+  const name=(prompt('Name this Style:')||'').trim();
+  if(!name)return;
+  const snap=getUISnapshot();
+  delete snap.geom;delete snap.adjustIndependent; // not portable across photos — see comment above
+  const list=stylesList();
+  const existing=list.findIndex(s=>s.name===name);
+  const entry={name,recipe:snap,created:Date.now()}; // stored as a plain object (localStorage.setItem below JSON.stringifies the whole list) — no base64 needed for a pure-JS/localStorage feature
+  if(existing>=0){if(!confirm(`A Style named "${name}" already exists. Overwrite it?`))return;list[existing]=entry;}
+  else list.push(entry);
+  stylesSave(list);styleListRefresh();
+  toast(`Style "${name}" saved`,true);
+}
+function styleApply(name){
+  const s=stylesList().find(x=>x.name===name);if(!s)return;
+  try{applyUISnapshot(JSON.parse(JSON.stringify(s.recipe)));fxUpdate();log(`Style applied: ${name}`,'ok');}
+  catch(e){log('Could not apply style: '+e.message,'err');}
+}
+function styleDelete(name){
+  if(!confirm(`Delete Style "${name}"? This cannot be undone.`))return;
+  stylesSave(stylesList().filter(s=>s.name!==name));styleListRefresh();
+}
+function styleExport(name){
+  const s=stylesList().find(x=>x.name===name);if(!s)return;
+  const blob=new Blob([JSON.stringify(s,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=name.replace(/[^\w.-]+/g,'_')+'.chromasmith-style.json';
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+}
+function styleImportClick(){const inp=document.getElementById('style-import-input');if(inp)inp.click();}
+async function styleImportFile(file){
+  if(!file)return;
+  try{
+    const s=JSON.parse(await file.text());
+    if(!s||typeof s.recipe!=='object'||!s.recipe)throw new Error('not a Style file');
+    let name=(s.name||file.name.replace(/\.json$/i,'')).trim()||'Imported style';
+    const list=stylesList();
+    if(list.some(x=>x.name===name)){
+      let n=2;while(list.some(x=>x.name===`${name} (${n})`))n++;
+      name=`${name} (${n})`;
+    }
+    list.push({name,recipe:s.recipe,created:Date.now()});
+    stylesSave(list);styleListRefresh();
+    toast(`Style "${name}" imported`,true);
+  }catch(e){log('Style import failed: '+e.message,'err');toast('Not a valid Style file',false);}
+  finally{const inp=document.getElementById('style-import-input');if(inp)inp.value='';}
+}
+function styleListRefresh(){
+  const el=document.getElementById('style-list');if(!el)return;
+  const list=stylesList();
+  if(!list.length){el.innerHTML='<div style="font-size:10px;color:var(--mut);font-family:var(--mono)">No styles saved yet.</div>';return;}
+  el.innerHTML=list.map(s=>{
+    const n=s.name.replace(/'/g,"\\'");
+    return `<div class="btn-row" style="margin:0;gap:4px">`
+      +`<button class="btn bgh" style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="styleApply('${n}')" title="Apply this style">${s.name}</button>`
+      +`<button class="btn-icon" onclick="styleExport('${n}')" title="Export as .json">⇩</button>`
+      +`<button class="btn-icon" onclick="styleDelete('${n}')" title="Delete">✕</button>`
+      +`</div>`;
+  }).join('');
+}
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
@@ -10949,6 +11135,7 @@ function dustModeBuildChips(){
 dustModeBuildChips();
 _fxPristineDefault=getUISnapshot(); // factory-default UI state, captured before loadSession touches it
 loadSession();       // restore saved slider state (silent — no image loaded yet)
+styleListRefresh();  // populate the Styles list from localStorage
 initZoomPan();
 initEditableVals();
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor

@@ -115,6 +115,7 @@
     typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff'
     cameraFilter: 'all',
     lensFilter: 'all',
+    isoFilter: 'all',
     tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
     search: '',
     open: false,
@@ -405,6 +406,7 @@
       </select>
       <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
       <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
+      <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select>
       <select id="lib-tag-filter" title="Filter by tag">
         <option value="all">All tags</option>
         <option value="red">Rejected (X)</option>
@@ -1196,6 +1198,15 @@
       if (state._openToken !== openToken || state.currentFolder !== path || state.source !== 'folder') return; // user moved on
       populateSelect(document.getElementById('lib-camera-filter'), state.entries.map((e) => state.meta.get(e.path)?.camera), 'All cameras');
       populateSelect(document.getElementById('lib-lens-filter'), state.entries.map((e) => state.meta.get(e.path)?.lens), 'All lenses');
+      {
+        // ISO needs a NUMERIC sort (100 < 1600 < 6400), unlike camera/lens names — populateSelect's
+        // plain .sort() would put "1600" before "200" lexicographically, so build this one by hand.
+        const sel = document.getElementById('lib-iso-filter');
+        const cur = sel.value;
+        const distinct = Array.from(new Set(state.entries.map((e) => state.meta.get(e.path)?.iso).filter(Boolean))).sort((a, b) => (+a) - (+b));
+        sel.innerHTML = '<option value="all">All ISOs</option>' + distinct.map((v) => `<option value="${v}">ISO ${v}</option>`).join('');
+        sel.value = distinct.includes(cur) ? cur : 'all';
+      }
       renderGrid();
     });
   }
@@ -1241,6 +1252,7 @@
     if (state.typeFilter !== 'all' && entry.kind !== state.typeFilter) return false;
     if (state.cameraFilter !== 'all' && m.camera !== state.cameraFilter) return false;
     if (state.lensFilter !== 'all' && m.lens !== state.lensFilter) return false;
+    if (state.isoFilter !== 'all' && String(m.iso || '') !== state.isoFilter) return false;
     if (state.search && !entry.name.toLowerCase().includes(state.search)) return false;
     if (state.tagFilter === 'red' && sc.label !== 'Red') return false;
     if (state.tagFilter === 'green' && sc.label !== 'Green') return false;
@@ -1586,7 +1598,13 @@
       setExportScope(n > 1 ? 'all' : 'current');
       await exportFX();
     });
-    const resetItem = item('Reset edit', () => Promise.all(paths.map(async (p) => {
+    const resetItem = item('Reset edit', () => {
+      // Irreversible (no undo history survives closing the photo) — confirm, matching the
+      // in-editor "Reset all" (fxResetAll) which already does. This context-menu path could
+      // silently wipe edits on several selected photos at once with a single misclick.
+      const label = n > 1 ? `${n} photos` : 'this photo';
+      if (!window.confirm(`Reset edit${n > 1 ? 's' : ''} on ${label}? This cannot be undone.`)) return;
+      return Promise.all(paths.map(async (p) => {
       const cur = await getSidecar(p);
       const updated = { ...cur, edited: false, recipe: '' };
       state.sidecars.set(p, updated);
@@ -1595,7 +1613,8 @@
       const badge = card && card.querySelector('.lib-edited-badge');
       if (badge) badge.remove();
       if (p === state.openedPath) { openInEditor(p); } // re-open to fall back to RAW defaults
-    })));
+      }));
+    });
     if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
     sep();
     item('Copy edit', async () => {
@@ -1603,15 +1622,29 @@
       window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
       toast('Edit copied', true);
     });
-    const pasteItem = item('Paste edit', () => Promise.all(paths.map(async (p) => {
-      const cur = await getSidecar(p);
-      const updated = { ...cur, edited: true, recipe: window.__copiedRecipe };
-      state.sidecars.set(p, updated);
-      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe: window.__copiedRecipe }).catch((e) => sidecarWriteFailed(p, cur, e));
-      markCardEdited(p);
-      if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(window.__copiedRecipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
-    })));
-    if (!window.__copiedRecipe) { pasteItem.style.opacity = '.4'; pasteItem.style.pointerEvents = 'none'; }
+    const pasteAllToPaths = async (recipe) => {
+      await Promise.all(paths.map(async (p) => {
+        const cur = await getSidecar(p);
+        const updated = { ...cur, edited: true, recipe };
+        state.sidecars.set(p, updated);
+        await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
+        markCardEdited(p);
+        if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
+      }));
+    };
+    const pasteItem = item('Paste edit', () => pasteAllToPaths(window.__copiedRecipe));
+    // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
+    // of all-or-nothing — e.g. paste just the grain+halation without also overwriting the LUT.
+    // chromasmithPasteEditSelective (chromasmith-22.html) shows the category picker and hands
+    // back one MERGED snapshot (current state + only the checked categories from the copy).
+    const pasteSelItem = item('Paste edit (selective)…', () => {
+      if (typeof window.chromasmithPasteEditSelective !== 'function') return;
+      window.chromasmithPasteEditSelective(window.__copiedRecipe, (merged) => pasteAllToPaths(snapshotToB64(merged)));
+    });
+    if (!window.__copiedRecipe) {
+      pasteItem.style.opacity = '.4'; pasteItem.style.pointerEvents = 'none';
+      pasteSelItem.style.opacity = '.4'; pasteSelItem.style.pointerEvents = 'none';
+    }
     sep();
     item(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
       for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
@@ -1761,6 +1794,33 @@
     syncDockPadding();
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
+  window.chromasmithToggleExpandedView = () => { if (state.open) toggleExpandedView(); }; // menu-bar "Toggle Full Library" — no-op if the Library isn't even open
+
+  // Standalone copy/paste-edit for the Photo menu (menu-copy-edit/menu-paste-edit in
+  // desktop-native.js) — same __copiedRecipe clipboard as the right-click context menu's Copy/
+  // Paste edit items (buildPathsMenu, below), just reachable without right-clicking anything,
+  // and scoped to whichever photo/batch is CURRENTLY open in the editor.
+  window.chromasmithMenuCopyEdit = async () => {
+    const path = state.openedPath || (state.openedPaths && state.openedPaths[fxCurIdx]);
+    if (!path) { toast('No photo open', false); return; }
+    const sc = await getSidecar(path);
+    window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
+    toast('Edit copied', true);
+  };
+  window.chromasmithMenuPasteEdit = async () => {
+    if (!window.__copiedRecipe) { toast('Nothing copied yet', false); return; }
+    const targets = state.openedPath ? [state.openedPath] : (state.openedPaths || []);
+    if (!targets.length) { toast('No photo open', false); return; }
+    await Promise.all(targets.map(async (p) => {
+      const cur = await getSidecar(p);
+      const updated = { ...cur, edited: true, recipe: window.__copiedRecipe };
+      state.sidecars.set(p, updated);
+      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe: window.__copiedRecipe }).catch((e) => sidecarWriteFailed(p, cur, e));
+      markCardEdited(p);
+    }));
+    try { applyUISnapshot(snapshotFromB64(window.__copiedRecipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); }
+    toast('Edit pasted', true);
+  };
   document.addEventListener('keydown', (e) => {
     if (!state.open) return;
     const t = e.target;
@@ -1805,6 +1865,7 @@
   overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
   let searchDebounce;
   overlay.querySelector('#lib-search').oninput = (e) => {

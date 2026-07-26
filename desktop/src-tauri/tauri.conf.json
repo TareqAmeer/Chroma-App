@@ -50,7 +50,8 @@
     "resources": {
       "vendor/onnxruntime/libonnxruntime.dylib": "vendor/onnxruntime/libonnxruntime.dylib",
       "vendor/sam2/encoder.onnx": "vendor/sam2/encoder.onnx",
-      "vendor/sam2/decoder.onnx": "vendor/sam2/decoder.onnx"
+      "vendor/sam2/decoder.onnx": "vendor/sam2/decoder.onnx",
+      "../dist": "dist"
     },
     "fileAssociations": [
       {

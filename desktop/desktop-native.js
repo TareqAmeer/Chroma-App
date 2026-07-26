@@ -217,6 +217,32 @@
   wire('menu-export', () => typeof exportFX === 'function' && exportFX());
   wire('menu-undo', () => typeof fxUndo === 'function' && fxUndo());
   wire('menu-redo', () => typeof fxRedo === 'function' && fxRedo());
+  // Photo menu — same actions as the Library's right-click menu / X-P-U culling keys, just
+  // reachable from the menu bar. fxToggleFlag/fxResetAll/geomRotate/geomFlip are chromasmith-
+  // 22.html globals; the copy/paste-edit pair lives in library-ui.js (Library-only, since it
+  // needs the sidecar + clipboard state that only exists there).
+  wire('menu-reject', () => typeof fxToggleFlag === 'function' && fxToggleFlag('Red'));
+  wire('menu-pick', () => typeof fxToggleFlag === 'function' && fxToggleFlag('Green'));
+  wire('menu-clear-flag', () => typeof fxToggleFlag === 'function' && fxToggleFlag(''));
+  wire('menu-reset-edit', () => typeof fxResetAll === 'function' && fxResetAll());
+  wire('menu-rotate-left', () => typeof geomRotate === 'function' && geomRotate(-90));
+  wire('menu-rotate-right', () => typeof geomRotate === 'function' && geomRotate(90));
+  wire('menu-flip-h', () => typeof geomFlip === 'function' && geomFlip('h'));
+  wire('menu-flip-v', () => typeof geomFlip === 'function' && geomFlip('v'));
+  wire('menu-copy-edit', () => typeof window.chromasmithMenuCopyEdit === 'function' && window.chromasmithMenuCopyEdit());
+  wire('menu-paste-edit', () => typeof window.chromasmithMenuPasteEdit === 'function' && window.chromasmithMenuPasteEdit());
+  // View menu
+  wire('menu-zoom-in', () => typeof zoomBy === 'function' && zoomBy(1.25));
+  wire('menu-zoom-out', () => typeof zoomBy === 'function' && zoomBy(0.8));
+  wire('menu-zoom-fit', () => typeof _resetZoom === 'function' && _resetZoom(true));
+  wire('menu-zoom-100', () => typeof zoomSet === 'function' && zoomSet(1));
+  wire('menu-split', () => typeof toggleSplit === 'function' && toggleSplit());
+  wire('menu-histogram', () => typeof toggleHist === 'function' && toggleHist());
+  wire('menu-expand-library', () => typeof window.chromasmithToggleExpandedView === 'function' && window.chromasmithToggleExpandedView());
+  // Help menu
+  wire('menu-shortcuts', () => typeof window.chromasmithShowShortcuts === 'function' && window.chromasmithShowShortcuts());
+  wire('menu-guide', () => typeof switchTab === 'function' && switchTab('guide'));
+  wire('menu-whatsnew', () => typeof window.chromasmithShowWhatsNew === 'function' && window.chromasmithShowWhatsNew());
   // Surfaces download_url_native's (main.rs) byte-count/content-type/hex-header diagnostic
   // for Google Photos RAW downloads into the app's OWN log panel — it previously only went to
   // eprintln!, which is invisible in the packaged .app (no attached terminal), so a "DNG won't
