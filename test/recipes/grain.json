@@ -1,0 +1,7 @@
+{
+  "_desc": "Film grain enabled (35mm format, strong amount) — exercises the value-noise comp-pass grain stage.",
+  "sliders": { "grain-a": "60", "grain-sz": "50" },
+  "toggles": { "grain": true },
+  "selects": { "sel-grain-fmt": "35mm" },
+  "colors": {}
+}

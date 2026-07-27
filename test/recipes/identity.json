@@ -1,0 +1,7 @@
+{
+  "_desc": "No-op: default UI state, nothing enabled. Establishes the export pipeline's neutral baseline.",
+  "sliders": {},
+  "toggles": {},
+  "selects": {},
+  "colors": {}
+}

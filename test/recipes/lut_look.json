@@ -1,0 +1,7 @@
+{
+  "_desc": "A shipped film-look LUT applied (classic_neg), nothing else enabled.",
+  "sliders": {},
+  "toggles": {},
+  "selects": { "sel-lut": "p:classic_neg" },
+  "colors": {}
+}

@@ -151,6 +151,24 @@ fn cache_key(path: &str, mtime: u64, size: u64) -> String {
 /// hundreds of RAWs stays fast. Cache key includes mtime+size so edits/replacements invalidate.
 #[tauri::command]
 pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
+    // rawler's embedded-preview extraction and the `image` crate can both panic on malformed
+    // input (a truncated/corrupt file, an unsupported internal variant, etc.) — an uncaught
+    // panic here would take down the whole Tauri process, breaking every future thumbnail (and
+    // everything else) for the rest of the session. Catch it and report it as a normal Err
+    // instead, matching the pattern examples/test_thumb.rs already uses to probe this same call.
+    let path_for_panic_msg = path.clone();
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| get_thumbnail_inner(path)))
+        .unwrap_or_else(|panic| {
+            let msg = panic
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "<non-string panic>".to_string());
+            Err(format!("thumbnail decode panicked for {path_for_panic_msg}: {msg}"))
+        })
+}
+
+fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let key = cache_key(&path, mtime, meta.len());
@@ -530,6 +548,22 @@ fn registry_write(name: &str, list: &[String]) {
         let _ = std::fs::write(registry_path(name), text);
     }
 }
+/// JS-facing entry point for registries beyond the fixed set (`edited`/`favorites`/`flagged`/
+/// `rejected`) written internally by set_sidecar above — used for the C2 "duplicates" and C3
+/// "gphotos" (Google-Photos-synced) smart collections, which are driven from library-ui.js/
+/// chromasmith-22.html rather than from a sidecar write. Same underlying mechanism, just named
+/// so a small fixed extra set of collection names can be set directly. `name` is not arbitrary
+/// user input from a network source — it's a small fixed set from our own frontend code — but
+/// validate anyway since this fn, unlike registry_set, is reachable directly from JS.
+#[tauri::command]
+pub fn registry_set_cmd(name: String, path: String, present: bool) -> Result<(), String> {
+    if !matches!(name.as_str(), "duplicates" | "gphotos") {
+        return Err(format!("registry_set_cmd: unknown registry '{name}'"));
+    }
+    registry_set(&name, &path, present);
+    Ok(())
+}
+
 fn registry_set(name: &str, path: &str, present_target: bool) {
     let mut list = registry_read(name);
     let present = list.iter().any(|p| p == path);
@@ -669,7 +703,77 @@ pub fn collection_counts() -> std::collections::HashMap<String, usize> {
     m.insert("rejected".to_string(), registry_read("rejected").len());
     m.insert("exported".to_string(), export_history_read_all().len());
     m.insert("recents".to_string(), registry_read("recents").len());
+    m.insert("duplicates".to_string(), registry_read("duplicates").len());
+    m.insert("gphotos".to_string(), registry_read("gphotos").len());
     m
+}
+
+// ── Perceptual-hash duplicate detection (dHash, 8x8 grey -> 64-bit) ──────────────────────
+// Reuses get_thumbnail's cached 360px JPEG bytes (no extra decode). Cached per path in
+// <hash>.phash.json alongside meta_cache_path's .meta4.json, keyed the same way (path+mtime+
+// size), so re-runs are free until the file changes.
+fn phash_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
+    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".phash.json"))
+}
+
+/// dHash: resize to 9x8 grey, compare each pixel to its right neighbor -> 64 bits.
+fn compute_dhash(bytes: &[u8]) -> Result<u64, String> {
+    let img = image::load_from_memory(bytes).map_err(|e| format!("phash decode: {e}"))?;
+    let small = img.resize_exact(9, 8, image::imageops::FilterType::Triangle).to_luma8();
+    let mut hash: u64 = 0;
+    let mut bit = 0u32;
+    for y in 0..8u32 {
+        for x in 0..8u32 {
+            let left = small.get_pixel(x, y)[0];
+            let right = small.get_pixel(x + 1, y)[0];
+            if left > right {
+                hash |= 1u64 << bit;
+            }
+            bit += 1;
+        }
+    }
+    Ok(hash)
+}
+
+fn phash_for_path(path: &str) -> Result<u64, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let cp = phash_cache_path(path, mtime, meta.len());
+    if let Ok(text) = std::fs::read_to_string(&cp) {
+        if let Ok(h) = text.trim().parse::<u64>() {
+            return Ok(h);
+        }
+    }
+    // Reuse get_thumbnail's own cache (same cache_key convention) instead of re-decoding.
+    let thumb_cache = cache_dir().join(cache_key(path, mtime, meta.len()));
+    let bytes = if let Ok(b) = std::fs::read(&thumb_cache) {
+        b
+    } else {
+        // Not cached yet — generate it via the normal thumbnail path (which writes the JPEG
+        // cache file as a side effect), then read it back from disk.
+        get_thumbnail_inner(path.to_string())?;
+        std::fs::read(&thumb_cache).map_err(|e| format!("read thumb cache: {e}"))?
+    };
+    let h = compute_dhash(&bytes)?;
+    let _ = std::fs::write(&cp, h.to_string());
+    Ok(h)
+}
+
+/// Batch perceptual-hash for duplicate clustering. Returns (path, hash) pairs; a path whose
+/// hash fails to compute is simply omitted (frontend clustering just won't see it — no need
+/// to fail the whole batch over one bad file). Hash is serialized as a 16-char lowercase hex
+/// STRING, not a JSON number — a raw u64 can exceed JS's 2^53 safe-integer range and silently
+/// lose precision through the Tauri IPC JSON bridge, corrupting Hamming-distance clustering.
+#[tauri::command]
+pub fn phash_batch(paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
+    let mut out = Vec::with_capacity(paths.len());
+    for path in paths {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| phash_for_path(&path))) {
+            Ok(Ok(h)) => out.push((path, format!("{h:016x}"))),
+            _ => {}
+        }
+    }
+    Ok(out)
 }
 
 /// Most-recently-opened photos, capped at 50 (oldest dropped first) — called once per photo

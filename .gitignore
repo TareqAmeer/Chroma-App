@@ -33,6 +33,10 @@ dehancer-baseline-*.png
 # Untracked source-material folder (not part of the public repo)
 Fujify Luts and XMP/
 
+# Dehancer extraction working files (local reference only, not redistributed —
+# see calib/dehancer_probe.py / dehancer_extract_films.py)
+calib/dehancer/
+
 # iOS shell (Capacitor): www/ is staged by build-ios.sh; node_modules restored by npm ci.
 # The ios/ project IS committed (ios/.gitignore covers its build products/Pods/public).
 node_modules/
@@ -47,3 +51,4 @@ desktop/src-tauri/target/
 # over GitHub's 100MB hard push limit (no Git LFS set up for this repo) — see
 # desktop/src-tauri/vendor/sam2/README.md for the exact download commands to re-fetch these.
 desktop/src-tauri/vendor/sam2/*.onnx
+test/output/

@@ -42,14 +42,38 @@ pub struct DecodedRaw {
     pub rgb16: Vec<u16>,
 }
 
-pub fn decode_rw2_bytes(
-    bytes: &[u8],
-    auto_lens: bool,
-    native_nr: bool,
-    demosaic_algo: &str,
-    fast: bool,
-    lens_override: Option<(&str, f32)>, // (lensfun "Maker Model" string, focal length mm) — see main.rs decode_raw_v2
-) -> Result<DecodedRaw, String> {
+/// Output of the expensive, parameter-independent half of the decode (steps 1-4: black/white
+/// scaling, WB, clip-to-white, demosaic, u16 pack — everything BEFORE orientation and the
+/// quality passes). Only `demosaic_algo` affects these pixels, so the two-phase decode's
+/// refine (fast=false) can reuse the fast pass's result instead of re-running the whole
+/// demosaic — previously refine() redid scaling+WB+full PPG on the identical bytes purely to
+/// add the NR passes, doubling the demosaic cost of every RAW open.
+struct DemosaicOut {
+    rgb16: Vec<u16>, // pre-orientation, pre-cleanup interleaved u16 RGB
+    w: usize,
+    h: usize,
+    iso: u32,
+    make: String,
+    model: String,
+    orientation: u16,
+    lens_model_meta: Option<String>, // rawler's own lens fields, resolved at demosaic time
+    focal_meta: Option<f32>,         // (the byte-level EXIF fallback still runs later if these are None)
+}
+
+/// Single-slot cache handing the fast pass's demosaic to the immediately-following refine.
+/// Keyed on a full hash of the RAW bytes + the demosaic algorithm; the refine TAKES the slot
+/// (no second full-frame copy), so a cache entry serves exactly one refine.
+static DEMOSAIC_CACHE: std::sync::Mutex<Option<(u64, DemosaicOut)>> = std::sync::Mutex::new(None);
+
+fn demosaic_cache_key(bytes: &[u8], demosaic_algo: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h); // full-bytes hash: tens of ms on a 30MB RW2, vs the seconds a demosaic costs
+    demosaic_algo.hash(&mut h);
+    h.finish()
+}
+
+fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut, String> {
     let source = RawSource::new_from_slice(bytes);
     let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
     let params = RawDecodeParams::default();
@@ -68,7 +92,10 @@ pub fn decode_rw2_bytes(
         .iso_speed_ratings
         .map(|v| v as u32)
         .or(metadata.exif.iso_speed)
-        .unwrap_or(200);
+        .unwrap_or_else(|| {
+            eprintln!("raw_decode: no ISO tag in metadata — defaulting to 200 (dcpFit's ISO dependence will be flattened)");
+            200
+        });
 
     // 1) Per-CFA black/white-level normalization → f32 in 0..1 (rawler-maintained math).
     raw_image
@@ -91,6 +118,7 @@ pub fn decode_rw2_bytes(
     //    that's correct; libraw clips at 65535 and we clip at the final u16 pack, same place).
     let mut wb = raw_image.wb_coeffs; // [R, G, B, G2], may contain NaN
     if wb[0].is_nan() {
+        eprintln!("raw_decode: NaN white-balance coefficients from decoder — falling back to [1,1,1,1] (no WB applied)");
         wb = [1.0, 1.0, 1.0, 1.0];
     }
     if wb[3].is_nan() || wb[3] <= 0.0 {
@@ -131,6 +159,13 @@ pub fn decode_rw2_bytes(
     if std::env::var_os("CS_NO_CLIP_WHITE").is_none() {
         const CLIP: f32 = 0.995; // post-WB clip threshold (pack clamps at 1.0)
         pixels.par_chunks_mut(2 * w).for_each(|rows| {
+            // On an ODD image height, the final chunk from par_chunks_mut(2*w) is only `w`
+            // elements long (a single row, not a top+bottom pair) — split_at_mut(w) then makes
+            // `bot` empty, and bot[i0]/bot[i0+1] below would panic. Skip the clip-whitening for
+            // that short tail row; it's a single unpaired row with no CFA-cell partner anyway.
+            if rows.len() < 2 * w {
+                return;
+            }
             let (top, bot) = rows.split_at_mut(w);
             for cx in 0..w / 2 {
                 let i0 = 2 * cx;
@@ -153,6 +188,15 @@ pub fn decode_rw2_bytes(
     // but increases chroma noise on OTHER photos — see raw_decode.rs's Cargo.toml comment and
     // the project's noise-model plan file — hence a per-photo opt-in, never a global default).
     // CS_DEMOSAIC env var overrides the parameter for calibration/diagnostics only.
+    // Deliberately NOT a half-size/box-average demosaic here even on the fast pass: the
+    // background refine() still has to redo the full pipeline at full resolution a moment
+    // later regardless (NR/false-color/hue-defringe/lens all still run then), so shrinking the
+    // FIRST paint doesn't shorten the total wait to a finished photo — it only adds a visible
+    // low-res→full-res pop partway through. If the full decode is going to take a while anyway,
+    // showing the real full-resolution image throughout (once demosaiced) beats showing a
+    // shrunk one first. `fast` still buys real time by skipping the expensive PER-PIXEL cleanup
+    // passes below (false-color suppression, hue defringe, native NR, lens correction) — those
+    // are the actual slow stages, not this interpolation step.
     let demosaic_choice = std::env::var("CS_DEMOSAIC").unwrap_or_else(|_| demosaic_algo.to_string());
     let (out_w, out_h, rgb16_f32): (usize, usize, Vec<f32>) = if demosaic_choice.is_empty() {
         let pix = PixF32::new_with(pixels, w, h);
@@ -170,16 +214,20 @@ pub fn decode_rw2_bytes(
         (rgb.width, rgb.height, interleaved)
     } else {
         use demosaic::{demosaic as demosaic_fn, Algorithm, CfaPattern};
+        // demosaic_choice normally only ever contains "", "ahd", "vng", "mhc" — main.rs validates
+        // and defaults the UI-supplied demosaicAlgo before it reaches this function (see
+        // decode_rw2 in main.rs). CS_DEMOSAIC is a diagnostics-only env var override, so an
+        // unknown value here still shouldn't crash the whole process — return an Err instead.
         let algo = match demosaic_choice.as_str() {
             "ahd" => Algorithm::Ahd,
             "vng" => Algorithm::Vng,
             "mhc" => Algorithm::Mhc,
-            other => panic!("unknown CS_DEMOSAIC={other} (expected ahd|vng|mhc)"),
+            other => return Err(format!("unknown CS_DEMOSAIC={other} (expected ahd|vng|mhc)")),
         };
         let cfa_pattern = CfaPattern::bayer_rggb(); // confirmed RGGB via dump_cfa on this camera
         let mut planar = vec![0f32; 3 * w * h]; // crate output is planar CHW (R,G,B planes)
         demosaic_fn(&pixels, w, h, &cfa_pattern, algo, &mut planar)
-            .expect("demosaic crate failed");
+            .map_err(|e| format!("demosaic crate failed: {e}"))?;
         let mut interleaved = vec![0f32; w * h * 3];
         interleaved.par_chunks_mut(3).enumerate().for_each(|(i, dst)| {
             dst[0] = planar[i];
@@ -200,6 +248,77 @@ pub fn decode_rw2_bytes(
             dst[1] = (px[1].clamp(0.0, 1.0) * 65535.0).round() as u16;
             dst[2] = (px[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
         });
+
+    let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
+    Ok(DemosaicOut {
+        rgb16,
+        w: out_w,
+        h: out_h,
+        iso,
+        make: metadata.make.clone(),
+        model: metadata.model.clone(),
+        // rawler hardcodes raw_image.orientation to Normal (TODO upstream) — read the EXIF tag.
+        orientation: metadata.exif.orientation.unwrap_or(1),
+        lens_model_meta: metadata
+            .exif
+            .lens_model
+            .clone()
+            .or_else(|| metadata.lens.as_ref().map(|l| l.lens_model.clone())),
+        focal_meta: metadata.exif.focal_length.as_ref().map(ratio).filter(|f| *f > 0.0),
+    })
+}
+
+pub fn decode_rw2_bytes(
+    bytes: &[u8],
+    auto_lens: bool,
+    native_nr: bool,
+    demosaic_algo: &str,
+    fast: bool,
+    lens_override: Option<(&str, f32)>, // (lensfun "Maker Model" string, focal length mm) — see main.rs decode_raw_v2
+) -> Result<DecodedRaw, String> {
+    let key = demosaic_cache_key(bytes, demosaic_algo);
+    // refine (fast=false) first tries to TAKE the fast pass's cached demosaic; anything else
+    // (cold open with fast=false, cache holding a different photo) falls through to a full run.
+    let dem = if !fast {
+        let mut guard = DEMOSAIC_CACHE
+            .lock()
+            .map_err(|_| "demosaic cache lock poisoned".to_string())?;
+        match guard.take() {
+            Some((k, d)) if k == key => Some(d),
+            other => {
+                *guard = other; // not ours — put it back for whoever it belongs to
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let dem = match dem {
+        Some(d) => d,
+        None => decode_and_demosaic(bytes, demosaic_algo)?,
+    };
+    if fast {
+        // One full-frame copy (~140MB memcpy, tens of ms) buys the refine out of re-running the
+        // multi-second decode+demosaic — stored BEFORE orientation/cleanup so refine replays
+        // the full-quality tail exactly as a cold fast=false decode would.
+        *DEMOSAIC_CACHE
+            .lock()
+            .map_err(|_| "demosaic cache lock poisoned".to_string())? = Some((
+            key,
+            DemosaicOut {
+                rgb16: dem.rgb16.clone(),
+                w: dem.w,
+                h: dem.h,
+                iso: dem.iso,
+                make: dem.make.clone(),
+                model: dem.model.clone(),
+                orientation: dem.orientation,
+                lens_model_meta: dem.lens_model_meta.clone(),
+                focal_meta: dem.focal_meta,
+            },
+        ));
+    }
+    let DemosaicOut { mut rgb16, w: out_w, h: out_h, iso, make, model, orientation, lens_model_meta, focal_meta } = dem;
 
     // 4.5) False-color suppression (DEFAULT ON; CS_NO_FALSE_COLOR=1 is the diagnostic escape
     // hatch). Fixes the user-reported green speckle on sunlit-water sparkle: PPG demosaic
@@ -253,9 +372,7 @@ pub fn decode_rw2_bytes(
         hue_defringe_gated(&mut rgb16, out_w, out_h, contrast_thresh);
     }
 
-    // 5) EXIF orientation. raw_image.orientation is hardcoded Normal in rawler 0.7 (TODO
-    //    upstream), so read metadata.exif.orientation. Cameras emit 1/3/6/8 only.
-    let orientation = metadata.exif.orientation.unwrap_or(1);
+    // 5) EXIF orientation (resolved into DemosaicOut at demosaic time — cameras emit 1/3/6/8 only).
     let (mut rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
 
     // 5.5) Optional automatic lens-profile correction (distortion) — see lens_correct.rs.
@@ -263,8 +380,13 @@ pub fn decode_rw2_bytes(
     // reports the REAL outcome of THIS decode (not a separate DB probe) back to main.rs/JS, so
     // the UI can show ground truth ("Applied ✓" / "not applied") instead of a guess that could
     // drift from what the decode actually did.
+    // Deferred to the full-quality (fast=false) pass, same as false-color-suppression/hue-
+    // defringe/native-NR below: a full-frame bilinear resample is real work to spend on a
+    // buffer that's about to be thrown away the moment refine() lands (~1s later). Geometry
+    // being very slightly off for one frame during first paint is invisible; the wasted resample
+    // pass on every RAW open was not.
     let mut lens_applied = false;
-    if auto_lens {
+    if auto_lens && !fast {
         // Manual/adapted lenses (e.g. TTArtisan, other fully-mechanical primes with no
         // electronic contacts) write no lens EXIF at all — no fallback can recover a tag the
         // camera never wrote. `lens_override` lets the user pick a lens directly (from the
@@ -274,32 +396,23 @@ pub fn decode_rw2_bytes(
         let (lens_model, focal_len) = if let Some((ov_lens, ov_focal)) = lens_override {
             (ov_lens.to_string(), ov_focal)
         } else {
-            let lens_model = metadata
-                .exif
-                .lens_model
+            // rawler's structured fields (resolved into DemosaicOut at demosaic time) come back
+            // empty for at least one real DC-S9 RW2 that DOES carry the tags — the patched-EXIF
+            // byte-level fallbacks close that gap; without the focal one, the gate below
+            // silently no-op'd even when the lens profile matched ("Auto shows available but
+            // nothing happens").
+            let lens_model = lens_model_meta
                 .clone()
-                .or_else(|| metadata.lens.as_ref().map(|l| l.lens_model.clone()))
                 .or_else(|| crate::lens_correct::exif_lens_model_fallback(bytes))
                 .unwrap_or_default();
-            let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
-            // Same rawler gap as lens_model above: focal_length also comes back empty for at
-            // least one real DC-S9 RW2 that DOES carry the tag, so the correction gate below
-            // silently no-op'd even when the lens profile itself matched — the exact "Auto
-            // shows available but nothing happens" symptom. Fall back to the same patched-EXIF
-            // read.
-            let focal_len = metadata
-                .exif
-                .focal_length
-                .as_ref()
-                .map(ratio)
-                .filter(|f| *f > 0.0)
+            let focal_len = focal_meta
                 .or_else(|| crate::lens_correct::exif_focal_length_fallback(bytes))
                 .unwrap_or(0.0);
             (lens_model, focal_len)
         };
         if !lens_model.is_empty() && focal_len > 0.0 {
             lens_applied = crate::lens_correct::correct_distortion(
-                &mut rgb16, out_w, out_h, &metadata.make, &metadata.model, &lens_model, focal_len,
+                &mut rgb16, out_w, out_h, &make, &model, &lens_model, focal_len,
             );
         }
     }
@@ -325,7 +438,7 @@ pub fn decode_rw2_bytes(
         width: out_w as u32,
         height: out_h as u32,
         iso,
-        make: metadata.make.clone(),
+        make,
         lens_applied,
         rgb16,
     })
@@ -499,9 +612,13 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     });
 
     // Separable à-trous convolution with the B3-spline kernel [1,4,6,4,1]/16, hole spacing 2^lvl.
-    fn atrous_smooth(src: &[f32], w: usize, h: usize, step: usize) -> Vec<f32> {
+    // `tmp` is caller-provided scratch for the horizontal pass — this runs ~3×levels times per
+    // photo (levels ≤9) and used to allocate a fresh full-frame Vec on every call. The vertical
+    // output IS freshly allocated: every caller retains it (`lcur = lsm` / `current = smooth`),
+    // so only the horizontal intermediate is genuinely transient/reusable.
+    fn atrous_smooth(src: &[f32], w: usize, h: usize, step: usize, tmp: &mut Vec<f32>) -> Vec<f32> {
         const K: [f32; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0];
-        let mut tmp = vec![0f32; src.len()];
+        tmp.resize(src.len(), 0.0);
         // horizontal
         tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             let base = y * w;
@@ -578,12 +695,14 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     let coarse_lo = 0.30 - 0.18 * t; // 0.30 at low-s .. 0.12 at s=1
     let coarse_hi = 0.55 - 0.15 * t; // 0.55 at low-s .. 0.40 at s=1
 
+    // Shared horizontal-pass scratch for every atrous_smooth call in this function.
+    let mut atrous_tmp: Vec<f32> = Vec::new();
     // Per-level luma detail magnitude — the shared edge guide for BOTH chroma planes.
     let mut luma_detail: Vec<Vec<f32>> = Vec::with_capacity(levels);
     {
         let mut lcur = yv.clone();
         for lvl in 0..levels {
-            let lsm = atrous_smooth(&lcur, w, h, 1usize << lvl);
+            let lsm = atrous_smooth(&lcur, w, h, 1usize << lvl, &mut atrous_tmp);
             let mut d = vec![0f32; npx];
             d.par_iter_mut().enumerate().for_each(|(i, o)| *o = (lcur[i] - lsm[i]).abs());
             luma_detail.push(d);
@@ -609,11 +728,11 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     // e.g. a sparkle field) the same way it correctly protects a real isolated feature (the
     // gold tag). 1.0 = shipped behavior.
     let protect_scale: f32 = std::env::var("CS_NR_PROTECT_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
-    let denoise_plane = |plane: &mut Vec<f32>| {
+    let mut denoise_plane = |plane: &mut Vec<f32>| {
         let mut current = std::mem::take(plane);
         let mut rebuilt = vec![0f32; npx];
         for lvl in 0..levels {
-            let smooth = atrous_smooth(&current, w, h, 1usize << lvl);
+            let smooth = atrous_smooth(&current, w, h, 1usize << lvl, &mut atrous_tmp);
             let lvl_frac = lvl as f32 / ldiv;
             let base_keep = keep_fine + (keep_coarse - keep_fine) * lvl_frac;
             let coarse_gate = smoothstep(coarse_lo, coarse_hi, lvl_frac);
@@ -698,9 +817,17 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
         vals[4]
     };
 
+    // Each median pass needs to read every neighbor from the UN-modified plane while writing new
+    // values (edge pixels only), so a fresh snapshot per iteration is algorithmically required —
+    // but the snapshot doesn't need to re-allocate every time. Two scratch buffers, allocated
+    // once outside the steps loop and reused via copy_from_slice + swap, avoid the repeat
+    // alloc/free churn `plane.clone()` did on every iteration (a full-frame Vec<f32> alloc per
+    // pass, `steps * 2` times, on a 24MP+ image).
+    let mut next_cb = cb.clone();
+    let mut next_cr = cr.clone();
     for _ in 0..steps {
-        for plane in [&mut cb, &mut cr] {
-            let mut next = plane.clone();
+        for (plane, next) in [(&mut cb, &mut next_cb), (&mut cr, &mut next_cr)] {
+            next.copy_from_slice(plane);
             next.par_iter_mut().enumerate().for_each(|(i, o)| {
                 if contrast[i] <= contrast_thresh {
                     return; // not near a hard edge — never a candidate, regardless of deviation
@@ -721,7 +848,7 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
                     *o = med;
                 }
             });
-            *plane = next;
+            std::mem::swap(plane, next);
         }
     }
 
@@ -840,7 +967,18 @@ fn apply_orientation(src: Vec<u16>, w: usize, h: usize, orientation: u16) -> (Ve
 /// for ImageData/putImageData. Mirrors chromasmith-22.html's applyDcpLUT indexing exactly —
 /// moved here because 24M pixels × 24 LUT reads was multi-second, UI-blocking work on the JS
 /// main thread; with rayon it's tens of milliseconds.
-pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Vec<u8> {
+pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, String> {
+    // n is derived by the caller as (lut.len()/3).cbrt().round() — a corrupt/truncated/mismatched
+    // LUT payload can round to an n that doesn't actually satisfy n*n*n*3==lut.len(), which
+    // would otherwise silently read out-of-bounds-adjacent garbage (wrong colors) or panic once
+    // the idx()-computed offsets exceed lut.len(). Validate before touching the data.
+    if n < 2 || n * n * n * 3 != lut.len() {
+        return Err(format!(
+            "apply_lut_rgba: LUT size mismatch (n={n}, expected {} elements, got {})",
+            n.saturating_mul(n).saturating_mul(n).saturating_mul(3),
+            lut.len()
+        ));
+    }
     let nm = n - 1;
     let sc = nm as f32 / 65535.0;
     let px_count = rgb16.len() / 3;
@@ -876,7 +1014,7 @@ pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Vec<u8> {
             }
             dst[3] = 255;
         });
-    rgba
+    Ok(rgba)
 }
 
 /// sRGB-gamma the linear u16 RGB to RGBA8 — the "None (LibRaw sRGB)" no-profile path,

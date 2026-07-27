@@ -1,0 +1,7 @@
+{
+  "_desc": "Halation enabled with No-remjet strong mode — exercises the emission/blur/comp halation pipeline on bright edges.",
+  "sliders": { "hal-a": "80", "hal-r": "25", "hal-p": "50" },
+  "toggles": { "hal": true, "hal-noremjet": true },
+  "selects": {},
+  "colors": {}
+}

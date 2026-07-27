@@ -1,0 +1,7 @@
+{
+  "_desc": "Basic Adjustments enabled with nonzero exposure/contrast/saturation — exercises basicAdjust() in the lut pass.",
+  "sliders": { "adj-exp": "20", "adj-con": "30", "adj-sat": "-25", "adj-temp": "15" },
+  "toggles": { "adjust": true },
+  "selects": {},
+  "colors": {}
+}

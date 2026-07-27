@@ -1289,6 +1289,14 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
           <button class="btn bgh fx-mini" id="btn-before" title="Press and hold to see the original">○</button>
           <button class="btn bgh fx-mini" id="btn-split" onclick="toggleSplit()" title="Split before/after view">⇔</button>
+          <div style="position:relative;display:inline-flex">
+            <button class="btn bgh fx-mini" id="btn-split-menu" onclick="fxToggleSplitMenu(event)" title="Choose what the split's before-side compares against" style="padding:0 6px">▾</button>
+            <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+          </div>
+          <div style="position:relative;display:inline-flex">
+            <button class="btn bgh fx-mini" id="btn-history" onclick="fxToggleTimelinePopover()" title="Edit history timeline">⏱</button>
+            <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+          </div>
           <button class="btn bgh fx-mini" id="btn-hist" onclick="toggleHist()" title="Toggle RGB histogram overlay">▦</button>
         </div>
       </div>
@@ -3525,7 +3533,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-26c';
+const BUILD='2026-07-27c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -5327,6 +5335,9 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
 let fxSplit=false, fxSplitPos=0.5;       // split before/after view
+// B3: what the split's "before" side renders. 'orig'|'pin'|{hist:N}|{style:name}|{export:v,recipe}
+// — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
+let fxPinned=null, fxSplitSrc='orig';
 let fxHistOn=false;                        // live histogram toggle
 let fxZoom=1, fxPanX=0, fxPanY=0;        // CSS-zoom/pan state (upscales the preview buffer)
 let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // true 1:1 native-res loupe
@@ -5932,15 +5943,28 @@ function setRawProfile(v){localStorage.setItem('rawProfile',v);log('RAW profile:
 function initDcpSelect(){const s=document.getElementById('sel-dcp');if(!s)return;
   s.innerHTML='<option value="">None (LibRaw sRGB)</option>'+DCP_PROFILES.map(n=>'<option value="'+n+'">'+n+'</option>').join('');
   s.value=rawProfile();}
-function parseDCP(buf){
+function parseDCP(buf,fname){
+  fname=fname||'DCP profile';
   const d=new DataView(buf);
+  // Every offset below is read from the FILE ITSELF (untrusted) — a truncated/corrupt .dcp
+  // must throw a clear named error instead of a raw uncaught RangeError from the DataView.
+  function need(offset,len){
+    if(offset<0||len<0||offset+len>d.byteLength)throw new Error(`Corrupt DCP profile (offset out of range): ${fname}`);
+  }
+  need(0,4);
   if(d.getUint16(0,true)!==0x4949||d.getUint16(2,true)!==0x4352)throw new Error('not a little-endian DCP');
-  const off=d.getUint32(4,true),n=d.getUint16(off,true);
+  need(4,4);
+  const off=d.getUint32(4,true);
+  need(off,2);
+  const n=d.getUint16(off,true);
   const TYPSZ={1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8};
   const tags={};
   for(let i=0;i<n;i++){
-    const e=off+2+i*12,tag=d.getUint16(e,true),typ=d.getUint16(e+2,true),cnt=d.getUint32(e+4,true);
+    const e=off+2+i*12;
+    need(e,12);
+    const tag=d.getUint16(e,true),typ=d.getUint16(e+2,true),cnt=d.getUint32(e+4,true);
     const sz=(TYPSZ[typ]||1)*cnt,ptr=sz>4?d.getUint32(e+8,true):e+8;
+    need(ptr,sz);
     let val;
     if(typ===10){val=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getInt32(ptr+8*j,true),b=d.getInt32(ptr+8*j+4,true);val[j]=b?a/b:a;}}
     else if(typ===11){val=new Float32Array(cnt);for(let j=0;j<cnt;j++)val[j]=d.getFloat32(ptr+4*j,true);}
@@ -5949,6 +5973,16 @@ function parseDCP(buf){
     tags[tag]=val;
   }
   if(!tags[50964]||!tags[50940]||!tags[50981]||!tags[50982])throw new Error('DCP missing ForwardMatrix/ToneCurve/LookTable');
+  // Reject tags with the right IDs but wrong element counts — a malformed/truncated table here
+  // would otherwise silently produce NaN matrices deep in bakeDcpLUT instead of failing loudly.
+  if(tags[50964].length<9)throw new Error(`Corrupt DCP profile (ForwardMatrix has wrong element count): ${fname}`);
+  if(tags[50940].length<4||tags[50940].length%2!==0)throw new Error(`Corrupt DCP profile (ToneCurve has wrong element count): ${fname}`);
+  if(tags[50981].length<3)throw new Error(`Corrupt DCP profile (LookTable dims has wrong element count): ${fname}`);
+  {
+    const[nh,ns,nv]=tags[50981];
+    const expectedLook=nh*ns*nv*3;
+    if(!(nh>0&&ns>0&&nv>0)||tags[50982].length<expectedLook)throw new Error(`Corrupt DCP profile (LookTable has wrong element count): ${fname}`);
+  }
   return{fm:tags[50964],tone:tags[50940],dims:tags[50981],look:tags[50982],
          enc:tags[51108]?tags[51108][0]:0,baseOff:tags[51109]?tags[51109][0]:0};
 }
@@ -6077,12 +6111,17 @@ async function getDcpLUT(cameraPrefix,name,iso){
   const key=cacheKey+'@'+(iso||200);
   if(_dcpLutCache[key])return _dcpLutCache[key];
   if(!_dcpCache[cacheKey]){
-    let r=await fetch('vendor/dcp/'+cameraPrefix+' Camera '+name+'.dcp');
-    if(!r.ok&&name!=='Standard'){ // this camera doesn't have that specific style — fall back to its Standard
-      r=await fetch('vendor/dcp/'+cameraPrefix+' Camera Standard.dcp');
-    }
+    let r;
+    try{
+      r=await fetch('vendor/dcp/'+cameraPrefix+' Camera '+name+'.dcp');
+      if(!r.ok&&name!=='Standard'){ // this camera doesn't have that specific style — fall back to its Standard
+        r=await fetch('vendor/dcp/'+cameraPrefix+' Camera Standard.dcp');
+      }
+    }catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
     if(!r.ok)throw new Error('DCP profile fetch failed: '+cameraPrefix+' '+name+' ('+r.status+')');
-    _dcpCache[cacheKey]=parseDCP(await r.arrayBuffer());
+    let buf;
+    try{buf=await r.arrayBuffer();}catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+    _dcpCache[cacheKey]=parseDCP(buf,cameraPrefix+' Camera '+name+'.dcp');
   }
   const lut=bakeDcpLUT(_dcpCache[cacheKey],dcpFit(iso,cameraPrefix));
   _dcpLutCache[key]=lut;return lut;
@@ -6123,34 +6162,41 @@ async function loadRw2(file){
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
   const w=img.width,h=img.height,ch=img.colors||3;let rgb=img.data;
   if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
-  let rgba;
-  if(img.rgba){
-    rgba=img.data; // native shell: decode + DCP develop already done in Rust, pixels are final RGBA8
-  }else if(profile){
-    if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
-    // libraw-wasm's "linear" output is measurably non-linear vs true (ADC-count) linearity:
-    // wasm ≈ 1.22·native^0.634 per channel (fitted on identical frames vs the desktop shell's
-    // rawler decode, 3% residual). The DCP constants are calibrated on TRUE linear data, so
-    // in the browser (no native shell) linearize first: v' = (v/gain)^(1/0.634). The desktop
-    // shell's NativeLibRawShim already returns true-linear data — skip there.
-    if(!window.__TAURI__){
-      const GAIN=[1.219,1.215,1.193],PW=1/0.634;
-      const lin=new Uint16Array(rgb.length);
-      for(let i=0;i<rgb.length;i++)lin[i]=Math.min(Math.pow((rgb[i]/65535)/GAIN[i%3],PW)*65535,65535);
-      rgb=lin;
+  let rgba,c,dt;
+  // Covers the linearization loop, DCP LUT fetch/bake/apply and the canvas writes — the RW2
+  // bytes are already decoded at this point (the worker is already freed in the finally above),
+  // but a bad/missing DCP profile, a corrupt profile file, or a canvas failure here previously
+  // threw an unwrapped error straight out of loadRw2 with no context. Wrapping it lets the
+  // per-file catch in loadFXImages (and its batch-summary toast) report something legible.
+  try{
+    if(img.rgba){
+      rgba=img.data; // native shell: decode + DCP develop already done in Rust, pixels are final RGBA8
+    }else if(profile){
+      if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
+      // libraw-wasm's "linear" output is measurably non-linear vs true (ADC-count) linearity:
+      // wasm ≈ 1.22·native^0.634 per channel (fitted on identical frames vs the desktop shell's
+      // rawler decode, 3% residual). The DCP constants are calibrated on TRUE linear data, so
+      // in the browser (no native shell) linearize first: v' = (v/gain)^(1/0.634). The desktop
+      // shell's NativeLibRawShim already returns true-linear data — skip there.
+      if(!window.__TAURI__){
+        const GAIN=[1.219,1.215,1.193],PW=1/0.634;
+        const lin=new Uint16Array(rgb.length);
+        for(let i=0;i<rgb.length;i++)lin[i]=Math.min(Math.pow((rgb[i]/65535)/GAIN[i%3],PW)*65535,65535);
+        rgb=lin;
+      }
+      const camPrefix=cameraDcpPrefix(m.make,m.model);
+      if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile.`);
+      const lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
+      rgba=applyDcpLUT(rgb,w,h,lut);
+    }else{
+      // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
+      rgba=new Uint8ClampedArray(w*h*4);
+      for(let i=0,j=0;i<w*h;i++){const s=i*ch;rgba[j++]=rgb[s];rgba[j++]=ch>1?rgb[s+1]:rgb[s];rgba[j++]=ch>2?rgb[s+2]:rgb[s];rgba[j++]=255;}
     }
-    const camPrefix=cameraDcpPrefix(m.make,m.model);
-    if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile.`);
-    const lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
-    rgba=applyDcpLUT(rgb,w,h,lut);
-  }else{
-    // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
-    rgba=new Uint8ClampedArray(w*h*4);
-    for(let i=0,j=0;i<w*h;i++){const s=i*ch;rgba[j++]=rgb[s];rgba[j++]=ch>1?rgb[s+1]:rgb[s];rgba[j++]=ch>2?rgb[s+2]:rgb[s];rgba[j++]=255;}
-  }
-  const dt=Math.round(performance.now()-t0);
-  const c=document.createElement('canvas');c.width=w;c.height=h;
-  c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
+    dt=Math.round(performance.now()-t0);
+    c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
+  }catch(e){throw new Error('RW2 colour processing failed: '+errStr(e))}
   log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
   // Two-phase decode, phase 2: the decode above intentionally skipped false-color-suppression/
   // hue-defringe/native-NR to get a photo on screen fast (see desktop-native.js's
@@ -6175,7 +6221,11 @@ async function loadRw2(file){
       if(typeof updateWork==='function')updateWork();
       if(typeof renderPreview==='function')renderPreview();
       log('RAW refined (noise reduction applied)','info');
-    }).catch(e=>console.error('RAW background refine failed',e));
+    }).catch(e=>{
+      console.error('RAW background refine failed',e);
+      log(`RAW background refine failed for ${file.name}: ${errStr(e)}`,'warn');
+      if(typeof toast==='function')toast(`Noise reduction refine failed for ${file.name} — ${typeof friendlyRawError==='function'?friendlyRawError(e):errStr(e)}`,false);
+    });
   }
   return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
 }
@@ -6242,7 +6292,7 @@ function installFXImages(entries,loadKey){
   // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
-  _resetZoom(); fxHistory=[JSON.stringify(getUISnapshot())]; fxHistIdx=0; // history stores JSON strings — see fxHistoryPush
+  _resetZoom(); fxHistory=[{j:JSON.stringify(getUISnapshot()),label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush
   // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
   // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
   // CURRENTLY SELECTED photo's own masks array, swapped by fxSelectImage on every filmstrip
@@ -6282,6 +6332,7 @@ async function loadFXImages(fileList){
   const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
   if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault);
   const entries=[];
+  let _loadFailCount=0;
   for(const file of files){
     try{
       const bytes=new Uint8Array(await file.arrayBuffer());
@@ -6314,8 +6365,9 @@ async function loadFXImages(fileList){
       // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
       // row in the metadata panel at all — only photos opened via the desktop Library set it.
       entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength});
-    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err')} // keep loading the rest of the batch
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++} // keep loading the rest of the batch
   }
+  if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length} photo(s) failed to load — see log`,false);
   if(!entries.length){log('No images loaded','err');return}
   // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
   // now) — was previously inline per-RW2-entry, before any render had happened; moving it
@@ -7864,13 +7916,59 @@ function applyUISnapshot(s){
 // string compare. (2) 20 retained parsed object trees (each with brush pixel arrays) cost far
 // more RAM than 20 strings. applyUISnapshot deep-copies out of whatever it's given, so parsing
 // on undo/redo (rare) is safe and cheap relative to pushing (every edit).
+// ── B2: human-readable per-step label, diffed against the PREVIOUS top-of-stack snapshot.
+// Reuses PASTE_CATEGORIES' field groupings (sliders/toggles/selects/colors/extra) so the
+// history timeline's labels and the selective-paste picker stay driven by one taxonomy instead
+// of two that could drift apart.
+function _fxFieldLabel(id){ // best-effort human name from the existing DOM label, not a 2nd hand-rolled table
+  const lab=document.querySelector('#sl-'+id+', #tg-'+id+', #'+id);
+  const row=lab&&lab.closest('.fx-row');
+  const txt=row&&row.querySelector('.fx-label');
+  if(txt&&txt.textContent.trim())return txt.textContent.trim();
+  return id;
+}
+function snapDiffLabel(prevSnap,nextSnap){
+  if(!prevSnap)return 'Edit';
+  const changes=[]; // {kind:'field'|'struct', text}
+  PASTE_CATEGORIES.forEach(c=>{
+    c.sliders.forEach(id=>{
+      const a=prevSnap.sliders&&prevSnap.sliders[id],b=nextSnap.sliders&&nextSnap.sliders[id];
+      if(a!==undefined&&b!==undefined&&String(a)!==String(b)){
+        const d=parseFloat(b)-parseFloat(a);
+        changes.push({kind:'field',text:`${_fxFieldLabel(id)} ${d>=0?'+':''}${(+d.toFixed(2))} → ${b}`});
+      }
+    });
+    c.toggles.forEach(id=>{
+      const a=prevSnap.toggles&&prevSnap.toggles[id],b=nextSnap.toggles&&nextSnap.toggles[id];
+      if(a!==undefined&&b!==undefined&&a!==b)changes.push({kind:'field',text:`${_fxFieldLabel(id)} ${b?'on':'off'}`});
+    });
+    (c.selects||[]).forEach(id=>{
+      const a=prevSnap.selects&&prevSnap.selects[id],b=nextSnap.selects&&nextSnap.selects[id];
+      if(a!==undefined&&b!==undefined&&a!==b)changes.push({kind:'field',text:`${_fxFieldLabel(id)}: ${b||'—'}`});
+    });
+    (c.colors||[]).forEach(id=>{
+      const a=prevSnap.colors&&prevSnap.colors[id],b=nextSnap.colors&&nextSnap.colors[id];
+      if(a!==undefined&&b!==undefined&&a!==b)changes.push({kind:'field',text:_fxFieldLabel(id)});
+    });
+    (c.extra||[]).forEach(k=>{
+      const a=JSON.stringify(prevSnap[k]),b=JSON.stringify(nextSnap[k]);
+      if(a!==b)changes.push({kind:'struct',text:c.label});
+    });
+  });
+  if(JSON.stringify(prevSnap.geom)!==JSON.stringify(nextSnap.geom))changes.push({kind:'struct',text:'Crop'});
+  if(JSON.stringify(prevSnap.canvas)!==JSON.stringify(nextSnap.canvas))changes.push({kind:'struct',text:'Canvas'});
+  if(!changes.length)return 'Edit';
+  if(changes.length===1)return changes[0].text;
+  return `${changes.length} changes`;
+}
 function fxHistoryPush(){
   if(_fxHistLocked)return;
   const snap=getUISnapshot();
   const j=JSON.stringify(snap);
-  if(fxHistory.length&&fxHistory[fxHistIdx]===j)return;
+  if(fxHistory.length&&fxHistory[fxHistIdx].j===j)return;
+  const prev=fxHistory[fxHistIdx]?JSON.parse(fxHistory[fxHistIdx].j):null;
   fxHistory=fxHistory.slice(0,fxHistIdx+1);
-  fxHistory.push(j);
+  fxHistory.push({j,label:snapDiffLabel(prev,snap),ts:Date.now()});
   if(fxHistory.length>20){fxHistory.shift();}
   fxHistIdx=fxHistory.length-1;
   if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(snap); // native-shell Library auto-save hook; no-op elsewhere
@@ -7879,7 +7977,7 @@ function fxHistoryPush(){
 function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}
   fxHistIdx--;_fxHistLocked=true;
-  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx]));
+  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx].j));
   fxUpdate();_fxHistLocked=false;
   if(typeof hapt==='function')hapt();
   log('Undo','info');
@@ -7887,7 +7985,7 @@ function fxUndo(){
 function fxRedo(){
   if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
   fxHistIdx++;_fxHistLocked=true;
-  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx]));
+  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx].j));
   fxUpdate();_fxHistLocked=false;
   if(typeof hapt==='function')hapt();
   log('Redo','info');
@@ -7897,7 +7995,7 @@ function fxResetAll(){
   if(!confirm('Reset all edits on this photo? This cannot be undone.'))return;
   if(typeof hapt==='function')hapt();
   _fxHistLocked=true;
-  applyUISnapshot(JSON.parse(fxHistory[0]));
+  applyUISnapshot(JSON.parse(fxHistory[0].j));
   _fxHistLocked=false;
   if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
   fxHistoryPush();
@@ -7937,6 +8035,118 @@ function initSplitDrag(){
   line.addEventListener('mousedown',e=>{e.preventDefault();document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);});
   line.addEventListener('touchstart',e=>{e.preventDefault();document.addEventListener('touchmove',move);document.addEventListener('touchend',up);},{passive:false});
 }
+// ── B3: split-source menu (Original / Pinned / History / Styles / Exports) ────────────────────
+function _fxSplitSrcLabel(src){
+  if(!src||src==='orig')return 'Original';
+  if(src==='pin')return 'Pinned';
+  if(src.hist!==undefined)return (fxHistory[src.hist]&&fxHistory[src.hist].label)||`Step ${src.hist}`;
+  if(src.style!==undefined)return `Style: ${src.style}`;
+  if(src.export!==undefined)return `Export v${src.export}`;
+  return 'Original';
+}
+function _fxSplitRow(text,onclick,active){
+  const row=document.createElement('div');
+  row.style.cssText='padding:7px 9px;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(active?';background:var(--sur3,rgba(255,255,255,.08))':'');
+  row.onmouseenter=()=>row.style.background='var(--sur3,rgba(255,255,255,.08))';
+  row.onmouseleave=()=>row.style.background=active?'var(--sur3,rgba(255,255,255,.08))':'';
+  row.textContent=text;
+  row.onclick=onclick;
+  return row;
+}
+function _fxSplitHead(text){
+  const h=document.createElement('div');
+  h.style.cssText='padding:6px 9px 2px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)';
+  h.textContent=text;
+  return h;
+}
+function fxSetSplitSrc(src){
+  fxSplitSrc=src;
+  if(!fxSplit){fxSplit=true;const btn=document.getElementById('btn-split');if(btn)btn.classList.add('on');const b=document.getElementById('btn-before');if(b)b.style.display='none';initSplitDrag();}
+  const pop=document.getElementById('fx-split-popover');if(pop)pop.style.display='none';
+  renderPreview();
+}
+async function fxToggleSplitMenu(e){
+  if(e)e.stopPropagation();
+  const pop=document.getElementById('fx-split-popover');
+  if(!pop)return;
+  if(pop.style.display!=='none'){pop.style.display='none';return;}
+  pop.innerHTML='';
+  pop.appendChild(_fxSplitRow('Original',()=>fxSetSplitSrc('orig'),fxSplitSrc==='orig'));
+  pop.appendChild(_fxSplitRow(fxPinned?'Pinned':'Pinned (none yet)',()=>{if(fxPinned)fxSetSplitSrc('pin');},fxSplitSrc==='pin'));
+  pop.appendChild(_fxSplitRow('Pin current state',()=>{fxPinned=getUISnapshot();fxSetSplitSrc('pin');}));
+  const hist=fxHistory;
+  if(hist.length>1){
+    pop.appendChild(_fxSplitHead('History'));
+    [...hist].map((h,i)=>({h,i})).reverse().forEach(({h,i})=>{
+      pop.appendChild(_fxSplitRow(`${i}: ${h.label}`,()=>fxSetSplitSrc({hist:i}),fxSplitSrc&&fxSplitSrc.hist===i));
+    });
+  }
+  const styles=stylesList();
+  if(styles.length){
+    pop.appendChild(_fxSplitHead('Styles'));
+    styles.forEach(s=>{pop.appendChild(_fxSplitRow(s.name,()=>fxSetSplitSrc({style:s.name}),fxSplitSrc&&fxSplitSrc.style===s.name));});
+  }
+  if(typeof window.chromasmithGetExportHistory==='function'){
+    pop.appendChild(_fxSplitHead('Exports'));
+    try{
+      const list=await window.chromasmithGetExportHistory();
+      if(list&&list.length){
+        [...list].reverse().forEach(entry=>{
+          pop.appendChild(_fxSplitRow(`v${entry.version}`,()=>{
+            try{
+              const recipe=JSON.parse(decodeURIComponent(escape(atob(entry.recipe))));
+              fxSetSplitSrc({export:entry.version,recipe});
+            }catch(err){log('Could not read that export recipe: '+(err&&err.message||err),'err');}
+          },fxSplitSrc&&fxSplitSrc.export===entry.version));
+        });
+      }
+    }catch(err){/* desktop-only feature — silently skip if it errors */}
+  }
+  pop.style.display='block';
+}
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('fx-split-popover');
+  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-split-menu')wrap.style.display='none';
+});
+// ── B2: in-session edit-history timeline (separate from the export-version popover above) ─────
+function fxTimelineScrub(idx){
+  idx=Math.max(0,Math.min(fxHistory.length-1,idx|0));
+  fxHistIdx=idx;
+  _fxHistLocked=true;
+  applyUISnapshot(JSON.parse(fxHistory[idx].j));
+  fxUpdate();
+  _fxHistLocked=false;
+}
+function fxToggleTimelinePopover(){
+  const pop=document.getElementById('fx-timeline-popover');
+  if(!pop)return;
+  if(pop.style.display!=='none'){pop.style.display='none';return;}
+  pop.innerHTML='';
+  const rail=document.createElement('input');
+  rail.type='range';rail.min=0;rail.max=Math.max(0,fxHistory.length-1);rail.value=fxHistIdx;
+  rail.style.cssText='width:100%';
+  rail.oninput=()=>fxTimelineScrub(parseInt(rail.value,10));
+  rail.onchange=()=>{fxToggleTimelinePopover();fxToggleTimelinePopover();}; // cheap refresh of the list below after a scrub settles
+  pop.appendChild(rail);
+  const list=document.createElement('div');
+  list.style.cssText='margin-top:6px';
+  [...fxHistory].map((h,i)=>({h,i})).reverse().forEach(({h,i})=>{
+    const row=document.createElement('div');
+    row.style.cssText='padding:6px 8px;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(i===fxHistIdx?';background:var(--sur3,rgba(255,255,255,.08))':'');
+    row.onmouseenter=()=>row.style.background='var(--sur3,rgba(255,255,255,.08))';
+    row.onmouseleave=()=>row.style.background=i===fxHistIdx?'var(--sur3,rgba(255,255,255,.08))':'';
+    const d=new Date(h.ts);
+    row.innerHTML=`<span>${i}: ${h.label}</span><span style="color:var(--mut)">${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>`;
+    row.onclick=()=>{fxTimelineScrub(i);fxToggleTimelinePopover();fxToggleTimelinePopover();};
+    list.appendChild(row);
+  });
+  pop.appendChild(list);
+  pop.style.display='block';
+}
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('fx-timeline-popover');
+  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-history')wrap.style.display='none';
+});
 function _applySplitPos(){
   const wrap=document.getElementById('fx-wrap');
   const line=document.getElementById('fx-split-line');
@@ -8709,6 +8919,63 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
   return true;
 }
+// ── B1: shared snapshot-render primitive (Phase B) ────────────────────────────
+// Renders an ARBITRARY saved UI snapshot into a target 2D canvas without disturbing the live
+// editing state — used by split-compare, the history scrub rail, and (later) Library compare
+// panes, so they all share one code path instead of three near-duplicate render branches.
+//   snap === null   → render the CURRENT live state (no swap at all)
+//   snap === 'orig' → the existing all-FX-off literal (geometry/crop is already baked into
+//                      fxWork by updateWork(), so this needs no UI-state swap either)
+//   snap === {...}  → a full getUISnapshot()-shaped object (history entry / style / pin / export)
+const FX_ORIG_PARAMS={lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
+  bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}};
+function renderSnapshotTo(dstCanvas,snap,pw,ph,opts){
+  opts=opts||{};
+  const blit=()=>{dstCanvas.width=pw;dstCanvas.height=ph;dstCanvas.getContext('2d').drawImage(FX.cv,0,0);};
+  if(snap==='orig'){
+    FX.render(FX_ORIG_PARAMS,pw,ph,{glowScale:fxGlowScale(),...opts});
+    blit();return;
+  }
+  if(snap===null){
+    FX.render(getFXParams(),pw,ph,{glowScale:fxGlowScale(),...opts});
+    blit();return;
+  }
+  // Full UI-snapshot swap: MUST be synchronous start-to-finish (no await/rAF) or the DOM
+  // sliders would visibly flicker to the snapshot's values and race fxUpdate's debounce.
+  const live=getUISnapshot();
+  _fxHistLocked=true; // reuse the existing guard (fxUndo/fxRedo/fxResetAll) — else applyUISnapshot
+                       // would push a history entry, fire chromasmithOnEdit (sidecar write!) and autosave
+  try{
+    applyUISnapshot(snap);
+    FX.render(getFXParams(),pw,ph,{glowScale:fxGlowScale(),...opts});
+    blit();
+  } finally {
+    applyUISnapshot(live);
+    _fxHistLocked=false;
+  }
+}
+// ── B3: shared snapshot-source resolver. Plain top-level function (not closured inside the
+// split-toolbar UI) so a later Library compare-pair mode can call it too — see CLAUDE.md-adjacent
+// plan notes. Resolves a `fxSplitSrc`-shaped descriptor to whatever renderSnapshotTo(B1) accepts.
+function resolveSplitSnapshot(src){
+  if(!src||src==='orig')return 'orig';
+  if(src==='pin')return fxPinned||'orig'; // nothing pinned yet → fall back to original, never throw
+  if(src.hist!==undefined){
+    const e=fxHistory[src.hist];
+    return e?JSON.parse(e.j):'orig';
+  }
+  if(src.style!==undefined){
+    const st=stylesList().find(s=>s.name===src.style);
+    return st?st.recipe:'orig';
+  }
+  if(src.export!==undefined){
+    // Export versions are fetched async (window.chromasmithGetExportHistory) at MENU-SELECT time,
+    // not here — the resolver itself must stay synchronous for renderPreview's hot path. The
+    // decoded recipe is cached on the descriptor by the menu handler below.
+    return src.recipe||'orig';
+  }
+  return 'orig';
+}
 function renderPreview(){
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
@@ -8769,11 +9036,8 @@ function renderPreview(){
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
   if(fxSplit){
-    const origP={lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}};
     const origCv=document.getElementById('fx-canvas-orig');
-    FX.render(origP,pw,ph,{glowScale:fxGlowScale()});  // render original into FX.cv
-    origCv.width=pw;origCv.height=ph;
-    origCv.getContext('2d').drawImage(FX.cv,0,0);      // copy original into sibling canvas
+    renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
     FX.render(P,pw,ph,{glowScale:fxGlowScale()});      // re-render processed into FX.cv
     _applySplitPos();
@@ -9340,6 +9604,11 @@ async function exportFX(){
     const ver=`v${fxVersion.toFixed(1).replace('.','-')}`;
     const single=N===1;
     const results=[];
+    // Library source-path lookup (native shell only — see chromasmithGetOpenedPaths in
+    // library-ui.js): parallels fxImages' own order, so results[i].srcPath below lets the
+    // Google Photos-sync mirror (Phase 3) record exactly which on-disk photo each successful
+    // upload came from, instead of guessing from the output filename.
+    const libPaths=typeof window.chromasmithGetOpenedPaths==='function'?window.chromasmithGetOpenedPaths():[];
     // ── Phase 1: render every image to bytes at FULL resolution (no share yet). Each image is
     // its own try/catch so ONE bad/oversized/corrupt image can't silently discard every image
     // already rendered before it — previously a single mid-batch exception skipped straight to
@@ -9440,7 +9709,13 @@ async function exportFX(){
         }else{
           base=single?(fld||it.name):it.name;
         }
-        results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime,srcIdx:idx}); // srcIdx: which item/status-row this came from — see setExportPhotoStatus below
+        // srcIdx: which item/status-row this came from — see setExportPhotoStatus below.
+        // srcPath: the item's on-disk Library source path (undefined outside the native
+        // shell, or if libPaths and fxImages have desynced) — captured HERE per-item rather
+        // than inferred from the output filename afterward, per the fxIdx lookup above.
+        const fxIdx=fxImages.indexOf(it);
+        const srcPath=fxIdx>=0?libPaths[fxIdx]:undefined;
+        results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime,srcIdx:idx,srcPath});
         ec.width=ec.height=0; // free big intermediates promptly
         setProg(idx+1,`Rendered ${idx+1}/${N}`);
         setExportPhotoStatus(idx,'rendered');
@@ -9522,6 +9797,15 @@ async function exportFX(){
         setProg(N,`Uploading ${results.length} to Google Photos…`);
         const nUp=await gpUploadItems(results,lb=>setProg(N,lb));
         log(`Uploaded ${nUp}/${results.length} to Google Photos (album "Chromasmith")`,'ok');
+        // C3: mark each successfully-mirrored photo's SOURCE path as synced (native-shell-only
+        // optional hook — mirrors the chromasmithOnEdit/chromasmithRecordExport guard style
+        // used throughout this file). gpUploadItems doesn't report per-item success, so — like
+        // the local-save status above — every item with a known source path is recorded once
+        // the batch upload as a whole succeeds.
+        if(typeof window.chromasmithRecordSynced==='function'){
+          const syncedPaths=results.map(r=>r.srcPath).filter(Boolean);
+          if(syncedPaths.length)window.chromasmithRecordSynced(syncedPaths).catch(()=>{});
+        }
       }catch(e){
         log('Google Photos upload failed (files are still saved locally): '+(e&&e.message||e),'err');
         toast('Google Photos upload failed — see log');

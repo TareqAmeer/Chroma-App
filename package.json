@@ -6,7 +6,10 @@
   "scripts": {
     "postinstall": "patch-package",
     "build:www": "./build-ios.sh",
-    "sync": "./build-ios.sh && npx cap sync ios"
+    "sync": "./build-ios.sh && npx cap sync ios",
+    "export:test": "node test/export_harness.mjs",
+    "export:golden": "node test/export_harness.mjs --golden",
+    "test": "npm run export:test && .calibvenv/bin/python3 calib/export_scorecard.py || python3 calib/export_scorecard.py"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",
@@ -17,6 +20,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
-    "patch-package": "^8.0.1"
+    "patch-package": "^8.0.1",
+    "playwright": "^1.48.0"
   }
 }

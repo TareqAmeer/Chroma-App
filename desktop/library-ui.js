@@ -30,7 +30,23 @@
       case 'read_file_bytes': return Promise.resolve(png.buffer);
       case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false });
       case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
-      case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0 });
+      case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
+      case 'phash_batch': {
+        // Fake hashes: make IMG_1001/1002 a duplicate pair (Hamming distance 1), everything
+        // else spread out (distinct low bits per index), so the Duplicates cluster UI is
+        // exercisable in the harness.
+        const paths = A.paths || [];
+        const BASE = BigInt('0x1234567800000000'), MUL = BigInt('0x9e3779b97f4a7c15'), MASK = BigInt('0xffffffffffffffff');
+        return Promise.resolve(paths.map((p, i) => {
+          if (/IMG_1001\./.test(p)) return [p, BASE.toString(16).padStart(16, '0')];
+          if (/IMG_1002\./.test(p)) return [p, (BASE ^ 1n).toString(16).padStart(16, '0')]; // 1 bit different (Hamming distance 1)
+          // XOR by a large odd multiple of the index — spreads hashes across many bit
+          // positions (unlike a plain BASE+i, which mostly toggles low bits and can
+          // accidentally land every photo in the same cluster via transitive Hamming chains).
+          return [p, ((BASE ^ (BigInt(i) * MUL)) & MASK).toString(16).padStart(16, '0')];
+        }));
+      }
+      case 'registry_set_cmd': return Promise.resolve();
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
       case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
       case 'get_lr_thumb': return Promise.reject(new Error('miss')); // always a miss → exercises the network+save path
@@ -60,6 +76,21 @@
     };
     window.libtestLrConnect = () => { ltConnected = true; window.dispatchEvent(new CustomEvent('lr-cloud-state')); };
   }
+
+  // ── friendlyRawError: maps ugly RAW/DCP decode error strings to short human sentences for
+  // toasts. The raw string still goes to log()/console as before — only the toast is friendly.
+  // Exposed on window so chromasmith-22.html's own catch sites (which can't see this file's
+  // module scope) can reuse the exact same mapping instead of duplicating it.
+  function friendlyRawError(msg) {
+    const s = String(msg == null ? '' : (msg.message || msg));
+    if (/^no decoder: /.test(s)) return 'No decoder available for this file type';
+    if (/LUT 'dcp:[^']*' not registered/.test(s)) return 'Camera colour profile not found';
+    if (/framed body truncated/i.test(s)) return 'RAW file appears truncated or corrupted';
+    if (/RangeError: Offset is outside the bounds of the DataView/i.test(s)) return 'Corrupt or truncated file data';
+    if (/TypeError: Failed to fetch/i.test(s)) return 'Network error — couldn\'t load required file';
+    return s;
+  }
+  window.friendlyRawError = friendlyRawError;
 
   // ── decoded-image cache: reopening a photo you've already viewed this session skips the
   // full decode (RW2: PPG demosaic + DCP LUT bake, several seconds) entirely — the SAME
@@ -112,10 +143,15 @@
     entries: [],           // image entries in the currently-viewed folder
     sidecars: new Map(),   // path -> {rating,label,edited,recipe} (cached client-side)
     meta: new Map(),       // path -> {camera,lens,date,iso}
+    dupeClusters: new Map(), // path -> clusterId (only present for clusters of size > 1)
+    dupeClusterSizes: new Map(), // clusterId -> size
+    syncedPaths: new Set(),  // paths known-synced to Google Photos (gphotos registry, folder-local cache)
     typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff'
     cameraFilter: 'all',
     lensFilter: 'all',
     isoFilter: 'all',
+    dupeFilter: 'all',     // 'all' | 'dupes'
+    syncedFilter: 'all',   // 'all' | 'synced' | 'notsynced'
     tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
     search: '',
     open: false,
@@ -327,6 +363,40 @@
     .lib-raw-badge{position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:5px;
       background:rgba(0,0,0,.55);color:#cfcfd6;font-size:9px;font-weight:700;letter-spacing:.02em;
       display:flex;align-items:center;justify-content:center;z-index:2}
+    /* Dupe chip: bottom-left (RAW already owns top-left, Edited owns top-right). Synced badge:
+       bottom-right, mirroring it. Both passive-only indicators, no click handler. */
+    .lib-dupe-badge{position:absolute;bottom:4px;left:4px;min-width:18px;height:18px;padding:0 4px;
+      border-radius:9px;background:rgba(0,0,0,.6);color:#e8c15a;font-size:9px;font-weight:700;
+      display:flex;align-items:center;justify-content:center;z-index:2}
+    .lib-synced-badge{position:absolute;bottom:4px;right:4px;width:18px;height:18px;border-radius:50%;
+      background:rgba(0,0,0,.6);color:#7ec4e8;font-size:10px;display:flex;align-items:center;
+      justify-content:center;z-index:2}
+    #lib-grid.list-view .lib-dupe-badge,#lib-grid.list-view .lib-synced-badge{position:static;width:16px;height:16px}
+    /* C1: Compare-pair mode — two panes side by side, sharing one zoom/pan via CSS transform
+       on each pane's canvas (re-rendered only on photo/source change, not on every pointermove
+       — see renderComparePane's comment). */
+    #lib-compare{display:none;height:100%;flex-direction:column;gap:8px}
+    #lib-compare.on{display:flex}
+    #lib-main:has(#lib-compare.on) #lib-grid{display:none}
+    #lib-compare-panes{display:flex;gap:8px;flex:1;min-height:0}
+    .lib-cmp-pane{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--sur2);
+      border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
+    .lib-cmp-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--bdr);
+      font-size:11px;flex-wrap:wrap}
+    .lib-cmp-head select{background:var(--sur1);border:1px solid var(--bdr);color:var(--txt);
+      border-radius:6px;padding:3px 6px;font-size:10.5px;max-width:120px}
+    .lib-cmp-canvas-wrap{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+    .lib-cmp-canvas-wrap canvas{max-width:100%;max-height:100%;transform-origin:center center}
+    .lib-cmp-chrome{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--bdr);font-size:12px}
+    .lib-cmp-stars{display:flex;gap:2px;cursor:pointer;user-select:none}
+    .lib-cmp-star{opacity:.35;font-size:13px}
+    .lib-cmp-star.on{opacity:1;color:var(--acc)}
+    .lib-cmp-chrome .lib-flag{width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+      border-radius:5px;cursor:pointer;opacity:.6}
+    .lib-cmp-chrome .lib-flag.on,.lib-cmp-chrome .lib-flag:hover{opacity:1;background:var(--bdr)}
+    #lib-compare-bar{display:flex;align-items:center;gap:8px;padding:2px 4px;font-size:11px;color:var(--mut)}
+    #lib-compare-bar button{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
+      border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
     #lib-empty{color:var(--mut);font-size:12px;padding:30px 10px;text-align:center}
     #lib-filters select,#lib-filters input{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
@@ -407,6 +477,15 @@
       <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
       <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
       <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select>
+      <select id="lib-dupe-filter" title="Filter by duplicate status">
+        <option value="all">All photos</option>
+        <option value="dupes">Duplicates only</option>
+      </select>
+      <select id="lib-synced-filter" title="Filter by Google Photos sync status">
+        <option value="all">All photos</option>
+        <option value="synced">Synced to Google Photos</option>
+        <option value="notsynced">Not synced</option>
+      </select>
       <select id="lib-tag-filter" title="Filter by tag">
         <option value="all">All tags</option>
         <option value="red">Rejected (X)</option>
@@ -420,6 +499,7 @@
       <div class="lib-seg" id="lib-viewmode-seg">
         <button data-v="grid" title="Grid view">▦</button>
         <button data-v="list" title="List view">☰</button>
+        <button data-v="compare" title="Compare two photos/looks side by side — C">⇹</button>
       </div>
       <select id="lib-sort" title="Sort by">
         <option value="name">Name</option>
@@ -463,6 +543,7 @@
         <div class="lib-lh-cell" data-sort="edited">Edited</div>
       </div>
       <div id="lib-grid"></div>
+      <div id="lib-compare"></div>
     </div>
     <div id="lib-bottom"><span style="font-size:11px;color:var(--mut)" id="lib-count"></span></div>
   `;
@@ -697,6 +778,11 @@
   // little more on every folder switch/re-render. Tracked per generation so a full sweep can
   // run once the URLs' owning cards are guaranteed gone.
   let _thumbUrlsThisGen = [];
+  // Per-generation failure tracking for a single summary toast once the batch settles, instead
+  // of a silent CSS class per broken thumbnail (easy to miss on a large grid).
+  let _thumbFailCount = 0;
+  let _thumbTotalCount = 0;
+  let _thumbFailToastShown = false;
   const _thumbIO = (typeof IntersectionObserver === 'function')
     ? new IntersectionObserver((ents) => {
         for (const en of ents) {
@@ -726,6 +812,7 @@
         })
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
+          _thumbFailCount++;
           if (job.imgEl.isConnected) {
             job.imgEl.classList.add('thumb-error');
             job.imgEl.parentElement?.classList.add('thumb-broken');
@@ -735,11 +822,18 @@
           if (_thumbIO) _thumbIO.unobserve(job.imgEl);
           _thumbActive--;
           _thumbPump();
+          // Batch settled (this generation's queue drained and no job still in flight): show
+          // ONE summary toast if anything failed, instead of a silent per-thumbnail CSS class.
+          if (_thumbActive === 0 && _thumbQueue.length === 0 && _thumbFailCount > 0 && !_thumbFailToastShown) {
+            _thumbFailToastShown = true;
+            if (typeof toast === 'function') toast(`${_thumbFailCount} of ${_thumbTotalCount} thumbnails failed to load`, false);
+          }
         });
     }
   }
   function loadThumb(path, imgEl) {
     _thumbQueue.push({ path, imgEl, visible: false, gen: _thumbGen });
+    _thumbTotalCount++;
     if (_thumbIO) _thumbIO.observe(imgEl);
     _thumbPump();
   }
@@ -752,6 +846,9 @@
     // grid.innerHTML right after calling this) — revoke now rather than leaking.
     _thumbUrlsThisGen.forEach((u) => URL.revokeObjectURL(u));
     _thumbUrlsThisGen = [];
+    _thumbFailCount = 0;
+    _thumbTotalCount = 0;
+    _thumbFailToastShown = false;
   }
 
   // Small orange pen icon for the "edited" corner badge — replaces the old EDITED text pill.
@@ -869,7 +966,11 @@
         const snap = snapshotFromB64(sc.recipe);
         if (snap.nativeNr !== undefined) nativeNrForThisPhoto = snap.nativeNr;
         if (snap.demosaicAlgo !== undefined) demosaicAlgoForThisPhoto = snap.demosaicAlgo;
-      } catch (e) { /* fall through to default */ }
+      } catch (e) {
+        if (typeof log === 'function') log(`Recipe parse failed for ${path}: ${e}`, 'warn');
+        if (typeof toast === 'function') toast(`Couldn't restore edits for ${baseName(path)} — reverted to defaults`, false);
+        /* fall through to default */
+      }
     }
     window.chromasmithNativeNr = nativeNrForThisPhoto;
     window.chromasmithDemosaicAlgo = demosaicAlgoForThisPhoto;
@@ -899,7 +1000,10 @@
           exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
                    date: m.date, lens: m.lens, make: m.make, model: m.model },
         };
-      } catch (e) { /* no cache yet, or it's stale — fall through to a full decode below */ }
+      } catch (e) {
+        if (typeof log === 'function') log(`Decode cache read failed for ${path}: ${e}`, 'warn');
+        /* no cache yet, or it's stale — fall through to a full decode below */
+      }
     }
     try {
       if (cached) {
@@ -988,6 +1092,7 @@
       if (card) card.classList.add('sel');
     } catch (e) {
       console.error('openInEditor', e);
+      if (typeof toast === 'function') toast(`Couldn't open ${baseName(path)} — ${friendlyRawError(e)}`, false);
     } finally {
       const hideProvisional = await provisionalPromise;
       hideProvisional();
@@ -1167,7 +1272,97 @@
     return m;
   }
 
+  // ── C2: duplicate detection (perceptual-hash clustering) ─────────────────────────────
+  // 64-bit dHashes come back as 16-char hex strings (see phash_batch's Rust doc comment — a
+  // raw u64 JSON number can exceed JS's 2^53 safe-integer range and silently corrupt Hamming
+  // distance). Compared as BigInt.
+  function hammingHex(a, b) {
+    let x = BigInt('0x' + a) ^ BigInt('0x' + b);
+    let n = 0n;
+    while (x) { n += x & 1n; x >>= 1n; }
+    return Number(n);
+  }
+  const DUPE_HAMMING_THRESHOLD = 6;
+  // Simple union-find over the folder's hashes.
+  function clusterByHash(pairs) {
+    const parent = new Map();
+    const find = (p) => { while (parent.get(p) !== p) { parent.set(p, parent.get(parent.get(p))); p = parent.get(p); } return p; };
+    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+    pairs.forEach(([p]) => parent.set(p, p));
+    for (let i = 0; i < pairs.length; i++) {
+      for (let j = i + 1; j < pairs.length; j++) {
+        if (hammingHex(pairs[i][1], pairs[j][1]) <= DUPE_HAMMING_THRESHOLD) union(pairs[i][0], pairs[j][0]);
+      }
+    }
+    const groups = new Map(); // root -> [paths]
+    pairs.forEach(([p]) => {
+      const r = find(p);
+      if (!groups.has(r)) groups.set(r, []);
+      groups.get(r).push(p);
+    });
+    return groups;
+  }
+  let _dupeToken = 0;
+  // Runs in the background after openFolder's meta pass, behind the same staleness guard
+  // (_openToken/currentFolder/source) so switching folders fast never lets a stale batch
+  // overwrite the new folder's clusters.
+  async function runDupeDetection(paths, openToken) {
+    const myToken = ++_dupeToken;
+    if (!paths.length) { state.dupeClusters.clear(); state.dupeClusterSizes.clear(); return; }
+    let pairs;
+    try { pairs = await invoke('phash_batch', { paths }); } catch (e) { console.error('phash_batch', e); return; }
+    if (myToken !== _dupeToken || state._openToken !== openToken || state.source !== 'folder') return; // user moved on
+    const groups = clusterByHash(pairs);
+    state.dupeClusters.clear(); state.dupeClusterSizes.clear();
+    let clusterId = 0;
+    groups.forEach((members) => {
+      if (members.length < 2) return;
+      clusterId++;
+      state.dupeClusterSizes.set(clusterId, members.length);
+      members.forEach((p) => state.dupeClusters.set(p, clusterId));
+    });
+    // Cross-folder registry mirrors the current view — a passive record only, never destructive.
+    Promise.all(paths.map((p) => invoke('registry_set_cmd', { name: 'duplicates', path: p, present: state.dupeClusters.has(p) }).catch(() => {})))
+      .then(() => renderCollectionCounts());
+    renderGrid();
+  }
+
+  // ── C3: Google-Photos-synced badge ────────────────────────────────────────────────────
+  window.chromasmithRecordSynced = async (paths) => {
+    if (!Array.isArray(paths)) return;
+    for (const p of paths) {
+      try { await invoke('registry_set_cmd', { name: 'gphotos', path: p, present: true }); } catch (e) { console.error('registry_set_cmd(gphotos)', e); }
+      state.syncedPaths.add(p);
+    }
+    renderCollectionCounts();
+    renderGrid();
+  };
+  // Loads the synced-paths registry once and intersects with the current folder's entries so
+  // the ☁ badge/filter know which of THIS folder's photos are already synced. Mirrors the
+  // sidecar-fetch pattern (a single background invoke, not per-path).
+  async function loadSyncedForFolder(entries, openToken) {
+    try {
+      const list = await invoke('list_collection', { name: 'gphotos' });
+      if (state._openToken !== openToken || state.source !== 'folder') return;
+      const known = new Set((list || []).map((e) => e.path));
+      entries.forEach((e) => { if (known.has(e.path)) state.syncedPaths.add(e.path); });
+      renderGrid();
+    } catch (e) { /* best-effort */ }
+  }
+  async function markFolderSyncedIfGphotosDownloads(path, entries) {
+    try {
+      const gDir = await gphotosDownloadsDir();
+      if (!gDir || path !== gDir) return;
+      // Files living in the Google Photos import-download folder are by definition already
+      // mirrored there — mark every photo in it as synced on open.
+      await Promise.all(entries.map((e) => invoke('registry_set_cmd', { name: 'gphotos', path: e.path, present: true }).catch(() => {})));
+      entries.forEach((e) => state.syncedPaths.add(e.path));
+      renderCollectionCounts();
+    } catch (e) { /* best-effort */ }
+  }
+
   async function openFolder(path) {
+    if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
     state.source = 'folder'; // leaving a collection/cloud view — clears their sidebar highlight below
     state.selected.clear();
@@ -1190,8 +1385,14 @@
     // refresh filters + grid once so sort-by-ISO/camera-filter pick it up.
     await Promise.all(state.entries.map((e) => getSidecar(e.path)));
     const openToken = (state._openToken = (state._openToken || 0) + 1);
+    state.dupeClusters.clear(); state.dupeClusterSizes.clear();
     await renderGrid();
     if (typeof renderCollections === 'function') renderCollections(); // drop stale collection/album highlight
+    // Duplicate detection + sync-status backfill run in the background, gated on the same
+    // openToken so a fast folder switch never lets stale results overwrite the new grid.
+    runDupeDetection(state.entries.map((e) => e.path), openToken);
+    loadSyncedForFolder(state.entries, openToken);
+    markFolderSyncedIfGphotosDownloads(path, state.entries);
     Promise.all(state.entries.map((e) => getMeta(e.path).catch(() => ({})))).then(() => {
       // source check: without it, opening a folder then clicking a Lightroom album while this
       // background meta pass was still running clobbered the cloud grid seconds later.
@@ -1253,6 +1454,9 @@
     if (state.cameraFilter !== 'all' && m.camera !== state.cameraFilter) return false;
     if (state.lensFilter !== 'all' && m.lens !== state.lensFilter) return false;
     if (state.isoFilter !== 'all' && String(m.iso || '') !== state.isoFilter) return false;
+    if (state.dupeFilter === 'dupes' && !state.dupeClusters.has(entry.path)) return false;
+    if (state.syncedFilter === 'synced' && !state.syncedPaths.has(entry.path)) return false;
+    if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
     if (state.search && !entry.name.toLowerCase().includes(state.search)) return false;
     if (state.tagFilter === 'red' && sc.label !== 'Red') return false;
     if (state.tagFilter === 'green' && sc.label !== 'Green') return false;
@@ -1410,6 +1614,11 @@
     await Promise.all(paths.map((p) => invoke('append_export_history', { path: p, version, recipe }).catch((e) => console.error('append_export_history', p, e))));
     renderCollectionCounts(); // these photos may be newly counted in the "Exported" collection
   };
+  // C3: lets chromasmith-22.html's export loop (which only has fxImages indices, not library
+  // paths) map each rendered photo back to its ON-DISK source path, in the same order
+  // fxImages was loaded — used to record which photo a successful Google Photos upload
+  // actually came from (see gpUploadItems' call site / window.chromasmithRecordSynced).
+  window.chromasmithGetOpenedPaths = () => (state.openedPath ? [state.openedPath] : (state.openedPaths || []));
   window.chromasmithGetExportHistory = async () => {
     const path = state.openedPath;
     if (!path) return [];
@@ -1704,11 +1913,17 @@
         (sc.label === 'Red' ? ' flag-red' : sc.label === 'Green' ? ' flag-green' : '') + (entry.missing ? ' lib-missing' : '');
       card.dataset.path = entry.path;
       const rawBadge = entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
+      const dupeClusterId = state.dupeClusters.get(entry.path);
+      const dupeSize = dupeClusterId ? state.dupeClusterSizes.get(dupeClusterId) : 0;
+      const dupeBadge = dupeSize > 1
+        ? `<div class="lib-dupe-badge" title="${dupeSize} similar photos (a RAW and its JPEG sibling clustering together is expected)">⧉${dupeSize}</div>`
+        : '';
+      const syncedBadge = state.syncedPaths.has(entry.path) ? `<div class="lib-synced-badge" title="Synced to Google Photos">☁</div>` : '';
       if (isList) {
         const m = state.meta.get(entry.path) || {};
         const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
         card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
-          <div class="lib-name">${state.showTitle ? esc(entry.name) + (entry.missing ? ' (missing)' : '') : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}</div>
+          <div class="lib-name">${state.showTitle ? esc(entry.name) + (entry.missing ? ' (missing)' : '') : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}${dupeBadge}${syncedBadge}</div>
           <div class="lib-col">${esc(m.date)}</div>
           <div class="lib-col">${esc(fmtEditedTs(entry.edited_ts))}</div>
           <div class="lib-col">${esc(m.camera)}</div>
@@ -1724,6 +1939,8 @@
           </div>
           ${sc.edited ? EDITED_BADGE_HTML : ''}
           ${rawBadge}
+          ${dupeBadge}
+          ${syncedBadge}
           ${state.showTitle ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}`;
       }
       // Append to the grid BEFORE calling loadThumb(): _thumbPump() checks img.isConnected
@@ -1754,6 +1971,242 @@
     document.getElementById('lib-count').textContent = state.selected.size
       ? `${state.selected.size} selected — ${shown.length} of ${state.entries.length} photo(s)`
       : `${shown.length} of ${state.entries.length} photo(s)`;
+  }
+
+  // ── C1: Compare-pair mode ─────────────────────────────────────────────────────────────
+  // Two panes, each an independent {imgIdx, snapshotSrc} pointing into the SAME loaded batch
+  // (fxImages, via openPathsInEditor) — same-photo-two-looks falls out for free by letting
+  // both panes share an imgIdx. snapshotSrc uses the exact descriptor shape B3's
+  // resolveSplitSnapshot already understands ('orig'|{hist:N}|{style:name}|{export:v}); this
+  // file adds only the 'live' meaning (null → resolveSplitSnapshot treats falsy as 'orig', so
+  // Compare keeps its own tiny string<->descriptor mapping instead of touching that resolver).
+  const compareState = {
+    active: false,
+    paths: [],                          // the ordered selection Compare was entered with
+    paneA: { idx: 0, srcKey: 'live' },
+    paneB: { idx: 0, srcKey: 'live' },
+    zoom: 1, panX: 0, panY: 0,
+    prevViewMode: 'grid',
+  };
+  function compareSrcKeyToDescriptor(key) {
+    if (!key || key === 'live') return null;
+    if (key === 'orig') return 'orig';
+    if (key.indexOf('hist:') === 0) return { hist: parseInt(key.slice(5), 10) };
+    if (key.indexOf('style:') === 0) return { style: key.slice(6) };
+    return null;
+  }
+  // A couple of recent history steps + Styles, mirroring B3's split-source menu options.
+  function compareSourceOptions() {
+    const opts = [{ v: 'live', label: 'Live edit' }, { v: 'orig', label: 'Original' }];
+    try {
+      if (typeof fxHistory !== 'undefined' && Array.isArray(fxHistory) && fxHistory.length) {
+        const start = Math.max(0, fxHistory.length - 6);
+        for (let i = fxHistory.length - 1; i >= start; i--) {
+          const e = fxHistory[i];
+          opts.push({ v: `hist:${i}`, label: `History: ${(e && e.label) || ('Step ' + (i + 1))}` });
+        }
+      }
+    } catch (e) {}
+    try {
+      if (typeof stylesList === 'function') stylesList().forEach((s) => opts.push({ v: `style:${s.name}`, label: 'Style: ' + s.name }));
+    } catch (e) {}
+    return opts;
+  }
+  function compareHost() { return document.getElementById('lib-compare'); }
+  function comparePathForIdx(idx) { return compareState.paths[idx] || ''; }
+
+  function buildCompareUI() {
+    const host = compareHost();
+    if (!host) return;
+    const paneHtml = (which) => `
+      <div class="lib-cmp-pane" data-pane="${which}">
+        <div class="lib-cmp-head">
+          <select class="lib-cmp-photo-sel" data-pane="${which}"></select>
+          <select class="lib-cmp-src-sel" data-pane="${which}">${compareSourceOptions().map((o) => `<option value="${o.v}">${o.label}</option>`).join('')}</select>
+        </div>
+        <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
+        <div class="lib-cmp-chrome">
+          <div class="lib-cmp-stars" data-pane="${which}"></div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Green" title="Pick">🚩</div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Red" title="Reject">✕</div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Favorite" title="Favorite">♡</div>
+          <span style="margin-left:auto;color:var(--mut);font-size:10px" class="lib-cmp-name" data-pane="${which}"></span>
+        </div>
+      </div>`;
+    host.innerHTML = `
+      <div id="lib-compare-bar">
+        <span>Compare — ←/→ cycles the right pane · ⏎ promotes it to the left · Esc exits</span>
+      </div>
+      <div id="lib-compare-panes">${paneHtml('A')}${paneHtml('B')}</div>`;
+    host.querySelectorAll('.lib-cmp-photo-sel').forEach((sel) => {
+      sel.innerHTML = compareState.paths.map((p, i) => `<option value="${i}">${esc2(baseName(p))}</option>`).join('');
+      sel.onchange = (e) => {
+        const which = e.target.dataset.pane;
+        compareState[which === 'A' ? 'paneA' : 'paneB'].idx = parseInt(e.target.value, 10);
+        renderComparePane(which);
+      };
+    });
+    host.querySelectorAll('.lib-cmp-src-sel').forEach((sel) => {
+      sel.onchange = (e) => {
+        const which = e.target.dataset.pane;
+        compareState[which === 'A' ? 'paneA' : 'paneB'].srcKey = e.target.value;
+        renderComparePane(which);
+      };
+    });
+    host.querySelectorAll('.lib-flag').forEach((flag) => {
+      flag.onclick = async () => {
+        const which = flag.dataset.pane;
+        const path = comparePathForIdx(compareState[which === 'A' ? 'paneA' : 'paneB'].idx);
+        if (!path) return;
+        if (flag.dataset.flag === 'Favorite') {
+          const cur = state.sidecars.get(path) || { favorite: false };
+          await setFavorite(path, !cur.favorite);
+        } else {
+          const cur = state.sidecars.get(path) || { label: '' };
+          await setLabel(path, cur.label === flag.dataset.flag ? '' : flag.dataset.flag);
+        }
+        syncCompareChrome(which);
+      };
+    });
+    host.querySelectorAll('.lib-cmp-stars').forEach((row) => {
+      row.innerHTML = [1, 2, 3, 4, 5].map((n) => `<span class="lib-cmp-star" data-n="${n}">★</span>`).join('');
+      row.querySelectorAll('.lib-cmp-star').forEach((star) => {
+        star.onclick = async () => {
+          const which = row.dataset.pane;
+          const path = comparePathForIdx(compareState[which === 'A' ? 'paneA' : 'paneB'].idx);
+          if (!path) return;
+          const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+          const n = parseInt(star.dataset.n, 10);
+          const rating = cur.rating === n ? 0 : n; // click same star again to clear
+          const updated = { ...cur, rating };
+          state.sidecars.set(path, updated);
+          try { await invoke('set_sidecar', { path, rating, label: updated.label, edited: updated.edited }); }
+          catch (e) { sidecarWriteFailed(path, cur, e); }
+          syncCompareChrome(which);
+        };
+      });
+    });
+    syncCompareChrome('A'); syncCompareChrome('B');
+    setupCompareZoomPan();
+  }
+  function esc2(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function syncCompareChrome(which) {
+    const host = compareHost(); if (!host) return;
+    const p = compareState[which === 'A' ? 'paneA' : 'paneB'];
+    const path = comparePathForIdx(p.idx);
+    const sc = state.sidecars.get(path) || { rating: 0, label: '', favorite: false };
+    host.querySelectorAll(`.lib-cmp-photo-sel[data-pane="${which}"]`).forEach((sel) => { sel.value = String(p.idx); });
+    host.querySelectorAll(`.lib-cmp-src-sel[data-pane="${which}"]`).forEach((sel) => { sel.value = p.srcKey; });
+    host.querySelectorAll(`.lib-cmp-stars[data-pane="${which}"] .lib-cmp-star`).forEach((star) => {
+      star.classList.toggle('on', parseInt(star.dataset.n, 10) <= (sc.rating || 0));
+    });
+    host.querySelectorAll(`.lib-flag[data-pane="${which}"]`).forEach((flag) => {
+      const f = flag.dataset.flag;
+      flag.classList.toggle('on', f === 'Favorite' ? !!sc.favorite : sc.label === f);
+    });
+    const nameEl = host.querySelector(`.lib-cmp-name[data-pane="${which}"]`);
+    if (nameEl) nameEl.textContent = baseName(path);
+  }
+  // Re-renders one pane: selects its photo (fxSelectImage, a no-op if already current),
+  // resolves its snapshotSrc via B3's resolveSplitSnapshot, then draws with B1's
+  // renderSnapshotTo. Only called on photo/source change — zoom/pan is a pure CSS transform
+  // (setupCompareZoomPan) so panning/zooming never re-renders.
+  async function renderComparePane(which) {
+    const host = compareHost(); if (!host) return;
+    const p = compareState[which === 'A' ? 'paneA' : 'paneB'];
+    const pane = host.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
+    const canvas = pane && pane.querySelector('canvas');
+    if (!canvas) return;
+    if (typeof fxSelectImage === 'function' && typeof fxCurIdx !== 'undefined' && fxCurIdx !== p.idx) fxSelectImage(p.idx);
+    const it = (typeof fxImages !== 'undefined' && fxImages[p.idx]) || null;
+    const img = it && it.img;
+    const iw = img ? (img.naturalWidth || img.width) : 1200, ih = img ? (img.naturalHeight || img.height) : 800;
+    const wrap = pane.querySelector('.lib-cmp-canvas-wrap');
+    const maxW = Math.max(200, (wrap.clientWidth || 500)), maxH = Math.max(200, (wrap.clientHeight || 400));
+    const sc = Math.min(1, maxW / iw, maxH / ih);
+    const pw = Math.max(1, Math.round(iw * sc)), ph = Math.max(1, Math.round(ih * sc));
+    try {
+      const snap = typeof resolveSplitSnapshot === 'function' ? resolveSplitSnapshot(compareSrcKeyToDescriptor(p.srcKey)) : 'orig';
+      if (typeof renderSnapshotTo === 'function') renderSnapshotTo(canvas, snap, pw, ph, {});
+    } catch (e) { console.error('renderComparePane', which, e); }
+    syncCompareChrome(which);
+  }
+  function applyCompareTransform() {
+    const host = compareHost(); if (!host) return;
+    const t = `translate(${compareState.panX}px,${compareState.panY}px) scale(${compareState.zoom})`;
+    host.querySelectorAll('.lib-cmp-canvas-wrap canvas').forEach((c) => { c.style.transform = t; });
+  }
+  function setupCompareZoomPan() {
+    const host = compareHost(); if (!host || host._zoomWired) return;
+    host._zoomWired = true;
+    let dragging = false, lx = 0, ly = 0;
+    host.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = -e.deltaY * 0.0015;
+      compareState.zoom = Math.min(6, Math.max(1, compareState.zoom * (1 + delta)));
+      applyCompareTransform();
+    }, { passive: false });
+    host.addEventListener('pointerdown', (e) => {
+      if (compareState.zoom <= 1) return;
+      dragging = true; lx = e.clientX; ly = e.clientY;
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      compareState.panX += e.clientX - lx; compareState.panY += e.clientY - ly;
+      lx = e.clientX; ly = e.clientY;
+      applyCompareTransform();
+    });
+    window.addEventListener('pointerup', () => { dragging = false; });
+  }
+
+  function canEnterCompare() {
+    if (state.source === 'lr') {
+      if (typeof toast === 'function') toast("Compare isn't available for Lightroom cloud albums yet", false);
+      return false;
+    }
+    return true;
+  }
+  async function enterCompareMode() {
+    if (!canEnterCompare()) return;
+    const paths = state.selected.size ? Array.from(state.selected) : (state.openedPath ? [state.openedPath] : []);
+    if (!paths.length) { if (typeof toast === 'function') toast('Select at least one photo to compare', false); return; }
+    if (state.viewMode !== 'compare') compareState.prevViewMode = state.viewMode;
+    compareState.paths = paths;
+    compareState.paneA = { idx: 0, srcKey: 'live' };
+    compareState.paneB = { idx: paths.length > 1 ? 1 : 0, srcKey: 'live' };
+    compareState.zoom = 1; compareState.panX = 0; compareState.panY = 0;
+    state.viewMode = 'compare';
+    syncViewSeg();
+    const host = compareHost();
+    if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
+    try { await openPathsInEditor(paths); }
+    catch (e) { console.error('compare openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for compare', false); exitCompareMode(); return; }
+    compareState.active = true;
+    buildCompareUI();
+    await renderComparePane('A');
+    await renderComparePane('B');
+  }
+  function exitCompareMode() {
+    compareState.active = false;
+    const host = compareHost();
+    if (host) host.classList.remove('on');
+    state.viewMode = compareState.prevViewMode || 'grid';
+    localStorage.setItem('chromasmith_lib_view', state.viewMode);
+    syncViewSeg();
+    renderGrid();
+  }
+  // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
+  // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.
+  function compareCycleB(delta) {
+    if (!compareState.paths.length) return;
+    const n = compareState.paths.length;
+    compareState.paneB.idx = ((compareState.paneB.idx + delta) % n + n) % n;
+    renderComparePane('B');
+  }
+  function comparePromoteB() {
+    const a = compareState.paneA, b = compareState.paneB;
+    compareState.paneA = { ...b }; compareState.paneB = { ...a };
+    renderComparePane('A'); renderComparePane('B');
   }
 
   // ── wiring ──────────────────────────────────────────────────────────────────
@@ -1834,6 +2287,16 @@
       else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
       return;
     }
+    // ── Compare mode: ←/→ cycle pane B, ⏎ promotes B to A, Esc exits back to the previous
+    // view mode. Own branch so the grid-culling arrows/Enter below don't also fire.
+    if (state.viewMode === 'compare' && compareState.active) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); compareCycleB(-1); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); compareCycleB(1); return; }
+      if (e.key === 'Enter') { e.preventDefault(); comparePromoteB(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); return; }
+      return;
+    }
+    if ((e.key === 'c' || e.key === 'C') && (state.selected.size >= 1 || state.openedPath)) { enterCompareMode(); return; }
     // ── Grid keyboard culling (Lightroom idiom): arrows move a highlight through the CURRENT
     // sorted/filtered order, Enter opens it, X rejects / P picks / U clears the flag on it (or
     // on the multi-selection when one exists). The highlight rides on state.openedPath when a
@@ -1866,6 +2329,8 @@
   overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
   let searchDebounce;
   overlay.querySelector('#lib-search').oninput = (e) => {
@@ -1877,8 +2342,16 @@
   const viewSeg = overlay.querySelector('#lib-viewmode-seg');
   function syncViewSeg() { viewSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.viewMode)); }
   viewSeg.querySelectorAll('button').forEach((b) => {
-    b.onclick = () => { state.viewMode = b.dataset.v; localStorage.setItem('chromasmith_lib_view', state.viewMode); syncViewSeg(); renderGrid(); };
+    b.onclick = () => {
+      if (b.dataset.v === 'compare') { enterCompareMode(); return; }
+      if (state.viewMode === 'compare') exitCompareMode();
+      state.viewMode = b.dataset.v; localStorage.setItem('chromasmith_lib_view', state.viewMode); syncViewSeg(); renderGrid();
+    };
   });
+  // 'compare' was never a persisted-view default before this session — a stale localStorage
+  // value from a crash mid-compare should fall back to grid on next load, not silently retry
+  // entering compare with no selection.
+  if (state.viewMode === 'compare') state.viewMode = 'grid';
   syncViewSeg();
 
   const thumbSlider = overlay.querySelector('#lib-thumbsize');
@@ -2030,6 +2503,8 @@
     { name: 'exported', label: 'Exported', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>' },
     { name: 'flagged', label: 'Flagged', icon: FLAG_SVG_GREEN },
     { name: 'rejected', label: 'Rejected', icon: FLAG_SVG_RED },
+    { name: 'duplicates', label: 'Duplicates', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="12" height="12" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h10v10a2 2 0 0 1-2 2h-2"/></svg>' },
+    { name: 'gphotos', label: 'Synced', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 19a4 4 0 1 1 .4-7.98A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H6z"/></svg>' },
   ];
   let collectionCounts = {};
 

@@ -98,7 +98,7 @@ fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
         .chunks_exact(4)
         .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
         .collect();
-    let mut guard = DCP_LUTS.lock().unwrap();
+    let mut guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
     guard.get_or_insert_with(HashMap::new).insert(key, std::sync::Arc::new(lut));
     Ok(())
 }
@@ -229,7 +229,18 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     let native_nr = json["nativeNr"].as_bool().unwrap_or(true);
     // Per-photo "RAW Processing" mode ("" = Standard/PPG, "ahd" = Sparkle-optimized) — see
     // raw_decode.rs's decode_rw2_bytes doc comment for why this is opt-in, not a global default.
-    let demosaic_algo = json["demosaicAlgo"].as_str().unwrap_or("");
+    // Validate at the UI boundary: raw_decode.rs's decode_and_demosaic only accepts "" (PPG),
+    // "ahd", "vng", "mhc" — any other string used to reach a `panic!` deep inside the demosaic
+    // branch and take down the whole process. An unrecognized value here (stale localStorage,
+    // future JS typo, etc.) now silently falls back to the standard "" (PPG) algorithm instead.
+    let demosaic_algo_raw = json["demosaicAlgo"].as_str().unwrap_or("");
+    let demosaic_algo = match demosaic_algo_raw {
+        "" | "ahd" | "vng" | "mhc" => demosaic_algo_raw,
+        other => {
+            eprintln!("decode_raw_v2: unknown demosaicAlgo={other:?} — defaulting to standard (PPG)");
+            ""
+        }
+    };
     // Two-phase decode: `fast=true` skips the false-color-suppression / hue-defringe / native-NR
     // passes (the serial, full-frame CPU work that made RAW opens take up to ~15s) so the shell
     // can display a photo almost immediately, then request a `fast=false` decode of the SAME
@@ -264,7 +275,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         "lut" => {
             let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
             let lut = {
-                let guard = DCP_LUTS.lock().unwrap();
+                let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
                 guard
                     .as_ref()
                     .and_then(|m| m.get(key).cloned())
@@ -272,7 +283,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             };
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
-            raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)
+            raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
         }
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
@@ -841,6 +852,8 @@ fn main() {
             library::collection_counts,
             library::touch_recent,
             library::backfill_edited_registry,
+            library::phash_batch,
+            library::registry_set_cmd,
             library::get_decode_cache,
             library::save_decode_cache,
             library::get_lr_thumb,

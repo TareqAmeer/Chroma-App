@@ -1,0 +1,63 @@
+name: Export regression gate
+
+# Renders test/fixtures/*.png through the REAL, unmodified chromasmith-22.html (headless
+# Chromium + SwiftShare software WebGL2) for every recipe in test/recipes/, and fails the
+# job if any rendered PNG drifts from its committed golden in test/golden/ beyond a small
+# tolerance. This is the only automated regression coverage the export pipeline has —
+# see CLAUDE.md and calib/export_scorecard.py for the full method.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'chromasmith-22.html'
+      - 'test/**'
+      - 'calib/export_scorecard.py'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/export-gate.yml'
+  pull_request:
+    paths:
+      - 'chromasmith-22.html'
+      - 'test/**'
+      - 'calib/export_scorecard.py'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/export-gate.yml'
+
+jobs:
+  export-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install node dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Python dependencies
+        run: pip install -r calib/requirements.txt
+
+      - name: Render export test output
+        run: npm run export:test
+
+      - name: Compare against committed goldens
+        run: python calib/export_scorecard.py
+
+      - name: Upload rendered output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-gate-output
+          path: test/output/
+          retention-days: 14
