@@ -4092,7 +4092,8 @@ uniform vec4 mskC[4];  // exposure (stops), contrast, temp, sat  (each -1..1-ish
 uniform vec4 mskD[4];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
 uniform vec4 mskE[4];  // x: subtract-previous-mask flag (0/1) — simple "mask inside a mask"
                         // (this mask's shape minus the shape of the mask listed just before
-                        // it), y: tint, z: hue(deg), w reserved
+                        // it), y: tint, z: hue(deg), w: Amount 0..1 — one master scale on the whole
+                        // mask, so it can be dialled back without rescaling all eight sliders
 uniform vec4 mskF[4];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z: radial rotation (rad), w unused
 // SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
 // mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.
@@ -4334,6 +4335,7 @@ if(mskN>0.5){
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
     w*=colRangeWeight(c.rgb,mskG[i],mskCS[i*2],mskCS[i*2+1]);
+    w*=mskE[i].w;                          // Amount: one master scale over the finished selection
     // "Selection" preview mode: paint this mask's EFFECTIVE weight (shape x lum gate x colour
     // gate) over a greyscale photo and stop. The JS/SVG overlay can only draw the shape, so it
     // cannot show what the gates do — and a colour range is untunable if you cannot see it.
@@ -4948,6 +4950,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
       mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
       mE[o]=m.subtract?1:0;mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
+      // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
+      // slot (amount 0) rather than dropping the mask from the array, because removing it would
+      // renumber the slots and silently repoint every later mask's "subtract prev".
+      mE[o+3]=m.muted?0:(m.amount!=null?m.amount:100)/100;
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
@@ -6848,6 +6854,8 @@ function pcEyedropper(){
 function _fxEnsureNormalRender(){
   if(typeof mskShowSelIdx!=='function'||mskShowSelIdx()<0)return;
   if(!FX||!FX.cv||!FX.cv.width)return;
+  if(typeof fxLoupe!=='undefined'&&fxLoupe)return;  // the loupe render has its own uv window; a
+                                                    // plain full-frame re-render would clobber it
   try{FX.render(getFXParams(),FX.cv.width,FX.cv.height,{glowScale:fxGlowScale(),showSel:-1});}catch(err){}
 }
 function _pickAvgRGB(e,fromCanvas){
@@ -7169,7 +7177,8 @@ function _mskSkinDefaults(){return{
   crOn:false,crSamples:[],crRange:35,        // colour gate: up to CR_MAX_SAMPLES picks + one range
   uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
   tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
-  tanDepth:0,tanWarm:0,srcV:null};}
+  tanDepth:0,tanWarm:0,srcV:null,
+  amount:100,name:'',muted:false};}   // amount = master scale on the whole mask; name = user label
 // Masks saved by an older build have none of the fields above. Fill them in on load (defaults are
 // all-zero, so a restored recipe renders exactly as it did) — without this the panel would read
 // undefined into its sliders and the target resolver would see no tgtMode.
@@ -7881,7 +7890,9 @@ function mskRebuild(){
   if(mskAiTapMode&&(!fxState.masks[mskSel]||fxState.masks[mskSel].origin!=='ai'))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
-    b.textContent=(m.origin==='skin'?'Skin':m.type==='linear'?'Linear':m.type==='radial'?'Radial':m.origin==='sky'?'Sky':m.origin==='ai'?'AI':'Brush')+' '+(i+1);
+    b.textContent=(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'');
+    if(m.muted)b.style.opacity='0.45';
+    b.title=m.muted?'Muted — click to select, then the eye button to unmute':'Click to edit this mask';
     b.onclick=()=>{mskSel=i;mskRebuild();};list.appendChild(b);
   });
   // Masks are per-photo by default (see installFXImages/fxSelectImage) — this is the one
@@ -7920,6 +7931,16 @@ function mskRebuild(){
       +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()"><span class="bdot"></span>Re-detect sky</button>':'')+'</div>'
       +(m.origin!=='ai'?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
+  // Mask management: order matters (see "Subtract prev"), so give it real controls. Mute is a
+  // dry/wet check on one mask without losing it.
+  h+='<div class="btn-row" style="margin-top:6px">'
+    +'<button class="btn bgh" onclick="mskMove(-1)" '+(mskSel<1?'disabled':'')+' title="Move earlier in the list. Order matters: − Subtract prev reads the mask immediately before this one."><span class="bdot"></span>↑ Up</button>'
+    +'<button class="btn bgh" onclick="mskMove(1)" '+(mskSel>=fxState.masks.length-1?'disabled':'')+' title="Move later in the list"><span class="bdot"></span>↓ Down</button>'
+    +'<button class="btn bgh" onclick="mskRename()" title="Give this mask a name so the list is readable"><span class="bdot"></span>✎ Name</button>'
+    +'<button class="btn '+(m.muted?'bsec':'bgh')+'" onclick="mskToggleMute()" title="Temporarily switch this mask off without deleting it — the quickest way to judge what it is contributing"><span class="bdot"></span>'+(m.muted?'Muted ✓':'👁 Mute')+'</button></div>'
+    // Amount: one master scale on the finished selection, so a mask can be dialled back without
+    // rescaling every slider below it by hand.
+    +_mskRow('Amount','amount',m.amount!=null?m.amount:100,0,100,1,false);
   // ── SKIN TONE: colour-range gate + uniformity. Three independent groups, and keeping them
   // separate is the point: the gate says WHICH pixels (must be picked from the photo), the target
   // says WHERE THEY GO (need not exist in the photo), Uniformity says HOW FAR.
@@ -7996,6 +8017,40 @@ function mskRebuild(){
   mskOverlaySync();
 }
 function mskToggleSubtract(){const m=fxState.masks[mskSel];if(!m||mskSel<1)return;m.subtract=!m.subtract;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+// ── Mask list management: order, name, mute ──────────────────────────────────────────────────
+// Order is not cosmetic — "− Subtract prev" reads the mask immediately before this one, so a
+// wrongly-ordered pair previously had to be deleted and rebuilt. Moving a mask carries the
+// selection with it and repoints the subtract flags so the intent survives the move.
+function mskMove(dir){
+  const i=mskSel,j=i+dir;
+  if(i<0||j<0||j>=fxState.masks.length)return;
+  const A=fxState.masks;
+  [A[i],A[j]]=[A[j],A[i]];
+  // A mask at index 0 has nothing before it to subtract, so that flag can't survive there.
+  if(A[0]&&A[0].subtract)A[0].subtract=false;
+  mskSel=j;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+function mskRename(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const v=prompt('Name this mask',m.name||mskAutoLabel(m,mskSel));
+  if(v===null)return;
+  m.name=v.trim().slice(0,24);
+  mskRebuild();
+}
+function mskToggleMute(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.muted=!m.muted;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// The label shown on the list chip when the user hasn't named the mask themselves.
+function mskAutoLabel(m,i){
+  const t=m.origin==='skin'?'Skin':m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
+    :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Colour':'Radial'):'Brush';
+  return t+' '+(i+1);
+}
 
 // ── on-canvas mask shape overlay: an SVG sized to exactly match #fx-canvas's rendered rect
 // (viewBox="0 0 1 1" so mask coords — already normalized 0..1 — map directly, no pixel math),
@@ -9210,7 +9265,7 @@ function renderLoupe(){
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,
+  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]}); // export-scale grain & glow
   FX.setImage(fxWork);                                              // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -9316,7 +9371,7 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,
+  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]});
   FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
