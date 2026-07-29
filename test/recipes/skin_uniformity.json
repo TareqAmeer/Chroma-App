@@ -13,7 +13,11 @@
       "lumLo": 0, "lumHi": 1,
       "exp": 0, "con": 0, "temp": 0, "tint": 0, "sat": 0, "hue": 0, "hi": 0, "sh": 0,
       "subtract": false, "colHue": 0, "colAmt": 0, "colSat": 0.65,
-      "crOn": true, "crH": 0.05, "crS": 0.33, "crV": 0.73, "crRange": 55,
+      "crOn": true, "crRange": 55,
+      "crSamples": [
+        { "h": 0.05,  "s": 0.33, "v": 0.73, "rgb": [186, 142, 125] },
+        { "h": 0.098, "s": 0.16, "v": 0.98, "rgb": [250, 235, 210] }
+      ],
       "uH": 60, "uS": 50, "uL": 40, "preserve": 70,
       "tgtMode": "swatch", "tgtHex": "#a07e56",
       "tanDepth": 30, "tanWarm": 40,

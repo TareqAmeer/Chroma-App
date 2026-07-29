@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-29b`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30a`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -376,11 +376,18 @@ so pushing it deepens the whole selection instead of compounding on the dark par
 Capture One's Skin Tone tool; Lightroom has no equivalent.
 
 Three per-mask pieces, all reusing the existing mask machinery:
-- **`colRangeWeight()`** — gates the mask by hue/sat near an eyedropper pick (`mskG`), multiplied
-  into `w` beside the lum gate. Same kernel shape as `pcWeight` but ⚠️ **deliberately without its
-  `min(1,s*3)` saturation floor** — skin highlights and sheen are genuinely low-saturation, and
-  that floor would drop the brightest skin out of the selection and leave a bright halo along
-  every highlight.
+- **`colRangeWeight()`** — gates the mask by hue/sat near up to 4 eyedropper picks (`mskG` holds
+  the count + range, `mskCS` the samples, two per vec4), multiplied into `w` beside the lum gate.
+  The gate is the **UNION (max)** of the per-sample kernels, not a sum: overlapping picks must not
+  push past 1, and it keeps the weight FLAT across the sampled region (see the failure mode below).
+  Same kernel shape as `pcWeight` but ⚠️ **deliberately without its `min(1,s*3)` saturation floor**
+  — skin highlights and sheen are genuinely low-saturation, and that floor would drop the
+  brightest skin out of the selection and leave a bright halo along every highlight.
+  ⚠️ **One sample cannot cover a body.** Skin straddles the hue wrap point: matte skin sits just
+  above 0.0 and sheeny/pinker skin just below 1.0. Measured on `__TM3390.jpg`, a gate centred on
+  the cheek gave the lower chest only **0.04** — so the palest area, the one furthest from the
+  target, barely moved and hue *diverged*. Hence multi-sample, and hence `crSampleMean` uses a
+  **circular** mean for hue (a plain average of 0.98 and 0.02 gives cyan, not red).
 - **Target decoupled from the gate centre** (`mskI`) — Match pick / **Monk Skin Tone** swatch (10
   shades, CC BY 4.0, credited in the Guide) / any custom colour. The gate must be picked from the
   photo; the target must not have to be, or a tan tone absent from the frame is unreachable.
@@ -398,18 +405,37 @@ gate × colour gate) as a red overlay. `mskOverlaySync` draws only the SHAPE in 
 showed the lum gate either; a colour range is untunable blind. Only the two `renderPreview` calls
 pass `showSel` — exports never do. It does not yet reach the 1:1 loupe (see `ROADMAP.md`).
 
-### ⚠️ The non-obvious failure mode: weight uniformity beats distance
-Because each pixel moves by `w·u·(target−x)`, a large spread in **w** across the skin can outweigh
-the spread in **distance** — and then the tones stop converging and can actively diverge. Measured
-on `__TM3390.jpg` (`test/probe_tm3390.mjs`): at Range 40 the tanned cheek's saturation weight was
-0.84 vs the pale chest's 0.64, so the cheek moved *more* despite starting *closer* to the target,
-and the saturation spread **widened** (0.0434 → 0.0468). Evening the weights out (Range 70,
-feather 1) gave 0.82/0.84, the pale chest then moved more than the cheek (0.080 vs 0.062), and the
-spread closed 42% with hue and lightness closing too. This is why `+ Skin` defaults to a wide
-Range (65) and full feather, and why the UI pushes the Selection view: **a weakly-selected patch
-that is far from the target makes things worse, not better.** A single-point gate also can't cover
-skin whose sheen pushes it to the magenta side of the hue wheel (the lower torso gated only 0.32
-here) — the real fix is multi-sample gating, ROADMAP item 1.
+### ⚠️ The non-obvious failure mode: FLAT weight matters more than high weight
+Each pixel moves by `w·u·(target−x)`, so a spread in **w** across the skin competes with the
+spread in **distance** — and when w wins, the tones stop converging and can actively diverge. Both
+halves of `w` have to be kept flat over the subject:
+
+- **The gate** — via enough colour samples. Measured on `__TM3390.jpg`
+  (`test/probe_tm3390.mjs`, 6 skin points from cheek to lower chest): **1 sample** → gate weights
+  0.04–1.00 and hue **diverged**; **2 samples** → 0.86–1.00, hue closed 40% / sat 45%;
+  **3 samples** → sat closed 49%.
+- **The shape** — via a LOW feather. ⚠️ Counterintuitive: `feather` is where the falloff *starts*,
+  so a high feather fades from the ellipse **centre** and makes the shape the dominant term. Back-
+  solving the ellipse radius for each skin point gave `t = 0.11..0.42`; at feather 0.25 (falloff
+  starts at t=0.5) every skin point gets shape exactly **1.0**, and the effective-weight spread
+  fell from **0.82 → 0.156**. Final result on lit skin: hue closed **47%**, sat **38%**.
+  ⚠️ `feather` is stored **0..0.5** — the shader's `max(1-2f,0)` saturates at 0.5, so the top half
+  of the old 0..1 slider was inert. The slider now maps 0-100 → 0-0.5 and `_mskMigrate` clamps;
+  both are no-ops for how existing masks render.
+
+Hence `+ Skin` defaults to Range 55, feather 0.25, and a UI that pushes shift-click-to-add-samples
+plus the Selection view. **A weakly-selected patch that is far from the target makes things worse,
+not better.**
+
+⚠️ **Value/lightness is deliberately NOT expected to converge.** Two of those six points are deep
+shadow (v 0.365 and 0.208); forcing them to match the sunlit cheek's brightness is exactly the
+form-destroying flattening `preserve` exists to prevent. Judge lightness only across *lit* skin,
+and expect a small number there (14%) at the default `preserve = 70`.
+
+⚠️ **Colour alone cannot exclude a same-hued subject.** Sampling shadowed skin (93,49,40 — dark
+brown) necessarily pulls dark brown dog fur in: with a flat shape the dog's head gated **0.75**.
+The shape must do it — drag the ellipse off the animal, or add a Brush mask with `− Subtract prev`.
+The structural fix is a segmented person/skin mask (ROADMAP item 4).
 
 ---
 
