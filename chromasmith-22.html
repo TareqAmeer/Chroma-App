@@ -148,6 +148,9 @@ body.mobile-fx .fx-toggle::after{width:20px;height:20px;top:2px;left:2px}
 body.mobile-fx .fx-toggle.on::after{left:22px}
 .fx-fields{display:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
+/* Sub-group heading INSIDE a panel (e.g. Skin Tone vs Local Adjustments in the mask panel) —
+   lighter than .fx-ctrl-title, which is the panel's own header. */
+.fx-sub{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:4px 0 4px;padding-top:6px;border-top:1px solid var(--bdr)}
 /* Two-line slider layout: label + value share a top row, the track spans full width below —
    DOM order (label, slider, val) is unchanged, `order` just re-flows them visually so the
    existing contenteditable tap-to-type value div needs no markup changes. */
@@ -996,12 +999,14 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <button class="btn bgh" onclick="mskAdd('linear')"><span class="bdot"></span>+ Linear</button>
             <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye"><span class="bdot"></span>+ Brush</button>
             <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed"><span class="bdot"></span>+ Sky</button>
+            <button class="btn bgh" onclick="mskAdd('skin')" title="Even out uneven skin (patchy tan, pale chest vs tanned face) and tan it consistently — picks a tone, selects everything near it, then pulls it all toward one target"><span class="bdot"></span>+ Skin</button>
             <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Brush over an object on the photo to select it (EdgeSAM, on-device — desktop app only)" style="display:none"><span class="bdot"></span>+ AI Select</button>
           </div>
           <div class="fx-row"><div class="fx-label">Show on photo</div>
             <div class="lib-seg msk-prevmode-seg" style="border:1px solid var(--bdr);border-radius:7px;overflow:hidden;display:flex">
               <button data-v="overlay" class="on" onclick="mskSetPreviewMode('overlay')" style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Overlay</button>
               <button data-v="isolate" onclick="mskSetPreviewMode('isolate')" style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Isolate</button>
+              <button data-v="select" onclick="mskSetPreviewMode('select')" title="Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only." style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Selection</button>
               <button data-v="off" onclick="mskSetPreviewMode('off')" style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Off</button>
             </div>
           </div>
@@ -1398,7 +1403,18 @@ setTimeout(()=>window.hideBootSplash(),6000);
     <ul>
       <li>Up to 4 <b>Radial</b> (faces, subjects) or <b>Linear</b> (skies, foregrounds) masks. Position/size with the X/Y/Width sliders, soften with <b>Feather</b>, flip with <b>Invert</b>, and restrict to a tonal range with <b>Lum floor/ceiling</b> (e.g. brighten only the shadows inside the mask).</li>
       <li>Each mask carries its own Exposure, Contrast, Temp and Saturation. Masks are resolution-independent — exports and the 1:1 loupe match the preview exactly.</li>
+      <li>Set <b>Show on photo</b> to <b>Selection</b> to see the mask's <i>effective</i> selection in red — the shape combined with the Lum and Colour range gates. Overlay and Isolate draw the shape only. <kbd>O</kbd> cycles the modes.</li>
     </ul>
+
+    <h3>Skin Tone (even out an uneven tan)</h3>
+    <ul>
+      <li>Every other colour control here <i>shifts</i> tones by a fixed amount, which is why a patchy tan resists them: raising warmth moves a pale chest and an already-tanned face equally, so the face over-cooks while the chest still looks pale next to it. <b>Uniformity</b> works the other way — it pulls the selected tones <i>toward one target</i>, so areas far from it move a lot and areas already close barely move. Uneven skin evens out instead of the dark parts getting darker.</li>
+      <li>Add a <b>+ Skin</b> mask, then click a mid-tone patch of skin. Drag the shape on the photo so it covers the person you mean — it starts in the middle of the frame, and the colour range alone can't tell skin from anything sharing its hue, such as a pet, sand or bare wood. Use <b>+ Brush</b> or <b>− Subtract prev</b> for anything the ellipse can't isolate.</li>
+      <li>Switch <b>Show on photo</b> to <b>Selection</b> and widen <b>Range</b> until <i>all</i> the skin reads red. This matters more than it looks: each pixel moves by weight × strength × distance-to-target, so a patch that's only weakly selected barely moves while a strongly-selected patch moves fully — and if the weakly-selected area is the one furthest from the target, the difference gets <i>worse</i> instead of better. Even weight across the skin is what makes the evening-out work.</li>
+      <li><b>Target</b> is independent of what you picked, so you can aim at a tan that appears nowhere in the photo: <b>Match pick</b> just evens out the tone you clicked, <b>Swatch</b> offers the 10-shade Monk Skin Tone scale (4–6 is the useful span for tanning a light base), and <b>Custom</b> takes any colour. <b>Tan Depth/Warmth</b> then nudge the target — never the pixels — so pushing them deepens the whole selection evenly.</li>
+      <li><b>Preserve modeling</b> only affects the Lightness slider. At 0 it collapses lightness onto the target, which evens out a hard tan <i>line</i> but flattens the shading that gives a body its form. At 100 it shifts the overall lightness level instead, leaving the shading intact. Start high.</li>
+    </ul>
+    <div class="gnote">Skin tone swatches use the <b>Monk Skin Tone scale</b> (Ellis Monk / Google, 2023), licensed CC BY 4.0.</div>
 
     <h3>Film FX</h3>
     <ul>
@@ -3533,7 +3549,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-27c';
+const BUILD='2026-07-29b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4077,6 +4093,12 @@ uniform vec4 mskE[4];  // x: subtract-previous-mask flag (0/1) — simple "mask 
                         // (this mask's shape minus the shape of the mask listed just before
                         // it), y: tint, z: hue(deg), w reserved
 uniform vec4 mskF[4];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z: radial rotation (rad), w unused
+// SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
+// mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.
+uniform vec4 mskG[4];  // x: colour-gate on (0/1), y: gate centre hue 0..1, z: gate centre sat 0..1, w: gate range 0..1
+uniform vec4 mskH[4];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
+uniform vec4 mskI[4];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
+uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
 uniform vec2 uvOffL,uvScaleL;
 // Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
 // (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
@@ -4133,6 +4155,67 @@ vec3 tintToward(vec3 c,float hueDeg,float amt,float sat){
   float l=dot(c,vec3(.2126,.7152,.0722));
   vec3 target=hsl2rgb(vec3(mod(hueDeg,360.0)/360.0,clamp(sat,0.0,1.0),l));
   return mix(c,target,clamp(amt,0.0,1.0));
+}
+// HSV (not HSL) — matches the convention r2hsv/hsv2r/applyHSL/applyPointColors use on the JS
+// side, so the colour-range gate and the Point Color kernel it is modelled on agree.
+vec3 rgb2hsv(vec3 c){
+  float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),d=mx-mn;
+  float h=0.0;
+  if(d>1e-5){
+    if(mx==c.r)h=mod((c.g-c.b)/d,6.0);
+    else if(mx==c.g)h=(c.b-c.r)/d+2.0;
+    else h=(c.r-c.g)/d+4.0;
+    h=fract(h/6.0+1.0);
+  }
+  return vec3(h,mx>0.0?d/mx:0.0,mx);
+}
+vec3 hsv2rgb(vec3 hsv){
+  vec3 p=abs(fract(hsv.x+vec3(1.0,2.0/3.0,1.0/3.0))*6.0-3.0);
+  return hsv.z*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),hsv.y);
+}
+// COLOUR-RANGE GATE — restricts a mask to pixels near a picked hue/saturation, so a rough brush
+// or a frame-filling radial can still land on skin only. Same weighted-kernel shape as pcWeight
+// (Point Color) for a consistent feel, re-centred on the pick and driven by its own Range.
+// NOTE: deliberately does NOT carry over pcWeight's "min(1, s*3)" saturation floor. That term
+// stops the 8-band mixer touching neutrals, but skin highlights and specular sheen are genuinely
+// low-saturation — the floor would drop the brightest skin out of the selection and leave a
+// bright halo along every highlight. The ws gaussian, centred on the PICKED saturation, already
+// rejects neutrals correctly.
+float colRangeWeight(vec3 c,vec4 G){
+  if(G.x<0.5)return 1.0;
+  vec3 hsv=rgb2hsv(c);
+  float dh=abs(hsv.x-G.y);if(dh>0.5)dh=1.0-dh;
+  float hHalf=0.02+G.w*0.14;                      // range 0-100 -> +/-7deg .. +/-58deg
+  float sHalf=0.10+G.w*0.45;                      // wider range also tolerates more sat drift
+  float wh=max(0.0,1.0-pow(dh/hHalf,2.0));
+  float ws=max(0.0,1.0-pow((hsv.y-G.z)/sHalf,2.0));
+  return wh*ws;
+}
+// SKIN TONE UNIFORMITY — the one CONTRACTIVE operator in the app. Every other colour control
+// here (adjSkin, applyHSL, applyPointColors, maskAdjust) is additive: "x -> x + delta", which
+// leaves the spread of the selected tones untouched. On a subject whose face is sun-exposed and
+// whose chest is pale, adding a constant moves both equally — the chest stays pale RELATIVE to a
+// face that is now over-cooked. This instead pulls toward a reference: "x -> x + u*(target - x)",
+// so distance to the target shrinks by (1-u). Far-from-target pixels move a lot, near-target
+// pixels barely move, and the spread collapses onto one tone. "Tan" then moves the TARGET (in
+// JS), never the pixels, so pushing it deepens the whole selection instead of compounding on the
+// parts that were already dark.
+// LUM is the exception (U.w = "preserve modeling"): converging every pixel's value onto an
+// absolute target would crush the subject to one flat lightness and make shadowed skin as bright
+// as lit skin, deleting the modeling. vRef mixes between the pixel's own value (w=0 -> genuine
+// contraction: flattens, but evens out a tan LINE) and the measured mean of the gated pixels
+// (w=1 -> a pure offset: relocates the overall level, form fully intact).
+vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T){
+  if(w<=0.001||(U.x==0.0&&U.y==0.0&&U.z==0.0))return c;
+  vec3 hsv=rgb2hsv(c);
+  float dh=T.x-hsv.x;                             // shortest way round the hue wheel
+  if(dh>0.5)dh-=1.0;
+  if(dh<-0.5)dh+=1.0;
+  hsv.x=fract(hsv.x+w*U.x*dh+1.0);
+  hsv.y+=w*U.y*(T.y-hsv.y);
+  float vRef=mix(hsv.z,T.w,U.w);
+  hsv.z+=w*U.z*(T.z-vRef);
+  return clamp(hsv2rgb(vec3(hsv.x,clamp(hsv.y,0.0,1.0),clamp(hsv.z,0.0,1.0))),0.0,1.0);
 }
 vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec4 CT){ // A: exp,con,temp,sat | TH: tint,hue(deg) | CT: colHue(deg),colAmt,rot(unused here),colSat — weighted by w
   vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
@@ -4225,8 +4308,18 @@ if(mskN>0.5){
     vec4 D=mskD[i];
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
+    w*=colRangeWeight(c.rgb,mskG[i]);
+    // "Selection" preview mode: paint this mask's EFFECTIVE weight (shape x lum gate x colour
+    // gate) over a greyscale photo and stop. The JS/SVG overlay can only draw the shape, so it
+    // cannot show what the gates do — and a colour range is untunable if you cannot see it.
+    if(mskShowSel>=0.0&&abs(mskShowSel-float(i))<0.5){
+      float g=dot(c.rgb,vec3(.2126,.7152,.0722));
+      o=vec4(mix(vec3(g),vec3(1.0,0.15,0.15),clamp(w,0.0,1.0)*0.75),1.0);
+      return;
+    }
     if(w>0.001){
-      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);
+      c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i]);                // converge toward the target FIRST,
+      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
         float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
@@ -4818,7 +4911,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Local-adjust masks: pack up to 4 masks into vec4 uniform arrays; global-uv mapped via
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const MK=(P.masks&&P.masks.length)?P.masks.slice(0,4):[];
-    const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16),mF=new Float32Array(16);
+    const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16),mF=new Float32Array(16),
+          mG=new Float32Array(16),mH=new Float32Array(16),mI=new Float32Array(16);
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
@@ -4828,7 +4922,19 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
       mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
       mE[o]=m.subtract?1:0;mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
-      mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;});
+      mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
+      // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
+      // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
+      // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
+      mG[o]=m.crOn?1:0;mG[o+1]=m.crH||0;mG[o+2]=m.crS||0;mG[o+3]=(m.crRange!=null?m.crRange:35)/100;
+      mH[o]=(m.uH||0)/100;mH[o+1]=(m.uS||0)/100;mH[o+2]=(m.uL||0)/100;
+      mH[o+3]=(m.preserve!=null?m.preserve:70)/100;
+      const tgt=mskSkinTarget(m);
+      mI[o]=tgt.h;mI[o+1]=tgt.s;mI[o+2]=tgt.v;
+      // srcV: mean value of the gated pixels, measured ONCE in JS (mskMeasureSrcV) and passed in.
+      // Must be identical for preview, loupe and every export tile — re-measuring per tile would
+      // make each tile converge to a different level and show as blocks.
+      mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});
     if(MK.some(m=>m.type==='brush'))mskBuildTex();
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
@@ -4863,6 +4969,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       maskTex:4,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
+      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,
+      mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
@@ -6699,15 +6807,23 @@ function pcEyedropper(){
   if(FX.cv)FX.cv.style.cursor=_pcEyedropperActive?'crosshair':'';
   if(_pcEyedropperActive)log('Click a color in the photo to target it','info');
 }
-function pcEyedropperClick(e){
-  if(!_pcEyedropperActive)return;
-  if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a point color','warn');return;}
-  _pcEyedropperActive=false;
-  const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.remove('on');
-  if(FX.cv)FX.cv.style.cursor='';
-  const src=fxWork||fxImg;if(!src)return;
-  // Same click→source-pixel mapping as the WB eyedropper, and the same 5x5-average sampling so
-  // one click on a grainy/high-ISO area doesn't land on a single noisy outlier pixel.
+// Shared eyedropper sampling: click → a 5x5-averaged RGB triple (averaged so one click on a
+// grainy/high-ISO area doesn't land on a single noisy outlier pixel). Same click→pixel mapping
+// as the WB eyedropper. `fromCanvas` samples the PREVIEW canvas (i.e. the GRADED pixel) instead
+// of the source — which is what a shader-side gate must be centred on, since it sees post-LUT,
+// post-basicAdjust colour. preserveDrawingBuffer:true is already set on the GL context, so
+// drawing FX.cv into a 2D canvas reads back reliably.
+// Both canvas readers below (the colour-range eyedropper and mskMeasureSrcV) must see the real
+// graded photo. If the preview is currently showing the red SELECTION map they'd sample that
+// instead, so force one normal render first; the caller's own fxUpdate() puts the map back.
+function _fxEnsureNormalRender(){
+  if(typeof mskShowSelIdx!=='function'||mskShowSelIdx()<0)return;
+  if(!FX||!FX.cv||!FX.cv.width)return;
+  try{FX.render(getFXParams(),FX.cv.width,FX.cv.height,{glowScale:fxGlowScale(),showSel:-1});}catch(err){}
+}
+function _pickAvgRGB(e,fromCanvas){
+  if(fromCanvas)_fxEnsureNormalRender();
+  const src=fromCanvas?FX.cv:(fxWork||fxImg);if(!src)return null;
   const rect=FX.cv.getBoundingClientRect();
   const dpr=FX.cv.width/rect.width;
   const cx=Math.round((e.clientX-rect.left)*dpr),cy=Math.round((e.clientY-rect.top)*dpr);
@@ -6721,7 +6837,16 @@ function pcEyedropperClick(e){
   const d5=tc.getContext('2d').getImageData(0,0,K,K).data;
   let ar=0,ag=0,ab=0;const n5=K*K;
   for(let i=0;i<d5.length;i+=4){ar+=d5[i];ag+=d5[i+1];ab+=d5[i+2];}
-  ar/=n5;ag/=n5;ab/=n5;
+  return[ar/n5,ag/n5,ab/n5];
+}
+function pcEyedropperClick(e){
+  if(!_pcEyedropperActive)return;
+  if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a point color','warn');return;}
+  _pcEyedropperActive=false;
+  const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.remove('on');
+  if(FX.cv)FX.cv.style.cursor='';
+  const avg=_pickAvgRGB(e,false);if(!avg)return;
+  const[ar,ag,ab]=avg;
   const[h,s]=r2hsv(ar/255,ag/255,ab/255);
   fxState.pointColors.push({h,s,rgb:[Math.round(ar),Math.round(ag),Math.round(ab)],hue:0,sat:0,lum:0,range:35});
   pcSel=fxState.pointColors.length-1;
@@ -7006,10 +7131,38 @@ function cvSetBg(c){fxState.canvas.bg=c;fxState.canvas.blur=false;cvBuildChips()
 // texture convention; exposure in stops; etc.). The sliders convert: Y sliders are
 // top-based (0 = top of the photo) and flip on write via data-fl.
 let mskSel=-1;
+// Skin-tone / colour-range fields, shared by EVERY mask type (a colour gate is useful on a
+// linear gradient or a painted mask too, not just the Skin preset). A factory, not a shared
+// constant, so masks never alias one object. All strengths default to 0 => a freshly added
+// mask renders bit-identically to before this feature existed.
+function _mskSkinDefaults(){return{
+  crOn:false,crH:0,crS:0,crV:0,crRange:35,   // colour gate: centre hue/sat (+ picked value) and range
+  uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
+  tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
+  tanDepth:0,tanWarm:0,srcV:null};}
+// Masks saved by an older build have none of the fields above. Fill them in on load (defaults are
+// all-zero, so a restored recipe renders exactly as it did) — without this the panel would read
+// undefined into its sliders and the target resolver would see no tgtMode.
+function _mskMigrate(m){
+  if(!m||typeof m!=='object')return m;
+  const d=_mskSkinDefaults();
+  for(const k in d)if(m[k]===undefined)m[k]=d[k];
+  return m;
+}
 function mskAdd(type){
   if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
   let m;
-  if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+  if(type==='skin'){
+    // A generously feathered radial covering roughly the middle of the frame — NOT the whole
+    // frame. The colour gate alone cannot tell skin from anything else sharing its hue (a pet's
+    // fur, sand, bare wood, a second person), so the shape has to do that half of the job: it
+    // starts bounded and visible-on-photo (draggable, mskPreviewMode defaults to 'overlay') so
+    // limiting it is the obvious next move rather than something you discover after the fact.
+    // Radial (not brush) on purpose: a brush mask starts all-zero, which would make the whole
+    // panel a silent no-op until the user painted something.
+    m={type:'radial',origin:'skin',cx:0.5,cy:0.5,rx:0.45,ry:0.55,rot:0,feather:1,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+  }
+  else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
   else if(type==='sky'){ // sky: brush-type raster mask, seeded from a colour/position heuristic,
@@ -7026,11 +7179,21 @@ function mskAdd(type){
     const{w,h}=mskTexDims();
     m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
+  Object.assign(m,_mskSkinDefaults());
+  // Wide Range + full feather on purpose. Uniformity is a CONTRACTION, but each pixel moves by
+  // w*u*(target-x) — so if w varies a lot across the skin, the weight difference can outweigh the
+  // distance difference and the spread stops closing. Measured on __TM3390.jpg (see
+  // test/probe_tm3390.mjs): at Range 40 the tanned cheek sat weight was 0.84 and the pale chest
+  // 0.64, so the cheek moved MORE despite starting closer to the target and the saturation spread
+  // WIDENED (0.0434 -> 0.0468). At Range 70 with feather 1 the weights evened out (0.82 / 0.84),
+  // the pale chest moved more than the cheek (0.080 vs 0.062), and the spread closed 42%.
+  if(type==='skin'){m.crOn=true;m.crRange=65;}
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
   if(type==='ai'){_samLastError=null;samEnsureEncoded();mskAiTapToggle(true);}
+  if(type==='skin'){mskCrEyedropper(true);log('Click a mid-tone patch of skin. Then drag/resize the shape on the photo so it only covers the person you mean.','info');}
 }
 
 // ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
@@ -7502,6 +7665,9 @@ function mskSlide(el){
   const v=parseFloat(el.value),sc=parseFloat(el.dataset.sc);
   m[el.dataset.k]=el.dataset.fl==='1'?1-v/100:v*sc;
   el.nextElementSibling.textContent=el.dataset.k==='colHue'?Math.round(v)+'°':Math.round(v);
+  // Widening/narrowing the colour gate changes WHICH pixels are selected, so the mean value that
+  // "preserve modeling" anchors to has to be re-measured (debounced — it reads back the canvas).
+  if(el.dataset.k==='crRange')mskSrcVDebounced();
   fxUpdate();
 }
 // hue(0-360)+sat(0-1) at a fixed 50% lightness -> #rrggbb, for the native <input type="color"> picker.
@@ -7531,6 +7697,100 @@ function mskColPicked(el){
   if(hueSl){hueSl.value=Math.round(h);hueSl.nextElementSibling.textContent=Math.round(h)+'°';}
   fxUpdate();
 }
+// ══ SKIN TONE — colour-range gate + uniformity ══════════════════════════════════════════════
+// The Monk Skin Tone scale (Ellis Monk / Google, 2023) — 10 shades, CC BY 4.0, purpose-built for
+// imaging and finer-grained at the darker end than the alternatives. Used as the TARGET palette so
+// a tan tone can be aimed at even when it appears nowhere in the photo. Deliberately not the
+// Fitzpatrick scale: that classifies skin's UV reactivity and has no official RGB values.
+const MST_SWATCHES=['#f6ede4','#f3e7db','#f7ead0','#eadaba','#d7bd96','#a07e56','#825c43','#604134','#3a312a','#292420'];
+function _hexToRgb01(hex){const n=parseInt(hex.slice(1),16);return[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255];}
+// Resolve a mask's TARGET tone to one hsv triple. Keeping the target independent of the gate
+// centre is the whole point: the gate says which pixels (must come from the photo), the target
+// says where they go (need not exist in the photo at all). Tan then nudges only the target — never
+// the pixels — which is why pushing it can't over-cook the parts that were already dark.
+function mskSkinTarget(m){
+  let h,s,v;
+  if(m.tgtMode==='match'||!m.tgtMode){h=m.crH||0;s=m.crS||0;v=m.crV||0;}
+  else{const[r,g,b]=_hexToRgb01(m.tgtHex||'#d7bd96');[h,s,v]=r2hsv(r,g,b);}
+  const td=(m.tanDepth||0)/100,tw=(m.tanWarm||0)/100;
+  if(tw){ // rotate the target toward the orange/skin hue (25deg), the short way round the wheel
+    const TAN_H=25/360;let dh=TAN_H-h;
+    if(dh>0.5)dh-=1;if(dh<-0.5)dh+=1;
+    h=(h+dh*tw+1)%1;
+  }
+  s=Math.min(1,s*(1+0.50*td));
+  v=Math.max(0,v*(1-0.35*td));
+  return{h,s,v};
+}
+// Mean value (HSV V) of the pixels the colour gate actually passes — the anchor "preserve
+// modeling" needs so lightness uniformity can relocate the skin's overall LEVEL instead of
+// collapsing every pixel onto one flat value. Measured from the graded preview canvas (the space
+// the shader gate evaluates in), over a downsample so it stays cheap, and stored on the mask so
+// preview / loupe / every export tile all use the SAME number — re-measuring per tile would make
+// each tile converge to a different level and show up as blocks.
+function mskMeasureSrcV(m){
+  if(!m||!m.crOn||!FX.cv){if(m)m.srcV=null;return;}
+  _fxEnsureNormalRender();
+  const N=180,cw=FX.cv.width,ch=FX.cv.height;
+  if(!cw||!ch){m.srcV=null;return;}
+  const sc=Math.min(1,N/Math.max(cw,ch)),tw=Math.max(1,Math.round(cw*sc)),th=Math.max(1,Math.round(ch*sc));
+  const tc=document.createElement('canvas');tc.width=tw;tc.height=th;
+  try{tc.getContext('2d').drawImage(FX.cv,0,0,tw,th);}catch(err){m.srcV=null;return;}
+  const d=tc.getContext('2d').getImageData(0,0,tw,th).data;
+  const gH=m.crH||0,gS=m.crS||0,R=(m.crRange!=null?m.crRange:35)/100;
+  const hHalf=0.02+R*0.14,sHalf=0.10+R*0.45;      // must mirror colRangeWeight() in the shader
+  let acc=0,wsum=0;
+  for(let i=0;i<d.length;i+=4){
+    const[h,s,v]=r2hsv(d[i]/255,d[i+1]/255,d[i+2]/255);
+    let dh=Math.abs(h-gH);if(dh>0.5)dh=1-dh;
+    const wh=Math.max(0,1-Math.pow(dh/hHalf,2)),ws=Math.max(0,1-Math.pow((s-gS)/sHalf,2));
+    const w=wh*ws;if(w<=0)continue;
+    acc+=w*v;wsum+=w;
+  }
+  m.srcV=wsum>1e-6?acc/wsum:null;   // null => the shader falls back to the target's own value
+}
+let _mskSrcVT=null;
+function mskSrcVDebounced(){clearTimeout(_mskSrcVT);_mskSrcVT=setTimeout(()=>{
+  const m=fxState.masks[mskSel];if(!m)return;
+  mskMeasureSrcV(m);fxUpdate();
+},60);}
+let _mskCrEyeActive=false;
+function mskCrEyedropper(force){
+  _mskCrEyeActive=force!=null?!!force:!_mskCrEyeActive;
+  const btn=document.getElementById('btn-msk-cr-eye');if(btn)btn.classList.toggle('on',_mskCrEyeActive);
+  if(FX.cv)FX.cv.style.cursor=_mskCrEyeActive?'crosshair':'';
+  if(_mskCrEyeActive&&force==null)log('Click the tone you want to select','info');
+}
+function mskCrEyedropperClick(e){
+  if(!_mskCrEyeActive)return true;   // returns true when it consumed the click
+  const m=fxState.masks[mskSel];if(!m){mskCrEyedropper(false);return true;}
+  if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a skin tone','warn');return true;}
+  mskCrEyedropper(false);
+  const avg=_pickAvgRGB(e,true);if(!avg)return true;
+  const[h,s,v]=r2hsv(avg[0]/255,avg[1]/255,avg[2]/255);
+  m.crH=h;m.crS=s;m.crV=v;m.crOn=true;
+  m.crRgb=[Math.round(avg[0]),Math.round(avg[1]),Math.round(avg[2])];
+  mskMeasureSrcV(m);
+  mskRebuild();fxUpdate();
+  log('Tone targeted — Range sets how much of it is selected, Uniformity evens it out','ok');
+  return true;
+}
+function mskCrToggle(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.crOn=!!el.checked;mskMeasureSrcV(m);mskRebuild();fxUpdate();
+}
+function mskTgtMode(mode){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.tgtMode=mode;mskRebuild();fxUpdate();
+}
+function mskTgtSwatch(hex){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.tgtHex=hex;m.tgtMode='swatch';mskRebuild();fxUpdate();
+}
+function mskTgtPicked(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.tgtHex=el.value;m.tgtMode='custom';fxUpdate();
+}
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
   if(!list||!ctl)return;list.innerHTML='';
@@ -7538,7 +7798,7 @@ function mskRebuild(){
   if(mskAiTapMode&&(!fxState.masks[mskSel]||fxState.masks[mskSel].origin!=='ai'))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
-    b.textContent=(m.type==='linear'?'Linear':m.type==='radial'?'Radial':m.origin==='sky'?'Sky':m.origin==='ai'?'AI':'Brush')+' '+(i+1);
+    b.textContent=(m.origin==='skin'?'Skin':m.type==='linear'?'Linear':m.type==='radial'?'Radial':m.origin==='sky'?'Sky':m.origin==='ai'?'AI':'Brush')+' '+(i+1);
     b.onclick=()=>{mskSel=i;mskRebuild();};list.appendChild(b);
   });
   // Masks are per-photo by default (see installFXImages/fxSelectImage) — this is the one
@@ -7577,6 +7837,46 @@ function mskRebuild(){
       +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()"><span class="bdot"></span>Re-detect sky</button>':'')+'</div>'
       +(m.origin!=='ai'?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
+  // ── SKIN TONE: colour-range gate + uniformity. Three independent groups, and keeping them
+  // separate is the point: the gate says WHICH pixels (must be picked from the photo), the target
+  // says WHERE THEY GO (need not exist in the photo), Uniformity says HOW FAR.
+  const tgtMode=m.tgtMode||'match',tgtHex=m.tgtHex||'#d7bd96';
+  const crSw=m.crRgb?'background:rgb('+m.crRgb.join(',')+')':'background:repeating-conic-gradient(var(--sur2) 0 25%,transparent 0 50%) 0 0/8px 8px';
+  h+='<div class="fx-sub" style="margin-top:10px">Skin Tone</div>'
+    +'<div class="fx-row" title="Restricts this mask to pixels near one picked tone, so a rough shape can still land on skin only. Combine with the shape to exclude same-coloured objects (pets, wood, sand).">'
+    +'<div class="fx-label">Colour range</div>'
+    +'<input type="checkbox" '+(m.crOn?'checked':'')+' onchange="mskCrToggle(this)" style="margin-right:6px;flex:0 0 auto">'
+    +'<button class="btn bgh" id="btn-msk-cr-eye" onclick="mskCrEyedropper()" style="flex:0 0 auto" title="Click a mid-tone patch of the tone you want to select"><span class="bdot"></span>◉ Pick</button>'
+    +'<span style="width:22px;height:18px;border:1px solid var(--bdr);border-radius:4px;margin-left:6px;flex:0 0 auto;'+crSw+'"></span></div>';
+  if(m.crOn){
+    h+=_mskRow('Range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
+      +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:2px 0 6px">Set the mask preview to <b>Selection</b> above and widen <b>Range</b> until ALL the skin reads red — a patch left out (shaded, pinker or paler skin) won\'t even out with the rest, and too narrow a range can make the difference worse. The range alone can\'t tell skin from anything sharing its hue (a pet, sand, wood, another person) — keep those out with the mask <b>shape</b>, a <b>Brush</b> mask, or <b>− Subtract prev</b>.</div>'
+      // TARGET — decoupled from the pick, so a tan tone that appears nowhere in the photo is reachable.
+      +'<div class="fx-row" title="Where the selected tones move TO. Match keeps the picked tone (pure evening-out); a swatch or custom colour lets you aim at a tone that is not in the photo at all."><div class="fx-label">Target</div>'
+      +['match','swatch','custom'].map(v=>'<button class="btn '+(tgtMode===v?'bsec':'bgh')+'" style="flex:1 1 0;min-width:0" onclick="mskTgtMode(\''+v+'\')">'+(v==='match'?'Match pick':v==='swatch'?'Swatch':'Custom')+'</button>').join('')
+      +'</div>';
+    if(tgtMode==='swatch'){
+      // Monk Skin Tone scale — see MST_SWATCHES. 4-6 is the useful span for tanning a light base.
+      h+='<div style="display:flex;gap:3px;flex-wrap:wrap;margin:2px 0 4px">'
+        +MST_SWATCHES.map((hx,i)=>'<button class="pc-chip'+(tgtHex.toLowerCase()===hx?' on':'')+'" style="background:'+hx+'" title="Monk Skin Tone '+(i+1)+'" onclick="mskTgtSwatch(\''+hx+'\')"></button>').join('')
+        +'</div><div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-bottom:6px">Monk Skin Tone scale (CC BY 4.0) — 1 lightest to 10 darkest.</div>';
+    }else if(tgtMode==='custom'){
+      h+='<div class="fx-row"><div class="fx-label">Target colour</div>'
+        +'<input type="color" value="'+tgtHex+'" style="width:28px;height:22px;padding:0;border:1px solid var(--bdr);border-radius:5px;background:none;flex:0 0 auto;cursor:pointer" oninput="mskTgtPicked(this)"></div>';
+    }
+    // UNIFORMITY — the contractive operator. See skinUniformity() in the lut shader for why this
+    // is different in kind from every other (additive) colour slider in the app.
+    h+='<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:4px 0 2px">Uniformity pulls the selected tones TOWARD the target instead of shifting them all equally — uneven areas even out rather than the darkest getting darker.</div>'
+      +_mskRow('Uniformity: Hue','uH',m.uH||0,0,100,1,false)
+      +_mskRow('Uniformity: Saturation','uS',m.uS||0,0,100,1,false)
+      +_mskRow('Uniformity: Lightness','uL',m.uL||0,0,100,1,false)
+      +'<div class="fx-row" title="0 = collapse lightness onto the target (evens out a tan LINE, but flattens the shading that gives a body its form). 100 = shift the overall lightness level to the target with shading fully intact."><div class="fx-label">Preserve modeling</div>'
+      +'<input class="fx-slider" type="range" min="0" max="100" value="'+(m.preserve!=null?m.preserve:70)+'" data-k="preserve" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
+      +'<div class="fx-val">'+(m.preserve!=null?m.preserve:70)+'</div></div>'
+      +_mskRow('Tan: Depth','tanDepth',m.tanDepth||0,0,100,1,false)
+      +_mskRow('Tan: Warmth','tanWarm',m.tanWarm||0,0,100,1,false)
+      +'<div class="fx-sub" style="margin-top:10px">Local Adjustments</div>';
+  }
   h+=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
     +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
@@ -7610,9 +7910,22 @@ function mskToggleSubtract(){const m=fxState.masks[mskSel];if(!m||mskSel<1)retur
 // with draggable handles so radial/linear masks are visible AND editable on the photo itself
 // instead of being invisible sliders-only edits (the #1 mask complaint). Brush/sky masks have
 // no shape to show (they're already visible via their painted pixels).
-let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside)
+// 'select' is the odd one out: overlay/isolate are drawn HERE in JS from the mask's shape, so
+// they cannot show what the luminance or colour-range gates actually do. 'select' instead asks the
+// lut shader to render the EFFECTIVE per-pixel weight (shape x lum gate x colour gate) — the only
+// way to tune a colour range without guessing. See mskShowSel in the shader / render().
+let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
 function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
-  document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));}
+  document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  if(typeof fxUpdate==='function')fxUpdate();}   // 'select' changes the RENDER, not just the overlay
+// Which mask index the shader should render as a selection map (-1 = normal photo). Gated on the
+// Local Adjustments section being on and a mask being selected, and never set during export.
+function mskShowSelIdx(){
+  if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
+  const tg=document.getElementById('tg-local');
+  if(tg&&!tg.classList.contains('on'))return -1;
+  return mskSel;
+}
 function mskOverlayBox(){
   // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
   // they ride the same CSS transform as the canvas by construction — no getBoundingClientRect
@@ -7666,7 +7979,9 @@ function mskOverlaySync(){
   const ff=document.getElementById('ff-local');
   const cardVisible=ff&&ff.offsetParent!==null;
   const m=fxState.masks[mskSel];
-  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&!cropMode&&!fxLoupe;
+  // 'select' renders its own map in the shader — drawing the shape overlay on top of it too would
+  // just obscure the thing it exists to show, so it hides these JS overlays like 'off' does.
+  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&mskPreviewMode!=='select'&&!cropMode&&!fxLoupe;
   if(m&&m.type==='brush'){
     svg.classList.remove('on');svg.innerHTML='';
     if(paintCv)mskPaintOverlaySync(anyShowable?m:null,mskOverlayBox(),mskPreviewMode==='isolate');
@@ -7879,7 +8194,7 @@ function applyUISnapshot(s){
   if(s.pointColors){fxState.pointColors=JSON.parse(JSON.stringify(s.pointColors));pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
   if(s.dustMode!==undefined){fxState.dustMode=s.dustMode;if(typeof dustModeBuildChips==='function')dustModeBuildChips();}
-  if(s.masks){fxState.masks=JSON.parse(JSON.stringify(s.masks));mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
+  if(s.masks){fxState.masks=JSON.parse(JSON.stringify(s.masks)).map(_mskMigrate);mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
     if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;} // keep the per-photo array reference (fxSelectImage/installFXImages) in sync with a restored recipe
   if(s.canvas){fxState.canvas=JSON.parse(JSON.stringify(s.canvas));cvBuildChips();}
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten) — CURRENT photo only, geometry is per-photo
@@ -8398,11 +8713,12 @@ function initZoomPan(){
 
 // ── WB Eyedropper ──────────────────────────────────────────────────────────────
 // Dispatches a click on the main preview canvas to whichever eyedropper mode (if any) is
-// currently armed — WB or Point Color. Both are mutually-exclusive momentary "click to sample"
-// modes, so at most one is ever active at a time.
+// currently armed — WB, Point Color, or a mask's Skin Tone colour range. All are
+// mutually-exclusive momentary "click to sample" modes, so at most one is ever active at a time.
 function fxCanvasClick(e){
   if(_wbEyedropperActive){wbEyedropperClick(e);return;}
   if(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive){pcEyedropperClick(e);return;}
+  if(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive){mskCrEyedropperClick(e);return;}
 }
 let _wbEyedropperActive=false;
 function wbEyedropper(){
@@ -8613,7 +8929,7 @@ function loadSession(userTriggered){
     if(s._pointColors){fxState.pointColors=s._pointColors;pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
     if(s._artSeed!=null)fxState.artSeed=s._artSeed;
     if(s._dustMode!=null){fxState.dustMode=s._dustMode;dustModeBuildChips();}
-    if(s._masks){fxState.masks=s._masks;mskSel=fxState.masks.length-1;mskRebuild();}
+    if(s._masks){fxState.masks=s._masks.map(_mskMigrate);mskSel=fxState.masks.length-1;mskRebuild();}
     if(s._canvas){fxState.canvas=s._canvas;cvBuildChips();}
     fxUpdate();
     // restore LUT preset selection if stored
@@ -9031,7 +9347,7 @@ function renderPreview(){
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
   const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
-  FX.render(P,pw,ph,{glowScale:fxGlowScale()}); // same glow scale the export will use → faithful preview
+  FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx()}); // same glow scale the export will use → faithful preview
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
@@ -9039,7 +9355,7 @@ function renderPreview(){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,{glowScale:fxGlowScale()});      // re-render processed into FX.cv
+    FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx()});      // re-render processed into FX.cv
     _applySplitPos();
   } else {
     const orig=document.getElementById('fx-canvas-orig');
@@ -9754,19 +10070,30 @@ async function exportFX(){
         if(!path){lrFailed++;log(`No Lightroom handoff path for rendered photo ${i+1} — skipped`,'err');continue;}
         setExportPhotoStatus(results[i].srcIdx,'saving');
         try{
-          const b64=_u8b64(results[i].content);
-          // write_lightroom_tiff (not write_file_bytes): reads the ORIGINAL Edit-In TIFF still on
-          // disk and splices its EXIF sub-IFD (shutter/aperture/ISO/focal/lens/DateTimeOriginal —
-          // the capture date, so Lightroom's "Captured" shows shot time, not export time), GPS,
-          // XMP and IPTC into our render before overwriting — see tiff_meta.rs. UTIF can't carry
-          // these (safeTiffMetaFrom's ASCII-only limit). Fallback for an older native shell that
-          // doesn't have the command compiled in yet.
+          // write_lightroom_tiff_raw sends the render as a raw IPC body (no base64) so a large
+          // 16-bit TIFF isn't tripled in memory (JS base64 string + btoa copy + JSON-escaped
+          // IPC copy) — that triple-copy was OOMing full-res exports. Falls back through
+          // write_lightroom_tiff (base64) then write_file_bytes for older native shells that
+          // predate one command or the other; see write_lightroom_tiff_raw's comment in main.rs.
           try{
-            await window.__TAURI__.core.invoke('write_lightroom_tiff',{path,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
+            await window.__TAURI__.core.invoke('write_lightroom_tiff_raw',results[i].content,{headers:{'x-path':path}});
           }catch(e){
-            if(!/write_lightroom_tiff/.test(e&&e.message||String(e)))throw e;
-            log('Native shell predates write_lightroom_tiff — saved without EXIF splice (restart the app after updating)','warn');
-            await window.__TAURI__.core.invoke('write_file_bytes',{path,dataB64:b64});
+            if(!/write_lightroom_tiff_raw/.test(e&&e.message||String(e)))throw e;
+            log('Native shell predates write_lightroom_tiff_raw — falling back to base64 save (slower, more memory)','warn');
+            const b64=_u8b64(results[i].content);
+            // write_lightroom_tiff (not write_file_bytes): reads the ORIGINAL Edit-In TIFF still on
+            // disk and splices its EXIF sub-IFD (shutter/aperture/ISO/focal/lens/DateTimeOriginal —
+            // the capture date, so Lightroom's "Captured" shows shot time, not export time), GPS,
+            // XMP and IPTC into our render before overwriting — see tiff_meta.rs. UTIF can't carry
+            // these (safeTiffMetaFrom's ASCII-only limit). Fallback for an older native shell that
+            // doesn't have the command compiled in yet.
+            try{
+              await window.__TAURI__.core.invoke('write_lightroom_tiff',{path,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
+            }catch(e2){
+              if(!/write_lightroom_tiff/.test(e2&&e2.message||String(e2)))throw e2;
+              log('Native shell predates write_lightroom_tiff — saved without EXIF splice (restart the app after updating)','warn');
+              await window.__TAURI__.core.invoke('write_file_bytes',{path,dataB64:b64});
+            }
           }
           setExportPhotoStatus(results[i].srcIdx,'saved');
           log('Saved back to Lightroom: '+path,'ok');
@@ -11469,7 +11796,7 @@ syncAllFxBtn();
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
-  // "O" cycles the mask overlay (Overlay -> Isolate -> Off -> Overlay…), same Lightroom-style
+  // "O" cycles the mask overlay (Overlay -> Isolate -> Selection -> Off -> Overlay…), same Lightroom-style
   // convention the Masks panel's own segmented control offers by click — only while that panel
   // is actually open and the user isn't typing somewhere else.
   if(e.key==='o'||e.key==='O'){
@@ -11477,7 +11804,7 @@ document.addEventListener('keydown',e=>{
     const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
     const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return;
     e.preventDefault();
-    const next={overlay:'isolate',isolate:'off',off:'overlay'}[mskPreviewMode]||'overlay';
+    const next={overlay:'isolate',isolate:'select',select:'off',off:'overlay'}[mskPreviewMode]||'overlay';
     mskSetPreviewMode(next);
   }
   // ── Editor shortcuts (Lightroom/Capture One idiom). All skip when typing in an input, and

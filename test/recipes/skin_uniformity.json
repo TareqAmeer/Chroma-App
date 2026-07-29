@@ -1,0 +1,23 @@
+{
+  "_desc": "Skin Tone: a frame-filling radial mask gated by COLOUR RANGE, with hue/sat/lum Uniformity pulling the selected tones toward an MST swatch target plus Tan. Exercises colRangeWeight() and skinUniformity() in the lut pass, including the 'preserve modeling' vRef mix. srcV is pinned here (the app measures it from the preview canvas, which a headless processToCanvas render never draws) so the golden stays deterministic. The portrait fixture is the interesting case: a tanned field plus a pale disc is exactly the uneven-tan problem, so a contraction should visibly close the gap between them while an additive shift would not.",
+  "sliders": {},
+  "toggles": { "local": true },
+  "selects": {},
+  "colors": {},
+  "masks": [
+    {
+      "type": "radial",
+      "origin": "skin",
+      "cx": 0.5, "cy": 0.5, "rx": 1.4, "ry": 1.4, "rot": 0,
+      "feather": 1, "invert": false,
+      "lumLo": 0, "lumHi": 1,
+      "exp": 0, "con": 0, "temp": 0, "tint": 0, "sat": 0, "hue": 0, "hi": 0, "sh": 0,
+      "subtract": false, "colHue": 0, "colAmt": 0, "colSat": 0.65,
+      "crOn": true, "crH": 0.05, "crS": 0.33, "crV": 0.73, "crRange": 55,
+      "uH": 60, "uS": 50, "uL": 40, "preserve": 70,
+      "tgtMode": "swatch", "tgtHex": "#a07e56",
+      "tanDepth": 30, "tanWarm": 40,
+      "srcV": 0.73
+    }
+  ]
+}

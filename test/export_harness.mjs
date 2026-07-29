@@ -100,12 +100,19 @@ async function main() {
     // the way there is for fxState.artSeed). For a reproducible regression harness we replace
     // Math.random with a small seeded LCG via addInitScript BEFORE the app's own script runs —
     // this only affects what happens inside this Playwright page, chromasmith-22.html on disk
-    // is untouched. Reset once per page here (not per-render) so the SAME fixed sequence of
-    // draws is consumed by fixtures/recipes in a fixed order — reproducible across separate
-    // harness invocations (golden vs test) as long as the combo order is identical, which it
-    // is (fixtures/recipes are both sorted before iterating).
+    // is untouched.
+    //
+    // The seed is RE-SET before every fixture x recipe combo (window.__reseed below), not once
+    // per page. A single per-page stream made each combo's grain depend on how many renders ran
+    // BEFORE it, so merely ADDING a recipe shifted the stream and silently invalidated the grain
+    // goldens of every later fixture — a spurious "regression" with no code change behind it
+    // (observed when skin_uniformity.json was added: chart__grain still matched, but
+    // gradient__grain and portrait__grain both moved). Re-seeding per combo makes each golden
+    // depend only on its own fixture+recipe, so recipes can be added or removed freely.
     await page.addInitScript(() => {
-      let s = 0xC0FFEE;
+      const SEED = 0xC0FFEE;
+      let s = SEED;
+      window.__reseed = () => { s = SEED; };
       Math.random = () => {
         s = (s * 1103515245 + 12345) & 0x7fffffff;
         return s / 0x7fffffff;
@@ -155,6 +162,15 @@ async function main() {
           // which iterates known slider/toggle/select ids and ignores anything unrecognized —
           // but keep it out just to be tidy.
           const clean = { ...snap }; delete clean._desc;
+          // ISOLATION: applyUISnapshot treats an ABSENT selects key as "leave this alone" — correct
+          // for selective paste, wrong for a regression harness, where each combo must be
+          // independent of whichever recipe ran before it. Without these explicit empties, a recipe
+          // with no LUT inherits the previous recipe's LUT: lut_look leaked its look into
+          // skin_uniformity (the first recipe to sort after it), which rendered ~21/255 brighter
+          // than the same recipe rendered from clean state. Nothing warned, because the readiness
+          // loop below simply timed out and carried on. Recipes that DO want a LUT still override.
+          clean.selects = { 'sel-lut': '', 'sel-print': '', ...(clean.selects || {}) };
+          window.__reseed();   // per-combo determinism — see addInitScript above
           window.applyUISnapshot(clean);
           if (typeof window.fxUpdate === 'function') window.fxUpdate();
           // Let a frame settle so any deferred UI-triggered rebakes (HSL/curves) run before render.
@@ -163,13 +179,19 @@ async function main() {
           // doesn't await them) — wait for fxState.lut/fxState.print to actually reflect the
           // requested selection before rendering, or a look LUT recipe would silently render as
           // identity (the bug this comment documents having hit during harness development).
-          const wantLut = clean.selects && clean.selects['sel-lut'];
-          const wantPrint = clean.selects && clean.selects['sel-print'];
+          const wantLut = clean.selects['sel-lut'];
+          const wantPrint = clean.selects['sel-print'];
           const lutReady = () => (!wantLut ? !fxState.lut : !!fxState.lut);
           const printReady = () => (!wantPrint ? !fxState.print : fxState.print === wantPrint);
           const t0 = Date.now();
           while ((!lutReady() || !printReady()) && Date.now() - t0 < 5000) {
             await new Promise(r => setTimeout(r, 30));
+          }
+          // THROW rather than render a knowingly-wrong frame. The old code fell through on
+          // timeout, so a state-leak bug baked itself into the goldens silently.
+          if (!lutReady() || !printReady()) {
+            throw new Error(`state not settled: lut=${!!fxState.lut} (want ${wantLut || 'none'}), `
+              + `print=${fxState.print || 'none'} (want ${wantPrint || 'none'})`);
           }
 
           const it = typeof curItem === 'function' ? curItem() : fxImages[fxCurIdx || 0];
