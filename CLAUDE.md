@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-03b`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-29b`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -96,6 +96,33 @@ python calib/render_chart.py     # render a model + side-by-side vs the Dehancer
 python calib/optimize_hal.py     # autonomous dense-loss optimizer (background-able)
 ```
 
+### Export regression gate (`test/`) — the fast way to verify a shader edit
+
+```bash
+npm test                          # export gate + scorecard
+node test/export_harness.mjs      # renders every fixture x recipe into test/output/
+node test/export_harness.mjs --golden   # regenerate test/golden/ (only when a change is intended)
+```
+
+`test/export_harness.mjs` loads the REAL `chromasmith-22.html` in Playwright/Chromium (software
+SwiftShader GL, so output doesn't depend on the host GPU) and drives it through the app's own
+`applyUISnapshot`/`processToCanvas`. It is the cheapest way to prove a shader edit compiles and
+that untouched paths are **bit-exact** — far faster than clicking, and it catches the
+shader-truncation white-screen class of bug immediately (watch for `[pageerror]`). Recipes are
+JSON in `test/recipes/`, fixtures are PNGs in `test/fixtures/` (`portrait.png` is a tanned field +
+pale disc + dark dot — a deliberate uneven-skin test case). `test/probe_*.mjs` are ad-hoc probes
+built on the same rig for measuring pixels rather than diffing images.
+
+⚠️ Two determinism rules the harness enforces, both learned by having them fail silently:
+- **Recipes are isolated per combo.** `applyUISnapshot` treats an *absent* `selects` key as "leave
+  this alone" (correct for selective paste), so a recipe with no LUT used to inherit the previous
+  recipe's LUT. Latent for a long time because `lut_look` sorted last and state resets per
+  FIXTURE, not per recipe. The harness now clears `sel-lut`/`sel-print` explicitly and **throws**
+  if state hasn't settled instead of rendering a knowingly-wrong frame into a golden.
+- **The seeded `Math.random` stream resets per combo**, not per page. Per-page, each combo's grain
+  depended on how many renders preceded it, so merely ADDING a recipe invalidated the grain
+  goldens of every later fixture — a spurious "regression" with no code change behind it.
+
 ---
 
 ## 3. App architecture (`chromasmith-22.html`)
@@ -111,7 +138,8 @@ Everything is in one file. Key pieces:
      moves] → `basicAdjust()` (exposure/contrast/WB/etc.) → [**local-adjust masks** (`mskN`):
      up to 4 analytic radial/linear masks passed as vec4 uniform arrays, global-uv mapped via
      `uvOffL/uvScaleL` so preview/loupe/export tiles place them identically; per mask
-     exp/con/temp/sat + luminance-range gate + invert] → [**tone curves** (`useCurve`):
+     exp/con/temp/sat + luminance-range gate + **colour-range gate + skin-tone uniformity**
+     (§5b) + invert] → [**tone curves** (`useCurve`):
      256×1 table baked from monotone-cubic point curves, sampled at texel centers so identity
      is byte-identical]. Each optional stage is gated off (and identity-gated in
      `getFXParams`) by default. ⚠️ **Saturation & vibrance are NOT applied here** — they moved
@@ -157,7 +185,8 @@ reload the live page in a real browser after touching shader source**, even for 
   converts V-Log/V-Gamut→Rec.709 before the look LUT), a preset/LUT, a **Print profile**
   (Kodak/Fuji print, applied as a 2nd 3D LUT AFTER the film look + halation — see §8), basic
   adjustments, **Tone Curves** (master+R/G/B point-curve editor), **Color Mixer** (8-band HSL),
-  **Local Adjustments** (up to 4 radial/linear masks), grain/**Film Artifacts** (dust/scratches/
+  **Local Adjustments** (up to 4 radial/linear/brush/sky/AI masks, each with an optional
+  **Skin Tone** colour-range gate + uniformity — see §5b), grain/**Film Artifacts** (dust/scratches/
   light leak + Reshuffle)/halation (incl. **No remjet** strong mode — see §5)/bloom/vignette/
   borders, **Canvas** (aspect-ratio matte around image+borders — ratio chips/zoom/bg color or
   blurred-photo fill via `canvasCompose()`, shared by preview & export; order: photo → borders
@@ -329,6 +358,58 @@ colour blocks — and minimizes it with scipy Nelder-Mead, entirely in Python (z
 per eval). The inner-edge "tiny glow" the user wanted is **emergent** from the channel-split
 blur (σ_R ≫ σ_G): at an edge both glows overlap (amber), deeper only red remains (deep red) —
 a dedicated inner-glow term optimized to ~zero gain, so none is needed.
+
+---
+
+## 5b. Skin Tone — the one CONTRACTIVE colour operator
+
+Every other colour control in the app is **additive**: `adjSkin`, `applyHSL`,
+`applyPointColors` and `maskAdjust` all compute `x → x + Δ`. Adding a constant leaves the
+*spread* of the selected tones untouched — which is why a patchy tan resists all of them: raising
+warmth moves a pale chest and an already-tanned face equally, so the chest stays pale relative to
+a face that is now over-cooked.
+
+`skinUniformity()` (lut pass) is the missing operator: `x → x + w·u·(target − x)`. Distance to a
+reference tone shrinks by `(1−u)`, so far-from-target pixels move a lot and near-target pixels
+barely move. **Tan** moves the TARGET (resolved on the CPU in `mskSkinTarget`), never the pixels,
+so pushing it deepens the whole selection instead of compounding on the dark parts. Modelled on
+Capture One's Skin Tone tool; Lightroom has no equivalent.
+
+Three per-mask pieces, all reusing the existing mask machinery:
+- **`colRangeWeight()`** — gates the mask by hue/sat near an eyedropper pick (`mskG`), multiplied
+  into `w` beside the lum gate. Same kernel shape as `pcWeight` but ⚠️ **deliberately without its
+  `min(1,s*3)` saturation floor** — skin highlights and sheen are genuinely low-saturation, and
+  that floor would drop the brightest skin out of the selection and leave a bright halo along
+  every highlight.
+- **Target decoupled from the gate centre** (`mskI`) — Match pick / **Monk Skin Tone** swatch (10
+  shades, CC BY 4.0, credited in the Guide) / any custom colour. The gate must be picked from the
+  photo; the target must not have to be, or a tan tone absent from the frame is unreachable.
+- **`preserve` ("Preserve modeling", `mskH.w`)** — required once the target is absolute. Converging
+  every pixel's V onto a fixed swatch value would crush the subject to one flat lightness and make
+  shadowed skin as bright as lit skin. `vRef` mixes between the pixel's own value (0 = true
+  contraction: evens a tan LINE, flattens form) and `srcV`, the measured mean of the gated pixels
+  (1 = a pure level offset, form intact). ⚠️ `srcV` is measured ONCE in JS (`mskMeasureSrcV`, off
+  the graded preview canvas) and passed as a uniform — re-measuring per export tile would make
+  each tile converge to a different level and show as blocks. Its JS gate mirror must stay in sync
+  with `colRangeWeight`.
+
+**`mskShowSel` / the "Selection" preview mode** renders a mask's *effective* weight (shape × lum
+gate × colour gate) as a red overlay. `mskOverlaySync` draws only the SHAPE in JS/SVG, so it never
+showed the lum gate either; a colour range is untunable blind. Only the two `renderPreview` calls
+pass `showSel` — exports never do. It does not yet reach the 1:1 loupe (see `ROADMAP.md`).
+
+### ⚠️ The non-obvious failure mode: weight uniformity beats distance
+Because each pixel moves by `w·u·(target−x)`, a large spread in **w** across the skin can outweigh
+the spread in **distance** — and then the tones stop converging and can actively diverge. Measured
+on `__TM3390.jpg` (`test/probe_tm3390.mjs`): at Range 40 the tanned cheek's saturation weight was
+0.84 vs the pale chest's 0.64, so the cheek moved *more* despite starting *closer* to the target,
+and the saturation spread **widened** (0.0434 → 0.0468). Evening the weights out (Range 70,
+feather 1) gave 0.82/0.84, the pale chest then moved more than the cheek (0.080 vs 0.062), and the
+spread closed 42% with hue and lightness closing too. This is why `+ Skin` defaults to a wide
+Range (65) and full feather, and why the UI pushes the Selection view: **a weakly-selected patch
+that is far from the target makes things worse, not better.** A single-point gate also can't cover
+skin whose sheen pushes it to the magenta side of the hue wheel (the lower torso gated only 0.32
+here) — the real fix is multi-sample gating, ROADMAP item 1.
 
 ---
 
