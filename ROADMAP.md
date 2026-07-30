@@ -8,11 +8,15 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 (`test/probe_tm3390.mjs`, `test/probe_skin.mjs`) — those are marked **[measured]** and are the
 highest-confidence entries here.
 
+**Status: 6 of 20 done.** ✅ 1 (multi-sample gate), 2 (Amount), 3 (order half), 6 (Texture),
+8 (range mask types), B (Selection in loupe). Every one verified against the export gate with all
+18 goldens byte-identical, i.e. each is a true no-op at its defaults.
+
 ---
 
 ## Tier 1 — finish and harden what the mask system already almost does
 
-### 1. Multi-sample colour gate (hue *locus*, not a ball) — **[measured]** — M
+### 1. ✅ DONE — Multi-sample colour gate (hue *locus*, not a ball) — **[measured]**
 `colRangeWeight` centres a symmetric hue×sat kernel on ONE pick. Real skin isn't a ball in that
 space: on `__TM3390.jpg`, with the gate centred on the cheek (h 0.044, s 0.373), the lower torso
 (222,169,185) gated only **0.32** and the shoulder (209,150,156) **0.31** — both sit on the
@@ -23,14 +27,14 @@ biggest quality win available to the tool we just shipped.
 *Touches:* `colRangeWeight` (lut shader), `mskG` packing → an array of samples (UBO or a tiny
 1D sample texture), `mskCrEyedropperClick`, `mskMeasureSrcV`'s JS mirror.
 
-### 2. Per-mask **Amount** (opacity) — S
+### 2. ✅ DONE — Per-mask **Amount** (opacity)
 Every per-mask slider is independent, so dialling a mask back means scaling eight sliders by
 hand. Capture One's own advice for over-strong uniformity is "turn the value down, or erase the
 mask with a low-opacity brush" — an Amount slider is the direct answer. Implementation is one
 multiply on `w` after the gates, before `skinUniformity`/`maskAdjust`.
 *Touches:* one slot in `mskB`/`mskE`, one line in the mask loop, one `_mskRow`.
 
-### 3. Mask **reorder** + edge-aware refine + higher raster resolution — **[measured]** — M
+### 3. ⏳ PARTLY DONE — Mask **reorder** shipped (+ rename/mute); edge-aware refine and higher raster resolution still open — **[measured]** — M
 Three related defects in one area:
 - **Order matters but can't be changed.** `− Subtract prev` subtracts *the previous mask in the
   list* (`mskE[i].x`, `mskShapeWeight(i-1)`), yet there is no reorder affordance anywhere
@@ -57,7 +61,7 @@ constraints. A uniform buffer object (or a small parameter texture) plus a raste
 or atlas would take it to 8–16. Portraits with skin + eyes + background + sky already exhaust 4.
 *Touches:* all `msk*` uniform declarations and packing, `mskBuildTex`, `mskShapeWeight`.
 
-### 6. Per-mask **Texture / Clarity / Sharpness / Noise** — M
+### 6. ✅ PARTLY DONE — Per-mask **Texture** shipped; Clarity/Sharpness/Noise still open — M
 Masks carry exposure/contrast/temp/tint/sat/hue/highlights/shadows/colour-paint, but none of the
 *detail* controls — so the most common portrait move of all (soften skin texture locally while
 keeping eyes sharp) is impossible. The lut pass already runs a 5-tap unsharp on source pixels for
@@ -79,7 +83,7 @@ at 4000px) so export tiles stay seamless.
 
 ## Tier 2 — capability gaps against Lightroom / Capture One
 
-### 8. Colour Range and Luminance Range as first-class mask *types* — S
+### 8. ✅ DONE — Colour Range and Luminance Range as first-class mask *types*
 We added a colour gate as a *modifier* on shape masks. Both range gates deserve to be masks in
 their own right (`+ Colour Range`, `+ Luminance Range`) with no shape at all — that is how users
 coming from Lightroom expect to find them, and the machinery is already written.
@@ -137,7 +141,7 @@ clicking each and watching the overlay, cannot rename them, cannot temporarily d
 judge its contribution, and — per item 3 — cannot reorder them even though `Subtract prev`
 depends on order. A small live thumbnail per mask fixes most of this at a glance.
 
-### B. Make the **Selection** view work in the 1:1 loupe, and make it adjustable — S
+### B. ✅ MOSTLY DONE — **Selection** view now works in the 1:1 loupe; overlay-opacity and edge-only modes still open — S
 Known limitation of what we just shipped: `mskShowSelIdx()` is only passed by the two
 `renderPreview` calls, so the loupe (`renderFullResCrop`) always shows the normal photo. Judging
 a colour range at true export scale is exactly when you'd want it. Also worth adding: an opacity

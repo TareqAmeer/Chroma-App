@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30a`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30b`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -138,8 +138,14 @@ Everything is in one file. Key pieces:
      moves] → `basicAdjust()` (exposure/contrast/WB/etc.) → [**local-adjust masks** (`mskN`):
      up to 4 analytic radial/linear masks passed as vec4 uniform arrays, global-uv mapped via
      `uvOffL/uvScaleL` so preview/loupe/export tiles place them identically; per mask
-     exp/con/temp/sat + luminance-range gate + **colour-range gate + skin-tone uniformity**
-     (§5b) + invert] → [**tone curves** (`useCurve`):
+     exp/con/temp/sat/**Texture** + luminance-range gate + **colour-range gate + skin-tone
+     uniformity** (§5b) + **Amount** (`mskE.w`, one master scale over the finished selection;
+     muting rides this slot at 0) + invert. Mask **"type 2" is SHAPELESS** — weight 1 everywhere,
+     so the range gates alone select; that is the Colour Range / Luminance Range mask, and for it
+     `invert` flips the GATES rather than the shape (inverting a full-frame shape gives zero).
+     ⚠️ Texture reuses `srcHP`, the source high-pass hoisted to the top of `main()` and shared with
+     the global Sharpen/Clarity, gated on `mskAnyTex` so its 4 extra taps are never paid by
+     default] → [**tone curves** (`useCurve`):
      256×1 table baked from monotone-cubic point curves, sampled at texel centers so identity
      is byte-identical]. Each optional stage is gated off (and identity-gated in
      `getFXParams`) by default. ⚠️ **Saturation & vibrance are NOT applied here** — they moved
@@ -185,8 +191,9 @@ reload the live page in a real browser after touching shader source**, even for 
   converts V-Log/V-Gamut→Rec.709 before the look LUT), a preset/LUT, a **Print profile**
   (Kodak/Fuji print, applied as a 2nd 3D LUT AFTER the film look + halation — see §8), basic
   adjustments, **Tone Curves** (master+R/G/B point-curve editor), **Color Mixer** (8-band HSL),
-  **Local Adjustments** (up to 4 radial/linear/brush/sky/AI masks, each with an optional
-  **Skin Tone** colour-range gate + uniformity — see §5b), grain/**Film Artifacts** (dust/scratches/
+  **Local Adjustments** (up to 4 masks — radial/linear/brush/sky/AI plus shapeless **Colour Range**
+  and **Luminance Range**; each carries Amount, Texture, an optional **Skin Tone** colour-range gate
+  + uniformity (§5b), and can be reordered/renamed/muted), grain/**Film Artifacts** (dust/scratches/
   light leak + Reshuffle)/halation (incl. **No remjet** strong mode — see §5)/bloom/vignette/
   borders, **Canvas** (aspect-ratio matte around image+borders — ratio chips/zoom/bg color or
   blurred-photo fill via `canvasCompose()`, shared by preview & export; order: photo → borders

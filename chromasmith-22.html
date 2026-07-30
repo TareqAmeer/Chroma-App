@@ -1000,6 +1000,8 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye"><span class="bdot"></span>+ Brush</button>
             <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed"><span class="bdot"></span>+ Sky</button>
             <button class="btn bgh" onclick="mskAdd('skin')" title="Even out uneven skin (patchy tan, pale chest vs tanned face) and tan it consistently — picks a tone, selects everything near it, then pulls it all toward one target"><span class="bdot"></span>+ Skin</button>
+            <button class="btn bgh" onclick="mskAdd('color')" title="Select by COLOUR alone, anywhere in the frame — no shape. Pick a colour, then shift-click to add more."><span class="bdot"></span>+ Colour Range</button>
+            <button class="btn bgh" onclick="mskAdd('lum')" title="Select by BRIGHTNESS alone, anywhere in the frame — no shape. Set the Lum floor/ceiling to pick a band (shadows, midtones, highlights)."><span class="bdot"></span>+ Luminance Range</button>
             <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Brush over an object on the photo to select it (EdgeSAM, on-device — desktop app only)" style="display:none"><span class="bdot"></span>+ AI Select</button>
           </div>
           <div class="fx-row"><div class="fx-label">Show on photo</div>
@@ -3550,7 +3552,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30a';
+const BUILD='2026-07-30b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4106,6 +4108,8 @@ uniform vec4 mskCS[8];
 uniform vec4 mskH[4];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
 uniform vec4 mskI[4];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
+uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
+uniform vec4 mskJ[4];     // x: Texture (-1..1, source high-pass gain; negative softens), y,z,w free
 uniform vec2 uvOffL,uvScaleL;
 // Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
 // (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
@@ -4304,17 +4308,30 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
     // full travel. Flat interior (LOW feather) is what lets Skin Tone uniformity converge
     // evenly — see CLAUDE.md 5b.
     float f=clamp(B.y,0.01,0.5);w=1.0-smoothstep(max(1.0-2.0*f,0.0),1.0,t);}
+  // type 2 = SHAPELESS: the whole frame, so the colour and/or luminance range gates are the only
+  // thing selecting. Invert is deliberately NOT applied here — inverting a full-frame shape gives
+  // zero everywhere. For these masks it inverts the GATES instead, in the mask loop.
+  else if(B.x>1.5){w=1.0;return w;}
   else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
   if(B.z>0.5)w=1.0-w;
   return w;
 }
 void main(){vec4 c=texture(img,uv);
+// Source-pixel high-pass, computed ONCE. Used by the global Sharpen/Clarity below and, when any
+// mask asks for it, by the per-mask Texture control in the mask loop. Hoisted (rather than
+// recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
+// when nothing needs it, so the default path costs exactly what it did before.
+vec3 srcHP=vec3(0.0);
+bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.))||mskAnyTex>0.5;
+if(needHP){
+  vec3 nb=(texture(img,uv+vec2(0.,texSize.y))+texture(img,uv-vec2(0.,texSize.y))
+          +texture(img,uv+vec2(texSize.x,0.))+texture(img,uv-vec2(texSize.x,0.))).rgb*0.25;
+  srcHP=c.rgb-nb;
+}
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
 // adjSharp boosts all frequencies; adjClarity weights by midtone mask (4*lum*(1-lum)).
 if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
-  vec3 nb=(texture(img,uv+vec2(0.,texSize.y))+texture(img,uv-vec2(0.,texSize.y))
-          +texture(img,uv+vec2(texSize.x,0.))+texture(img,uv-vec2(texSize.x,0.))).rgb*0.25;
-  vec3 hp=c.rgb-nb;
+  vec3 hp=srcHP;
   float lv=dot(c.rgb,vec3(.2126,.7152,.0722));
   float cw=4.*lv*(1.-lv);
   c.rgb=clamp(c.rgb+hp*(adjSharp+adjClarity*cw),0.,1.);
@@ -4335,6 +4352,9 @@ if(mskN>0.5){
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
     w*=colRangeWeight(c.rgb,mskG[i],mskCS[i*2],mskCS[i*2+1]);
+    // Shapeless (Colour Range / Luminance Range) masks invert their GATES, not their shape —
+    // see mskShapeWeight. Applied after both gates so it means "everything except this range".
+    if(mskB[i].x>1.5&&mskB[i].z>0.5)w=1.0-w;
     w*=mskE[i].w;                          // Amount: one master scale over the finished selection
     // "Selection" preview mode: paint this mask's EFFECTIVE weight (shape x lum gate x colour
     // gate) over a greyscale photo and stop. The JS/SVG overlay can only draw the shape, so it
@@ -4345,6 +4365,12 @@ if(mskN>0.5){
       return;
     }
     if(w>0.001){
+      // Texture: add or SUBTRACT the source high-pass inside the mask. Negative softens, which is
+      // the most-wanted local move in portrait work (calm skin texture while eyes stay sharp) and
+      // was impossible before — masks carried no detail controls at all. The high-pass is measured
+      // on SOURCE pixels while this applies post-grade; that mismatch is deliberate and matches
+      // what the global Sharpen/Clarity already do.
+      if(mskJ[i].x!=0.0)c.rgb=clamp(c.rgb+srcHP*(mskJ[i].x*w),0.0,1.0);
       c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i]);                // converge toward the target FIRST,
       c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
@@ -4940,9 +4966,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const MK=(P.masks&&P.masks.length)?P.masks.slice(0,4):[];
     const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16),mF=new Float32Array(16),
           mG=new Float32Array(16),mH=new Float32Array(16),mI=new Float32Array(16),
-          mS=new Float32Array(32);   // colour-gate samples: 4 masks x 4 samples x (h,s) = 8 vec4
+          mS=new Float32Array(32),   // colour-gate samples: 4 masks x 4 samples x (h,s) = 8 vec4
+          mJ=new Float32Array(16);   // per-mask detail: x = Texture
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
+      else if(m.type==='none'){mB[o]=2;}   // shapeless: gates only (Colour/Luminance Range masks)
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
       else{mA[o]=m.cx;mA[o+1]=m.cy;mA[o+2]=m.rx;mA[o+3]=m.ry;mB[o]=0;}
       mB[o+1]=m.feather!=null?m.feather:0.5;mB[o+2]=m.invert?1:0;
@@ -4955,6 +4983,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // renumber the slots and silently repoint every later mask's "subtract prev".
       mE[o+3]=m.muted?0:(m.amount!=null?m.amount:100)/100;
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
+      mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -5004,7 +5033,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       maskTex:4,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
-      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,
+      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,
+      mskAnyTex:MK.some(m=>m.tex)?1:0,
       mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
@@ -7178,7 +7208,8 @@ function _mskSkinDefaults(){return{
   uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
   tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
   tanDepth:0,tanWarm:0,srcV:null,
-  amount:100,name:'',muted:false};}   // amount = master scale on the whole mask; name = user label
+  amount:100,name:'',muted:false,     // amount = master scale on the whole mask; name = user label
+  tex:0};}                            // Texture: +sharpen / -soften inside the mask
 // Masks saved by an older build have none of the fields above. Fill them in on load (defaults are
 // all-zero, so a restored recipe renders exactly as it did) — without this the panel would read
 // undefined into its sliders and the target resolver would see no tgtMode.
@@ -7218,6 +7249,12 @@ function mskAdd(type){
     // point on __TM3390.jpg gave t = 0.11..0.42 — all inside 0.5, so all get weight 1.0.
     m={type:'radial',origin:'skin',cx:0.5,cy:0.5,rx:0.45,ry:0.5,rot:0,feather:0.25,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
+  else if(type==='color'||type==='lum'){
+    // Shapeless masks: no ellipse or gradient at all, the range gates do all the selecting. These
+    // existed only as modifiers on a shape mask before, which is not where anyone coming from
+    // Lightroom looks for them.
+    m={type:'none',origin:type,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+  }
   else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
@@ -7245,12 +7282,16 @@ function mskAdd(type){
   // 0.86-1.00 and closed hue 40% / sat 45%; three closed sat 49%. Hence a mid Range plus the
   // shift-click-to-add-samples flow the panel pushes, rather than one pick and a huge Range.
   if(type==='skin'){m.crOn=true;m.crRange=55;}
+  if(type==='color'){m.crOn=true;m.crRange=40;}
+  if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
   if(type==='ai'){_samLastError=null;samEnsureEncoded();mskAiTapToggle(true);}
   if(type==='skin'){mskCrEyedropper(true);log('Click a mid-tone patch of skin. Then drag/resize the shape on the photo so it only covers the person you mean.','info');}
+  if(type==='color'){mskCrEyedropper(true);log('Click the colour you want to select — this mask has no shape, the colour range IS the selection','info');}
+  if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
 }
 
 // ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
@@ -7907,6 +7948,12 @@ function mskRebuild(){
     h+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
       +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false)
       +_mskRow('Feather','feather',m.feather,0,100,0.005,false);
+  }else if(m.type==='none'){   // Colour Range / Luminance Range — no shape, the gates select
+    h+='<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:2px 0 6px">'
+      +'No shape — this mask selects the whole frame and lets the '
+      +(m.origin==='lum'?'<b>Lum floor/ceiling</b>':'<b>Colour range</b>')
+      +' below do the selecting. <b>Invert</b> flips the range (everything <i>except</i> it). '
+      +'Turn on the <b>Selection</b> preview above to see it.</div>';
   }else if(m.type==='linear'){
     h+=_mskRow('Start X','x0',m.x0,0,100,0.01,false)+_mskRow('Start Y','y0',m.y0,0,100,0.01,true)
       +_mskRow('End X','x1',m.x1,0,100,0.01,false)+_mskRow('End Y','y1',m.y1,0,100,0.01,true)
@@ -7995,6 +8042,11 @@ function mskRebuild(){
     +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
     +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
+    // Texture: the local detail control masks never had. Negative softens — the standard portrait
+    // move of calming skin texture while eyes and hair stay sharp.
+    +'<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or colour."><div class="fx-label">Texture</div>'
+    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
+    +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
     // Color paint: a Lightroom-style "tint the masked area toward this color" control —
     // distinct from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already
@@ -8047,7 +8099,8 @@ function mskToggleMute(){
 }
 // The label shown on the list chip when the user hasn't named the mask themselves.
 function mskAutoLabel(m,i){
-  const t=m.origin==='skin'?'Skin':m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
+  const t=m.origin==='skin'?'Skin':m.origin==='color'?'Colour':m.origin==='lum'?'Lum'
+    :m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
     :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Colour':'Radial'):'Brush';
   return t+' '+(i+1);
 }
