@@ -263,6 +263,7 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    brush-mask equivalent of the radial/linear shape overlay above; same mskPreviewMode segmented
    control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
 #msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
+.msk-dragging{opacity:0.4}
 #msk-paint-overlay.on{display:block}
 /* Live brush cursor: a ring at the ACTUAL painted radius (matches mskPaintAt's soft falloff),
    only shown while "Paint" is armed — previously the brush had no visible size/position at all
@@ -3586,7 +3587,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30k';
+const BUILD='2026-07-30l';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -8438,8 +8439,18 @@ function mskRebuild(){
     label.textContent=(m.isExclude?'✂ ':'')+(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'')+(mskSolo===i?' ★':'');
     b.appendChild(label);
     if(m.muted)b.style.opacity='0.45';
-    b.title=m.muted?'Muted — click to select, then the eye button to unmute':'Click to edit this mask';
-    b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};list.appendChild(b);
+    b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — order matters (Subtract prev).':'Click to edit this mask. Drag to reorder — order matters (Subtract prev).';
+    b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
+    // Drag-to-reorder: HTML5 DnD on the row buttons themselves. dragstart stashes the source
+    // index (dataTransfer, not a global — a second drag started mid-drop would otherwise race a
+    // module-level var); drop hands off to mskReorder, which is the ↑/↓ swap logic (mskMove)
+    // generalized to move BETWEEN any two indices instead of only adjacent ones.
+    b.draggable=true;
+    b.ondragstart=(e)=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(i));b.classList.add('msk-dragging');};
+    b.ondragend=()=>{b.classList.remove('msk-dragging');};
+    b.ondragover=(e)=>{e.preventDefault();e.dataTransfer.dropEffect='move';};
+    b.ondrop=(e)=>{e.preventDefault();const from=parseInt(e.dataTransfer.getData('text/plain'),10);if(!isNaN(from))mskReorder(from,i);};
+    list.appendChild(b);
   });
   // Masks are per-photo by default (see installFXImages/fxSelectImage) — this is the one
   // explicit, opt-in way to share the current photo's mask set across the rest of a batch.
@@ -8594,6 +8605,20 @@ function mskMove(dir){
   mskSel=j;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
+}
+// Drag-and-drop reorder (mskRebuild's row ondrop): moves the mask at `from` to land at `to`,
+// splice-out-then-splice-in rather than mskMove's single swap so a drag across several rows in
+// one gesture doesn't need N adjacent swaps. Keeps mskMove's own two safety rules: index 0 can
+// never carry "subtract prev" (nothing precedes it), and the moved mask stays selected.
+function mskReorder(from,to){
+  const A=fxState.masks;
+  if(from===to||from<0||to<0||from>=A.length||to>=A.length)return;
+  const[m]=A.splice(from,1);
+  A.splice(to,0,m);
+  if(A[0]&&A[0].subtract)A[0].subtract=false;
+  mskSel=to;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();fxHistoryPush();
 }
 function mskRename(){
   const m=fxState.masks[mskSel];if(!m)return;

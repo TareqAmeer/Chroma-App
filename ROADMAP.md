@@ -9,14 +9,14 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 highest-confidence entries here.
 
 **Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
-8, 14 (resize+sharpening), 16, A (thumbnails+solo), B, D shipped; 4 partly. Item 16 (face-parse
-auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a real photo
-— see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but
-like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs
-a hands-on check in the built app. Everything else below is verified against the export gate with
+8, 14 (resize+sharpening), 16, A, B, D shipped; 4 partly. Item 16 (face-parse auto-exclusion) is
+verified with a real Rust integration test (`cargo test`) against a real photo — see
+`desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but like
+item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs a
+hands-on check in the built app. Everything else below is verified against the export gate with
 the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
 
-**Still open — 10 items, each independent.** Nothing here blocks anything else, so they can be
+**Still open — 9 items, each independent.** Nothing here blocks anything else, so they can be
 picked off in any order and in separate sessions:
 
 | # | item | size |
@@ -28,7 +28,6 @@ picked off in any order and in separate sessions:
 | 13 | JXL / AVIF / HEIC in, 16-bit out | L |
 | 14 | Export ICC/P3, watermark, named presets | S |
 | 15 | Auto-match a series to a reference photo | M |
-| A | Mask panel drag-reorder (thumbnails+solo done; still uses ↑/↓ buttons) | S |
 | C | Command palette (⌘K) | S |
 | E | First-run tour + contextual tips | S |
 
@@ -200,14 +199,16 @@ than a LUT.
 
 ## UX / UI enhancements
 
-### A. ⏳ MOSTLY DONE — Mask panel: thumbnails, rename, solo/mute shipped; drag-reorder (still ↑/↓ buttons) open — S
+### A. ✅ DONE — Mask panel: thumbnails, rename, solo/mute, drag-reorder
 Each mask-list row now carries a small live canvas thumbnail (`_mskThumb`: downsampled raster for
 brush/sky/AI, a drawn ellipse/gradient for radial/linear, a flat tint for shapeless Colour/Luminance
 Range) plus a Solo toggle (`mskToggleSolo`/`mskSolo`) that isolates one mask's contribution by
 riding the exact same Amount=0 slot `muted` already uses — no shader change, and deliberately
 **not persisted** (session state only, cleared on reselect) so a saved session never loads with a
-mask looking silently disabled. Reorder is still the `mskMove` ↑/↓ buttons from item 3, not drag —
-genuine drag-and-drop is the one piece left here.
+mask looking silently disabled. Reorder is now HTML5 drag-and-drop on the rows themselves
+(`mskReorder`), generalizing item 3's `mskMove` swap (adjacent-only) to move between any two
+indices in one gesture — same two safety rules carried over (index 0 can't keep "subtract prev",
+the moved mask stays selected).
 
 ### B. ✅ MOSTLY DONE — **Selection** view now works in the 1:1 loupe; overlay-opacity and edge-only modes still open — S
 Known limitation of what we just shipped: `mskShowSelIdx()` is only passed by the two
