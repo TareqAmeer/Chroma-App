@@ -27,7 +27,9 @@ const out=await pg.evaluate(async()=>{
       const xx=Math.min(W-1,Math.max(0,x+dx)),yy=Math.min(H-1,Math.max(0,y+dy));
       const i=(yy*W+xx)*4;r+=full[i];g+=full[i+1];b+=full[i+2];c++;}
     return [r/c,g/c,b/c];};
-  const hsvOf=(x,y)=>{const p=blk(x,y);return r2hsv(p[0]/255,p[1]/255,p[2]/255);};
+  // Oklab LCh, matching colRangeWeight. Returns [hueTurn, chroma, L] so the existing
+  // [h,s,v] destructuring below still reads correctly.
+  const hsvOf=(x,y)=>{const p=blk(x,y);return rgb2oklch(p[0]/255,p[1]/255,p[2]/255);};
 
   const SKIN={
     'cheek':[1290,3990],'neck':[1440,4560],
@@ -66,7 +68,7 @@ const out=await pg.evaluate(async()=>{
   for(const[n,[x,y]]of Object.entries(ALL)){
     const[h,s,v]=hsvOf(x,y);
     rows[n]={rgb:blk(x,y).map(Math.round),h:+h.toFixed(4),s:+s.toFixed(3),v:+v.toFixed(3),
-      gate:+crWeightJS(h,s,samples,RANGE,hsvOf(x,y)[2]).toFixed(3),shape:SHAPELESS?1:+shape(M,x,y).toFixed(3)};
+      gate:+crWeightJS(h,s,samples,RANGE).toFixed(3),shape:SHAPELESS?1:+shape(M,x,y).toFixed(3)};
   }
   // Sweep the sample sets: how much skin is covered vs how much non-skin leaks?
   const sweep={};
@@ -75,13 +77,13 @@ const out=await pg.evaluate(async()=>{
     let minSkin=1,nMissed=0,maxLeak=0,leaks=[];
     for(const n of Object.keys(SKIN)){
       const[h,s,v]=hsvOf(...SKIN[n]);
-      const g=crWeightJS(h,s,sm,RANGE,v);
+      const g=crWeightJS(h,s,sm,RANGE);
       if(g<minSkin)minSkin=g;
       if(g<0.6)nMissed++;
     }
     for(const n of Object.keys(OTHER)){
       const[h,s,v]=hsvOf(...OTHER[n]);
-      const g=crWeightJS(h,s,sm,RANGE,v);
+      const g=crWeightJS(h,s,sm,RANGE);
       if(g>0.15){leaks.push(n+' '+g.toFixed(2));}
       if(g>maxLeak)maxLeak=g;
     }
@@ -93,7 +95,7 @@ const out=await pg.evaluate(async()=>{
 console.log('samples used:',JSON.stringify(out.samples.map(p=>({h:+p.h.toFixed(3),s:+p.s.toFixed(3)}))));
 const show=(names,title)=>{
   console.log('\n'+title);
-  console.log('  '+'point'.padEnd(17)+'rgb'.padEnd(17)+'h'.padEnd(8)+'s'.padEnd(7)+'gate'.padEnd(7)+'shape'.padEnd(7)+'eff');
+  console.log('  '+'point'.padEnd(17)+'rgb'.padEnd(17)+'h'.padEnd(8)+'C'.padEnd(7)+'gate'.padEnd(7)+'shape'.padEnd(7)+'eff');
   for(const n of names){const r=out.rows[n];
     const eff=+(r.gate*r.shape).toFixed(3);
     const flag=names===out.skinNames?(eff<0.6?'  <-- MISSED':''):(eff>0.08?'  <-- LEAK':'');

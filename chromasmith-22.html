@@ -1020,6 +1020,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
               <button data-v="off" onclick="mskSetPreviewMode('off')" style="background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer">Off</button>
             </div>
           </div>
+          <!-- Overlay/Isolate are drawn in JS from the mask SHAPE only; Selection is rendered by
+               the shader and is the effective weight. For a gated mask those differ a lot, and
+               without saying so the three modes look like three contradictory answers. -->
+          <div id="msk-prevmode-hint" style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:2px 0 6px"></div>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
@@ -3582,7 +3586,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30h';
+const BUILD='2026-07-30i';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4097,6 +4101,57 @@ class FXR{
   _prog(vs,fs){const gl=this.gl,p=gl.createProgram();gl.attachShader(p,this._sh(gl.VERTEX_SHADER,vs));gl.attachShader(p,this._sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS)){const e=gl.getProgramInfoLog(p);console.error('GLSL link error:',e);log('Link error: '+e,'err');}return p}
   _compileAll(){
     const VS=`#version 300 es\nin vec2 a;out vec2 uv;\nvoid main(){uv=a*.5+.5;gl_Position=vec4(a,0,1);}`;
+    // ── OKLAB (Björn Ottosson) — shared by the lut pass and lumdown, interpolated into both so the
+    // skin path and the low-frequency lightness it compares against live in the SAME space.
+    //
+    // Why the skin tool moved here from HSV: HSV is not a perceptual space, it is a cheap
+    // reprojection of RGB, and every boundary problem this tool hit lived where that shows.
+    // Its "saturation" is max-min over max, which is near-identical for bright limestone and for
+    // deep-shadow skin, so separating them needed two hand-tuned luminance-gated cuts. Oklab
+    // CHROMA separates them outright: measured on __TM3390.jpg, rock C=0.0046 and sunglasses
+    // C=0.0051, against C=0.0186 for the darkest real skin and 0.049-0.075 for lit skin — a single
+    // threshold with ~3.6x margin. Oklab L is also real lightness rather than max(r,g,b), which is
+    // what the frequency separation and Preserve modeling were always meant to act on.
+    //
+    // Constants verified before use: white/black/mid-grey give a=b=0 exactly, and a 20k-sample
+    // round trip over random sRGB has a max error of 4.2e-4 / 255. Input/output is DISPLAY sRGB;
+    // the linearisation is done inside, since Oklab is defined on linear light.
+    const GLSL_OKLAB=`
+float _ok_s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
+float _ok_l2s(float c){c=max(c,0.0);return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
+float _ok_cbrt(float x){return sign(x)*pow(abs(x),1.0/3.0);}
+vec3 rgb2oklab(vec3 c){
+  vec3 lin=vec3(_ok_s2l(c.r),_ok_s2l(c.g),_ok_s2l(c.b));
+  float l=0.4122214708*lin.r+0.5363325363*lin.g+0.0514459929*lin.b;
+  float m=0.2119034982*lin.r+0.6806995451*lin.g+0.1073969566*lin.b;
+  float s=0.0883024619*lin.r+0.2817188376*lin.g+0.6299787005*lin.b;
+  float l_=_ok_cbrt(l),m_=_ok_cbrt(m),s_=_ok_cbrt(s);
+  return vec3(0.2104542553*l_+0.7936177850*m_-0.0040720468*s_,
+              1.9779984951*l_-2.4285922050*m_+0.4505937099*s_,
+              0.0259040371*l_+0.7827717662*m_-0.8086757660*s_);
+}
+vec3 oklab2rgb(vec3 lab){
+  float l_=lab.x+0.3963377774*lab.y+0.2158037573*lab.z;
+  float m_=lab.x-0.1055613458*lab.y-0.0638541728*lab.z;
+  float s_=lab.x-0.0894841775*lab.y-1.2914855480*lab.z;
+  float l=l_*l_*l_,m=m_*m_*m_,s=s_*s_*s_;
+  return vec3(_ok_l2s( 4.0767416621*l-3.3077115913*m+0.2309699292*s),
+              _ok_l2s(-1.2684380046*l+2.6097574011*m-0.3413193965*s),
+              _ok_l2s(-0.0041960863*l-0.7034186147*m+1.7076147010*s));
+}
+// LCh: x = L, y = chroma, z = hue as a 0..1 turn (so the existing circular-distance code carries
+// over unchanged from the HSV version).
+vec3 rgb2oklch(vec3 c){
+  vec3 lab=rgb2oklab(c);
+  float C=length(lab.yz);
+  float h=fract(atan(lab.z,lab.y)/6.28318530718+1.0);
+  return vec3(lab.x,C,h);
+}
+vec3 oklch2rgb(vec3 lch){
+  float a=lch.y*cos(lch.z*6.28318530718),b=lch.y*sin(lch.z*6.28318530718);
+  return oklab2rgb(vec3(lch.x,a,b));
+}
+`;
     this.progs.lut=this._prog(VS,`#version 300 es
 precision highp float;
 precision highp sampler3D;
@@ -4146,6 +4201,7 @@ uniform sampler2D skinLum;uniform float useSkinLum;
 // 4x4 box-averaged COLOUR of the source, used to evaluate the colour-range gate (see lumdown).
 uniform sampler2D skinCol;uniform float useSkinCol;
 uniform vec4 mskJ[4];     // x: Texture (-1..1, source high-pass gain; negative softens)
+                          // z: Tan one-way (0/1) — see skinUniformity
                           // y: EXCLUDE flag — this mask applies nothing itself and is instead
                           //    subtracted from every other mask. Unlike the older "subtract prev"
                           //    (which reaches back exactly one slot, so only ONE region could ever
@@ -4208,23 +4264,7 @@ vec3 tintToward(vec3 c,float hueDeg,float amt,float sat){
   vec3 target=hsl2rgb(vec3(mod(hueDeg,360.0)/360.0,clamp(sat,0.0,1.0),l));
   return mix(c,target,clamp(amt,0.0,1.0));
 }
-// HSV (not HSL) — matches the convention r2hsv/hsv2r/applyHSL/applyPointColors use on the JS
-// side, so the colour-range gate and the Point Color kernel it is modelled on agree.
-vec3 rgb2hsv(vec3 c){
-  float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),d=mx-mn;
-  float h=0.0;
-  if(d>1e-5){
-    if(mx==c.r)h=mod((c.g-c.b)/d,6.0);
-    else if(mx==c.g)h=(c.b-c.r)/d+2.0;
-    else h=(c.r-c.g)/d+4.0;
-    h=fract(h/6.0+1.0);
-  }
-  return vec3(h,mx>0.0?d/mx:0.0,mx);
-}
-vec3 hsv2rgb(vec3 hsv){
-  vec3 p=abs(fract(hsv.x+vec3(1.0,2.0/3.0,1.0/3.0))*6.0-3.0);
-  return hsv.z*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),hsv.y);
-}
+${GLSL_OKLAB}
 // COLOUR-RANGE GATE — restricts a mask to pixels near a picked hue/saturation, so a rough brush
 // or a frame-filling radial can still land on skin only. Same weighted-kernel shape as pcWeight
 // (Point Color) for a consistent feel, re-centred on the pick and driven by its own Range.
@@ -4250,52 +4290,37 @@ float crAxis(float d,float hw){
   return 1.0-t*t;
 }
 // Kernel for ONE sample centre. Split out so the multi-sample union below stays readable.
-float crSampleWeight(vec3 hsv,float ch,float cs,float hHalf,float sHalf){
-  float dh=abs(hsv.x-ch);if(dh>0.5)dh=1.0-dh;
-  return crAxis(dh,hHalf)*crAxis(abs(hsv.y-cs),sHalf);
+float crSampleWeight(vec2 hc,float ch,float cc,float hHalf,float cHalf){
+  float dh=abs(hc.x-ch);if(dh>0.5)dh=1.0-dh;
+  return crAxis(dh,hHalf)*crAxis(abs(hc.y-cc),cHalf);
 }
 float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2){
   int n=int(G.x+0.5);
   if(n<1)return 1.0;
-  vec3 hsv=rgb2hsv(c);
+  vec3 lch=rgb2oklch(c);
+  vec2 hc=lch.zy;                                 // (hue turn, chroma) — the two gate axes
   float hHalf=0.02+G.w*0.14;                      // range 0-100 -> +/-7deg .. +/-58deg
-  float sHalf=0.10+G.w*0.45;                      // wider range also tolerates more sat drift
-  // UNION, not sum: overlapping samples must not push the weight past 1, and a pixel belongs to
-  // the selection if it is near ANY pick. Also keeps the weight FLAT across the sampled region,
-  // which is what makes the uniformity contraction actually converge (see CLAUDE.md 5b).
-  // SIX samples, not four: a whole body needs more than four. Measured on __TM3390.jpg, a
-  // shadowed pec (h 0.913, i.e. 34deg round the wheel from the nearest of three picks) gated only
-  // 0.089 and was effectively left out of the selection entirely.
-  float w=crSampleWeight(hsv,S0.x,S0.y,hHalf,sHalf);
-  if(n>1)w=max(w,crSampleWeight(hsv,S0.z,S0.w,hHalf,sHalf));
-  if(n>2)w=max(w,crSampleWeight(hsv,S1.x,S1.y,hHalf,sHalf));
-  if(n>3)w=max(w,crSampleWeight(hsv,S1.z,S1.w,hHalf,sHalf));
-  if(n>4)w=max(w,crSampleWeight(hsv,S2.x,S2.y,hHalf,sHalf));
-  if(n>5)w=max(w,crSampleWeight(hsv,S2.z,S2.w,hHalf,sHalf));
-  // NEUTRAL FLOOR — skin always carries some chroma, so a near-grey pixel is not skin whatever its
-  // hue. Without this the saturation axis is symmetric: a sample at s=0.21 with sHalf 0.35 accepts
-  // everything down to s=0, so bright near-neutral limestone (s~0.02, and slightly WARM in hue)
-  // scored 0.97 and the whole mountain range joined the selection. Measured on __TM3390.jpg; it was
-  // present at every sample count and had merely been hidden by the old mask's shape.
-  // ⚠️ NOT the same thing as pcWeight's "min(1,s*3)" floor, which is deliberately absent above:
-  // that one ramps all the way to s=0.33 and would drop genuinely low-saturation skin (highlights,
-  // sheen, shadowed chest). This is a hard cut below the least-saturated real skin measured here
-  // (s=0.134), so it removes only true neutrals.
-  // ...but only for BRIGHT neutrals. Dark low-chroma pixels are body hair, beard and eyebrows —
-  // rejecting those punched speckled holes right through the chest and jaw, which reads far worse
-  // than a little background leak. Bright near-neutral is rock, snow and concrete; dark
-  // near-neutral is hair. So the cut fades in with luminance and the two separate cleanly.
-  float neutral=1.0-smoothstep(0.05,0.13,hsv.y);   // 1 = fully neutral
-  w*=1.0-neutral*smoothstep(0.45,0.68,hsv.z);
-  // DARK FLOOR — skin is never near-black. Sunglasses, pupils, eye sockets and dark clothing are,
-  // and some of them sit right next to skin's hue: measured on __TM3390.jpg the eye-socket pixels
-  // are h=0.959, which is only 0.048 round the wheel from the skin samples (just across the wrap),
-  // so they passed the hue and saturation axes cleanly and the glasses were being tanned.
-  // Thresholds have ~3x margin on both sides and are measured, not guessed: every sunglass sample
-  // reads v = 0.02..0.11, while the DARKEST real skin in the frame — shadowed pec and the shadow
-  // under the jaw — reads v = 0.32..0.33. Hair and beard (v = 0.35) stay selected, which is
-  // deliberate; see the bright-neutral cut above for why dark low-chroma pixels are kept.
-  w*=smoothstep(0.12,0.22,hsv.z);
+  float cHalf=0.012+G.w*0.10;                     // Oklab chroma: skin spans ~0.019..0.075
+  // UNION, not sum: overlapping samples must not push past 1, and a pixel belongs to the selection
+  // if it is near ANY pick. Keeping the weight FLAT across the sampled region is what lets the
+  // uniformity contraction actually converge — see CLAUDE.md 5b.
+  float w=crSampleWeight(hc,S0.x,S0.y,hHalf,cHalf);
+  if(n>1)w=max(w,crSampleWeight(hc,S0.z,S0.w,hHalf,cHalf));
+  if(n>2)w=max(w,crSampleWeight(hc,S1.x,S1.y,hHalf,cHalf));
+  if(n>3)w=max(w,crSampleWeight(hc,S1.z,S1.w,hHalf,cHalf));
+  if(n>4)w=max(w,crSampleWeight(hc,S2.x,S2.y,hHalf,cHalf));
+  if(n>5)w=max(w,crSampleWeight(hc,S2.z,S2.w,hHalf,cHalf));
+  // CHROMA FLOOR — skin always carries some chroma; rock, snow, concrete, sunglasses and pupils do
+  // not. This ONE threshold replaces the two hand-tuned luminance-gated cuts the HSV version
+  // needed, and that simplification is the whole reason for moving to Oklab. Measured on
+  // __TM3390.jpg: rock C=0.0046 and sunglass lenses C=0.0051..0.0101, against C=0.0186 for the
+  // darkest real skin (shadowed pec) and C=0.0201 for the darkest beard — so 0.010..0.016 clears
+  // both ends on a single perceptually-uniform axis, replacing two brightness-conditioned hacks.
+  // ⚠️ This is why HSV had to go: the old dark-value cut needed to reject near-black sunglasses
+  // (HSV v=0.02..0.05) but the darkest BEARD pixels sit at v=0.14, so the same cut scored them 0.12
+  // and punched visible holes through the beard and chest. In chroma those cases are 2x apart
+  // instead of overlapping, and both land correctly with one threshold.
+  w*=smoothstep(0.010,0.016,lch.y);
   return w;
 }
 // SKIN TONE UNIFORMITY — the one CONTRACTIVE operator in the app. Every other colour control
@@ -4321,18 +4346,23 @@ float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2){
 // U.w ("Preserve modeling") now blends LOCAL (0) -> GLOBAL mean (1), i.e. from true evening-out to
 // a plain level shift, with the local end as the useful default. When the blur buffer is unavailable
 // (useSkinLum 0) it falls back to the pixel's own value, which is the old behaviour.
-vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T,float vLow){
+vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T,float vLow,float oneWay){
   if(w<=0.001||(U.x==0.0&&U.y==0.0&&U.z==0.0))return c;
-  vec3 hsv=rgb2hsv(c);
-  float dh=T.x-hsv.x;                             // shortest way round the hue wheel
+  vec3 lch=rgb2oklch(c);                          // x=L, y=chroma, z=hue turn
+  float dh=T.x-lch.z;                             // shortest way round the hue wheel
   if(dh>0.5)dh-=1.0;
   if(dh<-0.5)dh+=1.0;
-  hsv.x=fract(hsv.x+w*U.x*dh+1.0);
-  hsv.y+=w*U.y*(T.y-hsv.y);
-  float local=useSkinLum>0.5?vLow:hsv.z;
+  lch.z=fract(lch.z+w*U.x*dh+1.0);
+  lch.y+=w*U.y*(T.y-lch.y);
+  float local=useSkinLum>0.5?vLow:lch.x;
   float vRef=mix(local,T.w,U.w);
-  hsv.z+=w*U.z*(T.z-vRef);
-  return clamp(hsv2rgb(vec3(hsv.x,clamp(hsv.y,0.0,1.0),clamp(hsv.z,0.0,1.0))),0.0,1.0);
+  float dL=T.z-vRef;
+  // ONE-WAY TAN: tanning should only ever darken. Without this, any skin already darker than the
+  // target gets LIGHTENED toward it — so shadowed areas, the underside of the jaw and the edges of
+  // hair are lifted, which reads as a flat, washed-out patch rather than a tan.
+  if(oneWay>0.5)dL=min(dL,0.0);
+  lch.x+=w*U.z*dL;
+  return clamp(oklch2rgb(vec3(clamp(lch.x,0.0,1.0),max(lch.y,0.0),lch.z)),0.0,1.0);
 }
 vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec4 CT){ // A: exp,con,temp,sat | TH: tint,hue(deg) | CT: colHue(deg),colAmt,rot(unused here),colSat — weighted by w
   vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
@@ -4479,7 +4509,7 @@ if(mskN>0.5){
       // on SOURCE pixels while this applies post-grade; that mismatch is deliberate and matches
       // what the global Sharpen/Clarity already do.
       if(mskJ[i].x!=0.0)c.rgb=clamp(c.rgb+srcHP*(mskJ[i].x*w),0.0,1.0);
-      c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow);           // converge toward the target FIRST,
+      c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow,mskJ[i].z); // converge toward the target FIRST,
       c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
@@ -4607,6 +4637,7 @@ precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D img;uniform vec2 texSize;
+${GLSL_OKLAB}
 void main(){
   vec3 sc=vec3(0.);
   for(int j=0;j<4;j++)for(int i=0;i<4;i++){
@@ -4620,7 +4651,10 @@ void main(){
   // a scattering of their pixels are genuinely skin-coloured, so a per-pixel gate speckles across
   // the whole background. Averaging first removes isolated noise while the ADJUSTMENT still lands
   // on the original sharp pixel — select from a denoised copy, apply to the real one.
-  o=vec4(sc,dot(sc,vec3(.2126,.7152,.0722)));
+  // .a is Oklab L, NOT a Rec.709 luma: skinUniformity compares this against an Oklab target, so a
+  // luma here would be a silent unit mismatch — the low-frequency reference and the target would
+  // live on different scales and Preserve modeling would drift.
+  o=vec4(sc,rgb2oklab(sc).x);
 }`);
 
     // TRIPLE-SIGMA HALATION BLUR — same shader for both H and V passes.
@@ -5122,6 +5156,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
       mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
+      mJ[o+2]=m.tanOneWay?1:0;// tanning only ever darkens — never lifts already-dark skin
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -7372,14 +7407,47 @@ function mskIsAI(m){return !!(m&&(m.origin==='ai'||m.ai));}
 // linear gradient or a painted mask too, not just the Skin preset). A factory, not a shared
 // constant, so masks never alias one object. All strengths default to 0 => a freshly added
 // mask renders bit-identically to before this feature existed.
+// ── OKLAB (Björn Ottosson) — JS mirror of GLSL_OKLAB. MUST stay in step with it: crWeightJS and
+// mskMeasureSrcV reproduce the shader's gate to compute srcV, and any divergence shows up as the
+// frequency separation quietly anchoring to the wrong level.
+// ⚠️ Only the SKIN path moves to Oklab. applyHSL / applyPointColors / deriveXMP stay on r2hsv —
+// they are separately calibrated and changing their space would move every look and preset.
+function _okCbrt(x){return Math.sign(x)*Math.pow(Math.abs(x),1/3);}
+function rgb2oklab(r,g,b){
+  const R=s2l(r),G=s2l(g),B=s2l(b);
+  const l=0.4122214708*R+0.5363325363*G+0.0514459929*B;
+  const m=0.2119034982*R+0.6806995451*G+0.1073969566*B;
+  const s2=0.0883024619*R+0.2817188376*G+0.6299787005*B;
+  const l_=_okCbrt(l),m_=_okCbrt(m),s_=_okCbrt(s2);
+  return[0.2104542553*l_+0.7936177850*m_-0.0040720468*s_,
+         1.9779984951*l_-2.4285922050*m_+0.4505937099*s_,
+         0.0259040371*l_+0.7827717662*m_-0.8086757660*s_];
+}
+// Returns [hueTurn, chroma, L] so it slots into the existing [h,s,v] call sites unchanged.
+function rgb2oklch(r,g,b){
+  const[L,a,b2]=rgb2oklab(r,g,b);
+  const C=Math.hypot(a,b2);
+  let h=Math.atan2(b2,a)/(2*Math.PI);if(h<0)h+=1;
+  return[h,C,L];
+}
+function oklch2rgb(h,C,L){
+  const a=C*Math.cos(h*2*Math.PI),b2=C*Math.sin(h*2*Math.PI);
+  const l_=L+0.3963377774*a+0.2158037573*b2;
+  const m_=L-0.1055613458*a-0.0638541728*b2;
+  const s_=L-0.0894841775*a-1.2914855480*b2;
+  const l=l_*l_*l_,m=m_*m_*m_,s2=s_*s_*s_;
+  return[l2s( 4.0767416621*l-3.3077115913*m+0.2309699292*s2),
+         l2s(-1.2684380046*l+2.6097574011*m-0.3413193965*s2),
+         l2s(-0.0041960863*l-0.7034186147*m+1.7076147010*s2)];
+}
 const CR_MAX_SAMPLES=6;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max
 function _mskSkinDefaults(){return{
   crOn:false,crSamples:[],crRange:35,        // colour gate: up to CR_MAX_SAMPLES picks + one range
   uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
   tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
-  tanDepth:0,tanWarm:0,srcV:null,
+  tanDepth:0,tanWarm:0,srcV:null,_okSpace:true,
   amount:100,name:'',muted:false,     // amount = master scale on the whole mask; name = user label
-  tex:0,isExclude:false};}            // Texture: +sharpen / -soften; isExclude: use as an eraser
+  tex:0,isExclude:false,tanOneWay:false};}            // Texture: +sharpen / -soften; isExclude: use as an eraser
 // Masks saved by an older build have none of the fields above. Fill them in on load (defaults are
 // all-zero, so a restored recipe renders exactly as it did) — without this the panel would read
 // undefined into its sliders and the target resolver would see no tgtMode.
@@ -7393,6 +7461,17 @@ function _mskMigrate(m){
   if(!m.crSamples.length&&(m.crH!==undefined||m.crS!==undefined)){
     m.crSamples=[{h:m.crH||0,s:m.crS||0,v:m.crV||0,rgb:m.crRgb||null}];
   }
+  // Samples used to hold HSV; they now hold Oklab hue/chroma/L. Anything carrying rgb is
+  // RECOMPUTED rather than reinterpreted — feeding HSV numbers to an Oklab gate selects almost
+  // nothing and would look exactly like the tool being broken.
+  if(m.crSamples&&m.crSamples.length&&!m._okSpace){
+    m.crSamples=m.crSamples.map(p=>{
+      if(!p.rgb)return p;
+      const[h,C,L]=rgb2oklch(p.rgb[0]/255,p.rgb[1]/255,p.rgb[2]/255);
+      return Object.assign({},p,{h,s:C,v:L});
+    });
+  }
+  m._okSpace=true;
   if(m.crSamples.length>CR_MAX_SAMPLES)m.crSamples.length=CR_MAX_SAMPLES;
   // Feather is stored 0..0.5 now that the slider maps to the range the shader actually uses.
   // Anything above 0.5 rendered identically to 0.5 before (the falloff start clamped at 0), so
@@ -7453,7 +7532,7 @@ function mskAdd(type){
   // chest: ONE sample gave gate weights 0.04-1.00 and hue DIVERGED 10%; two samples gave
   // 0.86-1.00 and closed hue 40% / sat 45%; three closed sat 49%. Hence a mid Range plus the
   // shift-click-to-add-samples flow the panel pushes, rather than one pick and a huge Range.
-  if(type==='skin'){m.crOn=true;m.crRange=55;}
+  if(type==='skin'){m.crOn=true;m.crRange=55;m.tanOneWay=true;}  // a Skin mask is for tanning
   if(type==='color'){m.crOn=true;m.crRange=40;}
   if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
@@ -7497,8 +7576,21 @@ function _samFramedInvoke(cmd,jsonObj,payload){
 }
 function mskAiTapToggle(force){
   mskAiTapMode=force!==undefined?force:!mskAiTapMode;
-  const b=document.getElementById('btn-msk-ai-tap');if(b)b.classList.toggle('on',mskAiTapMode);
+  // ⚠️ The button had TWO competing representations of "armed" and they drifted apart, which is
+  // what made it appear stuck: mskRebuild renders it with bsec/bgh plus a "✓" label, while this
+  // function only ever flipped a different class ('on') and never re-rendered. Clicking it changed
+  // mskAiTapMode but left the bsec class and the ✓ from the last rebuild, so the button kept
+  // showing armed no matter the real state. Drive every visual from mskAiTapMode here — and do it
+  // WITHOUT calling mskRebuild, which itself calls back into this function.
+  const b=document.getElementById('btn-msk-ai-tap');
+  if(b){
+    b.classList.toggle('on',mskAiTapMode);
+    b.classList.toggle('bsec',mskAiTapMode);
+    b.classList.toggle('bgh',!mskAiTapMode);
+    b.innerHTML='<span class="bdot"></span>'+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select');
+  }
   if(FX.cv)FX.cv.style.cursor=mskAiTapMode?'crosshair':'';
+  if(!mskAiTapMode){_aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;}  // never leave a stroke open
 }
 // Two-tier fast/quality encode, mirroring desktop-native.js's NativeLibRawShim.refine() pattern
 // for RAW decode: EdgeSAM (fast, ~1s) is awaited so the first scribble has SOMETHING to query
@@ -7912,6 +8004,10 @@ function mskPaintAt(m,nx,ny){
     _aiStrokeLast=null;_aiStrokeAdded=false;
   };
   cv.addEventListener('pointerup',aiEnd);cv.addEventListener('pointercancel',aiEnd);
+  // lostpointercapture matters: if capture is lost mid-drag (pointer leaves the window, another
+  // element grabs it) neither pointerup nor pointercancel necessarily fires on this element, and
+  // _aiStroke would stay set so every subsequent move kept appending points to the mask.
+  cv.addEventListener('lostpointercapture',aiEnd);
   // Called from the pinch-zoom touchmove handler (initZoomPan) the moment a second finger
   // lands: a touch pinch's FIRST finger fires pointerdown before the second finger arrives, so
   // it briefly starts a paint/scribble stroke — this discards whatever that partial stroke
@@ -7995,15 +8091,17 @@ function crSampleMean(samples){
 function mskSkinTarget(m){
   let h,s,v;
   if(m.tgtMode==='match'||!m.tgtMode){const mn=crSampleMean(m.crSamples);h=mn.h;s=mn.s;v=mn.v;}
-  else{const[r,g,b]=_hexToRgb01(m.tgtHex||'#d7bd96');[h,s,v]=r2hsv(r,g,b);}
+  else{const[r,g,b]=_hexToRgb01(m.tgtHex||'#d7bd96');[h,s,v]=rgb2oklch(r,g,b);}
   const td=(m.tanDepth||0)/100,tw=(m.tanWarm||0)/100;
-  if(tw){ // rotate the target toward the orange/skin hue (25deg), the short way round the wheel
-    const TAN_H=25/360;let dh=TAN_H-h;
+  if(tw){ // rotate the target toward the warm skin hue, the short way round the wheel.
+    // 0.085 turn in OKLAB hue, not 25/360: Oklab's hue angles are not HSV's — skin measures
+    // h = 0.06..0.14 here where HSV placed it at 0.01..0.06.
+    const TAN_H=0.085;let dh=TAN_H-h;
     if(dh>0.5)dh-=1;if(dh<-0.5)dh+=1;
     h=(h+dh*tw+1)%1;
   }
-  s=Math.min(1,s*(1+0.50*td));
-  v=Math.max(0,v*(1-0.35*td));
+  s=Math.min(0.4,s*(1+0.50*td));   // CHROMA now, not HSV saturation: real skin sits ~0.02..0.10
+  v=Math.max(0,v*(1-0.25*td));     // Oklab L is perceptual, so a given darkening reads stronger
   return{h,s,v};
 }
 // Mean value (HSV V) of the pixels the colour gate actually passes — the anchor "preserve
@@ -8021,21 +8119,18 @@ function _crAxisJS(d,half){
   const t=Math.min(1,Math.max(0,(d-core)/Math.max(half-core,1e-6)));
   return 1-t*t;
 }
-function crWeightJS(h,s,samples,range,v){
+function crWeightJS(h,C,samples,range){
   if(!samples||!samples.length)return 1;
-  const R=range/100,hHalf=0.02+R*0.14,sHalf=0.10+R*0.45;
+  const R=range/100,hHalf=0.02+R*0.14,cHalf=0.012+R*0.10;
   let w=0;
   for(const p of samples){
     let dh=Math.abs(h-(p.h||0));if(dh>0.5)dh=1-dh;
-    const cw=_crAxisJS(dh,hHalf)*_crAxisJS(Math.abs(s-(p.s||0)),sHalf);
+    const cw=_crAxisJS(dh,hHalf)*_crAxisJS(Math.abs(C-(p.s||0)),cHalf);
     if(cw>w)w=cw;
   }
-  // Bright-neutral cut — must mirror colRangeWeight exactly, INCLUDING the luminance term. v is
-  // optional only so older callers don't break; omitting it applies the cut unconditionally, which
-  // over-rejects dark hair, so always pass it.
-  const neutral=1-_smoothstepJS(0.05,0.13,s);
-  const vv=v!=null?v:1;
-  return w*(1-neutral*_smoothstepJS(0.45,0.68,vv))*_smoothstepJS(0.12,0.22,vv);   // + dark floor
+  // Chroma floor — mirrors colRangeWeight. Replaced the two luminance-gated cuts the HSV gate
+  // needed; see that function for the measurements behind the thresholds.
+  return w*_smoothstepJS(0.010,0.016,C);
 }
 function mskMeasureSrcV(m){
   if(!m||!m.crOn||!m.crSamples||!m.crSamples.length||!FX.cv){if(m)m.srcV=null;return;}
@@ -8049,9 +8144,9 @@ function mskMeasureSrcV(m){
   const R=(m.crRange!=null?m.crRange:35);
   let acc=0,wsum=0;
   for(let i=0;i<d.length;i+=4){
-    const[h,s,v]=r2hsv(d[i]/255,d[i+1]/255,d[i+2]/255);
-    const w=crWeightJS(h,s,m.crSamples,R,v);if(w<=0)continue;
-    acc+=w*v;wsum+=w;
+    const[h,C,L]=rgb2oklch(d[i]/255,d[i+1]/255,d[i+2]/255);
+    const w=crWeightJS(h,C,m.crSamples,R);if(w<=0)continue;
+    acc+=w*L;wsum+=w;   // srcV is Oklab L — the space the shader compares it against
   }
   m.srcV=wsum>1e-6?acc/wsum:null;   // null => the shader falls back to the target's own value
 }
@@ -8072,7 +8167,9 @@ function mskCrEyedropperClick(e){
   const m=fxState.masks[mskSel];if(!m){mskCrEyedropper(false);return true;}
   if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a skin tone','warn');return true;}
   const avg=_pickAvgRGB(e,true);if(!avg)return true;
-  const[h,s,v]=r2hsv(avg[0]/255,avg[1]/255,avg[2]/255);
+  // Field names h/s/v are kept so the packing code and saved masks are unchanged, but the VALUES
+  // are Oklab hue-turn / chroma / L. rgb is stored so _mskMigrate can recompute after a space swap.
+  const[h,s,v]=rgb2oklch(avg[0]/255,avg[1]/255,avg[2]/255);
   // Shift/Alt-click ADDS a sample (Lightroom's Color Range convention) instead of replacing —
   // one pick can't cover a whole body, so building up a locus is the normal case, not the
   // exception. Stays armed while adding so several picks are one gesture each.
@@ -8222,6 +8319,7 @@ function mskRebuild(){
       +'<div class="fx-row" title="0 = collapse lightness onto the target (evens out a tan LINE, but flattens the shading that gives a body its form). 100 = shift the overall lightness level to the target with shading fully intact."><div class="fx-label">Preserve modeling</div>'
       +'<input class="fx-slider" type="range" min="0" max="100" value="'+(m.preserve!=null?m.preserve:70)+'" data-k="preserve" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
       +'<div class="fx-val">'+(m.preserve!=null?m.preserve:70)+'</div></div>'
+      +'<div class="fx-row" title="Tanning only darkens. Off, any skin already darker than the target gets LIFTED toward it, which washes out shadows and the edges of hair instead of tanning them."><div class="fx-label">Tan darkens only</div>'+'<input type="checkbox" '+(m.tanOneWay?'checked':'')+' onchange="mskSetFlag(\'tanOneWay\',this.checked)" style="margin-right:6px;flex:0 0 auto"></div>'
       +_mskRow('Tan: Depth','tanDepth',m.tanDepth||0,0,100,1,false)
       +_mskRow('Tan: Warmth','tanWarm',m.tanWarm||0,0,100,1,false)
       +'<div class="fx-sub" style="margin-top:10px">Local Adjustments</div>';
@@ -8289,6 +8387,7 @@ function mskToggleMute(){
 // Turn a mask into an ERASER: it applies nothing of its own and is subtracted from every other
 // mask. Paint one over the lips, another over a pet, and both come out of the skin selection —
 // which "subtract prev" cannot do, since it only ever reaches back a single slot.
+function mskSetFlag(k,v){const m=fxState.masks[mskSel];if(!m)return;m[k]=!!v;mskRebuild();fxUpdate();}
 function mskToggleExclude(){
   const m=fxState.masks[mskSel];if(!m)return;
   m.isExclude=!m.isExclude;
@@ -8314,7 +8413,14 @@ function mskAutoLabel(m,i){
 // lut shader to render the EFFECTIVE per-pixel weight (shape x lum gate x colour gate) — the only
 // way to tune a colour range without guessing. See mskShowSel in the shader / render().
 let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
+const MSK_PREVMODE_HINT={
+  overlay:'Showing the mask SHAPE only — for a Skin mask that is the raw AI subject, hair and glasses included. Not what gets adjusted.',
+  isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the colour range is not applied here.',
+  select:'Showing what is ACTUALLY adjusted — shape x colour range x Amount. This is the one to trust.',
+  off:''};
 function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
+  const hint=document.getElementById('msk-prevmode-hint');
+  if(hint)hint.textContent=MSK_PREVMODE_HINT[v]||'';
   document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   if(typeof fxUpdate==='function')fxUpdate();}   // 'select' changes the RENDER, not just the overlay
 // Which mask index the shader should render as a selection map (-1 = normal photo). Gated on the

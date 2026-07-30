@@ -25,7 +25,7 @@ const out=await pg.evaluate(async()=>{
   c0.getContext('2d').drawImage(src,0,0);
   const full=c0.getContext('2d').getImageData(0,0,W,H).data;
   const at=(x,y)=>{const i=(y*W+x)*4;return [full[i],full[i+1],full[i+2]];};
-  const hsvAt=(x,y)=>{const p=at(x,y);return r2hsv(p[0]/255,p[1]/255,p[2]/255);};
+  const hsvAt=(x,y)=>{const p=at(x,y);return rgb2oklch(p[0]/255,p[1]/255,p[2]/255);};
   const S=n=>{const[h,s,v]=hsvAt(n[0],n[1]);return{h,s,v};};
   // SIX samples covering the tonal variety of a whole body — the three that used to be missed
   // (shadowed pec, bright far arm, armpit) each need their own pick.
@@ -77,7 +77,7 @@ const out=await pg.evaluate(async()=>{
   let acc=0,wsum=0;
   for(let y=0;y<H;y+=16)for(let x=0;x<W;x+=16){
     const[h,s,v]=hsvAt(x,y);
-    const w=crWeightJS(h,s,skin.crSamples,skin.crRange,v);
+    const w=crWeightJS(h,s,skin.crSamples,skin.crRange);
     if(w>0){acc+=w*v;wsum+=w;}
   }
   skin.srcV=wsum>1e-6?acc/wsum:null;

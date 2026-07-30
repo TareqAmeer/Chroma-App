@@ -22,7 +22,7 @@ const out=await pg.evaluate(async()=>{
   const it=fxImages[0],src=it.img,W=src.naturalWidth,H=src.naturalHeight;
   const c0=document.createElement('canvas');c0.width=W;c0.height=H;c0.getContext('2d').drawImage(src,0,0);
   const full=c0.getContext('2d').getImageData(0,0,W,H).data;
-  const hsvAt=(x,y)=>{const i=(y*W+x)*4;return r2hsv(full[i]/255,full[i+1]/255,full[i+2]/255);};
+  const hsvAt=(x,y)=>{const i=(y*W+x)*4;return rgb2oklch(full[i]/255,full[i+1]/255,full[i+2]/255);};
   const S=n=>{const[h,s,v]=hsvAt(n[0],n[1]);return{h,s,v};};
   const PT={cheek:[1150,3760],'chest upper':[1200,5250],'chest lower':[1500,5600],
             lips:[1330,3950],'dog head':[2370,3600],'dog body':[2550,4350],
@@ -50,7 +50,7 @@ const out=await pg.evaluate(async()=>{
     uH:90,uS:80,uL:70,preserve:35,tgtMode:'match',tanDepth:35,tanWarm:45};
   let acc=0,wsum=0;
   for(let y=0;y<H;y+=16)for(let x=0;x<W;x+=16){
-    const[h,s,v]=hsvAt(x,y);const w=crWeightJS(h,s,skin.crSamples,skin.crRange,v);
+    const[h,s,v]=hsvAt(x,y);const w=crWeightJS(h,s,skin.crSamples,skin.crRange);
     if(w>0){acc+=w*v;wsum+=w;}
   }
   skin.srcV=wsum/wsum?acc/wsum:null;

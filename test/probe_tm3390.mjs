@@ -94,7 +94,7 @@ const out = await page.evaluate(async ({ SKIN, OTHER, PICK_FROM }) => {
   const srcHsv = {};
   for (const [n, [x, y]] of Object.entries(ALL)) {
     const rgb = at(x, y);
-    const [h, s, v] = r2hsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+    const [h, s, v] = rgb2oklch(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
     srcHsv[n] = { rgb, h, s, v };
   }
 
@@ -153,7 +153,7 @@ const out = await page.evaluate(async ({ SKIN, OTHER, PICK_FROM }) => {
         r += dat[i]; g += dat[i + 1]; b += dat[i + 2]; cnt++;
       }
       const rgb = [Math.round(r / cnt), Math.round(g / cnt), Math.round(b / cnt)];
-      const [h, s, v] = r2hsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+      const [h, s, v] = rgb2oklch(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
       o[n] = { rgb, h, s, v };
     }
     return o;
@@ -189,7 +189,7 @@ const out = await page.evaluate(async ({ SKIN, OTHER, PICK_FROM }) => {
     const step = 16;
     for (let y = 0; y < H; y += step) for (let x = 0; x < W; x += step) {
       const d = at(x, y);
-      const [h, s, v] = r2hsv(d[0] / 255, d[1] / 255, d[2] / 255);
+      const [h, s, v] = rgb2oklch(d[0] / 255, d[1] / 255, d[2] / 255);
       const w = crWeightJS(h, s, m.crSamples, m.crRange) * shapeOf(m, x, y);
       if (w > 0) { acc += w * v; wsum += w; }
     }

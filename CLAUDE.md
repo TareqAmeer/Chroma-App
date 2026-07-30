@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30h`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30i`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -491,7 +491,32 @@ shadow (v 0.365 and 0.208); forcing them to match the sunlit cheek's brightness 
 form-destroying flattening `preserve` exists to prevent. Judge lightness only across *lit* skin,
 and expect a small number there (14%) at the default `preserve = 70`.
 
-**Two measured cuts in `colRangeWeight`, both "what skin is never":**
+**The skin path works in OKLAB LCh, not HSV** (`GLSL_OKLAB`, interpolated into both the lut pass and
+`lumdown`; `rgb2oklch`/`oklch2rgb` mirror it in JS). ⚠️ Only the skin path — `applyHSL`,
+`applyPointColors` and `deriveXMP` stay on `r2hsv`, since they are separately calibrated.
+Constants verified before use: white/black/grey give a=b=0 exactly and a 20k-sample sRGB round trip
+errs by 4.2e-4/255.
+
+This is what collapsed two hand-tuned cuts into one. HSV "saturation" is near-identical for bright
+limestone and deep-shadow skin, so separating them needed a bright-neutral cut AND a dark-value cut
+— and the dark cut then scored the darkest beard pixels 0.12, punching visible holes through the
+beard and chest. Oklab **chroma** separates all of it on one perceptually-uniform axis:
+
+| | Oklab C | gate |
+|---|---|---|
+| rock / scree | 0.0046 | 0 |
+| sunglass lens | 0.0051–0.0101 | 0 |
+| **cut** | **0.010 → 0.016** | |
+| wet hair / shadowed pec | 0.0176 / 0.0186 | 1 |
+| darkest beard | 0.0201 | 1 |
+| lit skin | 0.049–0.075 | 1 |
+
+Oklab `L` is also real lightness rather than `max(r,g,b)`, which is what the frequency separation and
+Preserve modeling were always meant to act on — ⚠️ hence `lumdown` emits `rgb2oklab(sc).x` in its
+alpha, NOT a Rec.709 luma, or the low-frequency reference and the target would sit on different
+scales. Measured after the move: hue spread closed 70%, chroma 65%, weight spread 0.039.
+
+**Older HSV-era cuts, kept for the reasoning:**
 - *Never bright and neutral* — `1 - neutral*smoothstep(0.45,0.68,v)`. Bright near-neutral is rock,
   snow, concrete; dark near-neutral is hair, beard and brows, which must stay selected or they
   punch speckled holes through the chest and jaw.
