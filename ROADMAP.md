@@ -8,10 +8,32 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 (`test/probe_tm3390.mjs`, `test/probe_skin.mjs`) — those are marked **[measured]** and are the
 highest-confidence entries here.
 
-**Status: 8 of 19 done** (item 12 withdrawn — it already existed). ✅ 1 (multi-sample gate),
-2 (Amount), 3 (order half), 6 (Texture), 8 (range mask types), 14 (export resize + sharpening),
-B (Selection in loupe), D (slider ergonomics). Every one verified against the export gate with all
-18 goldens byte-identical, i.e. each is a true no-op at its defaults.
+**Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 6(Texture), 7, 8, 14
+(resize+sharpening), B, D shipped; 3 and 4 partly. Everything below is verified against the export
+gate with the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
+
+**Still open — 12 items, each independent.** Nothing here blocks anything else, so they can be
+picked off in any order and in separate sessions:
+
+| # | item | size |
+|---|---|---|
+| 16 | BiSeNet face-parse auto-exclusions (lips/eyes/brows/glasses/hair) | M |
+| 3 | Edge-aware mask refine + raster resolution above 1024px | M |
+| 5 | Raise the 4-mask cap | M |
+| 6 | Per-mask Clarity / Sharpness / Noise (Texture done) | M |
+| 9 | Dehaze | S/M |
+| 10 | Spot removal / clone / heal | M |
+| 11 | Perspective / keystone + auto horizon | M |
+| 13 | JXL / AVIF / HEIC in, 16-bit out | L |
+| 14 | Export ICC/P3, watermark, named presets | S |
+| 15 | Auto-match a series to a reference photo | M |
+| A | Mask panel thumbnails + drag-reorder | M |
+| C | Command palette (⌘K) | S |
+| E | First-run tour + contextual tips | S |
+
+To pick one up in a fresh session, quote its number and heading from this file — each entry states
+the gap, the files it touches and the functions to reuse. Read `CLAUDE.md` §5b first if the item
+touches the skin path.
 
 ---
 
@@ -64,6 +86,27 @@ exists: `vendor/libraw` is already a vendored, sha512-verified WASM decoder, and
 offline-first by design so a bundled model fits the architecture.
 *Touches:* new `vendor/sam-web/`, an ORT-web path behind `samEnsureEncoded`, drop the `deskx` gate.
 
+### 16. BiSeNet face parsing as an automatic EXCLUSION layer — M
+⚠️ **It cannot replace SAM.** CelebAMask-HQ classes are face-centric — skin(face/neck), neck, hair,
+clothing — with **no torso, chest, shoulder or arm class**. The complaint that started this work is
+chest vs face, so used as the selector it would grab the face and drop the chest entirely.
+
+What it is excellent at is the job the colour gate keeps failing: separating lips, eyes, brows,
+glasses and hair from skin. So run BOTH — SAM for the subject (shipped), BiSeNet inside the head
+region to emit lips/eyes/brows/glasses/hair as an automatic eraser. That removes the two leaks that
+still need a hand-drawn eraser today (wet hair, sunglass frames).
+
+⚠️ Verify the real I/O contract with `onnx.load` before trusting any published spec — the class
+table supplied for this did NOT match the model actually available: `jonathandinu/face-parsing` is
+a SegFormer whose glasses index is 3 (not 6), hair 13 (not 17), lips 11/12 (not 12/13), neck 17
+(not 14). Building against the quoted table would have excluded the wrong features.
+
+Also needs a 512x512 face-ish crop — derive it from the top of the SAM subject mask's bounding box
+rather than adding a face detector. Integration follows the existing path: vendor under
+`desktop/src-tauri/vendor/`, reuse `SamSession` and the `set_*_model_paths` OnceLock pattern in
+`desktop/src-tauri/src/sam.rs`, bundle via the `resources` block in `tauri.conf.json`. Size is a
+non-issue next to the 128 MB SAM2 encoder already shipped.
+
 ### 5. Raise the 4-mask cap — M
 `mskAdd` hard-stops at 4 ("Maximum 4 masks") because the lut pass packs masks into `vec4 mskA[4]`
 … `mskI[4]` and packs raster masks one-per-RGBA-channel into a single texture. Both are the real
@@ -79,7 +122,7 @@ global `adjSharp`/`adjClarity`; the per-mask version needs that neighbourhood av
 mask stage, which is the only real design question.
 *Touches:* lut shader (a second unsharp, or move masks after a detail pre-pass), `mskC`/new array.
 
-### 7. Frequency-separated lightness evening — M
+### 7. ✅ DONE — Frequency-separated lightness evening
 Deliberately deferred when we shipped Skin Tone. Today, lightness uniformity either contracts
 (flattens form) or offsets (preserves form but doesn't close the gap) — the `preserve` slider is a
 trade between them, and on `__TM3390.jpg` the lightness gap only closed **12%** at
