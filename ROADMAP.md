@@ -8,8 +8,9 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 (`test/probe_tm3390.mjs`, `test/probe_skin.mjs`) — those are marked **[measured]** and are the
 highest-confidence entries here.
 
-**Status: 6 of 20 done.** ✅ 1 (multi-sample gate), 2 (Amount), 3 (order half), 6 (Texture),
-8 (range mask types), B (Selection in loupe). Every one verified against the export gate with all
+**Status: 8 of 19 done** (item 12 withdrawn — it already existed). ✅ 1 (multi-sample gate),
+2 (Amount), 3 (order half), 6 (Texture), 8 (range mask types), 14 (export resize + sharpening),
+B (Selection in loupe), D (slider ergonomics). Every one verified against the export gate with all
 18 goldens byte-identical, i.e. each is a true no-op at its defaults.
 
 ---
@@ -104,10 +105,16 @@ There is crop/rotate/flip/straighten but no keystone (`grep perspective` → 0).
 already does distortion/vignette/CA as a pre-pass on the source, so the geometry slot exists;
 this is a homography in that same pass, plus a Hough-style auto-level for the horizon.
 
-### 12. Auto lens correction from EXIF — M
-`lens-dist/vig/ca` are manual sliders. `desktop/src-tauri/examples/dump_lenses.rs` suggests lens
-metadata work already started. Matching EXIF lens model against a small bundled profile table
-(LensFun-style coefficients) and auto-applying would be a quiet, large quality win on RAW files.
+### 12. ❌ WITHDRAWN — Auto lens correction already exists
+My error: this shipped already. `tg-lens-auto` / `fxLensAutoToggled` own the toggle, LensModel is
+read from EXIF (`0xA434`), and the correction itself runs in Rust during RAW decode
+(`desktop/src-tauri/src/lens_correct.rs`) as a real geometric remap rather than a shader term —
+with `chromasmithLensApplied` reporting the decode's own outcome back into the status line. I
+missed it because I grepped for `perspective`/`lensProfile` and not for the toggle id.
+
+The only genuine gap left here is that it is **desktop-only**, since it needs the native decode
+path. Browser/iOS see "no effect". Porting it would mean a WASM remap in the browser decode — a
+different, larger piece of work; folded into item 13's territory rather than tracked here.
 
 ---
 
@@ -119,7 +126,7 @@ decode (WASM, same vendoring pattern as libraw) plus **16-bit** PNG/TIFF export 
 RAW→edit→export path credible end to end. Today an 8-bit export throws away most of what the RW2
 pipeline and DCP work earn.
 
-### 14. Export presets: resize, output sharpening, colour space, watermark — S/M
+### 14. ✅ MOSTLY DONE — Export resize + output sharpening shipped; ICC/P3, watermark and named presets still open — S/M
 Export is full-resolution sRGB only. Long-edge resize with output sharpening (the two always go
 together), Display-P3 / sRGB ICC embedding, an optional watermark, and named export presets. The
 tiled export path already gives a clean place to hook resize.
@@ -152,7 +159,7 @@ The app has four tabs, ~20 collapsible FX sections, 11 looks, print profiles and
 menu. A fuzzy palette over tools, presets, looks and toggles would beat hunting through sections,
 and it composes well with the existing keyboard shortcuts panel.
 
-### D. Slider ergonomics on desktop: numeric entry, keyboard nudge, modified-indicator — S
+### D. ✅ DONE — Slider ergonomics on desktop: numeric entry, keyboard nudge, modified-indicator
 Mobile already has value bubbles and double-tap-to-reset; desktop has neither. Add click-to-type
 a number, arrow-key nudge (⇧ for coarse), double-click to reset to the pristine default
 (`_fxPristineDefault` already exists for section resets), and a subtle dot on any slider that

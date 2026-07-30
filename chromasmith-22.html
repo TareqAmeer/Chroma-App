@@ -163,6 +163,14 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
    consistent with touch-action:none already used on the zoom/mask/curve drag surfaces. */
 body.mobile-fx .fx-slider{touch-action:pan-x}
 .fx-val{order:2;font-family:var(--mono);font-size:11px;color:var(--acc);text-align:right;flex-shrink:0}
+/* Click the number to type an exact value. Kept visually identical to the static readout so the
+   row doesn't shift when it becomes editable. */
+.fx-val[contenteditable="true"]{cursor:text;outline:none;min-width:34px;border-bottom:1px dotted var(--acc)}
+.fx-val[contenteditable="true"]:focus{border-bottom:1px solid var(--acc);background:rgba(212,144,58,.10)}
+/* A slider that differs from its factory default gets a dot, so a loaded recipe is legible at a
+   glance instead of needing every section opened and compared. */
+.fx-row.fx-mod>.fx-label::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--acc);margin-left:5px;vertical-align:middle;opacity:.85}
 .fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
 .fx-val[contenteditable]:hover{background:var(--sur2)}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
@@ -1199,6 +1207,28 @@ setTimeout(()=>window.hideBootSplash(),6000);
           </select>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">JPG is never fully lossless, even at 100. PNG is lossless but files are much larger.</div>
+        <!-- Resize + output sharpening. These belong together: any downscale throws away the
+             detail the sharpening was judged on, so resampling without re-sharpening always
+             looks soft. Full size + Off is the default and leaves the export byte-identical. -->
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Resize (long edge)</div>
+          <select class="fx-select" id="sel-exp-size">
+            <option value="0">Full size</option>
+            <option value="4096">4096 px</option>
+            <option value="2560">2560 px</option>
+            <option value="2048">2048 px</option>
+            <option value="1600">1600 px</option>
+            <option value="1080">1080 px (social)</option>
+          </select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Output sharpening</div>
+          <select class="fx-select" id="sel-exp-sharp">
+            <option value="0">Off</option>
+            <option value="1">Low</option>
+            <option value="2">Standard</option>
+            <option value="3">High</option>
+          </select>
+        </div>
+        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Resizing never enlarges — a target above the photo's own long edge is ignored. Sharpening is applied last, after the resize, which is the only point at which the right amount is knowable.</div>
         <div id="fx-export-scope-row" style="margin-top:8px;display:none">
           <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope</div>
           <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
@@ -3552,7 +3582,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30b';
+const BUILD='2026-07-30c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -8423,6 +8453,10 @@ function applyUISnapshot(s){
     const tg=document.getElementById('tg-demosaic-ahd');if(tg)tg.classList.toggle('on',s.demosaicAlgo==='ahd');
   }
   if(typeof nrSyncGate==='function')nrSyncGate();
+  // A snapshot swap (session restore, recipe, undo/redo, style, selective paste) moves sliders
+  // without firing their input events, so the modified-from-default dots have to be refreshed here
+  // rather than only on user interaction.
+  if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
 }
 // History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by
 // brush masks carrying full w*h pixel arrays in the snapshot: (1) the dedup check used to
@@ -9081,7 +9115,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-pointcolor','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
-const _SESS_SELECTS=['sel-input','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt'];
+const _SESS_SELECTS=['sel-input','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(quiet){
   const s={};
@@ -9573,6 +9607,182 @@ function renderPreview(){
 // 4:5/3:4 without cropping. ORDER: photo → borders (belong to the image) → canvas around
 // everything. Shared by preview AND export so they match by construction.
 // CV={enabled,ar(w/h, 0=off),zoom(0.5..1.5, 1=fit),bg,'blur'}. zoom>1 crops into the frame.
+// ══ SLIDER ERGONOMICS ════════════════════════════════════════════════════════════════════════
+// Mobile already had value bubbles and double-tap-to-reset; desktop had neither, so an exact
+// value could only be reached by dragging and a loaded recipe was illegible without opening every
+// section. Three additions, all delegated from the document so they cover sliders that are built
+// later (mask rows, HSL bands, point colours) without any per-row wiring:
+//   • click the number to type an exact value
+//   • arrow keys nudge (Shift = x10), Home/End jump to the ends
+//   • a dot on any slider that differs from its factory default
+// Everything dispatches the row's own `oninput`, so each control's existing handler still runs and
+// nothing here needs to know what a given slider means.
+function _fxSliderOf(valEl){
+  const row=valEl.closest('.fx-row');if(!row)return null;
+  return row.querySelector('input[type=range]');
+}
+function _fxFireInput(sl){
+  sl.dispatchEvent(new Event('input',{bubbles:true}));
+}
+// Set a slider from a typed/nudged number, clamped and snapped to its own step.
+function _fxSliderSet(sl,v){
+  const min=parseFloat(sl.min),max=parseFloat(sl.max),step=parseFloat(sl.step)||1;
+  if(!isFinite(v))return false;
+  v=Math.min(max,Math.max(min,v));
+  v=Math.round((v-min)/step)*step+min;
+  if(String(v)===sl.value)return false;
+  sl.value=v;return true;
+}
+let _fxModTimer=null;
+// Compare every snapshot slider against the factory default and flag the ones that differ.
+// Debounced and driven off getUISnapshot so it cannot drift from what the snapshot considers a
+// slider — no second list to keep in sync.
+function fxMarkModifiedSliders(){
+  clearTimeout(_fxModTimer);
+  _fxModTimer=setTimeout(()=>{
+    if(!_fxPristineDefault||!_fxPristineDefault.sliders)return;
+    const base=_fxPristineDefault.sliders;
+    for(const id in base){
+      // ⚠️ Snapshot slider keys are stored WITHOUT their "sl-" element prefix (getUISnapshot reads
+      // getElementById('sl-'+id)), so looking the id up directly finds nothing and every dot
+      // silently stays off — which is exactly how this first shipped.
+      const sl=document.getElementById('sl-'+id)||document.getElementById(id);if(!sl)continue;
+      const row=sl.closest('.fx-row');if(!row)continue;
+      row.classList.toggle('fx-mod',String(sl.value)!==String(base[id]));
+    }
+  },120);
+}
+function initSliderErgonomics(){
+  // ── Click the value to type one ──
+  document.addEventListener('click',e=>{
+    const v=e.target.closest&&e.target.closest('.fx-val');
+    if(!v||v.isContentEditable)return;
+    // Touch devices already have value bubbles and double-tap-to-reset on the slider itself; making
+    // the readout editable there would fight those and pop the keyboard over the photo.
+    if(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches)return;
+    const sl=_fxSliderOf(v);if(!sl)return;
+    v.dataset.fxPrev=v.textContent;
+    v.contentEditable='true';v.focus();
+    const r=document.createRange();r.selectNodeContents(v);
+    const s=getSelection();s.removeAllRanges();s.addRange(r);
+  });
+  document.addEventListener('keydown',e=>{
+    const v=e.target.closest&&e.target.closest('.fx-val');
+    if(v&&v.isContentEditable){
+      if(e.key==='Enter'){e.preventDefault();v.blur();}
+      else if(e.key==='Escape'){e.preventDefault();v.textContent=v.dataset.fxPrev||'';v.blur();}
+      return;
+    }
+    // ── Arrow-key nudge on a focused slider ──
+    const sl=e.target;
+    if(!sl||sl.type!=='range')return;
+    let d=0;
+    if(e.key==='ArrowUp'||e.key==='ArrowRight')d=1;
+    else if(e.key==='ArrowDown'||e.key==='ArrowLeft')d=-1;
+    const step=(parseFloat(sl.step)||1)*(e.shiftKey?10:1);
+    if(d){
+      e.preventDefault();
+      if(_fxSliderSet(sl,parseFloat(sl.value)+d*step))_fxFireInput(sl);
+      return;
+    }
+    if(e.key==='Home'||e.key==='End'){
+      e.preventDefault();
+      if(_fxSliderSet(sl,parseFloat(e.key==='Home'?sl.min:sl.max)))_fxFireInput(sl);
+    }
+  });
+  document.addEventListener('blur',e=>{
+    const v=e.target.closest&&e.target.closest('.fx-val');
+    if(!v||!v.isContentEditable)return;
+    v.contentEditable='false';
+    const sl=_fxSliderOf(v);
+    // Strip anything that isn't part of a number — the readouts carry suffixes like "°".
+    const n=parseFloat(String(v.textContent).replace(/[^0-9.+-]/g,''));
+    if(sl&&_fxSliderSet(sl,n))_fxFireInput(sl);
+    else if(sl)_fxFireInput(sl);   // repaint the readout from the real value (rejects bad input)
+  },true);
+  // ── Double-click a slider to reset it to the factory default (desktop parity with mobile) ──
+  document.addEventListener('dblclick',e=>{
+    const sl=e.target;
+    if(!sl||sl.type!=='range'||!sl.id)return;
+    const base=_fxPristineDefault&&_fxPristineDefault.sliders;
+    const key=sl.id.replace(/^sl-/,'');   // snapshot keys drop the "sl-" prefix — see above
+    if(!base||base[key]===undefined)return;
+    e.preventDefault();
+    if(_fxSliderSet(sl,parseFloat(base[key])))_fxFireInput(sl);
+  });
+  document.addEventListener('input',e=>{if(e.target&&e.target.type==='range')fxMarkModifiedSliders();},true);
+  fxMarkModifiedSliders();
+}
+
+// ══ EXPORT RESIZE + OUTPUT SHARPENING ════════════════════════════════════════════════════════
+// Applied at the very END of the export chain (after borders and the canvas matte) because the
+// correct amount of sharpening is only knowable at the final pixel dimensions — a downscale
+// discards exactly the detail any earlier sharpening was judged on, which is why resampled
+// exports always look soft. Both default to off, leaving the export byte-identical.
+const EXP_SHARP_AMT=[0,0.35,0.60,0.95];   // Off / Low / Standard / High
+function exportResize(cv,longEdge){
+  const w=cv.width,h=cv.height,mx=Math.max(w,h);
+  if(!longEdge||mx<=longEdge)return cv;    // never ENLARGE — upscaling invents detail
+  // Halve repeatedly before the final step. A single big drawImage downscale in canvas is a
+  // bilinear point-sample: it skips most source pixels and aliases hard on fine detail (grain,
+  // foliage, fabric). Successive halving averages every pixel in, which is what a proper box
+  // filter would do, at a fraction of the cost of doing it by hand.
+  let cur=cv,cw=w,ch=h;
+  const scale=longEdge/mx;
+  while(cw*0.5>=w*scale&&ch*0.5>=h*scale&&cw>2&&ch>2){
+    const nw=Math.max(1,Math.round(cw/2)),nh=Math.max(1,Math.round(ch/2));
+    const t=document.createElement('canvas');t.width=nw;t.height=nh;
+    const tx=t.getContext('2d');tx.imageSmoothingEnabled=true;tx.imageSmoothingQuality='high';
+    tx.drawImage(cur,0,0,nw,nh);
+    if(cur!==cv){cur.width=cur.height=0;}
+    cur=t;cw=nw;ch=nh;
+  }
+  const fw=Math.max(1,Math.round(w*scale)),fh=Math.max(1,Math.round(h*scale));
+  const out=document.createElement('canvas');out.width=fw;out.height=fh;
+  const ox=out.getContext('2d');ox.imageSmoothingEnabled=true;ox.imageSmoothingQuality='high';
+  ox.drawImage(cur,0,0,fw,fh);
+  if(cur!==cv){cur.width=cur.height=0;}
+  return out;
+}
+function exportSharpen(cv,level){
+  const amt=EXP_SHARP_AMT[level|0]||0;
+  if(amt<=0)return cv;
+  const w=cv.width,h=cv.height;
+  const ctx=cv.getContext('2d');
+  let img;
+  try{img=ctx.getImageData(0,0,w,h);}catch(e){log('Output sharpening skipped (canvas too large to read back)','warn');return cv;}
+  const d=img.data,src=new Uint8ClampedArray(d);   // read from a copy so neighbours stay unsharpened
+  // Same 4-tap cross high-pass the in-shader Sharpen uses, per channel. Edge pixels clamp to
+  // themselves, which makes the high-pass 0 there — no bright rim around the frame.
+  for(let y=0;y<h;y++){
+    const yUp=(y>0?y-1:y)*w,yDn=(y<h-1?y+1:y)*w,yc=y*w;
+    for(let x=0;x<w;x++){
+      const xL=x>0?x-1:x,xR=x<w-1?x+1:x;
+      const i=(yc+x)*4,iU=(yUp+x)*4,iD=(yDn+x)*4,iL=(yc+xL)*4,iR=(yc+xR)*4;
+      for(let c=0;c<3;c++){
+        const v=src[i+c];
+        const nb=(src[iU+c]+src[iD+c]+src[iL+c]+src[iR+c])*0.25;
+        d[i+c]=v+(v-nb)*amt;
+      }
+    }
+  }
+  ctx.putImageData(img,0,0);
+  return cv;
+}
+// One entry point for the export path. Returns the same canvas when both are off.
+function exportResample(cv){
+  const longEdge=parseInt((document.getElementById('sel-exp-size')||{}).value||'0',10)||0;
+  const level=parseInt((document.getElementById('sel-exp-sharp')||{}).value||'0',10)||0;
+  if(!longEdge&&!level)return cv;
+  const w0=cv.width,h0=cv.height;
+  let out=exportResize(cv,longEdge);
+  if(out!==cv)cv.width=cv.height=0;
+  // Sharpening a full-resolution frame is a ~25M-pixel JS loop; warn rather than silently stall.
+  if(level&&!longEdge&&w0*h0>16e6)log('Sharpening at full resolution — this takes a few seconds','info');
+  out=exportSharpen(out,level);
+  if(out.width!==w0||out.height!==h0)log(`Resized ${w0}×${h0} → ${out.width}×${out.height}`,'info');
+  return out;
+}
 function canvasCompose(src,CV){
   if(!CV||!CV.enabled||!CV.ar)return src;
   const sw=src.width,sh=src.height,ar=CV.ar,zoom=CV.zoom||1;
@@ -10175,6 +10385,9 @@ async function exportFX(){
           const matted=canvasCompose(ec,P.canvas);
           if(matted!==ec){ec.width=ec.height=0;ec=matted;}
         }
+        // Resize + output sharpening, LAST — after borders and the matte, so the target long edge
+        // means the final file's long edge and the sharpening is judged at the real output size.
+        ec=exportResample(ec);
         let out,outExt,mime;
         if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath){
           // Write back a REAL TIFF — this used to encode PNG bytes and overwrite the .tif path
@@ -11945,6 +12158,7 @@ function dustModeBuildChips(){
 }
 dustModeBuildChips();
 _fxPristineDefault=getUISnapshot(); // factory-default UI state, captured before loadSession touches it
+initSliderErgonomics(); // numeric entry, keyboard nudge, modified-from-default dots
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 styleListRefresh();  // populate the Styles list from localStorage
 initZoomPan();
