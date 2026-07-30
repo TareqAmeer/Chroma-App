@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30i`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30j`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -141,7 +141,7 @@ Everything is in one file. Key pieces:
      else] → sharpen/clarity unsharp mask (on source pixels) → look LUT → [**HSL mixer**
      (`useHsl`): a 2nd 33³ LUT re-baked on the CPU from `applyHSL()` whenever a band slider
      moves] → `basicAdjust()` (exposure/contrast/WB/etc.) → [**local-adjust masks** (`mskN`):
-     up to 4 analytic radial/linear masks passed as vec4 uniform arrays, global-uv mapped via
+     up to 8 analytic radial/linear masks passed as vec4 uniform arrays (`MSK_MAX=8`), global-uv mapped via
      `uvOffL/uvScaleL` so preview/loupe/export tiles place them identically; per mask
      exp/con/temp/sat/**Texture** + luminance-range gate + **colour-range gate + skin-tone
      uniformity** (§5b) + **Amount** (`mskE.w`, one master scale over the finished selection;
@@ -209,9 +209,11 @@ still loads".
   converts V-Log/V-Gamut→Rec.709 before the look LUT), a preset/LUT, a **Print profile**
   (Kodak/Fuji print, applied as a 2nd 3D LUT AFTER the film look + halation — see §8), basic
   adjustments, **Tone Curves** (master+R/G/B point-curve editor), **Color Mixer** (8-band HSL),
-  **Local Adjustments** (up to 4 masks — radial/linear/brush/sky/AI plus shapeless **Colour Range**
+  **Local Adjustments** (up to 8 masks — radial/linear/brush/sky/AI plus shapeless **Colour Range**
   and **Luminance Range**; each carries Amount, Texture, an optional **Skin Tone** colour-range gate
-  + uniformity (§5b), and can be reordered/renamed/muted), grain/**Film Artifacts** (dust/scratches/
+  + uniformity (§5b), a live thumbnail, and can be reordered/renamed/muted/soloed; raster (brush/
+  sky/AI) masks store at up to 2048px and have an edge-aware **Refine** button — a guided filter
+  that snaps their edges to the photo's own boundaries), grain/**Film Artifacts** (dust/scratches/
   light leak + Reshuffle)/halation (incl. **No remjet** strong mode — see §5)/bloom/vignette/
   borders, **Canvas** (aspect-ratio matte around image+borders — ratio chips/zoom/bg color or
   blurred-photo fill via `canvasCompose()`, shared by preview & export; order: photo → borders

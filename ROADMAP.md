@@ -8,18 +8,17 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 (`test/probe_tm3390.mjs`, `test/probe_skin.mjs`) — those are marked **[measured]** and are the
 highest-confidence entries here.
 
-**Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 6(Texture), 7, 8, 14
-(resize+sharpening), B, D shipped; 3 and 4 partly. Everything below is verified against the export
-gate with the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
+**Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
+8, 14 (resize+sharpening), A (thumbnails+solo), B, D shipped; 4 partly. Everything below is
+verified against the export gate with the untouched goldens byte-identical, i.e. each is a true
+no-op at its defaults.
 
-**Still open — 12 items, each independent.** Nothing here blocks anything else, so they can be
+**Still open — 10 items, each independent.** Nothing here blocks anything else, so they can be
 picked off in any order and in separate sessions:
 
 | # | item | size |
 |---|---|---|
 | 16 | BiSeNet face-parse auto-exclusions (lips/eyes/brows/glasses/hair) | M |
-| 3 | Edge-aware mask refine + raster resolution above 1024px | M |
-| 5 | Raise the 4-mask cap | M |
 | 6 | Per-mask Clarity / Sharpness / Noise (Texture done) | M |
 | 9 | Dehaze | S/M |
 | 10 | Spot removal / clone / heal | M |
@@ -27,7 +26,7 @@ picked off in any order and in separate sessions:
 | 13 | JXL / AVIF / HEIC in, 16-bit out | L |
 | 14 | Export ICC/P3, watermark, named presets | S |
 | 15 | Auto-match a series to a reference photo | M |
-| A | Mask panel thumbnails + drag-reorder | M |
+| A | Mask panel drag-reorder (thumbnails+solo done; still uses ↑/↓ buttons) | S |
 | C | Command palette (⌘K) | S |
 | E | First-run tour + contextual tips | S |
 
@@ -57,16 +56,19 @@ mask with a low-opacity brush" — an Amount slider is the direct answer. Implem
 multiply on `w` after the gates, before `skinUniformity`/`maskAdjust`.
 *Touches:* one slot in `mskB`/`mskE`, one line in the mask loop, one `_mskRow`.
 
-### 3. ⏳ PARTLY DONE — Mask **reorder** shipped (+ rename/mute); edge-aware refine and higher raster resolution still open — **[measured]** — M
-Three related defects in one area:
-- **Order matters but can't be changed.** `− Subtract prev` subtracts *the previous mask in the
-  list* (`mskE[i].x`, `mskShapeWeight(i-1)`), yet there is no reorder affordance anywhere
-  (`grep reorder` → 0 hits). Getting the order wrong means deleting and re-creating masks.
-- **Raster masks are 1024px max** (`mskTexDims`, `MAXD=1024`) against a 4000×6000 photo — a ~5×
-  upscale, so brush/sky/AI mask edges are soft and blocky at export.
-- **No edge-aware refine.** A guided filter using the photo as guide would snap brush/sky/AI
-  edges to real boundaries, which matters far more than raw resolution.
-*Touches:* `mskRebuild` (drag handles), `mskTexDims`, `mskBuildTex`, a new refine pass.
+### 3. ✅ DONE — Mask reorder, raster resolution and edge-aware refine — **[measured]** — M
+All three defects in this area are closed:
+- **Order** — ↑/↓ buttons (`mskMove`) plus the `isExclude` eraser mechanism, which makes order
+  matter far less than it used to (an eraser subtracts from every mask, not just the one after it).
+- **Raster resolution** — `mskTexDims`' `MAXD` raised 1024→2048 for STORED brush/sky masks.
+  EdgeSAM/SAM2's own encode input stays at 1024 (split into a separate `samInputDims()`) — the
+  model's calibrated input size and the mask's stored crispness are now two different constants.
+- **Edge-aware refine** — a "◈ Refine edges" button (`mskRefineEdges`) runs a guided filter
+  (He/Sun/Tang 2010, box-filtered via `_boxFilterJS`, r=8) using the photo's own greyscale as the
+  guide, and bakes the result straight into `m.px`. Chosen over a per-frame shader pass
+  specifically so preview/loupe/every export tile agree for free — no `renderTiled` halo widening
+  needed, unlike item 7's blur.
+*Touches:* `mskMove`, `mskTexDims`/`samInputDims`, `mskRefineEdges`/`_boxFilterJS`, `mskBuildTex`.
 
 ### 4. ⏳ RESCOPED — AI mask now drives + Skin on DESKTOP; browser port dropped
 The Skin mask is segmentation-first as of 2026-07-30f: `mskAdd('skin')` builds an AI mask, scribble
@@ -107,12 +109,14 @@ rather than adding a face detector. Integration follows the existing path: vendo
 `desktop/src-tauri/src/sam.rs`, bundle via the `resources` block in `tauri.conf.json`. Size is a
 non-issue next to the 128 MB SAM2 encoder already shipped.
 
-### 5. Raise the 4-mask cap — M
-`mskAdd` hard-stops at 4 ("Maximum 4 masks") because the lut pass packs masks into `vec4 mskA[4]`
-… `mskI[4]` and packs raster masks one-per-RGBA-channel into a single texture. Both are the real
-constraints. A uniform buffer object (or a small parameter texture) plus a raster **texture array**
-or atlas would take it to 8–16. Portraits with skin + eyes + background + sky already exhaust 4.
-*Touches:* all `msk*` uniform declarations and packing, `mskBuildTex`, `mskShapeWeight`.
+### 5. ✅ DONE — Raise the mask cap 4 → 8
+Widened every `mskA[4]`…`mskJ[4]` uniform array to `[8]` (and `mskCS[12]`→`[24]`), and added a
+SECOND raster texture (`maskTex2`) for slots 4-7 rather than a texture array/atlas — one extra
+sampler was the smallest change that didn't touch the uv math every other mask type already
+shares. `MSK_MAX=8` is now the single named constant everything else (`mskAdd`'s cap, `mskBuildTex`'s
+channel packing) reads from.
+*Touches:* `mskA`…`mskJ`/`mskCS` uniform arrays + the lut shader's two mask loops, `mskBuildTex`,
+`FX.setMaskTex2`, `mskAdd`.
 
 ### 6. ✅ PARTLY DONE — Per-mask **Texture** shipped; Clarity/Sharpness/Noise still open — M
 Masks carry exposure/contrast/temp/tint/sat/hue/highlights/shadows/colour-paint, but none of the
@@ -194,11 +198,14 @@ than a LUT.
 
 ## UX / UI enhancements
 
-### A. Mask panel: thumbnails, rename, solo/mute, drag-reorder — M
-Masks are named "Radial 1 / Skin 2" with no visual. You cannot tell which is which without
-clicking each and watching the overlay, cannot rename them, cannot temporarily disable one to
-judge its contribution, and — per item 3 — cannot reorder them even though `Subtract prev`
-depends on order. A small live thumbnail per mask fixes most of this at a glance.
+### A. ⏳ MOSTLY DONE — Mask panel: thumbnails, rename, solo/mute shipped; drag-reorder (still ↑/↓ buttons) open — S
+Each mask-list row now carries a small live canvas thumbnail (`_mskThumb`: downsampled raster for
+brush/sky/AI, a drawn ellipse/gradient for radial/linear, a flat tint for shapeless Colour/Luminance
+Range) plus a Solo toggle (`mskToggleSolo`/`mskSolo`) that isolates one mask's contribution by
+riding the exact same Amount=0 slot `muted` already uses — no shader change, and deliberately
+**not persisted** (session state only, cleared on reselect) so a saved session never loads with a
+mask looking silently disabled. Reorder is still the `mskMove` ↑/↓ buttons from item 3, not drag —
+genuine drag-and-drop is the one piece left here.
 
 ### B. ✅ MOSTLY DONE — **Selection** view now works in the 1:1 loupe; overlay-opacity and edge-only modes still open — S
 Known limitation of what we just shipped: `mskShowSelIdx()` is only passed by the two

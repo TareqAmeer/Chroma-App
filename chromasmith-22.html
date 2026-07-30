@@ -3586,7 +3586,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30i';
+const BUILD='2026-07-30j';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4173,25 +4173,25 @@ uniform sampler3D hslLut;uniform float useHsl;
 // the preview, the 1:1 loupe and every export tile. Per mask: exposure/contrast/temp/sat plus
 // an optional luminance-range gate and invert. Applied after basicAdjust, before the curves.
 uniform float mskN;
-uniform vec4 mskA[4];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full effect at p0, none past p1)
-uniform vec4 mskB[4];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
-uniform vec4 mskC[4];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
-uniform vec4 mskD[4];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
-uniform vec4 mskE[4];  // x: subtract-previous-mask flag (0/1) — simple "mask inside a mask"
+uniform vec4 mskA[8];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full effect at p0, none past p1)
+uniform vec4 mskB[8];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
+uniform vec4 mskC[8];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
+uniform vec4 mskD[8];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
+uniform vec4 mskE[8];  // x: subtract-previous-mask flag (0/1) — simple "mask inside a mask"
                         // (this mask's shape minus the shape of the mask listed just before
                         // it), y: tint, z: hue(deg), w: Amount 0..1 — one master scale on the whole
                         // mask, so it can be dialled back without rescaling all eight sliders
-uniform vec4 mskF[4];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z: radial rotation (rad), w unused
+uniform vec4 mskF[8];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z: radial rotation (rad), w unused
 // SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
 // mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.
-uniform vec4 mskG[4];  // x: number of colour samples (0 = gate off), y,z unused, w: gate range 0..1
-// Colour-gate SAMPLES, 4 per mask, two packed per vec4 as (h0,s0,h1,s1). Mask i reads mskCS[i*2]
-// and mskCS[i*2+1]. Skin is not a ball in hue/sat space — sheen pushes lit skin toward magenta —
+uniform vec4 mskG[8];  // x: number of colour samples (0 = gate off), y,z unused, w: gate range 0..1
+// Colour-gate SAMPLES, 6 per mask, two packed per vec4 as (h0,s0,h1,s1). Mask i reads mskCS[i*3..i*3+2].
+// Skin is not a ball in hue/sat space — sheen pushes lit skin toward magenta —
 // so one centre cannot cover a whole body without a range so wide it swallows everything else.
 // The gate is the UNION (max) of the per-sample kernels, i.e. a locus traced by several picks.
-uniform vec4 mskCS[12];   // 6 samples per mask, 2 per vec4 => 3 vec4 per mask (mask i: i*3 .. i*3+2)
-uniform vec4 mskH[4];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
-uniform vec4 mskI[4];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
+uniform vec4 mskCS[24];   // 8 masks x 6 samples, 2 per vec4 => 3 vec4 per mask (mask i: i*3 .. i*3+2)
+uniform vec4 mskH[8];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
+uniform vec4 mskI[8];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
 uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
 // Quarter-res blurred luminance of this render's own source (see progs.lumdown + two blur passes).
@@ -4200,7 +4200,7 @@ uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the sourc
 uniform sampler2D skinLum;uniform float useSkinLum;
 // 4x4 box-averaged COLOUR of the source, used to evaluate the colour-range gate (see lumdown).
 uniform sampler2D skinCol;uniform float useSkinCol;
-uniform vec4 mskJ[4];     // x: Texture (-1..1, source high-pass gain; negative softens)
+uniform vec4 mskJ[8];     // x: Texture (-1..1, source high-pass gain; negative softens)
                           // z: Tan one-way (0/1) — see skinUniformity
                           // y: EXCLUDE flag — this mask applies nothing itself and is instead
                           //    subtracted from every other mask. Unlike the older "subtract prev"
@@ -4208,11 +4208,12 @@ uniform vec4 mskJ[4];     // x: Texture (-1..1, source high-pass gain; negative 
                           //    be excluded) any number of masks can be erasers, and order stops
                           //    mattering. z,w free.
 uniform vec2 uvOffL,uvScaleL;
-// Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
-// (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
-// resolution independent of image size, sampled here in the SAME global uv as the analytic
+// Painted/sky masks: up to 8 raster masks packed one-per-channel into TWO RGBA textures (slots
+// 0-3 -> maskTex, slots 4-7 -> maskTex2), authored in JS (brush strokes or the sky heuristic) at a
+// fixed resolution independent of image size, sampled here in the SAME global uv as the analytic
 // masks so it lines up identically in preview/loupe/every export tile.
 uniform sampler2D maskTex;
+uniform sampler2D maskTex2;
 uniform vec2 texSize;
 float s2lp(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.055;}
@@ -4420,7 +4421,7 @@ vec3 basicAdjust(vec3 c){
 float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-gate/subtract
   vec4 A=mskA[i],B=mskB[i];
   float w;
-  if(B.w>0.5){w=texture(maskTex,gm)[i];}      // painted/sky raster mask, packed channel i
+  if(B.w>0.5){w=i<4?texture(maskTex,gm)[i]:texture(maskTex2,gm)[i-4];}      // painted/sky raster mask, packed channel i (slots 4-7 in maskTex2)
   else if(B.x<0.5){vec2 d0=gm-A.xy;float rot=mskF[i].z;float cr=cos(rot),sr=sin(rot);
     vec2 d1=vec2(d0.x*cr+d0.y*sr,-d0.x*sr+d0.y*cr); // rotate into the ellipse's own (unrotated) axes
     vec2 dd=d1/max(A.zw,vec2(1e-4));float t=length(dd);
@@ -4473,7 +4474,7 @@ if(mskN>0.5){
   float vLow=useSkinLum>0.5?texture(skinLum,uv).a:0.0;
   // Gate on the averaged colour, adjust the sharp one. See lumdown for why.
   vec3 gateCol=useSkinCol>0.5?texture(skinCol,uv).rgb:c.rgb;
-  for(int i=0;i<4;i++){
+  for(int i=0;i<8;i++){
     if(float(i)>=mskN)break;
     if(mskJ[i].y>0.5)continue;                                   // an eraser mask applies nothing itself
     float w=mskShapeWeight(i,gm);
@@ -4481,7 +4482,7 @@ if(mskN>0.5){
     // Subtract EVERY mask flagged as an eraser. This is what lets several regions be excluded at
     // once (lips AND a pet AND a bystander); "subtract prev" reaches back exactly one slot, so it
     // could only ever remove one of them.
-    for(int j=0;j<4;j++){
+    for(int j=0;j<8;j++){
       if(float(j)>=mskN)break;
       if(j==i||mskJ[j].y<0.5)continue;
       w=max(0.0,w-mskShapeWeight(j,gm));
@@ -5045,10 +5046,11 @@ void main(){
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
-  // Painted/sky raster masks: up to 4 packed one-per-channel (slot i -> channel i) into a
-  // single RGBA texture, authored in JS at a fixed resolution (mskTexDims) independent of
-  // image size. FLIP_Y to match imgTx's convention so it samples correctly in the same
-  // global uv (uvOffL/uvScaleL) the analytic radial/linear masks already use.
+  // Painted/sky raster masks: up to 8 packed one-per-channel (slot i -> channel i) into TWO
+  // RGBA textures (slots 0-3 -> maskTex, slots 4-7 -> maskTex2), authored in JS at a fixed
+  // resolution (mskTexDims) independent of image size. FLIP_Y to match imgTx's convention so it
+  // samples correctly in the same global uv (uvOffL/uvScaleL) the analytic radial/linear masks
+  // already use.
   setMaskTex(data,w,h){const gl=this.gl;if(!this.maskTx)this.maskTx=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.maskTx);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
@@ -5056,16 +5058,23 @@ void main(){
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  setMaskTex2(data,w,h){const gl=this.gl;if(!this.maskTx2)this.maskTx2=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.maskTx2);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,skinLum:1,skinCol:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -5134,11 +5143,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const A=P.adjust||{};
     // Local-adjust masks: pack up to 4 masks into vec4 uniform arrays; global-uv mapped via
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
-    const MK=(P.masks&&P.masks.length)?P.masks.slice(0,4):[];
-    const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16),mF=new Float32Array(16),
-          mG=new Float32Array(16),mH=new Float32Array(16),mI=new Float32Array(16),
-          mS=new Float32Array(48),   // colour-gate samples: 4 masks x 6 samples x (h,s) = 12 vec4
-          mJ=new Float32Array(16);   // per-mask detail: x = Texture
+    const MK=(P.masks&&P.masks.length)?P.masks.slice(0,MSK_MAX):[];
+    const mA=new Float32Array(32),mB=new Float32Array(32),mC=new Float32Array(32),mD=new Float32Array(32),mE=new Float32Array(32),mF=new Float32Array(32),
+          mG=new Float32Array(32),mH=new Float32Array(32),mI=new Float32Array(32),
+          mS=new Float32Array(96),   // colour-gate samples: 8 masks x 6 samples x (h,s) = 24 vec4
+          mJ=new Float32Array(32);   // per-mask detail: x = Texture
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;}   // shapeless: gates only (Colour/Luminance Range masks)
@@ -5152,7 +5161,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would
       // renumber the slots and silently repoint every later mask's "subtract prev".
-      mE[o+3]=m.muted?0:(m.amount!=null?m.amount:100)/100;
+      // Solo (UI-only, never persisted — see mskSolo) rides the same slot: every non-eraser mask
+      // except the soloed one is zeroed, exactly like mute, so isolating a mask's contribution
+      // costs nothing new in the shader.
+      const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&i!==mskSolo&&!m.isExclude);
+      mE[o+3]=(m.muted||soloedOut)?0:(m.amount!=null?m.amount:100)/100;
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
       mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
@@ -5222,7 +5235,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
-      maskTex:4,
+      maskTex:4,maskTex2:7,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
       'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,
       mskAnyTex:MK.some(m=>m.tex)?1:0,
@@ -5235,7 +5248,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -7440,6 +7453,7 @@ function oklch2rgb(h,C,L){
          l2s(-1.2684380046*l+2.6097574011*m-0.3413193965*s2),
          l2s(-0.0041960863*l-0.7034186147*m+1.7076147010*s2)];
 }
+const MSK_MAX=8;   // must match mskA..mskJ[8] in the lut shader and the two maskTex/maskTex2 raster channels
 const CR_MAX_SAMPLES=6;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max
 function _mskSkinDefaults(){return{
   crOn:false,crSamples:[],crRange:35,        // colour gate: up to CR_MAX_SAMPLES picks + one range
@@ -7480,7 +7494,7 @@ function _mskMigrate(m){
   return m;
 }
 function mskAdd(type){
-  if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
+  if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks','warn');return;}
   let m;
   if(type==='skin'){
     // SEGMENTATION FIRST — desktop only, by design. Scribble over the subject, the on-device model
@@ -7495,7 +7509,7 @@ function mskAdd(type){
     // chest, because saturation cannot separate those two. Geometry separates them trivially.
     // With the subject segmented, the dog and the rocks are simply not in the mask, and the gate is
     // left doing the one thing it is genuinely good at: skin vs lips/hair inside the subject.
-    const{w,h}=mskTexDims();
+    const{w,h}=samInputDims();
     m={type:'brush',origin:'skin',ai:true,px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],
       invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,
       subtract:false,colHue:0,colAmt:0,colSat:0.65};
@@ -7520,7 +7534,7 @@ function mskAdd(type){
       if(m.aiPoints.length){samEnsureEncoded();samRunPoints(m);} // replaces m.px with the SAM result on success; on failure samRunPoints toasts and leaves the heuristic raster in place
     }
   }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
-    const{w,h}=mskTexDims();
+    const{w,h}=samInputDims();
     m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
   Object.assign(m,_mskSkinDefaults());
@@ -7605,7 +7619,7 @@ async function samEnsureEncoded(){
   _samEncoding=true;
   if(typeof toast==='function')toast('Preparing AI Select…',true);
   try{
-    const{w,h}=mskTexDims();
+    const{w,h}=samInputDims();
     const cv=document.createElement('canvas');cv.width=w;cv.height=h;
     const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
     const d=cx.getImageData(0,0,w,h).data;
@@ -7768,7 +7782,7 @@ async function samRunPoints(m){
 }
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
-  m.aiPoints=[];const{w,h}=mskTexDims();m.px=new Array(w*h).fill(0);m.mtW=w;m.mtH=h;
+  m.aiPoints=[];const{w,h}=samInputDims();m.px=new Array(w*h).fill(0);m.mtW=w;m.mtH=h;
   _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }
 function mskDelete(){if(mskSel<0)return;
@@ -7795,10 +7809,65 @@ function mskCopyToAll(){
 // shader). Stored as a plain JSON-safe number array (m.px) so it round-trips through the
 // existing generic mask save/undo/session code with no extra plumbing.
 let _mskTexDirty=true;
+// Solo: temporarily zero every OTHER non-eraser mask's Amount, same mechanism mute already rides
+// (mskE[i].w=0) — see the render() packing loop. Deliberately NOT persisted (not read by
+// _mskMigrate, not written into saved sessions): a loaded session with one mask soloed would look
+// like the others were lost. Cleared whenever the selected mask changes (see mskRebuild's list
+// button onclick) so it can't silently linger onto an unrelated mask.
+let mskSolo=null;
+function mskToggleSolo(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  mskSolo=(mskSolo===mskSel)?null:mskSel;
+  if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();
+}
+// Small live preview swatch for the mask-list row: raster masks downsample m.px; analytic shapes
+// draw the ellipse/gradient; shapeless (Colour/Luminance Range) masks get a flat identifying tint.
+// Cached on the mask object under a non-serialized key so JSON.stringify (session save/undo/copy)
+// never carries it — it's cheap to rebuild and would only go stale silently otherwise.
+function _mskThumb(m){
+  const W=28,H=18;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  cv.style.cssText='width:'+W+'px;height:'+H+'px;border-radius:3px;flex:none;background:#222';
+  const x=cv.getContext('2d');
+  x.fillStyle='#222';x.fillRect(0,0,W,H);
+  if(m.type==='brush'&&m.px&&m.mtW&&m.mtH){
+    const id=x.createImageData(W,H);
+    for(let ty=0;ty<H;ty++)for(let tx=0;tx<W;tx++){
+      const sx=Math.min(m.mtW-1,(tx/W*m.mtW)|0),sy=Math.min(m.mtH-1,(ty/H*m.mtH)|0);
+      const v=m.px[sy*m.mtW+sx]||0,j=(ty*W+tx)*4;
+      id.data[j]=255;id.data[j+1]=60;id.data[j+2]=60;id.data[j+3]=Math.round(v*0.9);
+    }
+    x.putImageData(id,0,0);
+  }else if(m.type==='none'){
+    x.fillStyle='rgba(255,60,60,0.55)';x.fillRect(0,0,W,H);
+  }else if(m.type==='linear'){
+    const g=x.createLinearGradient(m.x0*W,(1-m.y0)*H,m.x1*W,(1-m.y1)*H);
+    g.addColorStop(0,'rgba(255,60,60,0.85)');g.addColorStop(1,'rgba(255,60,60,0)');
+    x.fillStyle=g;x.fillRect(0,0,W,H);
+  }else{ // radial
+    const cx=(m.cx!=null?m.cx:0.5)*W,cy=(1-(m.cy!=null?m.cy:0.5))*H;
+    const rx=Math.max(1,(m.rx!=null?m.rx:0.28)*W),ry=Math.max(1,(m.ry!=null?m.ry:0.28)*H);
+    x.save();x.translate(cx,cy);if(m.rot)x.rotate(m.rot);
+    x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.fillStyle='rgba(255,60,60,0.8)';x.fill();x.restore();
+  }
+  if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=1;x.strokeRect(0.5,0.5,W-1,H-1);}
+  return cv;
+}
+// MAXD is the STORED raster-mask resolution (brush/sky/AI edges get finer as this rises). It is
+// deliberately higher than EdgeSAM/SAM2's own 1024 internal working resolution (samInputDims) —
+// the model's input size is a separate concern from how crisp the saved mask looks at export.
 function mskTexDims(){
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
-  const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih)); // matches EdgeSAM/SAM2's own internal working resolution
+  const MAXD=2048,s=Math.min(1,MAXD/Math.max(iw,ih));
+  return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
+}
+// EdgeSAM/SAM2's own internal working resolution for the ENCODE/prompt step (unrelated to how
+// the resulting mask is stored — see mskTexDims above).
+function samInputDims(){
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
+  const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih));
   return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
 }
 function mskEnsureDims(m){
@@ -7811,15 +7880,71 @@ function mskEnsureDims(m){
 }
 function mskBuildTex(){
   const{w,h}=mskTexDims();
-  const buf=new Uint8Array(w*h*4);
-  fxState.masks.slice(0,4).forEach((m,i)=>{
+  const buf=new Uint8Array(w*h*4),buf2=new Uint8Array(w*h*4);
+  fxState.masks.slice(0,MSK_MAX).forEach((m,i)=>{
     if(m.type!=='brush')return;
     mskEnsureDims(m);
-    const px=m.px;
-    for(let j=0;j<w*h;j++)buf[j*4+i]=px[j]||0;
+    const px=m.px,dst=i<4?buf:buf2,ch=i<4?i:i-4;
+    for(let j=0;j<w*h;j++)dst[j*4+ch]=px[j]||0;
   });
   FX.setMaskTex(buf,w,h);
+  FX.setMaskTex2(buf2,w,h);
   _mskTexDirty=false;
+}
+// Box filter via a per-row then per-column prefix sum — O(w*h) regardless of radius r, which is
+// what keeps the guided filter below responsive at mskTexDims (2048px) resolution.
+function _boxFilterJS(src,w,h,r){
+  const tmp=new Float32Array(w*h),out=new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    let acc=0;const row=y*w;
+    for(let x=0;x<w;x++)acc+=src[row+x];
+    // running sum over a 2r+1 window, clamped at the edges (edge pixels average a shorter window)
+    for(let x=0;x<w;x++){
+      const x0=Math.max(0,x-r),x1=Math.min(w-1,x+r);
+      let s=0;for(let k=x0;k<=x1;k++)s+=src[row+k];
+      tmp[row+x]=s/(x1-x0+1);
+    }
+  }
+  for(let x=0;x<w;x++){
+    for(let y=0;y<h;y++){
+      const y0=Math.max(0,y-r),y1=Math.min(h-1,y+r);
+      let s=0;for(let k=y0;k<=y1;k++)s+=tmp[k*w+x];
+      out[y*w+x]=s/(y1-y0+1);
+    }
+  }
+  return out;
+}
+// Edge-aware refine (guided filter, He/Sun/Tang 2010): snaps a rough brush/sky/AI mask to real
+// luminance edges in the photo instead of its own soft/blocky boundary. Guide = the photo's own
+// greyscale at mskTexDims resolution (same downscale mskGenerateSky already uses); input = the
+// mask itself, both normalized to 0..1. Bakes the result straight into m.px, so preview, loupe and
+// every export tile agree automatically — no per-frame shader cost, no renderTiled halo needed.
+function mskRefineEdges(m){
+  if(!m||m.type!=='brush'||!m.px||!m.mtW||!m.mtH)return;
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img)return;
+  mskEnsureDims(m);
+  const w=m.mtW,h=m.mtH;
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h).data;
+  const I=new Float32Array(w*h),P=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){I[j]=(0.2126*d[j*4]+0.7152*d[j*4+1]+0.0722*d[j*4+2])/255;P[j]=(m.px[j]||0)/255;}
+  const R=8,EPS=1e-4;
+  const meanI=_boxFilterJS(I,w,h,R),meanP=_boxFilterJS(P,w,h,R);
+  const IP=new Float32Array(w*h),II=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){IP[j]=I[j]*P[j];II[j]=I[j]*I[j];}
+  const corrIP=_boxFilterJS(IP,w,h,R),corrII=_boxFilterJS(II,w,h,R);
+  const a=new Float32Array(w*h),b=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){
+    const varI=corrII[j]-meanI[j]*meanI[j],covIP=corrIP[j]-meanI[j]*meanP[j];
+    a[j]=covIP/(varI+EPS);b[j]=meanP[j]-a[j]*meanI[j];
+  }
+  const meanA=_boxFilterJS(a,w,h,R),meanB=_boxFilterJS(b,w,h,R);
+  const out=new Array(w*h);
+  for(let j=0;j<w*h;j++)out[j]=Math.max(0,Math.min(255,Math.round((meanA[j]*I[j]+meanB[j])*255)));
+  m.px=out;_mskTexDirty=true;
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(3-2*t);}
 // One-shot sky heuristic (no ML): weights the upper part of the frame, favouring blue-ish
@@ -8215,10 +8340,14 @@ function mskRebuild(){
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
-    b.textContent=(m.isExclude?'✂ ':'')+(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'');
+    b.style.display='flex';b.style.alignItems='center';b.style.gap='6px';
+    b.appendChild(_mskThumb(m));
+    const label=document.createElement('span');
+    label.textContent=(m.isExclude?'✂ ':'')+(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'')+(mskSolo===i?' ★':'');
+    b.appendChild(label);
     if(m.muted)b.style.opacity='0.45';
     b.title=m.muted?'Muted — click to select, then the eye button to unmute':'Click to edit this mask';
-    b.onclick=()=>{mskSel=i;mskRebuild();};list.appendChild(b);
+    b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};list.appendChild(b);
   });
   // Masks are per-photo by default (see installFXImages/fxSelectImage) — this is the one
   // explicit, opt-in way to share the current photo's mask set across the rest of a batch.
@@ -8259,7 +8388,8 @@ function mskRebuild(){
       +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()"><span class="bdot"></span>Clear paint</button>'
-      +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()"><span class="bdot"></span>Re-detect sky</button>':'')+'</div>'
+      +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()"><span class="bdot"></span>Re-detect sky</button>':'')
+      +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)"><span class="bdot"></span>◈ Refine edges</button></div>'
       +(!mskIsAI(m)?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
   // Mask management: order matters (see "Subtract prev"), so give it real controls. Mute is a
@@ -8268,7 +8398,8 @@ function mskRebuild(){
     +'<button class="btn bgh" onclick="mskMove(-1)" '+(mskSel<1?'disabled':'')+' title="Move earlier in the list. Order matters: − Subtract prev reads the mask immediately before this one."><span class="bdot"></span>↑ Up</button>'
     +'<button class="btn bgh" onclick="mskMove(1)" '+(mskSel>=fxState.masks.length-1?'disabled':'')+' title="Move later in the list"><span class="bdot"></span>↓ Down</button>'
     +'<button class="btn bgh" onclick="mskRename()" title="Give this mask a name so the list is readable"><span class="bdot"></span>✎ Name</button>'
-    +'<button class="btn '+(m.muted?'bsec':'bgh')+'" onclick="mskToggleMute()" title="Temporarily switch this mask off without deleting it — the quickest way to judge what it is contributing"><span class="bdot"></span>'+(m.muted?'Muted ✓':'👁 Mute')+'</button></div>'
+    +'<button class="btn '+(m.muted?'bsec':'bgh')+'" onclick="mskToggleMute()" title="Temporarily switch this mask off without deleting it — the quickest way to judge what it is contributing"><span class="bdot"></span>'+(m.muted?'Muted ✓':'👁 Mute')+'</button>'
+    +'<button class="btn '+(mskSolo===mskSel?'bsec':'bgh')+'" onclick="mskToggleSolo()" title="Show ONLY this mask\'s contribution by temporarily zeroing every other mask\'s Amount — click again to restore them"><span class="bdot"></span>'+(mskSolo===mskSel?'★ Soloed':'☆ Solo')+'</button></div>'
     +'<div class="btn-row"><button class="btn '+(m.isExclude?'bsec':'bgh')+'" onclick="mskToggleExclude()" title="Use this mask as an ERASER: it applies nothing itself and is cut out of every other mask. Paint one over the lips and another over a pet and both are excluded — unlike Subtract prev, which can only remove the single mask directly before."><span class="bdot"></span>'+(m.isExclude?'✂ Excluding ✓':'✂ Use as eraser')+'</button></div>'
     +(m.isExclude?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:2px 0 6px">This mask now only removes area from the others — its own sliders below do nothing.</div>':'')
     // Amount: one master scale on the finished selection, so a mask can be dialled back without
