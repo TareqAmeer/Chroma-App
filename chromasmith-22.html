@@ -3582,7 +3582,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30g';
+const BUILD='2026-07-30h';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4287,6 +4287,15 @@ float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2){
   // near-neutral is hair. So the cut fades in with luminance and the two separate cleanly.
   float neutral=1.0-smoothstep(0.05,0.13,hsv.y);   // 1 = fully neutral
   w*=1.0-neutral*smoothstep(0.45,0.68,hsv.z);
+  // DARK FLOOR — skin is never near-black. Sunglasses, pupils, eye sockets and dark clothing are,
+  // and some of them sit right next to skin's hue: measured on __TM3390.jpg the eye-socket pixels
+  // are h=0.959, which is only 0.048 round the wheel from the skin samples (just across the wrap),
+  // so they passed the hue and saturation axes cleanly and the glasses were being tanned.
+  // Thresholds have ~3x margin on both sides and are measured, not guessed: every sunglass sample
+  // reads v = 0.02..0.11, while the DARKEST real skin in the frame — shadowed pec and the shadow
+  // under the jaw — reads v = 0.32..0.33. Hair and beard (v = 0.35) stay selected, which is
+  // deliberate; see the bright-neutral cut above for why dark low-chroma pixels are kept.
+  w*=smoothstep(0.12,0.22,hsv.z);
   return w;
 }
 // SKIN TONE UNIFORMITY — the one CONTRACTIVE operator in the app. Every other colour control
@@ -8025,7 +8034,8 @@ function crWeightJS(h,s,samples,range,v){
   // optional only so older callers don't break; omitting it applies the cut unconditionally, which
   // over-rejects dark hair, so always pass it.
   const neutral=1-_smoothstepJS(0.05,0.13,s);
-  return w*(1-neutral*_smoothstepJS(0.45,0.68,v!=null?v:1));
+  const vv=v!=null?v:1;
+  return w*(1-neutral*_smoothstepJS(0.45,0.68,vv))*_smoothstepJS(0.12,0.22,vv);   // + dark floor
 }
 function mskMeasureSrcV(m){
   if(!m||!m.crOn||!m.crSamples||!m.crSamples.length||!FX.cv){if(m)m.srcV=null;return;}

@@ -30,12 +30,12 @@ const out=await pg.evaluate(async()=>{
   const hsvOf=(x,y)=>{const p=blk(x,y);return r2hsv(p[0]/255,p[1]/255,p[2]/255);};
 
   const SKIN={
-    'cheek':[1290,3990],'forehead':[1230,3560],'neck':[1440,4560],
+    'cheek':[1290,3990],'neck':[1440,4560],
     'shoulder R(top)':[750,4950],'shoulder R(out)':[300,5400],'arm far L':[130,5620],
     'chest upper':[1200,5250],'chest mid':[1500,5600],'chest lower':[1750,5750],
     'belly':[1500,5900],'chest side R':[600,5750],'pec L':[2000,5500],'armpit L':[2250,5350],
   };
-  const OTHER={'dog head':[2370,3600],'dog body':[2550,4350],'beach sand':[2340,2970],
+  const OTHER={'sunglass lens':[1230,3560],'pupil/socket':[1300,3575],'dog head':[2370,3600],'dog body':[2550,4350],'beach sand':[2340,2970],
     'fg rock dark':[300,3600],'lake':[3300,3150],'sky':[2700,300],'green trees':[900,2400],
     'wet hair':[1000,3400],
     // The sunlit mountain face — the thing that actually lit up red in the render, and which the
@@ -74,7 +74,6 @@ const out=await pg.evaluate(async()=>{
     const sm=setOf(names);
     let minSkin=1,nMissed=0,maxLeak=0,leaks=[];
     for(const n of Object.keys(SKIN)){
-      if(n==='forehead')continue;                       // that probe point is hair, not skin
       const[h,s,v]=hsvOf(...SKIN[n]);
       const g=crWeightJS(h,s,sm,RANGE,v);
       if(g<minSkin)minSkin=g;

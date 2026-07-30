@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30g`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30h`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -490,6 +490,16 @@ not better.**
 shadow (v 0.365 and 0.208); forcing them to match the sunlit cheek's brightness is exactly the
 form-destroying flattening `preserve` exists to prevent. Judge lightness only across *lit* skin,
 and expect a small number there (14%) at the default `preserve = 70`.
+
+**Two measured cuts in `colRangeWeight`, both "what skin is never":**
+- *Never bright and neutral* — `1 - neutral*smoothstep(0.45,0.68,v)`. Bright near-neutral is rock,
+  snow, concrete; dark near-neutral is hair, beard and brows, which must stay selected or they
+  punch speckled holes through the chest and jaw.
+- *Never near-black* — `smoothstep(0.12,0.22,v)`. Sunglasses, pupils and eye sockets measure
+  v = 0.02..0.11 while the darkest real skin in the frame (shadowed pec, shadow under the jaw)
+  measures v = 0.32..0.33 — ~3x margin either side. Without it the glasses were tanned: the
+  eye-socket pixels sit at h=0.959, only 0.048 round the wheel from the skin samples (just across
+  the wrap), so they passed hue and saturation cleanly.
 
 ⚠️ **Colour alone cannot exclude a same-hued subject.** Sampling shadowed skin (93,49,40 — dark
 brown) necessarily pulls dark brown dog fur in: with a flat shape the dog's head gated **0.75**.
