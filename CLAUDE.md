@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30j`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30k`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -531,7 +531,15 @@ scales. Measured after the move: hue spread closed 70%, chroma 65%, weight sprea
 ⚠️ **Colour alone cannot exclude a same-hued subject.** Sampling shadowed skin (93,49,40 — dark
 brown) necessarily pulls dark brown dog fur in: with a flat shape the dog's head gated **0.75**.
 The shape must do it — drag the ellipse off the animal, or add a Brush mask with `− Subtract prev`.
-The structural fix is a segmented person/skin mask (ROADMAP item 4).
+The structural fix was a segmented person/skin mask (ROADMAP item 4, done — `+ Skin` is
+segmentation-first) plus, for what SAM's subject mask still can't separate from skin (lips, eyes,
+glasses, hair), automatic face-feature exclusion (ROADMAP item 16, done —
+`desktop/src-tauri/src/faceparse.rs`, model `jonathandinu/face-parsing`, **not** BiSeNet — see that
+file's doc comment and `desktop/src-tauri/vendor/faceparse/README.md` for why the originally-quoted
+class table was wrong and had to be independently verified against the real `.onnx`). The "✂
+Auto-exclude face features" button (Skin mask panel, desktop only) derives a head crop from the
+subject mask's own bounding box and turns the result into one eraser mask via the same
+`isExclude` mechanism a hand-painted eraser uses.
 
 ---
 

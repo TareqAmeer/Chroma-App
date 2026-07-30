@@ -3586,7 +3586,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30j';
+const BUILD='2026-07-30k';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -7780,6 +7780,98 @@ async function samRunPoints(m){
     mskRebuild();
   }
 }
+// ── Face-feature auto-exclusion (ROADMAP item 16) — desktop only, see
+// desktop/src-tauri/src/faceparse.rs for the model and desktop/src-tauri/vendor/faceparse/README.md
+// for why its class table needed independent verification. Runs the AI subject mask's own head
+// region through a face-parsing model and turns lips/eyes+brows/glasses/hair into ONE eraser mask
+// — the same "− Use as eraser" mechanism a hand-painted brush already uses, just auto-populated,
+// so those features come out of the Skin selection without a manual scribble.
+let _faceparseRunning=false;
+function _mskSubjectBBox(m){
+  // Bounding box of the AI mask's OWN raster, in its own tex-space pixels (m.mtW x m.mtH) — this
+  // is what tells us roughly where the person is in the frame, without a second segmentation call.
+  const w=m.mtW,h=m.mtH,px=m.px;
+  let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if((px[y*w+x]||0)>32){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+  }
+  if(x1<x0||y1<y0)return null;
+  return{x0,y0,x1,y1};
+}
+async function mskFaceAutoExclude(){
+  if(!window.__TAURI__){log('Face-feature exclusion needs the desktop app (on-device model)','warn');return;}
+  const m=fxState.masks[mskSel];
+  if(!m||m.origin!=='skin'){log('Select a Skin mask first','warn');return;}
+  if(!mskIsAI(m)||!m.px||!m.px.length){log('Scribble to select yourself first — the face crop is derived from that selection','warn');return;}
+  if(_faceparseRunning)return;
+  const bbox=_mskSubjectBBox(m);
+  if(!bbox){log('No selection yet — scribble over yourself first','warn');return;}
+  _faceparseRunning=true;
+  if(typeof toast==='function')toast('Finding face features…',true);
+  try{
+    const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+    if(!img)throw new Error('no photo loaded');
+    const{w:mtW,h:mtH}=mskTexDims();
+    // Head crop: a square anchored at the TOP of the subject's own bounding box, sized as a
+    // fraction of the subject's height (self-calibrating regardless of how tightly the person
+    // fills the frame) rather than guessing an absolute size.
+    const bboxH=bbox.y1-bbox.y0,bboxCX=(bbox.x0+bbox.x1)/2;
+    const cropSize=Math.max(40,Math.min(mtH,Math.round(bboxH*0.34)));
+    const cropX0=Math.max(0,Math.min(mtW-cropSize,Math.round(bboxCX-cropSize/2)));
+    const cropY0=Math.max(0,Math.min(mtH-cropSize,bbox.y0));
+    const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
+    const cv=document.createElement('canvas');cv.width=cropSize;cv.height=cropSize;
+    const cx=cv.getContext('2d');
+    cx.drawImage(img,cropX0/mtW*sw,cropY0/mtH*sh,cropSize/mtW*sw,cropSize/mtH*sh,0,0,cropSize,cropSize);
+    const d=cx.getImageData(0,0,cropSize,cropSize).data;
+    const rgb=new Uint8Array(cropSize*cropSize*3);
+    for(let i=0,j=0;i<cropSize*cropSize;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+
+    const buf=await _samFramedInvoke('faceparse_run',{width:cropSize,height:cropSize},rgb);
+    const dv=new DataView(buf);
+    const hlen=dv.getUint32(0,true);
+    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const groupLen=header.width*header.height;
+    const body=new Uint8Array(buf,4+hlen);
+    if(header.width!==cropSize||header.height!==cropSize||body.length!==groupLen*4){
+      throw new Error('face-parse: unexpected response size');
+    }
+    // Body is eyes_brows, glasses, lips, hair (fixed order — see faceparse_run in main.rs).
+    // Union (max), not sum: these are independent features and we want "any of them", not a
+    // brighter alpha where two happen to overlap.
+    const combined=new Uint8Array(groupLen);
+    for(let g=0;g<4;g++){const off=g*groupLen;for(let i=0;i<groupLen;i++){const v=body[off+i];if(v>combined[i])combined[i]=v;}}
+
+    // Reuse the mask if we already made one (re-running after moving/resizing the subject
+    // scribble should refine in place, not pile up new masks against the 4-mask cap), else create
+    // a fresh eraser. A full mtW*mtH buffer is always reallocated at the CURRENT resolution rather
+    // than resized in place — simplest way to stay correct if the photo's working size changed
+    // (crop/rotate) since the last run.
+    let fm=fxState.masks.find(x=>x.origin==='faceauto');
+    if(!fm){
+      if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+      fm={type:'brush',origin:'faceauto'};
+      Object.assign(fm,_mskSkinDefaults());
+      fm.isExclude=true;fm.name='Face features';
+      fxState.masks.push(fm);
+    }
+    fm.mtW=mtW;fm.mtH=mtH;fm.px=new Array(mtW*mtH).fill(0);
+    for(let y=0;y<cropSize;y++)for(let x=0;x<cropSize;x++){
+      fm.px[(cropY0+y)*mtW+(cropX0+x)]=combined[y*cropSize+x];
+    }
+    _mskTexDirty=true;
+    mskSel=fxState.masks.indexOf(fm);
+    if(typeof hapt==='function')hapt();
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    if(typeof toast==='function')toast('Excluded lips, eyes, glasses and hair','ok');
+    log('Face features excluded from the Skin selection (lips, eyes+brows, glasses, hair)','ok');
+  }catch(e){
+    const msg='Face-feature exclusion failed — '+(e&&e.message||e);
+    log(msg,'err');if(typeof toast==='function')toast(msg);
+  }finally{
+    _faceparseRunning=false;
+  }
+}
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
   m.aiPoints=[];const{w,h}=samInputDims();m.px=new Array(w*h).fill(0);m.mtW=w;m.mtH=h;
@@ -8376,6 +8468,7 @@ function mskRebuild(){
       h+='<div class="btn-row">'
         +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area."><span class="bdot"></span>'+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over"><span class="bdot"></span>Clear points</button></div>'
+        +(m.origin==='skin'?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble."><span class="bdot"></span>'+(_faceparseRunning?'⟳ Finding features…':'✂ Auto-exclude face features')+'</button></div>':'')
         +'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>'
         +(_sam2Encoding?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">⟳</span> Improving selection quality in the background…</div>':'')
         // Previously a failed encode/select was only logged to the hidden diagnostics panel — a

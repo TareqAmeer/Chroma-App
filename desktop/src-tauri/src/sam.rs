@@ -73,16 +73,16 @@ pub fn set_dylib_path(path: PathBuf) {
 /// Owns the loaded dylib + the OrtApi function-pointer table + one shared OrtEnv. Kept alive for
 /// the process lifetime (never released) — this is a single-purpose desktop app, not a library
 /// meant to be unloaded/reloaded, so there's no dangling-pointer risk in skipping cleanup.
-struct OrtHandle {
-    api: *const OrtApi,
-    env: *mut OrtEnv,
+pub(crate) struct OrtHandle {
+    pub(crate) api: *const OrtApi,
+    pub(crate) env: *mut OrtEnv,
     #[allow(dead_code)] // kept only to hold the dylib open for the process lifetime
     lib: libloading::Library
 }
 unsafe impl Send for OrtHandle {}
 unsafe impl Sync for OrtHandle {}
 
-unsafe fn check(api: *const OrtApi, status: OrtStatusPtr, what: &str) -> Result<(), String> {
+pub(crate) unsafe fn check(api: *const OrtApi, status: OrtStatusPtr, what: &str) -> Result<(), String> {
     if !status.0.is_null() {
         let msg = ((*api).GetErrorMessage)(status.0);
         let s = CStr::from_ptr(msg).to_string_lossy().into_owned();
@@ -91,7 +91,7 @@ unsafe fn check(api: *const OrtApi, status: OrtStatusPtr, what: &str) -> Result<
     Ok(())
 }
 
-fn ort_handle() -> Result<&'static OrtHandle, String> {
+pub(crate) fn ort_handle() -> Result<&'static OrtHandle, String> {
     static H: OnceLock<Result<OrtHandle, String>> = OnceLock::new();
     H.get_or_init(|| unsafe {
         let path = DYLIB_PATH.get().ok_or_else(|| "SAM dylib path not set — set_dylib_path() must run before any AI Select use".to_string())?;
@@ -116,7 +116,7 @@ fn ort_handle() -> Result<&'static OrtHandle, String> {
 }
 
 /// A loaded inference session. Like OrtHandle, deliberately never released (process-lifetime).
-struct SamSession(*mut OrtSession);
+pub(crate) struct SamSession(pub(crate) *mut OrtSession);
 unsafe impl Send for SamSession {}
 unsafe impl Sync for SamSession {}
 
@@ -162,7 +162,7 @@ pub fn set_sam2_model_paths(encoder_path: PathBuf, decoder_path: PathBuf) {
     let _ = SAM2_DECODER_PATH.set(decoder_path);
 }
 
-fn create_session_from_path(path: &std::path::Path) -> Result<SamSession, String> {
+pub(crate) fn create_session_from_path(path: &std::path::Path) -> Result<SamSession, String> {
     let h = ort_handle()?;
     // ort_sys::os_char is c_char on macOS (only c_ushort/UTF-16 on Windows), so a plain CString
     // is the right ABI here — confirmed by reading ort-sys's own os_char cfg rather than assumed.
@@ -202,19 +202,29 @@ fn sam2_decoder() -> Result<&'static Mutex<SamSession>, String> {
 /// One named f32 input tensor for run_session() — owns its own data so the OrtValue created from
 /// it stays valid for the lifetime of the Run() call (CreateTensorWithDataAsOrtValue does NOT
 /// copy the data, it wraps the pointer directly).
-struct NamedInput {
+// `data` is a Cow so cached embedding tensors can be passed BY REFERENCE per decode query —
+// the SAM2 high-res feature maps are 32×256×256 + 64×128×128 + 1×256×64×64 f32 (~12MB total),
+// and cloning all three on every scribble point made each mask query pay a pointless multi-MB
+// memcpy. ORT's CreateTensorWithDataAsOrtValue borrows the buffer only for the run, so a
+// borrow scoped to run_session is sufficient.
+pub(crate) struct NamedInput<'a> {
     name: CString,
-    data: Vec<f32>,
+    data: std::borrow::Cow<'a, [f32]>,
     shape: Vec<i64>
 }
-fn input(name: &str, data: Vec<f32>, shape: &[i64]) -> NamedInput {
-    NamedInput { name: CString::new(name).unwrap(), data, shape: shape.to_vec() }
+pub(crate) fn input(name: &str, data: Vec<f32>, shape: &[i64]) -> NamedInput<'static> {
+    NamedInput { name: CString::new(name).unwrap(), data: std::borrow::Cow::Owned(data), shape: shape.to_vec() }
+}
+
+/// Borrowing variant of `input` for large cached tensors (SAM embeddings) — no per-query copy.
+pub(crate) fn input_ref<'a>(name: &str, data: &'a [f32], shape: &[i64]) -> NamedInput<'a> {
+    NamedInput { name: CString::new(name).unwrap(), data: std::borrow::Cow::Borrowed(data), shape: shape.to_vec() }
 }
 
 /// Runs a session with the given named f32 inputs, returning the named f32 outputs requested (in
 /// the same order as `output_names`). Shared by encode() and decode_point() — both this model
 /// family's I/O is entirely f32 tensors, so one helper covers both.
-fn run_session(sess: &Mutex<SamSession>, mut inputs: Vec<NamedInput>, output_names: &[&str]) -> Result<Vec<Vec<f32>>, String> {
+pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, output_names: &[&str]) -> Result<Vec<Vec<f32>>, String> {
     let h = ort_handle()?;
     let sess = sess.lock().map_err(|_| "SAM session lock poisoned".to_string())?;
     unsafe {
@@ -236,14 +246,16 @@ fn run_session(sess: &Mutex<SamSession>, mut inputs: Vec<NamedInput>, output_nam
             }
         };
 
-        for inp in inputs.iter_mut() {
+        for inp in inputs.iter() {
             let mut value: *mut OrtValue = std::ptr::null_mut();
             let byte_len = inp.data.len() * std::mem::size_of::<f32>();
             let res = check(
                 h.api,
                 ((*h.api).CreateTensorWithDataAsOrtValue)(
                     mem_info,
-                    inp.data.as_mut_ptr() as *mut _,
+                    // ORT only READS inference inputs; the *mut is the C API's signature, not a
+                    // real mutation — safe to hand it a pointer derived from a shared borrow.
+                    inp.data.as_ptr() as *mut _,
                     byte_len,
                     inp.shape.as_ptr(),
                     inp.shape.len(),
@@ -332,7 +344,7 @@ pub struct Embedding {
     pub orig_h: u32
 }
 
-fn resize_rgb8(rgb: &[u8], w: u32, h: u32, new_w: u32, new_h: u32) -> Vec<u8> {
+pub(crate) fn resize_rgb8(rgb: &[u8], w: u32, h: u32, new_w: u32, new_h: u32) -> Vec<u8> {
     use image::{imageops::FilterType, ImageBuffer, Rgb};
     let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
         ImageBuffer::from_raw(w, h, rgb.to_vec()).expect("SAM resize: RGB buffer size mismatch");
@@ -380,10 +392,23 @@ pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
     Ok(Embedding { data: outputs.remove(0), orig_w: w, orig_h: h })
 }
 
+/// Converts a raw mask logit into a soft 0-255 alpha instead of a hard 0/255 threshold — the
+/// model's own decision boundary (mask_threshold=0.0) still marks the edge, but nearby pixels
+/// now carry a real feather gradient rather than a binary stair-step, which is what a hard
+/// threshold turns into once upsampled from the model's native 256x256 logit resolution to a
+/// multi-megapixel photo (blobby, jagged edges — see the "edges not tight to the object" plan
+/// item). `k` controls how steep the falloff is; k=4 puts ~90% of the transition within about
+/// ±1 logit unit of the boundary, tight enough to still read as a clean selection, not a
+/// blurry alpha matte — a dedicated matting model (HQ-SAM/ViTMatte) would be needed to go
+/// further than this, e.g. for genuine hair/fur alpha.
+fn logit_to_soft_alpha(v: f32) -> u8 {
+    let k = 4.0f32;
+    (255.0 / (1.0 + (-v * k).exp())).round().clamp(0.0, 255.0) as u8
+}
 /// Bilinear-samples `src` (row-major, `src_w`x`src_h`) at floating-point pixel-center coordinates,
 /// using the same half-pixel convention as cv2.resize(INTER_LINEAR)/PIL — `src_x = (dst_x+0.5) *
 /// (src_w/dst_w) - 0.5` — so this matches EdgeSAM's own postprocess_masks() sample-for-sample.
-fn bilinear_resize(src: &[f32], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<f32> {
+pub(crate) fn bilinear_resize(src: &[f32], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<f32> {
     let (sw, sh) = (src_w as f32, src_h as f32);
     let (dw, dh) = (dst_w as f32, dst_h as f32);
     let mut out = vec![0f32; (dst_w as usize) * (dst_h as usize)];
@@ -409,8 +434,9 @@ fn bilinear_resize(src: &[f32], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) 
 /// Runs the decoder for an arbitrary SET of point prompts (a Lightroom-style "brush over the
 /// object" scribble, sampled by the caller into positive/negative points along the stroke — see
 /// chromasmith-22.html's mskAiScribble* — rather than a single tap), returning a full-original-
-/// resolution binary mask — one byte per pixel, row-major, 255 = selected / 0 = not, already
-/// thresholded at SAM's standard mask_threshold=0.0 on the raw logit.
+/// resolution mask — one byte per pixel, row-major, a soft 0-255 alpha centered on SAM's
+/// standard mask_threshold=0.0 decision boundary (see logit_to_soft_alpha), not a hard binary
+/// threshold — the frontend runs a further guided-filter edge-snap pass on top of this.
 ///
 /// `points` are `(norm_x, norm_y, positive)` as 0..1 fractions of the ORIGINAL image (matching
 /// this app's existing mask-geometry convention — see chromasmith-22.html's mskA cx/cy).
@@ -440,7 +466,7 @@ pub fn decode_points(embed: &Embedding, points: &[(f32, f32, bool)]) -> Result<V
     let mut outputs = run_session(
         sess,
         vec![
-            input("image_embeddings", embed.data.clone(), &[1, 256, 64, 64]),
+            input_ref("image_embeddings", &embed.data, &[1, 256, 64, 64]),
             input("point_coords", coords, &[1, n, 2]),
             input("point_labels", labels, &[1, n]),
         ],
@@ -471,7 +497,7 @@ pub fn decode_points(embed: &Embedding, points: &[(f32, f32, bool)]) -> Result<V
     }
     let full_res = bilinear_resize(&cropped, input_w, input_h, embed.orig_w, embed.orig_h);
 
-    Ok(full_res.iter().map(|&v| if v > 0.0 { 255u8 } else { 0u8 }).collect())
+    Ok(full_res.iter().map(|&v| logit_to_soft_alpha(v)).collect())
 }
 
 // ── SAM 2.1 encode/decode — see the module-level SAM2 doc comment and vendor/sam2/README.md.
@@ -554,9 +580,9 @@ pub fn sam2_decode_points(embed: &Sam2Embedding, points: &[(f32, f32, bool)]) ->
     let mut outputs = run_session(
         sess,
         vec![
-            input("image_embed", embed.image_embed.clone(), &[1, 256, 64, 64]),
-            input("high_res_feats_0", embed.high_res_feats_0.clone(), &[1, 32, 256, 256]),
-            input("high_res_feats_1", embed.high_res_feats_1.clone(), &[1, 64, 128, 128]),
+            input_ref("image_embed", &embed.image_embed, &[1, 256, 64, 64]),
+            input_ref("high_res_feats_0", &embed.high_res_feats_0, &[1, 32, 256, 256]),
+            input_ref("high_res_feats_1", &embed.high_res_feats_1, &[1, 64, 128, 128]),
             input("point_coords", coords, &[1, n, 2]),
             input("point_labels", labels, &[1, n]),
             input("mask_input", vec![0f32; (MASK_SIZE * MASK_SIZE) as usize], &[1, 1, MASK_SIZE as i64, MASK_SIZE as i64]),
@@ -581,7 +607,7 @@ pub fn sam2_decode_points(embed: &Sam2Embedding, points: &[(f32, f32, bool)]) ->
     // direct square resize has no padding to crop back out, so independently rescaling x/y
     // un-distorts the aspect ratio in one step.
     let full_res = bilinear_resize(low_res, MASK_SIZE, MASK_SIZE, embed.orig_w, embed.orig_h);
-    Ok(full_res.iter().map(|&v| if v > 0.0 { 255u8 } else { 0u8 }).collect())
+    Ok(full_res.iter().map(|&v| logit_to_soft_alpha(v)).collect())
 }
 
 #[cfg(test)]

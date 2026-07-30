@@ -27,6 +27,7 @@ fn dist_dir() -> PathBuf {
 mod lens_correct;
 mod library;
 mod raw_decode;
+mod faceparse;
 mod sam;
 mod tiff_meta;
 
@@ -218,6 +219,35 @@ fn sam2_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Res
     out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
     out.extend_from_slice(&header_bytes);
     out.extend_from_slice(&mask);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+// ── Face-feature auto-exclusion (ROADMAP item 16) — see faceparse.rs for the model, the class
+// mapping and why the originally-quoted class table was wrong. Framed request/response, same
+// idiom as sam_encode/sam_points: caller sends an already-cropped RGB8 face region (derived from
+// the SAM subject mask's bounding box) + its width/height; response is 4 same-sized alpha masks
+// (eyes_brows, glasses, lips, hair), each width*height bytes, concatenated in that fixed order.
+#[tauri::command]
+fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("faceparse_run: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let masks = faceparse::parse(payload, w, h)?;
+    #[derive(serde::Serialize)]
+    struct Header { width: u32, height: u32 }
+    let header = Header { width: masks.w, height: masks.h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("faceparse_run header: {e}"))?;
+    let body_len = header_bytes.len() + masks.eyes_brows.len() + masks.glasses.len() + masks.lips.len() + masks.hair.len();
+    let mut out = Vec::with_capacity(4 + body_len);
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&masks.eyes_brows);
+    out.extend_from_slice(&masks.glasses);
+    out.extend_from_slice(&masks.lips);
+    out.extend_from_slice(&masks.hair);
     Ok(tauri::ipc::Response::new(out))
 }
 
@@ -476,6 +506,23 @@ fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
     std::fs::write(&path, bytes).map_err(|e| format!("write {path}: {e}"))
 }
 
+// Raw-body twin of write_file_bytes — see write_lightroom_tiff_raw's comment for why this
+// avoids the base64 triple-copy that OOMs on large exports.
+#[tauri::command]
+fn write_file_bytes_raw(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let path = request
+        .headers()
+        .get("x-path")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("missing x-path header")?
+        .to_string();
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
+        _ => return Err("expected raw request body".into()),
+    };
+    std::fs::write(&path, bytes).map_err(|e| format!("write {path}: {e}"))
+}
+
 // "Save to Lightroom" writer: like write_file_bytes, but first reads the ORIGINAL TIFF still
 // sitting at `path` (the Edit-In file we're about to overwrite) and splices its EXIF sub-IFD
 // (shutter/aperture/ISO/focal length/lens/DateTimeOriginal — everything Lightroom's Info panel
@@ -488,6 +535,31 @@ fn write_lightroom_tiff(app: tauri::AppHandle, path: String, data_b64: String) -
     let rendered = base64::engine::general_purpose::STANDARD
         .decode(data_b64)
         .map_err(|e| format!("decode base64: {e}"))?;
+    write_lightroom_tiff_impl(app, path, rendered)
+}
+
+// Raw-body twin of write_lightroom_tiff — same splice logic, but the render arrives as the
+// IPC request's raw binary body (path carried in a header) instead of a base64 JSON string.
+// The base64 path makes THREE full copies of a large TIFF in flight at once (the JS string
+// built by _u8b64, the base64 std::string, and Tauri's own JSON-escaped copy of that string
+// crossing the IPC boundary) — for a full-res 16-bit TIFF (100s of MB) that's enough to OOM
+// on export. tauri::ipc::Request hands the bytes straight through with no re-encoding.
+#[tauri::command]
+fn write_lightroom_tiff_raw(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let path = request
+        .headers()
+        .get("x-path")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("missing x-path header")?
+        .to_string();
+    let rendered = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
+        _ => return Err("expected raw request body".into()),
+    };
+    write_lightroom_tiff_impl(app, path, rendered)
+}
+
+fn write_lightroom_tiff_impl(app: tauri::AppHandle, path: String, rendered: Vec<u8>) -> Result<(), String> {
     // Splice outcome goes to the app's OWN log panel via an event (same pattern as
     // gphotos-download-diag) — the packaged .app has no terminal, so eprintln! alone made the
     // silent-skip bug (UTIF's big-endian output being rejected) invisible for a whole day.
@@ -830,7 +902,9 @@ fn main() {
             peek_raw_camera,
             read_file_bytes,
             write_file_bytes,
+            write_file_bytes_raw,
             write_lightroom_tiff,
+            write_lightroom_tiff_raw,
             http_native,
             take_pending_open_path,
             take_pending_oauth_callback,
@@ -862,6 +936,7 @@ fn main() {
             sam_points,
             sam2_encode,
             sam2_points,
+            faceparse_run,
             save_to_gphotos_downloads,
             gphotos_downloads_dir,
             save_to_lr_downloads,
@@ -1123,6 +1198,10 @@ fn main() {
                 bundled.filter(|p| p.exists()).unwrap_or(dev_fallback)
             };
             sam::set_sam2_model_paths(resolve_vendor("vendor/sam2/encoder.onnx"), resolve_vendor("vendor/sam2/decoder.onnx"));
+
+            // Face-feature auto-exclusion (ROADMAP item 16) — same bundled-resource-with-
+            // dev-fallback pattern as the SAM2 models above.
+            faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
 
             Ok(())
         })

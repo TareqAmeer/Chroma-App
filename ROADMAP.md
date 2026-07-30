@@ -9,16 +9,18 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 highest-confidence entries here.
 
 **Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
-8, 14 (resize+sharpening), A (thumbnails+solo), B, D shipped; 4 partly. Everything below is
-verified against the export gate with the untouched goldens byte-identical, i.e. each is a true
-no-op at its defaults.
+8, 14 (resize+sharpening), 16, A (thumbnails+solo), B, D shipped; 4 partly. Item 16 (face-parse
+auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a real photo
+— see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but
+like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs
+a hands-on check in the built app. Everything else below is verified against the export gate with
+the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
 
 **Still open — 10 items, each independent.** Nothing here blocks anything else, so they can be
 picked off in any order and in separate sessions:
 
 | # | item | size |
 |---|---|---|
-| 16 | BiSeNet face-parse auto-exclusions (lips/eyes/brows/glasses/hair) | M |
 | 6 | Per-mask Clarity / Sharpness / Noise (Texture done) | M |
 | 9 | Dehaze | S/M |
 | 10 | Spot removal / clone / heal | M |
@@ -88,7 +90,7 @@ exists: `vendor/libraw` is already a vendored, sha512-verified WASM decoder, and
 offline-first by design so a bundled model fits the architecture.
 *Touches:* new `vendor/sam-web/`, an ORT-web path behind `samEnsureEncoded`, drop the `deskx` gate.
 
-### 16. BiSeNet face parsing as an automatic EXCLUSION layer — M
+### 16. ✅ DONE — Face-parse automatic EXCLUSION layer (jonathandinu/face-parsing, not BiSeNet — see below)
 ⚠️ **It cannot replace SAM.** CelebAMask-HQ classes are face-centric — skin(face/neck), neck, hair,
 clothing — with **no torso, chest, shoulder or arm class**. The complaint that started this work is
 chest vs face, so used as the selector it would grab the face and drop the chest entirely.
