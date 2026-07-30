@@ -3582,7 +3582,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30f';
+const BUILD='2026-07-30g';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -7666,7 +7666,7 @@ async function samRunPoints(m){
   }
 }
 function mskAiPointsClear(){
-  const m=fxState.masks[mskSel];if(!m||m.origin!=='ai')return;
+  const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
   m.aiPoints=[];const{w,h}=mskTexDims();m.px=new Array(w*h).fill(0);m.mtW=w;m.mtH=h;
   _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }
@@ -7873,7 +7873,7 @@ function mskPaintAt(m,nx,ny){
   }
   cv.addEventListener('pointerdown',e=>{
     if(!mskAiTapMode)return;
-    const m=fxState.masks[mskSel];if(!m||m.origin!=='ai')return;
+    const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
     e.preventDefault();e.stopPropagation();
     try{cv.setPointerCapture(e.pointerId)}catch(_){}
     _aiStroke=m;_aiStrokeLast=null;_aiStrokeAdded=false;_aiStrokeStartLen=(m.aiPoints||[]).length;
@@ -8105,7 +8105,7 @@ function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
   if(!list||!ctl)return;list.innerHTML='';
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
-  if(mskAiTapMode&&(!fxState.masks[mskSel]||fxState.masks[mskSel].origin!=='ai'))mskAiTapToggle(false);
+  if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
     b.textContent=(m.isExclude?'✂ ':'')+(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'');
@@ -8153,7 +8153,7 @@ function mskRebuild(){
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()"><span class="bdot"></span>Clear paint</button>'
       +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()"><span class="bdot"></span>Re-detect sky</button>':'')+'</div>'
-      +(m.origin!=='ai'?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
+      +(!mskIsAI(m)?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
   // Mask management: order matters (see "Subtract prev"), so give it real controls. Mute is a
   // dry/wet check on one mask without losing it.

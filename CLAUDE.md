@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30f`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30g`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -112,6 +112,11 @@ shader-truncation white-screen class of bug immediately (watch for `[pageerror]`
 JSON in `test/recipes/`, fixtures are PNGs in `test/fixtures/` (`portrait.png` is a tanned field +
 pale disc + dark dot — a deliberate uneven-skin test case). `test/probe_*.mjs` are ad-hoc probes
 built on the same rig for measuring pixels rather than diffing images.
+
+`npm run lint:ai` (part of `npm test`) is a source-level check, not a render one: it fails if any
+raw `origin==='ai'` / `origin!=='ai'` comparison exists outside `mskIsAI()`. It exists because the
+whole segmentation path is gated on `window.__TAURI__` and therefore **invisible to the browser
+harness** — see the warning in §5b.
 
 ⚠️ Two determinism rules the harness enforces, both learned by having them fail silently:
 - **Recipes are isolated per combo.** `applyUISnapshot` treats an *absent* `selects` key as "leave
@@ -429,6 +434,15 @@ pass `showSel` — exports never do. It does not yet reach the 1:1 loupe (see `R
 `+ Skin` is **desktop-only and segmentation-first**: scribble over the subject, EdgeSAM/SAM2
 (`desktop/src-tauri/src/sam.rs`) returns them, and the colour samples refine *within* that region.
 `mskIsAI(m)` (not `origin==='ai'`) routes the AI plumbing, so a Skin mask is an AI mask.
+
+⚠️ **A Skin mask has `origin:'skin'` with `ai:true` — never compare `origin` to `'ai'` directly.**
+When this refactor was first done, a grep for `origin==='ai'` found and fixed five call sites and
+silently missed four written as the NEGATED `origin!=='ai'`. Two were on the scribble path —
+including the `pointerdown` handler, which bailed before collecting a single point — so scribbling
+did *literally nothing* on a Skin mask while the panel showed the tool armed and healthy. Nothing
+caught it: the segmentation path is gated on `window.__TAURI__`, so the browser harness cannot
+reach it at all. `npm run lint:ai` (`test/lint_ai_origin.mjs`) now fails the build on any such
+comparison; verified it flags all four against the commit that shipped the bug.
 
 The tool was originally built the other way round — colour gate first, geometry as an afterthought —
 and that cost real time for a structural reason worth stating plainly: **a colour gate cannot answer
