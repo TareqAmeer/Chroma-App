@@ -3582,7 +3582,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30d';
+const BUILD='2026-07-30e';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4139,7 +4139,16 @@ uniform vec4 mskH[4];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "prese
 uniform vec4 mskI[4];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
 uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
-uniform vec4 mskJ[4];     // x: Texture (-1..1, source high-pass gain; negative softens), y,z,w free
+// Quarter-res blurred luminance of this render's own source (see progs.lumdown + two blur passes).
+// Sampled in LOCAL uv, not global: the buffer is built from the same tile that is being rendered,
+// and renderTiled's halo guarantees the neighbourhood the blur needed is present.
+uniform sampler2D skinLum;uniform float useSkinLum;
+uniform vec4 mskJ[4];     // x: Texture (-1..1, source high-pass gain; negative softens)
+                          // y: EXCLUDE flag — this mask applies nothing itself and is instead
+                          //    subtracted from every other mask. Unlike the older "subtract prev"
+                          //    (which reaches back exactly one slot, so only ONE region could ever
+                          //    be excluded) any number of masks can be erasers, and order stops
+                          //    mattering. z,w free.
 uniform vec2 uvOffL,uvScaleL;
 // Painted/sky masks: up to 4 raster masks packed one-per-channel into a single RGBA texture
 // (slot i -> channel i), authored in JS (brush strokes or the sky heuristic) at a fixed
@@ -4267,12 +4276,21 @@ float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1){
 // pixels barely move, and the spread collapses onto one tone. "Tan" then moves the TARGET (in
 // JS), never the pixels, so pushing it deepens the whole selection instead of compounding on the
 // parts that were already dark.
-// LUM is the exception (U.w = "preserve modeling"): converging every pixel's value onto an
-// absolute target would crush the subject to one flat lightness and make shadowed skin as bright
-// as lit skin, deleting the modeling. vRef mixes between the pixel's own value (w=0 -> genuine
-// contraction: flattens, but evens out a tan LINE) and the measured mean of the gated pixels
-// (w=1 -> a pure offset: relocates the overall level, form fully intact).
-vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T){
+// LUM is the exception, and it needed FREQUENCY SEPARATION to work at all. Write v = vLow + vHigh,
+// where vLow is the local (blurred) lightness and vHigh the fine detail. Then
+//     v' = v + w*u*(target - vLow)
+// moves only the LOW-frequency component toward the target and leaves vHigh untouched BY
+// CONSTRUCTION — so an uneven tan evens out while pores, stubble and the shading that gives a body
+// its form all survive intact. That is the pro dodge-and-burn move, expressed in one term.
+// The two alternatives are both worse and were what shipped first:
+//   vRef = v     -> per-pixel contraction: closes the gap but crushes the whole lightness range
+//                   flat (measured: all skin collapsed into v 0.61-0.66, plasticky).
+//   vRef = srcV  -> the gated region's global mean: a pure offset, form intact but the tan
+//                   difference barely closes (14% at Preserve 70).
+// U.w ("Preserve modeling") now blends LOCAL (0) -> GLOBAL mean (1), i.e. from true evening-out to
+// a plain level shift, with the local end as the useful default. When the blur buffer is unavailable
+// (useSkinLum 0) it falls back to the pixel's own value, which is the old behaviour.
+vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T,float vLow){
   if(w<=0.001||(U.x==0.0&&U.y==0.0&&U.z==0.0))return c;
   vec3 hsv=rgb2hsv(c);
   float dh=T.x-hsv.x;                             // shortest way round the hue wheel
@@ -4280,7 +4298,8 @@ vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T){
   if(dh<-0.5)dh+=1.0;
   hsv.x=fract(hsv.x+w*U.x*dh+1.0);
   hsv.y+=w*U.y*(T.y-hsv.y);
-  float vRef=mix(hsv.z,T.w,U.w);
+  float local=useSkinLum>0.5?vLow:hsv.z;
+  float vRef=mix(local,T.w,U.w);
   hsv.z+=w*U.z*(T.z-vRef);
   return clamp(hsv2rgb(vec3(hsv.x,clamp(hsv.y,0.0,1.0),clamp(hsv.z,0.0,1.0))),0.0,1.0);
 }
@@ -4388,10 +4407,22 @@ if(useHsl>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(hslLut,c.rgb*sc+of).rgb;}
 c.rgb=basicAdjust(c.rgb);
 if(mskN>0.5){
   vec2 gm=uvOffL+uv*uvScaleL;
+  // Local (low-frequency) lightness for the skin frequency separation. LOCAL uv on purpose — the
+  // buffer was built from this render's own source, and a tile's halo covers the blur's reach.
+  float vLow=useSkinLum>0.5?texture(skinLum,uv).r:0.0;
   for(int i=0;i<4;i++){
     if(float(i)>=mskN)break;
+    if(mskJ[i].y>0.5)continue;                                   // an eraser mask applies nothing itself
     float w=mskShapeWeight(i,gm);
-    if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm));   // "mask inside a mask": subtract the previous mask's shape
+    if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm));   // legacy "subtract prev" — kept so saved masks render unchanged
+    // Subtract EVERY mask flagged as an eraser. This is what lets several regions be excluded at
+    // once (lips AND a pet AND a bystander); "subtract prev" reaches back exactly one slot, so it
+    // could only ever remove one of them.
+    for(int j=0;j<4;j++){
+      if(float(j)>=mskN)break;
+      if(j==i||mskJ[j].y<0.5)continue;
+      w=max(0.0,w-mskShapeWeight(j,gm));
+    }
     vec4 D=mskD[i];
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
@@ -4415,7 +4446,7 @@ if(mskN>0.5){
       // on SOURCE pixels while this applies post-grade; that mismatch is deliberate and matches
       // what the global Sharpen/Clarity already do.
       if(mskJ[i].x!=0.0)c.rgb=clamp(c.rgb+srcHP*(mskJ[i].x*w),0.0,1.0);
-      c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i]);                // converge toward the target FIRST,
+      c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow);           // converge toward the target FIRST,
       c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
@@ -4531,6 +4562,26 @@ void main(){
     t+=w;
   }
   o=t>0.?s/t:vec4(0.);
+}`);
+
+    // LUMINANCE DOWNSAMPLE for the skin-tone frequency separation. A 4x4 box average straight into
+    // a quarter-res buffer: the two Gaussian passes that follow then need a sigma 4x smaller, which
+    // keeps them inside the blur shader's 48-tap cap (a 2%-of-width sigma is ~80px at 4000px, i.e.
+    // 240 taps at full res — impossible). Box-averaging first is also what makes the downsample
+    // alias-free, so the low-frequency estimate doesn't shimmer.
+    this.progs.lumdown=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform vec2 texSize;
+void main(){
+  float s=0.;
+  for(int j=0;j<4;j++)for(int i=0;i<4;i++){
+    vec2 off=(vec2(float(i),float(j))-1.5)*texSize;
+    vec3 c=texture(img,uv+off).rgb;
+    s+=dot(c,vec3(.2126,.7152,.0722));
+  }
+  o=vec4(s/16.);
 }`);
 
     // TRIPLE-SIGMA HALATION BLUR — same shader for both H and V passes.
@@ -4843,7 +4894,10 @@ void main(){
     this._allocTex('nr',w,h);                                             // denoised source (only used when NR on)
     this._allocTex('hemitF',w,h);                                         // FULL-res halation emit (for a sharp high-pass)
     ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2)); // reduced-res glow
-    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.gs=gs;
+    // Quarter-res luminance ping-pong for the skin-tone frequency separation (see progs.lumdown).
+    const w4=Math.max(1,Math.ceil(w/4)),h4=Math.max(1,Math.ceil(h/4));
+    ['sklo_a','sklo_b'].forEach(n=>this._allocTex(n,w4,h4));
+    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;
   }
   setImage(img){const gl=this.gl;if(this.imgTx)gl.deleteTexture(this.imgTx);
     this.imgTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.imgTx);
@@ -4938,7 +4992,7 @@ void main(){
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,skinLum:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -5028,6 +5082,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mE[o+3]=m.muted?0:(m.amount!=null?m.amount:100)/100;
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
       mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
+      mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -5072,6 +5127,19 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
          texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
     }
     const lutSrc=nrOn?'nr':srcAfterLens;
+    // SKIN FREQUENCY SEPARATION — build a quarter-res, heavily blurred luminance of this render's
+    // own source, BEFORE the lut pass that consumes it. Only when a mask actually uses lightness
+    // uniformity, so the default path pays nothing. Sigma is a fixed fraction of the FULL image
+    // width (scOverride carries that through for tiles and the loupe, exactly as the halation
+    // sigmas do), which is what keeps the low-frequency estimate identical at every render size.
+    const skinLumOn=MK.some(m=>m.crOn&&m.uL&&(m.crSamples&&m.crSamples.length));
+    if(skinLumOn){
+      const RQ=[this.w4,this.h4];
+      const sigQ=Math.max(1.5,Math.min(24,FXR.CAL.skinBlurFrac*REF*sc/4));  // /4 = the quarter-res buffer
+      this._pass(this.progs.lumdown,this.fbs.sklo_a,{img:0,texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false]],RQ);
+      this._pass(this.progs.blur,this.fbs.sklo_b,{img:0,dir:[1/this.w4,0],sig:sigQ},[[0,'sklo_a',false]],RQ);
+      this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
+    }
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
@@ -5079,6 +5147,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
       'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,
       mskAnyTex:MK.some(m=>m.tex)?1:0,
+      skinLum:5,useSkinLum:skinLumOn?1:0,
       mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
@@ -5087,7 +5156,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -5216,6 +5285,11 @@ function hexRGB(h){return[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16
 //   interior-flood value bit-identical (calib/scorecard.py: 1 FAIL→0 FAIL).
 FXR.CAL={
   refWidth:2400,
+  // Skin-tone frequency separation: blur sigma as a fraction of the reference width, so the
+  // low-frequency lightness estimate is the same physical scale at every render size. 2% ~= 48px
+  // at the 2400px reference, ~80px on a 4000px file — broad enough to be "the tan gradient"
+  // rather than "the shading", which is the whole point of the separation.
+  skinBlurFrac:0.02,
   // channel-split halation (σ_R=7.52 ≫ σ_G=3.76 ≫ σ_B=1.13 px at 1x ref)
   //   → red spreads widest, green narrower, blue essentially local → warm backing
   //   colour AND the thin amber-to-red inner-rim cue both emerge from physics.
@@ -7253,7 +7327,7 @@ function _mskSkinDefaults(){return{
   tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
   tanDepth:0,tanWarm:0,srcV:null,
   amount:100,name:'',muted:false,     // amount = master scale on the whole mask; name = user label
-  tex:0};}                            // Texture: +sharpen / -soften inside the mask
+  tex:0,isExclude:false};}            // Texture: +sharpen / -soften; isExclude: use as an eraser
 // Masks saved by an older build have none of the fields above. Fill them in on load (defaults are
 // all-zero, so a restored recipe renders exactly as it did) — without this the panel would read
 // undefined into its sliders and the target resolver would see no tgtMode.
@@ -7982,7 +8056,7 @@ function mskRebuild(){
   if(mskAiTapMode&&(!fxState.masks[mskSel]||fxState.masks[mskSel].origin!=='ai'))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
-    b.textContent=(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'');
+    b.textContent=(m.isExclude?'✂ ':'')+(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'');
     if(m.muted)b.style.opacity='0.45';
     b.title=m.muted?'Muted — click to select, then the eye button to unmute':'Click to edit this mask';
     b.onclick=()=>{mskSel=i;mskRebuild();};list.appendChild(b);
@@ -8036,6 +8110,8 @@ function mskRebuild(){
     +'<button class="btn bgh" onclick="mskMove(1)" '+(mskSel>=fxState.masks.length-1?'disabled':'')+' title="Move later in the list"><span class="bdot"></span>↓ Down</button>'
     +'<button class="btn bgh" onclick="mskRename()" title="Give this mask a name so the list is readable"><span class="bdot"></span>✎ Name</button>'
     +'<button class="btn '+(m.muted?'bsec':'bgh')+'" onclick="mskToggleMute()" title="Temporarily switch this mask off without deleting it — the quickest way to judge what it is contributing"><span class="bdot"></span>'+(m.muted?'Muted ✓':'👁 Mute')+'</button></div>'
+    +'<div class="btn-row"><button class="btn '+(m.isExclude?'bsec':'bgh')+'" onclick="mskToggleExclude()" title="Use this mask as an ERASER: it applies nothing itself and is cut out of every other mask. Paint one over the lips and another over a pet and both are excluded — unlike Subtract prev, which can only remove the single mask directly before."><span class="bdot"></span>'+(m.isExclude?'✂ Excluding ✓':'✂ Use as eraser')+'</button></div>'
+    +(m.isExclude?'<div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin:2px 0 6px">This mask now only removes area from the others — its own sliders below do nothing.</div>':'')
     // Amount: one master scale on the finished selection, so a mask can be dialled back without
     // rescaling every slider below it by hand.
     +_mskRow('Amount','amount',m.amount!=null?m.amount:100,0,100,1,false);
@@ -8145,6 +8221,16 @@ function mskRename(){
 function mskToggleMute(){
   const m=fxState.masks[mskSel];if(!m)return;
   m.muted=!m.muted;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Turn a mask into an ERASER: it applies nothing of its own and is subtracted from every other
+// mask. Paint one over the lips, another over a pet, and both come out of the skin selection —
+// which "subtract prev" cannot do, since it only ever reaches back a single slot.
+function mskToggleExclude(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.isExclude=!m.isExclude;
+  if(m.isExclude&&m.subtract)m.subtract=false;   // the two mechanisms would fight; exclude wins
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
 }
@@ -10241,7 +10327,12 @@ async function processToCanvas(P,src,iw,ih,onTile){
 async function renderTiled(P,src,iw,ih,onTile){
   const REF=FXR.CAL.refWidth,sc=iw/REF;
   const H=FXR.CAL.halation,B=FXR.CAL.bloom;
-  const maxSig=Math.max((P.halation&&P.halation.radius||H.sigmaR)*sc,(P.bloom&&P.bloom.radius||B.sigma)*sc);
+  let maxSig=Math.max((P.halation&&P.halation.radius||H.sigmaR)*sc,(P.bloom&&P.bloom.radius||B.sigma)*sc);
+  // The skin-tone frequency separation blurs luminance at skinBlurFrac of the reference width, so a
+  // tile needs that neighbourhood too — without it each tile would compute its own local lightness
+  // from a different neighbourhood and the seams would show as brightness steps across the skin.
+  if((P.masks||[]).some(m=>m.crOn&&m.uL&&m.crSamples&&m.crSamples.length))
+    maxSig=Math.max(maxSig,FXR.CAL.skinBlurFrac*REF*sc);
   const halo=Math.ceil(maxSig*3)+16;                 // neighbourhood the blur needs on every side
   const TILE=1024;
   const out=document.createElement('canvas');out.width=iw;out.height=ih;const octx=out.getContext('2d');
