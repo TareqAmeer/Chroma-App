@@ -620,7 +620,7 @@ body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:trans
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
 body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
-body.deskx #btn-msk-add-ai{display:inline-flex!important} /* AI Select needs the native SAM commands — desktop only */
+body.deskx #btn-msk-add-ai,body.deskx #btn-msk-add-skin{display:inline-flex!important} /* AI Select needs the native SAM commands — desktop only */
 /* ⋯ overflow menu (deskbar): navigation to the non-editor tabs + utilities */
 #fx-overflow{display:none;position:relative}
 body.deskx #fx-overflow{display:inline-flex}
@@ -1007,7 +1007,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <button class="btn bgh" onclick="mskAdd('linear')"><span class="bdot"></span>+ Linear</button>
             <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye"><span class="bdot"></span>+ Brush</button>
             <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed"><span class="bdot"></span>+ Sky</button>
-            <button class="btn bgh" onclick="mskAdd('skin')" title="Even out uneven skin (patchy tan, pale chest vs tanned face) and tan it consistently — picks a tone, selects everything near it, then pulls it all toward one target"><span class="bdot"></span>+ Skin</button>
+            <button class="btn bgh" id="btn-msk-add-skin" onclick="mskAdd('skin')" title="Even out uneven skin (patchy tan, pale chest vs tanned face) and tan it consistently. Scribble over the subject to segment them, then refine skin vs lips/hair with colour samples. Desktop app only — needs the on-device segmentation model." style="display:none"><span class="bdot"></span>+ Skin</button>
             <button class="btn bgh" onclick="mskAdd('color')" title="Select by COLOUR alone, anywhere in the frame — no shape. Pick a colour, then shift-click to add more."><span class="bdot"></span>+ Colour Range</button>
             <button class="btn bgh" onclick="mskAdd('lum')" title="Select by BRIGHTNESS alone, anywhere in the frame — no shape. Set the Lum floor/ceiling to pick a band (shadows, midtones, highlights)."><span class="bdot"></span>+ Luminance Range</button>
             <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Brush over an object on the photo to select it (EdgeSAM, on-device — desktop app only)" style="display:none"><span class="bdot"></span>+ AI Select</button>
@@ -3582,7 +3582,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30e';
+const BUILD='2026-07-30f';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4134,7 +4134,7 @@ uniform vec4 mskG[4];  // x: number of colour samples (0 = gate off), y,z unused
 // and mskCS[i*2+1]. Skin is not a ball in hue/sat space — sheen pushes lit skin toward magenta —
 // so one centre cannot cover a whole body without a range so wide it swallows everything else.
 // The gate is the UNION (max) of the per-sample kernels, i.e. a locus traced by several picks.
-uniform vec4 mskCS[8];
+uniform vec4 mskCS[12];   // 6 samples per mask, 2 per vec4 => 3 vec4 per mask (mask i: i*3 .. i*3+2)
 uniform vec4 mskH[4];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
 uniform vec4 mskI[4];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
@@ -4143,6 +4143,8 @@ uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the sourc
 // Sampled in LOCAL uv, not global: the buffer is built from the same tile that is being rendered,
 // and renderTiled's halo guarantees the neighbourhood the blur needed is present.
 uniform sampler2D skinLum;uniform float useSkinLum;
+// 4x4 box-averaged COLOUR of the source, used to evaluate the colour-range gate (see lumdown).
+uniform sampler2D skinCol;uniform float useSkinCol;
 uniform vec4 mskJ[4];     // x: Texture (-1..1, source high-pass gain; negative softens)
                           // y: EXCLUDE flag — this mask applies nothing itself and is instead
                           //    subtracted from every other mask. Unlike the older "subtract prev"
@@ -4252,7 +4254,7 @@ float crSampleWeight(vec3 hsv,float ch,float cs,float hHalf,float sHalf){
   float dh=abs(hsv.x-ch);if(dh>0.5)dh=1.0-dh;
   return crAxis(dh,hHalf)*crAxis(abs(hsv.y-cs),sHalf);
 }
-float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1){
+float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2){
   int n=int(G.x+0.5);
   if(n<1)return 1.0;
   vec3 hsv=rgb2hsv(c);
@@ -4261,10 +4263,30 @@ float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1){
   // UNION, not sum: overlapping samples must not push the weight past 1, and a pixel belongs to
   // the selection if it is near ANY pick. Also keeps the weight FLAT across the sampled region,
   // which is what makes the uniformity contraction actually converge (see CLAUDE.md 5b).
+  // SIX samples, not four: a whole body needs more than four. Measured on __TM3390.jpg, a
+  // shadowed pec (h 0.913, i.e. 34deg round the wheel from the nearest of three picks) gated only
+  // 0.089 and was effectively left out of the selection entirely.
   float w=crSampleWeight(hsv,S0.x,S0.y,hHalf,sHalf);
   if(n>1)w=max(w,crSampleWeight(hsv,S0.z,S0.w,hHalf,sHalf));
   if(n>2)w=max(w,crSampleWeight(hsv,S1.x,S1.y,hHalf,sHalf));
   if(n>3)w=max(w,crSampleWeight(hsv,S1.z,S1.w,hHalf,sHalf));
+  if(n>4)w=max(w,crSampleWeight(hsv,S2.x,S2.y,hHalf,sHalf));
+  if(n>5)w=max(w,crSampleWeight(hsv,S2.z,S2.w,hHalf,sHalf));
+  // NEUTRAL FLOOR — skin always carries some chroma, so a near-grey pixel is not skin whatever its
+  // hue. Without this the saturation axis is symmetric: a sample at s=0.21 with sHalf 0.35 accepts
+  // everything down to s=0, so bright near-neutral limestone (s~0.02, and slightly WARM in hue)
+  // scored 0.97 and the whole mountain range joined the selection. Measured on __TM3390.jpg; it was
+  // present at every sample count and had merely been hidden by the old mask's shape.
+  // ⚠️ NOT the same thing as pcWeight's "min(1,s*3)" floor, which is deliberately absent above:
+  // that one ramps all the way to s=0.33 and would drop genuinely low-saturation skin (highlights,
+  // sheen, shadowed chest). This is a hard cut below the least-saturated real skin measured here
+  // (s=0.134), so it removes only true neutrals.
+  // ...but only for BRIGHT neutrals. Dark low-chroma pixels are body hair, beard and eyebrows —
+  // rejecting those punched speckled holes right through the chest and jaw, which reads far worse
+  // than a little background leak. Bright near-neutral is rock, snow and concrete; dark
+  // near-neutral is hair. So the cut fades in with luminance and the two separate cleanly.
+  float neutral=1.0-smoothstep(0.05,0.13,hsv.y);   // 1 = fully neutral
+  w*=1.0-neutral*smoothstep(0.45,0.68,hsv.z);
   return w;
 }
 // SKIN TONE UNIFORMITY — the one CONTRACTIVE operator in the app. Every other colour control
@@ -4409,7 +4431,9 @@ if(mskN>0.5){
   vec2 gm=uvOffL+uv*uvScaleL;
   // Local (low-frequency) lightness for the skin frequency separation. LOCAL uv on purpose — the
   // buffer was built from this render's own source, and a tile's halo covers the blur's reach.
-  float vLow=useSkinLum>0.5?texture(skinLum,uv).r:0.0;
+  float vLow=useSkinLum>0.5?texture(skinLum,uv).a:0.0;
+  // Gate on the averaged colour, adjust the sharp one. See lumdown for why.
+  vec3 gateCol=useSkinCol>0.5?texture(skinCol,uv).rgb:c.rgb;
   for(int i=0;i<4;i++){
     if(float(i)>=mskN)break;
     if(mskJ[i].y>0.5)continue;                                   // an eraser mask applies nothing itself
@@ -4426,7 +4450,7 @@ if(mskN>0.5){
     vec4 D=mskD[i];
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
-    w*=colRangeWeight(c.rgb,mskG[i],mskCS[i*2],mskCS[i*2+1]);
+    w*=colRangeWeight(gateCol,mskG[i],mskCS[i*3],mskCS[i*3+1],mskCS[i*3+2]);
     // Shapeless (Colour Range / Luminance Range) masks invert their GATES, not their shape —
     // see mskShapeWeight. Applied after both gates so it means "everything except this range".
     if(mskB[i].x>1.5&&mskB[i].z>0.5)w=1.0-w;
@@ -4575,13 +4599,19 @@ precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D img;uniform vec2 texSize;
 void main(){
-  float s=0.;
+  vec3 sc=vec3(0.);
   for(int j=0;j<4;j++)for(int i=0;i<4;i++){
     vec2 off=(vec2(float(i),float(j))-1.5)*texSize;
-    vec3 c=texture(img,uv+off).rgb;
-    s+=dot(c,vec3(.2126,.7152,.0722));
+    sc+=texture(img,uv+off).rgb;
   }
-  o=vec4(s/16.);
+  sc/=16.;
+  // rgb = the 4x4-averaged COLOUR, used to evaluate the colour-range gate; a = its luminance,
+  // which the two Gaussian passes then blur further for the frequency separation. Gating on an
+  // averaged colour is the point: sunlit rock and foliage carry enough per-pixel chroma noise that
+  // a scattering of their pixels are genuinely skin-coloured, so a per-pixel gate speckles across
+  // the whole background. Averaging first removes isolated noise while the ADJUSTMENT still lands
+  // on the original sharp pixel — select from a denoised copy, apply to the real one.
+  o=vec4(sc,dot(sc,vec3(.2126,.7152,.0722)));
 }`);
 
     // TRIPLE-SIGMA HALATION BLUR — same shader for both H and V passes.
@@ -4896,7 +4926,7 @@ void main(){
     ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2)); // reduced-res glow
     // Quarter-res luminance ping-pong for the skin-tone frequency separation (see progs.lumdown).
     const w4=Math.max(1,Math.ceil(w/4)),h4=Math.max(1,Math.ceil(h/4));
-    ['sklo_a','sklo_b'].forEach(n=>this._allocTex(n,w4,h4));
+    ['sklo_a','sklo_b','skbox'].forEach(n=>this._allocTex(n,w4,h4));
     this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;
   }
   setImage(img){const gl=this.gl;if(this.imgTx)gl.deleteTexture(this.imgTx);
@@ -4992,7 +5022,7 @@ void main(){
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,skinLum:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,skinLum:1,skinCol:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -5064,7 +5094,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const MK=(P.masks&&P.masks.length)?P.masks.slice(0,4):[];
     const mA=new Float32Array(16),mB=new Float32Array(16),mC=new Float32Array(16),mD=new Float32Array(16),mE=new Float32Array(16),mF=new Float32Array(16),
           mG=new Float32Array(16),mH=new Float32Array(16),mI=new Float32Array(16),
-          mS=new Float32Array(32),   // colour-gate samples: 4 masks x 4 samples x (h,s) = 8 vec4
+          mS=new Float32Array(48),   // colour-gate samples: 4 masks x 6 samples x (h,s) = 12 vec4
           mJ=new Float32Array(16);   // per-mask detail: x = Texture
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
@@ -5086,10 +5116,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
-      const CS=(m.crOn&&m.crSamples)?m.crSamples.slice(0,4):[];
+      const CS=(m.crOn&&m.crSamples)?m.crSamples.slice(0,CR_MAX_SAMPLES):[];
       mG[o]=CS.length;mG[o+3]=(m.crRange!=null?m.crRange:35)/100;
       // Two samples per vec4: mskCS[i*2]=(h0,s0,h1,s1), mskCS[i*2+1]=(h2,s2,h3,s3).
-      CS.forEach((p,k)=>{const q=i*8+k*2;mS[q]=p.h||0;mS[q+1]=p.s||0;});
+      CS.forEach((p,k)=>{const q=i*12+k*2;mS[q]=p.h||0;mS[q+1]=p.s||0;});
       mH[o]=(m.uH||0)/100;mH[o+1]=(m.uS||0)/100;mH[o+2]=(m.uL||0)/100;
       mH[o+3]=(m.preserve!=null?m.preserve:70)/100;
       const tgt=mskSkinTarget(m);
@@ -5132,12 +5162,17 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // uniformity, so the default path pays nothing. Sigma is a fixed fraction of the FULL image
     // width (scOverride carries that through for tiles and the loupe, exactly as the halation
     // sigmas do), which is what keeps the low-frequency estimate identical at every render size.
-    const skinLumOn=MK.some(m=>m.crOn&&m.uL&&(m.crSamples&&m.crSamples.length));
+    const anyGate=MK.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
+    const skinLumOn=anyGate&&MK.some(m=>m.crOn&&m.uL);
+    const RQ=[this.w4,this.h4];
+    if(anyGate){
+      // Box pass: 4x4-averaged colour + its luminance. Cheap (quarter res) and it is what makes the
+      // gate robust to per-pixel chroma noise in rock and foliage.
+      this._pass(this.progs.lumdown,this.fbs.skbox,{img:0,texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false]],RQ);
+    }
     if(skinLumOn){
-      const RQ=[this.w4,this.h4];
       const sigQ=Math.max(1.5,Math.min(24,FXR.CAL.skinBlurFrac*REF*sc/4));  // /4 = the quarter-res buffer
-      this._pass(this.progs.lumdown,this.fbs.sklo_a,{img:0,texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false]],RQ);
-      this._pass(this.progs.blur,this.fbs.sklo_b,{img:0,dir:[1/this.w4,0],sig:sigQ},[[0,'sklo_a',false]],RQ);
+      this._pass(this.progs.blur,this.fbs.sklo_b,{img:0,dir:[1/this.w4,0],sig:sigQ},[[0,'skbox',false]],RQ);
       this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
     }
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
@@ -5147,7 +5182,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
       'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,
       mskAnyTex:MK.some(m=>m.tex)?1:0,
-      skinLum:5,useSkinLum:skinLumOn?1:0,
+      skinLum:5,useSkinLum:skinLumOn?1:0,skinCol:6,useSkinCol:anyGate?1:0,
       mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
@@ -5156,7 +5191,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -7316,11 +7351,19 @@ function cvSetBg(c){fxState.canvas.bg=c;fxState.canvas.blur=false;cvBuildChips()
 // texture convention; exposure in stops; etc.). The sliders convert: Y sliders are
 // top-based (0 = top of the photo) and flip on write via data-fl.
 let mskSel=-1;
+// True when a mask is driven by the on-device segmentation (EdgeSAM/SAM2 — see
+// desktop/src-tauri/src/sam.rs). Checked instead of `origin==='ai'` because the Skin mask is now
+// segmentation-first too: SEGMENT the subject, then refine by colour inside it. That ordering is
+// the right way round. Colour alone cannot separate a subject from a background that shares its
+// colours — chasing it here produced a straight oscillation, where tightening the gate enough to
+// reject sunlit limestone (bright, near-neutral) also rejected chest hair and beard (dark,
+// near-neutral), because saturation cannot tell those apart. Geometry can.
+function mskIsAI(m){return !!(m&&(m.origin==='ai'||m.ai));}
 // Skin-tone / colour-range fields, shared by EVERY mask type (a colour gate is useful on a
 // linear gradient or a painted mask too, not just the Skin preset). A factory, not a shared
 // constant, so masks never alias one object. All strengths default to 0 => a freshly added
 // mask renders bit-identically to before this feature existed.
-const CR_MAX_SAMPLES=4;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max
+const CR_MAX_SAMPLES=6;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max
 function _mskSkinDefaults(){return{
   crOn:false,crSamples:[],crRange:35,        // colour gate: up to CR_MAX_SAMPLES picks + one range
   uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
@@ -7352,20 +7395,22 @@ function mskAdd(type){
   if(fxState.masks.length>=4){log('Maximum 4 masks','warn');return;}
   let m;
   if(type==='skin'){
-    // A generously feathered radial covering roughly the middle of the frame — NOT the whole
-    // frame. The colour gate alone cannot tell skin from anything else sharing its hue (a pet's
-    // fur, sand, bare wood, a second person), so the shape has to do that half of the job: it
-    // starts bounded and visible-on-photo (draggable, mskPreviewMode defaults to 'overlay') so
-    // limiting it is the obvious next move rather than something you discover after the fact.
-    // Radial (not brush) on purpose: a brush mask starts all-zero, which would make the whole
-    // panel a silent no-op until the user painted something.
-    // feather 0.25 => the falloff starts at HALF the ellipse radius, so the inner half is a FLAT
-    // 1.0 and only the outer half fades. That flatness is the point: uniformity moves each pixel
-    // by w*u*(target-x), so a shape that fades across the subject makes the weight the dominant
-    // term and the tones stop converging (measured: at a centre-fading shape the skin weights
-    // ranged 0.50-0.97 and hue actually diverged). Back-solving the ellipse radius for every skin
-    // point on __TM3390.jpg gave t = 0.11..0.42 — all inside 0.5, so all get weight 1.0.
-    m={type:'radial',origin:'skin',cx:0.5,cy:0.5,rx:0.45,ry:0.5,rot:0,feather:0.25,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+    // SEGMENTATION FIRST — desktop only, by design. Scribble over the subject, the on-device model
+    // (EdgeSAM/SAM2, desktop/src-tauri/src/sam.rs) returns them, and the colour samples then refine
+    // WITHIN that region.
+    //
+    // This ordering is the whole point, and getting it wrong cost real time. A colour gate cannot
+    // answer "which pixels are this person" — a pet, wet hair, sunlit limestone and a bystander all
+    // sit inside skin's own hue/saturation range. Trying to make it answer that produced a clean
+    // oscillation on __TM3390.jpg: tightening the gate enough to reject bright near-neutral rock
+    // also rejected dark near-neutral chest hair and beard, punching speckled holes through the
+    // chest, because saturation cannot separate those two. Geometry separates them trivially.
+    // With the subject segmented, the dog and the rocks are simply not in the mask, and the gate is
+    // left doing the one thing it is genuinely good at: skin vs lips/hair inside the subject.
+    const{w,h}=mskTexDims();
+    m={type:'brush',origin:'skin',ai:true,px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],
+      invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,
+      subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
   else if(type==='color'||type==='lum'){
     // Shapeless masks: no ellipse or gradient at all, the range gates do all the selecting. These
@@ -7407,7 +7452,10 @@ function mskAdd(type){
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
   if(type==='ai'){_samLastError=null;samEnsureEncoded();mskAiTapToggle(true);}
-  if(type==='skin'){mskCrEyedropper(true);log('Click a mid-tone patch of skin. Then drag/resize the shape on the photo so it only covers the person you mean.','info');}
+  if(type==='skin'){
+    _samLastError=null;samEnsureEncoded();mskAiTapToggle(true);
+    log('Scribble over yourself on the photo to select you. The dog, the rocks and the background are then outside the mask entirely \u2014 the colour samples below only have to tell skin from lips and hair INSIDE you.','info');
+  }
   if(type==='color'){mskCrEyedropper(true);log('Click the colour you want to select — this mask has no shape, the colour range IS the selection','info');}
   if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
 }
@@ -7473,13 +7521,13 @@ async function samEnsureEncoded(){
     const msg='AI Select: could not prepare this photo — '+(e&&e.message||e);
     log(msg,'err');_samLastError=msg;
     if(typeof toast==='function')toast(msg);
-    if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild();
+    if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();
   }finally{_samEncoding=false;}
 }
 async function samEnsureEncoded2(img,rgb,w,h){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
   _sam2Encoding=true;
-  if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild(); // show the spinner
+  if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // show the spinner
   try{
     const token='sam2-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     await _samFramedInvoke('sam2_encode',{token,width:w,height:h},rgb);
@@ -7491,12 +7539,12 @@ async function samEnsureEncoded2(img,rgb,w,h){
     // Silently upgrade the current mask in place if it already has a scribble — matches the RAW
     // refine's "gets better without asking" UX rather than requiring a fresh stroke.
     const m=fxState.masks[mskSel];
-    if(m&&m.origin==='ai'&&m.aiPoints&&m.aiPoints.length)await samRunPoints(m);
+    if(m&&mskIsAI(m)&&m.aiPoints&&m.aiPoints.length)await samRunPoints(m);
   }catch(e){
     log('AI Select (background quality upgrade): '+(e&&e.message||e),'warn'); // non-fatal — EdgeSAM still works
   }finally{
     _sam2Encoding=false;
-    if(fxState.masks[mskSel]&&fxState.masks[mskSel].origin==='ai')mskRebuild(); // hide the spinner
+    if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // hide the spinner
   }
 }
 // Resubmits m.aiPoints (the FULL accumulated scribble point set, not just the latest stroke) and
@@ -7964,7 +8012,7 @@ function _crAxisJS(d,half){
   const t=Math.min(1,Math.max(0,(d-core)/Math.max(half-core,1e-6)));
   return 1-t*t;
 }
-function crWeightJS(h,s,samples,range){
+function crWeightJS(h,s,samples,range,v){
   if(!samples||!samples.length)return 1;
   const R=range/100,hHalf=0.02+R*0.14,sHalf=0.10+R*0.45;
   let w=0;
@@ -7973,7 +8021,11 @@ function crWeightJS(h,s,samples,range){
     const cw=_crAxisJS(dh,hHalf)*_crAxisJS(Math.abs(s-(p.s||0)),sHalf);
     if(cw>w)w=cw;
   }
-  return w;
+  // Bright-neutral cut — must mirror colRangeWeight exactly, INCLUDING the luminance term. v is
+  // optional only so older callers don't break; omitting it applies the cut unconditionally, which
+  // over-rejects dark hair, so always pass it.
+  const neutral=1-_smoothstepJS(0.05,0.13,s);
+  return w*(1-neutral*_smoothstepJS(0.45,0.68,v!=null?v:1));
 }
 function mskMeasureSrcV(m){
   if(!m||!m.crOn||!m.crSamples||!m.crSamples.length||!FX.cv){if(m)m.srcV=null;return;}
@@ -7988,7 +8040,7 @@ function mskMeasureSrcV(m){
   let acc=0,wsum=0;
   for(let i=0;i<d.length;i+=4){
     const[h,s,v]=r2hsv(d[i]/255,d[i+1]/255,d[i+2]/255);
-    const w=crWeightJS(h,s,m.crSamples,R);if(w<=0)continue;
+    const w=crWeightJS(h,s,m.crSamples,R,v);if(w<=0)continue;
     acc+=w*v;wsum+=w;
   }
   m.srcV=wsum>1e-6?acc/wsum:null;   // null => the shader falls back to the target's own value
@@ -8084,7 +8136,7 @@ function mskRebuild(){
       +_mskRow('End X','x1',m.x1,0,100,0.01,false)+_mskRow('End Y','y1',m.y1,0,100,0.01,true)
       +_mskRow('Feather','feather',m.feather,0,100,0.005,false);
   }else{ // brush / sky / AI raster mask
-    if(m.origin==='ai'){
+    if(mskIsAI(m)){
       h+='<div class="btn-row">'
         +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area."><span class="bdot"></span>'+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over"><span class="bdot"></span>Clear points</button></div>'
@@ -8133,7 +8185,7 @@ function mskRebuild(){
         +(p.rgb?'background:rgb('+p.rgb.join(',')+')':'background:var(--sur2)')
         +'" title="Sample '+(i+1)+' — click to remove" onclick="mskCrDropSample('+i+')"></button>').join('')
       +'<span style="font-size:10px;color:var(--mut);font-family:var(--mono)">'+CS.length+'/'+CR_MAX_SAMPLES
-      +(CS.length<CR_MAX_SAMPLES?' — shift-click the photo to add':'')+'</span></div>';
+      +(CS.length<CR_MAX_SAMPLES?' \u2014 shift-click the photo to add':'')+'</span></div>';
   }
   if(m.crOn){
     h+=_mskRow('Range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
@@ -8236,7 +8288,7 @@ function mskToggleExclude(){
 }
 // The label shown on the list chip when the user hasn't named the mask themselves.
 function mskAutoLabel(m,i){
-  const t=m.origin==='skin'?'Skin':m.origin==='color'?'Colour':m.origin==='lum'?'Lum'
+  const t=m.origin==='skin'?(mskIsAI(m)?'Skin AI':'Skin'):m.origin==='color'?'Colour':m.origin==='lum'?'Lum'
     :m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
     :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Colour':'Radial'):'Brush';
   return t+' '+(i+1);

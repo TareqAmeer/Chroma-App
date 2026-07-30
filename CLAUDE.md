@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30e`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30f`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -424,6 +424,31 @@ Three per-mask pieces, all reusing the existing mask machinery:
 gate × colour gate) as a red overlay. `mskOverlaySync` draws only the SHAPE in JS/SVG, so it never
 showed the lum gate either; a colour range is untunable blind. Only the two `renderPreview` calls
 pass `showSel` — exports never do. It does not yet reach the 1:1 loupe (see `ROADMAP.md`).
+
+### ⚠️ SEGMENT FIRST, then refine by colour — do not repeat this mistake
+`+ Skin` is **desktop-only and segmentation-first**: scribble over the subject, EdgeSAM/SAM2
+(`desktop/src-tauri/src/sam.rs`) returns them, and the colour samples refine *within* that region.
+`mskIsAI(m)` (not `origin==='ai'`) routes the AI plumbing, so a Skin mask is an AI mask.
+
+The tool was originally built the other way round — colour gate first, geometry as an afterthought —
+and that cost real time for a structural reason worth stating plainly: **a colour gate cannot answer
+"which pixels are this person".** A pet, wet hair, sunlit limestone and a bystander all sit inside
+skin's own hue/saturation range. Measured on `__TM3390.jpg`, trying to force it produced a clean
+oscillation, each fix breaking the previous one:
+- a bounded ellipse dropped skin the gate had already found (far arm 0.35, outer shoulder 0.66,
+  armpit 0.68, chest side 0.83 — all at gate 1.0);
+- going shapeless fixed that but admitted the mountains, not at block-average level (every rock
+  probe reads 0) but **per pixel**, where limestone's chroma noise is genuinely skin-coloured;
+- a neutral floor killed the rock but also killed chest hair and beard, punching speckled holes
+  through the chest, because saturation cannot tell bright near-neutral rock from dark near-neutral
+  hair. (Gating that cut on luminance separates them, and is what ships — but it is a patch on the
+  wrong architecture.)
+
+Geometry separates all of it trivially. Two supporting pieces stayed, both useful in their own
+right: the gate is evaluated on a **4×4 box-averaged colour** (`progs.lumdown` → `skbox`, sampled as
+`skinCol`) so isolated noisy pixels cannot pass — select from a denoised copy, apply to the sharp
+pixel — and `crWeightJS` mirrors the gate for `srcV`, so ⚠️ any change to `colRangeWeight`
+**including its luminance term** must be mirrored there or `srcV` silently drifts.
 
 ### ⚠️ The non-obvious failure mode: FLAT weight matters more than high weight
 Each pixel moves by `w·u·(target−x)`, so a spread in **w** across the skin competes with the

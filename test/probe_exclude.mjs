@@ -50,7 +50,7 @@ const out=await pg.evaluate(async()=>{
     uH:90,uS:80,uL:70,preserve:35,tgtMode:'match',tanDepth:35,tanWarm:45};
   let acc=0,wsum=0;
   for(let y=0;y<H;y+=16)for(let x=0;x<W;x+=16){
-    const[h,s,v]=hsvAt(x,y);const w=crWeightJS(h,s,skin.crSamples,skin.crRange);
+    const[h,s,v]=hsvAt(x,y);const w=crWeightJS(h,s,skin.crSamples,skin.crRange,v);
     if(w>0){acc+=w*v;wsum+=w;}
   }
   skin.srcV=wsum/wsum?acc/wsum:null;

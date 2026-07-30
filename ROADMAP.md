@@ -46,7 +46,16 @@ Three related defects in one area:
   edges to real boundaries, which matters far more than raw resolution.
 *Touches:* `mskRebuild` (drag handles), `mskTexDims`, `mskBuildTex`, a new refine pass.
 
-### 4. Browser-side AI subject / person / skin mask — L
+### 4. ⏳ RESCOPED — AI mask now drives + Skin on DESKTOP; browser port dropped
+The Skin mask is segmentation-first as of 2026-07-30f: `mskAdd('skin')` builds an AI mask, scribble
+selects the subject, colour samples refine inside it. `mskIsAI()` routes the AI plumbing so Skin and
+AI Select share one path. Per the user, **desktop is the only target** — the browser/iOS port of the
+model is dropped rather than maintained as a worse second path.
+
+Still open here: a dedicated *skin* segmentation (BiSeNet-style face/skin parsing) rather than
+subject segmentation, which would separate lips, brows and hair without any brushing at all.
+
+Original note follows — L
 EdgeSAM is desktop-only (`body.deskx #btn-msk-add-ai`), because it needs the native
 `sam_encode`/`sam_points` commands in `desktop/src-tauri/src/sam.rs`. Running it in the browser via
 `onnxruntime-web` + WASM would make the app's best selection tool available everywhere — and it
