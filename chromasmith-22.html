@@ -1234,6 +1234,21 @@ setTimeout(()=>window.hideBootSplash(),6000);
           </select>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Resizing never enlarges — a target above the photo's own long edge is ignored. Sharpening is applied last, after the resize, which is the only point at which the right amount is knowable.</div>
+        <!-- Named export presets: just the four controls above (format/quality/resize/sharpen),
+             saved/recalled by name — distinct from Styles (the full edit recipe) and from Save
+             session (one auto-restored slot). The common case this exists for: "small JPG for
+             the web" vs "full-res PNG for print" as one click instead of four each time. -->
+        <div style="margin-top:10px">
+          <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
+            <select class="fx-select" id="sel-exp-preset" onchange="if(this.value)exportPresetApply(this.value)">
+              <option value="">— none —</option>
+            </select>
+          </div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn bgh" onclick="exportPresetSaveCurrent()" title="Save the current Quality/Format/Resize/Sharpening as a named preset"><span class="bdot"></span>Save preset…</button>
+            <button class="btn bgh" id="btn-exp-preset-del" onclick="exportPresetDeleteCurrent()" disabled title="Delete the selected preset"><span class="bdot"></span>Delete</button>
+          </div>
+        </div>
         <div id="fx-export-scope-row" style="margin-top:8px;display:none">
           <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope</div>
           <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
@@ -3587,7 +3602,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30l';
+const BUILD='2026-07-31a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -9631,6 +9646,59 @@ function styleListRefresh(){
       +`</div>`;
   }).join('');
 }
+// ── Named export presets: just the 4 export-panel controls (format/quality/resize/sharpen),
+// saved/recalled by name. Same localStorage-flat-list shape as Styles above, deliberately not
+// merged with it — a Style is the whole edit recipe (portable across photos); this is only
+// "how do I want the FILE encoded", the thing you actually re-pick per destination (web vs print).
+const _EXPPRESET_KEY='chromasmith-export-presets-v1';
+function exportPresetsList(){try{return JSON.parse(localStorage.getItem(_EXPPRESET_KEY)||'[]')}catch(e){return[]}}
+function exportPresetsSave(list){try{localStorage.setItem(_EXPPRESET_KEY,JSON.stringify(list))}catch(e){log('Could not save export preset: '+e.message,'err')}}
+function _exportPresetRead(){
+  return{
+    fmt:(document.getElementById('sel-exp-fmt')||{}).value||'auto',
+    q:(document.getElementById('sl-exp-q')||{}).value||'99',
+    size:(document.getElementById('sel-exp-size')||{}).value||'0',
+    sharp:(document.getElementById('sel-exp-sharp')||{}).value||'0',
+  };
+}
+function exportPresetSaveCurrent(){
+  const name=(prompt('Name this export preset:')||'').trim();
+  if(!name)return;
+  const list=exportPresetsList();
+  const existing=list.findIndex(p=>p.name===name);
+  const entry={name,settings:_exportPresetRead()};
+  if(existing>=0){if(!confirm(`An export preset named "${name}" already exists. Overwrite it?`))return;list[existing]=entry;}
+  else list.push(entry);
+  exportPresetsSave(list);exportPresetListRefresh(name);
+  toast(`Export preset "${name}" saved`,true);
+}
+function exportPresetApply(name){
+  const p=exportPresetsList().find(x=>x.name===name);if(!p)return;
+  const s=p.settings;
+  const fmtEl=document.getElementById('sel-exp-fmt'),qEl=document.getElementById('sl-exp-q'),
+    sizeEl=document.getElementById('sel-exp-size'),sharpEl=document.getElementById('sel-exp-sharp');
+  if(fmtEl&&s.fmt!=null)fmtEl.value=s.fmt;
+  if(qEl&&s.q!=null){qEl.value=s.q;const vl=document.getElementById('vl-exp-q');if(vl)vl.textContent=s.q;}
+  if(sizeEl&&s.size!=null)sizeEl.value=s.size;
+  if(sharpEl&&s.sharp!=null)sharpEl.value=s.sharp;
+  const delBtn=document.getElementById('btn-exp-preset-del');if(delBtn)delBtn.disabled=false;
+  log(`Export preset applied: ${name}`,'ok');
+}
+function exportPresetDeleteCurrent(){
+  const sel=document.getElementById('sel-exp-preset');const name=sel&&sel.value;if(!name)return;
+  if(!confirm(`Delete export preset "${name}"? This cannot be undone.`))return;
+  exportPresetsSave(exportPresetsList().filter(p=>p.name!==name));exportPresetListRefresh();
+}
+function exportPresetListRefresh(selectName){
+  const sel=document.getElementById('sel-exp-preset');if(!sel)return;
+  const list=exportPresetsList();
+  sel.innerHTML='<option value="">— none —</option>'+list.map(p=>{
+    const n=p.name.replace(/"/g,'&quot;');
+    return `<option value="${n}">${p.name}</option>`;
+  }).join('');
+  if(selectName)sel.value=selectName;
+  const delBtn=document.getElementById('btn-exp-preset-del');if(delBtn)delBtn.disabled=!sel.value;
+}
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
@@ -12690,6 +12758,7 @@ _fxPristineDefault=getUISnapshot(); // factory-default UI state, captured before
 initSliderErgonomics(); // numeric entry, keyboard nudge, modified-from-default dots
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 styleListRefresh();  // populate the Styles list from localStorage
+exportPresetListRefresh();  // populate the Export preset dropdown from localStorage
 initZoomPan();
 initEditableVals();
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor

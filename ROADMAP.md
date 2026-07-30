@@ -9,11 +9,11 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 highest-confidence entries here.
 
 **Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
-8, 14 (resize+sharpening), 16, A, B, D shipped; 4 partly. Item 16 (face-parse auto-exclusion) is
-verified with a real Rust integration test (`cargo test`) against a real photo — see
-`desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but like
-item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs a
-hands-on check in the built app. Everything else below is verified against the export gate with
+8, 14 (resize+sharpening+named presets), 16, A, B, D shipped; 4 partly. Item 16 (face-parse
+auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a real photo
+— see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but
+like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs
+a hands-on check in the built app. Everything else below is verified against the export gate with
 the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
 
 **Still open — 9 items, each independent.** Nothing here blocks anything else, so they can be
@@ -26,7 +26,7 @@ picked off in any order and in separate sessions:
 | 10 | Spot removal / clone / heal | M |
 | 11 | Perspective / keystone + auto horizon | M |
 | 13 | JXL / AVIF / HEIC in, 16-bit out | L |
-| 14 | Export ICC/P3, watermark, named presets | S |
+| 14 | Export ICC/P3 + watermark (presets done) | S |
 | 15 | Auto-match a series to a reference photo | M |
 | C | Command palette (⌘K) | S |
 | E | First-run tour + contextual tips | S |
@@ -183,10 +183,14 @@ decode (WASM, same vendoring pattern as libraw) plus **16-bit** PNG/TIFF export 
 RAW→edit→export path credible end to end. Today an 8-bit export throws away most of what the RW2
 pipeline and DCP work earn.
 
-### 14. ✅ MOSTLY DONE — Export resize + output sharpening shipped; ICC/P3, watermark and named presets still open — S/M
-Export is full-resolution sRGB only. Long-edge resize with output sharpening (the two always go
-together), Display-P3 / sRGB ICC embedding, an optional watermark, and named export presets. The
-tiled export path already gives a clean place to hook resize.
+### 14. ✅ MOSTLY DONE — Export resize + sharpening + named presets shipped; ICC/P3 and watermark still open — S/M
+Named export presets (`exportPresetSaveCurrent`/`exportPresetApply`/`exportPresetDeleteCurrent`)
+save/recall just the four export-panel controls — format, quality, resize, sharpening — by name,
+mirroring the existing Styles feature's localStorage-flat-list shape (`_STYLES_KEY` →
+`_EXPPRESET_KEY`) but deliberately kept separate: a Style is the whole portable edit recipe, this
+is only "how the file gets encoded" — the thing that actually differs web-vs-print. Still open:
+Display-P3 / sRGB ICC embedding and an optional watermark. The tiled export path already gives a
+clean place to hook both.
 
 ### 15. Auto-match a series to a reference photo — M
 Batch editing shares one `fxState` across photos, which is right for a look but wrong for
