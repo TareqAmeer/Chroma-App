@@ -62,7 +62,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30c`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-30d`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -182,6 +182,19 @@ a JS template literal, so a stray backtick silently truncates the shader source 
 `SyntaxError: missing ) after argument list`, breaking the entire page. This has bitten the
 project twice. Use double-quotes for inline code/values in shader comments, and **always
 reload the live page in a real browser after touching shader source**, even for a comment.
+
+### ⚠️ The QUIETER shader bug class: a compile error that does not break the page
+A GLSL compile/link failure does **not** white-screen the app the way a truncated template literal
+does. The page loads, the UI works, and the affected program simply renders as if its whole feature
+were switched off. That reads as a logic bug and can burn hours. It happened with a parameter named
+`half` — a **reserved word in GLSL ES** — which silently killed the `lut` program, so *every mask
+did nothing* while the app looked completely healthy. Other reserved words that read as innocent
+identifiers: `half`, `input`, `output`, `filter`, `sample`, `cast`, `union`, `this`, `double`.
+
+Practical rule: after ANY shader edit, run `node test/export_harness.mjs` and **watch for
+`[console.error] GLSL compile error`** — the harness surfaces it immediately and would have caught
+this in seconds. A silent no-op is worse than a crash, so never judge a shader change by "the page
+still loads".
 
 ---
 

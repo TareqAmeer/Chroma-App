@@ -172,6 +172,12 @@ const out = await page.evaluate(async ({ SKIN, OTHER, PICK_FROM }) => {
     ['3 samples, feather 0.3', { crSamples: P3, feather: 0.3 }],
     ['3 samples, feather 0.15', { crSamples: P3, feather: 0.15 }],
     ['3 samples, BRUSH (flat shape)', { crSamples: P3, _flatShape: true }],
+    // Ceiling checks: how close can the CURRENT per-pixel operator get before a
+    // frequency-separated lightness pass (ROADMAP 7) is actually required?
+    ['MAX h/s, feather 0.3', { crSamples: P3, feather: 0.3, uH: 100, uS: 100, uL: 40 }],
+    ['MAX all, preserve 70', { crSamples: P3, feather: 0.3, uH: 100, uS: 100, uL: 100 }],
+    ['MAX all, preserve 30', { crSamples: P3, feather: 0.3, uH: 100, uS: 100, uL: 100, preserve: 30 }],
+    ['MAX all, preserve 0', { crSamples: P3, feather: 0.3, uH: 100, uS: 100, uL: 100, preserve: 0 }],
   ];
   for (const [label, over] of cases) {
     const m = mkMask(over);

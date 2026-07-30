@@ -3582,7 +3582,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-30c';
+const BUILD='2026-07-30d';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4222,12 +4222,26 @@ vec3 hsv2rgb(vec3 hsv){
 // low-saturation — the floor would drop the brightest skin out of the selection and leave a
 // bright halo along every highlight. The ws gaussian, centred on the PICKED saturation, already
 // rejects neutrals correctly.
+// FLAT-TOPPED kernel: full weight out to CR_CORE of the half-width, then a smooth falloff to 0.
+// A plain parabola (1-(d/half)^2) only reaches exactly 1.0 AT the sample point, so every other
+// pixel is slightly under-selected — and since uniformity moves each pixel by w*u*(target-x), an
+// uneven w competes with the distance term and dilutes the contraction (CLAUDE.md 5b). A plateau
+// makes the weight exactly 1.0 across the whole sampled band, which is what the contraction needs,
+// while keeping a soft edge so the selection boundary never reads as a hard cut.
+// ⚠️ Do NOT name a parameter "half" — it is a RESERVED WORD in GLSL ES. Doing so fails to compile
+// the fragment shader, and the failure is SILENT in a way the backtick trap is not: the page loads
+// fine and simply renders with every mask doing nothing, which looks like a logic bug for hours.
+const float CR_CORE=0.45;
+float crAxis(float d,float hw){
+  float core=CR_CORE*hw;
+  if(d<=core)return 1.0;
+  float t=clamp((d-core)/max(hw-core,1e-6),0.0,1.0);
+  return 1.0-t*t;
+}
 // Kernel for ONE sample centre. Split out so the multi-sample union below stays readable.
 float crSampleWeight(vec3 hsv,float ch,float cs,float hHalf,float sHalf){
   float dh=abs(hsv.x-ch);if(dh>0.5)dh=1.0-dh;
-  float wh=max(0.0,1.0-pow(dh/hHalf,2.0));
-  float ws=max(0.0,1.0-pow((hsv.y-cs)/sHalf,2.0));
-  return wh*ws;
+  return crAxis(dh,hHalf)*crAxis(abs(hsv.y-cs),sHalf);
 }
 float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1){
   int n=int(G.x+0.5);
@@ -7869,14 +7883,21 @@ function mskSkinTarget(m){
 // each tile converge to a different level and show up as blocks.
 // JS mirror of colRangeWeight() — MUST stay in step with the shader version, including the
 // max-over-samples union and the hHalf/sHalf formulas.
+const CR_CORE=0.45;   // must equal the shader's CR_CORE
+function _crAxisJS(d,half){
+  const core=CR_CORE*half;
+  if(d<=core)return 1;
+  const t=Math.min(1,Math.max(0,(d-core)/Math.max(half-core,1e-6)));
+  return 1-t*t;
+}
 function crWeightJS(h,s,samples,range){
   if(!samples||!samples.length)return 1;
   const R=range/100,hHalf=0.02+R*0.14,sHalf=0.10+R*0.45;
   let w=0;
   for(const p of samples){
     let dh=Math.abs(h-(p.h||0));if(dh>0.5)dh=1-dh;
-    const wh=Math.max(0,1-Math.pow(dh/hHalf,2)),ws=Math.max(0,1-Math.pow((s-(p.s||0))/sHalf,2));
-    const cw=wh*ws;if(cw>w)w=cw;
+    const cw=_crAxisJS(dh,hHalf)*_crAxisJS(Math.abs(s-(p.s||0)),sHalf);
+    if(cw>w)w=cw;
   }
   return w;
 }
