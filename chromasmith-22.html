@@ -1234,6 +1234,18 @@ setTimeout(()=>window.hideBootSplash(),6000);
           </select>
         </div>
         <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Resizing never enlarges — a target above the photo's own long edge is ignored. Sharpening is applied last, after the resize, which is the only point at which the right amount is knowable.</div>
+        <!-- Watermark: drawn onto the FINAL (post-resize) canvas, last of all — so its text is a
+             constant fraction of whatever the actual output size ends up being, not the source. -->
+        <div class="fx-row" style="margin-top:10px" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
+          <div class="fx-label">Watermark</div>
+          <div class="fx-toggle" id="tg-exp-wm" onclick="this.classList.toggle('on');document.getElementById('exp-wm-row').style.display=this.classList.contains('on')?'block':'none'"></div>
+        </div>
+        <div id="exp-wm-row" style="display:none">
+          <div class="vrow" style="margin-top:4px">
+            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex:1">
+          </div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" oninput="document.getElementById('vl-exp-wm-op').textContent=this.value"><div class="fx-val" id="vl-exp-wm-op">55</div></div>
+        </div>
         <!-- Named export presets: just the four controls above (format/quality/resize/sharpen),
              saved/recalled by name — distinct from Styles (the full edit recipe) and from Save
              session (one auto-restored slot). The common case this exists for: "small JPG for
@@ -3602,7 +3614,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-31c';
+const BUILD='2026-07-31d';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -10475,6 +10487,34 @@ function exportSharpen(cv,level){
   ctx.putImageData(img,0,0);
   return cv;
 }
+// Text watermark, drawn onto the FINAL (post-resize) export canvas IN PLACE — deliberately last
+// in the export chain (after resize/sharpen/canvas-matte) so its size is a constant fraction of
+// whatever the actual output ends up being, not the source photo's own resolution. Font size and
+// margin both scale off the long edge for the same reason a 24px watermark looks right on a 1080
+// social export and comically small on a 6000px print export. White fill + a dark stroke keeps it
+// legible on both light and dark image content without needing per-photo tuning.
+function applyWatermark(cv){
+  const on=document.getElementById('tg-exp-wm');
+  const text=(document.getElementById('exp-wm-text')||{}).value||'';
+  if(!on||!on.classList.contains('on')||!text.trim())return cv;
+  const opacity=(parseFloat((document.getElementById('sl-exp-wm-op')||{}).value)||55)/100;
+  const ctx=cv.getContext('2d');
+  const longEdge=Math.max(cv.width,cv.height);
+  const fontPx=Math.max(10,Math.round(longEdge*0.022));
+  const margin=Math.round(longEdge*0.018);
+  ctx.save();
+  ctx.font=fontPx+'px -apple-system,sans-serif';
+  ctx.textAlign='right';ctx.textBaseline='bottom';
+  ctx.globalAlpha=opacity;
+  ctx.lineWidth=Math.max(1,fontPx*0.09);
+  ctx.strokeStyle='rgba(0,0,0,0.65)';
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  const x=cv.width-margin,y=cv.height-margin;
+  ctx.strokeText(text,x,y);
+  ctx.fillText(text,x,y);
+  ctx.restore();
+  return cv;
+}
 // One entry point for the export path. Returns the same canvas when both are off.
 function exportResample(cv){
   const longEdge=parseInt((document.getElementById('sel-exp-size')||{}).value||'0',10)||0;
@@ -11099,6 +11139,11 @@ async function exportFX(){
         // Resize + output sharpening, LAST — after borders and the matte, so the target long edge
         // means the final file's long edge and the sharpening is judged at the real output size.
         ec=exportResample(ec);
+        // Watermark is drawn IN PLACE on ec, after resize (see applyWatermark), and deliberately
+        // skipped on a Lightroom Edit-In write-back — that path overwrites the ORIGINAL file the
+        // user opened from Lightroom, and silently burning a watermark into it would be a real
+        // (and surprising) data-loss footgun, not a stylistic export option.
+        if(!(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath))applyWatermark(ec);
         let out,outExt,mime;
         if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath){
           // Write back a REAL TIFF — this used to encode PNG bytes and overwrite the .tif path

@@ -9,7 +9,7 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 highest-confidence entries here.
 
 **Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
-8, 14 (resize+sharpening+named presets), 16, A, B, C, D, E shipped; 4 partly. Item 16 (face-parse
+8, 14 (resize+sharpening+named presets+watermark), 16, A, B, C, D, E shipped; 4 partly. Item 16 (face-parse
 auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a real photo
 — see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but
 like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs
@@ -26,7 +26,7 @@ picked off in any order and in separate sessions:
 | 10 | Spot removal / clone / heal | M |
 | 11 | Perspective / keystone + auto horizon | M |
 | 13 | JXL / AVIF / HEIC in, 16-bit out | L |
-| 14 | Export ICC/P3 + watermark (presets done) | S |
+| 14 | Export Display-P3 / wide-gamut ICC (presets + watermark done) | S/M |
 | 15 | Auto-match a series to a reference photo | M |
 
 To pick one up in a fresh session, quote its number and heading from this file — each entry states
@@ -181,14 +181,28 @@ decode (WASM, same vendoring pattern as libraw) plus **16-bit** PNG/TIFF export 
 RAW→edit→export path credible end to end. Today an 8-bit export throws away most of what the RW2
 pipeline and DCP work earn.
 
-### 14. ✅ MOSTLY DONE — Export resize + sharpening + named presets shipped; ICC/P3 and watermark still open — S/M
+### 14. ✅ MOSTLY DONE — Export resize + sharpening + named presets + watermark shipped; ICC/P3 still open — S/M
 Named export presets (`exportPresetSaveCurrent`/`exportPresetApply`/`exportPresetDeleteCurrent`)
 save/recall just the four export-panel controls — format, quality, resize, sharpening — by name,
 mirroring the existing Styles feature's localStorage-flat-list shape (`_STYLES_KEY` →
 `_EXPPRESET_KEY`) but deliberately kept separate: a Style is the whole portable edit recipe, this
-is only "how the file gets encoded" — the thing that actually differs web-vs-print. Still open:
-Display-P3 / sRGB ICC embedding and an optional watermark. The tiled export path already gives a
-clean place to hook both.
+is only "how the file gets encoded" — the thing that actually differs web-vs-print.
+
+**Watermark** (`applyWatermark`) draws translucent text into the bottom-right corner, drawn
+straight onto the FINAL export canvas — deliberately LAST in the chain, after resize/sharpen/
+canvas-matte, so its font size (a fixed fraction of the long edge) scales with whatever the actual
+output size ends up being rather than the source photo's own resolution. Off by default (true
+no-op — the export gate stayed byte-identical). Deliberately skipped on a Lightroom Edit-In
+write-back: that path overwrites the ORIGINAL file the user opened from Lightroom, and silently
+burning a watermark into it would be a real data-loss footgun, not a stylistic export option.
+
+Still open: Display-P3 / sRGB ICC embedding. Note the "sRGB" half of this already shipped
+separately (`embedSRGBTag`, tags every PNG export explicitly sRGB) — what's missing is a real
+wide-gamut path: the whole render pipeline is hardcoded sRGB primaries+TRC throughout (`s2l`/`l2s`
+and every colour op), so true P3 output needs an actual sRGB→Display-P3 primaries matrix on the
+final pixels plus a real embedded Display-P3 ICC profile, not just a metadata tag — a color-science
+change, not a compositing one, and correspondingly harder to verify without a colour-managed
+reference to diff against.
 
 ### 15. Auto-match a series to a reference photo — M
 Batch editing shares one `fxState` across photos, which is right for a look but wrong for
