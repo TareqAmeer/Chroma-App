@@ -9,14 +9,14 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 highest-confidence entries here.
 
 **Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
-8, 14 (resize+sharpening+named presets), 16, A, B, D shipped; 4 partly. Item 16 (face-parse
+8, 14 (resize+sharpening+named presets), 16, A, B, C, D shipped; 4 partly. Item 16 (face-parse
 auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a real photo
 — see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but
 like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs
 a hands-on check in the built app. Everything else below is verified against the export gate with
 the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
 
-**Still open — 9 items, each independent.** Nothing here blocks anything else, so they can be
+**Still open — 8 items, each independent.** Nothing here blocks anything else, so they can be
 picked off in any order and in separate sessions:
 
 | # | item | size |
@@ -28,7 +28,6 @@ picked off in any order and in separate sessions:
 | 13 | JXL / AVIF / HEIC in, 16-bit out | L |
 | 14 | Export ICC/P3 + watermark (presets done) | S |
 | 15 | Auto-match a series to a reference photo | M |
-| C | Command palette (⌘K) | S |
 | E | First-run tour + contextual tips | S |
 
 To pick one up in a fresh session, quote its number and heading from this file — each entry states
@@ -220,10 +219,15 @@ Known limitation of what we just shipped: `mskShowSelIdx()` is only passed by th
 a colour range at true export scale is exactly when you'd want it. Also worth adding: an opacity
 slider for the red overlay, and an "edge only" outline mode for checking mask boundaries.
 
-### C. Command palette (⌘K) — S
-The app has four tabs, ~20 collapsible FX sections, 11 looks, print profiles and a growing mask
-menu. A fuzzy palette over tools, presets, looks and toggles would beat hunting through sections,
-and it composes well with the existing keyboard shortcuts panel.
+### C. ✅ DONE — Command palette (⌘K)
+`cpOpen()` — a fuzzy (subsequence-match) list built FRESH on every open, not cached, so it always
+reflects the live DOM: every tab, every FX section, every Look/LUT and Print profile (read straight
+off `#sel-lut`/`#sel-print`'s own `<option>`s, so an entry can never point at a preset that doesn't
+exist in this build), every mask-add type, plus the common actions (Export, Undo/Redo, Save/Load
+session, Save as Style, toggle theme, shortcuts help). Its own small overlay rather than the shared
+`_csModal` — needs arrow-key navigation and live filtering, which the generic modal doesn't do.
+Listed in the Keyboard Shortcuts panel for discoverability.
+*Touches:* `_cpCommands`, `_cpFilter`, `cpOpen`, one more `document.addEventListener('keydown',…)`.
 
 ### D. ✅ DONE — Slider ergonomics on desktop: numeric entry, keyboard nudge, modified-indicator
 Mobile already has value bubbles and double-tap-to-reset; desktop has neither. Add click-to-type

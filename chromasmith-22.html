@@ -3602,7 +3602,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-31a';
+const BUILD='2026-07-31b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -7220,13 +7220,102 @@ function shortcutsHtml(){
     +group('Edit',[['⌘Z','Undo'],['⇧⌘Z','Redo'],['⇧⌘C','Copy edit'],['⇧⌘V','Paste edit']])
     +group('Photo (Library grid)',[['X','Reject'],['P','Pick / flag'],['U','Clear flag'],['←/→','Move culling cursor'],['Enter','Open selected'],['⌘[ / ⌘]','Rotate left / right']])
     +group('View',[['⌘+ / ⌘-','Zoom in / out'],['⌘0','Zoom to fit'],['⌘1','Zoom to 100%'],['⌘\\','Toggle before/after split'],['⌘H','Toggle histogram'],['G','Toggle full Library'],['Esc','Close full Library / dialogs']])
-    +group('Help',[['⌘/','This panel']]);
+    +group('Help',[['⌘/','This panel'],['⌘K','Command palette']]);
 }
 window.chromasmithShowShortcuts=function(){_csModal('Keyboard Shortcuts',shortcutsHtml());};
 document.addEventListener('keydown',e=>{
   if(e.key!=='?'&&!(e.key==='/'&&(e.metaKey||e.ctrlKey)))return;
   const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
   e.preventDefault();window.chromasmithShowShortcuts();
+});
+// ── Command palette (⌘K) — a fuzzy list over tabs/sections/looks/actions, built FRESH every
+// open (not cached at load) so it always reflects the live DOM: which LUT/print options exist,
+// which tab is current, etc. Deliberately its own tiny overlay rather than reusing _csModal —
+// it needs a live-filtered list with arrow-key navigation, which the generic modal doesn't do.
+function _cpCommands(){
+  const cmds=[];
+  const add=(group,label,run)=>cmds.push({group,label,run});
+  const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Colour Copy',collage:'Collage',guide:'Guide'};
+  Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
+  const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',curves:'Tone Curves',
+    hsl:'Color Mixer',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
+    grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Vignette',
+    borders:'Borders',canvas:'Canvas',export:'Export'};
+  Object.entries(SECTIONS).forEach(([k,label])=>add('Section',label,()=>{switchTab('fx');fxSection(k);}));
+  // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
+  // point at a preset that doesn't actually exist in this build.
+  const lutSel=document.getElementById('sel-lut');
+  if(lutSel)Array.from(lutSel.options).forEach(o=>{if(o.value)add('Look','Apply look: '+o.textContent,()=>{lutSel.value=o.value;selectLUT(o.value);});});
+  const printSel=document.getElementById('sel-print');
+  if(printSel)Array.from(printSel.options).forEach(o=>{if(o.value)add('Print profile','Apply print: '+o.textContent,()=>{printSel.value=o.value;selectPrint(o.value);});});
+  if(typeof mskAdd==='function'){
+    const MASKS={radial:'Radial',linear:'Linear',color:'Colour Range',lum:'Luminance Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin'};
+    Object.entries(MASKS).forEach(([k,label])=>add('Mask','Add mask: '+label,()=>{switchTab('fx');fxSection('local');mskAdd(k);}));
+  }
+  add('Action','Export',()=>{if(typeof exportFX==='function')exportFX();});
+  add('Action','Undo',()=>{if(typeof fxUndo==='function')fxUndo();});
+  add('Action','Redo',()=>{if(typeof fxRedo==='function')fxRedo();});
+  add('Action','Save session',()=>{if(typeof saveSession==='function')saveSession();});
+  add('Action','Load session',()=>{if(typeof loadSession==='function')loadSession(true);});
+  add('Action','Save as Style…',()=>{if(typeof styleSaveCurrent==='function')styleSaveCurrent();});
+  add('Action','Toggle theme',()=>{if(typeof toggleTheme==='function')toggleTheme();});
+  add('Action','Keyboard shortcuts',()=>window.chromasmithShowShortcuts());
+  return cmds;
+}
+function _cpFilter(cmds,q){
+  q=q.trim().toLowerCase();if(!q)return cmds.slice(0,60);
+  // Simple subsequence fuzzy match (like most command palettes): every char of q must appear
+  // in order somewhere in the label, not necessarily contiguous. Ranks exact substring first.
+  const scored=[];
+  for(const c of cmds){
+    const hay=(c.group+' '+c.label).toLowerCase();
+    const sub=hay.indexOf(q);
+    if(sub>=0){scored.push([sub,c]);continue;}
+    let qi=0;for(let i=0;i<hay.length&&qi<q.length;i++)if(hay[i]===q[qi])qi++;
+    if(qi===q.length)scored.push([1000+hay.length,c]);
+  }
+  scored.sort((a,b)=>a[0]-b[0]);
+  return scored.slice(0,60).map(s=>s[1]);
+}
+let _cpIdx=0;
+function cpOpen(){
+  const prev=document.getElementById('cp-ov');if(prev){prev.remove();return;}
+  const cmds=_cpCommands();
+  const ov=document.createElement('div');ov.id='cp-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:20001;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding-top:12vh';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  const panel=document.createElement('div');
+  panel.style.cssText='width:min(560px,92vw);max-height:60vh;display:flex;flex-direction:column;background:var(--glass-bg);-webkit-backdrop-filter:blur(24px) saturate(1.4);backdrop-filter:blur(24px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;box-shadow:var(--lift-2);overflow:hidden';
+  panel.innerHTML='<input id="cp-input" placeholder="Type a command… (tabs, sections, looks, masks, actions)" style="border:none;outline:none;background:transparent;color:var(--txt);font:15px -apple-system,sans-serif;padding:14px 16px;border-bottom:1px solid var(--bdr)">'
+    +'<div id="cp-list" style="overflow-y:auto;padding:6px"></div>';
+  ov.appendChild(panel);document.body.appendChild(ov);
+  const input=panel.querySelector('#cp-input'),list=panel.querySelector('#cp-list');
+  _cpIdx=0;
+  function render(){
+    const filtered=_cpFilter(cmds,input.value);
+    if(_cpIdx>=filtered.length)_cpIdx=Math.max(0,filtered.length-1);
+    list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}" style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}">`
+      +`<span>${c.label}</span><span style="font-family:var(--mono);font-size:10px;opacity:.65">${c.group}</span></div>`).join('')
+      ||'<div style="padding:14px;font-size:12px;color:var(--mut);font-family:var(--mono)">No matches</div>';
+    list.querySelectorAll('.cp-row').forEach(row=>{
+      row.onmouseenter=()=>{_cpIdx=parseInt(row.dataset.i,10);render();};
+      row.onclick=()=>{const c=filtered[parseInt(row.dataset.i,10)];if(c){ov.remove();c.run();}};
+    });
+  }
+  input.oninput=render;
+  input.onkeydown=e=>{
+    const filtered=_cpFilter(cmds,input.value);
+    if(e.key==='ArrowDown'){e.preventDefault();_cpIdx=Math.min(filtered.length-1,_cpIdx+1);render();}
+    else if(e.key==='ArrowUp'){e.preventDefault();_cpIdx=Math.max(0,_cpIdx-1);render();}
+    else if(e.key==='Enter'){e.preventDefault();const c=filtered[_cpIdx];if(c){ov.remove();c.run();}}
+    else if(e.key==='Escape'){e.preventDefault();ov.remove();}
+  };
+  render();
+  setTimeout(()=>input.focus(),0);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key.toLowerCase()!=='k'||!(e.metaKey||e.ctrlKey))return;
+  e.preventDefault();cpOpen();
 });
 function fxPickPhotos(){const inp=document.querySelector('#dz-fx-img input[type=file]');if(inp)inp.click();}
 // Haptic tap: iOS shell (Capacitor Haptics plugin) OR the Tauri desktop shell (native macOS
