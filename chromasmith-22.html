@@ -914,6 +914,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
           <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
           <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a colour-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
+          <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground colour is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-dehaze">0</div></div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance"><span class="bdot"></span>WB Eyedropper</button>
             <button class="btn bgh" onclick="autoEnhance()" title="One-click levels and white balance from the image histogram"><span class="bdot"></span>Auto-enhance</button>
@@ -3614,7 +3615,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-31d';
+const BUILD='2026-07-31e';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4188,7 +4189,7 @@ uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
 // Basic adjustments (applied AFTER the LUT, BEFORE film FX — so halation/bloom react to
 // the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
-uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin;
+uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin,adjDehaze;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
 // Tone curves: 256x1 RGBA table baked on the CPU (master composed with per-channel point curves,
 // monotone cubic). Sampled at texel centers so an identity table is byte-identical passthrough.
@@ -4443,6 +4444,22 @@ vec3 basicAdjust(vec3 c){
     vec3 lin2=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
     lin2.r*=1.0+0.30*adjSkin*skinGate; lin2.b*=1.0-0.30*adjSkin*skinGate;
     c=vec3(l2sp(lin2.r),l2sp(lin2.g),l2sp(lin2.b));
+  }
+  // Dehaze — cheap haze-weighted contrast/black-point/saturation lift, NOT a physical dark-channel
+  // model (see ROADMAP item 9). Haze reads as BRIGHT + DESATURATED (a hazy sky or distant ridge),
+  // so gate the whole effect on exactly that combination: the hazy region moves a lot, an already-
+  // saturated foreground barely moves at all — the thing plain Contrast/Saturation can't do because
+  // neither is keyed on brightness+desaturation together. Negative values do the inverse (adds
+  // atmospheric haze back in) by construction, since every term below is linear in adjDehaze.
+  if(adjDehaze!=0.0){
+    float lv2=dot(c,vec3(.2126,.7152,.0722));
+    float mx3=max(c.r,max(c.g,c.b)),mn3=min(c.r,min(c.g,c.b)),sv3=mx3>0.0?(mx3-mn3)/mx3:0.0;
+    float haze=smoothstep(0.35,0.85,lv2)*(1.0-smoothstep(0.05,0.35,sv3));
+    float amt=adjDehaze*haze;
+    c=clamp((c-0.5)*(1.0+0.35*amt)+0.5,0.0,1.0);  // extra contrast in the haze band
+    c=clamp(c-0.22*amt,0.0,1.0);                   // pull the veil toward black (amt<0 lifts it — adds haze)
+    float l2=dot(c,vec3(.2126,.7152,.0722));
+    c=clamp(mix(vec3(l2),c,1.0+0.7*amt),0.0,1.0);  // saturation lift, same haze gate
   }
   return clamp(c,0.0,1.0);
 }
@@ -5275,7 +5292,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
-      adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,
+      adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,
       texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
@@ -9828,7 +9845,7 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -9990,7 +10007,7 @@ function showExif(exif){
 // given, is a raw-slider-value object (see domAdjustVals) sourced from that photo's own
 // it.adjustOverride instead of the live DOM — used by exportFX so each photo renders with ITS
 // own Adjust values instead of whichever photo happens to be previewed at export time.
-const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','skin'];
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','skin','dehaze'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
 function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:0;if(sl)sl.value=val;if(vl)vl.textContent=val;});}
 function computeAdjustBlock(v){
@@ -10003,7 +10020,7 @@ function computeAdjustBlock(v){
     temp:(v.temp||0)/100, tint:(v.tint||0)/100,
     vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
     sharpness:(v.sharp||0)/500, clarity:(v.clarity||0)/500,
-    skin:(v.skin||0)/100};
+    skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
 function getFXParams(adjValsOverride){return{
   lut:fxState.lut,

@@ -9,20 +9,20 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 highest-confidence entries here.
 
 **Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
-8, 14 (resize+sharpening+named presets+watermark), 16, A, B, C, D, E shipped; 4 partly. Item 16 (face-parse
-auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a real photo
-— see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but
-like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs
-a hands-on check in the built app. Everything else below is verified against the export gate with
-the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
+8, 9, 14 (resize+sharpening+named presets+watermark), 16, A, B, C, D, E shipped; 4 partly. Item 16
+(face-parse auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a
+real photo — see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification
+transcript — but like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features"
+button) still needs a hands-on check in the built app. Everything else below is verified against
+the export gate with the untouched goldens byte-identical, i.e. each is a true no-op at its
+defaults.
 
-**Still open — 7 items, each independent.** Nothing here blocks anything else, so they can be
+**Still open — 6 items, each independent.** Nothing here blocks anything else, so they can be
 picked off in any order and in separate sessions:
 
 | # | item | size |
 |---|---|---|
 | 6 | Per-mask Clarity / Sharpness / Noise (Texture done) | M |
-| 9 | Dehaze | S/M |
 | 10 | Spot removal / clone / heal | M |
 | 11 | Perspective / keystone + auto horizon | M |
 | 13 | JXL / AVIF / HEIC in, 16-bit out | L |
@@ -145,10 +145,22 @@ their own right (`+ Colour Range`, `+ Luminance Range`) with no shape at all —
 coming from Lightroom expect to find them, and the machinery is already written.
 *Touches:* `mskAdd`, `mskShapeWeight` (a "no shape → 1.0" type), `mskRebuild`.
 
-### 9. Dehaze — S/M
-Absent entirely (`grep dehaze` → 0). A dark-channel-prior estimate, or the cheap route: a
-haze-weighted contrast + black-point + saturation lift keyed on low local contrast in the
-distance. Mountain and lake shots — exactly this photo — are the canonical use case.
+### 9. ✅ DONE — Dehaze
+Took the cheap route named above rather than a dark-channel-prior estimate: a new `Dehaze` slider
+in Basic Adjustments (`adjDehaze`, folded into the existing `basicAdjust()` shader function and its
+`adjOn` toggle, same as Skin Warmth) gated on a per-pixel **haze weight** —
+`smoothstep(0.35,0.85,lum) * (1-smoothstep(0.05,0.35,sat))` — so only BRIGHT+DESATURATED pixels
+(a hazy sky, a distant ridge) move; an already-saturated foreground pixel is provably untouched
+(verified: identical to 1/255 across dehaze −0.8/0/+0.8 on a synthetic saturated-red foreground
+pixel). Three linear terms scaled by that same gate: extra contrast (`×0.35`), a black-point pull
+(`−0.22`), and a saturation lift (`×0.7`) — negative values invert all three (adds haze back in).
+⚠️ First pass had the contrast term dominate the black-pull term, so positive Dehaze made a bright
+hazy patch BRIGHTER instead of cutting through it — caught by rendering a tiny synthetic hazy-vs-
+saturated test image directly through `FX.render()` and checking actual RGB deltas before shipping,
+not by inspecting the formula. Rebalanced (0.6→0.35 contrast, 0.12→0.22 black-pull) until the sign
+matched the stated intent, then re-verified: default (dehaze=0) still a byte-exact no-op.
+*Touches:* `basicAdjust()` (lut shader), `adjDehaze` uniform, `ADJ_FIELDS`/`computeAdjustBlock`,
+one slider in Basic Adjustments.
 
 ### 10. Spot removal / clone / heal — M
 Absent (`grep healing` finds only an unrelated comment). Even a plain clone-stamp with a soft
