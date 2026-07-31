@@ -309,7 +309,7 @@
     .lib-lh-cell.sorted::after{content:' ▲';font-size:8px}
     .lib-lh-cell.sorted.desc::after{content:' ▼'}
     #lib-grid.list-view{display:flex;flex-direction:column;gap:2px}
-    #lib-grid.list-view .lib-card{display:grid;grid-template-columns:var(--lib-list-cols);align-items:center;gap:10px;border-width:1px;padding:4px 8px}
+    #lib-grid.list-view .lib-card{display:grid;grid-template-columns:var(--lib-list-cols);align-items:center;gap:10px;padding:4px 8px}
     #lib-grid.list-view .lib-thumb-wrap{width:52px;height:40px;aspect-ratio:auto}
     #lib-grid.list-view .lib-name{padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
     #lib-grid.list-view .lib-tagrow{padding:0;display:contents}
@@ -321,12 +321,12 @@
       pointer-events:none;opacity:0}
     .lib-card:hover .lib-meta-strip.hover-mode,.lib-meta-strip.always-mode{opacity:1}
     .lib-thumb-wrap{position:relative}
-    .lib-card{background:var(--sur);border:2px solid var(--bdr);border-radius:8px;overflow:hidden;
-      cursor:pointer;position:relative;box-shadow:var(--lift-1);transition:border-color .15s ease,transform .1s ease}
-    .lib-card:hover{border-color:var(--acc);transform:translateY(-1px)}
-    .lib-card.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
-    .lib-card.multi{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
-    .lib-card.sel.multi{box-shadow:0 0 0 1px var(--acc),0 0 0 3px var(--acc2)}
+    .lib-card{background:transparent;border:none;border-radius:8px;overflow:hidden;
+      cursor:pointer;position:relative;box-shadow:none;transition:box-shadow .15s ease,transform .1s ease}
+    .lib-card:hover{transform:translateY(-1px);box-shadow:0 0 0 1px var(--bdr)}
+    .lib-card.sel{box-shadow:0 0 0 2px var(--acc)}
+    .lib-card.multi{box-shadow:0 0 0 2px var(--acc2)}
+    .lib-card.sel.multi{box-shadow:0 0 0 2px var(--acc),0 0 0 4px var(--acc2)}
     .lib-card.flag-red{box-shadow:0 0 0 2px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
     .lib-card.flag-green{box-shadow:0 0 0 2px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
     .lib-card.flag-red.sel{box-shadow:0 0 0 1px var(--acc),0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
@@ -334,7 +334,7 @@
     /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
        photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
-    .lib-thumb-wrap{aspect-ratio:1.3;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .lib-thumb-wrap{aspect-ratio:1.3;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:contain;display:block}
     .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:var(--mut);
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -443,7 +443,7 @@
        tall and landscape frames are short, like Lightroom's filmstrip. */
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px}
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{width:100%;height:auto;object-fit:contain}
-    body.deskx #lib-overlay:not(.full) .lib-card{border:1px solid var(--bdr);border-radius:6px;padding:2px;background:var(--sur)}
+    body.deskx #lib-overlay:not(.full) .lib-card{border:none;border-radius:6px}
     /* the fixed 44px deskbar sits above everything; keep the strip below it */
     body.deskx #lib-overlay{top:44px;z-index:2500}
     body.deskx #lib-overlay.full{top:44px}

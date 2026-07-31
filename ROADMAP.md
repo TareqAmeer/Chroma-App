@@ -35,6 +35,67 @@ touches the skin path.
 
 ---
 
+## Library view — UI/UX improvements (2026-07-31)
+
+Prompted by a report that photo thumbnails "still have borders" in the Library grid even after a
+border-removal pass. Investigation found the visible frame was never *only* `border` — three other
+rules also drew one (`box-shadow:var(--lift-1)`, a `--sur` card background, and a `--bg` letterbox
+matte on `.lib-thumb-wrap`); all four are now fixed (`desktop/library-ui.js` lines ~296-450, synced
+to `desktop/dist/`, both Tauri build targets, the bundled `.app`, and `/Applications/Chromasmith.app`
+— `"Chromasmith copy.app"` is a symlink to the latter so it's covered automatically). Verified with
+the `?libtest=1` harness: computed `box-shadow: none`/transparent backgrounds at rest, selection
+(`.sel`/`.multi`/`flag-*`) rings and the new hover ring still compute correctly, and `npm test`
+stayed bit-exact (no shader touched).
+
+That investigation surfaced a broader gap: the Library grid has accumulated features (grid/list/
+compare, filters, collections, cloud import, compare-mode ratings) faster than it's been designed —
+it's missing 2-D keyboard nav, in-grid ratings, drag & drop, and re-renders the whole grid on every
+keystroke. 15 improvements below, ordered by value-per-effort. All touch only
+`desktop/library-ui.js` unless noted.
+
+**Top 5 (highest impact):**
+
+1. **2-D keyboard navigation.** Today `handleKey` (~2277-2328) only handles ←/→. Add ↑/↓ (columns =
+   `#lib-grid.offsetWidth / var(--lib-thumb)`), Home/End, `shift+arrow` range extension, `⌘A`
+   select-all. Reuse the existing cursor state and `updateCardSelClasses()` (~1635) — no new
+   selection model needed.
+2. **Star ratings in the grid/list.** Ratings exist in the sidecar and are settable only in compare
+   mode (~2078-2101). Add a star row to `flagsHtml()` (~869), `0`-`5` keyboard shortcuts through the
+   same mutation path as `setLabel`/`setFavorite` (~1480-1531), plus a rating filter and sort key.
+3. **Drag & drop.** No `dragstart`/`dragover`/`drop` handler exists anywhere in the file. Add:
+   drop files/folders from Finder onto the grid to import (route into `openFolder()`, ~1364); drag a
+   selection onto a collection in `#lib-side` to add it (reuse collections render, ~2784-2824).
+4. **Filter bar cleanup.** 8 wrapping `<select>`s (~468-495, already flagged in a comment at line
+   244). Collapse into one "Filters" button with an active-count badge → popover, a "Clear all"
+   control, and removable chips for active filters.
+5. **Grid virtualization + skeleton loading.** `renderGrid()` (~1893-1975) wipes `innerHTML` and
+   rebuilds every card synchronously on every filter/sort keystroke. Render only the visible window
+   + buffer, driven by the IntersectionObserver already in place (~786-863); replace the text-swap
+   loading state with per-card skeletons so re-filtering stops flashing.
+
+**Remaining 10:**
+
+6. **Full colour labels** — the sidecar has a `label` field but only red/green are wired up.
+7. **Metadata / info panel** — an EXIF + histogram inspector; today metadata is only a 2-line hover
+   strip (`metaStripHtml`, ~1441) or list-view columns.
+8. **Undo for destructive actions** — Delete and Reset edit (~1810, ~1862) are irreversible.
+9. **A real empty state** — the "No photos match this filter" text (~1970) has no CTA; give it a
+   "Choose a folder" button like the Lightroom-cloud branch already has.
+10. **Use `#lib-bottom`** (~551) — currently just a photo count; make it a status bar (selection
+    count, active-filter summary, import/export progress).
+11. **Filmstrip affordances** — `body.deskx` mode (~438-441) hides filters, viewbar, sidebar and
+    footer entirely; at minimum surface flags and filename on hover.
+12. **Saved filter/sort views** — persist named filter+sort combinations alongside the existing
+    smart collections (~2453-2626).
+13. **Batch operations bar** — when >1 card is selected, show inline flag/rate/export/delete
+    actions instead of requiring the right-click context menu.
+14. **Compare mode ↔ grid parity** — ratings, flags and navigation should behave identically in
+    both; compare currently has its own separate keyboard branch (~2292-2298).
+15. **Thumbnail decode tiering** — decode a low-res proxy first, upgrade on idle, so scrolling a
+    large folder stays smooth even after virtualization (item 5) lands.
+
+---
+
 ## Tier 1 — finish and harden what the mask system already almost does
 
 ### 1. ✅ DONE — Multi-sample colour gate (hue *locus*, not a ball) — **[measured]**
