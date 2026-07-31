@@ -29,6 +29,7 @@
       case 'get_thumbnail': return Promise.resolve(png.buffer);
       case 'read_file_bytes': return Promise.resolve(png.buffer);
       case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false });
+      case 'set_sidecar': return Promise.resolve();
       case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
       case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
       case 'phash_batch': {
@@ -246,6 +247,26 @@
     #lib-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 12px 8px}
     #lib-filters #lib-search{flex:1 1 160px;min-width:120px}
     #lib-filters select{flex:0 1 auto;width:auto;min-width:0}
+    /* Filters popover: was 7 wrapping selects in a row (real complaint — see the comment above
+       #lib-filters), collapsed to one button + a floating panel. The badge shows how many of
+       the 7 aren't at their default "all" value, so it's clear at a glance whether anything is
+       filtered without opening the panel. */
+    #lib-filters-btn-wrap{position:relative}
+    #lib-filters-badge{display:none;margin-left:5px;background:var(--acc);color:#1a1208;font-size:9px;
+      font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4}
+    #lib-filters-badge.on{display:inline-block}
+    #lib-filters-pop{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:30;
+      flex-direction:column;gap:6px;min-width:190px;padding:8px;background:var(--glass-bg);
+      -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+      border:1px solid var(--bdr);border-radius:8px;box-shadow:var(--lift-2)}
+    #lib-filters-pop.on{display:flex}
+    #lib-filters-pop select{width:100%}
+    #lib-filters-clear{align-self:flex-end;font-size:11px}
+    #lib-filter-chips{flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px}
+    .lib-chip{display:flex;align-items:center;gap:4px;background:var(--sur2);border:1px solid var(--bdr);
+      border-radius:12px;padding:2px 4px 2px 8px;font-size:10px;color:var(--txt)}
+    .lib-chip-x{cursor:pointer;opacity:.6;font-size:11px;line-height:1;padding:0 2px}
+    .lib-chip-x:hover{opacity:1;color:var(--acc)}
     #lib-side{overflow:auto;padding:8px 12px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr)}
     /* Darkroom-style smart collections, above the folder tree in the same #lib-side scroll box. */
     .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;
@@ -289,9 +310,11 @@
     #lib-viewbar .lib-seg button.on{background:var(--acc);color:#000}
     #lib-viewbar .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
+    #lib-grid.lib-dragover{outline:2px dashed var(--acc2);outline-offset:-6px;border-radius:8px}
+    .lib-coll-row.lib-coll-dragover{outline:2px dashed var(--acc2);outline-offset:-2px;background:var(--sur2)}
     /* Real table: header row (#lib-list-head) and every .lib-card in list mode share this exact
        column template, so clicking a header lines up with the data underneath it. */
-    :root{--lib-list-cols:52px minmax(120px,1fr) 92px 92px 132px 56px 68px 60px 56px 56px 60px}
+    :root{--lib-list-cols:52px minmax(120px,1fr) 92px 92px 132px 56px 68px 60px 56px 70px 56px 60px}
     #lib-list-head{display:none;position:sticky;top:0;z-index:20;background:var(--bg);
       grid-template-columns:var(--lib-list-cols);gap:10px;padding:4px 8px 6px;
       border-bottom:1px solid var(--bdr);font-size:10px;color:var(--mut);font-family:var(--mono,ui-monospace,Menlo,monospace);
@@ -352,6 +375,17 @@
     .lib-flags{display:flex;gap:3px}
     .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity .1s ease}
     .lib-flag.on{opacity:1;filter:none}
+    /* Same reveal-on-hover/reveal-if-set treatment as .lib-flags above, mirrored to the
+       opposite corner so the two overlay chips never collide. */
+    #lib-grid:not(.list-view) .lib-rating{position:absolute;top:4px;left:4px;display:flex;gap:1px;z-index:3;
+      background:rgba(0,0,0,.55);border-radius:5px;padding:2px 4px;
+      opacity:0;transition:opacity .12s ease}
+    #lib-grid:not(.list-view) .lib-card:hover .lib-rating,
+    #lib-grid:not(.list-view) .lib-rating:has(.lib-rating-star.on){opacity:1}
+    #lib-grid.list-view .lib-rating{position:static;background:none;opacity:1;padding:0}
+    .lib-rating{display:flex;gap:1px}
+    .lib-rating-star{cursor:pointer;font-size:10px;opacity:.4;color:var(--mut);transition:opacity .1s ease,color .1s ease}
+    .lib-rating-star.on{opacity:1;color:var(--acc)}
     .lib-thumb-wrap img.thumb-error{opacity:0}
     .lib-thumb-wrap.thumb-broken::after{content:'⚠';position:absolute;top:50%;left:50%;
       transform:translate(-50%,-50%);color:var(--mut);font-size:16px}
@@ -398,6 +432,10 @@
     #lib-compare-bar button{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
     #lib-empty{color:var(--mut);font-size:12px;padding:30px 10px;text-align:center}
+    .lib-skel{pointer-events:none}
+    .lib-skel .lib-thumb-wrap{background:linear-gradient(100deg,var(--sur) 30%,var(--sur2) 50%,var(--sur) 70%);
+      background-size:200% 100%;animation:lib-shimmer 1.4s ease-in-out infinite}
+    @keyframes lib-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
     #lib-filters select,#lib-filters input{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
     /* Provisional preview must fully REPLACE the previous photo, not float over it: it fills
@@ -469,31 +507,44 @@
         <option value="folder">This folder</option>
         <option value="edited">All Edited</option>
       </select>
-      <select id="lib-type-filter" title="Filter by file type">
-        <option value="all">All types</option>
-        <option value="raw">RAW</option><option value="jpeg">JPEG</option>
-        <option value="png">PNG</option><option value="tiff">TIFF</option>
-      </select>
-      <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
-      <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
-      <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select>
-      <select id="lib-dupe-filter" title="Filter by duplicate status">
-        <option value="all">All photos</option>
-        <option value="dupes">Duplicates only</option>
-      </select>
-      <select id="lib-synced-filter" title="Filter by Google Photos sync status">
-        <option value="all">All photos</option>
-        <option value="synced">Synced to Google Photos</option>
-        <option value="notsynced">Not synced</option>
-      </select>
-      <select id="lib-tag-filter" title="Filter by tag">
-        <option value="all">All tags</option>
-        <option value="red">Rejected (X)</option>
-        <option value="green">Picked (flag)</option>
-        <option value="edited">Edited</option>
-        <option value="noedited">Not edited</option>
-        <option value="favorite">Favorites</option>
-      </select>
+      <div id="lib-filters-btn-wrap">
+        <button class="lib-btn" id="lib-filters-btn" title="Filter by type, camera, lens, ISO, duplicates, sync status or tag/rating">Filters<span id="lib-filters-badge"></span></button>
+        <div id="lib-filters-pop">
+          <select id="lib-type-filter" title="Filter by file type">
+            <option value="all">All types</option>
+            <option value="raw">RAW</option><option value="jpeg">JPEG</option>
+            <option value="png">PNG</option><option value="tiff">TIFF</option>
+          </select>
+          <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
+          <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
+          <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select>
+          <select id="lib-dupe-filter" title="Filter by duplicate status">
+            <option value="all">All photos</option>
+            <option value="dupes">Duplicates only</option>
+          </select>
+          <select id="lib-synced-filter" title="Filter by Google Photos sync status">
+            <option value="all">All photos</option>
+            <option value="synced">Synced to Google Photos</option>
+            <option value="notsynced">Not synced</option>
+          </select>
+          <select id="lib-tag-filter" title="Filter by tag">
+            <option value="all">All tags</option>
+            <option value="red">Rejected (X)</option>
+            <option value="green">Picked (flag)</option>
+            <option value="edited">Edited</option>
+            <option value="noedited">Not edited</option>
+            <option value="favorite">Favorites</option>
+            <option value="unrated">Unrated</option>
+            <option value="rated1">★ 1+</option>
+            <option value="rated2">★ 2+</option>
+            <option value="rated3">★ 3+</option>
+            <option value="rated4">★ 4+</option>
+            <option value="rated5">★ 5</option>
+          </select>
+          <button class="lib-btn" id="lib-filters-clear">Clear all</button>
+        </div>
+      </div>
+      <div id="lib-filter-chips"></div>
     </div>
     <div id="lib-viewbar">
       <div class="lib-seg" id="lib-viewmode-seg">
@@ -509,6 +560,7 @@
         <option value="shutter">Shutter speed</option>
         <option value="aperture">Aperture</option>
         <option value="focal">Focal length</option>
+        <option value="rating">Rating</option>
         <option value="camera">Camera</option>
         <option value="edited">Edit status</option>
         <option value="editedts">Date edited</option>
@@ -539,6 +591,7 @@
         <div class="lib-lh-cell" data-sort="shutter">Shutter</div>
         <div class="lib-lh-cell" data-sort="aperture">Aperture</div>
         <div class="lib-lh-cell" data-sort="focal">Focal</div>
+        <div class="lib-lh-cell" data-sort="rating">Rating</div>
         <div class="lib-lh-cell lib-lh-flags">Flags</div>
         <div class="lib-lh-cell" data-sort="edited">Edited</div>
       </div>
@@ -647,6 +700,55 @@
       await renderTree();
       await openFolder(state.root);
     } catch (e) { console.error('pickFolder', e); }
+  }
+
+  // Same root-switch sequence as pickFolder() above, for a folder dropped from Finder onto the
+  // grid instead of chosen via the OS dialog.
+  async function importDroppedFolder(path) {
+    state.root = path;
+    localStorage.setItem(LS_ROOT, state.root);
+    pushRecentFolder(state.root);
+    state.expanded.clear();
+    state.expanded.add(state.root);
+    await renderTree();
+    await openFolder(state.root);
+  }
+  // Drop files/folders from Finder onto the grid to import — there was previously no drag&drop
+  // path into the Library at all (only the main editor's own drop zones, which load blobs
+  // directly and know nothing about folders or the Library's state). A single dropped item is
+  // probed with list_dir: it succeeds for a real directory and fails for a plain file (Rust's
+  // std::fs::read_dir errors on a non-directory path — see library.rs's list_dir), so the same
+  // drop target can tell folders and photos apart without the browser's limited File API. Files
+  // (or a probe failure) fall through to opening them as a photo batch, mirroring a multi-select
+  // batch open.
+  function wireGridFileDrop() {
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl) return;
+    const hasOsFiles = (e) => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+    gridEl.addEventListener('dragover', (e) => {
+      if (!hasOsFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      gridEl.classList.add('lib-dragover');
+    });
+    gridEl.addEventListener('dragleave', (e) => { if (e.target === gridEl) gridEl.classList.remove('lib-dragover'); });
+    gridEl.addEventListener('drop', async (e) => {
+      if (!hasOsFiles(e)) return;
+      e.preventDefault();
+      gridEl.classList.remove('lib-dragover');
+      if (state.source === 'lr') return; // cloud album view has nowhere local to import into
+      const files = Array.from(e.dataTransfer.files || []);
+      if (!files.length) return;
+      const paths = files.map((f) => f.path).filter(Boolean);
+      if (!paths.length) { toast('Could not read the dropped file path(s) — try 📁 instead', false); return; }
+      if (paths.length === 1) {
+        try {
+          const listing = await invoke('list_dir', { path: paths[0] });
+          if (Array.isArray(listing)) { await importDroppedFolder(paths[0]); return; }
+        } catch (err) { /* not a directory — fall through to opening it as a photo */ }
+      }
+      await openPathsInEditor(paths);
+    });
   }
 
   // ── quick access: jump straight to a folder (used by the Recent-folders dropdown AND the
@@ -865,6 +967,14 @@
     if (!ts) return '';
     const d = new Date(ts * 1000);
     return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' });
+  }
+  // A grid of blank shimmering placeholder cards, shown while a folder/collection/album is
+  // being fetched, instead of the previous "Loading…" text — swapping the entire grid for one
+  // line of text (then swapping it back for real cards moments later) was a visible flash on
+  // every folder switch. 24 is enough to fill the tallest common viewport at default thumb size
+  // without generating an unbounded number of shimmering nodes for a huge folder.
+  function libSkeletonHtml(n = 24) {
+    return Array.from({ length: n }, () => '<div class="lib-card lib-skel"><div class="lib-thumb-wrap"></div></div>').join('');
   }
   function flagsHtml(label, favorite) {
     return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Reject (X)">${FLAG_SVG_RED}</span>` +
@@ -1367,7 +1477,7 @@
     state.source = 'folder'; // leaving a collection/cloud view — clears their sidebar highlight below
     state.selected.clear();
     const grid = document.getElementById('lib-grid');
-    grid.innerHTML = '<div id="lib-empty">Loading…</div>';
+    grid.innerHTML = libSkeletonHtml();
     let entries;
     try {
       entries = await invoke('list_dir', { path });
@@ -1423,6 +1533,7 @@
       case 'shutter': return (m.shutter || '').startsWith('1/') ? -1 / parseFloat(m.shutter.slice(2) || '1') : parseFloat(m.shutter) || 0;
       case 'aperture': return parseFloat((m.aperture || '').replace('f/', '')) || 0;
       case 'focal': return parseFloat(m.focal_len || '') || 0;
+      case 'rating': return (state.sidecars.get(entry.path) || {}).rating || 0;
       case 'edited': return sc.edited ? 1 : 0;
       case 'editedts': return entry.edited_ts || 0;
       case 'camera': return (m.camera || '').toLowerCase();
@@ -1463,6 +1574,8 @@
     if (state.tagFilter === 'edited' && !sc.edited) return false;
     if (state.tagFilter === 'noedited' && sc.edited) return false;
     if (state.tagFilter === 'favorite' && !sc.favorite) return false;
+    if (state.tagFilter === 'unrated' && (sc.rating || 0) > 0) return false;
+    if (state.tagFilter.startsWith('rated') && (sc.rating || 0) < parseInt(state.tagFilter.slice(5), 10)) return false;
     return true;
   }
 
@@ -1503,6 +1616,29 @@
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite);
     renderCollectionCounts();
+  }
+  // Star rating (0-5) — was previously reachable only from Compare mode (see
+  // .lib-cmp-stars/syncCompareChrome below); this is the same mutation the grid's own star row
+  // and the 0-5 keyboard shortcut now use, so all three stay in sync.
+  async function setRating(path, rating) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    const updated = { ...cur, rating };
+    state.sidecars.set(path, updated);
+    await invoke('set_sidecar', { path, rating, label: updated.label, edited: updated.edited, favorite: updated.favorite })
+      .catch((e) => sidecarWriteFailed(path, cur, e));
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) {
+      const row = card.querySelector('.lib-rating');
+      if (row) syncRatingRow(row, rating);
+    }
+  }
+  function ratingHtml(rating) {
+    return `<div class="lib-rating">${[1, 2, 3, 4, 5].map((n) => `<span class="lib-rating-star${n <= (rating || 0) ? ' on' : ''}" data-n="${n}">★</span>`).join('')}</div>`;
+  }
+  function syncRatingRow(row, rating) {
+    row.querySelectorAll('.lib-rating-star').forEach((star) => {
+      star.classList.toggle('on', parseInt(star.dataset.n, 10) <= (rating || 0));
+    });
   }
   // Exposed so the main editor toolbar (chromasmith-22.html's top bar) can flag the
   // CURRENTLY OPEN photo without needing the Library panel open — same underlying
@@ -1906,6 +2042,13 @@
     const listHead = document.getElementById('lib-list-head');
     if (listHead) { listHead.classList.toggle('on', isList); syncListHead(); }
     const shown = sortEntries(state.entries.filter(passesFilters));
+    // Build every card into a detached DocumentFragment and append ONCE, instead of one
+    // appendChild() per card — on a large folder that was one reflow per photo. Wiring
+    // (thumbnail load, click/drag handlers) still has to happen in a SEPARATE pass after the
+    // fragment lands in the live grid: loadThumb()'s pump checks img.isConnected synchronously
+    // (see its comment above), so calling it on a still-detached card silently drops the job.
+    const frag = document.createDocumentFragment();
+    const built = [];
     shown.forEach((entry, idx) => {
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
@@ -1931,10 +2074,12 @@
           <div class="lib-col">${esc(m.shutter)}</div>
           <div class="lib-col">${esc(m.aperture)}</div>
           <div class="lib-col">${esc(m.focal_len)}</div>
+          ${ratingHtml(sc.rating)}
           <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
           <div class="lib-col">${sc.edited ? 'Yes' : ''}</div>`;
       } else {
         card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt="">${metaStripHtml(entry)}
+            ${ratingHtml(sc.rating)}
             <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
           </div>
           ${sc.edited ? EDITED_BADGE_HTML : ''}
@@ -1943,16 +2088,27 @@
           ${syncedBadge}
           ${state.showTitle ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}`;
       }
-      // Append to the grid BEFORE calling loadThumb(): _thumbPump() checks img.isConnected
-      // (see its comment) so it can drop stale jobs from a rebuilt grid — calling loadThumb()
-      // while the card is still detached made isConnected false for every job, silently
-      // discarding all of them (the "thumbnails never load" bug).
-      grid.appendChild(card);
+      frag.appendChild(card);
+      built.push({ entry, card, idx });
+    });
+    grid.appendChild(frag);
+    // Second pass: every card is now connected, so loadThumb()'s isConnected check (see its
+    // comment) sees it correctly instead of silently dropping the job.
+    built.forEach(({ entry, card, idx }) => {
       const img = card.querySelector('img');
       loadThumb(entry.path, img);
       card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
       card.oncontextmenu = (e) => showContextMenu(e, entry, shown);
+      // Drag the card (or, if it's already part of a multi-selection, the whole selection) onto
+      // a Favorites/Flagged/Rejected row in the sidebar — see the collection-row drop handlers
+      // near renderCollections(), below.
+      card.draggable = true;
+      card.ondragstart = (e) => {
+        const paths = state.selected.has(entry.path) ? Array.from(state.selected) : [entry.path];
+        e.dataTransfer.setData('application/x-chromasmith-paths', JSON.stringify(paths));
+        e.dataTransfer.effectAllowed = 'copy';
+      };
       card.querySelectorAll('.lib-flag').forEach((flag) => {
         flag.onclick = (e) => {
           e.stopPropagation();
@@ -1966,11 +2122,20 @@
           setLabel(entry.path, cur.label === which ? '' : which); // click same flag again to clear
         };
       });
+      card.querySelectorAll('.lib-rating-star').forEach((star) => {
+        star.onclick = (e) => {
+          e.stopPropagation();
+          const cur = state.sidecars.get(entry.path) || { rating: 0 };
+          const n = parseInt(star.dataset.n, 10);
+          setRating(entry.path, cur.rating === n ? 0 : n); // click same star again to clear
+        };
+      });
     });
     if (!shown.length) grid.innerHTML = '<div id="lib-empty">No photos match this filter in this folder.</div>';
     document.getElementById('lib-count').textContent = state.selected.size
       ? `${state.selected.size} selected — ${shown.length} of ${state.entries.length} photo(s)`
       : `${shown.length} of ${state.entries.length} photo(s)`;
+    if (typeof syncFilterUI === 'function') syncFilterUI();
   }
 
   // ── C1: Compare-pair mode ─────────────────────────────────────────────────────────────
@@ -2075,13 +2240,9 @@
           const which = row.dataset.pane;
           const path = comparePathForIdx(compareState[which === 'A' ? 'paneA' : 'paneB'].idx);
           if (!path) return;
-          const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+          const cur = state.sidecars.get(path) || { rating: 0 };
           const n = parseInt(star.dataset.n, 10);
-          const rating = cur.rating === n ? 0 : n; // click same star again to clear
-          const updated = { ...cur, rating };
-          state.sidecars.set(path, updated);
-          try { await invoke('set_sidecar', { path, rating, label: updated.label, edited: updated.edited }); }
-          catch (e) { sidecarWriteFailed(path, cur, e); }
+          await setRating(path, cur.rating === n ? 0 : n); // click same star again to clear
           syncCompareChrome(which);
         };
       });
@@ -2233,6 +2394,7 @@
     syncTreeToggle();
   };
   overlay.querySelector('#lib-pick').onclick = pickFolder;
+  wireGridFileDrop();
   overlay.querySelector('#lib-gphotos').onclick = () => {
     // gpImportClick lives in chromasmith-22.html (the web-app half); it's exposed on window.
     if (typeof window.gpImportClick === 'function') window.gpImportClick();
@@ -2274,10 +2436,31 @@
     try { applyUISnapshot(snapshotFromB64(window.__copiedRecipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); }
     toast('Edit pasted', true);
   };
+  // Column count of the CURRENT grid layout, read from the resolved CSS grid template rather
+  // than recomputed from thumb size + container width — the auto-fill/minmax track count is
+  // exactly what the browser used to place cards, so this can never drift from the real layout
+  // (including the docked single-column filmstrip, which naturally reports 1). List view is a
+  // single visual column of rows despite its multi-column CSS grid template (one row = one
+  // photo), so it's special-cased to 1.
+  function gridCols() {
+    if (!grid) return 1;
+    if (grid.classList.contains('list-view')) return 1;
+    const parts = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).filter(Boolean);
+    return Math.max(1, parts.length);
+  }
   document.addEventListener('keydown', (e) => {
     if (!state.open) return;
     const t = e.target;
     if (t && t.closest && t.closest('input,textarea,[contenteditable]')) return;
+    // ⌘A/Ctrl+A select-all, ahead of the generic modifier-key bailout below (every other
+    // shortcut here is unmodified).
+    if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && !e.altKey && state.source !== 'lr' && state.viewMode !== 'compare') {
+      e.preventDefault();
+      const all = sortEntries(state.entries.filter(passesFilters));
+      state.selected = new Set(all.map((en) => en.path));
+      updateCardSelClasses();
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     // Cloud album view: state.entries still holds the previous FOLDER's files — arrows/Enter/
     // X/P/U would act on invisible photos (Enter even opened one; X/P wrote its sidecar).
@@ -2304,24 +2487,46 @@
     const shown = state.entries.filter(passesFilters);
     const sorted = shown.length ? sortEntries(shown) : [];
     const curIdx = sorted.findIndex((en) => en.path === (state._kbCursor || state.openedPath));
-    const move = (delta) => {
+    // moveTo(next, extend): jump the cursor to an absolute index. extend=true (shift held)
+    // range-selects from the last non-shift anchor to the new cursor, mirroring the mouse's
+    // shift-click range select (handleCardClick above) instead of collapsing to a single card.
+    const moveTo = (next, extend) => {
       if (!sorted.length) return;
-      const next = Math.max(0, Math.min(sorted.length - 1, (curIdx < 0 ? (delta > 0 ? -1 : 0) : curIdx) + delta));
+      next = Math.max(0, Math.min(sorted.length - 1, next));
       state._kbCursor = sorted[next].path;
       const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(state._kbCursor)}"]`);
       if (card) { card.scrollIntoView({ block: 'nearest' }); }
-      state.selected.clear(); state.selected.add(state._kbCursor); updateCardSelClasses();
+      if (extend) {
+        if (selectAnchor < 0) selectAnchor = curIdx >= 0 ? curIdx : next;
+        const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
+        state.selected.clear();
+        for (let i = lo; i <= hi; i++) state.selected.add(sorted[i].path);
+      } else {
+        selectAnchor = next;
+        state.selected.clear(); state.selected.add(state._kbCursor);
+      }
+      updateCardSelClasses();
       e.preventDefault();
     };
+    const move = (delta, extend) => moveTo((curIdx < 0 ? (delta > 0 ? -1 : 0) : curIdx) + delta, extend);
     const kbTargets = () => (state.selected.size ? [...state.selected] : (state._kbCursor ? [state._kbCursor] : (state.openedPath ? [state.openedPath] : [])));
-    if (e.key === 'ArrowLeft') { move(-1); return; }
-    if (e.key === 'ArrowRight') { move(1); return; }
+    if (e.key === 'ArrowLeft') { move(-1, e.shiftKey); return; }
+    if (e.key === 'ArrowRight') { move(1, e.shiftKey); return; }
+    if (e.key === 'ArrowUp') { move(-gridCols(), e.shiftKey); return; }
+    if (e.key === 'ArrowDown') { move(gridCols(), e.shiftKey); return; }
+    if (e.key === 'Home') { moveTo(0, e.shiftKey); return; }
+    if (e.key === 'End') { moveTo(sorted.length - 1, e.shiftKey); return; }
     if (e.key === 'Enter' && (state._kbCursor || state.selected.size === 1)) {
       e.preventDefault(); openInEditor(state._kbCursor || [...state.selected][0]); return;
     }
     if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
     if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
     if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
+    if (e.key >= '0' && e.key <= '5' && kbTargets().length) {
+      const n = parseInt(e.key, 10);
+      kbTargets().forEach((p) => setRating(p, n));
+      return;
+    }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
   });
@@ -2332,6 +2537,40 @@
   overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
+  // ── Filters popover: toggle button, active-filter chips, clear-all ──────────────────────
+  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-tag-filter'];
+  function syncFilterUI() {
+    const chipsEl = document.getElementById('lib-filter-chips');
+    const badgeEl = document.getElementById('lib-filters-badge');
+    if (!chipsEl || !badgeEl) return;
+    const active = FILTER_SELECT_IDS.map((id) => document.getElementById(id)).filter((sel) => sel && sel.value !== 'all');
+    badgeEl.textContent = active.length ? String(active.length) : '';
+    badgeEl.classList.toggle('on', active.length > 0);
+    chipsEl.innerHTML = active.map((sel) => {
+      const opt = sel.options[sel.selectedIndex];
+      return `<span class="lib-chip">${opt ? opt.textContent : sel.value}<span class="lib-chip-x" data-for="${sel.id}" title="Remove filter">✕</span></span>`;
+    }).join('');
+    chipsEl.querySelectorAll('.lib-chip-x').forEach((x) => {
+      x.onclick = () => {
+        const sel = document.getElementById(x.dataset.for);
+        if (!sel) return;
+        sel.value = 'all';
+        sel.onchange({ target: sel });
+      };
+    });
+  }
+  const filtersBtn = overlay.querySelector('#lib-filters-btn');
+  const filtersPop = overlay.querySelector('#lib-filters-pop');
+  filtersBtn.onclick = (e) => { e.stopPropagation(); filtersPop.classList.toggle('on'); };
+  document.addEventListener('click', (e) => {
+    if (filtersPop.classList.contains('on') && !filtersPop.contains(e.target) && e.target !== filtersBtn) filtersPop.classList.remove('on');
+  });
+  overlay.querySelector('#lib-filters-clear').onclick = () => {
+    FILTER_SELECT_IDS.forEach((id) => { const sel = document.getElementById(id); if (sel) sel.value = 'all'; });
+    state.typeFilter = 'all'; state.cameraFilter = 'all'; state.lensFilter = 'all'; state.isoFilter = 'all';
+    state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all';
+    renderGrid();
+  };
   let searchDebounce;
   overlay.querySelector('#lib-search').oninput = (e) => {
     clearTimeout(searchDebounce);
@@ -2402,8 +2641,8 @@
   // grid-template-columns string applied to both #lib-list-head and every .lib-card in list
   // mode — a drag handle on a header cell just rewrites the one track that column corresponds
   // to and re-sets the var; the header/rows can never disagree since they share the same var.
-  const LIB_COL_DEFAULTS = { thumb: 52, date: 92, editedts: 92, camera: 132, iso: 56, shutter: 68, aperture: 60, focal: 56, flags: 56, edited: 60 };
-  const LIB_COL_ORDER = ['thumb', 'name', 'date', 'editedts', 'camera', 'iso', 'shutter', 'aperture', 'focal', 'flags', 'edited'];
+  const LIB_COL_DEFAULTS = { thumb: 52, date: 92, editedts: 92, camera: 132, iso: 56, shutter: 68, aperture: 60, focal: 56, rating: 70, flags: 56, edited: 60 };
+  const LIB_COL_ORDER = ['thumb', 'name', 'date', 'editedts', 'camera', 'iso', 'shutter', 'aperture', 'focal', 'rating', 'flags', 'edited'];
   let libColWidths;
   try { libColWidths = { ...LIB_COL_DEFAULTS, ...JSON.parse(localStorage.getItem('chromasmith_lib_cols') || '{}') }; }
   catch (e) { libColWidths = { ...LIB_COL_DEFAULTS }; }
@@ -2472,7 +2711,7 @@
     lrState.album = null; // leaving the cloud view — don't re-highlight a stale album later
     state.selected.clear();
     grid = document.getElementById('lib-grid');
-    grid.innerHTML = '<div id="lib-empty">Loading…</div>';
+    grid.innerHTML = libSkeletonHtml();
     let entries;
     try { entries = await invoke('list_collection', { name }); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this collection.</div>'; return; }
@@ -2485,7 +2724,7 @@
     state.source = 'exported';
     state.selected.clear();
     grid = document.getElementById('lib-grid');
-    grid.innerHTML = '<div id="lib-empty">Loading…</div>';
+    grid.innerHTML = libSkeletonHtml();
     let entries;
     try { entries = await invoke('list_exported'); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load exported photos.</div>'; return; }
@@ -2507,6 +2746,14 @@
     { name: 'gphotos', label: 'Synced', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 19a4 4 0 1 1 .4-7.98A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H6z"/></svg>' },
   ];
   let collectionCounts = {};
+  // Drop targets for the drag-a-selection-onto-a-collection gesture (card dragstart wiring is
+  // in renderGrid, above) — each is just the existing per-photo mutation that collection is
+  // itself derived from.
+  const COLL_DROP_MUTATIONS = {
+    favorites: (p) => setFavorite(p, true),
+    flagged: (p) => setLabel(p, 'Green'),
+    rejected: (p) => setLabel(p, 'Red'),
+  };
 
   // ── Cloud sources (approved wireframe): Adobe Lightroom lives in the sidebar between the
   // smart collections and the folder tree. Albums render as tree children once connected;
@@ -2676,7 +2923,7 @@
     grid = document.getElementById('lib-grid');
     thumbQueueReset();
     grid.classList.remove('list-view');
-    grid.innerHTML = '<div id="lib-empty">Loading Lightroom album…</div>';
+    grid.innerHTML = libSkeletonHtml();
     renderCollections();
     let assets;
     try { assets = await window.lrCloud.assets(albumId); }
@@ -2795,6 +3042,29 @@
         if (name === 'edited') ensureBackfill();
         if (name === 'exported') openExportedView();
         else openCollectionView(name);
+      };
+      // Drag-to-add: only the three collections that are actually a per-photo mutation (not a
+      // derived/automatic one like Recents/Edited/Exported/Duplicates/Synced) are valid drop
+      // targets — dropping applies the exact same write each already exposes via click (the
+      // heart icon / flag icons / X-P-U shortcuts), so a dropped photo shows up here for the
+      // same reason a manually-flagged one would.
+      const mutate = COLL_DROP_MUTATIONS[row.dataset.coll];
+      if (!mutate) return;
+      row.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes('application/x-chromasmith-paths')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('lib-coll-dragover');
+      };
+      row.ondragleave = () => row.classList.remove('lib-coll-dragover');
+      row.ondrop = (e) => {
+        e.preventDefault();
+        row.classList.remove('lib-coll-dragover');
+        let paths = [];
+        try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch (err) { /* ignore */ }
+        if (!paths.length) return;
+        const label = row.querySelector('.lib-coll-lb');
+        Promise.all(paths.map(mutate)).then(() => toast(`Added ${paths.length} photo${paths.length === 1 ? '' : 's'} to ${label ? label.textContent : 'collection'}`, true));
       };
     });
     const root = host.querySelector('[data-lr-root]');

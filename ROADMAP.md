@@ -53,25 +53,33 @@ it's missing 2-D keyboard nav, in-grid ratings, drag & drop, and re-renders the 
 keystroke. 15 improvements below, ordered by value-per-effort. All touch only
 `desktop/library-ui.js` unless noted.
 
-**Top 5 (highest impact):**
+**Top 5 (highest impact) — ✅ DONE (2026-07-31):**
 
-1. **2-D keyboard navigation.** Today `handleKey` (~2277-2328) only handles ←/→. Add ↑/↓ (columns =
-   `#lib-grid.offsetWidth / var(--lib-thumb)`), Home/End, `shift+arrow` range extension, `⌘A`
-   select-all. Reuse the existing cursor state and `updateCardSelClasses()` (~1635) — no new
-   selection model needed.
-2. **Star ratings in the grid/list.** Ratings exist in the sidecar and are settable only in compare
-   mode (~2078-2101). Add a star row to `flagsHtml()` (~869), `0`-`5` keyboard shortcuts through the
-   same mutation path as `setLabel`/`setFavorite` (~1480-1531), plus a rating filter and sort key.
-3. **Drag & drop.** No `dragstart`/`dragover`/`drop` handler exists anywhere in the file. Add:
-   drop files/folders from Finder onto the grid to import (route into `openFolder()`, ~1364); drag a
-   selection onto a collection in `#lib-side` to add it (reuse collections render, ~2784-2824).
-4. **Filter bar cleanup.** 8 wrapping `<select>`s (~468-495, already flagged in a comment at line
-   244). Collapse into one "Filters" button with an active-count badge → popover, a "Clear all"
-   control, and removable chips for active filters.
-5. **Grid virtualization + skeleton loading.** `renderGrid()` (~1893-1975) wipes `innerHTML` and
-   rebuilds every card synchronously on every filter/sort keystroke. Render only the visible window
-   + buffer, driven by the IntersectionObserver already in place (~786-863); replace the text-swap
-   loading state with per-card skeletons so re-filtering stops flashing.
+1. ✅ **2-D keyboard navigation.** Added ↑/↓ (delta = `gridCols()`, read from the resolved
+   `grid-template-columns` so it automatically matches grid/list/filmstrip layout), Home/End,
+   `shift+arrow` range extension from the last non-shift anchor, `⌘A`/`Ctrl+A` select-all. Reused
+   the existing cursor state and `updateCardSelClasses()` — no new selection model.
+2. ✅ **Star ratings in the grid/list.** Added `ratingHtml()`/`setRating()` (mirroring
+   `flagsHtml()`/`setLabel()`), wired into both card templates, a `0`-`5` keyboard shortcut on the
+   keyboard-cursor/selection, a rating filter (`Unrated`/`★1+`…`★5`) and a `Rating` sort key + list
+   column. Compare mode's own star row now calls the same `setRating()` instead of duplicating the
+   write.
+3. ✅ **Drag & drop.** Drop a folder or photos from Finder onto the grid — `list_dir` probes whether
+   a single dropped path is a directory (import) or a file (open as a batch), since the browser File
+   API can't tell folders from files directly. Drag a card/multi-selection onto the Favorites/
+   Flagged/Rejected sidebar rows to apply that exact mutation (`COLL_DROP_MUTATIONS`) — the only
+   three smart collections that are actually a per-photo write rather than derived automatically.
+4. ✅ **Filter bar cleanup.** The 7 non-search/source selects moved into a `#lib-filters-pop`
+   popover behind a "Filters" button with an active-count badge, a "Clear all" button, and removable
+   chips (`#lib-filter-chips`) below the bar showing each active filter by its own option text.
+5. **Grid rendering — partially done.** `renderGrid()` now builds all cards into a
+   `DocumentFragment` and appends once (was one reflow per card), and the plain-text "Loading…"
+   states across folder/collection/album opens were replaced with shimmering skeleton cards
+   (`libSkeletonHtml()`) so switching folders doesn't flash the grid to empty text and back. Actual
+   windowed virtualization (rendering only the visible row range) was judged too invasive to do
+   blind — everything from keyboard nav to the flag/rating click handlers looks cards up by
+   `data-path` in the live DOM — and is left as a follow-up if a real large-folder profile shows
+   it's still needed.
 
 **Remaining 10:**
 
