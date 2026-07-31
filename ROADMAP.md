@@ -9,14 +9,14 @@ Several items are grounded in measurements taken while shipping the Skin Tone to
 highest-confidence entries here.
 
 **Status — the Skin Tone tool is DONE and verified on desktop.** Items 1, 2, 3, 5, 6(Texture), 7,
-8, 14 (resize+sharpening+named presets), 16, A, B, C, D shipped; 4 partly. Item 16 (face-parse
+8, 14 (resize+sharpening+named presets), 16, A, B, C, D, E shipped; 4 partly. Item 16 (face-parse
 auto-exclusion) is verified with a real Rust integration test (`cargo test`) against a real photo
 — see `desktop/src-tauri/vendor/faceparse/README.md` for the full verification transcript — but
 like item 4, the desktop UI round-trip (the new "✂ Auto-exclude face features" button) still needs
 a hands-on check in the built app. Everything else below is verified against the export gate with
 the untouched goldens byte-identical, i.e. each is a true no-op at its defaults.
 
-**Still open — 8 items, each independent.** Nothing here blocks anything else, so they can be
+**Still open — 7 items, each independent.** Nothing here blocks anything else, so they can be
 picked off in any order and in separate sessions:
 
 | # | item | size |
@@ -28,7 +28,6 @@ picked off in any order and in separate sessions:
 | 13 | JXL / AVIF / HEIC in, 16-bit out | L |
 | 14 | Export ICC/P3 + watermark (presets done) | S |
 | 15 | Auto-match a series to a reference photo | M |
-| E | First-run tour + contextual tips | S |
 
 To pick one up in a fresh session, quote its number and heading from this file — each entry states
 the gap, the files it touches and the functions to reuse. Read `CLAUDE.md` §5b first if the item
@@ -235,11 +234,21 @@ a number, arrow-key nudge (⇧ for coarse), double-click to reset to the pristin
 (`_fxPristineDefault` already exists for section resets), and a subtle dot on any slider that
 differs from default so a loaded recipe is legible at a glance.
 
-### E. First-run tour + contextual "why" tips — S
-The Guide tab is thorough but it is a wall of text read only by people who already know what
-they're looking for. A short first-run tour (load a photo → pick a look → export) plus small
-contextual tips on the genuinely non-obvious controls — Preserve modeling, No remjet, Shadow
-protect, Input profile, Subtract prev — would carry far more of the design intent than prose.
+### E. ✅ DONE — First-run tour; contextual "why" tips already existed as hover tooltips
+`tourMaybeShow()` shows a single 3-step `_csModal` panel (load a photo → pick a look → export)
+once per browser, gated on a localStorage flag AND on `fxImages` being empty at startup — a
+session with a photo already loaded (import, restored session, returning reload) is by definition
+not a new user and is never re-greeted. `window.chromasmithShowTour()` replays it on demand (Help
+menu / the ⌘K palette's "Show welcome tour"), bypassing the once-only flag. Deliberately a single
+static panel rather than a per-element spotlight sequence — the layout differs too much between
+mobile bottom-sheet, desktop deskx rail and plain desktop for a spotlight to reliably land on a
+moving target.
+
+The "contextual tips on non-obvious controls" half turned out to already be fully shipped: Preserve
+modeling, No remjet, Shadow protect, Input profile AND Subtract prev all already carry an
+explanatory `title=` hover tooltip (`git grep` confirmed all five before writing anything new) —
+nothing left to add there.
+*Touches:* `tourMaybeShow`, `tourHtml`, `window.chromasmithShowTour`, one `_cpCommands` entry.
 
 ---
 

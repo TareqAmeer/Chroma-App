@@ -3602,7 +3602,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-31b';
+const BUILD='2026-07-31c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -7222,6 +7222,30 @@ function shortcutsHtml(){
     +group('View',[['⌘+ / ⌘-','Zoom in / out'],['⌘0','Zoom to fit'],['⌘1','Zoom to 100%'],['⌘\\','Toggle before/after split'],['⌘H','Toggle histogram'],['G','Toggle full Library'],['Esc','Close full Library / dialogs']])
     +group('Help',[['⌘/','This panel'],['⌘K','Command palette']]);
 }
+// First-run tour — a single short _csModal (not a per-element spotlight walkthrough: the app's
+// layout differs enough between mobile bottom-sheet, desktop deskx rail and plain desktop that
+// positioning a spotlight against a moving target was the fragile option; a 3-step "here's the
+// golden path" panel is not). Shown once via a localStorage flag, and never if a photo is already
+// loaded when the app starts (that machine has clearly used it before — an import, a saved
+// session, or a returning tab reload, none of which should re-greet a new user).
+const _TOUR_KEY='chromasmith-tour-seen-v1';
+function tourHtml(){
+  const step=(n,title,body)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
+  return step(1,'Load a photo','Drag a photo (or RW2/RAW) onto the window, or use the ＋ button.')
+    +step(2,'Pick a look','Open <b>Presets & Looks</b> and tap a film look — everything else (grain, halation, curves, masks…) is optional refinement on top of it.')
+    +step(3,'Export','When it looks right, hit <b>Export</b> at full resolution. Nothing ever uploads — it all runs on this device.')
+    +'<div style="font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:10px">The <b>Guide</b> tab has the full reference, and ⌘K opens a searchable command palette over every tool.</div>'
+    +'<div class="btn-row" style="margin-top:14px"><button class="btn bpri" onclick="document.getElementById(\'cs-modal-ov\').remove()">Got it</button></div>';
+}
+function tourMaybeShow(){
+  try{
+    if(localStorage.getItem(_TOUR_KEY))return;
+    if(typeof fxImages!=='undefined'&&fxImages&&fxImages.length)return; // already mid-session, not a new user
+    localStorage.setItem(_TOUR_KEY,'1');
+  }catch(e){return;}
+  _csModal('Welcome to Chromasmith',tourHtml());
+}
+window.chromasmithShowTour=function(){_csModal('Welcome to Chromasmith',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
 window.chromasmithShowShortcuts=function(){_csModal('Keyboard Shortcuts',shortcutsHtml());};
 document.addEventListener('keydown',e=>{
   if(e.key!=='?'&&!(e.key==='/'&&(e.metaKey||e.ctrlKey)))return;
@@ -7260,6 +7284,7 @@ function _cpCommands(){
   add('Action','Save as Style…',()=>{if(typeof styleSaveCurrent==='function')styleSaveCurrent();});
   add('Action','Toggle theme',()=>{if(typeof toggleTheme==='function')toggleTheme();});
   add('Action','Keyboard shortcuts',()=>window.chromasmithShowShortcuts());
+  add('Action','Show welcome tour',()=>window.chromasmithShowTour());
   return cmds;
 }
 function _cpFilter(cmds,q){
@@ -12848,6 +12873,7 @@ initSliderErgonomics(); // numeric entry, keyboard nudge, modified-from-default 
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 styleListRefresh();  // populate the Styles list from localStorage
 exportPresetListRefresh();  // populate the Export preset dropdown from localStorage
+setTimeout(tourMaybeShow,400); // first-run tour — after layout settles, only for a genuinely empty/new session
 initZoomPan();
 initEditableVals();
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
