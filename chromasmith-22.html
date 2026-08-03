@@ -3615,7 +3615,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-07-31g';
+const BUILD='2026-08-03a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -11097,7 +11097,7 @@ async function exportFX(){
     // which is exactly the mangled name users were seeing. Dash keeps the version unambiguous.
     const ver=`v${fxVersion.toFixed(1).replace('.','-')}`;
     const single=N===1;
-    const results=[];
+    let results=[]; // `let`: a native save that fails per-file prunes this before Phase 3 (below)
     // Library source-path lookup (native shell only — see chromasmithGetOpenedPaths in
     // library-ui.js): parallels fxImages' own order, so results[i].srcPath below lets the
     // Google Photos-sync mirror (Phase 3) record exactly which on-disk photo each successful
@@ -11290,12 +11290,24 @@ async function exportFX(){
     }else if(results.length){
       setProg(N,`Saving ${results.length} file(s)…`);
       results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saving'));
-      await saveFiles(results);
-      // saveFiles' desktop/anchorDownload and iOS share-sheet paths don't report per-file
-      // success back to the caller (see saveFiles' own comments) — mark every rendered photo
-      // 'saved' once the call returns; a render FAILURE (the far more common real-world cause of
-      // "photos go missing") is still tracked precisely above, per-item, as it happens.
-      results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saved'));
+      const sr=await saveFiles(results);
+      if(Array.isArray(sr)){
+        // Native desktop save: every file has a real per-item result, so report SAVES rather
+        // than renders — a file that never reached disk must not show (or be counted) as saved.
+        let saveFailed=0;
+        results.forEach((r,i)=>{
+          const s=sr[i];
+          if(s&&s.ok)setExportPhotoStatus(r.srcIdx,'saved');
+          else{saveFailed++;setExportPhotoStatus(r.srcIdx,'failed',((s&&s.err)||'save failed').slice(0,60));}
+        });
+        if(saveFailed){failed+=saveFailed;results=results.filter((r,i)=>sr[i]&&sr[i].ok);}
+      }else{
+        // saveFiles' browser/anchorDownload and iOS share-sheet paths don't report per-file
+        // success back to the caller (see saveFiles' own comments) — mark every rendered photo
+        // 'saved' once the call returns; a render FAILURE (the far more common real-world cause of
+        // "photos go missing") is still tracked precisely above, per-item, as it happens.
+        results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saved'));
+      }
     }
     // Recipe-only export history (Library-only — see chromasmithRecordExport in library-ui.js).
     // Only tracks the single currently-open Library photo (state.openedPath); a multi-photo
@@ -11332,6 +11344,9 @@ async function exportFX(){
     if(failed&&results.length)log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');
     if(failed&&results.length)toast(`Exported ${results.length}/${N} — ${failed} failed, see log`,false);
     else if(results.length)toast(`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);
+    // Every photo failed (render OR native save) — say so. Without this the run ended silently,
+    // since both branches above are guarded on results.length.
+    else if(failed){log(`Export finished: 0 saved, ${failed} failed (see log above)`,'err');toast(`Export failed — ${failed} photo${failed>1?'s':''} not saved, see log`,false);}
   }catch(e){
     log('Export error: '+(e&&e.message||e),'err');console.error(e);
     toast('Export failed — see log');
@@ -11615,8 +11630,50 @@ async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}]
   }
   await Share.share({files:uris});
 }
-function anchorDownload(content,fname,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);}
+// ── Tauri-native save path (the desktop shell) ────────────────────────────────
+// The desktop shell used to fall through to the browser <a download> loop below, which after a
+// multi-minute full-res batch render has no user activation left: WKWebView silently dropped
+// everything past the first few files (a user exporting 11 photos got 4), and anchorDownload
+// can neither fail nor report, so the app still said "Exported 11 photos ✓". Rust writes each
+// file to ~/Downloads instead, one invoke per file, and hands back the real path.
+// Returns a per-item [{ok,path,err}] so the caller can report SAVES, not renders — or null if
+// this isn't the native shell (or it predates the command), meaning "unreportable, fall through".
+function tauriNative(){return !!(window.__TAURI__&&window.__TAURI__.core);}
+async function saveFilesNative(items){
+  const out=[];
+  for(const it of items){
+    // Raw IPC body (not base64) — a full-res export through the base64 path is the same triple
+    // copy that OOMed Lightroom TIFF saves; see write_lightroom_tiff_raw's comment in main.rs.
+    const bytes=typeof it.content==='string'?new TextEncoder().encode(it.content)
+      :(it.content instanceof Uint8Array?it.content:new Uint8Array(it.content));
+    try{
+      const r=await window.__TAURI__.core.invoke('save_export_file_raw',bytes,{headers:{'x-filename':_u8b64(new TextEncoder().encode(it.fname))}});
+      out.push({ok:true,path:r&&r.path||it.fname});
+      log(`Saved ${r&&r.path||it.fname}`,'ok');
+    }catch(e){
+      const msg=e&&e.message||String(e);
+      // Older native shell without the command compiled in: bail out entirely so the caller
+      // falls through to the previous behaviour rather than reporting the whole batch failed.
+      if(/save_export_file_raw/.test(msg)&&/not (found|allowed)|unknown|Command/i.test(msg)){
+        log('Native shell predates save_export_file_raw — falling back to browser downloads (restart the app after updating)','warn');
+        return null;
+      }
+      out.push({ok:false,err:msg});
+      log(`Save failed for ${it.fname}: ${msg}`,'err');
+    }
+  }
+  return out;
+}
+// The 1000ms revoke was unconditionally too short: callers stagger these clicks 300ms apart, so
+// file #4 was clicked at t≈900ms and lost its blob source at t=1000ms while still queued — one
+// half of the "only the first few files land" bug. The URL is released on a.remove() regardless,
+// so a long timeout costs nothing.
+function anchorDownload(content,fname,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},60000);}
 async function saveFile(content,fname,mime='application/octet-stream'){
+  if(tauriNative()){
+    const r=await saveFilesNative([{content,fname,mime}]);
+    if(r){if(r[0].ok)toast('Saved to Downloads ✓',true);else toast('Save failed — see log');return}
+  }
   if(capNative()){
     try{await capShareFiles([{content,fname,mime}]);toast('Saved ✓',true);return}
     catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}
@@ -11630,8 +11687,14 @@ async function saveFile(content,fname,mime='application/octet-stream'){
 // render consumes — so try one combined share() inline, and if it rejects, surface a one-tap
 // button that re-enters share() under a fresh gesture (instead of silently dribbling files to
 // Downloads one-by-one, the bug the user hit). Desktop just downloads each file.
+// Returns a per-item [{ok,path,err}] when the save path can actually report success (the
+// Tauri desktop shell), else null — every browser/iOS path below is fire-and-forget.
 async function saveFiles(items){ // items: [{content,fname,mime}]
-  if(!items.length)return;
+  if(!items.length)return null;
+  if(tauriNative()){
+    const r=await saveFilesNative(items);
+    if(r)return r;
+  }
   if(capNative()){
     try{await capShareFiles(items);toast('Saved ✓',true);return}
     catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}

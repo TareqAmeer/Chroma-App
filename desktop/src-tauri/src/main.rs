@@ -792,6 +792,70 @@ fn save_to_download_dir(dir: PathBuf, filename: String, data_b64: String) -> Res
     Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes: bytes.len() as u64, renamed })
 }
 
+// ── Normal photo export ───────────────────────────────────────────────────────────────────
+// The desktop shell had NO native save path for ordinary exports: saveFiles() in
+// chromasmith-22.html fell through to a burst of browser <a download> clicks staggered 300ms
+// apart. After a multi-minute full-res batch render the click's user activation is long gone,
+// so WKWebView drops the later downloads as unattended — a user exporting 11 photos got 4
+// files and a "Exported 11 photos ✓" toast, because anchorDownload can neither fail nor
+// report. Every export now goes through this command instead: one file per invoke, a real
+// Result per file, and the actual written path handed back so JS can log a concrete line.
+fn export_downloads_path() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME").ok_or("no HOME")?;
+    Ok(PathBuf::from(home).join("Downloads"))
+}
+
+// Next free "name (2).ext" / "name (3).ext" in `dir`. Deliberately NOT shared with
+// save_to_download_dir above: that one treats a same-name+same-size file as an already-cached
+// re-import and skips the write, which is right for a Google Photos re-download and WRONG for
+// an export (it would silently drop a file the user just asked for).
+fn unique_dest(dir: &Path, name: &str) -> PathBuf {
+    let base = Path::new(name);
+    let stem = base.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
+    let ext = base.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+    let mut dest = dir.join(name);
+    let mut n = 2;
+    while dest.exists() {
+        let alt = if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") };
+        dest = dir.join(alt);
+        n += 1;
+    }
+    dest
+}
+
+// Raw-body writer, modelled on write_file_bytes_raw: the render arrives as the IPC request's
+// binary body with the filename in a header, so a full-res export isn't tripled in memory the
+// way the base64 path is (the same triple-copy that OOMed Lightroom TIFF saves — see
+// write_lightroom_tiff_raw's comment). The header carries the name BASE64-encoded because HTTP
+// headers are ASCII-only and export filenames routinely are not.
+#[tauri::command]
+fn save_export_file_raw(request: tauri::ipc::Request<'_>) -> Result<GpSaveResult, String> {
+    use base64::Engine;
+    let name_b64 = request
+        .headers()
+        .get("x-filename")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("missing x-filename header")?;
+    let name_bytes = base64::engine::general_purpose::STANDARD
+        .decode(name_b64)
+        .map_err(|e| format!("decode x-filename: {e}"))?;
+    let name = String::from_utf8(name_bytes).map_err(|e| format!("x-filename not utf8: {e}"))?;
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes,
+        _ => return Err("expected raw request body".into()),
+    };
+    // Strip any path separators — never let a filename escape the downloads folder.
+    let safe_name = Path::new(&name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("empty filename")?;
+    let dir = export_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create '{}': {e}", dir.display()))?;
+    let dest = unique_dest(&dir, safe_name);
+    std::fs::write(&dest, bytes).map_err(|e| format!("write {}: {e}", dest.display()))?;
+    Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes: bytes.len() as u64, renamed: false })
+}
+
 // ── Google OAuth for the desktop shell: the web build's popup+redirect flow (gpAuth() in
 // chromasmith-22.html) assumes the page is served from a real https:// origin, so Google can
 // redirect the popup back to it — but this shell serves from a custom "cs://" scheme, which
@@ -940,6 +1004,7 @@ fn main() {
             save_to_gphotos_downloads,
             gphotos_downloads_dir,
             save_to_lr_downloads,
+            save_export_file_raw,
             lr_downloads_dir
         ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
@@ -1242,4 +1307,40 @@ fn main() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod export_save_tests {
+    use super::unique_dest;
+    use std::path::Path;
+
+    // A batch export must never silently overwrite an existing file — the whole point of the
+    // native save path is that nothing disappears without the user hearing about it.
+    #[test]
+    fn unique_dest_avoids_collisions() {
+        let dir = std::env::temp_dir().join(format!("cs_unique_dest_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let first = unique_dest(&dir, "photo_1.0.jpg");
+        assert_eq!(first, dir.join("photo_1.0.jpg"));
+        std::fs::write(&first, b"x").unwrap();
+
+        let second = unique_dest(&dir, "photo_1.0.jpg");
+        assert_eq!(second, dir.join("photo_1.0 (2).jpg"));
+        std::fs::write(&second, b"x").unwrap();
+
+        assert_eq!(unique_dest(&dir, "photo_1.0.jpg"), dir.join("photo_1.0 (3).jpg"));
+
+        // Extensionless names keep working.
+        std::fs::write(dir.join("noext"), b"x").unwrap();
+        assert_eq!(unique_dest(&dir, "noext"), dir.join("noext (2)"));
+
+        // Non-ASCII round-trips (the reason the filename crosses IPC base64-encoded).
+        assert_eq!(unique_dest(&dir, "café ☕.jpg"), dir.join("café ☕.jpg"));
+
+        // Path separators are stripped by the caller, not here — confirm the caller's contract.
+        assert_eq!(Path::new("../../etc/passwd").file_name().unwrap(), "passwd");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
