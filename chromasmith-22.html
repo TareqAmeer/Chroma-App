@@ -1128,6 +1128,13 @@ setTimeout(()=>window.hideBootSplash(),6000);
               <option value="65mm" selected>65mm — fine</option>
             </select>
           </div>
+          <!-- VIDEO ONLY (fxSyncVideoUI shows/hides this row). 0 = grain frozen to the screen
+               (looks fake/stuck), 100 = every frame independently reseeded (looks like digital
+               boil at high Amount). See CLAUDE.md §12: real film grain differs frame to frame at
+               similar intensity — neither extreme is what real stock looks like. -->
+          <div class="fx-row" id="row-grain-motion" style="display:none" title="0 = grain frozen to the screen. 100 = fully independent every frame (can boil at high Amount). Real film sits in between.">
+            <div class="fx-label">Grain motion</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-grain-motion" oninput="fxVideoGrainMotionChanged(this.value)"><div class="fx-val" id="vl-grain-motion">75</div>
+          </div>
         </div>
       </div>
       <!-- FILM ARTIFACTS -->
@@ -1378,16 +1385,20 @@ setTimeout(()=>window.hideBootSplash(),6000);
         </div>
       </div>
       <div id="fx-filmstrip" title="Click a photo to preview it"></div>
-      <!-- VIDEO TRANSPORT — scrub + trim only in V0 (no playback/export yet, see CLAUDE.md §12 /
+      <!-- VIDEO TRANSPORT — scrub/trim (V0) + playback (V1); no export yet (see CLAUDE.md §12 /
            the video plan's V0→V4 phasing). Shown only for kind:'video' (fxSyncVideoUI). Scrubbing
            snaps to the nearest sync sample DURING the drag (instant — no decode wait) and seeks to
-           the exact frame on release, since exact-frame seeks can cost real time on a long GOP. -->
+           the exact frame on release, since exact-frame seeks can cost real time on a long GOP.
+           Playback deliberately does NOT chase real-time at high resolution (see fxVideoPlayTick's
+           own comment) — it may drop frames; export (later) may not. -->
       <div id="fx-transport" style="display:none;margin-top:8px;padding:8px;background:var(--sur2);border-radius:8px">
         <div class="fx-row" style="align-items:center;gap:8px">
+          <button class="btn-icon" id="btn-vid-play" onclick="fxVideoPlayToggle()" title="Play/pause">▶</button>
           <span id="vid-time" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px">00:00.0</span>
           <input type="range" id="vid-scrub" min="0" max="0" value="0" step="1" style="flex:1"
             oninput="fxVideoScrubInput(this.value)" onchange="fxVideoScrubCommit(this.value)">
           <span id="vid-time-total" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px;text-align:right">00:00.0</span>
+          <span id="vid-fps-readout" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:56px;text-align:right" title="Actual playback frame rate — may be below the clip's real fps if the grade is too heavy to keep up live">—</span>
         </div>
         <div class="fx-row" style="align-items:center;gap:8px;margin-top:6px" title="Trim in/out — used at export (V4); playback/scrub above is unaffected in V0">
           <div class="fx-label" style="width:auto">Trim</div>
@@ -6580,6 +6591,7 @@ async function loadFXVideoFile(file){
     // sampled average fps — good enough for a scrub range's max, not for frame-exact export.
     _mbSampleSink:sink,frameCount:Math.max(1,Math.round(duration*fps)),
     trimInFrame:0,trimOutFrame:Math.max(0,Math.round(duration*fps)-1),
+    curFrame:0,clipSeed:fxClipSeed(file.name,file.size,Math.round(duration*1e6)),grainMotion:75,
   };
 }
 // Seeks the CURRENT video entry to frameIndex and redraws it in place onto its own poster
@@ -6601,7 +6613,77 @@ async function fxVideoSeekTo(it,frameIndex){
   ctx.clearRect(0,0,it.img.width,it.img.height);
   sample.draw(ctx,0,0,it.img.width,it.img.height);
   sample.close();
+  it.curFrame=frameIndex; // read by fxVideoFrameSeed so the grain seed follows whichever frame is actually on screen
   updateWork();renderPreview();
+}
+// Deterministic hash of an integer -> [0,1): the standard GLSL-style sin/fract trick, in JS.
+// frameIndex+1 avoids the degenerate sin(0)=0 case landing every clip's frame 0 at hash 0.
+function fxHash01(n){const x=Math.sin(n*12.9898)*43758.5453;return x-Math.floor(x);}
+// Hash of the CLIP itself (name+size+durationUs), so reloading the same file reproduces the
+// same grain rather than a fresh Math.random() roll — set once at load (loadFXVideoFile).
+function fxClipSeed(name,size,durationUs){
+  let s=`${name}:${size}:${durationUs}`,h=0;
+  for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
+  return (h%10000)/100; // 0..100, matching the seed uniform's existing range
+}
+// The per-frame grain seed video rendering uses in place of Math.random(). Blends the per-frame
+// hash toward the clip-constant seed by `grainMotion` (0=grain frozen to the screen, 100=fully
+// independent every frame — see CLAUDE.md §12 on why a linear step (clipSeed+frameIndex*k) was
+// REJECTED: 13*7.7371~=100.58 makes frames 13 apart land under 1 lattice cell from each other,
+// a periodic correlation that reads as a visible pulse. A sin/fract hash has no such structure.
+function fxVideoFrameSeed(it){
+  if(!it||it.kind!=='video'||it.clipSeed==null)return null;
+  const motion=(it.grainMotion!=null?it.grainMotion:75)/100;
+  const frameHash=fxHash01((it.curFrame||0)+1)*100;
+  return it.clipSeed*(1-motion)+frameHash*motion;
+}
+function fxVideoGrainMotionChanged(v){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  it.grainMotion=+v;
+  document.getElementById('vl-grain-motion').textContent=v;
+  renderPreview();
+}
+// ---- Playback (V1) — does NOT chase real-time at high resolution; drops frames instead of
+// queuing (a queued backlog would make playback progressively LAG further behind, which reads
+// as broken, whereas a dropped frame just looks like a lower live frame rate). Export (later)
+// renders every frame regardless of how long each one takes — playback and export are
+// deliberately different code paths with different tradeoffs, not the same loop reused.
+let _fxPlayRAF=null,_fxPlayStartMs=0,_fxPlayStartFrame=0,_fxPlayFrameTimes=[];
+function fxVideoPlayToggle(){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  if(_fxPlayRAF){fxVideoPause();return;}
+  const btn=document.getElementById('btn-vid-play');if(btn)btn.textContent='⏸';
+  _fxPlayStartMs=performance.now();
+  _fxPlayStartFrame=+document.getElementById('vid-scrub').value||0;
+  _fxPlayFrameTimes=[];
+  _fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
+}
+function fxVideoPause(){
+  if(_fxPlayRAF)cancelAnimationFrame(_fxPlayRAF);
+  _fxPlayRAF=null;
+  const btn=document.getElementById('btn-vid-play');if(btn)btn.textContent='▶';
+}
+async function fxVideoPlayTick(nowMs){
+  const it=curItem();
+  if(!it||it.kind!=='video'||!_fxPlayRAF){fxVideoPause();return;}
+  const elapsedS=(nowMs-_fxPlayStartMs)/1000;
+  const targetFrame=_fxPlayStartFrame+Math.round(elapsedS*(it.fps||30));
+  const maxFrame=it.frameCount-1;
+  if(targetFrame>maxFrame){fxVideoPause();return;} // stop at the end rather than looping — a deliberate V1 simplification
+  const scrub=document.getElementById('vid-scrub');
+  if(+scrub.value!==targetFrame){
+    scrub.value=targetFrame;
+    document.getElementById('vid-time').textContent=fxVideoTimeLabel(targetFrame,it.fps);
+    await fxVideoSeekTo(it,targetFrame); // may still be resolving when the next tick fires — the seek generation counter handles that
+    _fxPlayFrameTimes.push(nowMs);
+    if(_fxPlayFrameTimes.length>30)_fxPlayFrameTimes.shift();
+    if(_fxPlayFrameTimes.length>1){
+      const dtAvg=(_fxPlayFrameTimes[_fxPlayFrameTimes.length-1]-_fxPlayFrameTimes[0])/(_fxPlayFrameTimes.length-1);
+      const readout=document.getElementById('vid-fps-readout');
+      if(readout&&dtAvg>0)readout.textContent=(1000/dtAvg).toFixed(1)+' fps';
+    }
+  }
+  if(_fxPlayRAF)_fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
 }
 function fxVideoTimeLabel(frameIndex,fps){
   const secs=frameIndex/(fps||30);
@@ -6612,15 +6694,26 @@ function fxVideoTimeLabel(frameIndex,fps){
 // whole bar — called from fxSyncVideoUI on every photo/video switch, same as the Clip info row.
 function fxSyncTransportUI(){
   const bar=document.getElementById('fx-transport');if(!bar)return;
+  fxVideoPause(); // switching photo/video (or between videos) must not leave a RAF loop targeting the OUTGOING item
   const it=curItem();
-  if(!it||it.kind!=='video'){bar.style.display='none';return;}
+  const motionRow=document.getElementById('row-grain-motion');
+  if(!it||it.kind!=='video'){bar.style.display='none';if(motionRow)motionRow.style.display='none';return;}
   bar.style.display='';
   const scrub=document.getElementById('vid-scrub'),trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
   const maxFrame=Math.max(0,it.frameCount-1);
   scrub.max=maxFrame;trimIn.max=maxFrame;trimOut.max=maxFrame;
+  scrub.value=it.curFrame||0;
+  document.getElementById('vid-time').textContent=fxVideoTimeLabel(it.curFrame||0,it.fps);
   trimIn.value=it.trimInFrame||0;trimOut.value=it.trimOutFrame!=null?it.trimOutFrame:maxFrame;
   document.getElementById('vid-time-total').textContent=fxVideoTimeLabel(maxFrame,it.fps);
+  document.getElementById('vid-fps-readout').textContent='—';
   fxVideoTrimChanged();
+  if(motionRow){
+    motionRow.style.display='';
+    const sl=document.getElementById('sl-grain-motion');
+    sl.value=it.grainMotion!=null?it.grainMotion:75;
+    document.getElementById('vl-grain-motion').textContent=sl.value;
+  }
 }
 function fxVideoScrubInput(v){
   document.getElementById('vid-time').textContent=fxVideoTimeLabel(+v,curItem()&&curItem().fps);
@@ -10686,7 +10779,14 @@ function renderPreview(){
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
   const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
-  FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx()}); // same glow scale the export will use → faithful preview
+  // Video only: a deterministic per-frame grain seed (see fxVideoFrameSeed) instead of the
+  // photo default (Math.random() inside FX.render itself when opts.seed is omitted) — a photo
+  // re-rolling grain on every renderPreview() call is harmless jitter between edits, but a video
+  // frame must look IDENTICAL every time it's shown, or pausing/scrubbing back to the same frame
+  // would visibly reroll the grain. {} spreads to nothing, so photo behavior is untouched.
+  const vSeedOpt=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed(curItem()):null;
+  const seedOpt=vSeedOpt!=null?{seed:vSeedOpt}:{};
+  FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx(),...seedOpt}); // same glow scale the export will use → faithful preview
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
@@ -10694,7 +10794,7 @@ function renderPreview(){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx()});      // re-render processed into FX.cv
+    FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx(),...seedOpt});      // re-render processed into FX.cv
     _applySplitPos();
   } else {
     const orig=document.getElementById('fx-canvas-orig');
