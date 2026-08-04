@@ -861,6 +861,12 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
           <select class="fx-select" id="sel-dcp" onchange="setRawProfile(this.value)"></select>
         </div>
+        <!-- Clip info — video only, hidden for photos (see fxSyncVideoUI/fxUpdateClipInfoUI).
+             Informational for V0 (no override controls yet — see CLAUDE.md §12 / the video plan's
+             B1″ probeClip design for the intended per-row overrides in a later phase). Flags a
+             clip the app can't yet grade correctly (HDR/VFR) instead of silently producing wrong
+             output that reads as "the LUTs are broken". -->
+        <div id="fx-clip-info" style="display:none;margin-top:8px;font-size:10px;color:var(--mut);font-family:var(--mono);line-height:1.6"></div>
         <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-lut')">
           <input type="file" accept=".cube,image/*,.tif,.tiff" onchange="fi(event,'fx-lut')">
           <div class="dz-ic">⬡</div><div class="dz-lb">Apply LUT (.cube or processed LUT chart)</div><div class="dz-fn" id="fn-fx-lut"></div>
@@ -6488,6 +6494,35 @@ const VID_EXT_RE=/\.(mp4|mov|m4v)$/i;
 // FX.setImage(canvas) for FX.setVideoFrame(rawFrame,w,h) on the SAME entry — see CLAUDE.md §12.
 // VideoSample.draw() applies the MP4 rotation metadata itself, so no srcXf handling is needed
 // for this still-frame poster path; srcXf/srcFlipY exist for the raw-VideoFrame GPU path (V1+).
+// Cheap (no-decode) VFR heuristic: EncodedPacketSink.packets() exposes presentation timestamps
+// straight from the container, so this costs nothing beyond reading ~30 packet headers. B-frame
+// reordering means these aren't perfectly monotonic in decode order — fine for a coefficient-of-
+// variation heuristic, not fine for anything that needs frame-exact timing (real playback/export
+// use the sample-level timestamps directly instead of trusting this flag).
+async function probeVfr(track){
+  try{
+    const pktSink=new(await getMediabunny()).EncodedPacketSink(track);
+    const ts=[];
+    for await(const pkt of pktSink.packets(undefined,undefined,{metadataOnly:true})){
+      ts.push(pkt.timestamp);
+      if(ts.length>=30)break;
+    }
+    if(ts.length<4)return false;
+    ts.sort((a,b)=>a-b);
+    const deltas=[];for(let i=1;i<ts.length;i++)deltas.push(ts[i]-ts[i-1]);
+    const mean=deltas.reduce((a,b)=>a+b,0)/deltas.length;
+    if(mean<=0)return false;
+    const variance=deltas.reduce((a,d)=>a+(d-mean)**2,0)/deltas.length;
+    return(Math.sqrt(variance)/mean)>0.15; // coefficient of variation — empirical threshold, not a spec value
+  }catch(e){return false;} // never let a probe failure block loading the clip
+}
+// HDR/wide-gamut detection: BT.2020 primaries or an HLG/PQ transfer function both need a tone
+// map this app doesn't have yet (see CLAUDE.md §12/the video plan) — grading either as if it
+// were Rec.709 produces washed-out or blown-out output that reads as "the LUTs are wrong".
+function isHdrColorSpace(cs){
+  if(!cs)return false;
+  return cs.primaries==='bt2020'||cs.transfer==='hlg'||cs.transfer==='pq';
+}
 async function loadFXVideoFile(file){
   const MB=await getMediabunny();
   const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(file)});
@@ -6498,9 +6533,15 @@ async function loadFXVideoFile(file){
   const rotation=await track.getRotation();
   const displayW=await track.getDisplayWidth(),displayH=await track.getDisplayHeight();
   const colorSpace=await track.getColorSpace();
+  const codec=await track.getCodec().catch(()=>null);
   const duration=await input.computeDuration();
   const sink=new MB.VideoSampleSink(track);
-  const sample=await sink.getSample(0);
+  // getSample(0) returns null on some real-world encodes (verified against a synthetic
+  // variable-frame-rate fixture: an irregular GOP/PTS pattern from an unusual frame-drop
+  // sequence made its exact-timestamp lookup fail even though the same file decodes fine
+  // through the async iterator). samples() is the robust way to grab "just the first frame".
+  let sample=null;
+  for await(const s of sink.samples()){sample=s;break;}
   if(!sample)throw new Error('Could not decode the first frame');
   const canvas=document.createElement('canvas');
   canvas.width=displayW;canvas.height=displayH;
@@ -6508,10 +6549,12 @@ async function loadFXVideoFile(file){
   sample.draw(ctx,0,0,displayW,displayH);
   sample.close();
   const packetStats=await track.computePacketStats(100).catch(()=>null); // sampled estimate, not exact — good enough for a fps readout
+  const isVfr=await probeVfr(track);
+  const isHdr=isHdrColorSpace(colorSpace);
   const ext=(file.name.split('.').pop()||'mp4').toLowerCase();
   return{
     kind:'video',img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi:72,bytes:null,
-    fileSize:file.size,videoFile:file,rotation,colorSpace,
+    fileSize:file.size,videoFile:file,rotation,colorSpace,codec,isVfr,isHdr,
     durationUs:Math.round(duration*1e6),
     fps:packetStats?packetStats.averagePacketRate:null,
   };
@@ -8804,6 +8847,29 @@ function fxSyncVideoUI(){
   const isVideo=!!(curItem()&&curItem().kind==='video');
   const localPanel=document.querySelector('.fx-ctrl[data-fxsec="local"]');
   if(localPanel)localPanel.style.display=isVideo?'none':'';
+  fxUpdateClipInfoUI();
+}
+// Renders the probeClip() facts loadFXVideoFile already gathered (rotation/colour space/codec/
+// fps/HDR/VFR) as one line of badges. HDR and VFR get an explicit warning rather than a quiet
+// badge — see CLAUDE.md §12: this app has no HLG/BT.2020 tonemap yet, and grading either as
+// plain Rec.709 produces washed-out/blown output that reads as a LUT bug, not a footage-support
+// gap. Rendered fresh on every load/switch so it can never show a STALE clip's info.
+function fxUpdateClipInfoUI(){
+  const el=document.getElementById('fx-clip-info');if(!el)return;
+  const it=curItem();
+  if(!it||it.kind!=='video'){el.style.display='none';el.textContent='';return;}
+  const parts=[];
+  const cs=it.colorSpace||{};
+  parts.push(`${it.img.width}×${it.img.height}`);
+  if(it.fps)parts.push(`${it.fps.toFixed(it.fps%1?2:0)} fps${it.isVfr?' (variable)':''}`);
+  if(it.codec)parts.push(it.codec);
+  if(it.rotation)parts.push(`rotated ${it.rotation}°`);
+  if(cs.primaries||cs.transfer)parts.push([cs.primaries,cs.transfer].filter(Boolean).join('/'));
+  const warnings=[];
+  if(it.isHdr)warnings.push('⚠ HDR source (BT.2020/HLG/PQ) — no tone map yet, colours will look wrong until this is added');
+  if(it.isVfr)warnings.push('⚠ Variable frame rate detected — playback/export timing may judder until VFR handling lands');
+  el.style.display='';
+  el.innerHTML=parts.join(' · ')+(warnings.length?'<br>'+warnings.map(w=>`<span style="color:var(--warn,#d4903a)">${w}</span>`).join('<br>'):'');
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
