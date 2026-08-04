@@ -1,0 +1,210 @@
+#!/usr/bin/env node
+// Headless video-grading gate harness for Chromasmith — same Playwright/SwiftShader rig as
+// export_harness.mjs, but for Part B (video grading) instead of stills.
+//
+// Loads the REAL, unmodified chromasmith-22.html, drives it through the app's own
+// loadFXImages()/fxVideoSeekTo() with a tiny committed fixture (test/fixtures/video_tiny.mp4:
+// 10 frames, 160x120, 10fps, each frame's luma = (frameIndex*20) mod 255 — a cheap, exact,
+// content-addressable way to verify decode/seek land on the RIGHT frame without needing a
+// perceptual diff). Chromium's VideoDecoder/VideoEncoder use software codecs even under
+// SwiftShader, so this is fully headless — no host GPU or hardware codec dependency.
+//
+// Usage:
+//   node test/video_harness.mjs
+//
+// This is V0-scoped: it covers what V0 actually built (demux metadata, footage-quality probes,
+// seek correctness/determinism, and the guard that video code is invisible to the photo path).
+// It does NOT yet cover playback, encode/export, or grain-motion determinism — those land with
+// V1-V3 (see CLAUDE.md §12 / the video plan's Part 4 for the full matrix this harness grows into).
+
+import { chromium } from 'playwright';
+import { createServer } from 'node:http';
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
+const FIXTURES_DIR = path.join(__dirname, 'fixtures');
+const GOLDEN_DIR = path.join(__dirname, 'golden');
+
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.wasm': 'application/wasm', '.png': 'image/png', '.json': 'application/json',
+  '.css': 'text/css', '.cube': 'text/plain', '.mp4': 'video/mp4' };
+
+function startServer(root) {
+  return new Promise((resolve) => {
+    const server = createServer(async (req, res) => {
+      try {
+        const urlPath = decodeURIComponent(req.url.split('?')[0]);
+        let filePath = path.join(root, urlPath === '/' ? '/index.html' : urlPath);
+        if (!filePath.startsWith(root)) { res.writeHead(403); res.end(); return; }
+        const data = await readFile(filePath);
+        const ext = path.extname(filePath);
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+        res.end(data);
+      } catch (e) {
+        res.writeHead(404); res.end('not found');
+      }
+    });
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+}
+
+let failCount = 0;
+function check(label, cond, detail) {
+  if (cond) { console.log(`  ok   ${label}`); }
+  else { failCount++; console.error(`  FAIL ${label}${detail ? ' — ' + detail : ''}`); }
+}
+
+async function main() {
+  const fixturePath = path.join(FIXTURES_DIR, 'video_tiny.mp4');
+  await readFile(fixturePath); // throws a clear error if the fixture is missing
+
+  const server = await startServer(ROOT);
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const browser = await chromium.launch({
+    args: [
+      '--use-gl=swiftshader',
+      '--use-angle=swiftshader',
+      '--disable-gpu-sandbox',
+      '--disable-dev-shm-usage',
+      '--enable-unsafe-swiftshader',
+    ],
+  });
+
+  try {
+    const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+    page.on('pageerror', (e) => console.error('  [pageerror]', e.message));
+    page.on('console', (msg) => {
+      // GLSL compile errors are the "quiet" bug class (CLAUDE.md §3): they don't white-screen
+      // the app, they silently no-op the affected shader program. Surface them loudly here.
+      if (msg.type() === 'error') console.error('  [console.error]', msg.text());
+    });
+
+    await page.goto(`${baseUrl}/chromasmith-22.html`, { waitUntil: 'load' });
+    await page.waitForFunction(() => typeof window.loadFXImages === 'function'
+      && typeof window.videoSupported === 'function', null, { timeout: 30000 });
+
+    const supported = await page.evaluate(() => window.videoSupported());
+    if (!supported) {
+      console.error('FATAL: videoSupported() is false in this Chromium build — cannot run the video harness.');
+      process.exit(1);
+    }
+
+    // ---- 1. Demux metadata ----------------------------------------------------------------
+    console.log('\n[1] Demux metadata (video_tiny.mp4)');
+    const meta = await page.evaluate(async () => {
+      const resp = await fetch('/test/fixtures/video_tiny.mp4');
+      const blob = await resp.blob();
+      const file = new File([blob], 'video_tiny.mp4', { type: 'video/mp4' });
+      const entry = await window.loadFXVideoFile(file);
+      return {
+        kind: entry.kind, w: entry.img.width, h: entry.img.height,
+        rotation: entry.rotation, isVfr: entry.isVfr, isHdr: entry.isHdr,
+        frameCount: entry.frameCount, fps: entry.fps, durationUs: entry.durationUs,
+      };
+    });
+    check('kind === "video"', meta.kind === 'video');
+    check('dimensions 160x120', meta.w === 160 && meta.h === 120, JSON.stringify(meta));
+    check('rotation 0 (unrotated fixture)', meta.rotation === 0, `got ${meta.rotation}`);
+    check('not flagged VFR (CFR fixture)', meta.isVfr === false);
+    check('not flagged HDR (SDR fixture)', meta.isHdr === false);
+    check('frameCount === 10', meta.frameCount === 10, `got ${meta.frameCount}`);
+    check('duration ~= 1s', Math.abs(meta.durationUs - 1e6) < 5e4, `got ${meta.durationUs}us`);
+
+    // ---- 2. Seek correctness ----------------------------------------------------------------
+    // Each frame's luma is (frameIndex*20) mod 255 (see gen note below) — an exact, cheap way
+    // to verify fxVideoSeekTo() lands on the RIGHT frame rather than an off-by-one neighbour.
+    console.log('\n[2] Seek correctness (exact per-frame luma)');
+    await page.evaluate(async () => {
+      const resp = await fetch('/test/fixtures/video_tiny.mp4');
+      const blob = await resp.blob();
+      const file = new File([blob], 'video_tiny.mp4', { type: 'video/mp4' });
+      await window.loadFXImages([file]);
+      await new Promise(r => setTimeout(r, 300));
+    });
+    const seekResults = await page.evaluate(async () => {
+      const it = curItem();
+      const out = {};
+      for (const f of [0, 3, 6, 9]) {
+        await fxVideoSeekTo(it, f);
+        const px = it.img.getContext('2d').getImageData(80, 60, 1, 1).data;
+        out[f] = px[0]; // R===G===B for this fixture (grey luma ramp)
+      }
+      return out;
+    });
+    for (const f of [0, 3, 6, 9]) {
+      const expected = (f * 20) % 255;
+      const got = seekResults[f];
+      check(`frame ${f} luma ~= ${expected}`, Math.abs(got - expected) <= 12, `got ${got}`); // H.264 rounding tolerance
+    }
+
+    // ---- 3. Seek determinism (direction-independent) ---------------------------------------
+    // The highest-value check in export_harness.mjs's own philosophy: render forward and
+    // backward through the same frames and assert the results match. Doesn't yet test frame-
+    // seeded grain (that lands with the temporal-grain work in V1+) — it tests that
+    // fxVideoSeekTo's generation-counter guard against overlapping async seeks (see its own
+    // comment in chromasmith-22.html) doesn't leave a stale frame behind depending on scrub order.
+    console.log('\n[3] Seek determinism (forward vs backward walk)');
+    const detResults = await page.evaluate(async () => {
+      const it = curItem();
+      const hashFrame = () => {
+        const d = it.img.getContext('2d').getImageData(0, 0, it.img.width, it.img.height).data;
+        let h = 0; for (let i = 0; i < d.length; i += 37) h = (h * 31 + d[i]) >>> 0;
+        return h;
+      };
+      const forward = {}, backward = {};
+      for (let f = 0; f <= 9; f++) { await fxVideoSeekTo(it, f); forward[f] = hashFrame(); }
+      for (let f = 9; f >= 0; f--) { await fxVideoSeekTo(it, f); backward[f] = hashFrame(); }
+      return { forward, backward };
+    });
+    let detOk = true;
+    for (let f = 0; f <= 9; f++) if (detResults.forward[f] !== detResults.backward[f]) detOk = false;
+    check('frame N identical walking 0→9 and 9→0', detOk,
+      detOk ? '' : JSON.stringify({ forward: detResults.forward, backward: detResults.backward }));
+
+    // ---- 4. Video-off-by-default guard: photo path unaffected ------------------------------
+    // The single guard the whole plan rests on (CLAUDE.md §12 / Part 4 Gate 0): loading a video
+    // must not perturb the photo pipeline. Cheap proxy for the full 18-golden export_harness.mjs
+    // suite — render one still through the SAME page (already carrying video/mediabunny state)
+    // and diff it against its own golden.
+    console.log('\n[4] Photo path unaffected after video code has run');
+    const chartGolden = path.join(GOLDEN_DIR, 'chart__identity.png');
+    const chartBytes = await readFile(chartGolden);
+    const chartFixture = await readFile(path.join(FIXTURES_DIR, 'chart.png'));
+    const stillB64 = await page.evaluate(async ({ b64 }) => {
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const file = new File([arr], 'chart.png', { type: 'image/png' });
+      await window.loadFXImages([file]);
+      await new Promise(r => setTimeout(r, 100));
+      const it = curItem();
+      const P = window.getFXParams(it.adjustOverride || undefined);
+      const src = window.geomCanvas(it);
+      const canvas = await window.processToCanvas(P, src, src.width, src.height);
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png'));
+      const buf = await blob.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let bin2 = ''; for (let i = 0; i < bytes.length; i++) bin2 += String.fromCharCode(bytes[i]);
+      return btoa(bin2);
+    }, { b64: chartFixture.toString('base64') });
+    const stillBytes = Buffer.from(stillB64, 'base64');
+    check('chart.png x identity still byte-exact vs golden', Buffer.compare(chartBytes, stillBytes) === 0,
+      `${chartBytes.length} vs ${stillBytes.length} bytes`);
+
+  } finally {
+    await browser.close();
+    server.close();
+  }
+
+  console.log(`\n${failCount === 0 ? 'PASS' : 'FAIL'} — ${failCount} check(s) failed`);
+  process.exit(failCount === 0 ? 0 : 1);
+}
+
+main().catch((e) => { console.error('FATAL:', e); process.exit(1); });

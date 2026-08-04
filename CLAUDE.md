@@ -758,10 +758,22 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
 - ⚠️ GLSL reserved words are an active risk here specifically: **`sample` and `output`** are
   exactly the identifiers a video feature reaches for, and both are reserved in GLSL ES. Prefix:
   `vidSample`, `vidOut`.
-- **`test/video_harness.mjs`** (new, same Playwright/SwiftShader rig as `export_harness.mjs`) is
-  headless-testable because Chromium's `VideoDecoder`/`VideoEncoder` use software codecs under
-  SwiftShader — but probe `VideoDecoder.isConfigSupported({codec:'avc1.42e01e'})` first and fall
-  back to VP8/VP9-in-WebM, since Playwright's plain `chromium` build has historically omitted
-  proprietary codecs. The single highest-value test: render frame 5 walking a clip 0→9 and again
-  9→0 and assert the hashes match — catches the entire "grain differs between preview and export"
-  class in pure JS, no fixture needed beyond what's already loaded.
+- **`test/video_harness.mjs`** (`npm run video:test`, same Playwright/SwiftShader rig as
+  `export_harness.mjs`) is headless-testable because Chromium's `VideoDecoder`/`VideoEncoder` use
+  software codecs even under SwiftShader. Fixture: `test/fixtures/video_tiny.mp4` — 10 frames,
+  160×120, 10fps, each frame's luma = `(frameIndex*20) mod 255` (an exact, content-addressable way
+  to verify a seek landed on the RIGHT frame without a perceptual diff; regenerate with
+  `ffmpeg -f lavfi -i "color=c=black:s=160x120:r=10:d=1,geq=lum='mod(N*20\,255)':cb=128:cr=128"
+  -c:v libx264 -pix_fmt yuv420p -movflags +faststart video_tiny.mp4`). Currently covers V0: demux
+  metadata (frameCount/rotation/isVfr/isHdr), per-frame seek correctness, seek determinism
+  (walking a clip 0→9 and 9→0 must produce identical frames — this is the "grain differs between
+  preview and export" class of check, still valid before frame-seeded grain exists because it's
+  really testing `fxVideoSeekTo`'s stale-result generation-counter guard), and the guard that
+  matters most: loading a video must not perturb a still render (`chart.png x identity` re-rendered
+  on the SAME page after video code has run, diffed byte-for-byte against its own golden).
+  ⚠️ **`getSample(0)` returned `null` on a real irregular-timestamp fixture during V0 testing** even
+  though the same file decoded fine via the `.samples()` async iterator — `loadFXVideoFile` grabs
+  the first frame via the iterator for exactly this reason; don't regress it back to `getSample(0)`.
+  Not yet covered (lands with later phases): playback, encode/export, rotation-metadata fixtures
+  (ffmpeg on this dev machine won't reliably write an ISOBMFF `colr`/rotation matrix box — a real
+  phone-shot fixture will be needed), HDR fixtures (same tooling gap), grain-motion determinism.
