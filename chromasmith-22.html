@@ -4186,6 +4186,19 @@ precision highp float;
 precision highp sampler3D;
 in vec2 uv;out vec4 o;
 uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
+// VIDEO source transform — the only two uniforms a video frame needs at the actual entry
+// point of the pipeline (everything downstream already treats img as just "the source pixel").
+// Both default to the identity so every still golden in test/golden/ stays byte-exact.
+// srcFlipY: video frames are NOT flipped with UNPACK_FLIP_Y_WEBGL (see setVideoFrame's comment
+// — flipping a VideoFrame can force a CPU readback), so this negates V on the SOURCE SAMPLE only.
+// srcXf: 2x2 rotation packed (a,b,c,d) -> [x',y']=[a*x+b*y, c*x+d*y], applied about the uv centre,
+// for the MP4 display-matrix rotation (0/90/180/270) WebCodecs does not apply for you.
+uniform float srcFlipY;uniform vec4 srcXf;
+vec2 vidUV(vec2 u){
+  if(srcFlipY>0.5)u.y=1.0-u.y;
+  vec2 c=u-0.5;
+  return vec2(srcXf.x*c.x+srcXf.y*c.y,srcXf.z*c.x+srcXf.w*c.y)+0.5;
+}
 // Basic adjustments (applied AFTER the LUT, BEFORE film FX — so halation/bloom react to
 // the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
@@ -4486,7 +4499,7 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
   if(B.z>0.5)w=1.0-w;
   return w;
 }
-void main(){vec4 c=texture(img,uv);
+void main(){vec4 c=texture(img,vidUV(uv));
 // Source-pixel high-pass, computed ONCE. Used by the global Sharpen/Clarity below and, when any
 // mask asks for it, by the per-mask Texture control in the mask loop. Hoisted (rather than
 // recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
@@ -4494,8 +4507,8 @@ void main(){vec4 c=texture(img,uv);
 vec3 srcHP=vec3(0.0);
 bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.))||mskAnyTex>0.5;
 if(needHP){
-  vec3 nb=(texture(img,uv+vec2(0.,texSize.y))+texture(img,uv-vec2(0.,texSize.y))
-          +texture(img,uv+vec2(texSize.x,0.))+texture(img,uv-vec2(texSize.x,0.))).rgb*0.25;
+  vec3 nb=(texture(img,vidUV(uv+vec2(0.,texSize.y)))+texture(img,vidUV(uv-vec2(0.,texSize.y)))
+          +texture(img,vidUV(uv+vec2(texSize.x,0.)))+texture(img,vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
   srcHP=c.rgb-nb;
 }
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
@@ -5018,7 +5031,11 @@ void main(){
     ['sklo_a','sklo_b','skbox'].forEach(n=>this._allocTex(n,w4,h4));
     this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;
   }
-  setImage(img){const gl=this.gl;if(this.imgTx)gl.deleteTexture(this.imgTx);
+  setImage(img){const gl=this.gl;
+    // vidTx is a PERSISTENT texture reused across video frames (see setVideoFrame) — never
+    // delete it here, only the one-shot photo texture. Without this guard, loading a photo
+    // right after grading a video would delete the still-live video texture out from under it.
+    if(this.imgTx&&this.imgTx!==this.vidTx)gl.deleteTexture(this.imgTx);
     this.imgTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.imgTx);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
@@ -5026,6 +5043,12 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this.imgW=img.naturalWidth||img.width;this.imgH=img.naturalHeight||img.height;
+    this._ensureLutTx();
+  }
+  // Lazy neutral-passthrough 3D LUT init, shared by setImage and setVideoFrame — was originally
+  // inlined at the end of setImage only; hoisted out so both source paths initialize it exactly
+  // once on first use, instead of silently depending on which one happened to run first.
+  _ensureLutTx(){const gl=this.gl;
   if (!this.lutTx) {
     this.lutTx = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_3D, this.lutTx);
@@ -5034,15 +5057,43 @@ void main(){
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-    
+
     // 2x2x2 neutral passthrough LUT data
     const idData = new Uint8Array([
       0,0,0,255,   255,0,0,255,   0,255,0,255,   255,255,0,255,
       0,0,255,255, 255,0,255,255, 0,255,255,255, 255,255,255,255
     ]);
-    
+
     gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 2, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, idData);
   }
+  }
+  // setVideoFrame(src,w,h) — sibling to setImage for VideoFrame/canvas sources drawn from a
+  // decoded video sample. Uses a PERSISTENT texture (this.vidTx) reallocated only when the
+  // frame size changes (texImage2D), and texSubImage2D otherwise — the cheap upload path a
+  // fixed-size video clip should always hit after its first frame. imgTx is aliased to vidTx
+  // so the rest of the pipeline (the `img` sampler binding, basicAdjust, masks, etc.) needs
+  // zero changes to grade a video frame exactly like a photo.
+  // ⚠️ No UNPACK_FLIP_Y_WEBGL here — flipping a VideoFrame can knock the browser off its
+  // zero-copy blit path and force a CPU readback. srcFlipY (a shader uniform, negating V on
+  // the source sample only) replaces it for video; it defaults to 0 so photos are unaffected.
+  setVideoFrame(src,w,h){const gl=this.gl;
+    const needAlloc=!this.vidTx||this.vidW!==w||this.vidH!==h;
+    if(needAlloc){
+      if(this.vidTx)gl.deleteTexture(this.vidTx);
+      this.vidTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      this.vidW=w;this.vidH=h;
+    }else{
+      gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
+    }
+    gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,src);
+    // Delete a stale one-shot photo texture before aliasing over it (mirrors setImage's own guard).
+    if(this.imgTx&&this.imgTx!==this.vidTx)gl.deleteTexture(this.imgTx);
+    this.imgTx=this.vidTx;
+    this.imgW=w;this.imgH=h;
+    this._ensureLutTx();
   }
   setLUT(lut){const gl=this.gl;if(this.lutTx)gl.deleteTexture(this.lutTx);
     const d=new Uint8Array(SZ*SZ*SZ*3);
@@ -5278,6 +5329,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
     }
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
+      srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       maskTex:4,maskTex2:7,
@@ -5420,6 +5472,20 @@ function hexRGB(h){return[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16
 //   orange/yellow/green have B=0; cyan/blue have R=0) — validated to move ONLY the
 //   purple gap (0.187→0.327, matching 0.325) with every other color's gap-R and
 //   interior-flood value bit-identical (calib/scorecard.py: 1 FAIL→0 FAIL).
+// MP4 display-matrix rotation -> the 2x2 matrix srcXf expects (packed row-major a,b,c,d).
+// WebCodecs/VideoDecoder does not apply this for you — mediabunny's track.getRotation() reads
+// it, and the shader applies it at the one place the raw video pixel enters the pipeline
+// (vidUV in progs.lut). Cached as Float32Array so _pass's uniform4fv path picks it up (a plain
+// length-4 JS array falls through _pass's array-length switch and silently sets nothing).
+FXR._rotXfCache={};
+FXR.rotXf=function(deg){
+  const k=((deg%360)+360)%360;
+  if(!FXR._rotXfCache[k]){
+    const m=k===90?[0,1,-1,0]:k===180?[-1,0,0,-1]:k===270?[0,-1,1,0]:[1,0,0,1];
+    FXR._rotXfCache[k]=new Float32Array(m);
+  }
+  return FXR._rotXfCache[k];
+};
 FXR.CAL={
   refWidth:2400,
   // Skin-tone frequency separation: blur sigma as a fraction of the reference width, so the
