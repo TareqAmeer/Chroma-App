@@ -4893,6 +4893,7 @@ in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
 uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
+uniform float useDither,ditherSeed; // TPDF dither at final quantization — see the JS call site's comment
 uniform float dustA,scrA,leakA,fxSeed,artAsp,dustMode; // film artifacts (dust/scratches/light leak) + stable seed + image aspect; dustMode: 0=both,1=black,2=white
 uniform vec3 grK;     // per-channel grain gain (R,G,B)
 uniform vec2 grHi;    // highlight rolloff gate (lo,hi)
@@ -5034,16 +5035,38 @@ void main(){
   }
   // VIGNETTE — applied last (post-grain), darkens corners in display space
   if(vigAmt>0.){vec2 vc=uv*2.-1.;float vd=dot(vc,vc);res*=1.-smoothstep(0.3,1.5,vd)*vigAmt;}
+  // TPDF (triangular) dither: sum of two independent uniforms in [0,1) minus 1 gives a
+  // triangular distribution in [-1,1); scaled to +/-1 LSB at 8-bit. Masks banding from a hard
+  // S-curve/LUT on a low-bit-depth (4:2:0 video) source hitting an 8-bit canvas. Off by default
+  // (useDither=0) so every still golden is untouched — see the JS call site for why.
+  if(useDither>0.5){
+    float d=hash12(gl_FragCoord.xy+ditherSeed)+hash12(gl_FragCoord.xy*1.37+ditherSeed+7.0)-1.0;
+    res+=d/255.0;
+  }
   o=vec4(clamp(res,0.,1.),1.);
 }`);
   }
-  _allocTex(n,tw,th){const gl=this.gl;
+  // float16: allocate RGBA16F instead of RGBA8 (see the `lut` FBO's use of this at _initBufs).
+  // Requires EXT_color_buffer_float to be RENDERABLE in WebGL2 (linear-filterable half-float
+  // sampling is core, but using one as a framebuffer colour attachment is not) — callers must
+  // check _hdrSupported() first; this method assumes the caller already downgraded to false.
+  _allocTex(n,tw,th,float16){const gl=this.gl;
     const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
-    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,tw,th,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    if(float16)gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,tw,th,0,gl.RGBA,gl.HALF_FLOAT,null);
+    else gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,tw,th,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this.txs[n]=t;const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
     gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);this.fbs[n]=f;
+  }
+  // Cached feature probe for rendering to an RGBA16F framebuffer (the `lut` FBO holds the fully
+  // graded base — see CLAUDE.md §12's "RGBA8 intermediate problem": an 8-bit source through a
+  // hard S-curve and two 3D LUTs into an 8-bit buffer bands in skies, and video starts from
+  // 8-bit 4:2:0 rather than a still's 12-14-bit source, so it can't rely on grain-as-dither to
+  // hide it the way stills do). Feature-detected and cached; falls back to RGBA8 silently.
+  _hdrSupported(){
+    if(this._hdrSupportedCache==null)this._hdrSupportedCache=!!this.gl.getExtension('EXT_color_buffer_float');
+    return this._hdrSupportedCache;
   }
   // glowScale (gs) downsamples ONLY the halation/bloom blur buffers. The blur is
   // low-frequency, so computing it at 1/gs resolution and bilinearly upsampling in the
@@ -5051,13 +5074,14 @@ void main(){
   // memory. The full-res `lut` base + the full-res composite/grain are untouched, so the
   // EXPORTED IMAGE stays at native resolution. This is what lets a 24MP photo export on
   // iOS (≈860MB → ≈430MB of GPU memory at gs=2) without the tab being killed.
-  _initBufs(w,h,gs){gs=gs||1;if(this.w===w&&this.h===h&&this.gs===gs)return;const gl=this.gl;
+  _initBufs(w,h,gs,hdrIntermediate){gs=gs||1;hdrIntermediate=!!hdrIntermediate&&this._hdrSupported();
+    if(this.w===w&&this.h===h&&this.gs===gs&&this.hdrIntermediate===hdrIntermediate)return;const gl=this.gl;
     this.cv.width=w;this.cv.height=h;
     Object.values(this.fbs).forEach(f=>gl.deleteFramebuffer(f));
     Object.values(this.txs).forEach(t=>gl.deleteTexture(t));
     this.fbs={};this.txs={};
     const w2=Math.max(1,Math.ceil(w/gs)),h2=Math.max(1,Math.ceil(h/gs));
-    this._allocTex('lut',w,h);                                            // full-res graded base
+    this._allocTex('lut',w,h,hdrIntermediate);                            // full-res graded base — RGBA16F only when requested+supported
     this._allocTex('lens',w,h);                                           // lens-corrected source (only used when Lens on)
     this._allocTex('nr',w,h);                                             // denoised source (only used when NR on)
     this._allocTex('hemitF',w,h);                                         // FULL-res halation emit (for a sharp high-pass)
@@ -5065,7 +5089,7 @@ void main(){
     // Quarter-res luminance ping-pong for the skin-tone frequency separation (see progs.lumdown).
     const w4=Math.max(1,Math.ceil(w/4)),h4=Math.max(1,Math.ceil(h/4));
     ['sklo_a','sklo_b','skbox'].forEach(n=>this._allocTex(n,w4,h4));
-    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;
+    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;this.hdrIntermediate=hdrIntermediate;
   }
   setImage(img){const gl=this.gl;
     // vidTx is a PERSISTENT texture reused across video frames (see setVideoFrame) — never
@@ -5233,7 +5257,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   // opts.scOverride: force the sigma-scale (=fullImageWidth/REF) — used by the tiled path so
   //   a tile blurs with the WHOLE image's radius, not the tile's.
   // opts.uvOff/uvScale: map this render's local uv → global image uv (grain continuity for tiles).
-  render(P,w,h,opts){const gl=this.gl;const gs=(opts&&opts.glowScale)||1;this._initBufs(w,h,gs);
+  render(P,w,h,opts){const gl=this.gl;const gs=(opts&&opts.glowScale)||1;this._initBufs(w,h,gs,opts&&opts.hdrIntermediate);
     const w2=this.w2,h2=this.h2;
     const iw2=1/w2,ih2=1/h2;          // texel step in the REDUCED-res glow buffers
     // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
@@ -5472,9 +5496,16 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
      gl.uniform1f(ul('dustMode'),AR.dustMode||0);
      gl.uniform1f(ul('fxSeed'),(AR.seed!=null)?AR.seed:7.7);
      gl.uniform1f(ul('artAsp'),((w/uvSx2)/(h/uvSy))||1);}
-    gl.uniform1f(ul('seed'),(opts&&opts.seed!=null)?opts.seed:Math.random()*100);
+    const seedForFrame=(opts&&opts.seed!=null)?opts.seed:Math.random()*100;
+    gl.uniform1f(ul('seed'),seedForFrame);
     gl.uniform1f(ul('debug'),P.debug||0);
     gl.uniform1f(ul('vigAmt'),P.vignette||0);
+    // TPDF dither at final quantization — masks 8-bit banding from a hard S-curve/LUT on
+    // low-bit-depth (4:2:0 video) source. Off by default (useDither=0 → the shader adds
+    // nothing) so every still golden is untouched; keyed on the SAME per-frame seed as grain
+    // so it changes frame to frame rather than fixing a static dither pattern to the screen.
+    gl.uniform1f(ul('useDither'),(opts&&opts.dither)?1:0);
+    gl.uniform1f(ul('ditherSeed'),seedForFrame);
     const uvOff=(opts&&opts.uvOff)||[0,0],uvScale=(opts&&opts.uvScale)||[1,1];
     gl.uniform2f(ul('uvOff'),uvOff[0],uvOff[1]);gl.uniform2f(ul('uvScale'),uvScale[0],uvScale[1]);
     gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);const al=gl.getAttribLocation(cp,'a');gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
@@ -10784,8 +10815,13 @@ function renderPreview(){
   // re-rolling grain on every renderPreview() call is harmless jitter between edits, but a video
   // frame must look IDENTICAL every time it's shown, or pausing/scrubbing back to the same frame
   // would visibly reroll the grain. {} spreads to nothing, so photo behavior is untouched.
+  const _curIsVideo=!!(curItem()&&curItem().kind==='video');
   const vSeedOpt=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed(curItem()):null;
-  const seedOpt=vSeedOpt!=null?{seed:vSeedOpt}:{};
+  // hdrIntermediate/dither are ALSO video-only for now: a still's 12-14-bit source plus grain
+  // already dithers the S-curve/LUT quantization for free (see CLAUDE.md §12), so there is
+  // nothing to fix and nothing should change for photos. Video starts from 8-bit 4:2:0.
+  const seedOpt=(vSeedOpt!=null?{seed:vSeedOpt}:{});
+  if(_curIsVideo)Object.assign(seedOpt,{hdrIntermediate:true,dither:true});
   FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx(),...seedOpt}); // same glow scale the export will use → faithful preview
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
