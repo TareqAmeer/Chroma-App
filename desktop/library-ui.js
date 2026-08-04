@@ -1930,6 +1930,17 @@
     state.openedPath = '';
     state.openedPaths = paths;
     await loadFXImages(files);
+    // Seed shared FX (LUT/grain/halation/curves/etc.) from the first photo's saved recipe —
+    // same reasoning as the "Export N photos" path below: without this the shared sliders
+    // stay at whatever stale state the app was in, and exporting straight from here (without
+    // first touching any slider) would silently render every photo unedited.
+    try {
+      const firstSc = await getSidecar(paths[0]);
+      if (firstSc.recipe) {
+        applyUISnapshot(snapshotFromB64(firstSc.recipe));
+        if (typeof applyRawDefaults === 'function') applyRawDefaults();
+      }
+    } catch (e) { console.error('seed shared FX for batch open', e); }
     paths.forEach((p) => invoke('touch_recent', { path: p }).catch(() => {}));
     if (state.source === 'recents') renderCollectionCounts();
     return files;
@@ -1988,12 +1999,25 @@
       state.openedPath = '';
       state.openedPaths = paths;
       await loadFXImages(files);
+      // Seed the SHARED FX state (LUT/grain/halation/curves/HSL/adjustments — everything
+      // getFXParams() reads off the DOM) from the first selected photo's own saved recipe.
+      // Exporting straight from the Library grid (no photo currently open in this session)
+      // used to leave the shared sliders at whatever stale/default state the app happened to
+      // be in, so a cold batch export rendered every photo through an unedited pipeline —
+      // geometry/masks/adjustOverride (restored per-photo below) survived, but the actual
+      // look did not. One seed only: applying it per-photo would let the LAST photo's saved
+      // FX silently overwrite every other photo's render (that's why the loop below stays
+      // geom/masks/adjustOverride-only).
+      try {
+        const firstSc = await getSidecar(paths[0]);
+        if (firstSc.recipe) {
+          applyUISnapshot(snapshotFromB64(firstSc.recipe));
+          if (typeof applyRawDefaults === 'function') applyRawDefaults();
+        }
+      } catch (e) { console.error('seed shared FX for batch export', e); }
       // Restore each photo's own saved CROP/MASKS/independent-ADJUST before exporting (all
       // three are per-photo — see chromasmith-22.html's geomApplyToAll/mskCopyToAll/
-      // adjToggleScope). FX/adjustments are otherwise shared across the batch by design, so
-      // unlike the old code this does NOT run the saved recipe's sliders/LUT/curves through
-      // applyUISnapshot — doing that per photo just made the LAST photo's saved FX silently
-      // overwrite every other photo's render.
+      // adjToggleScope).
       for (let i = 0; i < paths.length; i++) {
         const sc = await getSidecar(paths[i]);
         if (!sc.recipe || !fxImages[i]) continue;
