@@ -75,6 +75,7 @@ coi-serviceworker.min.js    Enables cross-origin isolation for the RAW decoder (
 vendor/
   libraw/                   LibRaw WebAssembly RW2/RAW decoder (index.js, worker.js, .wasm)
   dcp/                      Panasonic DC-S9 Adobe DCP camera colour profiles
+  mediabunny/               Video demux/mux (MP4 read + write) for video grading
 ```
 
 ## Third-party components
@@ -83,6 +84,13 @@ vendor/
 - **pako** 2.1.0 (embedded) — zlib inflate for ZIP-compressed TIFF. MIT/Zlib.
 - **coi-serviceworker** (gzuidhof) — cross-origin isolation shim. MIT.
 - Panasonic DC-S9 DCP camera profiles — Adobe/Panasonic camera profiles.
+- **RawNIND UtNet2** (Benoit Brummer, UCLouvain; desktop app only, "High" noise-reduction tier) —
+  a raw-domain denoiser trained on the RawNIND dataset. **GPL-3.0** — see
+  [`LICENSE`](LICENSE) and `desktop/src-tauri/vendor/rawdenoise/README.md`. Paper:
+  [arXiv:2501.08924](https://arxiv.org/abs/2501.08924).
+- **mediabunny** 1.52.3 (Vanilagy and contributors) — MP4 demux/mux for video grading. **MPL-2.0**
+  — see `vendor/mediabunny/LICENSE` and `vendor/mediabunny/README.md`. Kept as its own vendored
+  file rather than inlined, per the file-level copyleft terms.
 
 ## Privacy
 

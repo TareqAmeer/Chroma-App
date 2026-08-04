@@ -24,6 +24,8 @@ CLAUDE.md                   This file
 vendor/
   libraw/                   LibRaw WebAssembly RW2/RAW decoder (index.js, worker.js, .wasm)
   dcp/                      14 Panasonic DC-S9 Adobe DCP camera profiles (runtime copies)
+  mediabunny/               MP4 demux/mux for video grading (§12) — MPL-2.0, kept as its own
+                            file and lazy-`import()`ed like libraw, NOT inlined like pako/utif2
 ios/ + package.json + capacitor.config.json + build-ios.sh + patches/ + .github/workflows/
                             Capacitor iOS shell → unsigned IPA built by CI (see §2)
 calib/                      Calibration & analysis tooling (Python). Not needed to RUN the
@@ -718,3 +720,48 @@ Zone 2 bars (x=2400–4799): 100% white y840–986, 80% grey y1020–1166, 60% y
 Gap ≈34px. Measure interiors ≥40px from any edge.
 Zone 7 full-width lines/blocks at x=3600: white line y5240, warm(255,160,80) y5360,
 cool(110,180,255) y5480, red(255,80,80) y5600. **Always use the 2×/4800×6400 PNGs.**
+
+---
+
+## 12. Video grading (in progress)
+
+Single-clip video grading through the existing `FXR` pipeline: load an MP4, scrub/grade with the
+same LUT/grain/halation/adjustment stack as stills, export a graded MP4. Explicitly NOT a timeline
+NLE — one clip, global adjustments, trim in/out at most. Full design doc, gap analysis vs.
+comparable apps (Dehancer, FilmBox, Lightroom video), and phased plan:
+`~/.claude/plans/review-the-video-editing-elegant-squid.md` (or wherever it was moved — ask if
+missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish.
+
+- **Demux/mux: `vendor/mediabunny/`**, NOT hand-rolled. Use its high-level API
+  (`Input`/`VideoSampleSink`/`Output`/`CanvasSource`) — it already solves rotation metadata,
+  exact-frame seeking, audio passthrough, and WebCodecs timestamp/keyframe/flush correctness.
+  Lazy `import()`, same pattern as `getLibRaw()` (`:6418`). Kept out of the inline `<script>`
+  blocks (unlike pako/utif2) because MPL-2.0 is file-level copyleft.
+- **Reject clearly, at load, with a named reason:** fragmented MP4, HLS, AVI, MKV, edit lists —
+  whatever `ALL_FORMATS` can't handle.
+- ⚠️ **Grain/artifact seeds must become per-frame, but naively.** The stills design deliberately
+  makes `seed`/`artSeed` STABLE (preview==export, tiles byte-identical) — for video, stable-across-
+  frames is grain freezing to the screen. Use a HASH of frameIndex, not a linear step
+  (`clipSeed + frameIndex*k`) — a linear step near-repeats whenever `13×k` lands close to a
+  multiple of 100, producing a periodic grain "pulse". A `Grain motion` slider blends toward the
+  clip-constant seed to control boil vs. freeze.
+- ⚠️ **Never `getPixels()` on the export path** — full GPU stall + JS row-flip per frame. Render
+  into the same composite canvas used for borders/watermark and hand that to `CanvasSource`.
+- ⚠️ **`setImage`'s unconditional `gl.deleteTexture(this.imgTx)` will delete a live video texture**
+  if a video's `imgTx` is aliased to a persistent `vidTx` and a photo is then loaded. Guard:
+  `if(this.imgTx && this.imgTx!==this.vidTx) gl.deleteTexture(this.imgTx)`.
+- **Every new shader uniform (`srcFlipY`, `srcXf`, range remap, HLG tonemap, dither, grain motion)
+  must default to today's behaviour exactly** — all 18 PNGs in `test/golden/` must stay byte-exact
+  through every phase of this work. Run `node test/export_harness.mjs` after any shader touch and
+  watch for `[console.error] GLSL compile error` (§3's "quieter bug class" — it will not
+  white-screen the app, it silently no-ops the whole program).
+- ⚠️ GLSL reserved words are an active risk here specifically: **`sample` and `output`** are
+  exactly the identifiers a video feature reaches for, and both are reserved in GLSL ES. Prefix:
+  `vidSample`, `vidOut`.
+- **`test/video_harness.mjs`** (new, same Playwright/SwiftShader rig as `export_harness.mjs`) is
+  headless-testable because Chromium's `VideoDecoder`/`VideoEncoder` use software codecs under
+  SwiftShader — but probe `VideoDecoder.isConfigSupported({codec:'avc1.42e01e'})` first and fall
+  back to VP8/VP9-in-WebM, since Playwright's plain `chromium` build has historically omitted
+  proprietary codecs. The single highest-value test: render frame 5 walking a clip 0→9 and again
+  9→0 and assert the hashes match — catches the entire "grain differs between preview and export"
+  class in pure JS, no fixture needed beyond what's already loaded.
