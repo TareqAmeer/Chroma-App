@@ -774,6 +774,31 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
   ⚠️ **`getSample(0)` returned `null` on a real irregular-timestamp fixture during V0 testing** even
   though the same file decoded fine via the `.samples()` async iterator — `loadFXVideoFile` grabs
   the first frame via the iterator for exactly this reason; don't regress it back to `getSample(0)`.
-  Not yet covered (lands with later phases): playback, encode/export, rotation-metadata fixtures
-  (ffmpeg on this dev machine won't reliably write an ISOBMFF `colr`/rotation matrix box — a real
-  phone-shot fixture will be needed), HDR fixtures (same tooling gap), grain-motion determinism.
+  Not yet covered (lands with later phases): encode/export, rotation-metadata fixtures (ffmpeg on
+  this dev machine won't reliably write an ISOBMFF `colr`/rotation matrix box — a real phone-shot
+  fixture will be needed), HDR fixtures (same tooling gap).
+- **Playback (V1)** does not chase real-time — `fxVideoPlayTick` tracks wall-clock elapsed time
+  against the clip's fps and jumps straight to whichever frame SHOULD be showing now, dropping
+  any it can't render in time, rather than queuing (a queue makes lag compound; a drop just reads
+  as a lower live frame rate). Paused automatically on every photo/video switch (`fxSyncTransportUI`
+  calls `fxVideoPause()`) so switching away can't leave a RAF loop targeting the outgoing item.
+- **Per-frame grain seed**: `fxVideoFrameSeed` hashes `(clipSeed, frameIndex)` with a sin/fract
+  hash, NOT a linear step — verified the rejected linear formula's near-repeat bug for real
+  (`clipSeed+frameIndex*7.7371`: frames 13 apart land within 0.58 of each other since
+  `13×7.7371≈100.58`) and confirmed the hash keeps >2.8 separation at the same offset. The `Grain
+  motion` slider (0..100) blends between the frozen clip-constant seed and the fully independent
+  per-frame hash.
+- ⚠️ **HLG tonemap and the extended Log input selector (S-Log3/C-Log3/Log-C) are DEFERRED, not
+  forgotten — do not implement from formula alone.** The `isHdr` flag (BT.2020/HLG/PQ detection)
+  ships and is safe because it's a passthrough of mediabunny's own container metadata. A shader-
+  side HLG inverse-OETF/tonemap is a different risk class: when `VideoSampleSink`/`VideoFrame.draw`
+  paints an HDR BT.2020/HLG frame onto a plain 2D canvas, the BROWSER may already gamut-map and
+  tone-map it to the canvas's SDR colour space as part of the draw (standard, spec'd behaviour,
+  not something this app controls) — in which case the pixels the shader receives are ALREADY
+  SDR, and applying a second manual HLG transform on top would be actively wrong, not merely
+  redundant. This could not be checked on this dev machine: there is no real phone-shot HLG file
+  available, and this machine's ffmpeg build won't even write the container-level colour tags
+  needed to synthesize one (confirmed: `-color_primaries`/`-color_trc`/`-colorspace` output flags
+  produce no `colr` box for either h264 or hevc mp4 here). Before implementing either transform, get
+  a real HDR clip (or S-Log3/C-Log3 footage with a known-correct reference still) and verify what
+  actually lands in the canvas/texture BEFORE writing any correction for it.
