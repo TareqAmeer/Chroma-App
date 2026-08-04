@@ -23,6 +23,8 @@ use rawler::rawsource::RawSource;
 use rayon::prelude::*;
 use serde::Serialize;
 
+use crate::rawdenoise;
+
 #[derive(Serialize)]
 pub struct DecodedRaw {
     pub width: u32,
@@ -58,6 +60,46 @@ struct DemosaicOut {
     orientation: u16,
     lens_model_meta: Option<String>, // rawler's own lens fields, resolved at demosaic time
     focal_meta: Option<f32>,         // (the byte-level EXIF fallback still runs later if these are None)
+    /// This shot's resolved XYZ(D50)->camera-RGB matrix (rawler's `RawImage.xyz_to_cam`, rows
+    /// 0..3 — the 4th RGBE row is unused on this 3-channel Bayer sensor). Captured here
+    /// (post-decode, pre-scaling) rather than re-derived later — it's per-file metadata, not
+    /// something that can be recomputed from the pixel data. Used only by the High-tier
+    /// denoiser (rawdenoise::camera_rec2020_matrices) to convert into/out of the linear
+    /// Rec.2020 space that model expects; the existing JS DCP colour pipeline is untouched.
+    xyz_to_cam: rawdenoise::Mat3,
+}
+
+/// Native (Rust) RAW noise-reduction tier, replacing the old `native_nr: bool`. `Off` and `Fast`
+/// are UNCHANGED from every prior release (Fast = today's shadow + chroma-wavelet passes, byte-
+/// identical); `High` additionally runs the RawNIND UtNet2 neural denoiser
+/// (rawdenoise::denoise_frame_high) — 25-90s at 24MP on an Intel Mac (measured; see
+/// examples/denoise_probe.rs), so it is NEVER selected automatically by the two-phase fast/
+/// refine decode (see decode_rw2_bytes's `fast` handling below) — only by an explicit user
+/// action or at export. See the denoiser design doc's §A4 for the full two-tier UX rationale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NrTier {
+    Off,
+    Fast,
+    High
+}
+
+impl NrTier {
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "off" => Some(Self::Off),
+            "fast" => Some(Self::Fast),
+            "high" => Some(Self::High),
+            _ => None
+        }
+    }
+
+    /// CS_NR_TIER overrides whatever the caller requested — the same diagnostic-escape-hatch
+    /// pattern as CS_DEMOSAIC/CS_NO_CHROMA_NR, so the calib harness (dump_rw2.rs) can force a
+    /// tier without every call site needing its own env-var plumbing. Unset in normal use, so
+    /// default behavior (whatever the caller requested) is unchanged.
+    fn resolve(requested: Self) -> Self {
+        std::env::var("CS_NR_TIER").ok().and_then(|v| Self::parse(&v)).unwrap_or(requested)
+    }
 }
 
 /// Single-slot cache handing the fast pass's demosaic to the immediately-following refine.
@@ -83,6 +125,47 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
     let mut raw_image = decoder
         .raw_image(&source, &params, false)
         .map_err(|e| format!("decode: {e}"))?;
+
+    // Captured before apply_scaling()/demosaic touch the pixels — this is per-file metadata
+    // (rawler resolves it from the RAW's embedded calibration tags), not derived from the pixel
+    // data, so where in the pipeline it's read doesn't matter.
+    //
+    // ⚠️ `raw_image.xyz_to_cam` (the field this originally read) is rawler's OWN acknowledged-
+    // deprecated field (its doc comment literally says `// TODO: deprecated, use color_matrix`)
+    // and came back all-zeros for a real DC-S9 RW2 — silently, no error, which fed a zero matrix
+    // into mat3_inv (determinant 0) and produced NaN everywhere downstream (found via a real
+    // decode of __TM5624.RW2 going fully black; see the denoiser design doc's process notes).
+    // `camera.color_matrix: HashMap<Illuminant, FlatColorMatrix>` is the maintained field; the
+    // D65-preferred-else-first selection and row-major `matrix[i*3+j]` unpacking below exactly
+    // mirrors rawler's OWN reference usage in imgop/develop.rs's `Calibrate` step (the one place
+    // in rawler itself that actually consumes color_matrix), not a guessed convention.
+    let color_matrix_flat = raw_image
+        .camera
+        .color_matrix
+        .iter()
+        .find(|(illuminant, _m)| **illuminant == rawler::imgop::xyz::Illuminant::D65)
+        .or_else(|| raw_image.camera.color_matrix.iter().next())
+        .map(|(_illuminant, m)| m.clone());
+    let xyz_to_cam: rawdenoise::Mat3 = match color_matrix_flat {
+        Some(flat) if flat.len() % 3 == 0 && flat.len() / 3 >= 3 => {
+            let mut m: rawdenoise::Mat3 = [[0.0; 3]; 3];
+            for i in 0..3 {
+                for j in 0..3 {
+                    m[i][j] = flat[i * 3 + j];
+                }
+            }
+            m
+        }
+        _ => {
+            eprintln!(
+                "raw_decode: no usable camera.color_matrix for {:?} — High-tier neural NR will skip this file (falls back to Fast)",
+                metadata.model
+            );
+            [[0.0; 3]; 3] // all-zero is a valid, detectable sentinel: mat3_inv's determinant is 0,
+                          // rawdenoise::denoise_frame_high's caller (below) checks for this and
+                          // skips the High-tier pass entirely rather than feeding NaN through it.
+        }
+    };
 
     // iso_speed_ratings is the standard EXIF ISO tag (what this file actually carries);
     // iso_speed (a different EXIF tag) is absent on the S9 and used to silently default
@@ -265,17 +348,45 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
             .clone()
             .or_else(|| metadata.lens.as_ref().map(|l| l.lens_model.clone())),
         focal_meta: metadata.exif.focal_length.as_ref().map(ratio).filter(|f| *f > 0.0),
+        xyz_to_cam,
     })
 }
 
+/// Unchanged public signature/behavior for every existing caller (decode_raw_v2, dump_rw2.rs) —
+/// a thin wrapper over decode_rw2_bytes_ex with no progress/cancel, so nothing calling the old
+/// 6-argument form needs to change.
 pub fn decode_rw2_bytes(
     bytes: &[u8],
     auto_lens: bool,
-    native_nr: bool,
+    nr: NrTier,
     demosaic_algo: &str,
     fast: bool,
     lens_override: Option<(&str, f32)>, // (lensfun "Maker Model" string, focal length mm) — see main.rs decode_raw_v2
 ) -> Result<DecodedRaw, String> {
+    decode_rw2_bytes_ex(bytes, auto_lens, nr, demosaic_algo, fast, lens_override, 1.0, None, None)
+}
+
+/// Extended form used by `denoise_raw_high` (main.rs) so the High-tier neural pass can report
+/// tile-row progress and be cancelled mid-frame — both threaded straight through to
+/// rawdenoise::denoise_frame_high. `progress`/`cancel` are no-ops for Off/Fast/the two existing
+/// native passes (those have no per-tile structure to report against). `high_strength` (0.0-1.0,
+/// default 1.0 for the compat wrapper above) is rawdenoise::denoise_frame_high's blend-toward-
+/// original amount — see its doc comment for why this exists (real-photo review found the
+/// model over-smooths fine hair/fur detail vs DxO PureRAW even at comparable flat-noise
+/// removal).
+#[allow(clippy::too_many_arguments)]
+pub fn decode_rw2_bytes_ex(
+    bytes: &[u8],
+    auto_lens: bool,
+    nr: NrTier,
+    demosaic_algo: &str,
+    fast: bool,
+    lens_override: Option<(&str, f32)>,
+    high_strength: f32,
+    progress: Option<&(dyn Fn(usize, usize) + Sync)>,
+    cancel: Option<&std::sync::atomic::AtomicBool>
+) -> Result<DecodedRaw, String> {
+    let nr = NrTier::resolve(nr); // CS_NR_TIER escape hatch, resolved once for the whole call
     let key = demosaic_cache_key(bytes, demosaic_algo);
     // refine (fast=false) first tries to TAKE the fast pass's cached demosaic; anything else
     // (cold open with fast=false, cache holding a different photo) falls through to a full run.
@@ -315,10 +426,27 @@ pub fn decode_rw2_bytes(
                 orientation: dem.orientation,
                 lens_model_meta: dem.lens_model_meta.clone(),
                 focal_meta: dem.focal_meta,
+                xyz_to_cam: dem.xyz_to_cam,
             },
         ));
     }
-    let DemosaicOut { mut rgb16, w: out_w, h: out_h, iso, make, model, orientation, lens_model_meta, focal_meta } = dem;
+    let DemosaicOut { mut rgb16, w: out_w, h: out_h, iso, make, model, orientation, lens_model_meta, focal_meta, xyz_to_cam } = dem;
+
+    // High-tier neural NR (see NrTier doc). Runs BEFORE false-color suppression/hue-defringe
+    // (noise creates spurious local contrast that would make those gates over-fire) and BEFORE
+    // orientation/lens (both conditional/user-toggled — sitting before them means the expensive
+    // ~25-90s denoise result is invariant to those toggles, so flipping "auto lens" replays only
+    // the cheap tail instead of a full re-denoise). Off/Fast are completely unaffected by this
+    // block (it's gated strictly on High), preserving byte-identical behavior for both — verified
+    // in examples/denoise_probe.rs's colour round-trip and by a dedicated CS_NR_TIER=fast
+    // bit-exactness check against a pre-change dump (see the denoiser design doc §A6).
+    if nr == NrTier::High && !fast {
+        if xyz_to_cam == [[0.0; 3]; 3] {
+            eprintln!("raw_decode: skipping High-tier neural NR — no camera colour matrix available for this file");
+        } else {
+            rgb16 = rawdenoise::denoise_frame_high(&rgb16, out_w, out_h, xyz_to_cam, high_strength, progress, cancel)?;
+        }
+    }
 
     // 4.5) False-color suppression (DEFAULT ON; CS_NO_FALSE_COLOR=1 is the diagnostic escape
     // hatch). Fixes the user-reported green speckle on sunlit-water sparkle: PPG demosaic
@@ -417,13 +545,14 @@ pub fn decode_rw2_bytes(
         }
     }
 
-    // 6/7) Native (Rust) noise reduction — user-toggleable (default on) via the "RAW Noise
-    //    Reduction" switch in the Noise Reduction panel. Both passes run on true-linear data,
+    // 6/7) Native (Rust) noise reduction — user-toggleable (default Fast) via the "RAW Noise
+    //    Reduction" select in the Noise Reduction panel. Both passes run on true-linear data,
     //    before any tone curve, which is why they can't live in the WebGL NR sliders (see each
-    //    function's doc comment) — but that also means the toggle can't be live, only apply on
+    //    function's doc comment) — but that also means the tier can't be live, only apply on
     //    the next decode. Off entirely reproduces the untouched decode, for comparison or if a
-    //    photo needs its own manual grain/detail instead.
-    if native_nr && !fast {
+    //    photo needs its own manual grain/detail instead. Fast and High both run these two
+    //    passes identically (only High additionally ran the neural pass above, before this).
+    if nr != NrTier::Off && !fast {
         // Diagnostic escape hatch (mirrors CS_NO_CHROMA_NR inside the wavelet pass): lets the
         // calib harness isolate each pass's contribution — CS_NO_CHROMA_NR only disables the
         // wavelet, so the shadow pass alone had never been isolatable before this. Unset in

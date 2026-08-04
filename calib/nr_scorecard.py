@@ -33,6 +33,17 @@ Two checks, not one:
 
 Run: python calib/nr_scorecard.py --lr-no-nr a.tif --lr-default-nr b.tif \
                                    --cs-no-nr c.tif --cs-default-nr d.tif
+
+Optional THIRD pair, --cs-high / --lr-denoise: validates the High tier (RawNIND neural
+denoiser) against Lightroom's own AI Denoise checkbox, instead of against Manual NR — Denoise
+is the actually-comparable tool (see nr_validate.py's module doc for the full reasoning: High
+denoises luma at all brightness by design, so comparing it to Manual NR's classical, luma-
+sparing behaviour would be the wrong bar). Reuses the exact same patch-detection and std-ratio
+machinery as the Manual-NR check above (still anchored on --lr-no-nr's own flat patches — one
+detection pass covers both comparisons), and prints as its own MATCH/MISS table with the same
+TOL_RATIO tolerance — but does NOT affect this script's exit code, since (unlike the Manual-NR
+comparison) there's no prior data to say what tolerance is actually right for a neural denoiser
+vs Denoise. Read the numbers, don't gate on them yet.
 """
 import argparse
 import sys
@@ -134,8 +145,12 @@ def main():
     ap.add_argument('--lr-default-nr', required=True)
     ap.add_argument('--cs-no-nr', required=True)
     ap.add_argument('--cs-default-nr', required=True)
+    ap.add_argument('--cs-high', default=None, help='Chromasmith export, High-tier (neural) noise reduction ON')
+    ap.add_argument('--lr-denoise', default=None, help='Lightroom export, AI Denoise checkbox ON')
     ap.add_argument('--n-patches', type=int, default=N_PATCHES)
     args = ap.parse_args()
+    if bool(args.cs_high) != bool(args.lr_denoise):
+        ap.error('--cs-high and --lr-denoise must be given together (both or neither)')
 
     imgs = {
         'lr_no': load(args.lr_no_nr),
@@ -143,6 +158,9 @@ def main():
         'cs_no': load(args.cs_no_nr),
         'cs_def': load(args.cs_default_nr),
     }
+    if args.cs_high:
+        imgs['cs_high'] = load(args.cs_high)
+        imgs['lr_denoise'] = load(args.lr_denoise)
     planes = {k: to_ycbcr(v) for k, v in imgs.items()}  # (y, cb, cr) per image
 
     ref_y = planes['lr_no'][0]
@@ -154,12 +172,15 @@ def main():
 
     header = f"{'patch (luma)':<16}{'ch':>3}{'LR noNR':>10}{'CS noNR':>10}{'Δ%':>7}  {'decode':<6}" \
              f"{'LR defNR':>10}{'CS defNR':>10}{'Δ%':>7}  {'nr-match':<8}"
+    if args.cs_high:
+        header += f"  {'LR denoise':>10}{'CS High':>10}{'Δ%':>7}  {'high-match':<8}"
     print(header)
     print('-' * len(header))
 
     n_pass_decode = n_fail_decode = 0
     n_pass_nr = n_fail_nr = 0
-    decode_ratios, nr_ratios = [], []
+    n_pass_high = n_fail_high = 0
+    decode_ratios, nr_ratios, high_ratios = [], [], []
 
     for i, rn in enumerate(rects_n):
         patch_luma = ref_y[rect_denorm(rn, ref_y.shape)[0]:rect_denorm(rn, ref_y.shape)[0] + rect_denorm(rn, ref_y.shape)[2],
@@ -184,11 +205,20 @@ def main():
             n_fail_nr += not n_ok
             nr_ratios.append(results['cs_def'] / max(results['lr_def'], 1e-9))
 
-            print(f"{row_label:<16}{ch_name:>3}"
-                  f"{results['lr_no']*1000:>10.2f}{results['cs_no']*1000:>10.2f}{d_err*100:>6.0f}%"
-                  f"  {'OK' if d_ok else 'OFF':<6}"
-                  f"{results['lr_def']*1000:>10.2f}{results['cs_def']*1000:>10.2f}{n_err*100:>6.0f}%"
-                  f"  {'MATCH' if n_ok else 'MISS':<8}")
+            row = (f"{row_label:<16}{ch_name:>3}"
+                   f"{results['lr_no']*1000:>10.2f}{results['cs_no']*1000:>10.2f}{d_err*100:>6.0f}%"
+                   f"  {'OK' if d_ok else 'OFF':<6}"
+                   f"{results['lr_def']*1000:>10.2f}{results['cs_def']*1000:>10.2f}{n_err*100:>6.0f}%"
+                   f"  {'MATCH' if n_ok else 'MISS':<8}")
+            if args.cs_high:
+                h_err = abs(results['cs_high'] - results['lr_denoise']) / max(results['lr_denoise'], 1e-6)
+                h_ok = (1 / TOL_RATIO) <= (results['cs_high'] / max(results['lr_denoise'], 1e-9)) <= TOL_RATIO
+                n_pass_high += h_ok
+                n_fail_high += not h_ok
+                high_ratios.append(results['cs_high'] / max(results['lr_denoise'], 1e-9))
+                row += (f"  {results['lr_denoise']*1000:>10.2f}{results['cs_high']*1000:>10.2f}"
+                        f"{h_err*100:>6.0f}%  {'MATCH' if h_ok else 'MISS':<8}")
+            print(row)
 
     print(f"\nstd values x1000, whole-patch mean-subtracted, linear-ish display-space (as loaded)")
     print(f"\nDecode-floor check (CS noNR vs LR noNR): {n_pass_decode} OK / {n_fail_decode} OFF "
@@ -198,6 +228,13 @@ def main():
     print(f"\nNR-match check (CS defaultNR vs LR defaultNR): {n_pass_nr} MATCH / {n_fail_nr} MISS")
     print(f"  median ratio CS/LR = {np.median(nr_ratios):.2f}x "
           f"({'CS under-reduces (still noisier than LR)' if np.median(nr_ratios) > 1.1 else ('CS over-smooths vs LR' if np.median(nr_ratios) < 0.9 else 'comparable to LR')})")
+
+    if args.cs_high:
+        print(f"\nHIGH-TIER check (CS High vs LR Denoise) — INFORMATIONAL, does NOT affect exit code:")
+        print(f"  {n_pass_high} MATCH / {n_fail_high} MISS (tolerance: within {TOL_RATIO}x, same as above —")
+        print(f"  not a validated threshold for this comparison yet, see module doc)")
+        print(f"  median ratio CS/LR = {np.median(high_ratios):.2f}x "
+              f"({'CS under-reduces vs LR Denoise' if np.median(high_ratios) > 1.1 else ('CS over-smooths vs LR Denoise' if np.median(high_ratios) < 0.9 else 'comparable to LR Denoise')})")
 
     # Own-pipeline reduction, for context (this is the number previously reported —
     # now shown alongside the real LR comparison instead of standing alone).

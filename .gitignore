@@ -37,6 +37,10 @@ Fujify Luts and XMP/
 # see calib/dehancer_probe.py / dehancer_extract_films.py)
 calib/dehancer/
 
+# nr_validate.py's dump_rw2 output cache (CS_DUMP_DIR default) — regenerate with dump_rw2, not
+# meant to be committed.
+calib/nr_dump/
+
 # iOS shell (Capacitor): www/ is staged by build-ios.sh; node_modules restored by npm ci.
 # The ios/ project IS committed (ios/.gitignore covers its build products/Pods/public).
 node_modules/
@@ -51,4 +55,7 @@ desktop/src-tauri/target/
 # over GitHub's 100MB hard push limit (no Git LFS set up for this repo) — see
 # desktop/src-tauri/vendor/sam2/README.md for the exact download commands to re-fetch these.
 desktop/src-tauri/vendor/sam2/*.onnx
+# RawNIND UtNet2 raw denoiser (GPL-3.0 weights — see vendor/rawdenoise/README.md): ~30MB each,
+# re-fetched from the darktable-ai release rather than committed, same rationale as sam2/ above.
+desktop/src-tauri/vendor/rawdenoise/*.onnx
 test/output/

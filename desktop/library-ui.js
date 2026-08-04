@@ -357,8 +357,12 @@
     /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
        photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
-    .lib-thumb-wrap{aspect-ratio:1.3;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden}
-    .lib-thumb-wrap img{width:100%;height:100%;object-fit:contain;display:block}
+    .lib-thumb-wrap{aspect-ratio:1;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    /* Real thumbnails fade in over the skeleton/empty cell instead of popping in the instant
+       get_thumbnail resolves — .loaded is added by the thumb pool once the blob URL is set. */
+    #lib-grid:not(.list-view) .lib-thumb-wrap img{opacity:0;transition:opacity .15s ease}
+    #lib-grid:not(.list-view) .lib-thumb-wrap img.loaded{opacity:1}
     .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:var(--mut);
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-tagrow{display:flex;align-items:center;gap:6px;padding:0 6px 6px}
@@ -375,17 +379,6 @@
     .lib-flags{display:flex;gap:3px}
     .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity .1s ease}
     .lib-flag.on{opacity:1;filter:none}
-    /* Same reveal-on-hover/reveal-if-set treatment as .lib-flags above, mirrored to the
-       opposite corner so the two overlay chips never collide. */
-    #lib-grid:not(.list-view) .lib-rating{position:absolute;top:4px;left:4px;display:flex;gap:1px;z-index:3;
-      background:rgba(0,0,0,.55);border-radius:5px;padding:2px 4px;
-      opacity:0;transition:opacity .12s ease}
-    #lib-grid:not(.list-view) .lib-card:hover .lib-rating,
-    #lib-grid:not(.list-view) .lib-rating:has(.lib-rating-star.on){opacity:1}
-    #lib-grid.list-view .lib-rating{position:static;background:none;opacity:1;padding:0}
-    .lib-rating{display:flex;gap:1px}
-    .lib-rating-star{cursor:pointer;font-size:10px;opacity:.4;color:var(--mut);transition:opacity .1s ease,color .1s ease}
-    .lib-rating-star.on{opacity:1;color:var(--acc)}
     .lib-thumb-wrap img.thumb-error{opacity:0}
     .lib-thumb-wrap.thumb-broken::after{content:'⚠';position:absolute;top:50%;left:50%;
       transform:translate(-50%,-50%);color:var(--mut);font-size:16px}
@@ -422,9 +415,6 @@
     .lib-cmp-canvas-wrap{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
     .lib-cmp-canvas-wrap canvas{max-width:100%;max-height:100%;transform-origin:center center}
     .lib-cmp-chrome{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--bdr);font-size:12px}
-    .lib-cmp-stars{display:flex;gap:2px;cursor:pointer;user-select:none}
-    .lib-cmp-star{opacity:.35;font-size:13px}
-    .lib-cmp-star.on{opacity:1;color:var(--acc)}
     .lib-cmp-chrome .lib-flag{width:20px;height:20px;display:flex;align-items:center;justify-content:center;
       border-radius:5px;cursor:pointer;opacity:.6}
     .lib-cmp-chrome .lib-flag.on,.lib-cmp-chrome .lib-flag:hover{opacity:1;background:var(--bdr)}
@@ -534,12 +524,6 @@
             <option value="edited">Edited</option>
             <option value="noedited">Not edited</option>
             <option value="favorite">Favorites</option>
-            <option value="unrated">Unrated</option>
-            <option value="rated1">★ 1+</option>
-            <option value="rated2">★ 2+</option>
-            <option value="rated3">★ 3+</option>
-            <option value="rated4">★ 4+</option>
-            <option value="rated5">★ 5</option>
           </select>
           <button class="lib-btn" id="lib-filters-clear">Clear all</button>
         </div>
@@ -560,7 +544,6 @@
         <option value="shutter">Shutter speed</option>
         <option value="aperture">Aperture</option>
         <option value="focal">Focal length</option>
-        <option value="rating">Rating</option>
         <option value="camera">Camera</option>
         <option value="edited">Edit status</option>
         <option value="editedts">Date edited</option>
@@ -591,14 +574,13 @@
         <div class="lib-lh-cell" data-sort="shutter">Shutter</div>
         <div class="lib-lh-cell" data-sort="aperture">Aperture</div>
         <div class="lib-lh-cell" data-sort="focal">Focal</div>
-        <div class="lib-lh-cell" data-sort="rating">Rating</div>
         <div class="lib-lh-cell lib-lh-flags">Flags</div>
         <div class="lib-lh-cell" data-sort="edited">Edited</div>
       </div>
       <div id="lib-grid"></div>
       <div id="lib-compare"></div>
     </div>
-    <div id="lib-bottom"><span style="font-size:11px;color:var(--mut)" id="lib-count"></span></div>
+    <div id="lib-bottom"><span style="font-size:11px;color:var(--mut)" id="lib-count"></span><span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span></div>
   `;
   // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
   // body-level overlay — see the big comment above the style block. .fx-layout already exists
@@ -654,7 +636,10 @@
     // distortion-correction geometry baked into the cached JPEG just like autoLens does, so it
     // was missing here: switching manual lenses used to silently serve a stale cache decoded
     // with the PREVIOUS lens's correction.
-    return [profile, window.chromasmithNativeNr !== false ? 1 : 0,
+    // Fast and High are DECODE-TIME identical (High's extra neural pass runs out of band via
+    // denoise_raw_high, never through decode_raw_v2 — see raw_decode.rs's NrTier) — the disk
+    // cache only needs to distinguish Off from not-Off, same 2-way key as the old boolean.
+    return [profile, window.chromasmithRawNr !== 'off' ? 1 : 0,
       window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0,
       window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0].join('|');
   }
@@ -721,6 +706,16 @@
   // drop target can tell folders and photos apart without the browser's limited File API. Files
   // (or a probe failure) fall through to opening them as a photo batch, mirroring a multi-select
   // batch open.
+  //
+  // ⚠️ The actual OS→app handoff now happens in wireNativeFileDrop() below, NOT here. WKWebView
+  // (macOS) never populates File.path on an HTML5 drop — a browser security restriction, not a
+  // Tauri bug — so with dragDropEnabled:false this function used to hit "Could not read the
+  // dropped file path(s)" on every drop. tauri.conf.json now sets dragDropEnabled:true, which
+  // routes OS file drags through Tauri's native tauri://drag-drop event (real absolute paths)
+  // instead of the DOM 'drop' event, so this handler only fires for the (documented) fallback
+  // case where the native path is unavailable — e.g. LIBTEST's browser harness. Kept, rather
+  // than deleted, purely as that fallback; it no longer needs a "give up" toast because the
+  // native listener is the one actually doing the work in the shipped app.
   function wireGridFileDrop() {
     const gridEl = document.getElementById('lib-grid');
     if (!gridEl) return;
@@ -740,14 +735,65 @@
       const files = Array.from(e.dataTransfer.files || []);
       if (!files.length) return;
       const paths = files.map((f) => f.path).filter(Boolean);
-      if (!paths.length) { toast('Could not read the dropped file path(s) — try 📁 instead', false); return; }
-      if (paths.length === 1) {
-        try {
-          const listing = await invoke('list_dir', { path: paths[0] });
-          if (Array.isArray(listing)) { await importDroppedFolder(paths[0]); return; }
-        } catch (err) { /* not a directory — fall through to opening it as a photo */ }
-      }
-      await openPathsInEditor(paths);
+      if (!paths.length) return; // no usable path here — wireNativeFileDrop already handled it
+      await handleLibraryDrop(paths);
+    });
+  }
+  // Shared by both the DOM fallback above and the native listener below.
+  async function handleLibraryDrop(paths) {
+    if (state.source === 'lr') return; // cloud album view has nowhere local to import into
+    if (paths.length === 1) {
+      try {
+        const listing = await invoke('list_dir', { path: paths[0] });
+        if (Array.isArray(listing)) { await importDroppedFolder(paths[0]); return; }
+      } catch (err) { /* not a directory — fall through to opening it as a photo */ }
+    }
+    await openPathsInEditor(paths);
+  }
+  // ── Native OS file drag&drop bridge ───────────────────────────────────────────────────────
+  // dragDropEnabled:true (tauri.conf.json) makes Tauri itself watch the OS-level drag session
+  // and hands real absolute paths to the frontend via tauri://drag-over/-drop/-leave, instead of
+  // letting the browser's own HTML5 DnD receive it (which is what exposed the missing-.path bug
+  // above). This ONE listener serves every drop target in the app — the Library grid AND every
+  // editor drop zone in chromasmith-22.html (.dz elements: before/after, Match&Refine source/
+  // ref, LUT/preset start, FX image/LUT, canvas photo tray, Lightroom-handoff dev zones) — by
+  // hit-testing the drop position against the DOM, then either running the Library import path
+  // directly or reconstructing File objects (via readPathsAsFiles, same helper openPathsInEditor
+  // uses) and feeding them into each zone's EXISTING handler (dzd/clDropFiles/loadFXImages) so
+  // none of those handlers had to change. In-page drags (mask reorder, filmstrip/canvas-tray
+  // drag, card→sidebar drag) are unaffected: they never put a file:// URL on the OS pasteboard,
+  // so Tauri's native watcher has nothing to intercept and plain HTML5 dragstart/drop keeps
+  // handling them exactly as before.
+  function wireNativeFileDrop() {
+    if (LIBTEST || !window.__TAURI__ || !window.__TAURI__.event) return; // nothing real to listen to
+    const dpr = () => window.devicePixelRatio || 1;
+    let overEl = null;
+    const clearOver = () => { if (overEl) { overEl.classList.remove('over', 'lib-dragover'); overEl = null; } };
+    // Tauri's drag position is in PHYSICAL window pixels; elementFromPoint wants CSS (logical)
+    // pixels, hence the devicePixelRatio divide.
+    const dzAt = (payload) => {
+      const pos = payload && payload.position;
+      if (!pos) return null;
+      const el = document.elementFromPoint(pos.x / dpr(), pos.y / dpr());
+      return el && el.closest ? el.closest('.dz, #lib-grid') : null;
+    };
+    window.__TAURI__.event.listen('tauri://drag-over', (e) => {
+      clearOver();
+      const dz = dzAt(e.payload);
+      if (dz) { dz.classList.add(dz.id === 'lib-grid' ? 'lib-dragover' : 'over'); overEl = dz; }
+    });
+    window.__TAURI__.event.listen('tauri://drag-leave', clearOver);
+    window.__TAURI__.event.listen('tauri://drag-drop', async (e) => {
+      const dz = dzAt(e.payload);
+      clearOver();
+      const paths = (e.payload && e.payload.paths) || [];
+      if (!dz || !paths.length) return;
+      if (dz.id === 'lib-grid') { await handleLibraryDrop(paths); return; }
+      const files = await readPathsAsFiles(paths);
+      if (!files.length) return;
+      const fakeEvent = { preventDefault() {}, currentTarget: dz, dataTransfer: { files } };
+      if (dz.id === 'cl-dz') { if (typeof clDropFiles === 'function') clDropFiles(fakeEvent); return; }
+      if (typeof dzd === 'function') dzd(fakeEvent, dz.id.replace(/^dz-/, ''));
     });
   }
 
@@ -904,11 +950,13 @@
       // every single job and _thumbActive never even incremented).
       if (job.gen !== _thumbGen || !job.imgEl.isConnected) continue; // grid was rebuilt — skip
       _thumbActive++;
+      updateThumbProgress();
       invoke('get_thumbnail', { path: job.path })
         .then((buf) => {
           if (job.imgEl.isConnected) {
             const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
             job.imgEl.src = url;
+            job.imgEl.classList.add('loaded');
             _thumbUrlsThisGen.push(url);
           }
         })
@@ -923,6 +971,8 @@
         .finally(() => {
           if (_thumbIO) _thumbIO.unobserve(job.imgEl);
           _thumbActive--;
+          _thumbDoneCount++;
+          updateThumbProgress();
           _thumbPump();
           // Batch settled (this generation's queue drained and no job still in flight): show
           // ONE summary toast if anything failed, instead of a silent per-thumbnail CSS class.
@@ -932,6 +982,16 @@
           }
         });
     }
+  }
+  // Small "Loading photos… N/M" readout in the bottom bar while the thumb pool is still
+  // draining a large folder — cleared once every job in this generation has settled (loaded or
+  // failed), so it never lingers after a folder finishes loading.
+  let _thumbDoneCount = 0;
+  function updateThumbProgress() {
+    const el = document.getElementById('lib-thumb-progress');
+    if (!el) return;
+    if (_thumbDoneCount >= _thumbTotalCount || _thumbTotalCount < 8) { el.textContent = ''; return; }
+    el.textContent = `Loading photos… ${_thumbDoneCount}/${_thumbTotalCount}`;
   }
   function loadThumb(path, imgEl) {
     _thumbQueue.push({ path, imgEl, visible: false, gen: _thumbGen });
@@ -950,7 +1010,9 @@
     _thumbUrlsThisGen = [];
     _thumbFailCount = 0;
     _thumbTotalCount = 0;
+    _thumbDoneCount = 0;
     _thumbFailToastShown = false;
+    updateThumbProgress();
   }
 
   // Small orange pen icon for the "edited" corner badge — replaces the old EDITED text pill.
@@ -1061,11 +1123,14 @@
     // RAW Noise Reduction is baked into the native decode itself (not a live shader term), so
     // it must be per-PHOTO, not one global switch bleeding into whatever you open next — peek
     // the sidecar's saved recipe BEFORE decoding (not after, like the rest of applyUISnapshot)
-    // so window.chromasmithNativeNr is already correct when the decode shim reads it. Falls
-    // back to the app-wide default (true) for a photo with no saved recipe yet.
+    // so window.chromasmithRawNr is already correct when the decode shim reads it (open() only
+    // ever sends 'off'/'fast' to decode_raw_v2 — High runs later via denoise_raw_high, never
+    // automatically). Falls back to the app-wide default (Fast) for a photo with no saved
+    // recipe yet. ⚠️ Deliberately NEVER defaults to High here, sidecar or no — High must only
+    // ever be reached by an explicit user action (the Denoise-now button) or at export.
     const sc = await getSidecar(path);
-    let nativeNrForThisPhoto;
-    try { nativeNrForThisPhoto = localStorage.getItem('chromasmithNativeNr') !== '0'; } catch (e) { nativeNrForThisPhoto = true; }
+    let rawNrForThisPhoto;
+    try { rawNrForThisPhoto = localStorage.getItem('chromasmithRawNr') || (localStorage.getItem('chromasmithNativeNr') === '0' ? 'off' : 'fast'); } catch (e) { rawNrForThisPhoto = 'fast'; }
     // Same decode-time-baked, per-photo reasoning as nativeNr above — the RAW demosaic
     // algorithm choice ("" Standard / "ahd" Sparkle-optimized) must also be peeked from the
     // sidecar BEFORE decoding, not restored afterward like the rest of applyUISnapshot.
@@ -1074,7 +1139,10 @@
     if (sc.recipe) {
       try {
         const snap = snapshotFromB64(sc.recipe);
-        if (snap.nativeNr !== undefined) nativeNrForThisPhoto = snap.nativeNr;
+        // rawNr is authoritative; nativeNr (older sidecars) maps Off/Fast only — an old recipe
+        // can never have meant High, since that tier didn't exist when it was saved.
+        if (snap.rawNr !== undefined) rawNrForThisPhoto = snap.rawNr;
+        else if (snap.nativeNr !== undefined) rawNrForThisPhoto = snap.nativeNr ? 'fast' : 'off';
         if (snap.demosaicAlgo !== undefined) demosaicAlgoForThisPhoto = snap.demosaicAlgo;
       } catch (e) {
         if (typeof log === 'function') log(`Recipe parse failed for ${path}: ${e}`, 'warn');
@@ -1082,7 +1150,11 @@
         /* fall through to default */
       }
     }
-    window.chromasmithNativeNr = nativeNrForThisPhoto;
+    // Carries the TRUE saved tier, including 'high', so the NR panel's select and Denoise-now
+    // button correctly reflect the photo's own saved preference — NativeLibRawShim.open() does
+    // its OWN clamp to 'off'/'fast' before ever talking to decode_raw_v2 (see its comment), so
+    // setting the real value here does not risk an automatic High-tier decode.
+    window.chromasmithRawNr = rawNrForThisPhoto;
     window.chromasmithDemosaicAlgo = demosaicAlgoForThisPhoto;
     // Persistent decode cache ("photos re-decode on every relaunch"): the in-memory imgCache
     // above only survives within THIS session. For a RAW that isn't in it (first open, or a
@@ -1471,6 +1543,25 @@
     } catch (e) { /* best-effort */ }
   }
 
+  // ── scroll-position persistence ───────────────────────────────────────────────────────────
+  // openFolder() rebuilds #lib-grid from scratch (grid.innerHTML = libSkeletonHtml()) on every
+  // call, INCLUDING re-opening the same folder — e.g. toggleLibrary() re-runs openFolder every
+  // time the dock is shown again, so simply editing a photo and coming back used to always land
+  // back at the top of the grid. Keyed by folder path (not a single "last scroll") so hopping
+  // between folders in the tree/recents doesn't clobber each folder's own position.
+  const scrollByFolder = new Map();
+  function wireScrollPersist() {
+    const libMain = document.getElementById('lib-main');
+    if (!libMain) return;
+    let raf = 0;
+    libMain.addEventListener('scroll', () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (state.currentFolder) scrollByFolder.set(state.currentFolder, libMain.scrollTop);
+      });
+    }, { passive: true });
+  }
   async function openFolder(path) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
@@ -1497,6 +1588,8 @@
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     state.dupeClusters.clear(); state.dupeClusterSizes.clear();
     await renderGrid();
+    const libMain = document.getElementById('lib-main');
+    if (libMain) libMain.scrollTop = scrollByFolder.get(path) || 0;
     if (typeof renderCollections === 'function') renderCollections(); // drop stale collection/album highlight
     // Duplicate detection + sync-status backfill run in the background, gated on the same
     // openToken so a fast folder switch never lets stale results overwrite the new grid.
@@ -1533,7 +1626,6 @@
       case 'shutter': return (m.shutter || '').startsWith('1/') ? -1 / parseFloat(m.shutter.slice(2) || '1') : parseFloat(m.shutter) || 0;
       case 'aperture': return parseFloat((m.aperture || '').replace('f/', '')) || 0;
       case 'focal': return parseFloat(m.focal_len || '') || 0;
-      case 'rating': return (state.sidecars.get(entry.path) || {}).rating || 0;
       case 'edited': return sc.edited ? 1 : 0;
       case 'editedts': return entry.edited_ts || 0;
       case 'camera': return (m.camera || '').toLowerCase();
@@ -1574,8 +1666,6 @@
     if (state.tagFilter === 'edited' && !sc.edited) return false;
     if (state.tagFilter === 'noedited' && sc.edited) return false;
     if (state.tagFilter === 'favorite' && !sc.favorite) return false;
-    if (state.tagFilter === 'unrated' && (sc.rating || 0) > 0) return false;
-    if (state.tagFilter.startsWith('rated') && (sc.rating || 0) < parseInt(state.tagFilter.slice(5), 10)) return false;
     return true;
   }
 
@@ -1616,29 +1706,6 @@
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite);
     renderCollectionCounts();
-  }
-  // Star rating (0-5) — was previously reachable only from Compare mode (see
-  // .lib-cmp-stars/syncCompareChrome below); this is the same mutation the grid's own star row
-  // and the 0-5 keyboard shortcut now use, so all three stay in sync.
-  async function setRating(path, rating) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
-    const updated = { ...cur, rating };
-    state.sidecars.set(path, updated);
-    await invoke('set_sidecar', { path, rating, label: updated.label, edited: updated.edited, favorite: updated.favorite })
-      .catch((e) => sidecarWriteFailed(path, cur, e));
-    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) {
-      const row = card.querySelector('.lib-rating');
-      if (row) syncRatingRow(row, rating);
-    }
-  }
-  function ratingHtml(rating) {
-    return `<div class="lib-rating">${[1, 2, 3, 4, 5].map((n) => `<span class="lib-rating-star${n <= (rating || 0) ? ' on' : ''}" data-n="${n}">★</span>`).join('')}</div>`;
-  }
-  function syncRatingRow(row, rating) {
-    row.querySelectorAll('.lib-rating-star').forEach((star) => {
-      star.classList.toggle('on', parseInt(star.dataset.n, 10) <= (rating || 0));
-    });
   }
   // Exposed so the main editor toolbar (chromasmith-22.html's top bar) can flag the
   // CURRENTLY OPEN photo without needing the Library panel open — same underlying
@@ -2074,12 +2141,10 @@
           <div class="lib-col">${esc(m.shutter)}</div>
           <div class="lib-col">${esc(m.aperture)}</div>
           <div class="lib-col">${esc(m.focal_len)}</div>
-          ${ratingHtml(sc.rating)}
           <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
           <div class="lib-col">${sc.edited ? 'Yes' : ''}</div>`;
       } else {
         card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt="">${metaStripHtml(entry)}
-            ${ratingHtml(sc.rating)}
             <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
           </div>
           ${sc.edited ? EDITED_BADGE_HTML : ''}
@@ -2122,16 +2187,17 @@
           setLabel(entry.path, cur.label === which ? '' : which); // click same flag again to clear
         };
       });
-      card.querySelectorAll('.lib-rating-star').forEach((star) => {
-        star.onclick = (e) => {
-          e.stopPropagation();
-          const cur = state.sidecars.get(entry.path) || { rating: 0 };
-          const n = parseInt(star.dataset.n, 10);
-          setRating(entry.path, cur.rating === n ? 0 : n); // click same star again to clear
-        };
-      });
     });
-    if (!shown.length) grid.innerHTML = '<div id="lib-empty">No photos match this filter in this folder.</div>';
+    if (!shown.length && state.entries.length) {
+      // Only the richer "nothing matches" message when a filter/search actually hid photos —
+      // an empty FOLDER (state.entries.length === 0) gets its own message below instead.
+      grid.innerHTML = '<div id="lib-empty">No photos match the current filters.<br>'
+        + '<a id="lib-empty-clear" style="color:var(--acc);cursor:pointer;text-decoration:underline">Clear filters</a></div>';
+      const clearLink = document.getElementById('lib-empty-clear');
+      if (clearLink) clearLink.onclick = () => clearAllLibFilters();
+    } else if (!shown.length) {
+      grid.innerHTML = '<div id="lib-empty">No photos in this folder.</div>';
+    }
     document.getElementById('lib-count').textContent = state.selected.size
       ? `${state.selected.size} selected — ${shown.length} of ${state.entries.length} photo(s)`
       : `${shown.length} of ${state.entries.length} photo(s)`;
@@ -2191,7 +2257,6 @@
         </div>
         <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
         <div class="lib-cmp-chrome">
-          <div class="lib-cmp-stars" data-pane="${which}"></div>
           <div class="lib-flag" data-pane="${which}" data-flag="Green" title="Pick">🚩</div>
           <div class="lib-flag" data-pane="${which}" data-flag="Red" title="Reject">✕</div>
           <div class="lib-flag" data-pane="${which}" data-flag="Favorite" title="Favorite">♡</div>
@@ -2233,20 +2298,6 @@
         syncCompareChrome(which);
       };
     });
-    host.querySelectorAll('.lib-cmp-stars').forEach((row) => {
-      row.innerHTML = [1, 2, 3, 4, 5].map((n) => `<span class="lib-cmp-star" data-n="${n}">★</span>`).join('');
-      row.querySelectorAll('.lib-cmp-star').forEach((star) => {
-        star.onclick = async () => {
-          const which = row.dataset.pane;
-          const path = comparePathForIdx(compareState[which === 'A' ? 'paneA' : 'paneB'].idx);
-          if (!path) return;
-          const cur = state.sidecars.get(path) || { rating: 0 };
-          const n = parseInt(star.dataset.n, 10);
-          await setRating(path, cur.rating === n ? 0 : n); // click same star again to clear
-          syncCompareChrome(which);
-        };
-      });
-    });
     syncCompareChrome('A'); syncCompareChrome('B');
     setupCompareZoomPan();
   }
@@ -2258,9 +2309,6 @@
     const sc = state.sidecars.get(path) || { rating: 0, label: '', favorite: false };
     host.querySelectorAll(`.lib-cmp-photo-sel[data-pane="${which}"]`).forEach((sel) => { sel.value = String(p.idx); });
     host.querySelectorAll(`.lib-cmp-src-sel[data-pane="${which}"]`).forEach((sel) => { sel.value = p.srcKey; });
-    host.querySelectorAll(`.lib-cmp-stars[data-pane="${which}"] .lib-cmp-star`).forEach((star) => {
-      star.classList.toggle('on', parseInt(star.dataset.n, 10) <= (sc.rating || 0));
-    });
     host.querySelectorAll(`.lib-flag[data-pane="${which}"]`).forEach((flag) => {
       const f = flag.dataset.flag;
       flag.classList.toggle('on', f === 'Favorite' ? !!sc.favorite : sc.label === f);
@@ -2395,6 +2443,8 @@
   };
   overlay.querySelector('#lib-pick').onclick = pickFolder;
   wireGridFileDrop();
+  wireNativeFileDrop();
+  wireScrollPersist();
   overlay.querySelector('#lib-gphotos').onclick = () => {
     // gpImportClick lives in chromasmith-22.html (the web-app half); it's exposed on window.
     if (typeof window.gpImportClick === 'function') window.gpImportClick();
@@ -2522,14 +2572,22 @@
     if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
     if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
     if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
-    if (e.key >= '0' && e.key <= '5' && kbTargets().length) {
-      const n = parseInt(e.key, 10);
-      kbTargets().forEach((p) => setRating(p, n));
-      return;
-    }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
   });
+  // Shared by the Filters popover's "Clear all" button AND the empty-grid "Clear filters" link
+  // (renderGrid's no-matches state) — one place so the two can't drift on what "clear" means.
+  // Also resets the search box: a search term hiding every photo is as much a "filter" to a
+  // user staring at an empty grid as the dropdowns are.
+  function clearAllLibFilters() {
+    FILTER_SELECT_IDS.forEach((id) => { const sel = document.getElementById(id); if (sel) sel.value = 'all'; });
+    state.typeFilter = 'all'; state.cameraFilter = 'all'; state.lensFilter = 'all'; state.isoFilter = 'all';
+    state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all';
+    const searchEl = document.getElementById('lib-search');
+    if (searchEl) searchEl.value = '';
+    state.search = '';
+    renderGrid();
+  }
   overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; renderGrid(); };
@@ -2565,12 +2623,7 @@
   document.addEventListener('click', (e) => {
     if (filtersPop.classList.contains('on') && !filtersPop.contains(e.target) && e.target !== filtersBtn) filtersPop.classList.remove('on');
   });
-  overlay.querySelector('#lib-filters-clear').onclick = () => {
-    FILTER_SELECT_IDS.forEach((id) => { const sel = document.getElementById(id); if (sel) sel.value = 'all'; });
-    state.typeFilter = 'all'; state.cameraFilter = 'all'; state.lensFilter = 'all'; state.isoFilter = 'all';
-    state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all';
-    renderGrid();
-  };
+  overlay.querySelector('#lib-filters-clear').onclick = () => clearAllLibFilters();
   let searchDebounce;
   overlay.querySelector('#lib-search').oninput = (e) => {
     clearTimeout(searchDebounce);
@@ -2641,8 +2694,8 @@
   // grid-template-columns string applied to both #lib-list-head and every .lib-card in list
   // mode — a drag handle on a header cell just rewrites the one track that column corresponds
   // to and re-sets the var; the header/rows can never disagree since they share the same var.
-  const LIB_COL_DEFAULTS = { thumb: 52, date: 92, editedts: 92, camera: 132, iso: 56, shutter: 68, aperture: 60, focal: 56, rating: 70, flags: 56, edited: 60 };
-  const LIB_COL_ORDER = ['thumb', 'name', 'date', 'editedts', 'camera', 'iso', 'shutter', 'aperture', 'focal', 'rating', 'flags', 'edited'];
+  const LIB_COL_DEFAULTS = { thumb: 52, date: 92, editedts: 92, camera: 132, iso: 56, shutter: 68, aperture: 60, focal: 56, flags: 56, edited: 60 };
+  const LIB_COL_ORDER = ['thumb', 'name', 'date', 'editedts', 'camera', 'iso', 'shutter', 'aperture', 'focal', 'flags', 'edited'];
   let libColWidths;
   try { libColWidths = { ...LIB_COL_DEFAULTS, ...JSON.parse(localStorage.getItem('chromasmith_lib_cols') || '{}') }; }
   catch (e) { libColWidths = { ...LIB_COL_DEFAULTS }; }

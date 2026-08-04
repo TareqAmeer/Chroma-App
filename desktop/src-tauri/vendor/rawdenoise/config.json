@@ -1,0 +1,41 @@
+{
+    "id": "rawdenoise-nind",
+    "name": "raw denoise nind",
+    "description": "UtNet2 raw denoiser trained on RawNIND (Bayer + linear Rec.2020 variants)",
+    "task": "rawdenoise",
+    "arch": "utnet2",
+    "backend": "onnx",
+    "version": "1.0",
+    "tiling": true,
+    "model_card": {
+        "long_description": "UtNet2 raw denoisers trained on the Raw Natural Image Noise Dataset (RawNIND). Bundles two variants: Bayer and Linear (for X-Trans, Foveon, or any already-demosaicked pipeline)",
+        "scope": "raw and linear-RGB image denoising",
+        "author": "Benoit Brummer (UCLouvain)",
+        "source": "https://github.com/trougnouf/rawnind_jddc",
+        "paper": "https://arxiv.org/abs/2501.08924",
+        "license": "GPL-3.0",
+        "training_data": "RawNIND – real-world raw noise/clean pairs photographed by authors, published on Wikimedia Commons and UCLouvain Dataverse",
+        "training_data_license": "CC BY 4.0 / CC0 (per-image, Wikimedia Commons)",
+        "notes": "all components publicly available under open licenses"
+    },
+    "attributes": {
+        "input_sizes": [
+            512
+        ],
+        "model_bayer": {
+            "input_kind": "bayer_v1",
+            "bayer_orientation": "force_rggb",
+            "edge_pad": "mirror_cropped",
+            "wb_norm": "none",
+            "output_scale": "match_gain"
+        },
+        "model_linear": {
+            "input_kind": "linear_v1",
+            "input_colorspace": "lin_rec2020",
+            "wb_norm": "none",
+            "output_scale": "match_gain",
+            "target_mean": null
+        }
+    },
+    "coreml_format": "mlprogram"
+}

@@ -10,6 +10,10 @@
 // the wasm dbgDumpCam16 dumps so the Python harness reads both identically (and 63x smaller).
 #[path = "../src/lens_correct.rs"]
 mod lens_correct;
+#[path = "../src/sam.rs"]
+mod sam;
+#[path = "../src/rawdenoise.rs"]
+mod rawdenoise;
 #[path = "../src/raw_decode.rs"]
 mod raw_decode;
 
@@ -23,8 +27,19 @@ fn main() {
     }
     let ds: usize = args.get(3).map(|s| s.parse().expect("downscale int")).unwrap_or(1);
     let bytes = std::fs::read(&args[1]).expect("read input");
+    // CS_NR_TIER (off|fast|high) is decode_rw2_bytes's own env-var escape hatch and overrides
+    // whatever's requested here regardless — the plain boolean below preserves this tool's
+    // pre-existing CS_NO_CHROMA_NR-driven default (Fast unless explicitly disabled) for anyone
+    // still using that older flag without also setting CS_NR_TIER.
+    let requested = if std::env::var_os("CS_NO_CHROMA_NR").is_none() { raw_decode::NrTier::Fast } else { raw_decode::NrTier::Off };
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    sam::set_dylib_path(manifest_dir.join("vendor/onnxruntime/libonnxruntime.dylib"));
+    rawdenoise::set_model_paths(manifest_dir.join("vendor/rawdenoise/model_linear.onnx"), manifest_dir.join("vendor/rawdenoise/model_bayer.onnx"));
+    // CS_HIGH_STRENGTH (0-100, default 100) — dev-only override for testing rawdenoise.rs's
+    // blend-toward-original amount without going through the app's UI slider.
+    let high_strength: f32 = std::env::var("CS_HIGH_STRENGTH").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v / 100.0).unwrap_or(1.0);
     let t0 = std::time::Instant::now();
-    let d = raw_decode::decode_rw2_bytes(&bytes, false, std::env::var_os("CS_NO_CHROMA_NR").is_none(), "", false, None).expect("decode");
+    let d = raw_decode::decode_rw2_bytes_ex(&bytes, false, requested, "", false, None, high_strength, None, None).expect("decode");
     eprintln!(
         "{}x{} iso {} decoded in {:.2}s",
         d.width,

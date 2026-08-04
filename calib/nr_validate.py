@@ -26,6 +26,31 @@ Three things measured per app, per luma bucket (shadow/mid/highlight):
 
 PASS/FAIL gates (see thresholds below) on all three, per set. Run:
   python calib/nr_validate.py
+
+── HIGH TIER (RawNIND neural denoiser) vs Lightroom AI Denoise ─────────────────────────────
+The classical FAST-tier comparison above (CS Manual-equivalent shadow+chroma-wavelet passes
+vs LR's Luminance/Color sliders) is unchanged and still the right comparison for Fast — that's
+what it was originally calibrated against. But Fast never touches luma above 15% brightness by
+design (see raw_decode.rs), so Y_RETAIN_MIN=0.80 assumes CS shouldn't smooth luma much — correct
+for Fast, WRONG for High, which is SUPPOSED to denoise luma at all brightness levels. Comparing
+High to Manual NR would be comparing it to the wrong tool entirely (a classical slider vs a
+neural denoiser) — the actually-comparable target is Lightroom's own AI **Denoise** checkbox.
+
+Reuses the same measure() function and the same off-image (both CS tiers and both LR NR modes
+share one no-NR baseline per set — flat patches only need detecting once), but does NOT reuse
+FAST's PASS/FAIL thresholds: those were tuned for a denoiser that doesn't touch luma above 15%,
+and High's characteristics (much stronger luma reduction, different failure modes — see
+rawdenoise.rs's "waxy skin/plastic fur" warning) haven't been measured yet. Reported as an
+INFORMATIONAL table (ratios only, no verdict) until real data justifies real thresholds —
+this project's own stated method is "render-and-look first, validate the mechanism, before
+trusting any number" (CLAUDE.md §10), not asserting a gate ahead of evidence.
+
+Inputs, per set that has them (optional — sets without a `lr_denoise`/`cs_high` pair are
+skipped in this section, so a partial rollout across ISO sets doesn't crash):
+  CS decode HIGH tier    -> {SC}/set{N}_cs_high.bin   (dump_rw2 with CS_NR_TIER=high)
+  Lightroom AI Denoise   -> LR-denoise{N}.tif           (repo root; Denoise checkbox ON,
+                                                          Manual NR sliders irrelevant/ignored)
+Both compared against the SAME lr_no/cs_off baseline the Fast comparison already uses.
 """
 import os
 import numpy as np
@@ -33,23 +58,23 @@ from PIL import Image
 
 Image.MAX_IMAGE_PIXELS = None
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Directory holding the `dump_rw2` outputs `set{N}_cs_off.bin` / `set{N}_cs_on.bin`
-# (RW2 decoded NR-off via CS_NO_CHROMA_NR=1, and NR-on). Override with CS_DUMP_DIR.
-SC = os.environ.get(
-    "CS_DUMP_DIR",
-    "/private/tmp/claude-501/-Users-tareqameer-Documents-GitHub-Chroma-App/90b32845-2d88-4db5-a609-abc7c61ec0f1/scratchpad",
-)
+# Directory holding the `dump_rw2` outputs `set{N}_cs_off.bin` / `set{N}_cs_on.bin` (RW2
+# decoded NR-off via CS_NO_CHROMA_NR=1, and Fast-tier NR-on) and, for the High-tier section
+# below, `set{N}_cs_high.bin` (CS_NR_TIER=high). Override with CS_DUMP_DIR. Defaults to a
+# stable in-repo (gitignored) location rather than a prior session's ephemeral scratchpad path,
+# which wouldn't exist on a fresh run.
+SC = os.environ.get("CS_DUMP_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "nr_dump"))
 
 SETS = {
-    1: dict(iso=12800, lr_no="LR-noNR.tif",  lr_def="LR-defaultNR.tif"),
-    2: dict(iso=5000,  lr_no="LR-noNR2.tif", lr_def="LR-defaultNR2.tif"),
-    3: dict(iso=2000,  lr_no="LR-noNR3.tif", lr_def="LR-defaultNR3.tif"),
-    5: dict(iso=100,   lr_no="LR-noNR5.tif", lr_def="LR-defaultNR5.tif"),
+    1: dict(iso=12800, lr_no="LR-noNR.tif",  lr_def="LR-defaultNR.tif",  lr_denoise="LR-denoise.tif"),
+    2: dict(iso=5000,  lr_no="LR-noNR2.tif", lr_def="LR-defaultNR2.tif", lr_denoise="LR-denoise2.tif"),
+    3: dict(iso=2000,  lr_no="LR-noNR3.tif", lr_def="LR-defaultNR3.tif", lr_denoise="LR-denoise3.tif"),
+    5: dict(iso=100,   lr_no="LR-noNR5.tif", lr_def="LR-defaultNR5.tif", lr_denoise="LR-denoise5.tif"),
     # Added to close the untested 3200-6400 bracket (ISO strength table's middle brackets):
     # set 6 = __TM7997 (ISO 3200), set 7 = __TM6773 (ISO 4000), set 8 = __TM6412 (ISO 6400).
-    6: dict(iso=3200,  lr_no="LR-noNR6.tif", lr_def="LR-defaultNR6.tif"),
-    7: dict(iso=4000,  lr_no="LR-noNR7.tif", lr_def="LR-defaultNR7.tif"),
-    8: dict(iso=6400,  lr_no="LR-noNR8.tif", lr_def="LR-defaultNR8.tif"),
+    6: dict(iso=3200,  lr_no="LR-noNR6.tif", lr_def="LR-defaultNR6.tif", lr_denoise="LR-denoise6.tif"),
+    7: dict(iso=4000,  lr_no="LR-noNR7.tif", lr_def="LR-defaultNR7.tif", lr_denoise="LR-denoise7.tif"),
+    8: dict(iso=6400,  lr_no="LR-noNR8.tif", lr_def="LR-defaultNR8.tif", lr_denoise="LR-denoise8.tif"),
 }
 
 PATCH_FRAC = 0.05
@@ -241,7 +266,53 @@ def main():
     print("Ratios are on-NR/off-NR noise std (LOWER = more removed). 'Yret CS|LR': CS should NOT be"
           "\nmuch lower than LR (that's over-smoothed luma = waxy). 'sat': CS colored-patch chroma"
           "\nmagnitude on/off (should be ~1; <0.88 = draining real color = muted).")
-    print(f"\nOVERALL: {'FAIL — do not ship' if any_fail else 'PASS'}")
+    print(f"\nFAST TIER OVERALL: {'FAIL — do not ship' if any_fail else 'PASS'}")
+
+    # ── HIGH tier (RawNIND neural) vs Lightroom AI Denoise — see module doc for why this is a
+    # separate comparison with NO reused Fast-tier thresholds. Skips any set missing either half
+    # of its pair (a CS High dump or an LR Denoise export) rather than crashing, so this can run
+    # meaningfully with a partial rollout while exports are still landing.
+    print()
+    print("=" * 90)
+    print("HIGH TIER (RawNIND neural) vs Lightroom AI Denoise — INFORMATIONAL, no PASS/FAIL yet.")
+    print("Thresholds aren't calibrated (no real data existed until now) — read the ratios, look")
+    print("at the actual pixels (nr_stage_montage.py-style crop), THEN decide gates. Do not infer")
+    print("a verdict from the Fast-tier thresholds above — High denoises luma at all brightness by")
+    print("design, so a much lower Yret than Fast ever showed is EXPECTED, not a regression.")
+    print("=" * 90)
+    print(f"{'set/ISO':<11}{'bucket':<8}{'Yret CS|LR':>16}{'Cb CS|LR':>16}{'sat CS|LR':>16}")
+    print("-" * 90)
+    any_high_data = False
+    for s, info in SETS.items():
+        cs_off_path = f"{SC}/set{s}_cs_off.bin"
+        cs_high_path = f"{SC}/set{s}_cs_high.bin"
+        lr_denoise_path = info.get("lr_denoise")
+        if not (os.path.exists(cs_off_path) and os.path.exists(cs_high_path)):
+            continue
+        if not lr_denoise_path or not os.path.exists(lr_denoise_path):
+            continue
+        any_high_data = True
+        cs_off_h = load_bin_srgb(cs_off_path)
+        cs_high = load_bin_srgb(cs_high_path)
+        lr_off_h = load_tif(info["lr_no"])
+        lr_denoise = load_tif(lr_denoise_path)
+        cs_h = measure(cs_off_h, cs_high)
+        lr_h = measure(lr_off_h, lr_denoise)
+        for b in ("shadow", "mid", "high"):
+            c, l = cs_h[b], lr_h[b]
+            def pair(cv, lv):
+                cs_s = f"{cv:.2f}" if not np.isnan(cv) else "  - "
+                lr_s = f"{lv:.2f}" if not np.isnan(lv) else "  - "
+                return f"{cs_s}|{lr_s}"
+            satpair = f"{c['sat']:.2f}" if not np.isnan(c['sat']) else "  - "
+            print(f"{str(s) + '/' + str(info['iso']):<11}{b:<8}"
+                  f"{pair(c['y'], l['y']):>16}{pair(c['cb'], l['cb']):>16}"
+                  f"{satpair:>16}")
+        print()
+    if not any_high_data:
+        print("(no set yet has BOTH a CS High-tier dump (set{N}_cs_high.bin) AND an LR-denoise{N}.tif")
+        print(" export — nothing to compare. Run dump_rw2 with CS_NR_TIER=high and drop the LR")
+        print(" Denoise exports in the repo root, then re-run this script.)")
 
 
 if __name__ == "__main__":

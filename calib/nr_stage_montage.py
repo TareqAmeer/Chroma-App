@@ -1,16 +1,26 @@
 """
 Phase-1 diagnosis montage for the sparkle-field NR regression (see the ACTIVE PLAN in the
-plan file): crops the textured sparkle patch from 4 native-decode variants of __TM8159
-(both passes on / shadow-only / wavelet-only / both off) plus the two Lightroom references,
-and tiles them side-by-side (plus an 8x chroma-amplified row) so the destructive stage can be
-attributed visually in one image.
+plan file): crops the textured sparkle patch from native-decode variants of __TM8159
+(both passes on / shadow-only / wavelet-only / both off / High-tier neural) plus Lightroom
+references, and tiles them side-by-side (plus an 8x chroma-amplified row) so the destructive
+stage can be attributed visually in one image.
+
+Extended (see the denoiser design doc's §A6 step 4 — "not optional"): the whole reason this
+montage exists is that a scalar metric previously said a change was fine while the eye caught
+real waxy/plastic texture loss — exactly the failure mode a neural denoiser is MOST prone to.
+Added: 'High (neural)' — the RawNIND UtNet2 pass — and 'LR Denoise' as its comparison target
+(NOT 'LR default NR' — see nr_validate.py's module doc for why Manual NR is the wrong bar for
+a neural denoiser). Both are optional (skipped with a note if their input file is missing) so
+this still runs meaningfully on just the original 4-variant classical set.
 
 Inputs (produce with desktop/src-tauri/examples/dump_rw2 + env toggles):
   /tmp/cs_dump/tm8159_both_on.bin        (no env)
   /tmp/cs_dump/tm8159_both_off.bin       (CS_NO_CHROMA_NR=1 — dump_rw2 maps it to native_nr=false)
   /tmp/cs_dump/tm8159_wavelet_only.bin   (CS_NO_SHADOW_NR=1)
   /tmp/cs_dump/tm8159_shadow_only.bin    (CS_NR_LEVELS=0 CS_NR_STRENGTH=0 — wavelet no-op)
+  calib/nr_dump/set2_cs_high.bin         (CS_NR_TIER=high — set 2 is __TM8159, same source photo)
   LR-noNR2.tif / LR-defaultNR2.tif       (repo root)
+  LR-denoise2.tif                        (repo root — LR AI Denoise checkbox export, optional)
 
 Output: calib/nr_stage_montage.png (small — patch crops only, safe to keep)
 
@@ -37,9 +47,11 @@ VARIANTS = [
     ('both OFF', '/tmp/cs_dump/tm8159_both_off.bin', 'bin'),
     ('shadow only', '/tmp/cs_dump/tm8159_shadow_only.bin', 'bin'),
     ('wavelet only', '/tmp/cs_dump/tm8159_wavelet_only.bin', 'bin'),
-    ('both ON (shipped)', '/tmp/cs_dump/tm8159_both_on.bin', 'bin'),
+    ('both ON (Fast, shipped)', '/tmp/cs_dump/tm8159_both_on.bin', 'bin'),
+    ('High (neural)', 'calib/nr_dump/set2_cs_high.bin', 'bin'),
     ('LR no NR', 'LR-noNR2.tif', 'tif'),
     ('LR default NR', 'LR-defaultNR2.tif', 'tif'),
+    ('LR Denoise', 'LR-denoise2.tif', 'tif'),
 ]
 
 

@@ -93,7 +93,13 @@
         }
       }
       const autoLens = !!window.chromasmithAutoLens;
-      const nativeNr = window.chromasmithNativeNr !== false; // default on
+      // ⚠️ decode_raw_v2 only ever accepts "off"/"fast" — High-tier neural NR runs via the
+      // SEPARATE denoise_raw_high command (window.chromasmithDenoiseHigh), never through this
+      // path, so a 'high' selection collapses to 'fast' here (the cheap passes still run
+      // automatically; the expensive one only runs on explicit request or at export — see
+      // raw_decode.rs's NrTier and rawdenoise.rs's module doc for the full two-tier rationale).
+      const rawNrSelected = window.chromasmithRawNr || (window.chromasmithNativeNr !== false ? 'fast' : 'off');
+      const rawNr = rawNrSelected === 'off' ? 'off' : 'fast';
       // Per-photo "RAW Processing" mode: "" (Standard/PPG, default) or "ahd" (Sparkle-
       // optimized — trades some general chroma-noise headroom for much cleaner rendering of
       // dense sunlit-water/specular sparkle fields; NOT a global default, see raw_decode.rs).
@@ -104,7 +110,7 @@
       // EXIF detection as normal" — see raw_decode.rs's lens_override param.
       const lensOverride = window.chromasmithLensOverride || '';
       const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
-      const extra = { autoLens, nativeNr, demosaicAlgo, lensOverride, lensOverrideFocal };
+      const extra = { autoLens, rawNr, demosaicAlgo, lensOverride, lensOverrideFocal };
       // Two-phase decode ("RAW load takes 15s"): the FIRST decode always requests `fast:true`
       // — Rust skips the false-color-suppression / hue-defringe / native-NR passes (the serial
       // full-frame CPU work that dominates decode time), so this returns in roughly the time a
@@ -112,7 +118,7 @@
       // SAME bytes at full quality in the background and loadRw2() swaps the pixels in once it
       // lands — the user sees a photo almost immediately instead of staring at a spinner.
       this._mode = mode; this._lutKey = lutKey; this._bytes = bytes; this._extra = extra;
-      this._needsRefine = nativeNr; // full quality still gets applied — just not before first paint
+      this._needsRefine = rawNr !== 'off'; // full quality still gets applied — just not before first paint
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
@@ -168,6 +174,105 @@
     }
   }
   window.getLibRaw = async function () { return NativeLibRawShim; };
+
+  // ── High-tier (neural) RAW denoise — "Denoise now" button in the Noise Reduction panel.
+  // Deliberately NOT a NativeLibRawShim method: that class's instances are open()-call-scoped
+  // locals inside loadRw2() and aren't retained anywhere, so a button pressed long after the
+  // photo loaded (after switching photos, undoing, etc.) has no instance to call back into.
+  // Re-derives mode/lutKey fresh from the CURRENT rawProfile()/curItem().exif — exactly
+  // NativeLibRawShim.open()'s own logic — rather than trying to cache stale state, so if the
+  // user changed the RAW profile dropdown since opening, the denoised result matches what's
+  // actually on screen now, not what was on screen when the photo first loaded.
+  // `targetItem` lets exportFX() denoise a SPECIFIC fxImages[] entry (not necessarily the one
+  // currently selected/shown) — pass null/undefined for the interactive "Denoise now" button,
+  // which always means "the current photo". When an explicit item IS passed, the canvas-
+  // identity bail-out below is skipped: export already owns the iteration (its own cancel
+  // button stops the batch loop, not this), so there's no concurrent-photo-switch race to
+  // guard against the way there is for the interactive button.
+  window.chromasmithDenoiseHigh = async function (targetItem, onProgress, onToken) {
+    const it = targetItem || ((typeof curItem === 'function') ? curItem() : null);
+    if (!it || !it.rawFile) throw new Error('No RAW photo selected — High-tier noise reduction only applies to RAW files.');
+    const c = it.img; // canvas identity, re-checked after the async round trip — same guard refine()'s caller uses
+    const bytes = new Uint8Array(await it.rawFile.arrayBuffer());
+    const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+    const ident = it.exif || {};
+    let mode = 'srgb', lutKey = '';
+    if (profile) {
+      const camPrefix = (typeof cameraDcpPrefix === 'function') ? cameraDcpPrefix(ident.make || '', ident.model || '') : null;
+      if (camPrefix) {
+        mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
+        if (!_rustLuts[lutKey]) {
+          const lut = await getDcpLUT(camPrefix, profile, 200); // iso arg vestigial — see open()'s identical call
+          await framedInvoke('store_dcp_lut', { key: lutKey },
+            new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+          _rustLuts[lutKey] = true;
+        }
+      } else {
+        mode = 'linear16';
+      }
+    }
+    const autoLens = !!window.chromasmithAutoLens;
+    const demosaicAlgo = window.chromasmithDemosaicAlgo || '';
+    const lensOverride = window.chromasmithLensOverride || '';
+    const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
+    const token = 'nrh-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    if (typeof onToken === 'function') onToken(token); // lets the caller wire a Cancel button before the request lands
+    let unlisten = null;
+    if (typeof onProgress === 'function' && window.__TAURI__.event) {
+      try {
+        unlisten = await window.__TAURI__.event.listen('raw-nr-progress', (e) => {
+          const p = e.payload || {};
+          if (p.token === token) onProgress(p.done, p.total);
+        });
+      } catch (e) { console.error('raw-nr-progress listen failed', e); }
+    }
+    // 0-100, blend-toward-original amount — see chromasmith-22.html's sl-nr-high-strength /
+    // rawdenoise.rs's `strength` param doc comment for why this exists.
+    const highStrength = (typeof window.chromasmithRawNrHighStrength === 'number') ? window.chromasmithRawNrHighStrength : 70;
+    let buf;
+    try {
+      const req = mode === 'lut'
+        ? { mode, lutKey, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, highStrength, token }
+        : { mode, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, highStrength, token };
+      buf = await framedInvoke('denoise_raw_high', req, bytes);
+    } finally {
+      if (unlisten) unlisten();
+    }
+    // Same 20-byte header + RGBA8-or-raw-u16 body shape as decode_raw_v2/refine() — see
+    // NativeLibRawShim.refine() above for the reference implementation this mirrors.
+    const head = new Uint32Array(buf, 0, 5);
+    const w = head[0], h = head[1];
+    const usedLut = head[3] === 1;
+    const effMode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
+    let rgba2;
+    if (effMode === 'linear16') {
+      const rgb2 = new Uint16Array(buf, 20);
+      rgba2 = new Uint8ClampedArray(w * h * 4);
+      for (let i = 0, j = 0; i < w * h; i++) {
+        const s = i * 3;
+        rgba2[j++] = rgb2[s] >> 8; rgba2[j++] = rgb2[s + 1] >> 8; rgba2[j++] = rgb2[s + 2] >> 8; rgba2[j++] = 255;
+      }
+    } else {
+      rgba2 = new Uint8ClampedArray(buf, 20);
+    }
+    if (!targetItem) {
+      // Interactive path only: the user could have switched photos while this was in flight.
+      const stillCurrent = (typeof fxImages !== 'undefined') && fxImages.some((x) => x.img === c);
+      if (!stillCurrent) return { applied: false, reason: 'photo changed during denoise' };
+    }
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    c.getContext('2d').putImageData(new ImageData(rgba2, w, h), 0, 0);
+    if (!targetItem) {
+      // Live-preview repaint — skipped for an explicit-item (export) call so a mid-batch
+      // denoise never flashes an unrelated photo's canvas into the visible editor.
+      if (typeof updateWork === 'function') updateWork();
+      if (typeof renderPreview === 'function') renderPreview();
+    }
+    return { applied: true };
+  };
+  window.chromasmithCancelDenoiseHigh = function (token) {
+    if (token) invoke('cancel_denoise_high', { token }).catch((e) => console.error('cancel_denoise_high', e));
+  };
 
   // ── Darkroom-style shell layout: everything is chromasmith-22.html's `body.deskx` mode
   // (grid, icon rail right, panel toggle, ⋯ menu, 44px deskbar) — the shell only turns it on

@@ -29,6 +29,7 @@ mod library;
 mod raw_decode;
 mod faceparse;
 mod sam;
+mod rawdenoise;
 mod tiff_meta;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
@@ -256,7 +257,27 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     let (json, payload) = parse_framed(request.body())?;
     let mode = json["mode"].as_str().unwrap_or("linear16");
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
-    let native_nr = json["nativeNr"].as_bool().unwrap_or(true);
+    // "off"|"fast" ONLY — decode_raw_v2 is also the Library's thumbnail-decode path, so it must
+    // be STRUCTURALLY unable to trigger the ~25-90s neural High tier no matter what a caller
+    // sends; High only ever runs via the separate denoise_raw_high command below (see the
+    // denoiser design doc §A4). `nativeNr` (bool) is kept as a fallback for any caller still on
+    // the pre-tier JS build (desktop-native.js ships both fields for one release — see
+    // chromasmith-22.html's applyUISnapshot migration comment).
+    let nr = match json["rawNr"].as_str() {
+        Some("off") => raw_decode::NrTier::Off,
+        Some("fast") => raw_decode::NrTier::Fast,
+        Some(other) => {
+            eprintln!("decode_raw_v2: rawNr={other:?} not accepted here (High runs via denoise_raw_high) — using Fast");
+            raw_decode::NrTier::Fast
+        }
+        None => {
+            if json["nativeNr"].as_bool().unwrap_or(true) {
+                raw_decode::NrTier::Fast
+            } else {
+                raw_decode::NrTier::Off
+            }
+        }
+    };
     // Per-photo "RAW Processing" mode ("" = Standard/PPG, "ahd" = Sparkle-optimized) — see
     // raw_decode.rs's decode_rw2_bytes doc comment for why this is opt-in, not a global default.
     // Validate at the UI boundary: raw_decode.rs's decode_and_demosaic only accepts "" (PPG),
@@ -286,7 +307,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         (Some(l), Some(f)) if !l.is_empty() && f > 0.0 => Some((l, f as f32)),
         _ => None,
     };
-    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, native_nr, demosaic_algo, fast, lens_override)?;
+    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, nr, demosaic_algo, fast, lens_override)?;
     // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files
     // for (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a
     // DIFFERENT sensor's data wouldn't error — it would just silently produce wrong colors (a
@@ -327,6 +348,117 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     out.extend_from_slice(&lens_applied.to_le_bytes());
     out.extend_from_slice(&body);
     Ok(tauri::ipc::Response::new(out))
+}
+
+/// Cancel flags for in-flight denoise_raw_high calls, keyed by the caller-supplied token.
+/// Entries are removed by the SAME call that inserted them once it returns (success, error, or
+/// cancelled) — cancel_denoise_high only ever flips a flag that may or may not still be there
+/// (a token for a call that already finished is a harmless no-op, not an error).
+static NR_CANCEL_FLAGS: Mutex<Option<HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>> = Mutex::new(None);
+
+/// The High-tier neural RAW denoiser (RawNIND UtNet2 — see rawdenoise.rs), deliberately a
+/// SEPARATE command from decode_raw_v2 so the Library's thumbnail-decode path is structurally
+/// unable to trigger it (decode_raw_v2 only ever accepts "off"/"fast" — see its own comment).
+/// Same framed-request shape and 20-byte response header as decode_raw_v2 so the JS side
+/// (desktop-native.js's NativeLibRawShim.denoiseHigh()) can swap the canvas through the exact
+/// mechanism refine() already uses. Emits "raw-nr-progress" ({token,done,total}) once per tile
+/// row (~15 events at 24MP, not per tile — see the denoiser design doc §A4).
+#[tauri::command]
+fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let token = json["token"].as_str().unwrap_or("").to_string();
+    let mode = json["mode"].as_str().unwrap_or("linear16");
+    let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
+    let demosaic_algo_raw = json["demosaicAlgo"].as_str().unwrap_or("");
+    let demosaic_algo = match demosaic_algo_raw {
+        "" | "ahd" | "vng" | "mhc" => demosaic_algo_raw,
+        other => {
+            eprintln!("denoise_raw_high: unknown demosaicAlgo={other:?} — defaulting to standard (PPG)");
+            ""
+        }
+    };
+    let lens_override = match (json["lensOverride"].as_str(), json["lensOverrideFocal"].as_f64()) {
+        (Some(l), Some(f)) if !l.is_empty() && f > 0.0 => Some((l, f as f32)),
+        _ => None
+    };
+    // Blend-toward-original amount (0-100 from the UI slider, default 100 = full strength for
+    // any caller that doesn't send it) — see rawdenoise::denoise_frame_high's doc comment.
+    let high_strength = (json["highStrength"].as_f64().unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    if !token.is_empty() {
+        let mut guard = NR_CANCEL_FLAGS.lock().map_err(|_| "NR cancel-flag lock poisoned".to_string())?;
+        guard.get_or_insert_with(HashMap::new).insert(token.clone(), cancel.clone());
+    }
+    let app_for_progress = app.clone();
+    let token_for_progress = token.clone();
+    let progress = move |done: usize, total: usize| {
+        let _ = app_for_progress.emit("raw-nr-progress", &serde_json::json!({"token": token_for_progress, "done": done, "total": total}));
+    };
+
+    let result = raw_decode::decode_rw2_bytes_ex(
+        payload,
+        auto_lens,
+        raw_decode::NrTier::High,
+        demosaic_algo,
+        false, // never the `fast` pass — High is always the full-quality decode
+        lens_override,
+        high_strength,
+        Some(&progress),
+        Some(&cancel)
+    );
+
+    if !token.is_empty() {
+        if let Ok(mut guard) = NR_CANCEL_FLAGS.lock() {
+            if let Some(map) = guard.as_mut() {
+                map.remove(&token);
+            }
+        }
+    }
+    let decoded = result?;
+
+    const KNOWN_DCP_MAKES: &[&str] = &["panasonic", "sony"];
+    let make_lower = decoded.make.to_lowercase();
+    let has_dcp_support = KNOWN_DCP_MAKES.iter().any(|m| make_lower.contains(m));
+    let effective_mode = if mode == "lut" && !has_dcp_support { "linear16" } else { mode };
+    let used_lut = if effective_mode == "lut" { 1u32 } else { 0u32 };
+    let body: Vec<u8> = match effective_mode {
+        "lut" => {
+            let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
+            let lut = {
+                let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
+                guard
+                    .as_ref()
+                    .and_then(|m| m.get(key).cloned())
+                    .ok_or_else(|| format!("LUT '{key}' not registered"))?
+            };
+            let n = (lut.len() / 3) as f64;
+            let n = n.cbrt().round() as usize;
+            raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+        }
+        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16),
+        _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect()
+    };
+    let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
+    let mut out = Vec::with_capacity(20 + body.len());
+    out.extend_from_slice(&decoded.width.to_le_bytes());
+    out.extend_from_slice(&decoded.height.to_le_bytes());
+    out.extend_from_slice(&decoded.iso.to_le_bytes());
+    out.extend_from_slice(&used_lut.to_le_bytes());
+    out.extend_from_slice(&lens_applied.to_le_bytes());
+    out.extend_from_slice(&body);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command]
+fn cancel_denoise_high(token: String) {
+    if let Ok(guard) = NR_CANCEL_FLAGS.lock() {
+        if let Some(map) = guard.as_ref() {
+            if let Some(flag) = map.get(&token) {
+                flag.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -957,6 +1089,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             store_dcp_lut,
             decode_raw_v2,
+            denoise_raw_high,
+            cancel_denoise_high,
             lens_profile_available,
             list_lens_profiles,
             download_url_native,
@@ -1267,6 +1401,11 @@ fn main() {
             // Face-feature auto-exclusion (ROADMAP item 16) — same bundled-resource-with-
             // dev-fallback pattern as the SAM2 models above.
             faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
+
+            // High-tier RAW denoiser (rawdenoise.rs) — same bundled-resource-with-dev-fallback
+            // pattern; ~30MB each, so file-path CreateSession like SAM2/faceparse, not
+            // include_bytes! like EdgeSAM's much smaller models.
+            rawdenoise::set_model_paths(resolve_vendor("vendor/rawdenoise/model_linear.onnx"), resolve_vendor("vendor/rawdenoise/model_bayer.onnx"));
 
             Ok(())
         })

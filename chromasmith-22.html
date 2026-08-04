@@ -855,7 +855,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <div class="fx-ctrl" data-fxsec="image">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
-          <input type="file" accept="image/*,.tif,.tiff,.rw2,.raw" multiple onchange="fi(event,'fx-img')">
+          <input type="file" id="in-fx-img" accept="image/*,.tif,.tiff,.rw2,.raw" multiple onchange="fi(event,'fx-img')">
           <div class="dz-ic">◧</div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
@@ -870,14 +870,13 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button class="btn bgh" onclick="gpImportClick()" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)"><span class="bdot"></span>Google Photos…</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
-          <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()"><span class="bdot"></span>Save to library</button>
+          <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)"><span class="bdot"></span>Save to library</button>
           <button class="btn bgh" id="btn-lut-del" disabled onclick="deleteLUTFromLibrary()"><span class="bdot"></span>Delete</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" onclick="downloadLutChart()" title="Replicate any Lightroom preset: download this chart, apply the preset to it in Lightroom, export (sRGB, full size), drop the export on the LUT zone above"><span class="bdot"></span>LUT chart</button>
           <button class="btn bgh" id="btn-lut-dl" disabled onclick="if(lastUploadedLUT)dl(writeCube(lastUploadedLUT.lut,lastUploadedLUT.name),lastUploadedLUT.name+'.cube')"><span class="bdot"></span>Download .cube</button>
         </div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Library is stored in this browser only (Safari may purge it after ~7 days unused)</div>
       </div>
       <!-- LOOKS GALLERY + PRESET -->
       <div class="fx-ctrl" data-fxsec="looks">
@@ -927,8 +926,19 @@ setTimeout(()=>window.hideBootSplash(),6000);
            enable toggle — it's driven by the sliders being >0, same as Lens). -->
       <div class="fx-ctrl" data-fxsec="nr">
         <div class="fx-ctrl-title">Noise Reduction</div>
-        <div class="fx-row" title="Desktop only: the native Rust-side shadow + chroma-wavelet denoise that runs on the linear RAW data before any tone curve, ahead of these sliders. On by default — turn off to compare against the untouched decode, or if it's oversmoothing. Requires reopening this photo to take effect.">
-          <div class="fx-label">RAW Noise Reduction</div><div class="fx-toggle on" id="tg-native-nr" onclick="fxNativeNrToggled(this)"></div>
+        <div class="fx-row" title="Desktop only. Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser — 25–90s at 24MP, never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect.">
+          <div class="fx-label">RAW Noise Reduction</div>
+          <select class="fx-select" id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="flex:1"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High (neural)</option></select>
+        </div>
+        <div class="fx-row" id="row-nr-high-strength" style="display:none" title="Blends the neural denoiser back toward the untouched decode. Real-photo review (5 ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands more than DxO does, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise now / re-applies at next export.">
+          <div class="fx-label">High Strength</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-nr-high-strength" oninput="fxRawNrHighStrengthChanged(this.value)"><div class="fx-val" id="vl-nr-high-strength">70</div>
+        </div>
+        <div class="fx-row" id="row-nr-high" style="display:none">
+          <button class="btn bgh" id="btn-denoise-now" onclick="fxDenoiseNowClicked()" style="flex:1"><span class="bdot"></span>Denoise now</button>
+          <button class="btn" id="btn-denoise-cancel" onclick="fxDenoiseCancelClicked()" style="display:none;margin-left:6px">Cancel</button>
+        </div>
+        <div id="row-nr-high-progress" style="display:none;margin:2px 0 4px">
+          <div style="height:4px;border-radius:2px;background:var(--bg3,#2a2a2a);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--accent,#4a9eff);transition:width .15s"></div></div>
         </div>
         <div class="fx-row" title="Desktop only: switches the RAW demosaic algorithm. Standard (default) is safest across all photos. Sparkle-optimized uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect.">
           <div class="fx-label">Sparkle-optimized RAW</div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
@@ -1032,7 +1042,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       </div>
       <!-- LENS CORRECTION -->
       <div class="fx-ctrl" data-fxsec="lens">
-        <div class="fx-ctrl-title">Lens Correction</div>
+        <div class="fx-ctrl-title" title="Manual sliders — dial to taste while looking at a straight edge or the frame corners. Or try Auto above (desktop app only) if this camera+lens is in the bundled profile database.">Lens Correction</div>
         <div class="fx-row" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">
           <div class="fx-label">Auto (lens profile)</div><div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div>
         </div>
@@ -1051,11 +1061,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-dist" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-dist">0</div></div>
         <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-vig">0</div></div>
         <div class="fx-row" title="Corrects red/blue fringing near high-contrast edges, worst in the corners."><div class="fx-label">Chromatic Aberration</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ca" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ca">0</div></div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Manual sliders — dial to taste while looking at a straight edge or the frame corners. Or try Auto above (desktop app only) if this camera+lens is in the bundled profile database.</div>
       </div>
       <!-- CROP & ROTATE -->
       <div class="fx-ctrl" data-fxsec="crop">
-        <div class="fx-ctrl-title">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--mono)">Reset</div></div>
+        <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--mono)">Reset</div></div>
         <div class="btn-row" style="justify-content:center;gap:14px">
           <button class="btn-icon" onclick="geomRotate(-90)" title="Rotate left">⟲</button>
           <button class="btn-icon" onclick="geomRotate(90)" title="Rotate right">⟳</button>
@@ -1098,7 +1107,6 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bsec" id="btn-crop" onclick="cropToggle()"><span class="bdot"></span>Crop</button>
         </div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Rotate / flip / straighten / crop apply to every loaded image</div>
       </div>
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
@@ -1118,19 +1126,18 @@ setTimeout(()=>window.hideBootSplash(),6000);
       </div>
       <!-- FILM ARTIFACTS -->
       <div class="fx-ctrl" data-fxsec="art">
-        <div class="fx-ctrl-title">Film Artifacts <div class="fx-toggle" id="tg-art" onclick="toggleFX('art')"></div></div>
+        <div class="fx-ctrl-title" title="Placement is seeded — export matches preview; Reshuffle re-rolls it">Film Artifacts <div class="fx-toggle" id="tg-art" onclick="toggleFX('art')"></div></div>
         <div class="fx-fields" id="ff-art">
           <div class="fx-row" title="Random dust specks and the odd hair — mostly light (dust on the negative prints white)."><div class="fx-label">Dust</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-art-du" oninput="fxUpdate()"><div class="fx-val" id="vl-art-du">30</div></div>
           <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck colour — Both is the real-film mix (mostly light specks); Black/White forces one colour."></div>
           <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" oninput="fxUpdate()"><div class="fx-val" id="vl-art-sc">20</div></div>
           <div class="fx-row" title="A warm light leak flooding in from one edge."><div class="fx-label">Light leak</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-art-lk" oninput="fxUpdate()"><div class="fx-val" id="vl-art-lk">0</div></div>
           <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="artReshuffle()" title="Re-roll the random dust/scratch/leak placement"><span class="bdot"></span>Reshuffle</button></div>
-          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Placement is seeded — export matches preview; Reshuffle re-rolls it</div>
         </div>
       </div>
       <!-- HALATION -->
       <div class="fx-ctrl" data-fxsec="hal">
-        <div class="fx-ctrl-title">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
+        <div class="fx-ctrl-title" title="Warm film glow — turn on White glow for B&amp;W photos">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
         <div class="fx-fields" id="ff-hal">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-hal-a">70</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
@@ -1138,17 +1145,15 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="fx-row" title="Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded)."><div class="fx-label">White glow</div><div class="fx-toggle" id="tg-hal-white" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
           <div class="fx-row" title="Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look."><div class="fx-label">No remjet</div><div class="fx-toggle" id="tg-hal-noremjet" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
           <div class="fx-row" title="Extreme halation — the no-remjet glow pushed ≈5–6× stronger for a heavy, stylised bloom. Implies No remjet."><div class="fx-label">Extreme</div><div class="fx-toggle" id="tg-hal-extreme" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
-          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Warm film glow — turn on White glow for B&amp;W photos</div>
         </div>
       </div>
       <!-- BLOOM -->
       <div class="fx-ctrl" data-fxsec="bloom">
-        <div class="fx-ctrl-title">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
+        <div class="fx-ctrl-title" title="Colour derived from source light">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
         <div class="fx-fields" id="ff-bloom">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-bloom-a">40</div></div>
           <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="2" max="60" value="10" id="sl-bloom-th" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-th">10</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="50" value="12" id="sl-bloom-r" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-r">12</div></div>
-          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:4px">Colour derived from source light</div>
         </div>
       </div>
       <!-- VIGNETTE -->
@@ -1184,7 +1189,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       </div>
       <!-- DIAGNOSTICS -->
       <div class="fx-ctrl fx-diag" data-fxsec="diag">
-        <div class="fx-ctrl-title">Diagnostics</div>
+        <div class="fx-ctrl-title" title="Isolate a single shader pass to debug the match">Diagnostics</div>
         <div class="fx-row"><div class="fx-label">View</div>
           <select class="fx-select" id="sel-debug" onchange="fxUpdate()">
             <option value="0">Final image</option>
@@ -1193,7 +1198,6 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <option value="2">Bloom glow (raw)</option>
           </select>
         </div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Isolate a single shader pass to debug the match</div>
       </div>
       <!-- EXPORT -->
       <div class="fx-ctrl" data-fxsec="export">
@@ -1205,18 +1209,17 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
-        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Format</div>
+        <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
           <select class="fx-select" id="sel-exp-fmt">
             <option value="auto">Auto (match source)</option>
             <option value="jpg">JPG</option>
             <option value="png">PNG (lossless)</option>
           </select>
         </div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">JPG is never fully lossless, even at 100. PNG is lossless but files are much larger.</div>
         <!-- Resize + output sharpening. These belong together: any downscale throws away the
              detail the sharpening was judged on, so resampling without re-sharpening always
              looks soft. Full size + Off is the default and leaves the export byte-identical. -->
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Resize (long edge)</div>
+        <div class="fx-row" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
           <select class="fx-select" id="sel-exp-size">
             <option value="0">Full size</option>
             <option value="4096">4096 px</option>
@@ -1226,7 +1229,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <option value="1080">1080 px (social)</option>
           </select>
         </div>
-        <div class="fx-row"><div class="fx-label">Output sharpening</div>
+        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
           <select class="fx-select" id="sel-exp-sharp">
             <option value="0">Off</option>
             <option value="1">Low</option>
@@ -1234,7 +1237,6 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <option value="3">High</option>
           </select>
         </div>
-        <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Resizing never enlarges — a target above the photo's own long edge is ignored. Sharpening is applied last, after the resize, which is the only point at which the right amount is knowable.</div>
         <!-- Watermark: drawn onto the FINAL (post-resize) canvas, last of all — so its text is a
              constant fraction of whatever the actual output size ends up being, not the source. -->
         <div class="fx-row" style="margin-top:10px" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
@@ -1301,13 +1303,12 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <input type="file" id="style-import-input" accept="application/json,.json" style="display:none" onchange="styleImportFile(this.files[0])">
         </div>
         <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
-          <div class="fx-label" style="width:auto;margin-bottom:6px">Google Photos</div>
+          <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>
           <div class="btn-row" style="margin-top:0">
             <button class="btn bgh" id="btn-gp-connect" onclick="gpConnectToggle()" title="Sign in to Google Photos (lasts ~1 hour)"><span class="bdot"></span>Connect</button>
             <button class="btn bgh" id="btn-gp-save" onclick="gpToggleSave()" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><span class="bdot"></span>Upload exports: Off</button>
             <button class="btn bgh" onclick="gpAskClientId(true)" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px"><span class="bdot"></span>ID…</button>
           </div>
-          <div style="font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:6px">Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.</div>
         </div>
         <!-- Lightroom cloud browsing moved into the desktop LIBRARY sidebar (see library-ui.js's
              Cloud section + window.lrCloud below) — the old cramped Export-panel widget
@@ -3615,7 +3616,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-03a';
+const BUILD='2026-08-04a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -5780,29 +5781,107 @@ function fxLensManualApply(reload){
   if(reload&&typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
 }
 
-// ── Native (Rust) noise reduction on/off — desktop only. Both the shadow denoise and the
-// chroma-wavelet denoise (see raw_decode.rs) run on linear RAW data during decode, before
-// anything else touches the pixels, so — like Auto lens-profile — toggling this can't take
-// effect live; it needs a fresh decode of the current RAW. Defaults ON (unchanged behavior).
-try{window.chromasmithNativeNr=localStorage.getItem('chromasmithNativeNr')!=='0';}catch(e){window.chromasmithNativeNr=true;}
-function fxNativeNrToggled(el){
-  const on=el.classList.toggle('on');
-  window.chromasmithNativeNr=on;
-  // Per-photo, not global: this is now stored in the recipe (getUISnapshot's nativeNr field),
-  // via the SAME auto-persist path a slider drag uses — fxHistoryPush schedules the sidecar
-  // write library-ui.js's openInEditorInner later peeks before re-decoding. localStorage still
-  // gets it too, purely as the starting DEFAULT for a photo that has no saved recipe yet — it
-  // no longer controls an already-edited photo's setting.
-  try{localStorage.setItem('chromasmithNativeNr',on?'1':'0');}catch(e){}
-  if(typeof fxHistoryPush==='function')fxHistoryPush();
-  const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
-  const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
-  if(window.__TAURI__)toast((on?'RAW noise reduction on':'RAW noise reduction off')+suffix,true);
+// ── Native (Rust) RAW noise-reduction TIER — desktop only. Off/Fast run on linear RAW data
+// during decode, before anything else touches the pixels — like Auto lens-profile, can't take
+// effect live, needs a fresh decode. Defaults to Fast (unchanged behavior from the old always-
+// on boolean). High additionally runs a ~25-90s neural denoise (rawdenoise.rs) that must NEVER
+// run automatically — see denoise_raw_high's own doc comment for why it's a separate Rust
+// command the Library's thumbnail path can't reach. Selecting High here only reveals the
+// "Denoise now" button; it does not itself trigger the expensive pass (see fxRawNrChanged).
+try{window.chromasmithRawNr=localStorage.getItem('chromasmithRawNr')||(localStorage.getItem('chromasmithNativeNr')==='0'?'off':'fast');}catch(e){window.chromasmithRawNr='fast';}
+// Blend-toward-original amount for the High tier (0-100) — see rawdenoise.rs's `strength`
+// param doc comment for why this exists: full strength measurably over-smooths fine hair/fur
+// vs DxO PureRAW on real photos even though flat-noise removal is comparable. Default 70, not
+// 100 — a deliberate compromise chosen after that same review, not the "give the user every
+// knob" default some sliders use.
+try{window.chromasmithRawNrHighStrength=parseInt(localStorage.getItem('chromasmithRawNrHighStrength'),10);if(!(window.chromasmithRawNrHighStrength>=0&&window.chromasmithRawNrHighStrength<=100))window.chromasmithRawNrHighStrength=70;}catch(e){window.chromasmithRawNrHighStrength=70;}
+function fxRawNrSyncUI(){
+  const sel=document.getElementById('sel-raw-nr');
+  if(sel)sel.value=window.chromasmithRawNr;
+  const isHigh=window.chromasmithRawNr==='high';
+  const rowHigh=document.getElementById('row-nr-high');
+  if(rowHigh)rowHigh.style.display=isHigh?'':'none';
+  const rowStrength=document.getElementById('row-nr-high-strength');
+  if(rowStrength)rowStrength.style.display=isHigh?'':'none';
+  const slStrength=document.getElementById('sl-nr-high-strength'),vlStrength=document.getElementById('vl-nr-high-strength');
+  if(slStrength)slStrength.value=window.chromasmithRawNrHighStrength;
+  if(vlStrength)vlStrength.textContent=window.chromasmithRawNrHighStrength;
+  const it=(typeof curItem==='function')?curItem():null;
+  const btn=document.getElementById('btn-denoise-now');
+  if(btn){
+    const isRaw=!!(it&&it.rawFile);
+    btn.disabled=!isRaw||!!(it&&it._nrHighApplied);
+    btn.textContent=(it&&it._nrHighApplied)?'Denoised ✓':'Denoise now';
+    btn.title=isRaw?'':'High-tier noise reduction only applies to RAW files';
+  }
 }
-if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
-  const tg=document.getElementById('tg-native-nr');
-  if(tg)tg.classList.toggle('on',window.chromasmithNativeNr);
-});
+function fxRawNrChanged(val){
+  window.chromasmithRawNr=val;
+  // Per-photo, not global: stored in the recipe (getUISnapshot's rawNr field) via the SAME
+  // auto-persist path a slider drag uses — fxHistoryPush schedules the sidecar write library-
+  // ui.js's openInEditorInner later peeks before re-decoding. localStorage is only the starting
+  // DEFAULT for a photo with no saved recipe yet — it doesn't control an already-edited photo.
+  try{localStorage.setItem('chromasmithRawNr',val);}catch(e){}
+  const it=(typeof curItem==='function')?curItem():null;
+  if(it)it._nrHighApplied=false; // tier changed — any previous High result no longer reflects the current selection
+  fxRawNrSyncUI();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  // Off/Fast reload immediately (cheap — a few seconds at most). High deliberately does NOT
+  // auto-reload/auto-run: switching TO High only reveals the button, matching the two-tier
+  // design's whole point (grade fast, opt into the expensive pass explicitly).
+  if(val!=='high'){
+    const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+    const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
+    if(window.__TAURI__)toast('RAW noise reduction: '+(val==='off'?'off':'Fast')+suffix,true);
+  }
+}
+function fxRawNrHighStrengthChanged(val){
+  window.chromasmithRawNrHighStrength=parseInt(val,10);
+  const vl=document.getElementById('vl-nr-high-strength');if(vl)vl.textContent=val;
+  try{localStorage.setItem('chromasmithRawNrHighStrength',val);}catch(e){}
+  const it=(typeof curItem==='function')?curItem():null;
+  if(it)it._nrHighApplied=false; // strength changed — any previous High result used the OLD strength, no longer current
+  fxRawNrSyncUI();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+let _fxDenoiseToken=null;
+async function fxDenoiseNowClicked(){
+  if(typeof window.chromasmithDenoiseHigh!=='function'){toast('Desktop only',false);return;}
+  const it=(typeof curItem==='function')?curItem():null;
+  if(!it||!it.rawFile){toast('High-tier noise reduction only applies to RAW files',false);return;}
+  const btn=document.getElementById('btn-denoise-now'),cancelBtn=document.getElementById('btn-denoise-cancel');
+  const progRow=document.getElementById('row-nr-high-progress'),bar=document.getElementById('nr-high-progress-bar');
+  btn.disabled=true;btn.textContent='Denoising…';
+  if(cancelBtn)cancelBtn.style.display='';
+  if(progRow)progRow.style.display='';
+  if(bar)bar.style.width='0%';
+  try{
+    const res=await window.chromasmithDenoiseHigh(
+      null, // null = the current photo (interactive path)
+      (done,total)=>{if(bar&&total>0)bar.style.width=Math.round(done/total*100)+'%';},
+      (token)=>{_fxDenoiseToken=token;}
+    );
+    if(res&&res.applied){
+      it._nrHighApplied=true;
+      toast('High-tier noise reduction applied',true);
+    }else{
+      toast('Denoise finished, but the photo changed in the meantime — result discarded',false);
+    }
+  }catch(e){
+    console.error('chromasmithDenoiseHigh',e);
+    const msg=(e&&e.message)||String(e);
+    toast(/cancel/i.test(msg)?'Noise reduction cancelled':('High-tier noise reduction failed: '+msg),false);
+  }finally{
+    _fxDenoiseToken=null;
+    if(cancelBtn)cancelBtn.style.display='none';
+    if(progRow)progRow.style.display='none';
+    fxRawNrSyncUI();
+  }
+}
+function fxDenoiseCancelClicked(){
+  if(_fxDenoiseToken&&typeof window.chromasmithCancelDenoiseHigh==='function')window.chromasmithCancelDenoiseHigh(_fxDenoiseToken);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxRawNrSyncUI);
 
 // ── RAW demosaic algorithm ("" Standard / "ahd" Sparkle-optimized) — desktop only, same
 // decode-time-only constraint as native NR above (raw_decode.rs's demosaic step runs before
@@ -6393,6 +6472,58 @@ function sniffRealImageKind(bytes){
 function errStr(e){if(e&&e.message)return e.message;if(typeof e==='object'&&e!==null){try{return JSON.stringify(e)}catch(_){return String(e)}}return String(e)}
 let _LibRaw=null;
 async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/index.js')).default;return _LibRaw;}
+let _Mediabunny=null;
+async function getMediabunny(){if(!_Mediabunny)_Mediabunny=await import('./vendor/mediabunny/mediabunny.min.mjs');return _Mediabunny;}
+// videoSupported() gates every video affordance (accept attribute, drop handling, transport bar,
+// export format) — never show one you can't honour. Excludes Capacitor/iOS specifically (per
+// CLAUDE.md §12/the video plan: WKWebView memory limits + no streaming write there), NOT Tauri
+// desktop, which is feature-detected the same way the RAW/COI paths already are.
+function videoSupported(){return !!(window.VideoDecoder&&window.VideoEncoder&&window.VideoFrame)&&!capNative();}
+const VID_EXT_RE=/\.(mp4|mov|m4v)$/i;
+// Loads ONE video file via mediabunny and returns a fxImages-shaped entry whose `img` is a
+// rotation-corrected 2D canvas of the first frame — deliberately reusing the EXACT entry shape
+// a photo produces (img:canvas, name, ext, dpi, bytes:null, fileSize), so buildFilmstrip,
+// curItem(), updateWork()/geomCanvas() and the whole grading pipeline need ZERO changes to
+// treat this first frame like any other photo. Real per-frame playback/scrub (V1) later swaps
+// FX.setImage(canvas) for FX.setVideoFrame(rawFrame,w,h) on the SAME entry — see CLAUDE.md §12.
+// VideoSample.draw() applies the MP4 rotation metadata itself, so no srcXf handling is needed
+// for this still-frame poster path; srcXf/srcFlipY exist for the raw-VideoFrame GPU path (V1+).
+async function loadFXVideoFile(file){
+  const MB=await getMediabunny();
+  const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(file)});
+  const track=await input.getPrimaryVideoTrack();
+  if(!track)throw new Error('No video track found (or an unsupported container — fragmented MP4/HLS/AVI/MKV are not supported)');
+  const canDecode=await track.canDecode();
+  if(!canDecode)throw new Error('This codec isn\'t supported by this browser\'s decoder');
+  const rotation=await track.getRotation();
+  const displayW=await track.getDisplayWidth(),displayH=await track.getDisplayHeight();
+  const colorSpace=await track.getColorSpace();
+  const duration=await input.computeDuration();
+  const sink=new MB.VideoSampleSink(track);
+  const sample=await sink.getSample(0);
+  if(!sample)throw new Error('Could not decode the first frame');
+  const canvas=document.createElement('canvas');
+  canvas.width=displayW;canvas.height=displayH;
+  const ctx=canvas.getContext('2d');
+  sample.draw(ctx,0,0,displayW,displayH);
+  sample.close();
+  const packetStats=await track.computePacketStats(100).catch(()=>null); // sampled estimate, not exact — good enough for a fps readout
+  const ext=(file.name.split('.').pop()||'mp4').toLowerCase();
+  return{
+    kind:'video',img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi:72,bytes:null,
+    fileSize:file.size,videoFile:file,rotation,colorSpace,
+    durationUs:Math.round(duration*1e6),
+    fps:packetStats?packetStats.averagePacketRate:null,
+  };
+}
+// Widen the photo picker's accept attribute to include video ONLY when this browser can
+// actually grade it — never advertise a file type the drop/pick path will just reject.
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  if(videoSupported()){
+    const inp=document.getElementById('in-fx-img');
+    if(inp)inp.setAttribute('accept',inp.getAttribute('accept')+',video/*,.mp4,.mov,.m4v');
+  }
+});
 
 // ── DCP (Adobe DNG Camera Profile) rendering — match Lightroom's RAW color ──
 // Pipeline (validated numerically vs an LR reference TIFF in calib/dcp_pipeline.py):
@@ -6804,6 +6935,7 @@ function installFXImages(entries,loadKey){
   if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
   renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
   if(typeof nrSyncGate==='function')nrSyncGate(); // this photo's own NR sliders just landed in the DOM — refresh the Detail/HL-Desat dim state for them
+  if(typeof fxSyncVideoUI==='function')fxSyncVideoUI();
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
@@ -6813,8 +6945,16 @@ async function loadFXImages(fileList){
   // dropped every PNG/JPEG opened from the library ("No images loaded"). Fall back to the
   // filename extension whenever the MIME is missing/unhelpful.
   const IMG_EXT_RE=/\.(png|jpe?g|gif|webp|avif|heic|heif|bmp)$/i;
+  // Video files are routed to their own decode path (loadFXVideoFile) below, alongside the
+  // per-file try/catch loop images already use — a video mixed into `files` would hit loadImg()
+  // and fail as "not a valid image". Gated on videoSupported() so a browser without WebCodecs
+  // (or Capacitor/iOS) gets a clear per-file error instead of a silent no-op.
+  const videoFiles=videoSupported()?[...fileList].filter(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name)):[];
   const files=[...fileList].filter(f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f));
-  if(!files.length)return;
+  if(!files.length&&!videoFiles.length)return;
+  if(!videoSupported()&&[...fileList].some(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name))){
+    log('Video grading needs a browser with WebCodecs support (desktop Chrome, or the desktop app) — not available here.','err');
+  }
   // Hoisted above the decode loop (only depends on `files`, not `entries`) so a genuinely NEW
   // photo can be detected BEFORE applyRawDefaults() runs below. Previously that detection only
   // happened afterward, inside installFXImages — so applyRawDefaults()'s "only fill a slider
@@ -6823,10 +6963,15 @@ async function loadFXImages(fileList){
   // its own 25 default), and rail icons (tg-adjust/tg-curves/tg-hsl/tg-local/tg-art/tg-vig/
   // tg-canvas — everything outside the small _ALLFX set) kept showing "enabled" (orange) on a
   // never-touched photo simply because the LAST photo had left that toggle's DOM class on.
-  const loadKey=files.map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
+  const loadKey=[...files,...videoFiles].map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
   if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault);
   const entries=[];
   let _loadFailCount=0;
+  for(const file of videoFiles){
+    try{
+      entries.push(await loadFXVideoFile(file));
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++}
+  }
   for(const file of files){
     try{
       const bytes=new Uint8Array(await file.arrayBuffer());
@@ -6861,7 +7006,7 @@ async function loadFXImages(fileList){
       entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength});
     }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++} // keep loading the rest of the batch
   }
-  if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length} photo(s) failed to load — see log`,false);
+  if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length} file(s) failed to load — see log`,false);
   if(!entries.length){log('No images loaded','err');return}
   // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
   // now) — was previously inline per-RW2-entry, before any render had happened; moving it
@@ -6960,6 +7105,7 @@ function nrSyncGate(){
   const hint=document.getElementById('nr-gate-hint');
   if(hint)hint.textContent=on?'Tames RAW sensor noise (esp. high ISO) before the film look.':
     'Detail & Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.';
+  if(typeof fxRawNrSyncUI==='function')fxRawNrSyncUI(); // same refresh points cover the RAW-NR tier select/Denoise-now button too
 }
 function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}
 // RAW-only baseline (Lightroom applies Color NR 25 + capture sharpening by default on import;
@@ -8650,6 +8796,15 @@ function mskTgtPicked(el){
   const m=fxState.masks[mskSel];if(!m)return;
   m.tgtHex=el.value;m.tgtMode='custom';fxUpdate();
 }
+// Local Adjustments are static analytic masks in FRAME space — on a moving subject they visibly
+// swim, so video hides the whole panel rather than offering a feature that reads as broken.
+// Called on every photo/video switch (installFXImages, fxSelectImage) — see CLAUDE.md §12/the
+// video plan's "masks need an active decision" note.
+function fxSyncVideoUI(){
+  const isVideo=!!(curItem()&&curItem().kind==='video');
+  const localPanel=document.querySelector('.fx-ctrl[data-fxsec="local"]');
+  if(localPanel)localPanel.style.display=isVideo?'none':'';
+}
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
   if(!list||!ctl)return;list.innerHTML='';
@@ -9105,8 +9260,10 @@ function getUISnapshot(){
   // toggle read at render time — it has to travel with the per-photo recipe so each photo
   // remembers its OWN setting instead of one global switch affecting every photo. See
   // library-ui.js's openInEditorInner, which peeks this from the sidecar BEFORE decoding.
-  s.nativeNr=window.chromasmithNativeNr!==false;
-  s.demosaicAlgo=window.chromasmithDemosaicAlgo||''; // same decode-time-baked reasoning as nativeNr above
+  s.rawNr=window.chromasmithRawNr||'fast'; // 'off'|'fast'|'high' — see NrTier in raw_decode.rs
+  s.rawNrHighStrength=window.chromasmithRawNrHighStrength; // 0-100, High-tier blend amount
+  s.nativeNr=s.rawNr!=='off'; // kept for one release: an OLDER build reading a NEWER sidecar degrades to Fast rather than Off
+  s.demosaicAlgo=window.chromasmithDemosaicAlgo||''; // same decode-time-baked reasoning as rawNr above
   return s;
 }
 // ── Selective paste (darktable idiom: choose WHICH parts of a copied recipe to apply, rather
@@ -9192,9 +9349,12 @@ function applyUISnapshot(s){
       if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
     }
   }
-  if(s.nativeNr!==undefined){
-    window.chromasmithNativeNr=s.nativeNr;
-    const tg=document.getElementById('tg-native-nr');if(tg)tg.classList.toggle('on',s.nativeNr);
+  if(s.rawNr!==undefined||s.nativeNr!==undefined){
+    // s.rawNr is authoritative when present; s.nativeNr (older sidecars) maps Off/Fast only —
+    // an old recipe can never have meant High, since that tier didn't exist when it was saved.
+    window.chromasmithRawNr=s.rawNr||(s.nativeNr===false?'off':'fast');
+    if(s.rawNrHighStrength>=0&&s.rawNrHighStrength<=100)window.chromasmithRawNrHighStrength=s.rawNrHighStrength;
+    if(typeof fxRawNrSyncUI==='function')fxRawNrSyncUI();
   }
   if(s.demosaicAlgo!==undefined){
     window.chromasmithDemosaicAlgo=s.demosaicAlgo;
@@ -10742,6 +10902,7 @@ function fxSelectImage(idx){
   fxState.masks=it.masks||(it.masks=[]);
   mskSel=Math.min(mskSel,fxState.masks.length-1);
   if(typeof mskRebuild==='function')mskRebuild();
+  if(typeof fxSyncVideoUI==='function')fxSyncVideoUI();
   if(cropMode)cropExit();
   fxImg=it.img;updateWork();
   const ss=document.getElementById('sl-straighten');
@@ -11118,6 +11279,23 @@ async function exportFX(){
   if(!fxImages.length){log('No image loaded','warn');return}
   const scope=fxImages.length>1?fxExportScope:'all';
   const items=scope==='current'?[fxImages[fxCurIdx]]:fxImages;
+  // High-tier neural NR is shared across the whole export the same way every other FX slider
+  // is (see the per-item loop's own comment below on masks/adjustOverride being the ONLY truly
+  // per-photo state) — window.chromasmithRawNr is the CURRENTLY active photo's setting, and
+  // that's what a batch export applies uniformly, exactly as the old single nativeNr boolean
+  // did. Not a per-photo lookup from each item's own sidecar (that would need a native round
+  // trip per RAW file before rendering even starts) — same fidelity as before, just 3-way now.
+  let exportRawNr=window.chromasmithRawNr||'fast';
+  if(exportRawNr==='high'){
+    const highCount=items.filter(it=>it.rawFile&&!it._nrHighApplied).length;
+    if(highCount>5){
+      const proceed=confirm(`${highCount} of ${items.length} photo(s) use High noise reduction (~30-90s each, several minutes total).\n\nOK = continue with High. Cancel = choose Fast instead.`);
+      if(!proceed){
+        if(!confirm('Export this batch using Fast noise reduction instead?')){log('Export cancelled','info');return;}
+        exportRawNr='fast';
+      }
+    }
+  }
   const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
   const prompt=document.getElementById('fx-save-prompt');if(prompt)prompt.innerHTML='';
   const N=items.length;
@@ -11179,6 +11357,24 @@ async function exportFX(){
       if(fxExportCancel){log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
       try{
+        // High-tier neural NR, BEFORE geomCanvas(it) below reads it.img — replaces it.img's
+        // pixels in place with the denoised decode, same mechanism the "Denoise now" button
+        // uses (window.chromasmithDenoiseHigh with an explicit item, so it applies to THIS
+        // photo regardless of which one is currently selected in the editor). Skipped if the
+        // interactive button already denoised this exact photo (it._nrHighApplied) — avoids
+        // silently re-running a 25-90s pass the user already paid for on the current photo.
+        if(exportRawNr==='high'&&it.rawFile&&!it._nrHighApplied&&typeof window.chromasmithDenoiseHigh==='function'){
+          setExportPhotoStatus(idx,'rendering','denoising…');
+          setProg(idx,`Denoising ${idx+1}/${N}: ${it.name}…`);
+          try{
+            await window.chromasmithDenoiseHigh(it,
+              (done,tot)=>{if(tot>0)setProg(idx+done/tot,`Denoising ${idx+1}/${N}: ${it.name} — ${Math.round(done/tot*100)}%…`);},
+              null);
+            it._nrHighApplied=true;
+          }catch(e){
+            log(`High-tier noise reduction failed for ${it.name} — continuing with Fast: ${(e&&e.message)||e}`,'warn');
+          }
+        }
         // FX/adjustments are shared across the whole batch by design, but local-adjustment
         // masks are per-photo (fxState.masks normally tracks whichever photo is CURRENTLY
         // selected in the editor) — swap it to this item's own masks before reading params so
@@ -11189,7 +11385,7 @@ async function exportFX(){
         const savedMasks=fxState.masks;fxState.masks=it.masks||[];
         const P=getFXParams(it.adjustOverride||undefined);
         fxState.masks=savedMasks;
-        const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first
+        const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first (now on the denoised pixels, if High ran above)
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
         setExportPhotoStatus(idx,'rendering');
         setProg(idx,`Rendering ${idx+1}/${N}: ${it.name}…`);
