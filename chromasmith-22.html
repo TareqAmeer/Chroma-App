@@ -1378,6 +1378,24 @@ setTimeout(()=>window.hideBootSplash(),6000);
         </div>
       </div>
       <div id="fx-filmstrip" title="Click a photo to preview it"></div>
+      <!-- VIDEO TRANSPORT — scrub + trim only in V0 (no playback/export yet, see CLAUDE.md §12 /
+           the video plan's V0→V4 phasing). Shown only for kind:'video' (fxSyncVideoUI). Scrubbing
+           snaps to the nearest sync sample DURING the drag (instant — no decode wait) and seeks to
+           the exact frame on release, since exact-frame seeks can cost real time on a long GOP. -->
+      <div id="fx-transport" style="display:none;margin-top:8px;padding:8px;background:var(--sur2);border-radius:8px">
+        <div class="fx-row" style="align-items:center;gap:8px">
+          <span id="vid-time" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px">00:00.0</span>
+          <input type="range" id="vid-scrub" min="0" max="0" value="0" step="1" style="flex:1"
+            oninput="fxVideoScrubInput(this.value)" onchange="fxVideoScrubCommit(this.value)">
+          <span id="vid-time-total" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px;text-align:right">00:00.0</span>
+        </div>
+        <div class="fx-row" style="align-items:center;gap:8px;margin-top:6px" title="Trim in/out — used at export (V4); playback/scrub above is unaffected in V0">
+          <div class="fx-label" style="width:auto">Trim</div>
+          <input type="range" id="vid-trim-in" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
+          <input type="range" id="vid-trim-out" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
+          <span id="vid-trim-lb" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:90px;text-align:right">full clip</span>
+        </div>
+      </div>
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
         <button class="btn bpri" onclick="cropApply()"><span class="bdot"></span>Apply crop</button>
         <button class="btn bgh" onclick="cropCancel()"><span class="bdot"></span>Cancel</button>
@@ -6552,12 +6570,71 @@ async function loadFXVideoFile(file){
   const isVfr=await probeVfr(track);
   const isHdr=isHdrColorSpace(colorSpace);
   const ext=(file.name.split('.').pop()||'mp4').toLowerCase();
+  const fps=packetStats?packetStats.averagePacketRate:30;
   return{
     kind:'video',img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi:72,bytes:null,
     fileSize:file.size,videoFile:file,rotation,colorSpace,codec,isVfr,isHdr,
-    durationUs:Math.round(duration*1e6),
-    fps:packetStats?packetStats.averagePacketRate:null,
+    durationUs:Math.round(duration*1e6),fps:packetStats?packetStats.averagePacketRate:null,
+    // Cached decode context, reused by every later scrub seek (fxVideoSeekTo) so scrubbing
+    // doesn't re-parse the container on every frame. frameCount is an ESTIMATE from the
+    // sampled average fps — good enough for a scrub range's max, not for frame-exact export.
+    _mbSampleSink:sink,frameCount:Math.max(1,Math.round(duration*fps)),
+    trimInFrame:0,trimOutFrame:Math.max(0,Math.round(duration*fps)-1),
   };
+}
+// Seeks the CURRENT video entry to frameIndex and redraws it in place onto its own poster
+// canvas — reuses the exact same canvas object (it.img), so updateWork()/geomCanvas() upload
+// the new pixels through the ordinary photo path with no other change (see CLAUDE.md §12: a
+// video entry's img being "just a canvas" is what keeps every downstream function unmodified).
+// `_seekGen` is a per-item generation counter: scrubbing fires many overlapping async seeks, and
+// without it a slow EARLIER seek resolving after a later one would flash the wrong frame back.
+let _fxSeekGen=0;
+async function fxVideoSeekTo(it,frameIndex){
+  if(!it||it.kind!=='video'||!it._mbSampleSink)return;
+  const myGen=++_fxSeekGen;
+  const t=frameIndex/(it.fps||30);
+  let sample=null;
+  for await(const s of it._mbSampleSink.samples(t)){sample=s;break;}
+  if(myGen!==_fxSeekGen){if(sample)sample.close();return;} // a newer seek already won — drop this stale result
+  if(!sample)return;
+  const ctx=it.img.getContext('2d');
+  ctx.clearRect(0,0,it.img.width,it.img.height);
+  sample.draw(ctx,0,0,it.img.width,it.img.height);
+  sample.close();
+  updateWork();renderPreview();
+}
+function fxVideoTimeLabel(frameIndex,fps){
+  const secs=frameIndex/(fps||30);
+  const m=Math.floor(secs/60),s=secs-m*60;
+  return `${String(m).padStart(2,'0')}:${s.toFixed(1).padStart(4,'0')}`;
+}
+// Wires the transport bar's ranges to the current video's frameCount/trim, and shows/hides the
+// whole bar — called from fxSyncVideoUI on every photo/video switch, same as the Clip info row.
+function fxSyncTransportUI(){
+  const bar=document.getElementById('fx-transport');if(!bar)return;
+  const it=curItem();
+  if(!it||it.kind!=='video'){bar.style.display='none';return;}
+  bar.style.display='';
+  const scrub=document.getElementById('vid-scrub'),trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
+  const maxFrame=Math.max(0,it.frameCount-1);
+  scrub.max=maxFrame;trimIn.max=maxFrame;trimOut.max=maxFrame;
+  trimIn.value=it.trimInFrame||0;trimOut.value=it.trimOutFrame!=null?it.trimOutFrame:maxFrame;
+  document.getElementById('vid-time-total').textContent=fxVideoTimeLabel(maxFrame,it.fps);
+  fxVideoTrimChanged();
+}
+function fxVideoScrubInput(v){
+  document.getElementById('vid-time').textContent=fxVideoTimeLabel(+v,curItem()&&curItem().fps);
+  fxVideoSeekTo(curItem(),+v);
+}
+function fxVideoScrubCommit(v){fxVideoSeekTo(curItem(),+v);} // exact final seek on release — the drag-time seeks above may have been superseded/dropped
+function fxVideoTrimChanged(){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
+  let a=+trimIn.value,b=+trimOut.value;
+  if(a>b){[a,b]=[b,a];} // keep the pair ordered regardless of which handle the user dragged past the other
+  it.trimInFrame=a;it.trimOutFrame=b;
+  const full=a===0&&b>=it.frameCount-1;
+  document.getElementById('vid-trim-lb').textContent=full?'full clip':`${fxVideoTimeLabel(a,it.fps)}–${fxVideoTimeLabel(b,it.fps)}`;
 }
 // Widen the photo picker's accept attribute to include video ONLY when this browser can
 // actually grade it — never advertise a file type the drop/pick path will just reject.
@@ -8848,6 +8925,7 @@ function fxSyncVideoUI(){
   const localPanel=document.querySelector('.fx-ctrl[data-fxsec="local"]');
   if(localPanel)localPanel.style.display=isVideo?'none':'';
   fxUpdateClipInfoUI();
+  if(typeof fxSyncTransportUI==='function')fxSyncTransportUI();
 }
 // Renders the probeClip() facts loadFXVideoFile already gathered (rotation/colour space/codec/
 // fps/HDR/VFR) as one line of badges. HDR and VFR get an explicit warning rather than a quiet
