@@ -11932,15 +11932,21 @@ async function exportFX(){
 async function fxVideoExportSmall(it){
   if(!videoSupported()){toast('Video export needs a browser with WebCodecs support',false);return;}
   const MB=await getMediabunny();
-  const CAP_LONG_EDGE=1080,CAP_DURATION_S=30;
+  // Streaming (V3): desktop only, via the native stream_open/write/close commands (see
+  // desktop-native.js's chromasmithMakeVideoStreamTarget) — writes land on disk as they're
+  // encoded instead of accumulating in one ArrayBuffer, so the size/duration caps below are a
+  // BufferTarget-only limitation and lift entirely when streaming is available. Falls back to
+  // the capped in-memory BufferTarget on the browser/Pages build, unchanged from V2.
+  const canStream=typeof window.chromasmithMakeVideoStreamTarget==='function';
+  const CAP_LONG_EDGE=canStream?Infinity:1080,CAP_DURATION_S=canStream?Infinity:30;
   const srcW=it.img.width,srcH=it.img.height;
   const scale=Math.min(1,CAP_LONG_EDGE/Math.max(srcW,srcH));
   // Even dimensions: a hard H.264 requirement (4:2:0 chroma subsampling needs whole chroma blocks).
   const outW=Math.max(2,Math.round(srcW*scale/2)*2),outH=Math.max(2,Math.round(srcH*scale/2)*2);
   const fps=it.fps||30;
-  const totalFrames=Math.min(it.frameCount,Math.round(CAP_DURATION_S*fps));
-  if(totalFrames<it.frameCount)log(`Export capped to the first ${CAP_DURATION_S}s of ${(it.frameCount/fps).toFixed(1)}s (V2 limit — full-length export is a later phase).`,'warn');
-  if(scale<1)log(`Export capped to ${outW}×${outH} (V2 limit — ${srcW}×${srcH} source).`,'warn');
+  const totalFrames=Math.min(it.frameCount,Math.round(CAP_DURATION_S*fps)||it.frameCount);
+  if(totalFrames<it.frameCount)log(`Export capped to the first ${CAP_DURATION_S}s of ${(it.frameCount/fps).toFixed(1)}s (browser export limit — the desktop app removes this cap).`,'warn');
+  if(scale<1)log(`Export capped to ${outW}×${outH} (browser export limit — ${srcW}×${srcH} source; the desktop app removes this cap).`,'warn');
 
   // Film grain is pathological for H.264 at normal bitrates (it's exactly the high-frequency
   // detail a DCT discards first) — 20 Mbps at 1080p30 is roughly 2x a typical default, matching
@@ -11961,9 +11967,11 @@ async function fxVideoExportSmall(it){
   const compCtx=compCanvas.getContext('2d');
   const frameCanvas=document.createElement('canvas');frameCanvas.width=srcW;frameCanvas.height=srcH;
   const frameCtx=frameCanvas.getContext('2d');
-  let output=null,cancelled=false;
+  const fname=`${it.name}_graded.mp4`;
+  let output=null,cancelled=false,streamTarget=null;
   try{
-    output=new MB.Output({format:new MB.Mp4OutputFormat(),target:new MB.BufferTarget()});
+    const target=canStream?(streamTarget=await window.chromasmithMakeVideoStreamTarget(MB,fname)):new MB.BufferTarget();
+    output=new MB.Output({format:new MB.Mp4OutputFormat(),target});
     const videoSource=new MB.CanvasSource(compCanvas,{codec,bitrate:BITRATE});
     output.addVideoTrack(videoSource,{frameRate:fps});
     await output.start();
@@ -11990,17 +11998,23 @@ async function fxVideoExportSmall(it){
     }
     if(cancelled){
       await output.cancel();
+      if(streamTarget)await window.chromasmithCloseVideoStream(streamTarget,false); // delete the .part file
       log('Video export cancelled','warn');
     }else{
       await output.finalize();
-      const buf=output.target.buffer;
-      await saveFile(buf,`${it.name}_graded.mp4`,'video/mp4');
+      if(streamTarget){
+        const res=await window.chromasmithCloseVideoStream(streamTarget,true);
+        log(`Saved to ${res.path}`,'ok');
+      }else{
+        await saveFile(output.target.buffer,fname,'video/mp4');
+      }
       toast('Video exported ✓',true);
     }
   }catch(e){
     log('Video export error: '+(e&&e.message||e),'err');console.error(e);
     toast('Video export failed — see log',false);
     if(output)try{await output.cancel();}catch(e2){}
+    if(streamTarget)try{await window.chromasmithCloseVideoStream(streamTarget,false);}catch(e2){}
   }finally{
     if(btn)btn.disabled=false;
     if(cancelBtn)cancelBtn.style.display='none';
