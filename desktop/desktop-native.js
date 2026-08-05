@@ -365,4 +365,33 @@
     const editable = t.closest && t.closest('input,textarea,[contenteditable],#log-area');
     if (!editable) e.preventDefault();
   });
+
+  // ── Streaming save for large video exports (V3) — desktop-only escape hatch from the
+  // browser build's in-memory BufferTarget size cap (see CLAUDE.md §12 / the video plan's B5).
+  // mediabunny's StreamTarget takes a plain WritableStream; each write(chunk) call forwards
+  // {handle,pos} + the chunk bytes over the SAME framed raw-body protocol every other binary
+  // command here uses (framedInvoke, defined above). `chunked:true` lets mediabunny coalesce
+  // small writes into ~4MB chunks itself, so this file doesn't need its own backpressure pump.
+  // ⚠️ `pos` is NOT append-only — stream_write (main.rs) seeks there before every write, because
+  // mediabunny's mp4-muxer patches box sizes by seeking BACKWARD once final sizes are known.
+  // chromasmith-22.html gates on `typeof window.chromasmithMakeVideoStreamTarget==='function'`
+  // and falls back to mediabunny's own BufferTarget when this file isn't loaded (the browser/
+  // Pages build), so the video export path stays platform-agnostic there — same pattern as
+  // getLibRaw()/chromasmithDenoiseHigh above.
+  window.chromasmithMakeVideoStreamTarget = async (MB, filename) => {
+    const { handle } = await invoke('stream_open', { filename });
+    const writable = new WritableStream({
+      async write(chunk) {
+        await framedInvoke('stream_write', { handle, pos: chunk.position }, chunk.data);
+      },
+    });
+    const target = new MB.StreamTarget(writable, { chunked: true, chunkSize: 4 * 1024 * 1024 });
+    target._chromasmithHandle = handle; // stashed for chromasmithCloseVideoStream below
+    return target;
+  };
+  // commit:true renames the .part file to its final name; commit:false (cancel) deletes it —
+  // see stream_close's own doc comment. Always call this after output.finalize()/output.cancel()
+  // on a stream made above, or the .part file (and its open handle server-side) never gets closed.
+  window.chromasmithCloseVideoStream = (target, commit) =>
+    invoke('stream_close', { handle: target._chromasmithHandle, commit });
 })();
