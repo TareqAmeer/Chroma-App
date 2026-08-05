@@ -344,11 +344,11 @@ mod tests {
             return;
         };
         // The fast pass must NOT apply it (that's the deferral working, not a detection failure)…
-        let fast = crate::raw_decode::decode_rw2_bytes(&bytes, true, true, "", true, None)
+        let fast = crate::raw_decode::decode_rw2_bytes(&bytes, true, crate::raw_decode::NrTier::Fast, "", true, None)
             .expect("fast decode should succeed");
         assert!(!fast.lens_applied, "fast pass should defer lens correction to the refine pass");
         // …and the refine pass must.
-        let refined = crate::raw_decode::decode_rw2_bytes(&bytes, true, true, "", false, None)
+        let refined = crate::raw_decode::decode_rw2_bytes(&bytes, true, crate::raw_decode::NrTier::Fast, "", false, None)
             .expect("refine decode should succeed");
         assert!(refined.lens_applied, "expected lens correction to apply on __TM6917.RW2 with auto_lens=true (refine pass)");
     }

@@ -988,6 +988,113 @@ fn save_export_file_raw(request: tauri::ipc::Request<'_>) -> Result<GpSaveResult
     Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes: bytes.len() as u64, renamed: false })
 }
 
+// ── Streaming save for large video exports (V3 — see CLAUDE.md §12 / the video plan's B5) ──
+// mediabunny's mp4-muxer patches box sizes by SEEKING BACKWARD after writing forward-only data
+// (the moov/mdat size fields aren't known until encoding finishes), so `pos` on every write is
+// MANDATORY, not append-only — treating it as append-only silently produces a corrupt MP4.
+// One open std::fs::File per in-flight export, keyed by a caller-supplied token, so multiple
+// concurrent commands (open this session, write many times, close once) can address the same
+// handle without holding a lock across the whole export. `.part` + rename-on-commit means a
+// cancelled or crashed export never leaves a half-written file that LOOKS like a finished one.
+struct StreamHandle {
+    file: std::fs::File,
+    part_path: PathBuf,
+    final_name: String,
+}
+static STREAMS: Mutex<Option<HashMap<String, StreamHandle>>> = Mutex::new(None);
+static STREAM_TOKEN_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[tauri::command]
+fn stream_open(filename: String) -> Result<serde_json::Value, String> {
+    let safe_name = Path::new(&filename)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("empty filename")?
+        .to_string();
+    let dir = export_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create '{}': {e}", dir.display()))?;
+    // The .part name is its own unique_dest lookup (independent of the FINAL name's, which is
+    // resolved at close time) — two concurrent exports of the same source filename must not
+    // collide on the .part file while both are still in flight.
+    let part_dest = unique_dest(&dir, &format!("{safe_name}.part"));
+    let file = std::fs::File::create(&part_dest)
+        .map_err(|e| format!("create '{}': {e}", part_dest.display()))?;
+    let n = STREAM_TOKEN_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let token = format!(
+        "{}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+        n
+    );
+    let mut guard = STREAMS.lock().map_err(|_| "stream lock poisoned".to_string())?;
+    guard.get_or_insert_with(HashMap::new).insert(
+        token.clone(),
+        StreamHandle { file, part_path: part_dest, final_name: safe_name },
+    );
+    Ok(serde_json::json!({ "handle": token }))
+}
+
+// Seeks to `pos` then writes `data` — pulled out of stream_write so it's testable on a plain
+// std::fs::File without needing a real tauri::ipc::Request. `pos` is REQUIRED, never an append:
+// mediabunny's mp4-muxer seeks BACKWARD to patch box sizes once the final sizes are known, so
+// treating writes as append-only would silently corrupt the MP4 the moment that happens.
+fn stream_write_at(file: &mut std::fs::File, pos: u64, data: &[u8]) -> Result<(), String> {
+    use std::io::{Seek, SeekFrom, Write};
+    file.seek(SeekFrom::Start(pos)).map_err(|e| format!("seek: {e}"))?;
+    file.write_all(data).map_err(|e| format!("write: {e}"))?;
+    Ok(())
+}
+
+// Framed body: [u32 jsonLen][json {handle,pos}][raw chunk bytes]. `pos` is REQUIRED (see
+// stream_write_at's comment) — every write seeks there first, even ones that happen to be
+// sequential.
+#[tauri::command]
+fn stream_write(request: tauri::ipc::Request) -> Result<(), String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let handle = json["handle"].as_str().ok_or("missing handle")?;
+    let pos = json["pos"].as_u64().ok_or("missing pos")?;
+    let mut guard = STREAMS.lock().map_err(|_| "stream lock poisoned".to_string())?;
+    let map = guard.as_mut().ok_or("no open streams")?;
+    let h = map.get_mut(handle).ok_or("unknown stream handle")?;
+    stream_write_at(&mut h.file, pos, payload)
+        .map_err(|e| format!("{} on {}", e, h.part_path.display()))?;
+    Ok(())
+}
+
+// Pure rename-or-delete logic, pulled out of stream_close so it's testable against a temp dir
+// instead of the real Downloads folder (stream_close itself always operates on a real
+// StreamHandle's part_path, which lives under export_downloads_path()).
+fn stream_close_at(part_path: &Path, final_name: &str, commit: bool) -> Result<GpSaveResult, String> {
+    if !commit {
+        let _ = std::fs::remove_file(part_path); // best-effort — a cancel shouldn't itself fail loudly
+        return Ok(GpSaveResult { path: String::new(), bytes: 0, renamed: false });
+    }
+    let bytes = std::fs::metadata(part_path).map(|m| m.len()).unwrap_or(0);
+    let dir = part_path.parent().ok_or("part file has no parent dir")?;
+    let dest = unique_dest(dir, final_name);
+    std::fs::rename(part_path, &dest)
+        .map_err(|e| format!("rename {} -> {}: {e}", part_path.display(), dest.display()))?;
+    Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes, renamed: false })
+}
+
+#[tauri::command]
+fn stream_close(handle: String, commit: bool) -> Result<GpSaveResult, String> {
+    use std::io::Write;
+    let removed = {
+        let mut guard = STREAMS.lock().map_err(|_| "stream lock poisoned".to_string())?;
+        guard
+            .as_mut()
+            .and_then(|m| m.remove(&handle))
+            .ok_or("unknown stream handle")?
+    };
+    let StreamHandle { mut file, part_path, final_name } = removed;
+    file.flush().map_err(|e| format!("flush {}: {e}", part_path.display()))?;
+    drop(file); // release the handle before rename/delete
+    stream_close_at(&part_path, &final_name, commit)
+}
+
 // ── Google OAuth for the desktop shell: the web build's popup+redirect flow (gpAuth() in
 // chromasmith-22.html) assumes the page is served from a real https:// origin, so Google can
 // redirect the popup back to it — but this shell serves from a custom "cs://" scheme, which
@@ -1139,6 +1246,9 @@ fn main() {
             gphotos_downloads_dir,
             save_to_lr_downloads,
             save_export_file_raw,
+            stream_open,
+            stream_write,
+            stream_close,
             lr_downloads_dir
         ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
@@ -1480,6 +1590,95 @@ mod export_save_tests {
         // Path separators are stripped by the caller, not here — confirm the caller's contract.
         assert_eq!(Path::new("../../etc/passwd").file_name().unwrap(), "passwd");
 
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod stream_tests {
+    use super::{stream_close_at, stream_write_at};
+    use std::io::Read;
+
+    fn tmp_dir(label: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("cs_stream_test_{}_{}", label, std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // The whole reason `pos` is mandatory: a write that lands somewhere OTHER than the current
+    // end of the file (mediabunny's mp4-muxer patching a box size after the fact) must land
+    // exactly there, not get appended past whatever was already written.
+    #[test]
+    fn stream_write_at_seeks_before_writing() {
+        let dir = tmp_dir("seek");
+        let path = dir.join("out.part");
+        let mut file = std::fs::File::create(&path).unwrap();
+        stream_write_at(&mut file, 0, b"AAAAAAAAAA").unwrap(); // 10 bytes
+        stream_write_at(&mut file, 2, b"BB").unwrap(); // patch bytes 2..4, NOT appended at byte 10
+        drop(file);
+        let mut got = String::new();
+        std::fs::File::open(&path).unwrap().read_to_string(&mut got).unwrap();
+        assert_eq!(got, "AABBAAAAAA");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // Out-of-order writes (a later chunk arriving before an earlier patch, or vice versa) must
+    // still land correctly purely by position — this is what makes streaming safe regardless of
+    // the order mediabunny's writer happens to call in.
+    #[test]
+    fn stream_write_at_out_of_order() {
+        let dir = tmp_dir("outoforder");
+        let path = dir.join("out.part");
+        let mut file = std::fs::File::create(&path).unwrap();
+        stream_write_at(&mut file, 5, b"XXXXX").unwrap();
+        stream_write_at(&mut file, 0, b"YYYYY").unwrap();
+        drop(file);
+        let mut got = String::new();
+        std::fs::File::open(&path).unwrap().read_to_string(&mut got).unwrap();
+        assert_eq!(got, "YYYYYXXXXX");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // commit:true renames .part to a real, collision-free filename in the SAME directory.
+    #[test]
+    fn stream_close_commit_renames_part_file() {
+        let dir = tmp_dir("commit");
+        let part = dir.join("clip.mp4.part");
+        std::fs::write(&part, b"hello world").unwrap();
+        let result = stream_close_at(&part, "clip.mp4", true).unwrap();
+        assert!(!part.exists(), ".part file must be gone after a committed close");
+        assert_eq!(result.path, dir.join("clip.mp4").to_string_lossy());
+        assert_eq!(result.bytes, 11);
+        assert!(std::path::Path::new(&result.path).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // A cancelled export (commit:false) must delete the .part file — never leave a half-written
+    // file that could be mistaken for a finished export.
+    #[test]
+    fn stream_close_cancel_deletes_part_file() {
+        let dir = tmp_dir("cancel");
+        let part = dir.join("clip.mp4.part");
+        std::fs::write(&part, b"partial").unwrap();
+        let result = stream_close_at(&part, "clip.mp4", false).unwrap();
+        assert!(!part.exists(), ".part file must be deleted on cancel");
+        assert!(!dir.join("clip.mp4").exists(), "no renamed file should appear on cancel");
+        assert_eq!(result.bytes, 0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // A commit onto a directory that ALREADY has a same-named file must not clobber it — same
+    // guarantee unique_dest already gives the plain export path.
+    #[test]
+    fn stream_close_commit_avoids_collision() {
+        let dir = tmp_dir("collide");
+        std::fs::write(dir.join("clip.mp4"), b"existing").unwrap();
+        let part = dir.join("clip.mp4.part");
+        std::fs::write(&part, b"new export").unwrap();
+        let result = stream_close_at(&part, "clip.mp4", true).unwrap();
+        assert_eq!(result.path, dir.join("clip (2).mp4").to_string_lossy());
+        assert_eq!(std::fs::read(dir.join("clip.mp4")).unwrap(), b"existing"); // untouched
+        assert_eq!(std::fs::read(dir.join("clip (2).mp4")).unwrap(), b"new export");
         std::fs::remove_dir_all(&dir).ok();
     }
 }
