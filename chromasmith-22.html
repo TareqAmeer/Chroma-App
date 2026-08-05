@@ -11559,6 +11559,11 @@ async function exportFX(){
   if(!fxImages.length){log('No image loaded','warn');return}
   const scope=fxImages.length>1?fxExportScope:'all';
   const items=scope==='current'?[fxImages[fxCurIdx]]:fxImages;
+  // Video export is a completely different pipeline (VideoEncoder/mux vs toBlob) — mixing
+  // photos and videos in one batch isn't a designed use case (Library integration explicitly
+  // keeps video out for now, see CLAUDE.md §12), so route a single video item to its own export
+  // function entirely rather than threading kind-checks through every step below.
+  if(items.length===1&&items[0].kind==='video'){await fxVideoExportSmall(items[0]);return;}
   // High-tier neural NR is shared across the whole export the same way every other FX slider
   // is (see the per-item loop's own comment below on masks/adjustOverride being the ONLY truly
   // per-photo state) — window.chromasmithRawNr is the CURRENTLY active photo's setting, and
@@ -11898,6 +11903,95 @@ async function exportFX(){
     if(progBox)progBox.style.display='none';
     _expOverlay(false);
     fxExportCancel=false;
+  }
+}
+// V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget), no audio,
+// no trim, hard-capped 1080p/30s (see CLAUDE.md §12 / the video plan's V0-V4 phasing: streaming
+// save for large exports is V3, trim+audio is V4). Reuses the stills export progress UI.
+// ⚠️ Never getPixels() here — FX.render() draws into FX.cv (a WebGL canvas), and every frame is
+// composited by drawImage(FX.cv,...) into a 2D canvas, a GPU-side blit with no CPU readback.
+async function fxVideoExportSmall(it){
+  if(!videoSupported()){toast('Video export needs a browser with WebCodecs support',false);return;}
+  const MB=await getMediabunny();
+  const CAP_LONG_EDGE=1080,CAP_DURATION_S=30;
+  const srcW=it.img.width,srcH=it.img.height;
+  const scale=Math.min(1,CAP_LONG_EDGE/Math.max(srcW,srcH));
+  // Even dimensions: a hard H.264 requirement (4:2:0 chroma subsampling needs whole chroma blocks).
+  const outW=Math.max(2,Math.round(srcW*scale/2)*2),outH=Math.max(2,Math.round(srcH*scale/2)*2);
+  const fps=it.fps||30;
+  const totalFrames=Math.min(it.frameCount,Math.round(CAP_DURATION_S*fps));
+  if(totalFrames<it.frameCount)log(`Export capped to the first ${CAP_DURATION_S}s of ${(it.frameCount/fps).toFixed(1)}s (V2 limit — full-length export is a later phase).`,'warn');
+  if(scale<1)log(`Export capped to ${outW}×${outH} (V2 limit — ${srcW}×${srcH} source).`,'warn');
+
+  // Film grain is pathological for H.264 at normal bitrates (it's exactly the high-frequency
+  // detail a DCT discards first) — 20 Mbps at 1080p30 is roughly 2x a typical default, matching
+  // the plan's "Film Grain above ~30 needs High bitrate to survive compression" guidance.
+  const BITRATE=20_000_000;
+  const codec=await MB.getFirstEncodableVideoCodec(['avc'],{width:outW,height:outH,bitrate:BITRATE});
+  if(!codec){toast('No supported H.264 encoder found in this browser',false);return;}
+
+  const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
+  fxExportCancel=false;
+  const cancelBtn=document.getElementById('btn-fx-cancel'),progBox=document.getElementById('fx-export-prog'),
+    progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
+  if(cancelBtn)cancelBtn.style.display='';
+  if(progBox)progBox.style.display='block';
+  const setProg=(frac,label)=>{if(progBar)progBar.style.width=Math.round(frac*100)+'%';if(progTxt)progTxt.textContent=label;};
+
+  const compCanvas=document.createElement('canvas');compCanvas.width=outW;compCanvas.height=outH;
+  const compCtx=compCanvas.getContext('2d');
+  const frameCanvas=document.createElement('canvas');frameCanvas.width=srcW;frameCanvas.height=srcH;
+  const frameCtx=frameCanvas.getContext('2d');
+  let output=null,cancelled=false;
+  try{
+    output=new MB.Output({format:new MB.Mp4OutputFormat(),target:new MB.BufferTarget()});
+    const videoSource=new MB.CanvasSource(compCanvas,{codec,bitrate:BITRATE});
+    output.addVideoTrack(videoSource,{frameRate:fps});
+    await output.start();
+
+    const P=getFXParams(it.adjustOverride||undefined);
+    for(let f=0;f<totalFrames;f++){
+      if(fxExportCancel){cancelled=true;break;}
+      let sample=null;
+      for await(const s of it._mbSampleSink.samples(f/fps)){sample=s;break;}
+      if(!sample)continue;
+      frameCtx.clearRect(0,0,srcW,srcH);
+      sample.draw(frameCtx,0,0,srcW,srcH);
+      sample.close();
+      FX.setVideoFrame(frameCanvas,srcW,srcH);
+      const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:f}):undefined;
+      FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
+      compCtx.clearRect(0,0,outW,outH);
+      compCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
+      // Borders/canvas-matte are deferred past V2 (they'd need the same allocate-only-when-used
+      // treatment exportFX gives stills); watermark is cheap per-frame and ships now.
+      if(typeof applyWatermark==='function')applyWatermark(compCanvas);
+      await videoSource.add(f/fps,1/fps); // awaiting respects encoder/writer backpressure
+      setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
+    }
+    if(cancelled){
+      await output.cancel();
+      log('Video export cancelled','warn');
+    }else{
+      await output.finalize();
+      const buf=output.target.buffer;
+      await saveFile(buf,`${it.name}_graded.mp4`,'video/mp4');
+      toast('Video exported ✓',true);
+    }
+  }catch(e){
+    log('Video export error: '+(e&&e.message||e),'err');console.error(e);
+    toast('Video export failed — see log',false);
+    if(output)try{await output.cancel();}catch(e2){}
+  }finally{
+    if(btn)btn.disabled=false;
+    if(cancelBtn)cancelBtn.style.display='none';
+    if(progBox)progBox.style.display='none';
+    fxExportCancel=false;
+    // The export loop drove FX with EXPORT-resolution frames — restore the live preview to
+    // whichever frame the transport bar is actually showing, same as exportFX's own final
+    // preview-refresh call (kept separately try/caught there for the same reason: a failure
+    // here must never be confused with a real export failure).
+    try{updateWork();renderPreview();}catch(e3){}
   }
 }
 
