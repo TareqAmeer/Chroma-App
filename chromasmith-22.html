@@ -1406,6 +1406,9 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <input type="range" id="vid-trim-out" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
           <span id="vid-trim-lb" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:90px;text-align:right">full clip</span>
         </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn bgh" onclick="fxVideoCaptureFrame()" title="Exports the CURRENT frame through the full-res still export path, graded exactly like the video preview. Only as large as the video itself."><span class="bdot"></span>Capture frame</button>
+        </div>
       </div>
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
         <button class="btn bpri" onclick="cropApply()"><span class="bdot"></span>Apply crop</button>
@@ -6759,6 +6762,22 @@ function fxVideoTrimChanged(){
   it.trimInFrame=a;it.trimOutFrame=b;
   const full=a===0&&b>=it.frameCount-1;
   document.getElementById('vid-trim-lb').textContent=full?'full clip':`${fxVideoTimeLabel(a,it.fps)}–${fxVideoTimeLabel(b,it.fps)}`;
+}
+// Capture Frame (V2): exports the CURRENTLY DISPLAYED frame through the exact same full-res
+// still export path a photo uses (processToCanvas → toBlob) — the video already owns its own
+// full-res source canvas (it.img, kept current by fxVideoSeekTo), so this is just "export it
+// like a photo, once." getPixels() inside processToCanvas is fine here: it's a single still,
+// not the per-frame-in-a-loop pattern the video export path itself must avoid.
+async function fxVideoCaptureFrame(){
+  const it=curItem();
+  if(!it||it.kind!=='video'){toast('No video loaded',false);return;}
+  const P=getFXParams(it.adjustOverride||undefined);
+  const src=geomCanvas(it);
+  const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+  const proc=await processToCanvas(P,src,iw,ih);
+  const blob=await new Promise((resolve,reject)=>proc.toBlob(b=>b?resolve(b):reject(new Error('toBlob failed')),'image/png'));
+  await saveFile(blob,`${it.name}_frame${it.curFrame||0}.png`,'image/png');
+  toast('Frame captured ✓',true);
 }
 // Widen the photo picker's accept attribute to include video ONLY when this browser can
 // actually grade it — never advertise a file type the drop/pick path will just reject.
