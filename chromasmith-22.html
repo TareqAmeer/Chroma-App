@@ -5136,9 +5136,12 @@ void main(){
   // fixed-size video clip should always hit after its first frame. imgTx is aliased to vidTx
   // so the rest of the pipeline (the `img` sampler binding, basicAdjust, masks, etc.) needs
   // zero changes to grade a video frame exactly like a photo.
-  // ⚠️ No UNPACK_FLIP_Y_WEBGL here — flipping a VideoFrame can knock the browser off its
-  // zero-copy blit path and force a CPU readback. srcFlipY (a shader uniform, negating V on
-  // the source sample only) replaces it for video; it defaults to 0 so photos are unaffected.
+  // ⚠️ CORRECTED: the original comment here claimed skipping UNPACK_FLIP_Y_WEBGL was needed to
+  // preserve a zero-copy blit path for a raw VideoFrame upload — but this method never uploads a
+  // raw VideoFrame, only a plain 2D canvas that mediabunny's sample.draw() already rendered onto
+  // (see loadFXVideoFile/fxVideoSeekTo/fxVideoExportSmall). A canvas source needs EXACTLY the
+  // same flip setImage() already applies to photo canvases, or every video frame uploads
+  // vertically mirrored — this was shipping as "the export comes out upside down" until fixed.
   setVideoFrame(src,w,h){const gl=this.gl;
     const needAlloc=!this.vidTx||this.vidW!==w||this.vidH!==h;
     if(needAlloc){
@@ -5146,12 +5149,16 @@ void main(){
       this.vidTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
       this.vidW=w;this.vidH=h;
     }else{
       gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
     }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,src);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     // Delete a stale one-shot photo texture before aliasing over it (mirrors setImage's own guard).
     if(this.imgTx&&this.imgTx!==this.vidTx)gl.deleteTexture(this.imgTx);
     this.imgTx=this.vidTx;
