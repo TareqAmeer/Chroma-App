@@ -1385,28 +1385,36 @@ setTimeout(()=>window.hideBootSplash(),6000);
         </div>
       </div>
       <div id="fx-filmstrip" title="Click a photo to preview it"></div>
-      <!-- VIDEO TRANSPORT — scrub/trim (V0) + playback (V1); no export yet (see CLAUDE.md §12 /
-           the video plan's V0→V4 phasing). Shown only for kind:'video' (fxSyncVideoUI). Scrubbing
-           snaps to the nearest sync sample DURING the drag (instant — no decode wait) and seeks to
-           the exact frame on release, since exact-frame seeks can cost real time on a long GOP.
-           Playback deliberately does NOT chase real-time at high resolution (see fxVideoPlayTick's
-           own comment) — it may drop frames; export (later) may not. -->
+      <!-- VIDEO TRANSPORT — scrub/trim/loop/frame-step + playback. Shown only for kind:'video'
+           (fxSyncVideoUI). Scrubbing snaps to the nearest sync sample DURING the drag (instant —
+           no decode wait) and seeks to the exact frame on release, since exact-frame seeks can
+           cost real time on a long GOP. Playback deliberately does NOT chase real-time at high
+           resolution (see fxVideoPlayTick's own comment) — it may drop frames; export re-decodes
+           every frame so it never does. Trim is used both at export AND to bound loop playback
+           (fxVideoPlayTick). Keyboard: Space play/pause, ←/→ step a frame, Shift+←/→ step a
+           second, I/O set trim in/out at the playhead, Home/End jump to trim in/out — see the
+           video branch in the global keydown handler. -->
       <div id="fx-transport" style="display:none;margin-top:8px;padding:8px;background:var(--sur2);border-radius:8px">
         <div class="fx-row" style="align-items:center;gap:8px">
-          <button class="btn-icon" id="btn-vid-play" onclick="fxVideoPlayToggle()" title="Play/pause">▶</button>
+          <button class="btn-icon" onclick="fxVideoStep(-1)" title="Previous frame (←)">⏮</button>
+          <button class="btn-icon" id="btn-vid-play" onclick="fxVideoPlayToggle()" title="Play/pause (Space)">▶</button>
+          <button class="btn-icon" onclick="fxVideoStep(1)" title="Next frame (→)">⏭</button>
+          <button class="btn-icon" id="btn-vid-loop" onclick="fxVideoLoopToggle()" title="Loop playback within the trim range">⟲</button>
           <span id="vid-time" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px">00:00.0</span>
           <input type="range" id="vid-scrub" min="0" max="0" value="0" step="1" style="flex:1"
             oninput="fxVideoScrubInput(this.value)" onchange="fxVideoScrubCommit(this.value)">
           <span id="vid-time-total" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px;text-align:right">00:00.0</span>
           <span id="vid-fps-readout" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:56px;text-align:right" title="Actual playback frame rate — may be below the clip's real fps if the grade is too heavy to keep up live">—</span>
         </div>
-        <div class="fx-row" style="align-items:center;gap:8px;margin-top:6px" title="Trim in/out — used at export (V4); playback/scrub above is unaffected in V0">
+        <div class="fx-row" style="align-items:center;gap:8px;margin-top:6px" title="Trim in/out — used at export and to bound loop playback">
           <div class="fx-label" style="width:auto">Trim</div>
           <input type="range" id="vid-trim-in" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
           <input type="range" id="vid-trim-out" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
           <span id="vid-trim-lb" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:90px;text-align:right">full clip</span>
         </div>
         <div class="btn-row" style="margin-top:6px">
+          <button class="btn bgh" onclick="fxVideoSetTrimAtPlayhead('in')" title="Set trim-in at the playhead (I)">Set In</button>
+          <button class="btn bgh" onclick="fxVideoSetTrimAtPlayhead('out')" title="Set trim-out at the playhead (O)">Set Out</button>
           <button class="btn bgh" onclick="fxVideoCaptureFrame()" title="Exports the CURRENT frame through the full-res still export path, graded exactly like the video preview. Only as large as the video itself."><span class="bdot"></span>Capture frame</button>
         </div>
       </div>
@@ -3654,7 +3662,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-04a';
+const BUILD='2026-08-08a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -6719,7 +6727,12 @@ function fxVideoGrainMotionChanged(v){
 // as broken, whereas a dropped frame just looks like a lower live frame rate). Export (later)
 // renders every frame regardless of how long each one takes — playback and export are
 // deliberately different code paths with different tradeoffs, not the same loop reused.
-let _fxPlayRAF=null,_fxPlayStartMs=0,_fxPlayStartFrame=0,_fxPlayFrameTimes=[];
+let _fxPlayRAF=null,_fxPlayStartMs=0,_fxPlayStartFrame=0,_fxPlayFrameTimes=[],fxVideoLoop=false;
+function fxVideoLoopToggle(){
+  fxVideoLoop=!fxVideoLoop;
+  const btn=document.getElementById('btn-vid-loop');
+  if(btn)btn.classList.toggle('bsec',fxVideoLoop);
+}
 function fxVideoPlayToggle(){
   const it=curItem();if(!it||it.kind!=='video')return;
   if(_fxPlayRAF){fxVideoPause();return;}
@@ -6738,9 +6751,17 @@ async function fxVideoPlayTick(nowMs){
   const it=curItem();
   if(!it||it.kind!=='video'||!_fxPlayRAF){fxVideoPause();return;}
   const elapsedS=(nowMs-_fxPlayStartMs)/1000;
-  const targetFrame=_fxPlayStartFrame+Math.round(elapsedS*(it.fps||30));
+  let targetFrame=_fxPlayStartFrame+Math.round(elapsedS*(it.fps||30));
   const maxFrame=it.frameCount-1;
-  if(targetFrame>maxFrame){fxVideoPause();return;} // stop at the end rather than looping — a deliberate V1 simplification
+  // Loop within the trim window (or the whole clip when untrimmed) instead of always stopping
+  // at the end — the V1 "stop" behaviour is now just fxVideoLoop=false.
+  const loopIn=it.trimInFrame||0,loopOut=it.trimOutFrame!=null?Math.min(it.trimOutFrame,maxFrame):maxFrame;
+  if(targetFrame>loopOut){
+    if(fxVideoLoop&&loopOut>loopIn){
+      targetFrame=loopIn;
+      _fxPlayStartMs=nowMs;_fxPlayStartFrame=loopIn; // resync the wall-clock baseline to the loop-in point
+    }else{fxVideoPause();return;}
+  }
   const scrub=document.getElementById('vid-scrub');
   if(+scrub.value!==targetFrame){
     scrub.value=targetFrame;
@@ -6791,6 +6812,41 @@ function fxVideoScrubInput(v){
   fxVideoSeekTo(curItem(),+v);
 }
 function fxVideoScrubCommit(v){fxVideoSeekTo(curItem(),+v);} // exact final seek on release — the drag-time seeks above may have been superseded/dropped
+// Frame-step + I/O trim-set — shared by the transport buttons and the keyboard map below.
+function fxVideoStep(delta){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  fxVideoPause();
+  const scrub=document.getElementById('vid-scrub');if(!scrub)return;
+  const maxFrame=Math.max(0,it.frameCount-1);
+  const v=Math.max(0,Math.min(maxFrame,(+scrub.value||0)+delta));
+  scrub.value=v;
+  document.getElementById('vid-time').textContent=fxVideoTimeLabel(v,it.fps);
+  fxVideoSeekTo(it,v);
+}
+function fxVideoGoToTrim(which){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  fxVideoPause();
+  const scrub=document.getElementById('vid-scrub');if(!scrub)return;
+  const v=which==='in'?(it.trimInFrame||0):(it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1);
+  scrub.value=v;
+  document.getElementById('vid-time').textContent=fxVideoTimeLabel(v,it.fps);
+  fxVideoSeekTo(it,v);
+}
+function fxVideoSetTrimAtPlayhead(which){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  const scrub=document.getElementById('vid-scrub');if(!scrub)return;
+  const v=+scrub.value||0;
+  const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
+  if(which==='in')trimIn.value=v;else trimOut.value=v;
+  fxVideoTrimChanged();
+}
+function fxVideoClearTrim(which){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  const maxFrame=Math.max(0,it.frameCount-1);
+  const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
+  if(which==='in')trimIn.value=0;else trimOut.value=maxFrame;
+  fxVideoTrimChanged();
+}
 function fxVideoTrimChanged(){
   const it=curItem();if(!it||it.kind!=='video')return;
   const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
@@ -11970,9 +12026,9 @@ async function exportFX(){
     fxExportCancel=false;
   }
 }
-// V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget), no audio,
-// no trim, hard-capped 1080p/30s (see CLAUDE.md §12 / the video plan's V0-V4 phasing: streaming
-// save for large exports is V3, trim+audio is V4). Reuses the stills export progress UI.
+// V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget), hard-capped
+// 1080p/30s in-browser (see CLAUDE.md §12 / the video plan's V0-V4 phasing: streaming save for
+// large exports is V3). Reuses the stills export progress UI.
 // ⚠️ Never getPixels() here — FX.render() draws into FX.cv (a WebGL canvas), and every frame is
 // composited by drawImage(FX.cv,...) into a 2D canvas, a GPU-side blit with no CPU readback.
 async function fxVideoExportSmall(it){
@@ -11990,8 +12046,13 @@ async function fxVideoExportSmall(it){
   // Even dimensions: a hard H.264 requirement (4:2:0 chroma subsampling needs whole chroma blocks).
   const outW=Math.max(2,Math.round(srcW*scale/2)*2),outH=Math.max(2,Math.round(srcH*scale/2)*2);
   const fps=it.fps||30;
-  const totalFrames=Math.min(it.frameCount,Math.round(CAP_DURATION_S*fps)||it.frameCount);
-  if(totalFrames<it.frameCount)log(`Export capped to the first ${CAP_DURATION_S}s of ${(it.frameCount/fps).toFixed(1)}s (browser export limit — the desktop app removes this cap).`,'warn');
+  // Trim (V4): export only [trimIn,trimOut], with output timestamps REBASED to start at 0 — same
+  // technique the audio pass already uses for negative AAC priming timestamps below.
+  const trimF0=Math.max(0,Math.min(it.trimInFrame||0,it.frameCount-1));
+  const trimF1=Math.max(trimF0,Math.min(it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1,it.frameCount-1));
+  const trimFrameCount=trimF1-trimF0+1;
+  const totalFrames=Math.min(trimFrameCount,Math.round(CAP_DURATION_S*fps)||trimFrameCount);
+  if(totalFrames<trimFrameCount)log(`Export capped to the first ${CAP_DURATION_S}s of the ${(trimFrameCount/fps).toFixed(1)}s trimmed range (browser export limit — the desktop app removes this cap).`,'warn');
   if(scale<1)log(`Export capped to ${outW}×${outH} (browser export limit — ${srcW}×${srcH} source; the desktop app removes this cap).`,'warn');
 
   // Film grain is pathological for H.264 at normal bitrates (it's exactly the high-frequency
@@ -12040,14 +12101,15 @@ async function fxVideoExportSmall(it){
     const P=getFXParams(it.adjustOverride||undefined);
     for(let f=0;f<totalFrames;f++){
       if(fxExportCancel){cancelled=true;break;}
+      const srcFrame=trimF0+f; // source clip frame; output timestamps are rebased to start at 0
       let sample=null;
-      for await(const s of it._mbSampleSink.samples(f/fps)){sample=s;break;}
+      for await(const s of it._mbSampleSink.samples(srcFrame/fps)){sample=s;break;}
       if(!sample)continue;
       frameCtx.clearRect(0,0,srcW,srcH);
       sample.draw(frameCtx,0,0,srcW,srcH);
       sample.close();
       FX.setVideoFrame(frameCanvas,srcW,srcH);
-      const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:f}):undefined;
+      const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:srcFrame}):undefined;
       FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
       compCtx.clearRect(0,0,outW,outH);
       compCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
@@ -12058,27 +12120,37 @@ async function fxVideoExportSmall(it){
       setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
     }
     // Audio pass: a separate loop AFTER video (mediabunny muxes tracks correctly regardless of
-    // add() call interleaving) — copies encoded packets straight through, capped to the same
-    // duration as the (possibly capped) video above so a browser-export-limited video never
-    // ships with longer audio than picture.
+    // add() call interleaving) — copies encoded packets straight through, windowed to the
+    // TRIMMED range [trimF0/fps, (trimF0+totalFrames)/fps) and rebased to start at 0, same as
+    // the video timestamps above, so a trimmed export's audio and picture stay in sync.
     if(audioSource&&!cancelled){
-      const audioMaxT=totalFrames/fps;
+      const audioMinT=trimF0/fps,audioMaxT=(trimF0+totalFrames)/fps;
       const pktSink=new MB.EncodedPacketSink(it._mbAudioTrack);
       const decoderConfig=await it._mbAudioTrack.getDecoderConfig().catch(()=>null);
       // ⚠️ Real AAC streams routinely start at a NEGATIVE timestamp (encoder priming/pre-roll
       // samples) — verified on a real iPhone clip: "Timestamps must be non-negative (got
       // -0.044s)" on the very first packet. The standard remux fix (same one ffmpeg's
-      // `-avoid_negative_ts make_zero` does) is to shift the WHOLE stream by the first packet's
-      // timestamp so it starts at exactly 0, matching video's own timeline start — not clamp
-      // each packet independently, which would collapse several leading packets onto the same
-      // timestamp and confuse the muxer.
+      // `-avoid_negative_ts make_zero` does) is to shift the WHOLE stream so it starts at exactly
+      // 0, matching video's own timeline start — not clamp each packet independently, which would
+      // collapse several leading packets onto the same timestamp and confuse the muxer. When
+      // trimmed, the shift is audioMinT (plus any negative first-packet offset) rather than 0, so
+      // the kept window rebases the same way the video loop above does.
       const firstPkt=await pktSink.getFirstPacket().catch(()=>null);
-      const tsOffset=firstPkt&&firstPkt.timestamp<0?firstPkt.timestamp:0;
+      const negOffset=firstPkt&&firstPkt.timestamp<0?firstPkt.timestamp:0;
+      const tsOffset=audioMinT+negOffset;
       let first=true;
+      // Include the packet straddling the in-point rather than dropping it (the standard NLE
+      // convention — MLT/ffmpeg -ss included-packet behaviour) so trimmed audio is never short.
+      let includeFromHere=false;
       for await(const pkt of pktSink.packets()){
         if(fxExportCancel){cancelled=true;break;}
-        const shifted=tsOffset!==0?pkt.clone({timestamp:pkt.timestamp-tsOffset}):pkt;
-        if(shifted.timestamp>=audioMaxT)break;
+        const pktEnd=pkt.timestamp+(pkt.duration||0);
+        if(!includeFromHere){
+          if(pktEnd<=audioMinT)continue; // fully before the trim window — skip
+          includeFromHere=true;
+        }
+        if(pkt.timestamp>=audioMaxT)break;
+        const shifted=tsOffset!==0?pkt.clone({timestamp:Math.max(0,pkt.timestamp-tsOffset)}):pkt;
         await audioSource.add(shifted,first?{decoderConfig}:undefined);
         first=false;
       }
@@ -13828,6 +13900,18 @@ document.addEventListener('keydown',e=>{
   }
   if(inInput||e.metaKey||e.ctrlKey||e.altKey)return;
   if(!fxImages.length)return;
+  // ── Video transport shortcuts (Shotcut/Kdenlive/Resolve convention). Only while the CURRENT
+  // item is a video, so photo shortcuts (arrows = filmstrip nav, Space = compare) are unaffected.
+  const _vidIt=curItem();
+  if(_vidIt&&_vidIt.kind==='video'){
+    if(e.key===' '&&!e.repeat){e.preventDefault();fxVideoPlayToggle();return;}
+    if(e.key==='ArrowLeft'){e.preventDefault();fxVideoStep(e.shiftKey?-Math.round(_vidIt.fps||30):-1);return;}
+    if(e.key==='ArrowRight'){e.preventDefault();fxVideoStep(e.shiftKey?Math.round(_vidIt.fps||30):1);return;}
+    if(e.key==='Home'){e.preventDefault();fxVideoGoToTrim('in');return;}
+    if(e.key==='End'){e.preventDefault();fxVideoGoToTrim('out');return;}
+    if(e.key==='i'||e.key==='I'){e.preventDefault();fxVideoSetTrimAtPlayhead('in');return;}
+    if(e.key==='o'||e.key==='O'){e.preventDefault();fxVideoSetTrimAtPlayhead('out');return;}
+  }
   if(e.key==='ArrowLeft'&&fxImages.length>1){e.preventDefault();fxSelectImage((fxCurIdx-1+fxImages.length)%fxImages.length);return;}
   if(e.key==='ArrowRight'&&fxImages.length>1){e.preventDefault();fxSelectImage((fxCurIdx+1)%fxImages.length);return;}
   if(e.key===' '&&!e.repeat){ // hold Space = before/after compare (keyup releases below)

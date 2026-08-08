@@ -827,3 +827,22 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
   a zero-copy blit path for a raw `VideoFrame` upload) didn't match the actual implementation —
   every call site draws the sample onto a plain 2D canvas first via `sample.draw()`, exactly like
   a photo canvas, so it needs the identical flip. Verified with a top/bottom-asymmetric test clip.
+- ✅ **Trim now actually trims (V6, first slice).** `trimInFrame`/`trimOutFrame` used to be written
+  by the transport sliders and read by nothing — `fxVideoExportSmall` always exported the whole
+  clip. It now derives `trimF0/trimF1`, loops only that range, and rebases OUTPUT timestamps to
+  start at 0 (same technique the audio pass already used for negative AAC priming timestamps).
+  Audio is windowed to the trimmed range the same way, keeping the packet that straddles the
+  in-point (the standard ffmpeg/MLT `-ss` convention) so trimmed audio is never short. Playback
+  (`fxVideoPlayTick`) now also **loops within the trim window** via a `fxVideoLoop` toggle instead
+  of always stopping at the end — the old "stop" behaviour was an explicit V1 simplification, not
+  a design choice. Added a Shotcut/Kdenlive-style keyboard map for video (Space play/pause, ←/→
+  frame-step, Shift+←/→ second-step, I/O set trim at playhead, Home/End jump to trim in/out) and
+  transport buttons (frame-step, loop, Set In/Out) — none of this existed before. `test/video_harness.mjs`
+  gained a [5] section covering the transport wiring (trim-set/step/goto/loop), DOM-level so it
+  stays fast; the full trimmed-export frame/timestamp math is exercised in the browser directly,
+  not yet in the harness — see the open items below.
+  ⚠️ Still open from the same audit (`~/.claude/plans/anything-else-important-missing-wise-cerf.md`
+  has the full plan): no in-playback audio (playback is still silent — only export has sound via
+  passthrough), no export quality/codec/resolution UI (still hardcoded H.264/20Mbps), borders and
+  canvas-matte still skipped for video, no scopes (waveform/parade/vectorscope), no thumbnail
+  strip on the scrubber. Pick any of those up independently — they don't depend on each other.

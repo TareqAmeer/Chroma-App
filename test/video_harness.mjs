@@ -12,10 +12,10 @@
 // Usage:
 //   node test/video_harness.mjs
 //
-// This is V0-scoped: it covers what V0 actually built (demux metadata, footage-quality probes,
-// seek correctness/determinism, and the guard that video code is invisible to the photo path).
-// It does NOT yet cover playback, encode/export, or grain-motion determinism — those land with
-// V1-V3 (see CLAUDE.md §12 / the video plan's Part 4 for the full matrix this harness grows into).
+// Covers demux metadata, footage-quality probes, seek correctness/determinism, the guard that
+// video code is invisible to the photo path, and (V6) the trim/step/loop transport wiring.
+// It does NOT yet cover playback timing, full encode/export (audio remux, trimmed export frame
+// count), or grain-motion determinism — see CLAUDE.md §12 / the video plan's Part 4.
 
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -197,6 +197,43 @@ async function main() {
     const stillBytes = Buffer.from(stillB64, 'base64');
     check('chart.png x identity still byte-exact vs golden', Buffer.compare(chartBytes, stillBytes) === 0,
       `${chartBytes.length} vs ${stillBytes.length} bytes`);
+
+    // ---- 5. Trim/step/loop transport state (V6) ---------------------------------------------
+    // Cheap DOM-level checks for fxVideoStep/fxVideoSetTrimAtPlayhead/fxVideoGoToTrim/loop —
+    // no decode needed, just verifies the transport wiring set trimInFrame/trimOutFrame/scrub
+    // correctly. The actual trimmed-export frame math is exercised by fxVideoExportSmall itself
+    // (trimF0/trimF1/totalFrames) — this only guards the UI plumbing feeding it.
+    console.log('\n[5] Trim/step/loop transport state');
+    const trimResults = await page.evaluate(async ({ b64 }) => {
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const file = new File([arr], 'video_tiny.mp4', { type: 'video/mp4' });
+      await window.loadFXImages([file]); // check [4] above swapped curItem() to a photo — reload the video
+      await new Promise(r => setTimeout(r, 300));
+      const it = curItem();
+      await fxVideoSeekTo(it, 0);
+      document.getElementById('vid-scrub').value = 3;
+      fxVideoSetTrimAtPlayhead('in');
+      document.getElementById('vid-scrub').value = 7;
+      fxVideoSetTrimAtPlayhead('out');
+      const afterSet = { in: it.trimInFrame, out: it.trimOutFrame };
+      fxVideoStep(-2); // from frame 7 -> 5
+      const afterStep = +document.getElementById('vid-scrub').value;
+      fxVideoGoToTrim('in');
+      const afterGoIn = +document.getElementById('vid-scrub').value;
+      fxVideoLoopToggle();
+      const loopOn = fxVideoLoop;
+      fxVideoLoopToggle();
+      const loopOff = fxVideoLoop;
+      return { afterSet, afterStep, afterGoIn, loopOn, loopOff };
+    }, { b64: (await readFile(path.join(FIXTURES_DIR, 'video_tiny.mp4'))).toString('base64') });
+    check('trim-in set to playhead frame 3', trimResults.afterSet.in === 3, JSON.stringify(trimResults.afterSet));
+    check('trim-out set to playhead frame 7', trimResults.afterSet.out === 7, JSON.stringify(trimResults.afterSet));
+    check('step -2 from frame 7 lands on 5', trimResults.afterStep === 5, `got ${trimResults.afterStep}`);
+    check('go-to-trim-in lands on frame 3', trimResults.afterGoIn === 3, `got ${trimResults.afterGoIn}`);
+    check('loop toggle flips true then false', trimResults.loopOn === true && trimResults.loopOff === false,
+      JSON.stringify(trimResults));
 
   } finally {
     await browser.close();
