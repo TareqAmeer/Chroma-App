@@ -6570,16 +6570,29 @@ const VID_EXT_RE=/\.(mp4|mov|m4v)$/i;
 // variation heuristic, not fine for anything that needs frame-exact timing (real playback/export
 // use the sample-level timestamps directly instead of trusting this flag).
 async function probeVfr(track){
+  // ⚠️ Verified against a real B-frame-coded HEVC iPhone clip (IMG_8015.MOV, genuinely CFR
+  // 29.97fps): reading exactly N packets in DECODE order and sorting by presentation timestamp
+  // produces one spurious large gap at the TAIL, every time, on any B-frame stream — the last
+  // few decode-order packets grabbed are B-frames whose presentation timestamps land in the
+  // MIDDLE of the range already collected, while the packets that would fill that gap haven't
+  // been read yet (they come later in decode order). Measured: 29 of 29 real deltas were exactly
+  // 0.0333s; only the 30th (boundary) delta was wrong (0.133s), which alone pushed the
+  // coefficient of variation from ~0 to 0.5 and flagged genuinely CFR footage as VFR. Fix:
+  // over-read by a B-frame-reorder margin and DISCARD the tail samples near the read cutoff —
+  // this is the cheap-heuristic equivalent of what ffprobe/mediainfo do by analyzing complete,
+  // fully-decoded presentation-order timelines instead of a truncated decode-order prefix.
+  const SAMPLE=30,MARGIN=16;
   try{
     const pktSink=new(await getMediabunny()).EncodedPacketSink(track);
     const ts=[];
     for await(const pkt of pktSink.packets(undefined,undefined,{metadataOnly:true})){
       ts.push(pkt.timestamp);
-      if(ts.length>=30)break;
+      if(ts.length>=SAMPLE+MARGIN)break;
     }
-    if(ts.length<4)return false;
+    if(ts.length<SAMPLE)return false; // short clip — not enough margin to trust the tail-safe window either way
     ts.sort((a,b)=>a-b);
-    const deltas=[];for(let i=1;i<ts.length;i++)deltas.push(ts[i]-ts[i-1]);
+    const safe=ts.slice(0,SAMPLE); // drop the MARGIN tail samples, which may still be missing reordered neighbours
+    const deltas=[];for(let i=1;i<safe.length;i++)deltas.push(safe[i]-safe[i-1]);
     const mean=deltas.reduce((a,b)=>a+b,0)/deltas.length;
     if(mean<=0)return false;
     const variance=deltas.reduce((a,d)=>a+(d-mean)**2,0)/deltas.length;
