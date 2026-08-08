@@ -336,7 +336,7 @@
     #lib-grid.list-view .lib-thumb-wrap{width:52px;height:40px;aspect-ratio:auto}
     #lib-grid.list-view .lib-name{padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
     #lib-grid.list-view .lib-tagrow{padding:0;display:contents}
-    #lib-grid.list-view .lib-edited-badge,#lib-grid.list-view .lib-raw-badge{position:static;width:16px;height:16px}
+    #lib-grid.list-view .lib-edited-badge,#lib-grid.list-view .lib-raw-badge,#lib-grid.list-view .lib-video-badge{position:static;width:16px;height:16px}
     #lib-grid.list-view .lib-col{font-size:10px;color:var(--mut);font-family:ui-monospace,Menlo,monospace;
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .lib-meta-strip{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);color:#fff;
@@ -390,6 +390,15 @@
     .lib-raw-badge{position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:5px;
       background:rgba(0,0,0,.55);color:#cfcfd6;font-size:9px;font-weight:700;letter-spacing:.02em;
       display:flex;align-items:center;justify-content:center;z-index:2}
+    /* Video: same corner-badge slot the RAW "R" chip uses (mutually exclusive — a file is one
+       kind or the other) plus a dark placeholder fill + centered play glyph in the thumbnail
+       itself, since get_thumbnail has no still-frame decoder for video (see library.rs). */
+    .lib-video-badge{position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:5px;
+      background:rgba(0,0,0,.55);color:#cfcfd6;font-size:9px;display:flex;align-items:center;justify-content:center;z-index:2}
+    .lib-thumb-video{background:linear-gradient(135deg,var(--sur2),var(--sur))}
+    .lib-thumb-video::before{content:'▶';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      color:var(--mut);font-size:20px;opacity:.5;z-index:1}
+    .lib-thumb-video img{display:none} /* always empty (no thumbnail) — hide rather than show a broken icon */
     /* Dupe chip: bottom-left (RAW already owns top-left, Edited owns top-right). Synced badge:
        bottom-right, mirroring it. Both passive-only indicators, no click handler. */
     .lib-dupe-badge{position:absolute;bottom:4px;left:4px;min-width:18px;height:18px;padding:0 4px;
@@ -504,6 +513,7 @@
             <option value="all">All types</option>
             <option value="raw">RAW</option><option value="jpeg">JPEG</option>
             <option value="png">PNG</option><option value="tiff">TIFF</option>
+            <option value="video">Video</option>
           </select>
           <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
           <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
@@ -671,7 +681,8 @@
   // Best-effort MIME from the filename — File objects built from read_file_bytes carry no
   // type, and chromasmith-22.html has type-based branches downstream (its loadFXImages filter
   // is now extension-aware too, but a real MIME keeps every other check honest).
-  const MIME_BY_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff' };
+  const MIME_BY_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff',
+    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v' };
   const mimeFromName = (p) => MIME_BY_EXT[(p.split('.').pop() || '').toLowerCase()] || '';
   async function pickFolder() {
     try {
@@ -1577,7 +1588,7 @@
       grid.innerHTML = `<div id="lib-empty">Can't read this folder.</div>`;
       return;
     }
-    state.entries = entries.filter((e) => e.is_image);
+    state.entries = entries.filter((e) => e.is_image || e.is_video);
     // Sidecars are cheap (small JSON reads) and flags/edited badges need them for first paint —
     // await those. Metadata is NOT cheap on a cold folder (a get_meta cache miss reads the whole
     // RAW file for the lens fallback), and awaiting it for EVERY file kept the grid on
@@ -2147,6 +2158,9 @@
         (sc.label === 'Red' ? ' flag-red' : sc.label === 'Green' ? ' flag-green' : '') + (entry.missing ? ' lib-missing' : '');
       card.dataset.path = entry.path;
       const rawBadge = entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
+      // No thumbnail decoder for video (get_thumbnail errors cleanly for it — see library.rs) —
+      // a badge + CSS placeholder icon instead of a broken <img>, same idea as the RAW badge.
+      const videoBadge = entry.is_video ? `<div class="lib-video-badge" title="Video clip">▶</div>` : '';
       const dupeClusterId = state.dupeClusters.get(entry.path);
       const dupeSize = dupeClusterId ? state.dupeClusterSizes.get(dupeClusterId) : 0;
       const dupeBadge = dupeSize > 1
@@ -2156,8 +2170,8 @@
       if (isList) {
         const m = state.meta.get(entry.path) || {};
         const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-        card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt=""></div>
-          <div class="lib-name">${state.showTitle ? esc(entry.name) + (entry.missing ? ' (missing)' : '') : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}${dupeBadge}${syncedBadge}</div>
+        card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt=""></div>
+          <div class="lib-name">${state.showTitle ? esc(entry.name) + (entry.missing ? ' (missing)' : '') : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}${videoBadge}${dupeBadge}${syncedBadge}</div>
           <div class="lib-col">${esc(m.date)}</div>
           <div class="lib-col">${esc(fmtEditedTs(entry.edited_ts))}</div>
           <div class="lib-col">${esc(m.camera)}</div>
@@ -2168,11 +2182,12 @@
           <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
           <div class="lib-col">${sc.edited ? 'Yes' : ''}</div>`;
       } else {
-        card.innerHTML = `<div class="lib-thumb-wrap"><img loading="lazy" alt="">${metaStripHtml(entry)}
+        card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}
             <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
           </div>
           ${sc.edited ? EDITED_BADGE_HTML : ''}
           ${rawBadge}
+          ${videoBadge}
           ${dupeBadge}
           ${syncedBadge}
           ${state.showTitle ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}`;
@@ -2185,7 +2200,9 @@
     // comment) sees it correctly instead of silently dropping the job.
     built.forEach(({ entry, card, idx }) => {
       const img = card.querySelector('img');
-      loadThumb(entry.path, img);
+      // No thumbnail decoder for video (get_thumbnail errors cleanly for it) — CSS placeholder
+      // only, see lib-thumb-video; card click/drag/flag wiring below still applies to video.
+      if (!entry.is_video) loadThumb(entry.path, img);
       card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
       card.oncontextmenu = (e) => showContextMenu(e, entry, shown);

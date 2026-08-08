@@ -841,8 +841,64 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
   gained a [5] section covering the transport wiring (trim-set/step/goto/loop), DOM-level so it
   stays fast; the full trimmed-export frame/timestamp math is exercised in the browser directly,
   not yet in the harness — see the open items below.
-  ⚠️ Still open from the same audit (`~/.claude/plans/anything-else-important-missing-wise-cerf.md`
-  has the full plan): no in-playback audio (playback is still silent — only export has sound via
-  passthrough), no export quality/codec/resolution UI (still hardcoded H.264/20Mbps), borders and
-  canvas-matte still skipped for video, no scopes (waveform/parade/vectorscope), no thumbnail
-  strip on the scrubber. Pick any of those up independently — they don't depend on each other.
+- ✅ **The rest of the V6 punch list shipped in the same pass** (same plan file):
+  - **Geometry (crop/rotate/flip/straighten) now reaches video export.** `fxVideoExportSmall` used
+    to draw the raw decoded sample straight into the encoder, bypassing `geomCanvas`'s pipeline
+    entirely — the Crop tool visibly did nothing to an exported clip. `geomCanvas` was split into
+    `applyGeomTo(canvas,geom)` (pure, reusable) + a one-line `geomCanvas(item)` wrapper so both
+    stills and the per-frame export loop share the identical transform, with zero behavior change
+    for photos (verified: 18/18 export goldens still byte-exact after the refactor alone).
+  - **Borders + canvas matte now render into video export** (`_videoComposeBorderMatte`), mirroring
+    `exportFX`/`canvasCompose` exactly — border thickness and matte aspect ratio are constant for
+    a whole clip, so their output size is computed ONCE and every frame draws into pre-allocated
+    canvases (no per-frame allocation). This is what makes a 9:16/1:1/4:5 video export possible.
+  - **Export settings UI**: Quality (Draft/Standard/High/Maximum — bitrate scales off the same
+    20Mbps/1080p30 reference the old hardcoded value used, so High+1080p+30fps is byte-for-byte
+    the prior default), Resolution (Source/4K/1080p/720p), Codec (H.264/HEVC, HEVC silently falls
+    back to H.264 via the same `getFirstEncodableVideoCodec` probe if unencodable), Frame rate
+    (Source/30/24 — decimation only, sampling is now TIME-based (`samples(srcTimeS)`) rather than
+    frame-index-based specifically so this and trim compose without special-casing).
+  - **In-playback audio**: `loadFXVideoFile` decodes the whole track into an `AudioBuffer` via
+    `AudioContext.decodeAudioData` at load time (separate from `_mbAudioTrack`, which export still
+    uses for the lossless packet-passthrough remux — playback needs decoded PCM, export needs the
+    original encoded packets). Once a source node is running, `fxVideoPlayTick` reads
+    `AudioContext.currentTime` as its clock instead of `performance.now()` — tighter A/V sync than
+    an independent wall-clock RAF loop. Mute is a single global toggle (`fxVideoMuted`); at export
+    it just skips `output.addAudioTrack` — no re-encode needed either way.
+  - **Fade in/out** (picture only — passthrough audio can't be faded without a decode/re-encode
+    pass, out of scope). Applied at export as a black-backdrop alpha composite per frame; the UI
+    is two plain number inputs in seconds.
+  - **Preview quality proxy**: a Full/½/¼ selector scales ONLY the live preview's WebGL backing
+    store (`renderPreview`'s `pw,ph`, gated on `kind==='video'`) — export is never affected. Zero
+    behavior change at its default (1×).
+  - **Scopes**: histogram/waveform/RGB-parade/vectorscope share one mode selector next to the
+    existing histogram toggle and the SAME downsampled sample buffer `drawHistogram` already
+    built — switching modes costs nothing extra. Ported ffmpeg's `vf_waveform`/`vf_vectorscope`
+    conventions (additive intensity, Rec.709 Cb/Cr wheel, the 6 colour-bar target boxes, the 123°
+    skin-tone/I-axis line — see §5b) as plain JS/canvas2D, not vendored, per the "port
+    conventions, write the JS" call on this feature (GPL-3.0 makes Shotcut/Kdenlive/ffmpeg's own
+    *code* licence-compatible, but it's C++, not JS — not worth a source port for four draw calls).
+  - **Guides overlay**: rule-of-thirds + SMPTE 90%/93% title/action-safe boxes, pure SVG overlay,
+    never rendered into a preview snapshot or export.
+  - **Thumbnail strip** (`fxVideoBuildThumbs`): 16 evenly-spaced low-res frames decoded lazily
+    under the scrubber, one `requestAnimationFrame` yield between each so it never blocks
+    scrubbing/playback; abandons mid-build if the user switches items.
+  - `test/video_harness.mjs` gained a [6] export smoke test — the WHOLE `fxVideoExportSmall` path
+    (geometry, borders/matte, quality/codec/fps, fades, audio remux) had zero CI coverage before
+    this; it now trims a fixture to 3 frames, stubs `window.saveFile` (bare top-level identifier,
+    same override pattern the stills export path already relies on), and asserts a real non-trivial
+    MP4 comes out the other end without throwing.
+  - **Library integration** (`desktop/src-tauri/src/library.rs` + `desktop/library-ui.js`): `.mp4`/
+    `.mov`/`.m4v` now list alongside photos (`is_video` flag, `kind:"video"`), filter by "Video" in
+    the type filter, and open into the editor via the exact same `read_file_bytes` → `File` →
+    `loadFXImages` path a photo takes (video was already handled there via `VID_EXT_RE`/MIME —
+    the gap was purely that the Library filtered clips out of `list_dir` before the editor ever
+    saw them). No thumbnail decoder for video (`image` crate can't read MP4; not worth an ffmpeg
+    dependency for a grid thumbnail) — `get_thumbnail` fails cleanly for it and the grid shows a
+    dark placeholder + ▶ badge instead of a broken `<img>`.
+  ⚠️ Genuinely deferred, not attempted blind: a full custom timeline-canvas widget replacing the
+  two range sliders (A2 in the plan — the sliders now clamp against each other and paint a range-
+  fill background instead, which covers the "can't invert the handles" bug without the bigger
+  rewrite); speed ramp/retiming (interacts badly with per-frame grain seeding and forces an audio
+  decision, see the plan's non-goals); multi-clip timeline; audio gain/volume (needs `AudioEncoder`,
+  breaks Safari); stabilization/deflicker. See the plan file for the full reasoning on each.

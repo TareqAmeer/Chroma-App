@@ -15,6 +15,9 @@ const IMAGE_EXTS: &[&str] = &[
     "rw2", "raw", "dng", "cr2", "cr3", "nef", "arw", "orf", "jpg", "jpeg", "png", "tif", "tiff",
 ];
 const RAW_EXTS: &[&str] = &["rw2", "raw", "dng", "cr2", "cr3", "nef", "arw", "orf"];
+// Same three extensions chromasmith-22.html's VID_EXT_RE accepts for video grading — kept in
+// sync deliberately so a clip the Library lists is always one the editor can actually open.
+const VIDEO_EXTS: &[&str] = &["mp4", "mov", "m4v"];
 
 fn ext_lower(path: &Path) -> String {
     path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase()
@@ -24,6 +27,9 @@ fn is_image_ext(ext: &str) -> bool {
 }
 fn is_raw_ext(ext: &str) -> bool {
     RAW_EXTS.contains(&ext)
+}
+fn is_video_ext(ext: &str) -> bool {
+    VIDEO_EXTS.contains(&ext)
 }
 
 /// EXIF orientation (1/3/6/8) for a RAW, read the same way raw_decode.rs does for the full
@@ -72,7 +78,13 @@ pub struct DirEntry {
     pub path: String,
     pub is_dir: bool,
     pub is_image: bool,
-    pub kind: &'static str, // "raw" | "jpeg" | "png" | "tiff"; "" for dirs
+    /// A clip, not a photo — kept separate from is_image (rather than folding video into it)
+    /// because every existing is_image call site (thumbnail fetch, RAW-specific menus, EXIF
+    /// panel) assumes a decodable still; this flag lets the frontend opt video INTO the parts
+    /// of the grid that do apply (grid card, open-in-editor, filters) without touching those.
+    #[serde(default)]
+    pub is_video: bool,
+    pub kind: &'static str, // "raw" | "jpeg" | "png" | "tiff" | "video"; "" for dirs
     /// Filesystem mtime (unix secs) and byte size — cheap (same stat() the thumbnail/meta cache
     /// keys already pay for), used by the library grid's "Date modified" / size sort+display so
     /// it doesn't need a separate get_meta round-trip per entry just to sort a folder.
@@ -112,15 +124,18 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
         let is_dir = p.is_dir();
         let ext = ext_lower(&p);
         let is_image = !is_dir && is_image_ext(&ext);
-        if is_dir || is_image {
-            let kind = if is_dir { "" } else { kind_of(&ext) };
+        let is_video = !is_dir && !is_image && is_video_ext(&ext);
+        if is_dir || is_image || is_video {
+            let kind = if is_dir { "" } else if is_video { "video" } else { kind_of(&ext) };
             let (mtime, size) = entry.metadata().ok().map(|m| {
                 let mt = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
                 (mt, m.len())
             }).unwrap_or((0, 0));
             let path_s = p.to_string_lossy().into_owned();
+            // Video has no sidecar-based edit recipe today (grading is applied live, not saved to
+            // an .xmp on disk the way photo edits are) — 0 is honest, not a placeholder.
             let edited_ts = if is_image { edited_ts_of(&path_s) } else { 0 };
-            out.push(DirEntry { name, path: path_s, is_dir, is_image, kind, mtime, size, missing: false, edited_ts });
+            out.push(DirEntry { name, path: path_s, is_dir, is_image, is_video, kind, mtime, size, missing: false, edited_ts });
         }
     }
     out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
@@ -178,6 +193,12 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
     }
 
     let ext = ext_lower(Path::new(&path));
+    // No still-frame decoder for video here (the `image` crate can't read MP4, and pulling in
+    // ffmpeg just for a grid thumbnail is out of scope) — fail cleanly so the frontend falls
+    // back to its generic video-clip placeholder icon instead of a broken <img>.
+    if is_video_ext(&ext) {
+        return Err("no thumbnail decoder for video".into());
+    }
     let img = if is_raw_ext(&ext) {
         let img = rawler::analyze::extract_thumbnail_pixels(&path, &RawDecodeParams::default())
             .map_err(|e| format!("thumbnail decode: {e}"))?;
@@ -645,9 +666,9 @@ pub fn list_collection(name: String) -> Vec<DirEntry> {
             match std::fs::metadata(&path) {
                 Ok(m) => {
                     let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-                    DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime, size: m.len(), missing: false, edited_ts }
+                    DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime, size: m.len(), missing: false, edited_ts }
                 }
-                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime: 0, size: 0, missing: true, edited_ts },
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime: 0, size: 0, missing: true, edited_ts },
             }
         })
         .collect();
@@ -682,9 +703,9 @@ pub fn list_exported() -> Vec<DirEntry> {
             match std::fs::metadata(&path) {
                 Ok(m) => {
                     let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-                    DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime, size: m.len(), missing: false, edited_ts }
+                    DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime, size: m.len(), missing: false, edited_ts }
                 }
-                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, kind, mtime: 0, size: 0, missing: true, edited_ts },
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime: 0, size: 0, missing: true, edited_ts },
             }
         })
         .collect();

@@ -1353,6 +1353,21 @@ setTimeout(()=>window.hideBootSplash(),6000);
                behind the transform (the "zooming moves the mask" bug). See mskOverlayBox(). -->
           <svg id="fx-mask-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
           <canvas id="msk-paint-overlay"></canvas>
+          <!-- Rule-of-thirds + SMPTE safe-area guides, toggled by fxVideoGuidesToggle(). Pure
+               overlay — never rendered into a preview snapshot or an export. Lives inside
+               fx-zoom-wrap for the same reason the mask overlay does: it must ride the exact
+               CSS transform zoom/pan applies, with no per-event JS repositioning. -->
+          <svg id="fx-guides-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:4">
+            <line x1="33.33" y1="0" x2="33.33" y2="100" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="66.67" y1="0" x2="66.67" y2="100" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="0" y1="33.33" x2="100" y2="33.33" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="0" y1="66.67" x2="100" y2="66.67" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="50" y1="46" x2="50" y2="54" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="46" y1="50" x2="54" y2="50" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <!-- SMPTE action-safe 93% / title-safe 90% -->
+            <rect x="3.5" y="3.5" width="93" height="93" fill="none" stroke="rgba(255,210,80,.55)" stroke-width="0.15"/>
+            <rect x="5" y="5" width="90" height="90" fill="none" stroke="rgba(255,210,80,.35)" stroke-width="0.15"/>
+          </svg>
         </div>
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
         <canvas id="fx-hist"></canvas>
@@ -1381,31 +1396,39 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <button class="btn bgh fx-mini" id="btn-history" onclick="fxToggleTimelinePopover()" title="Edit history timeline">⏱</button>
             <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
           </div>
-          <button class="btn bgh fx-mini" id="btn-hist" onclick="toggleHist()" title="Toggle RGB histogram overlay">▦</button>
+          <button class="btn bgh fx-mini" id="btn-hist" onclick="toggleHist()" title="Toggle scope overlay">▦</button>
+          <select id="sel-scope-mode" onchange="fxScopeModeChanged(this.value)" title="Scope type" style="display:none;font-size:10px">
+            <option value="hist">Histogram</option><option value="wave">Waveform</option>
+            <option value="parade">RGB Parade</option><option value="vector">Vectorscope</option>
+          </select>
         </div>
       </div>
       <div id="fx-filmstrip" title="Click a photo to preview it"></div>
-      <!-- VIDEO TRANSPORT — scrub/trim/loop/frame-step + playback. Shown only for kind:'video'
-           (fxSyncVideoUI). Scrubbing snaps to the nearest sync sample DURING the drag (instant —
-           no decode wait) and seeks to the exact frame on release, since exact-frame seeks can
-           cost real time on a long GOP. Playback deliberately does NOT chase real-time at high
-           resolution (see fxVideoPlayTick's own comment) — it may drop frames; export re-decodes
-           every frame so it never does. Trim is used both at export AND to bound loop playback
-           (fxVideoPlayTick). Keyboard: Space play/pause, ←/→ step a frame, Shift+←/→ step a
-           second, I/O set trim in/out at the playhead, Home/End jump to trim in/out — see the
-           video branch in the global keydown handler. -->
+      <!-- VIDEO TRANSPORT — scrub/trim/loop/frame-step + playback + export settings. Shown only
+           for kind:'video' (fxSyncVideoUI). Scrubbing snaps to the nearest sync sample DURING the
+           drag (instant — no decode wait) and seeks to the exact frame on release, since exact-
+           frame seeks can cost real time on a long GOP. Playback deliberately does NOT chase
+           real-time at high resolution (see fxVideoPlayTick's own comment) — it may drop frames;
+           export re-decodes every frame so it never does. Trim is used both at export AND to
+           bound loop playback (fxVideoPlayTick). Keyboard: Space play/pause, ←/→ step a frame,
+           Shift+←/→ step a second, I/O set trim in/out at the playhead, Home/End jump to trim
+           in/out — see the video branch in the global keydown handler. -->
       <div id="fx-transport" style="display:none;margin-top:8px;padding:8px;background:var(--sur2);border-radius:8px">
         <div class="fx-row" style="align-items:center;gap:8px">
           <button class="btn-icon" onclick="fxVideoStep(-1)" title="Previous frame (←)">⏮</button>
           <button class="btn-icon" id="btn-vid-play" onclick="fxVideoPlayToggle()" title="Play/pause (Space)">▶</button>
           <button class="btn-icon" onclick="fxVideoStep(1)" title="Next frame (→)">⏭</button>
           <button class="btn-icon" id="btn-vid-loop" onclick="fxVideoLoopToggle()" title="Loop playback within the trim range">⟲</button>
-          <span id="vid-time" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px">00:00.0</span>
+          <button class="btn-icon" id="btn-vid-mute" onclick="fxVideoMuteToggle()" title="Mute (playback + export)">🔊</button>
+          <span id="vid-time" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:78px">00:00:00:00</span>
           <input type="range" id="vid-scrub" min="0" max="0" value="0" step="1" style="flex:1"
             oninput="fxVideoScrubInput(this.value)" onchange="fxVideoScrubCommit(this.value)">
-          <span id="vid-time-total" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:64px;text-align:right">00:00.0</span>
+          <span id="vid-time-total" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:78px;text-align:right">00:00:00:00</span>
           <span id="vid-fps-readout" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:56px;text-align:right" title="Actual playback frame rate — may be below the clip's real fps if the grade is too heavy to keep up live">—</span>
         </div>
+        <!-- Thumbnail strip (B3): filled in lazily by fxVideoBuildThumbs — evenly-spaced low-res
+             frames give a rough map of the clip under the scrubber, Premiere/Resolve-style. -->
+        <div id="vid-thumbstrip" style="display:flex;gap:1px;height:28px;margin-top:4px;border-radius:4px;overflow:hidden;background:var(--bg)"></div>
         <div class="fx-row" style="align-items:center;gap:8px;margin-top:6px" title="Trim in/out — used at export and to bound loop playback">
           <div class="fx-label" style="width:auto">Trim</div>
           <input type="range" id="vid-trim-in" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
@@ -1416,6 +1439,58 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button class="btn bgh" onclick="fxVideoSetTrimAtPlayhead('in')" title="Set trim-in at the playhead (I)">Set In</button>
           <button class="btn bgh" onclick="fxVideoSetTrimAtPlayhead('out')" title="Set trim-out at the playhead (O)">Set Out</button>
           <button class="btn bgh" onclick="fxVideoCaptureFrame()" title="Exports the CURRENT frame through the full-res still export path, graded exactly like the video preview. Only as large as the video itself."><span class="bdot"></span>Capture frame</button>
+          <button class="btn bgh" id="btn-vid-guides" onclick="fxVideoGuidesToggle()" title="Rule-of-thirds + safe-area guides over the preview">Guides</button>
+        </div>
+        <!-- Fades: picture only (see fxVideoExportSmall's own comment) — passthrough audio can't
+             be faded without a decode/re-encode pass, which is out of scope. -->
+        <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Fade in</span>
+            <input type="number" id="vid-fade-in" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade in from black, in seconds (picture only)">
+            <span style="font-size:10px;color:var(--mut)">s</span>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Fade out</span>
+            <input type="number" id="vid-fade-out" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade out to black, in seconds (picture only)">
+            <span style="font-size:10px;color:var(--mut)">s</span>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Preview</span>
+            <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Scales the LIVE PREVIEW resolution only — export is always full quality">
+              <option value="1">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
+            </select>
+          </div>
+        </div>
+        <!-- Export settings: quality controls bitrate, resolution/fps cap the encode (never
+             upscale/interpolate), codec is probed at export time and silently falls back to H.264
+             if HEVC isn't encodable in this browser. All read directly by fxVideoExportSmall. -->
+        <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Quality</span>
+            <select id="sel-vid-quality" title="Encode bitrate — higher survives film grain better, at a larger file">
+              <option value="draft">Draft</option><option value="standard">Standard</option>
+              <option value="high" selected>High</option><option value="max">Maximum</option>
+            </select>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Resolution</span>
+            <select id="sel-vid-resolution" title="Caps the export's long edge — never upscales past the source">
+              <option value="source">Source</option><option value="2160">4K</option>
+              <option value="1080" selected>1080p</option><option value="720">720p</option>
+            </select>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Codec</span>
+            <select id="sel-vid-codec" title="HEVC falls back to H.264 automatically if this browser can't encode it">
+              <option value="avc" selected>H.264</option><option value="hevc">HEVC</option>
+            </select>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Frame rate</span>
+            <select id="sel-vid-fps" title="Decimates toward the target — never interpolates up">
+              <option value="source" selected>Source</option><option value="30">30</option><option value="24">24</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
@@ -3662,7 +3737,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-08a';
+const BUILD='2026-08-08b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -6615,6 +6690,8 @@ function isHdrColorSpace(cs){
   if(!cs)return false;
   return cs.primaries==='bt2020'||cs.transfer==='hlg'||cs.transfer==='pq';
 }
+let _fxAudioCtx=null;
+function fxAudioCtx(){return _fxAudioCtx||(_fxAudioCtx=new(window.AudioContext||window.webkitAudioContext)());}
 async function loadFXVideoFile(file){
   const MB=await getMediabunny();
   const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(file)});
@@ -6649,11 +6726,24 @@ async function loadFXVideoFile(file){
   // them fresh via a NEW EncodedPacketSink so it isn't tied to whatever this load-time sink was
   // doing. null when the clip has no audio track; codec compatibility is checked at export time.
   const audioTrack=await input.getPrimaryAudioTrack().catch(()=>null);
+  // In-playback audio (V6): decode the WHOLE track up front into an AudioBuffer via the Web
+  // Audio API — separate from _mbAudioTrack (kept for the export remux, which needs the
+  // original ENCODED packets, not a decoded buffer). Fine for the short clips this app targets
+  // (browser export itself caps at 30s); a multi-minute clip would want streaming decode
+  // instead, but that's real scope beyond what playback needs today. Never let a decode failure
+  // block loading the clip — video-only playback with a "no audio" note is still useful.
+  let audioBuffer=null;
+  if(audioTrack){
+    try{
+      const buf=await file.arrayBuffer();
+      audioBuffer=await fxAudioCtx().decodeAudioData(buf.slice(0));
+    }catch(e){audioBuffer=null;log('Audio playback unavailable for this clip (decode failed) — export audio is unaffected.','warn');}
+  }
   return{
     kind:'video',img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi:72,bytes:null,
     fileSize:file.size,videoFile:file,rotation,colorSpace,codec,isVfr,isHdr,
     durationUs:Math.round(duration*1e6),fps:packetStats?packetStats.averagePacketRate:null,
-    _mbAudioTrack:audioTrack,
+    _mbAudioTrack:audioTrack,_audioBuffer:audioBuffer,
     // Cached decode context, reused by every later scrub seek (fxVideoSeekTo) so scrubbing
     // doesn't re-parse the container on every frame. frameCount is an ESTIMATE from the
     // sampled average fps — good enough for a scrub range's max, not for frame-exact export.
@@ -6733,6 +6823,48 @@ function fxVideoLoopToggle(){
   const btn=document.getElementById('btn-vid-loop');
   if(btn)btn.classList.toggle('bsec',fxVideoLoop);
 }
+// In-playback audio: an AudioBufferSourceNode re-created on every play/seek-while-playing/loop —
+// a source node is one-shot by the Web Audio spec (can't be re-started or re-offset once
+// created), so "restart" always means stop the old one and make a fresh one. Once playing, its
+// own AudioContext clock (fxAudioCtx().currentTime) becomes the playback clock instead of
+// performance.now() — tighter A/V sync than a wall-clock RAF loop drifting independently of
+// whatever the audio hardware is actually doing.
+let fxVideoMuted=false,_fxPlayAudioSrc=null,_fxPlayAudioCtxStart=0;
+function _fxAudioStop(){
+  if(_fxPlayAudioSrc){try{_fxPlayAudioSrc.stop();}catch(e){}try{_fxPlayAudioSrc.disconnect();}catch(e){}}
+  _fxPlayAudioSrc=null;
+}
+function _fxAudioStart(it,offsetSec){
+  _fxAudioStop();
+  if(fxVideoMuted||!it._audioBuffer)return;
+  const ctx=fxAudioCtx();
+  const src=ctx.createBufferSource();
+  src.buffer=it._audioBuffer;
+  src.connect(ctx.destination);
+  const clamped=Math.max(0,Math.min(it._audioBuffer.duration-0.001,offsetSec));
+  src.start(0,clamped);
+  src.onended=()=>{if(_fxPlayAudioSrc===src)_fxPlayAudioSrc=null;}; // clip runs past its own audio (video is usually a hair longer) — fine, just stop tracking it
+  _fxPlayAudioSrc=src;_fxPlayAudioCtxStart=ctx.currentTime-clamped;
+}
+function fxVideoMuteToggle(){
+  fxVideoMuted=!fxVideoMuted;
+  const btn=document.getElementById('btn-vid-mute');if(btn)btn.textContent=fxVideoMuted?'🔇':'🔊';
+  const it=curItem();
+  if(_fxPlayRAF&&it&&it.kind==='video'){ // playing right now — apply immediately instead of waiting for the next play
+    if(fxVideoMuted)_fxAudioStop();
+    else _fxAudioStart(it,(+document.getElementById('vid-scrub').value||0)/(it.fps||30));
+  }
+}
+function fxVideoGuidesToggle(){
+  const ov=document.getElementById('fx-guides-overlay');if(!ov)return;
+  const on=ov.style.display==='none';
+  ov.style.display=on?'block':'none';
+  const btn=document.getElementById('btn-vid-guides');if(btn)btn.classList.toggle('bsec',on);
+}
+// Live-preview-only resolution scale (see renderPreview's own hook) — export always renders at
+// full quality regardless of this setting.
+let fxVideoPreviewQuality=1;
+function fxVideoPreviewQualityChanged(v){fxVideoPreviewQuality=+v||1;renderPreview();}
 function fxVideoPlayToggle(){
   const it=curItem();if(!it||it.kind!=='video')return;
   if(_fxPlayRAF){fxVideoPause();return;}
@@ -6740,17 +6872,20 @@ function fxVideoPlayToggle(){
   _fxPlayStartMs=performance.now();
   _fxPlayStartFrame=+document.getElementById('vid-scrub').value||0;
   _fxPlayFrameTimes=[];
+  _fxAudioStart(it,_fxPlayStartFrame/(it.fps||30));
   _fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
 }
 function fxVideoPause(){
   if(_fxPlayRAF)cancelAnimationFrame(_fxPlayRAF);
   _fxPlayRAF=null;
+  _fxAudioStop();
   const btn=document.getElementById('btn-vid-play');if(btn)btn.textContent='▶';
 }
 async function fxVideoPlayTick(nowMs){
   const it=curItem();
   if(!it||it.kind!=='video'||!_fxPlayRAF){fxVideoPause();return;}
-  const elapsedS=(nowMs-_fxPlayStartMs)/1000;
+  // Prefer the audio clock once a source is actually running — see _fxAudioStart's comment.
+  const elapsedS=_fxPlayAudioSrc?(fxAudioCtx().currentTime-_fxPlayAudioCtxStart):(nowMs-_fxPlayStartMs)/1000;
   let targetFrame=_fxPlayStartFrame+Math.round(elapsedS*(it.fps||30));
   const maxFrame=it.frameCount-1;
   // Loop within the trim window (or the whole clip when untrimmed) instead of always stopping
@@ -6760,6 +6895,7 @@ async function fxVideoPlayTick(nowMs){
     if(fxVideoLoop&&loopOut>loopIn){
       targetFrame=loopIn;
       _fxPlayStartMs=nowMs;_fxPlayStartFrame=loopIn; // resync the wall-clock baseline to the loop-in point
+      _fxAudioStart(it,loopIn/(it.fps||30));
     }else{fxVideoPause();return;}
   }
   const scrub=document.getElementById('vid-scrub');
@@ -6777,10 +6913,14 @@ async function fxVideoPlayTick(nowMs){
   }
   if(_fxPlayRAF)_fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
 }
+// HH:MM:SS:FF (frames, not tenths) — I/O trim points are frame-accurate, so the readout should
+// be too, matching the Shotcut/Resolve convention rather than a tenths-of-a-second display.
 function fxVideoTimeLabel(frameIndex,fps){
-  const secs=frameIndex/(fps||30);
-  const m=Math.floor(secs/60),s=secs-m*60;
-  return `${String(m).padStart(2,'0')}:${s.toFixed(1).padStart(4,'0')}`;
+  fps=fps||30;
+  const totalSec=Math.floor(frameIndex/fps);
+  const h=Math.floor(totalSec/3600),m=Math.floor((totalSec%3600)/60),s=totalSec%60;
+  const f=Math.round(frameIndex-totalSec*fps);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}:${String(f).padStart(2,'0')}`;
 }
 // Wires the transport bar's ranges to the current video's frameCount/trim, and shows/hides the
 // whole bar — called from fxSyncVideoUI on every photo/video switch, same as the Clip info row.
@@ -6805,6 +6945,39 @@ function fxSyncTransportUI(){
     const sl=document.getElementById('sl-grain-motion');
     sl.value=it.grainMotion!=null?it.grainMotion:75;
     document.getElementById('vl-grain-motion').textContent=sl.value;
+  }
+  const mb=document.getElementById('btn-vid-mute');if(mb)mb.textContent=fxVideoMuted?'🔇':'🔊';
+  if(typeof fxVideoBuildThumbs==='function')fxVideoBuildThumbs(it); // fire-and-forget — fills in #vid-thumbstrip as frames decode
+}
+// Thumbnail strip (B3): N evenly-spaced low-res frames under the scrubber, Premiere/Resolve-
+// style. Built once per item (it._thumbsBuilt guards re-entry — fxSyncTransportUI calls this on
+// every switch back to an already-thumbnailed clip) and abandons early if the user switches to a
+// different item mid-build, since drawing into a strip that's no longer on screen would just be
+// wasted decode work racing whatever the newly-selected item is doing.
+async function fxVideoBuildThumbs(it){
+  if(!it||it.kind!=='video'||it._thumbsBuilt||!it._mbSampleSink)return;
+  it._thumbsBuilt=true;
+  const strip=document.getElementById('vid-thumbstrip');if(!strip)return;
+  strip.innerHTML='';
+  const N=16,maxFrame=Math.max(0,it.frameCount-1),fps=it.fps||30;
+  const sw=it.img.width,sh=it.img.height;
+  const canvases=[];
+  for(let i=0;i<N;i++){
+    const c=document.createElement('canvas');c.style.cssText='flex:1;height:100%;min-width:0';
+    strip.appendChild(c);canvases.push(c);
+  }
+  for(let i=0;i<N;i++){
+    if(curItem()!==it)return; // switched away — the strip for this item is gone, stop decoding for it
+    const t=Math.round(i/(N-1)*maxFrame)/fps;
+    let sample=null;
+    try{for await(const s of it._mbSampleSink.samples(t)){sample=s;break;}}catch(e){}
+    if(!sample||curItem()!==it){if(sample)sample.close();continue;}
+    const c=canvases[i],tw=48,th=28;c.width=tw;c.height=th;
+    const ctx=c.getContext('2d');
+    const s=Math.max(tw/sw,th/sh); // cover-fit, same centering math canvasCompose/buildFilmstrip use
+    sample.draw(ctx,(tw-sw*s)/2,(th-sh*s)/2,sw*s,sh*s);
+    sample.close();
+    await new Promise(r=>requestAnimationFrame(r)); // yield so scrubbing/playback stays responsive while the strip builds
   }
 }
 function fxVideoScrubInput(v){
@@ -6847,14 +7020,28 @@ function fxVideoClearTrim(which){
   if(which==='in')trimIn.value=0;else trimOut.value=maxFrame;
   fxVideoTrimChanged();
 }
+// A2: the two trim sliders can no longer cross a handle PAST the other one — each slider's own
+// min/max is clamped to the other's current value every time either one moves, so a drag simply
+// stops at the opposite handle instead of swapping past it (Shotcut/Kdenlive convention). The
+// swap-after-the-fact fallback stays as a belt-and-braces guard for the (now unreachable in the
+// UI, but still possible via the keyboard Set-In/Out path) case of a still-inverted pair.
 function fxVideoTrimChanged(){
   const it=curItem();if(!it||it.kind!=='video')return;
   const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
   let a=+trimIn.value,b=+trimOut.value;
-  if(a>b){[a,b]=[b,a];} // keep the pair ordered regardless of which handle the user dragged past the other
+  if(a>b){[a,b]=[b,a];trimIn.value=a;trimOut.value=b;}
+  trimIn.max=b;trimOut.min=a;
   it.trimInFrame=a;it.trimOutFrame=b;
   const full=a===0&&b>=it.frameCount-1;
   document.getElementById('vid-trim-lb').textContent=full?'full clip':`${fxVideoTimeLabel(a,it.fps)}–${fxVideoTimeLabel(b,it.fps)}`;
+  // Visual range fill on the scrub track — a background gradient from 0..a (dimmed, outside the
+  // trim) / a..b (normal, the playable/exported range) / b..end (dimmed again).
+  const scrub=document.getElementById('vid-scrub');
+  if(scrub){
+    const max=Math.max(1,+scrub.max||it.frameCount-1);
+    const p0=a/max*100,p1=b/max*100;
+    scrub.style.background=full?'':`linear-gradient(to right, var(--sur) 0%, var(--sur) ${p0}%, var(--acc) ${p0}%, var(--acc) ${p1}%, var(--sur) ${p1}%, var(--sur) 100%)`;
+  }
 }
 // Capture Frame (V2): exports the CURRENTLY DISPLAYED frame through the exact same full-res
 // still export path a photo uses (processToCanvas → toBlob) — the video already owns its own
@@ -10006,24 +10193,30 @@ function _applySplitPos(){
 }
 
 // ══ LIVE HISTOGRAM ════════════════════════════════════════════════════════════
+let fxScopeMode='hist'; // 'hist' | 'wave' | 'parade' | 'vector'
 function toggleHist(){
   fxHistOn=!fxHistOn;
   const btn=document.getElementById('btn-hist');
   if(btn)btn.classList.toggle('on',fxHistOn);
   const hc=document.getElementById('fx-hist');
   if(hc)hc.style.display=fxHistOn?'block':'none';
+  const sel=document.getElementById('sel-scope-mode');
+  if(sel)sel.style.display=fxHistOn?'':'none';
   if(fxHistOn)drawHistogram();
 }
+function fxScopeModeChanged(v){fxScopeMode=v;drawHistogram();}
+// One entry point dispatching to the 4 scope renderers below — all share the SAME downsampled
+// sample buffer (drawHistogram._tmp), so switching modes costs nothing extra per renderPreview
+// call. ffmpeg's vf_waveform/vf_vectorscope conventions (additive intensity, Rec.709 Cb/Cr
+// wheel with the 6 colour-bar targets + the 123° skin-tone line) — ported here as JS/canvas2D,
+// not vendored, per the "port conventions, write the JS" call on this feature.
 function drawHistogram(){
   const src=document.getElementById('fx-canvas');
   const hc=document.getElementById('fx-hist');
   if(!src||!hc||!fxHistOn)return;
-  const W=180,H=80,N=256;
-  hc.width=W;hc.height=H;
-  const ctx=hc.getContext('2d');
   // Sample a downscaled copy — into ONE persistent scratch canvas (runs on every renderPreview
-  // while the histogram overlay is open; allocating a fresh canvas + context each time churned
-  // the allocator for no benefit).
+  // while the scope overlay is open; allocating a fresh canvas + context each time churned the
+  // allocator for no benefit).
   const tmp=drawHistogram._tmp||(drawHistogram._tmp=document.createElement('canvas'));
   const scale=Math.min(1,200/src.width);
   tmp.width=Math.max(1,(src.width*scale)|0);
@@ -10031,6 +10224,15 @@ function drawHistogram(){
   const tctx=tmp.getContext('2d',{willReadFrequently:true});
   tctx.drawImage(src,0,0,tmp.width,tmp.height);
   const px=tctx.getImageData(0,0,tmp.width,tmp.height).data;
+  if(fxScopeMode==='wave')drawScopeWaveform(hc,px,tmp.width,tmp.height,null);
+  else if(fxScopeMode==='parade')drawScopeParade(hc,px,tmp.width,tmp.height);
+  else if(fxScopeMode==='vector')drawScopeVectorscope(hc,px,tmp.width,tmp.height);
+  else drawScopeHistogram(hc,px);
+}
+function drawScopeHistogram(hc,px){
+  const W=180,H=80,N=256;
+  hc.width=W;hc.height=H;
+  const ctx=hc.getContext('2d');
   const rH=new Float32Array(N),gH=new Float32Array(N),bH=new Float32Array(N);
   for(let i=0;i<px.length;i+=4){rH[px[i]]++;gH[px[i+1]]++;bH[px[i+2]]++;}
   const peak=Math.max(1,...rH,...gH,...bH);
@@ -10041,6 +10243,94 @@ function drawHistogram(){
     ctx.stroke();ctx.globalAlpha=1;
   };
   drawCh(rH,'#f55');drawCh(gH,'#5f5');drawCh(bH,'#58f');
+}
+// Luma (or one channel, when chOff is 0/1/2) column-vs-level accumulation, ffmpeg vf_waveform
+// style: x = source column, y = 255-level, brightness = how many source pixels of that column
+// landed at that level. Additive so a solid block reads as one bright horizontal band.
+function _scopeWaveAccum(px,srcW,srcH,outW,outH,chOff){
+  const acc=new Float32Array(outW*outH);
+  for(let y=0;y<srcH;y++)for(let x=0;x<srcW;x++){
+    const i=(y*srcW+x)*4;
+    const v=chOff==null?(px[i]*0.2126+px[i+1]*0.7152+px[i+2]*0.0722):px[i+chOff];
+    const ox=Math.min(outW-1,(x/srcW*outW)|0);
+    const oy=Math.min(outH-1,outH-1-((v/255*outH)|0));
+    acc[oy*outW+ox]++;
+  }
+  return acc;
+}
+function drawScopeWaveform(hc,px,srcW,srcH,chOff){
+  const W=180,H=80;
+  hc.width=W;hc.height=H;
+  const ctx=hc.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  const acc=_scopeWaveAccum(px,srcW,srcH,W,H,chOff);
+  const peak=Math.max(1,...acc);
+  const img=ctx.createImageData(W,H);
+  const col=chOff===0?[255,80,80]:chOff===1?[80,255,80]:chOff===2?[100,150,255]:[220,220,220];
+  for(let i=0;i<acc.length;i++){
+    const a=Math.min(1,Math.sqrt(acc[i]/peak)*1.4); // sqrt: a single bright pixel should still be visible, not lost under sparse-column normalization
+    img.data[i*4]=col[0];img.data[i*4+1]=col[1];img.data[i*4+2]=col[2];img.data[i*4+3]=a*255;
+  }
+  ctx.putImageData(img,0,0);
+}
+function drawScopeParade(hc,px,srcW,srcH){
+  const PW=60,H=80,W=PW*3;
+  hc.width=W;hc.height=H;
+  const ctx=hc.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  [0,1,2].forEach((chOff,slot)=>{
+    const acc=_scopeWaveAccum(px,srcW,srcH,PW,H,chOff);
+    const peak=Math.max(1,...acc);
+    const img=ctx.createImageData(PW,H);
+    const col=chOff===0?[255,80,80]:chOff===1?[80,255,80]:[100,150,255];
+    for(let i=0;i<acc.length;i++){
+      const a=Math.min(1,Math.sqrt(acc[i]/peak)*1.4);
+      img.data[i*4]=col[0];img.data[i*4+1]=col[1];img.data[i*4+2]=col[2];img.data[i*4+3]=a*255;
+    }
+    ctx.putImageData(img,slot*PW,0);
+  });
+  ctx.strokeStyle='rgba(255,255,255,.15)';ctx.beginPath();
+  ctx.moveTo(PW,0);ctx.lineTo(PW,H);ctx.moveTo(PW*2,0);ctx.lineTo(PW*2,H);ctx.stroke();
+}
+// Rec.709 Cb/Cr scatter on a 100×100 wheel — same convention as ffmpeg's vf_vectorscope: the
+// 6 colour-bar target boxes at 75% saturation plus the I-axis skin-tone line at 123° (see
+// CLAUDE.md §5b — the Skin Tone tool already measures hue on this same axis for a reason).
+function drawScopeVectorscope(hc,px,srcW,srcH){
+  const S=140;hc.width=S;hc.height=S;
+  const ctx=hc.getContext('2d');
+  ctx.clearRect(0,0,S,S);
+  const cx=S/2,cy=S/2,R=S/2-6;
+  ctx.strokeStyle='rgba(255,255,255,.25)';ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx-R,cy);ctx.lineTo(cx+R,cy);ctx.moveTo(cx,cy-R);ctx.lineTo(cx,cy+R);ctx.stroke();
+  // Skin-tone (I) line at 123° from the Cr(+U) axis — the same angle broadcast vectorscopes mark.
+  ctx.strokeStyle='rgba(255,210,80,.4)';ctx.beginPath();
+  const skA=123*Math.PI/180;ctx.moveTo(cx,cy);ctx.lineTo(cx+R*Math.cos(skA),cy-R*Math.sin(skA));ctx.stroke();
+  const acc=new Float32Array(S*S);
+  for(let y=0;y<srcH;y++)for(let x=0;x<srcW;x++){
+    const i=(y*srcW+x)*4,r=px[i],g=px[i+1],b=px[i+2];
+    const cb=-0.1146*r-0.3854*g+0.5*b,cr=0.5*r-0.4542*g-0.0458*b; // Rec.709, 8-bit centered (0 = neutral)
+    const ox=Math.min(S-1,Math.max(0,(cx+cr/128*R)|0));
+    const oy=Math.min(S-1,Math.max(0,(cy-cb/128*R)|0));
+    acc[oy*S+ox]++;
+  }
+  const peak=Math.max(1,...acc);
+  const img=ctx.getImageData(0,0,S,S);
+  for(let i=0;i<acc.length;i++){
+    if(acc[i]<=0)continue;
+    const a=Math.min(1,Math.sqrt(acc[i]/peak)*1.6);
+    img.data[i*4]=220;img.data[i*4+1]=220;img.data[i*4+2]=220;img.data[i*4+3]=Math.max(img.data[i*4+3],a*255);
+  }
+  ctx.putImageData(img,0,0);
+  // 6 target boxes (R/G/B/C/M/Y at 75% saturation), Rec.709 — small unfilled squares so a graded
+  // colour bar chart's dots should land inside them.
+  const targets=[['R',255,0,0],['G',0,255,0],['B',0,0,255],['C',0,255,255],['M',255,0,255],['Y',255,255,0]];
+  ctx.font='7px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  targets.forEach(([label,r,g,b])=>{
+    const cb=(-0.1146*r-0.3854*g+0.5*b)*0.75,cr=(0.5*r-0.4542*g-0.0458*b)*0.75;
+    const tx=cx+cr/128*R,ty=cy-cb/128*R;
+    ctx.strokeStyle='rgba(255,255,255,.35)';ctx.strokeRect(tx-4,ty-4,8,8);
+    ctx.fillStyle='rgba(255,255,255,.5)';ctx.fillText(label,tx,ty-7);
+  });
 }
 
 // ══ ZOOM / PAN ════════════════════════════════════════════════════════════════
@@ -10943,6 +11233,14 @@ function renderPreview(){
   // nothing to fix and nothing should change for photos. Video starts from 8-bit 4:2:0.
   const seedOpt=(vSeedOpt!=null?{seed:vSeedOpt}:{});
   if(_curIsVideo)Object.assign(seedOpt,{hdrIntermediate:true,dither:true});
+  // Preview proxy (B6): scales the LIVE PREVIEW's WebGL backing store only — export always
+  // renders at full quality regardless of this. Every other frame-drop mechanism in this app
+  // (fxVideoPlayTick) is about keeping playback live; this is about keeping it live in the FIRST
+  // place on a heavy grade over 4K footage, the way any NLE's proxy/quarter-res preview does.
+  if(_curIsVideo&&typeof fxVideoPreviewQuality==='number'&&fxVideoPreviewQuality<1){
+    pw=Math.max(2,Math.round(pw*fxVideoPreviewQuality));
+    ph=Math.max(2,Math.round(ph*fxVideoPreviewQuality));
+  }
   FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx(),...seedOpt}); // same glow scale the export will use → faithful preview
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
@@ -11333,8 +11631,11 @@ function straightenCanvas(src,deg){
   return c;
 }
 // Apply an item's geometry to its ORIGINAL image, returning a fresh canvas (or the image if identity).
-function geomCanvas(item){
-  const g=item.geom||defGeom();let cv=item.img;
+// Extracted from geomCanvas so video export can apply the SAME rotate/flip/straighten/crop
+// pipeline to a freshly-decoded frame canvas each frame (geomCanvas itself only ever reads
+// item.img, which is a still photo's static source — video has no single source image).
+function applyGeomTo(cv,g){
+  if(!g)return cv;
   if(g.rot||g.flipH||g.flipV){
     const sw=cv.naturalWidth||cv.width,sh=cv.naturalHeight||cv.height;
     const rot=((g.rot%360)+360)%360,swap=rot===90||rot===270;
@@ -11352,6 +11653,7 @@ function geomCanvas(item){
   }
   return cv;
 }
+function geomCanvas(item){return applyGeomTo(item.img,item.geom||defGeom());}
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
   const it=curItem();
@@ -12026,9 +12328,41 @@ async function exportFX(){
     fxExportCancel=false;
   }
 }
-// V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget), hard-capped
-// 1080p/30s in-browser (see CLAUDE.md §12 / the video plan's V0-V4 phasing: streaming save for
-// large exports is V3). Reuses the stills export progress UI.
+// Same border+canvas-matte compositing exportFX/canvasCompose do for stills (see CLAUDE.md §12
+// A7), reworked to draw into PRE-ALLOCATED, fixed-size canvases instead of allocating fresh ones
+// every call — border thickness and matte aspect ratio are constant for the whole clip, so their
+// output size is invariant across frames; only allocate-and-drawImage-into-existing per frame.
+// Returns the canvas actually holding the composed result (borderedCanvas or finalCanvas — never
+// gradeCanvas itself, so the caller can always treat the return value as "final size").
+function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas){
+  const{gradedW,gradedH,b1t,b2t,borderedW,borderedH,finalW,finalH,hasMatte}=dims;
+  let bordered=gradeCanvas;
+  if(b1t||b2t){
+    const bctx=borderedCanvas.getContext('2d');
+    bctx.fillStyle=P.b2.color;bctx.fillRect(0,0,borderedW,borderedH);
+    bctx.fillStyle=P.b1.color;bctx.fillRect(b2t,b2t,borderedW-2*b2t,borderedH-2*b2t);
+    bctx.drawImage(gradeCanvas,b1t+b2t,b1t+b2t);
+    bordered=borderedCanvas;
+  }
+  if(!hasMatte)return bordered;
+  const CV=P.canvas;
+  const fctx=finalCanvas.getContext('2d');
+  fctx.fillStyle=CV.bg||'#000000';fctx.fillRect(0,0,finalW,finalH);
+  if(CV.blur){
+    const t=_videoComposeBorderMatte._blurTmp||(_videoComposeBorderMatte._blurTmp=document.createElement('canvas'));
+    const tw=Math.max(1,Math.round(finalW/16)),th=Math.max(1,Math.round(finalH/16));
+    t.width=tw;t.height=th;const tx=t.getContext('2d');
+    const s=Math.max(tw/borderedW,th/borderedH);
+    tx.drawImage(bordered,(tw-borderedW*s)/2,(th-borderedH*s)/2,borderedW*s,borderedH*s);
+    fctx.imageSmoothingEnabled=true;fctx.drawImage(t,0,0,finalW,finalH);
+    fctx.fillStyle='rgba(0,0,0,.22)';fctx.fillRect(0,0,finalW,finalH);
+  }
+  const zoom=CV.zoom||1;
+  fctx.drawImage(bordered,(finalW-borderedW*zoom)/2,(finalH-borderedH*zoom)/2,borderedW*zoom,borderedH*zoom);
+  return finalCanvas;
+}
+// V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget) unless
+// streaming (V3, desktop) is available. Reuses the stills export progress UI.
 // ⚠️ Never getPixels() here — FX.render() draws into FX.cv (a WebGL canvas), and every frame is
 // composited by drawImage(FX.cv,...) into a 2D canvas, a GPU-side blit with no CPU readback.
 async function fxVideoExportSmall(it){
@@ -12040,27 +12374,54 @@ async function fxVideoExportSmall(it){
   // BufferTarget-only limitation and lift entirely when streaming is available. Falls back to
   // the capped in-memory BufferTarget on the browser/Pages build, unchanged from V2.
   const canStream=typeof window.chromasmithMakeVideoStreamTarget==='function';
-  const CAP_LONG_EDGE=canStream?Infinity:1080,CAP_DURATION_S=canStream?Infinity:30;
-  const srcW=it.img.width,srcH=it.img.height;
-  const scale=Math.min(1,CAP_LONG_EDGE/Math.max(srcW,srcH));
-  // Even dimensions: a hard H.264 requirement (4:2:0 chroma subsampling needs whole chroma blocks).
-  const outW=Math.max(2,Math.round(srcW*scale/2)*2),outH=Math.max(2,Math.round(srcH*scale/2)*2);
-  const fps=it.fps||30;
+  const resSel=(document.getElementById('sel-vid-resolution')||{}).value||'1080';
+  const resCap=resSel==='source'?Infinity:parseInt(resSel,10);
+  const CAP_LONG_EDGE=Math.min(canStream?Infinity:1080,resCap),CAP_DURATION_S=canStream?Infinity:30;
+  const srcW=it.img.width,srcH=it.img.height; // RAW sample dimensions — geometry (below) may change what's actually graded
+  // Geometry (A7): crop/rotate/flip/straighten, via the SAME applyGeomTo pipeline stills use
+  // (see geomCanvas) — the export loop used to bypass it entirely, silently ignoring the Crop
+  // tool for video. Constant across the whole clip, so run it once on a throwaway canvas just to
+  // learn the post-geometry dimensions; the real per-frame transform happens in the loop below.
+  const hasGeom=!!(it.geom&&(it.geom.rot||it.geom.flipH||it.geom.flipV||it.geom.angle||it.geom.crop));
+  let geomW=srcW,geomH=srcH;
+  if(hasGeom){
+    const probe=document.createElement('canvas');probe.width=srcW;probe.height=srcH;
+    const probed=applyGeomTo(probe,it.geom);
+    geomW=probed.width;geomH=probed.height;
+  }
+  const scale=Math.min(1,CAP_LONG_EDGE/Math.max(geomW,geomH));
+  // Even dimensions: a hard H.264/HEVC requirement (4:2:0 chroma subsampling needs whole chroma blocks).
+  const outW=Math.max(2,Math.round(geomW*scale/2)*2),outH=Math.max(2,Math.round(geomH*scale/2)*2);
+  const srcFps=it.fps||30;
+  const fpsSel=(document.getElementById('sel-vid-fps')||{}).value||'source';
+  // Frame-rate decimation only — never interpolates up past the source's own rate.
+  const fps=fpsSel==='source'?srcFps:Math.min(srcFps,parseInt(fpsSel,10));
   // Trim (V4): export only [trimIn,trimOut], with output timestamps REBASED to start at 0 — same
-  // technique the audio pass already uses for negative AAC priming timestamps below.
+  // technique the audio pass already uses for negative AAC priming timestamps below. Frame
+  // indices below are on the CLIP's own (srcFps) grid; sampling itself is time-based (see the
+  // loop), which is what makes fps decimation just a different time step over the same window.
   const trimF0=Math.max(0,Math.min(it.trimInFrame||0,it.frameCount-1));
   const trimF1=Math.max(trimF0,Math.min(it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1,it.frameCount-1));
-  const trimFrameCount=trimF1-trimF0+1;
-  const totalFrames=Math.min(trimFrameCount,Math.round(CAP_DURATION_S*fps)||trimFrameCount);
-  if(totalFrames<trimFrameCount)log(`Export capped to the first ${CAP_DURATION_S}s of the ${(trimFrameCount/fps).toFixed(1)}s trimmed range (browser export limit — the desktop app removes this cap).`,'warn');
-  if(scale<1)log(`Export capped to ${outW}×${outH} (browser export limit — ${srcW}×${srcH} source; the desktop app removes this cap).`,'warn');
+  const trimStartS=trimF0/srcFps,trimDurationS=(trimF1-trimF0+1)/srcFps;
+  const outFrameCount=Math.max(1,Math.round(trimDurationS*fps));
+  const totalFrames=Math.min(outFrameCount,Math.round(CAP_DURATION_S*fps)||outFrameCount);
+  if(totalFrames<outFrameCount)log(`Export capped to the first ${CAP_DURATION_S}s of the ${trimDurationS.toFixed(1)}s trimmed range (browser export limit — the desktop app removes this cap).`,'warn');
+  if(scale<1)log(`Export capped to ${outW}×${outH} (browser export limit — ${geomW}×${geomH} source; the desktop app removes this cap).`,'warn');
 
-  // Film grain is pathological for H.264 at normal bitrates (it's exactly the high-frequency
-  // detail a DCT discards first) — 20 Mbps at 1080p30 is roughly 2x a typical default, matching
-  // the plan's "Film Grain above ~30 needs High bitrate to survive compression" guidance.
-  const BITRATE=20_000_000;
-  const codec=await MB.getFirstEncodableVideoCodec(['avc'],{width:outW,height:outH,bitrate:BITRATE});
-  if(!codec){toast('No supported H.264 encoder found in this browser',false);return;}
+  // Quality (A6): bitrate scales off the SAME 20Mbps/1080p30 reference the export always used
+  // (so "High" at 1080p30 is byte-for-byte the same setting as before this control existed),
+  // adjusted for actual output area and frame rate, then multiplied by the quality tier. Film
+  // grain is pathological for H.264/HEVC at normal bitrates (it's exactly the high-frequency
+  // detail a DCT discards first) — 20 Mbps at 1080p30 is roughly 2x a typical default.
+  const qualitySel=(document.getElementById('sel-vid-quality')||{}).value||'high';
+  const qualityMult={draft:0.3,standard:0.6,high:1.0,max:1.8}[qualitySel]||1.0;
+  const BITRATE=Math.round(20_000_000*(outW*outH)/(1920*1080)*(fps/30)*qualityMult);
+  const codecSel=(document.getElementById('sel-vid-codec')||{}).value||'avc';
+  // HEVC falls back to AVC automatically: pass both, in preference order, to the same
+  // "first the browser can actually encode" probe the codec-detection already used.
+  const codec=await MB.getFirstEncodableVideoCodec(codecSel==='hevc'?['hevc','avc']:['avc'],{width:outW,height:outH,bitrate:BITRATE});
+  if(!codec){toast('No supported video encoder found in this browser',false);return;}
+  if(codecSel==='hevc'&&codec!=='hevc')log('HEVC isn\'t encodable in this browser — falling back to H.264.','info');
 
   const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
   fxExportCancel=false;
@@ -12070,10 +12431,36 @@ async function fxVideoExportSmall(it){
   if(progBox)progBox.style.display='block';
   const setProg=(frac,label)=>{if(progBar)progBar.style.width=Math.round(frac*100)+'%';if(progTxt)progTxt.textContent=label;};
 
-  const compCanvas=document.createElement('canvas');compCanvas.width=outW;compCanvas.height=outH;
+  // Borders + canvas matte (A7): sizes are constant for the whole clip (percentage-of-width
+  // border thickness computed off the fixed graded size, matte aspect ratio likewise fixed), so
+  // compute them ONCE and pre-allocate every canvas the per-frame loop needs — mirrors the
+  // "allocate-only-when-used" treatment exportFX gives stills.
+  const P=getFXParams(it.adjustOverride||undefined);
+  const b1t=P.bordersEnabled?Math.round(outW*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(outW*P.b2.thickness/100):0;
+  const borderedW=outW+2*(b1t+b2t),borderedH=outH+2*(b1t+b2t);
+  const hasMatte=!!(P.canvas&&P.canvas.enabled&&P.canvas.ar);
+  let finalW=borderedW,finalH=borderedH;
+  if(hasMatte){
+    const ar=P.canvas.ar;
+    const mw=borderedW/borderedH>ar?borderedW:borderedH*ar,mh=borderedW/borderedH>ar?borderedW/ar:borderedH;
+    finalW=Math.max(2,Math.round(mw/2)*2);finalH=Math.max(2,Math.round(mh/2)*2);
+  }else{finalW=Math.max(2,Math.round(borderedW/2)*2);finalH=Math.max(2,Math.round(borderedH/2)*2);}
+  const composeDims={gradedW:outW,gradedH:outH,b1t,b2t,borderedW,borderedH,finalW,finalH,hasMatte};
+
+  const gradeCanvas=document.createElement('canvas');gradeCanvas.width=outW;gradeCanvas.height=outH;
+  const gradeCtx=gradeCanvas.getContext('2d');
+  const borderedCanvas=(b1t||b2t)?Object.assign(document.createElement('canvas'),{width:borderedW,height:borderedH}):null;
+  const finalCanvas=hasMatte?Object.assign(document.createElement('canvas'),{width:finalW,height:finalH}):null;
+  // compCanvas is the ONE canvas object bound to CanvasSource below — mediabunny reads whatever
+  // is currently drawn on it at add() time, so every frame must end by drawing INTO this same
+  // object (fades need an off-canvas source to fade FROM, hence the two-stage draw below).
+  const compCanvas=document.createElement('canvas');compCanvas.width=finalW;compCanvas.height=finalH;
   const compCtx=compCanvas.getContext('2d');
   const frameCanvas=document.createElement('canvas');frameCanvas.width=srcW;frameCanvas.height=srcH;
   const frameCtx=frameCanvas.getContext('2d');
+  const fadeInS=Math.max(0,parseFloat((document.getElementById('vid-fade-in')||{}).value)||0);
+  const fadeOutS=Math.max(0,parseFloat((document.getElementById('vid-fade-out')||{}).value)||0);
+  const outDurationS=totalFrames/fps;
   const fname=`${it.name}_graded.mp4`;
   let output=null,cancelled=false,streamTarget=null;
   try{
@@ -12085,9 +12472,10 @@ async function fxVideoExportSmall(it){
     // re-encode, so there's no quality loss and no AudioEncoder dependency (which also sidesteps
     // Safari only gaining AudioEncoder in Safari 26). AAC only for now — MP4's universal audio
     // codec; PCM-in-MOV (some camera apps) is a real case but gets a clean "video only" export
-    // rather than a silent transcode path, matching the plan's explicit non-goal here.
+    // rather than a silent transcode path, matching the plan's explicit non-goal here. Mute (A5)
+    // simply skips adding the track — no re-encode needed either way.
     let audioSource=null,audioCodec=null;
-    if(it._mbAudioTrack){
+    if(it._mbAudioTrack&&!fxVideoMuted){
       audioCodec=await it._mbAudioTrack.getCodec().catch(()=>null);
       if(audioCodec==='aac'){
         audioSource=new MB.EncodedAudioPacketSource('aac');
@@ -12098,33 +12486,46 @@ async function fxVideoExportSmall(it){
     }
     await output.start();
 
-    const P=getFXParams(it.adjustOverride||undefined);
     for(let f=0;f<totalFrames;f++){
       if(fxExportCancel){cancelled=true;break;}
-      const srcFrame=trimF0+f; // source clip frame; output timestamps are rebased to start at 0
+      const outTimeS=f/fps; // rebased output timeline — 0 at trim-in
+      const srcTimeS=trimStartS+outTimeS; // time on the CLIP's own timeline — drives both sampling and the grain seed below
       let sample=null;
-      for await(const s of it._mbSampleSink.samples(srcFrame/fps)){sample=s;break;}
+      for await(const s of it._mbSampleSink.samples(srcTimeS)){sample=s;break;}
       if(!sample)continue;
       frameCtx.clearRect(0,0,srcW,srcH);
       sample.draw(frameCtx,0,0,srcW,srcH);
       sample.close();
-      FX.setVideoFrame(frameCanvas,srcW,srcH);
-      const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:srcFrame}):undefined;
+      const geomFrame=hasGeom?applyGeomTo(frameCanvas,it.geom):frameCanvas;
+      FX.setVideoFrame(geomFrame,geomFrame.width,geomFrame.height);
+      const srcFrameApprox=Math.round(srcTimeS*srcFps); // for the grain seed only — sampling itself is time-based, see above
+      const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:srcFrameApprox}):undefined;
       FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
-      compCtx.clearRect(0,0,outW,outH);
-      compCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
-      // Borders/canvas-matte are deferred past V2 (they'd need the same allocate-only-when-used
-      // treatment exportFX gives stills); watermark is cheap per-frame and ships now.
+      gradeCtx.clearRect(0,0,outW,outH);
+      gradeCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
+      const composed=_videoComposeBorderMatte(gradeCanvas,P,composeDims,borderedCanvas,finalCanvas);
+      // Fade in/out (B5): picture only — passthrough audio can't be faded without a decode/
+      // re-encode pass (out of scope, see the plan's non-goals). Skip the extra full-frame copy
+      // entirely when neither fade is configured (the common case).
+      let alpha=1;
+      if(fadeInS>0&&outTimeS<fadeInS)alpha=Math.min(alpha,outTimeS/fadeInS);
+      if(fadeOutS>0&&outTimeS>outDurationS-fadeOutS)alpha=Math.min(alpha,Math.max(0,(outDurationS-outTimeS)/fadeOutS));
+      if(alpha<1){
+        compCtx.fillStyle='#000';compCtx.fillRect(0,0,finalW,finalH);
+        compCtx.globalAlpha=alpha;compCtx.drawImage(composed,0,0);compCtx.globalAlpha=1;
+      }else if(composed!==compCanvas){
+        compCtx.clearRect(0,0,finalW,finalH);compCtx.drawImage(composed,0,0);
+      }
       if(typeof applyWatermark==='function')applyWatermark(compCanvas);
-      await videoSource.add(f/fps,1/fps); // awaiting respects encoder/writer backpressure
+      await videoSource.add(outTimeS,1/fps); // awaiting respects encoder/writer backpressure
       setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
     }
     // Audio pass: a separate loop AFTER video (mediabunny muxes tracks correctly regardless of
     // add() call interleaving) — copies encoded packets straight through, windowed to the
-    // TRIMMED range [trimF0/fps, (trimF0+totalFrames)/fps) and rebased to start at 0, same as
-    // the video timestamps above, so a trimmed export's audio and picture stay in sync.
+    // TRIMMED range and rebased to start at 0, same as the video timestamps above, so a trimmed
+    // export's audio and picture stay in sync.
     if(audioSource&&!cancelled){
-      const audioMinT=trimF0/fps,audioMaxT=(trimF0+totalFrames)/fps;
+      const audioMinT=trimStartS,audioMaxT=trimStartS+outDurationS;
       const pktSink=new MB.EncodedPacketSink(it._mbAudioTrack);
       const decoderConfig=await it._mbAudioTrack.getDecoderConfig().catch(()=>null);
       // ⚠️ Real AAC streams routinely start at a NEGATIVE timestamp (encoder priming/pre-roll

@@ -235,6 +235,34 @@ async function main() {
     check('loop toggle flips true then false', trimResults.loopOn === true && trimResults.loopOff === false,
       JSON.stringify(trimResults));
 
+    // ---- 6. Export smoke test (V6) -----------------------------------------------------------
+    // fxVideoExportSmall was rewritten wholesale (geometry, borders/canvas-matte, quality/
+    // resolution/codec/fps controls, fades) and until now the whole path — including the
+    // pre-existing audio remux — had NO coverage in CI. Stubs window.saveFile (a bare top-level
+    // function identifier the export path calls, same pattern the stills export already relies
+    // on — see its own "bare identifier" comment) to capture the output instead of triggering a
+    // real browser download, trims to a 3-frame window, and asserts the export actually produced
+    // a non-trivial MP4 blob without throwing.
+    console.log('\n[6] Export smoke test (trimmed, small MP4)');
+    const exportResult = await page.evaluate(async () => {
+      const it = curItem();
+      document.getElementById('vid-trim-in').value = 2;
+      document.getElementById('vid-trim-out').value = 4; // 3 frames
+      fxVideoTrimChanged();
+      let saved = null;
+      const origSaveFile = window.saveFile;
+      window.saveFile = async (content, fname, mime) => { saved = { size: content.size ?? content.byteLength, fname, mime }; };
+      let err = null;
+      try { await fxVideoExportSmall(it); } catch (e) { err = String(e && e.message || e); }
+      window.saveFile = origSaveFile;
+      return { saved, err };
+    });
+    check('export completed without throwing', exportResult.err === null, exportResult.err || '');
+    check('export produced a non-trivial MP4', !!exportResult.saved && exportResult.saved.size > 200,
+      JSON.stringify(exportResult.saved));
+    check('export filename ends in _graded.mp4', !!exportResult.saved && exportResult.saved.fname.endsWith('_graded.mp4'),
+      JSON.stringify(exportResult.saved));
+
   } finally {
     await browser.close();
     server.close();
