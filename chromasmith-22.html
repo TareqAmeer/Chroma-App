@@ -6636,10 +6636,15 @@ async function loadFXVideoFile(file){
   const isHdr=isHdrColorSpace(colorSpace);
   const ext=(file.name.split('.').pop()||'mp4').toLowerCase();
   const fps=packetStats?packetStats.averagePacketRate:30;
+  // Audio passthrough (V4): keep a reference to the track itself, not its packets — export reads
+  // them fresh via a NEW EncodedPacketSink so it isn't tied to whatever this load-time sink was
+  // doing. null when the clip has no audio track; codec compatibility is checked at export time.
+  const audioTrack=await input.getPrimaryAudioTrack().catch(()=>null);
   return{
     kind:'video',img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi:72,bytes:null,
     fileSize:file.size,videoFile:file,rotation,colorSpace,codec,isVfr,isHdr,
     durationUs:Math.round(duration*1e6),fps:packetStats?packetStats.averagePacketRate:null,
+    _mbAudioTrack:audioTrack,
     // Cached decode context, reused by every later scrub seek (fxVideoSeekTo) so scrubbing
     // doesn't re-parse the container on every frame. frameCount is an ESTIMATE from the
     // sampled average fps — good enough for a scrub range's max, not for frame-exact export.
@@ -6654,6 +6659,17 @@ async function loadFXVideoFile(file){
 // video entry's img being "just a canvas" is what keeps every downstream function unmodified).
 // `_seekGen` is a per-item generation counter: scrubbing fires many overlapping async seeks, and
 // without it a slow EARLIER seek resolving after a later one would flash the wrong frame back.
+// ⚠️ VFR: this is ALREADY the industry-standard fix, not a gap — deliberately, not by accident.
+// Real editors (Shotcut/MLT, Kdenlive) don't edit VFR natively; they detect it and CONFORM to a
+// constant frame rate before editing, because their timelines are frame-indexed. This function
+// does the same conform, just lazily: frameIndex maps to a NOMINAL time on an assumed-CFR grid
+// (frameIndex/fps), and whichever REAL frame actually covers that moment is what samples(t)
+// returns — irregular real spacing is absorbed by seeking on TIME, never by assuming frame N
+// sits at a fixed byte/index offset. `it.frameCount` (duration*fps) is the conformed grid's
+// slot count for the scrub bar, exactly like a conformed timeline's frame count in those tools
+// — not the clip's real, possibly-irregular frame count. Verified against a real 29.97fps HEVC
+// iPhone clip and a genuinely irregular synthetic one; see probeVfr's own comment for the
+// separate bug (now fixed) in DETECTING variable spacing, which is orthogonal to this.
 let _fxSeekGen=0;
 async function fxVideoSeekTo(it,frameIndex){
   if(!it||it.kind!=='video'||!it._mbSampleSink)return;
@@ -11994,6 +12010,21 @@ async function fxVideoExportSmall(it){
     output=new MB.Output({format:new MB.Mp4OutputFormat(),target});
     const videoSource=new MB.CanvasSource(compCanvas,{codec,bitrate:BITRATE});
     output.addVideoTrack(videoSource,{frameRate:fps});
+    // Audio passthrough (V4): re-mux the ORIGINAL encoded packets unchanged — no decode, no
+    // re-encode, so there's no quality loss and no AudioEncoder dependency (which also sidesteps
+    // Safari only gaining AudioEncoder in Safari 26). AAC only for now — MP4's universal audio
+    // codec; PCM-in-MOV (some camera apps) is a real case but gets a clean "video only" export
+    // rather than a silent transcode path, matching the plan's explicit non-goal here.
+    let audioSource=null,audioCodec=null;
+    if(it._mbAudioTrack){
+      audioCodec=await it._mbAudioTrack.getCodec().catch(()=>null);
+      if(audioCodec==='aac'){
+        audioSource=new MB.EncodedAudioPacketSource('aac');
+        output.addAudioTrack(audioSource);
+      }else if(audioCodec){
+        log(`Audio codec "${audioCodec}" isn't supported for passthrough — exporting video only.`,'warn');
+      }
+    }
     await output.start();
 
     const P=getFXParams(it.adjustOverride||undefined);
@@ -12015,6 +12046,32 @@ async function fxVideoExportSmall(it){
       if(typeof applyWatermark==='function')applyWatermark(compCanvas);
       await videoSource.add(f/fps,1/fps); // awaiting respects encoder/writer backpressure
       setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
+    }
+    // Audio pass: a separate loop AFTER video (mediabunny muxes tracks correctly regardless of
+    // add() call interleaving) — copies encoded packets straight through, capped to the same
+    // duration as the (possibly capped) video above so a browser-export-limited video never
+    // ships with longer audio than picture.
+    if(audioSource&&!cancelled){
+      const audioMaxT=totalFrames/fps;
+      const pktSink=new MB.EncodedPacketSink(it._mbAudioTrack);
+      const decoderConfig=await it._mbAudioTrack.getDecoderConfig().catch(()=>null);
+      // ⚠️ Real AAC streams routinely start at a NEGATIVE timestamp (encoder priming/pre-roll
+      // samples) — verified on a real iPhone clip: "Timestamps must be non-negative (got
+      // -0.044s)" on the very first packet. The standard remux fix (same one ffmpeg's
+      // `-avoid_negative_ts make_zero` does) is to shift the WHOLE stream by the first packet's
+      // timestamp so it starts at exactly 0, matching video's own timeline start — not clamp
+      // each packet independently, which would collapse several leading packets onto the same
+      // timestamp and confuse the muxer.
+      const firstPkt=await pktSink.getFirstPacket().catch(()=>null);
+      const tsOffset=firstPkt&&firstPkt.timestamp<0?firstPkt.timestamp:0;
+      let first=true;
+      for await(const pkt of pktSink.packets()){
+        if(fxExportCancel){cancelled=true;break;}
+        const shifted=tsOffset!==0?pkt.clone({timestamp:pkt.timestamp-tsOffset}):pkt;
+        if(shifted.timestamp>=audioMaxT)break;
+        await audioSource.add(shifted,first?{decoderConfig}:undefined);
+        first=false;
+      }
     }
     if(cancelled){
       await output.cancel();
