@@ -6599,9 +6599,10 @@ async function probeVfr(track){
     return(Math.sqrt(variance)/mean)>0.15; // coefficient of variation — empirical threshold, not a spec value
   }catch(e){return false;} // never let a probe failure block loading the clip
 }
-// HDR/wide-gamut detection: BT.2020 primaries or an HLG/PQ transfer function both need a tone
-// map this app doesn't have yet (see CLAUDE.md §12/the video plan) — grading either as if it
-// were Rec.709 produces washed-out or blown-out output that reads as "the LUTs are wrong".
+// HDR/wide-gamut detection: BT.2020 primaries or an HLG/PQ transfer function. Purely
+// informational (see fxUpdateClipInfoUI) — VERIFIED against a real HLG iPhone clip that the
+// browser's own VideoFrame->canvas draw already tone-maps this to SDR before any pixel reaches
+// this app, so no manual transform is needed OR wanted here; see CLAUDE.md §12.
 function isHdrColorSpace(cs){
   if(!cs)return false;
   return cs.primaries==='bt2020'||cs.transfer==='hlg'||cs.transfer==='pq';
@@ -9107,10 +9108,19 @@ function fxSyncVideoUI(){
   if(typeof fxSyncTransportUI==='function')fxSyncTransportUI();
 }
 // Renders the probeClip() facts loadFXVideoFile already gathered (rotation/colour space/codec/
-// fps/HDR/VFR) as one line of badges. HDR and VFR get an explicit warning rather than a quiet
-// badge — see CLAUDE.md §12: this app has no HLG/BT.2020 tonemap yet, and grading either as
-// plain Rec.709 produces washed-out/blown output that reads as a LUT bug, not a footage-support
-// gap. Rendered fresh on every load/switch so it can never show a STALE clip's info.
+// fps/HDR/VFR) as one line of badges, plus informational notes for HDR/VFR sources.
+// ⚠️ Neither is a warning anymore — VERIFIED against a real HLG/BT.2020 iPhone clip
+// (IMG_8015.MOV) that both are already handled correctly and don't need special-casing here:
+//  - HDR: the browser's own VideoFrame->canvas draw already tone-maps HLG/BT.2020 to SDR before
+//    this app ever sees a pixel (confirmed: a bright wall read (219,215,213) — correctly near-
+//    white — not the dull ~130-150 mid-grey a RAW un-tonemapped HLG signal read as Rec.709 would
+//    produce). Adding a manual HLG transform on top would double-correct and make it WORSE, not
+//    better. See CLAUDE.md §12 for the full reasoning this confirms.
+//  - VFR: fxVideoSeekTo already seeks by TIME, not by frame index treated as a fixed offset —
+//    real irregular spacing is absorbed automatically, exactly the "conform to CFR" approach
+//    real editors (Shotcut/MLT) use, just done lazily per-request instead of via upfront
+//    transcode. See fxVideoSeekTo's own comment.
+// Rendered fresh on every load/switch so it can never show a STALE clip's info.
 function fxUpdateClipInfoUI(){
   const el=document.getElementById('fx-clip-info');if(!el)return;
   const it=curItem();
@@ -9122,11 +9132,11 @@ function fxUpdateClipInfoUI(){
   if(it.codec)parts.push(it.codec);
   if(it.rotation)parts.push(`rotated ${it.rotation}°`);
   if(cs.primaries||cs.transfer)parts.push([cs.primaries,cs.transfer].filter(Boolean).join('/'));
-  const warnings=[];
-  if(it.isHdr)warnings.push('⚠ HDR source (BT.2020/HLG/PQ) — no tone map yet, colours will look wrong until this is added');
-  if(it.isVfr)warnings.push('⚠ Variable frame rate detected — playback/export timing may judder until VFR handling lands');
+  const notes=[];
+  if(it.isHdr)notes.push('HDR source (BT.2020/HLG) — tone-mapped to SDR by the browser before grading');
+  if(it.isVfr)notes.push('Variable frame rate — frames are matched by timestamp, not by fixed spacing');
   el.style.display='';
-  el.innerHTML=parts.join(' · ')+(warnings.length?'<br>'+warnings.map(w=>`<span style="color:var(--warn,#d4903a)">${w}</span>`).join('<br>'):'');
+  el.innerHTML=parts.join(' · ')+(notes.length?'<br>'+notes.map(n=>`<span style="color:var(--mut)">${n}</span>`).join('<br>'):'');
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');

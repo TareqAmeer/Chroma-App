@@ -788,17 +788,42 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
   `13×7.7371≈100.58`) and confirmed the hash keeps >2.8 separation at the same offset. The `Grain
   motion` slider (0..100) blends between the frozen clip-constant seed and the fully independent
   per-frame hash.
-- ⚠️ **HLG tonemap and the extended Log input selector (S-Log3/C-Log3/Log-C) are DEFERRED, not
-  forgotten — do not implement from formula alone.** The `isHdr` flag (BT.2020/HLG/PQ detection)
-  ships and is safe because it's a passthrough of mediabunny's own container metadata. A shader-
-  side HLG inverse-OETF/tonemap is a different risk class: when `VideoSampleSink`/`VideoFrame.draw`
-  paints an HDR BT.2020/HLG frame onto a plain 2D canvas, the BROWSER may already gamut-map and
-  tone-map it to the canvas's SDR colour space as part of the draw (standard, spec'd behaviour,
-  not something this app controls) — in which case the pixels the shader receives are ALREADY
-  SDR, and applying a second manual HLG transform on top would be actively wrong, not merely
-  redundant. This could not be checked on this dev machine: there is no real phone-shot HLG file
-  available, and this machine's ffmpeg build won't even write the container-level colour tags
-  needed to synthesize one (confirmed: `-color_primaries`/`-color_trc`/`-colorspace` output flags
-  produce no `colr` box for either h264 or hevc mp4 here). Before implementing either transform, get
-  a real HDR clip (or S-Log3/C-Log3 footage with a known-correct reference still) and verify what
-  actually lands in the canvas/texture BEFORE writing any correction for it.
+- ✅ **RESOLVED with a real clip: no manual HLG tonemap is needed, and adding one would be wrong.**
+  A real iPhone HLG/BT.2020 clip (`IMG_8015.MOV`, provided by the user) confirmed the risk this
+  section used to warn about is real and already handled: `VideoSampleSink.draw()`'s underlying
+  `VideoFrame`→canvas draw already tone-maps HLG/BT.2020 to SDR before this app ever sees a pixel.
+  Measured: a bright wall in the frame read `(219,215,213)` — correctly near-white — not the dull
+  ~130–150 mid-grey a RAW, un-tonemapped HLG signal displayed as Rec.709 would produce. `isHdr` is
+  now purely informational in the Clip info row (`fxUpdateClipInfoUI`), not a warning. Don't
+  re-add a manual HLG inverse-OETF/tonemap without RE-checking this on whatever browser/engine is
+  current at the time — the browser doing this for you is spec'd but not something this app
+  controls, and it could differ across engines/versions.
+- ⚠️ **The extended Log input selector (S-Log3/C-Log3/Log-C) is still deferred, separately from
+  HDR above** — no real reference footage for those has been obtained yet, and each needs its own
+  verified curve constants. Same rule as before: don't implement from formula alone; get real
+  footage (or a known-correct reference still) first.
+- ✅ **RESOLVED: the VFR flag was a false-positive bug, not a missing feature.** `probeVfr()` read
+  exactly 30 packets in DECODE order and sorted by presentation timestamp — on any B-frame-coded
+  stream (i.e. almost all real H.264/HEVC footage) this produces one spurious large gap at the
+  TAIL every time, because the last few decode-order packets grabbed are B-frames whose
+  presentation timestamps land mid-range, while the packets that would fill the gap haven't been
+  read yet. Verified on the same real clip: 29 of 29 real deltas were exactly 0.0333s (perfect
+  29.97fps CFR); only the boundary delta was wrong, and it alone triggered the VFR flag. Fixed by
+  over-reading a B-frame-reorder margin (16 packets) and discarding the tail before computing
+  variance. Separately, researched how open-source editors handle genuine VFR (Shotcut/MLT,
+  Kdenlive: detect, then CONFORM to CFR before editing — timelines are frame-indexed) and confirmed
+  `fxVideoSeekTo`'s existing time-based seek (`frameIndex/fps` → `samples(t)`) already does the
+  lazy equivalent, with no architecture change needed.
+- ✅ **Audio passthrough (V4) shipped**: `EncodedAudioPacketSource` re-muxes the original AAC
+  packets unchanged. ⚠️ Real AAC streams commonly start at a NEGATIVE presentation timestamp
+  (encoder priming/pre-roll) — confirmed on the same real clip ("Timestamps must be non-negative,
+  got -0.044s"). Fixed with the standard remux technique (same as ffmpeg's
+  `-avoid_negative_ts make_zero`): shift the WHOLE audio stream by the first packet's timestamp so
+  it starts at exactly 0 — never clamp packets independently, which collapses several leading
+  packets onto the same timestamp. Non-AAC audio gets a clean "video only" export with a warning,
+  not a silent transcode.
+- ✅ **Fixed: video was exporting/previewing upside down.** `setVideoFrame` never applied
+  `UNPACK_FLIP_Y_WEBGL` the way `setImage` does for photos. The original justification (preserving
+  a zero-copy blit path for a raw `VideoFrame` upload) didn't match the actual implementation —
+  every call site draws the sample onto a plain 2D canvas first via `sample.draw()`, exactly like
+  a photo canvas, so it needs the identical flip. Verified with a top/bottom-asymmetric test clip.
