@@ -177,7 +177,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 body.mobile-fx .fx-toggle{width:44px;height:24px;border-radius:12px}
 body.mobile-fx .fx-toggle::after{width:20px;height:20px;top:2px;left:2px}
 body.mobile-fx .fx-toggle.on::after{left:22px}
-.fx-fields{display:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
+/* ⚠️ An OFF section used to be display:none, so a disabled panel rendered as an empty card with
+   a lone switch and several hundred pixels of void — the Masks panel at rest was literally a
+   title, a toggle and nothing else, which reads as broken rather than as off. The controls are
+   always laid out now and simply dimmed, so you can see what the section offers before turning
+   it on, and touching any control switches it on for you (see the ff-off handler in JS). */
+.fx-fields{margin-top:8px;display:flex;flex-direction:column;gap:6px;transition:opacity var(--dur-2) var(--ease)}
+.fx-fields.ff-off{opacity:.42}
+.fx-fields.ff-off .fx-ctrl-title,.fx-fields.ff-off .msk-group-hd{color:var(--mut)}
 .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
 /* Sub-group heading INSIDE a panel (e.g. Skin Tone vs Local Adjustments in the mask panel) —
    lighter than .fx-ctrl-title, which is the panel's own header. */
@@ -266,6 +273,59 @@ body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center
   white-space:nowrap;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
 .seg>button:hover{color:var(--txt)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:0 1px 2px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06)}
+/* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
+.msk-rowbar{display:flex;align-items:center;gap:6px;padding:2px 0 8px;border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
+.msk-rowbar-nm{font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msk-more{margin-left:auto}
+.msk-tag{font-size:var(--fs-0);color:var(--mut);background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;white-space:nowrap}
+.msk-tag.on{color:var(--acc);border-color:rgba(212,144,58,.4);background:rgba(212,144,58,.12)}
+/* Collapsible group. The chevron rotates rather than swapping glyphs, so there is one DOM shape
+   and no layout shift on toggle. */
+.msk-group{border-top:1px solid var(--bdr);margin-top:var(--sp-2)}
+.msk-group:first-of-type{border-top:none;margin-top:0}
+.msk-group-hd{display:flex;align-items:center;gap:6px;width:100%;min-height:30px;padding:6px 0;background:none;border:none;
+  cursor:pointer;color:var(--mut);font-family:var(--sans);font-size:var(--fs-1);font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;text-align:left}
+.msk-group-hd:hover{color:var(--txt)}
+.msk-group-chev{display:inline-flex;transform:rotate(-90deg);transition:transform var(--dur-1) var(--ease)}
+.msk-group.open .msk-group-chev{transform:rotate(0)}
+.msk-group-note{margin-left:auto;font-size:var(--fs-0);letter-spacing:0;text-transform:none;color:var(--acc)}
+.msk-group-bd{padding:2px 0 var(--sp-3)}
+/* Guided Skin Tone steps */
+.msk-step{display:flex;align-items:center;gap:7px;margin:var(--sp-3) 0 var(--sp-1);font-size:var(--fs-3);font-weight:600;color:var(--txt)}
+.msk-group-bd>.msk-step:first-child{margin-top:2px}
+.msk-step-n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;
+  background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);font-size:var(--fs-0);font-weight:700;flex:0 0 auto}
+.msk-hint{font-size:var(--fs-1);color:var(--mut);line-height:1.45;margin:var(--sp-1) 0 var(--sp-2)}
+.msk-cov{font-size:var(--fs-1);color:var(--txt);background:var(--sur2);border:1px solid var(--bdr);
+  border-radius:6px;padding:5px 8px;margin:var(--sp-1) 0 var(--sp-2)}
+.msk-warn{font-size:var(--fs-1);color:#e8c07a;background:rgba(212,144,58,.10);border:1px solid rgba(212,144,58,.28);
+  border-radius:6px;padding:6px 8px;line-height:1.45;margin:var(--sp-1) 0 var(--sp-2)}
+.msk-chiprow{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:var(--sp-1) 0 var(--sp-2)}
+.msk-swatch{width:24px;height:24px;position:relative}
+.msk-mst .msk-swatch>span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;color:rgba(0,0,0,.55);text-shadow:0 0 2px rgba(255,255,255,.5)}
+.msk-mst .msk-swatch.rec{outline:1px dashed rgba(255,255,255,.35);outline-offset:2px}
+.msk-presets{gap:var(--sp-1)}
+.msk-preset{flex:1 1 calc(50% - var(--sp-1));min-width:0;justify-content:center;font-size:var(--fs-1);padding:7px 6px}
+.msk-seg{width:100%;margin:var(--sp-1) 0 var(--sp-2)}
+.msk-adv-hd{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;color:var(--mut);
+  font-family:var(--sans);font-size:var(--fs-1);font-weight:600;padding:var(--sp-2) 0 var(--sp-1);min-height:28px}
+.msk-adv-hd:hover{color:var(--txt)}
+/* "..." menu */
+.msk-more-menu{position:fixed;z-index:5000;min-width:230px;background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid var(--bdr);border-radius:9px;padding:4px;box-shadow:var(--lift-2)}
+.msk-more-it{display:flex;align-items:center;gap:9px;width:100%;min-height:30px;padding:0 9px;background:none;
+  border:none;border-radius:6px;cursor:pointer;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);text-align:left}
+.msk-more-it:hover:not(:disabled){background:var(--sur2)}
+.msk-more-it:disabled{opacity:.35;cursor:default}
+.msk-more-it.on{color:var(--acc)}
+.msk-more-it.danger{color:var(--err)}
+.msk-more-sep{height:1px;background:var(--bdr);margin:4px 6px}
+/* Inline icons inside text buttons must never absorb the flex squeeze — a shrunk 14px glyph next
+   to a full-size label looks like a rendering fault. */
+.btn>svg,.msk-more-it>svg{flex:0 0 auto}
 .pc-chip{width:28px;height:28px;border-radius:50%;border:2px solid var(--bdr);cursor:pointer;padding:0;flex:0 0 auto}
 /* ══ CHECKBOX ════════════════════════════════════════════════════════════════════════════════
    Native 13x13 checkboxes were half the size of everything around them and impossible to hit
@@ -1052,7 +1112,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="btn-row" id="adj-scope-row" style="display:none;margin-bottom:8px">
           <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Basic Adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
         </div>
-        <div class="fx-fields" id="ff-adjust">
+        <div class="fx-fields ff-off" id="ff-adjust">
           <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
           <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
@@ -1106,7 +1166,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
         <div class="fx-ctrl-title">Tone Curves <div class="fx-toggle" id="tg-curves" onclick="toggleFX('curves')"></div></div>
-        <div class="fx-fields" id="ff-curves">
+        <div class="fx-fields ff-off" id="ff-curves">
           <div class="btn-row" id="curve-chips">
             <button class="btn bgh crv-chip on" data-ch="m" onclick="curveSetCh('m')">RGB</button>
             <button class="btn bgh crv-chip" data-ch="r" onclick="curveSetCh('r')">R</button>
@@ -1129,7 +1189,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- HSL COLOR MIXER -->
       <div class="fx-ctrl" data-fxsec="hsl">
         <div class="fx-ctrl-title">Color Mixer <div class="fx-toggle" id="tg-hsl" onclick="toggleFX('hsl')"></div></div>
-        <div class="fx-fields" id="ff-hsl">
+        <div class="fx-fields ff-off" id="ff-hsl">
           <div id="hsl-hist" style="display:flex;align-items:flex-end;gap:3px;height:26px;margin-bottom:6px"></div>
           <div class="btn-row" id="hsl-chips" style="flex-wrap:wrap;gap:4px"></div>
           <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-h" oninput="hslSlider('hue',this.value)"><div class="fx-val" id="vl-hsl-h">0</div></div>
@@ -1144,7 +1204,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- POINT COLOR -->
       <div class="fx-ctrl" data-fxsec="pointcolor">
         <div class="fx-ctrl-title">Point Color <div class="fx-toggle" id="tg-pointcolor" onclick="toggleFX('pointcolor')"></div></div>
-        <div class="fx-fields" id="ff-pointcolor">
+        <div class="fx-fields ff-off" id="ff-pointcolor">
           <div class="btn-row">
             <button class="btn bgh" id="btn-pc-eye" onclick="pcEyedropper()" title="Click a color in the photo to target it precisely, then dial in how it shifts">Pick Color</button>
           </div>
@@ -1165,7 +1225,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- LOCAL ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="local">
         <div class="fx-ctrl-title">Masks <div class="fx-toggle" id="tg-local" onclick="toggleFX('local')"></div></div>
-        <div class="fx-fields" id="ff-local">
+        <div class="fx-fields ff-off" id="ff-local">
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAdd('radial')">+ Radial</button>
             <button class="btn bgh" onclick="mskAdd('linear')">+ Linear</button>
@@ -1258,7 +1318,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
         <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
-        <div class="fx-fields" id="ff-grain">
+        <div class="fx-fields ff-off" id="ff-grain">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-grain-a">30</div></div>
           <div class="fx-row" title="Fine-tune the grain clump size on top of the film format (5 = format-accurate)."><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="3" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">3</div></div>
           <div class="fx-row" title="Dehancer film-format grain: smaller formats are coarser/stronger, 65mm is the finest & weakest."><div class="fx-label">Film format</div>
@@ -1281,7 +1341,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- FILM ARTIFACTS -->
       <div class="fx-ctrl" data-fxsec="art">
         <div class="fx-ctrl-title" title="Placement is seeded — export matches preview; Reshuffle re-rolls it">Film Artifacts <div class="fx-toggle" id="tg-art" onclick="toggleFX('art')"></div></div>
-        <div class="fx-fields" id="ff-art">
+        <div class="fx-fields ff-off" id="ff-art">
           <div class="fx-row" title="Random dust specks and the odd hair — mostly light (dust on the negative prints white)."><div class="fx-label">Dust</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-art-du" oninput="fxUpdate()"><div class="fx-val" id="vl-art-du">30</div></div>
           <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck colour — Both is the real-film mix (mostly light specks); Black/White forces one colour."></div>
           <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" oninput="fxUpdate()"><div class="fx-val" id="vl-art-sc">20</div></div>
@@ -1292,7 +1352,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- HALATION -->
       <div class="fx-ctrl" data-fxsec="hal">
         <div class="fx-ctrl-title" title="Warm film glow — turn on White glow for B&amp;W photos">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
-        <div class="fx-fields" id="ff-hal">
+        <div class="fx-fields ff-off" id="ff-hal">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-hal-a">70</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
           <div class="fx-row" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior."><div class="fx-label">Shadow protect</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-p">0</div></div>
@@ -1304,7 +1364,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- BLOOM -->
       <div class="fx-ctrl" data-fxsec="bloom">
         <div class="fx-ctrl-title" title="Colour derived from source light">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
-        <div class="fx-fields" id="ff-bloom">
+        <div class="fx-fields ff-off" id="ff-bloom">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-bloom-a">40</div></div>
           <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="2" max="60" value="10" id="sl-bloom-th" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-th">10</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="50" value="12" id="sl-bloom-r" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-r">12</div></div>
@@ -1313,14 +1373,14 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- VIGNETTE -->
       <div class="fx-ctrl" data-fxsec="vig">
         <div class="fx-ctrl-title">Vignette <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
-        <div class="fx-fields" id="ff-vig">
+        <div class="fx-fields ff-off" id="ff-vig">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">50</div></div>
         </div>
       </div>
       <!-- BORDERS -->
       <div class="fx-ctrl" data-fxsec="borders">
         <div class="fx-ctrl-title">Borders <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
-        <div class="fx-fields" id="ff-borders">
+        <div class="fx-fields ff-off" id="ff-borders">
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:8px">Inner border</div>
         <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
         <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
@@ -1332,7 +1392,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- CANVAS (aspect-ratio matte around image + borders) -->
       <div class="fx-ctrl" data-fxsec="canvas">
         <div class="fx-ctrl-title">Canvas <div class="fx-toggle" id="tg-canvas" onclick="toggleFX('canvas')"></div></div>
-        <div class="fx-fields" id="ff-canvas">
+        <div class="fx-fields ff-off" id="ff-canvas">
           <div class="btn-row" id="cv-ar-chips" style="flex-wrap:wrap;gap:4px"></div>
           <div class="fx-row" title="1 = photo fits the canvas exactly; smaller = more matte around it; bigger = crops into the frame."><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="50" max="150" value="100" id="sl-canvas-z" oninput="fxUpdate();document.getElementById('vl-canvas-z').textContent=this.value+'%'"><div class="fx-val" id="vl-canvas-z">100%</div></div>
           <div class="fx-row" style="margin-top:6px"><div class="fx-label">Background</div>
@@ -7726,7 +7786,23 @@ function autoDetectBW(img){
   tg.classList.toggle('on',bw);
   if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display=on?'flex':'none';if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if((name==='hsl'||name==='pointcolor')&&typeof bakeHsl==='function')bakeHsl();if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if((name==='hsl'||name==='pointcolor')&&typeof bakeHsl==='function')bakeHsl();if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+// Touching a control in a dimmed (off) section turns that section on, rather than the control
+// silently doing nothing. This is the other half of showing off-sections instead of hiding them:
+// the controls are visible, so they have to be live. Registered once, delegated, capture-phase so
+// it runs before the control's own oninput reads state.
+function _ffAutoEnable(e){
+  const ff=e.target&&e.target.closest&&e.target.closest('.fx-fields.ff-off');
+  if(!ff)return;
+  const name=ff.id.replace(/^ff-/,'');
+  const tg=document.getElementById('tg-'+name);
+  if(!tg||tg.classList.contains('on'))return;
+  toggleFX(name);
+  if(typeof toast==='function')toast(name.charAt(0).toUpperCase()+name.slice(1)+' turned on');
+}
+document.addEventListener('input',_ffAutoEnable,true);
+document.addEventListener('change',_ffAutoEnable,true);
+document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button,.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','vig'].forEach(id=>{
@@ -8484,9 +8560,15 @@ function cvBuildChips(){
       const b=document.createElement('button');
       const isBlur=c==='blur';
       const sel=isBlur?fxState.canvas.blur:(!fxState.canvas.blur&&fxState.canvas.bg===c);
-      b.style.cssText='width:24px;height:24px;border-radius:50%;border:2px solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
-        +(isBlur?'background:linear-gradient(135deg,#888,#333);font-size:8px;color:#fff':'background:'+c);
-      if(isBlur){b.textContent='BLR';b.title='Blurred photo as the background';}
+      // 28px to clear the pointer-target floor (was 24). The blurred-background option used to be
+      // labelled with the text "BLR" set at 8px inside a 24px circle — unreadable, and it was
+      // invisible to the UI audit until off-sections started rendering dimmed instead of hidden.
+      // It is an icon now, like every other affordance in the app.
+      b.className='pc-chip';
+      b.style.cssText='width:28px;height:28px;border-radius:50%;border:2px solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
+        +'display:inline-flex;align-items:center;justify-content:center;'
+        +(isBlur?'background:linear-gradient(135deg,#8a8a8a,#333);color:#fff':'background:'+c);
+      if(isBlur){b.innerHTML=icon('nr',14);b.title='Blurred photo as the background';}
       b.onclick=()=>{if(isBlur){fxState.canvas.blur=!fxState.canvas.blur;}else{fxState.canvas.bg=c;fxState.canvas.blur=false;}cvBuildChips();fxUpdate();};
       sw.appendChild(b);
     });}
@@ -8759,7 +8841,7 @@ function mskAiTapToggle(force){
     b.classList.toggle('on',mskAiTapMode);
     b.classList.toggle('bsec',mskAiTapMode);
     b.classList.toggle('bgh',!mskAiTapMode);
-    b.innerHTML=''+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select');
+    b.innerHTML=icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select');
   }
   if(FX.cv)FX.cv.style.cursor=mskAiTapMode?'crosshair':'';
   if(!mskAiTapMode){_aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;}  // never leave a stroke open
@@ -9438,6 +9520,129 @@ function mskPaintAt(m,nx,ny){
     }
   };
 })();
+// ══ MASK PANEL STRUCTURE ═════════════════════════════════════════════════════════════════════
+// The panel used to render 35 control rows in one flat column for EVERY mask, in this order:
+// shape · Up/Down/Name/Mute/Solo/Eraser · Amount · the whole Skin Tone block · 14 adjustment
+// sliders · Invert/Delete. Two things were badly wrong with that:
+//
+//   1. Skin Tone rendered on every mask type — Radial, Linear, even Luminance Range, where it is
+//      meaningless — and it sat BETWEEN Amount and the adjustments, pushing Exposure roughly a
+//      thousand pixels down the panel.
+//   2. Six rarely-used management buttons occupied three rows of the most valuable space in the
+//      panel, above the controls you actually reach for.
+//
+// Now three collapsible groups — SELECTION (which pixels) · ADJUST (what to do to them) ·
+// SKIN TONE (skin masks only) — with management moved into a "..." menu on the mask row.
+//
+// ⚠️ The colour-range gate is a SELECTION tool and lives in Selection for ordinary masks. On a
+// Skin mask it is step 1 of the guided flow instead, so it appears exactly once either way.
+let _mskGroupOpen={selection:true,adjust:true,skin:true};
+try{const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
+function mskGroupToggle(k){
+  _mskGroupOpen[k]=!_mskGroupOpen[k];
+  try{localStorage.setItem('chromasmith_msk_groups',JSON.stringify(_mskGroupOpen));}catch(e){}
+  mskRebuild();
+}
+// Collapsible section. Open/closed is remembered per GROUP, not per mask — a user who works with
+// Selection collapsed wants it collapsed for the next mask too.
+function _mskGroup(key,label,body,note){
+  const open=_mskGroupOpen[key]!==false;
+  return '<div class="msk-group'+(open?' open':'')+'">'
+    +'<button class="msk-group-hd" onclick="mskGroupToggle(\''+key+'\')" aria-expanded="'+open+'">'
+    +'<span class="msk-group-chev">'+icon('chevron',14)+'</span><span>'+label+'</span>'
+    +(note?'<span class="msk-group-note">'+note+'</span>':'')+'</button>'
+    +(open?'<div class="msk-group-bd">'+body+'</div>':'')+'</div>';
+}
+// Rare, destructive or ordering operations. They still matter (order drives "Subtract prev"), but
+// they are not what you touch while grading, so they no longer cost three rows of panel height.
+function mskMoreMenu(ev){
+  ev.stopPropagation();
+  const m=fxState.masks[mskSel];if(!m)return;
+  document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
+  const item=(label,ic,fn,on,dis,danger)=>'<button class="msk-more-it'+(on?' on':'')+(danger?' danger':'')+'"'
+    +(dis?' disabled':'')+' onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+fn+'">'
+    +icon(ic,15)+'<span>'+label+'</span></button>';
+  const html=item('Move up','undo','mskMove(-1)',false,mskSel<1)
+    +item('Move down','redo','mskMove(1)',false,mskSel>=fxState.masks.length-1)
+    +item('Rename…','rename','mskRename()')
+    +item(m.muted?'Unmute':'Mute','eyeOff','mskToggleMute()',m.muted)
+    +item(mskSolo===mskSel?'Stop soloing':'Solo','star','mskToggleSolo()',mskSolo===mskSel)
+    +item(m.isExclude?'Stop using as eraser':'Use as eraser','eraser','mskToggleExclude()',m.isExclude)
+    +(mskSel>0?item(m.subtract?'Stop subtracting previous':'Subtract previous mask','scissors','mskToggleSubtract()',m.subtract):'')
+    +item(m.invert?'Un-invert':'Invert','compare','mskInvert()',m.invert)
+    +'<div class="msk-more-sep"></div>'
+    +item('Delete mask','trash','mskDelete()',false,false,true);
+  const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
+  document.body.appendChild(d);
+  const r=ev.currentTarget.getBoundingClientRect();
+  d.style.top=(r.bottom+4)+'px';
+  d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
+  setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+}
+// ── Guided Skin Tone ─────────────────────────────────────────────────────────────────────────
+// Presentation only. skinUniformity() in the lut shader, colRangeWeight, mskSkinTarget and
+// mskMeasureSrcV are all untouched — this just stops the tool presenting eight pieces of
+// internal vocabulary ("Uniformity: Hue", "Preserve modeling", "Tan darkens only") as the
+// primary interface.
+//
+// Strength drives uH and uS together because that is the 90% case; the individual axes stay
+// available under Advanced for anyone who wants them.
+function mskSkinStrength(v){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.uH=v;m.uS=v;
+  const lb=document.getElementById('msk-strength-val');if(lb)lb.textContent=Math.round(v);
+  fxUpdate();
+}
+// Each preset is just a set of the existing values — no new machinery, and every one of them can
+// be taken apart in Advanced afterwards.
+const MSK_SKIN_PRESETS={
+  even:{label:'Even out tan',uH:55,uS:50,uL:25,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false},
+  match:{label:'Match face to chest',uH:70,uS:65,uL:40,preserve:55,tanDepth:0,tanWarm:0,tanOneWay:false},
+  warm:{label:'Warm up',uH:35,uS:30,uL:10,preserve:80,tanDepth:10,tanWarm:35,tanOneWay:true},
+  deepen:{label:'Deepen tan',uH:45,uS:45,uL:20,preserve:75,tanDepth:45,tanWarm:20,tanOneWay:true}
+};
+function mskSkinPreset(k){
+  const m=fxState.masks[mskSel],p=MSK_SKIN_PRESETS[k];if(!m||!p)return;
+  Object.keys(p).forEach(key=>{if(key!=='label')m[key]=p[key];});
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Arms the eyedropper AND switches the preview to Selection in one action. Previously the help
+// text simply instructed the user to go and find a separate segmented control first — if you
+// cannot see the selection, the samples cannot be judged.
+let _mskPrevModeBeforePick=null;
+function mskPickSkin(){
+  if(!_mskCrEyeActive&&mskPreviewMode!=='select'){
+    _mskPrevModeBeforePick=mskPreviewMode;
+    mskSetPreviewMode('select');
+  }else if(_mskCrEyeActive&&_mskPrevModeBeforePick){
+    mskSetPreviewMode(_mskPrevModeBeforePick);_mskPrevModeBeforePick=null;
+  }
+  mskCrEyedropper();
+}
+// How much of the mask's shape actually passes the colour gate. CLAUDE.md 5b establishes that a
+// FLAT weight matters more than a high one (1 sample measured 0.04-1.00 and made hue DIVERGE;
+// 3 samples measured 0.86-1.00), so the panel shows the number instead of describing it in a
+// paragraph nobody reads. Sampled on a coarse grid — this is a UI readout, not a render.
+function mskSkinCoverage(m){
+  if(!m||!m.crOn||!m.crSamples||!m.crSamples.length)return null;
+  const cv=FX&&FX.cv;if(!cv||!cv.width)return null;
+  try{
+    const S=48,t=document.createElement('canvas');t.width=S;t.height=S;
+    const cx=t.getContext('2d',{willReadFrequently:true});
+    cx.drawImage(cv,0,0,S,S);
+    const d=cx.getImageData(0,0,S,S).data;
+    let hit=0,tot=0;
+    for(let i=0;i<S*S;i++){
+      const[h,C]=rgb2oklch(d[i*4]/255,d[i*4+1]/255,d[i*4+2]/255);
+      // ⚠️ crRange is passed RAW (0..100) — crWeightJS divides by 100 itself. Pre-dividing here
+      // collapsed the kernel to ~zero width and made this readout report 0% for every photo.
+      const w=crWeightJS(h,C,m.crSamples,(m.crRange!=null?m.crRange:35));
+      tot++;if(w>0.5)hit++;
+    }
+    return tot?Math.round(hit/tot*100):null;
+  }catch(e){return null;}
+}
 function _mskRow(label,k,val,min,max,sc,flip){
   const sv=Math.round(flip?(1-val)*100:val/sc);
   return '<div class="fx-row"><div class="fx-label">'+label+'</div>'
@@ -9675,7 +9880,7 @@ function mskRebuild(){
     b.style.display='flex';b.style.alignItems='center';b.style.gap='6px';
     b.appendChild(_mskThumb(m));
     const label=document.createElement('span');
-    label.textContent=(m.isExclude?'✂ ':'')+(m.name||mskAutoLabel(m,i))+(m.muted?' ⃠':'')+(mskSolo===i?' ★':'');
+    label.textContent=(m.name||mskAutoLabel(m,i));
     b.appendChild(label);
     if(m.muted)b.style.opacity='0.45';
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — order matters (Subtract prev).':'Click to edit this mask. Drag to reorder — order matters (Subtract prev).';
@@ -9699,106 +9904,147 @@ function mskRebuild(){
   const m=fxState.masks[mskSel];
   if(!m){ctl.innerHTML=(batchBtn?'<div class="btn-row">'+batchBtn+'</div>':'')+'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div>';return;}
   let h=batchBtn?'<div class="btn-row" style="margin-bottom:8px">'+batchBtn+'</div>':'';
+  // The mask's own row: name, the "..." menu, and (for raster masks) the paint tools. Everything
+  // that shapes the selection is collected into `shape` and rendered inside the Selection group
+  // below, rather than free-floating above it.
+  h+='<div class="msk-rowbar"><span class="msk-rowbar-nm">'+((m.name||mskAutoLabel(m,mskSel)).replace(/</g,'&lt;'))+'</span>'
+    +(m.muted?'<span class="msk-tag">Muted</span>':'')
+    +(mskSolo===mskSel?'<span class="msk-tag on">Solo</span>':'')
+    +(m.isExclude?'<span class="msk-tag">Eraser</span>':'')
+    +(m.subtract?'<span class="msk-tag">Subtracting</span>':'')
+    +(m.invert?'<span class="msk-tag">Inverted</span>':'')
+    +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
+    +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'');
+  let shape='';
   if(m.type==='radial'){
-    h+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
+    shape+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
       +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false)
       +_mskRow('Feather','feather',m.feather,0,100,0.005,false);
   }else if(m.type==='none'){   // Colour Range / Luminance Range — no shape, the gates select
-    h+='<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px">'
+    shape+='<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px">'
       +'No shape — this mask selects the whole frame and lets the '
       +(m.origin==='lum'?'<b>Lum floor/ceiling</b>':'<b>Colour range</b>')
       +' below do the selecting. <b>Invert</b> flips the range (everything <i>except</i> it). '
       +'Turn on the <b>Selection</b> preview above to see it.</div>';
   }else if(m.type==='linear'){
-    h+=_mskRow('Start X','x0',m.x0,0,100,0.01,false)+_mskRow('Start Y','y0',m.y0,0,100,0.01,true)
+    shape+=_mskRow('Start X','x0',m.x0,0,100,0.01,false)+_mskRow('Start Y','y0',m.y0,0,100,0.01,true)
       +_mskRow('End X','x1',m.x1,0,100,0.01,false)+_mskRow('End Y','y1',m.y1,0,100,0.01,true)
       +_mskRow('Feather','feather',m.feather,0,100,0.005,false);
   }else{ // brush / sky / AI raster mask
     if(mskIsAI(m)){
-      h+='<div class="btn-row">'
-        +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+(mskAiTapMode?'Scribble to select ✓':'◎ Scribble to select')+'</button>'
+      shape+='<div class="btn-row">'
+        +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over">Clear points</button></div>'
-        +(m.origin==='skin'?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+(_faceparseRunning?'⟳ Finding features…':'✂ Auto-exclude face features')+'</button></div>':'')
+        +(m.origin==='skin'?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button></div>':'')
         +'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>'
-        +(_sam2Encoding?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">⟳</span> Improving selection quality in the background…</div>':'')
+        +(_sam2Encoding?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">◠</span> Improving selection quality in the background…</div>':'')
         // Previously a failed encode/select was only logged to the hidden diagnostics panel — a
         // scribble that silently did nothing looked identical to one that just hadn't run yet.
         +(_samLastError?'<div style="font-size:10px;color:var(--err);font-family:var(--mono);margin-top:4px">⚠ '+_samLastError.replace(/</g,'&lt;')+'</div>':'');
     }
-    h+='<div class="btn-row">'
-      +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview">'+(mskPaintMode?'Painting ✓':'🖌 Paint')+'</button>'
-      +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add">Erase</button></div>'
+    shape+='<div class="btn-row">'
+      +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview">'+icon('brush',14)+(mskPaintMode?' Painting':' Paint')+'</button>'
+      +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add">'+icon('eraser',14)+' Erase</button></div>'
       +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
       +(m.origin==='sky'?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()">Re-detect sky</button>':'')
-      +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">◈ Refine edges</button></div>'
-      +(!mskIsAI(m)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">Tap 🖌 Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
+      +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button></div>'
+      +(!mskIsAI(m)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">Click Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
-  // Mask management: order matters (see "Subtract prev"), so give it real controls. Mute is a
-  // dry/wet check on one mask without losing it.
-  h+='<div class="btn-row" style="margin-top:6px">'
-    +'<button class="btn bgh" onclick="mskMove(-1)" '+(mskSel<1?'disabled':'')+' title="Move earlier in the list. Order matters: − Subtract prev reads the mask immediately before this one.">↑ Up</button>'
-    +'<button class="btn bgh" onclick="mskMove(1)" '+(mskSel>=fxState.masks.length-1?'disabled':'')+' title="Move later in the list">↓ Down</button>'
-    +'<button class="btn bgh" onclick="mskRename()" title="Give this mask a name so the list is readable">✎ Name</button>'
-    +'<button class="btn '+(m.muted?'bsec':'bgh')+'" onclick="mskToggleMute()" title="Temporarily switch this mask off without deleting it — the quickest way to judge what it is contributing">'+(m.muted?'Muted ✓':'👁 Mute')+'</button>'
-    +'<button class="btn '+(mskSolo===mskSel?'bsec':'bgh')+'" onclick="mskToggleSolo()" title="Show ONLY this mask\'s contribution by temporarily zeroing every other mask\'s Amount — click again to restore them">'+(mskSolo===mskSel?'★ Soloed':'☆ Solo')+'</button></div>'
-    +'<div class="btn-row"><button class="btn '+(m.isExclude?'bsec':'bgh')+'" onclick="mskToggleExclude()" title="Use this mask as an ERASER: it applies nothing itself and is cut out of every other mask. Paint one over the lips and another over a pet and both are excluded — unlike Subtract prev, which can only remove the single mask directly before.">'+(m.isExclude?'✂ Excluding ✓':'✂ Use as eraser')+'</button></div>'
-    +(m.isExclude?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px">This mask now only removes area from the others — its own sliders below do nothing.</div>':'')
-    // Amount: one master scale on the finished selection, so a mask can be dialled back without
-    // rescaling every slider below it by hand.
-    +_mskRow('Amount','amount',m.amount!=null?m.amount:100,0,100,1,false);
-  // ── SKIN TONE: colour-range gate + uniformity. Three independent groups, and keeping them
-  // separate is the point: the gate says WHICH pixels (must be picked from the photo), the target
-  // says WHERE THEY GO (need not exist in the photo), Uniformity says HOW FAR.
+  // ── SELECTION: Amount, the colour gate (non-skin masks) and the luminance band ──────────────
+  // Amount is a master scale on the finished selection, so a mask can be dialled back without
+  // rescaling every slider below it by hand.
+  const isSkin=(m.origin==='skin');
   const tgtMode=m.tgtMode||'match',tgtHex=m.tgtHex||'#d7bd96';
   const CS=m.crSamples||[];
-  h+='<div class="fx-sub" style="margin-top:10px">Skin Tone</div>'
-    +'<div class="fx-row" title="Restricts this mask to pixels near the picked tones, so a rough shape can still land on skin only. Combine with the shape to exclude same-coloured objects (pets, wood, sand).">'
-    +'<div class="fx-label">Colour range</div>'
-    +'<input type="checkbox" '+(m.crOn?'checked':'')+' onchange="mskCrToggle(this)" style="margin-right:6px;flex:0 0 auto">'
-    +'<button class="btn bgh" id="btn-msk-cr-eye" onclick="mskCrEyedropper()" style="flex:0 0 auto" title="Click a mid-tone patch of the tone you want. SHIFT-click further patches to add them — shaded, paler or pinker skin needs its own sample.">◉ Pick</button></div>';
-  if(CS.length){
-    // One chip per sample, showing the actual picked colour. Click removes. Skin needs several
-    // (matte cheek, shaded neck, sheeny chest) — see the union in colRangeWeight.
-    h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin:0 0 6px;align-items:center">'
-      +CS.map((p,i)=>'<button class="pc-chip" style="width:22px;height:22px;'
+  const chipRow=()=>CS.length?('<div class="msk-chiprow">'
+      +CS.map((p,i)=>'<button class="pc-chip msk-swatch" style="'
         +(p.rgb?'background:rgb('+p.rgb.join(',')+')':'background:var(--sur2)')
         +'" title="Sample '+(i+1)+' — click to remove" onclick="mskCrDropSample('+i+')"></button>').join('')
-      +'<span style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">'+CS.length+'/'+CR_MAX_SAMPLES
-      +(CS.length<CR_MAX_SAMPLES?' \u2014 shift-click the photo to add':'')+'</span></div>';
+      +'<span class="msk-hint">'+CS.length+'/'+CR_MAX_SAMPLES
+      +(CS.length<CR_MAX_SAMPLES?' — shift-click the photo to add':'')+'</span></div>'):'';
+
+  let selBody=shape
+    +_mskRow('Amount','amount',m.amount!=null?m.amount:100,0,100,1,false);
+  if(!isSkin){
+    // The colour gate is a way of choosing PIXELS, so on an ordinary mask it belongs here rather
+    // than under a "Skin Tone" heading it has nothing to do with.
+    selBody+='<div class="fx-row" title="Restricts this mask to pixels near the picked tones, so a rough shape can still land on one subject only. Combine with the shape to exclude same-coloured objects (pets, wood, sand).">'
+      +'<div class="fx-label">Colour range</div>'
+      +'<input type="checkbox" '+(m.crOn?'checked':'')+' onchange="mskCrToggle(this)">'
+      +'<button class="btn bgh" id="btn-msk-cr-eye" onclick="mskPickSkin()" style="flex:0 0 auto">'+icon('eyedropper',14)+' Pick</button></div>'
+      +chipRow()
+      +(m.crOn?_mskRow('How similar','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
+        +'<div class="msk-hint">Colour alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous.</div>':'');
   }
-  if(m.crOn){
-    h+=_mskRow('Range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
-      +'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px">Set the mask preview to <b>Selection</b> above, then <b>shift-click</b> each kind of skin in the photo — matte, shaded, paler, pinker — until it ALL reads red. Adding samples beats widening Range: a patch left out won\'t even out with the rest (and if it\'s the patch furthest from the target, the difference gets <i>worse</i>), while a huge Range starts swallowing things that merely share the hue. The gate can\'t tell skin from a pet, sand or wood on colour alone — keep those out with the mask <b>shape</b>, a <b>Brush</b> mask, or <b>− Subtract prev</b>.</div>'
-      // TARGET — decoupled from the pick, so a tan tone that appears nowhere in the photo is reachable.
-      +'<div class="fx-row" title="Where the selected tones move TO. Match keeps the picked tone (pure evening-out); a swatch or custom colour lets you aim at a tone that is not in the photo at all."><div class="fx-label">Target</div>'
-      +['match','swatch','custom'].map(v=>'<button class="btn '+(tgtMode===v?'bsec':'bgh')+'" style="flex:1 1 0;min-width:0" onclick="mskTgtMode(\''+v+'\')">'+(v==='match'?'Match pick':v==='swatch'?'Swatch':'Custom')+'</button>').join('')
+  selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
+    +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
+  h+=_mskGroup('selection','Selection',selBody);
+
+  // ── SKIN TONE: a guided three-step flow, skin masks only ─────────────────────────────────────
+  if(isSkin){
+    const cov=mskSkinCoverage(m);
+    const strength=Math.round(((m.uH||0)+(m.uS||0))/2);
+    let sk='<div class="msk-step"><span class="msk-step-n">1</span>Select the skin</div>'
+      +'<div class="msk-hint">Click the skin you want to even out. Add clicks for shaded, paler or pinker areas — one sample is never enough for a whole body.</div>'
+      +'<div class="btn-row"><button class="btn '+(_mskCrEyeActive?'bsec':'bgh')+'" id="btn-msk-cr-eye" onclick="mskPickSkin()">'
+      +icon('eyedropper',14)+(_mskCrEyeActive?' Picking — shift-click to add':' Pick skin')+'</button></div>'
+      +chipRow();
+    if(CS.length){
+      sk+=_mskRow('How similar','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
+        +(cov!=null?'<div class="msk-cov"><b>'+CS.length+' sample'+(CS.length>1?'s':'')+'</b> · about <b>'+cov+'%</b> of the frame selected</div>':'')
+        // The measured failure mode, stated where it can still be acted on. See CLAUDE.md 5b.
+        +(CS.length<2?'<div class="msk-warn">One sample rarely covers a whole body — skin straddles the hue wrap point, so a single pick can leave the palest area barely selected and push its hue further away, not closer. Shift-click a couple more.</div>':'');
+    }
+    sk+='<div class="msk-step"><span class="msk-step-n">2</span>Choose the target</div>'
+      +'<div class="msk-hint">Where those tones should end up. It does not have to be a colour that appears in the photo.</div>'
+      +'<div class="seg msk-seg">'
+      +[['match','Even them out'],['swatch','Pick a shade'],['custom','Custom']]
+        .map(([v,lb])=>'<button class="'+(tgtMode===v?'on':'')+'" onclick="mskTgtMode(\''+v+'\')">'+lb+'</button>').join('')
       +'</div>';
     if(tgtMode==='swatch'){
-      // Monk Skin Tone scale — see MST_SWATCHES. 4-6 is the useful span for tanning a light base.
-      h+='<div style="display:flex;gap:3px;flex-wrap:wrap;margin:2px 0 4px">'
-        +MST_SWATCHES.map((hx,i)=>'<button class="pc-chip'+(tgtHex.toLowerCase()===hx?' on':'')+'" style="background:'+hx+'" title="Monk Skin Tone '+(i+1)+'" onclick="mskTgtSwatch(\''+hx+'\')"></button>').join('')
-        +'</div><div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-bottom:6px">Monk Skin Tone scale (CC BY 4.0) — 1 lightest to 10 darkest.</div>';
+      sk+='<div class="msk-chiprow msk-mst">'
+        +MST_SWATCHES.map((hx,i)=>'<button class="pc-chip msk-swatch'+(tgtHex.toLowerCase()===hx?' on':'')
+          +(i>=3&&i<=5?' rec':'')+'" style="background:'+hx+'" title="Monk Skin Tone '+(i+1)+(i>=3&&i<=5?' — a good span for tanning a light base':'')+'" onclick="mskTgtSwatch(\''+hx+'\')"><span>'+(i+1)+'</span></button>').join('')
+        +'</div><div class="msk-hint">Monk Skin Tone scale (CC BY 4.0) — 1 lightest to 10 darkest. 4–6 is the useful span for tanning a light base.</div>';
     }else if(tgtMode==='custom'){
-      h+='<div class="fx-row"><div class="fx-label">Target colour</div>'
-        +'<input type="color" value="'+tgtHex+'" style="width:28px;height:22px;padding:0;border:1px solid var(--bdr);border-radius:5px;background:none;flex:0 0 auto;cursor:pointer" oninput="mskTgtPicked(this)"></div>';
+      sk+='<div class="fx-row"><div class="fx-label">Target colour</div>'
+        +'<input type="color" value="'+tgtHex+'" oninput="mskTgtPicked(this)"></div>';
     }
-    // UNIFORMITY — the contractive operator. See skinUniformity() in the lut shader for why this
-    // is different in kind from every other (additive) colour slider in the app.
-    h+='<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:4px 0 2px">Uniformity pulls the selected tones TOWARD the target instead of shifting them all equally — uneven areas even out rather than the darkest getting darker.</div>'
-      +_mskRow('Uniformity: Hue','uH',m.uH||0,0,100,1,false)
-      +_mskRow('Uniformity: Saturation','uS',m.uS||0,0,100,1,false)
-      +_mskRow('Uniformity: Lightness','uL',m.uL||0,0,100,1,false)
-      +'<div class="fx-row" title="0 = collapse lightness onto the target (evens out a tan LINE, but flattens the shading that gives a body its form). 100 = shift the overall lightness level to the target with shading fully intact."><div class="fx-label">Preserve modeling</div>'
-      +'<input class="fx-slider" type="range" min="0" max="100" value="'+(m.preserve!=null?m.preserve:70)+'" data-k="preserve" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
-      +'<div class="fx-val">'+(m.preserve!=null?m.preserve:70)+'</div></div>'
-      +'<div class="fx-row" title="Tanning only darkens. Off, any skin already darker than the target gets LIFTED toward it, which washes out shadows and the edges of hair instead of tanning them."><div class="fx-label">Tan darkens only</div>'+'<input type="checkbox" '+(m.tanOneWay?'checked':'')+' onchange="mskSetFlag(\'tanOneWay\',this.checked)" style="margin-right:6px;flex:0 0 auto"></div>'
-      +_mskRow('Tan: Depth','tanDepth',m.tanDepth||0,0,100,1,false)
-      +_mskRow('Tan: Warmth','tanWarm',m.tanWarm||0,0,100,1,false)
-      +'<div class="fx-sub" style="margin-top:10px">Local Adjustments</div>';
+    sk+='<div class="msk-step"><span class="msk-step-n">3</span>Blend</div>'
+      +'<div class="msk-chiprow msk-presets">'
+      +Object.entries(MSK_SKIN_PRESETS).map(([k,p])=>'<button class="btn bgh msk-preset" onclick="mskSkinPreset(\''+k+'\')">'+p.label+'</button>').join('')
+      +'</div>'
+      +'<div class="fx-row" title="How far the selected tones move toward the target. This is a CONVERGENCE, not a shift: uneven areas even out instead of the darkest simply getting darker."><div class="fx-label">Strength</div>'
+      +'<input class="fx-slider" type="range" min="0" max="100" value="'+strength+'" oninput="mskSkinStrength(parseFloat(this.value))">'
+      +'<div class="fx-val" id="msk-strength-val">'+strength+'</div></div>'
+      +_mskRow('Depth','tanDepth',m.tanDepth||0,0,100,1,false)
+      +_mskRow('Warmth','tanWarm',m.tanWarm||0,0,100,1,false);
+    // The two traps that are counterintuitive enough to be worth surfacing inline rather than
+    // documenting somewhere the user will never look. Both are measured findings (CLAUDE.md 5b).
+    if((m.feather||0)>0.4&&strength>0){
+      sk+='<div class="msk-warn">Feather is high, so the shape — not the colour gate — is deciding how much each pixel moves, and the tones will not converge. Lower Feather to about 25.</div>';
+    }
+    const adv=_mskGroupOpen.skinAdv===true;
+    sk+='<button class="msk-adv-hd" onclick="_mskGroupOpen.skinAdv='+(!adv)+';mskRebuild()">'+(adv?'▾':'▸')+' Advanced</button>';
+    if(adv){
+      sk+='<div class="msk-hint">Strength above moves Hue and Saturation together. These are the individual axes.</div>'
+        +_mskRow('Hue uniformity','uH',m.uH||0,0,100,1,false)
+        +_mskRow('Saturation uniformity','uS',m.uS||0,0,100,1,false)
+        +_mskRow('Lightness uniformity','uL',m.uL||0,0,100,1,false)
+        +'<div class="fx-row" title="0 collapses lightness onto the target — it evens out a tan LINE but flattens the shading that gives a body its form. 100 shifts the overall level with shading fully intact."><div class="fx-label">Keep shading</div>'
+        +'<input class="fx-slider" type="range" min="0" max="100" value="'+(m.preserve!=null?m.preserve:70)+'" data-k="preserve" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
+        +'<div class="fx-val">'+(m.preserve!=null?m.preserve:70)+'</div></div>'
+        +'<div class="fx-row" title="Tanning only darkens. With this off, skin already darker than the target gets LIFTED toward it, washing out shadows and the edges of hair."><div class="fx-label">Only darken</div>'
+        +'<input type="checkbox" '+(m.tanOneWay?'checked':'')+' onchange="mskSetFlag(\'tanOneWay\',this.checked)"></div>'
+        +'<div class="msk-hint">Lightness is not expected to match across sunlit and shadowed skin — forcing that is what flattens a subject, and what Keep shading exists to prevent. Judge the result on lit skin.</div>';
+    }
+    h+=_mskGroup('skin','Skin tone',sk,isSkin&&strength>0?'on':'');
   }
-  h+=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
+
+  // ── ADJUST ───────────────────────────────────────────────────────────────────────────────────
+  let adjBody=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
     +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
@@ -9809,23 +10055,17 @@ function mskRebuild(){
     +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
     +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
-    // Color paint: a Lightroom-style "tint the masked area toward this color" control —
-    // distinct from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already
-    // there). The swatch previews the target color at the current Amount.
-    +'<div class="fx-row" title="Pick any color (hue+saturation+lightness) to tint the masked area toward — the hue slider below is a quick fine-tune once a color is picked."><div class="fx-label">Color</div>'
-    +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" style="width:28px;height:22px;padding:0;border:1px solid var(--bdr);border-radius:5px;background:none;flex:0 0 auto;margin-right:6px;cursor:pointer" oninput="mskColPicked(this)"></div>'
+    // Color paint: a Lightroom-style "tint the masked area toward this color" control — distinct
+    // from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already there).
+    +'<div class="fx-row" title="Pick any colour to tint the masked area toward — the hue slider below fine-tunes it."><div class="fx-label">Colour</div>'
+    +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
     +'<div class="fx-row"><div class="fx-label">Hue (fine-tune)</div>'
     +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
     +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
-    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false)
+    +_mskRow('Colour amount','colAmt',m.colAmt,0,100,0.01,false)
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
-    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
-    +_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
-    +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false)
-    +'<div class="btn-row" style="margin-top:4px">'
-    +'<button class="btn '+(m.invert?'bsec':'bgh')+'" onclick="mskInvert()">'+(m.invert?'Inverted ✓':'Invert')+'</button>'
-    +(mskSel>0?'<button class="btn '+(m.subtract?'bsec':'bgh')+'" onclick="mskToggleSubtract()" title="Subtracts the PREVIOUS mask\'s shape from this one — a simple mask-inside-a-mask">'+(m.subtract?'− Subtracting ✓':'− Subtract prev')+'</button>':'')
-    +'<button class="btn bgh" onclick="mskDelete()">Delete mask</button></div>';
+    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false);
+  h+=_mskGroup('adjust','Adjust',adjBody);
   ctl.innerHTML=h;
   mskOverlaySync();
 }
@@ -10185,7 +10425,7 @@ function applyUISnapshot(s){
     s.sliders['adj-exp']=Math.max(-100,Math.min(100,parseFloat(s.sliders['adj-exp'])*(20/50)));
   }
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
-  _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff)ff.style.display=on?'flex':'none';}});
+  _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
@@ -11123,7 +11363,7 @@ function loadSession(userTriggered){
     _SESS_TOGGLES.forEach(id=>{
       const el=document.getElementById(id);if(!el||s[id]==null)return;
       el.classList.toggle('on',!!s[id]);
-      const ff=document.getElementById('ff-'+id.slice(3));if(ff)ff.style.display=s[id]?'flex':'none';
+      const ff=document.getElementById('ff-'+id.slice(3));if(ff){ff.style.display='';ff.classList.toggle('ff-off',!s[id]);}
     });
     _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null){el.value=s[id];el._chipsRender&&el._chipsRender();}});
     _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
@@ -14655,7 +14895,7 @@ function fxResetSection(cardOrName){
     const id=tg.id.slice(3);
     if(_fxPristineDefault.toggles&&_fxPristineDefault.toggles[id]!==undefined){
       const on=_fxPristineDefault.toggles[id];tg.classList.toggle('on',on);
-      const ff=document.getElementById('ff-'+id);if(ff)ff.style.display=on?'flex':'none';
+      const ff=document.getElementById('ff-'+id);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}
     }
   });
   if(typeof hapt==='function')hapt();
@@ -14677,6 +14917,13 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
    fab.disabled=realBtn.disabled;
    new MutationObserver(()=>{fab.disabled=realBtn.disabled;}).observe(realBtn,{attributes:true,attributeFilter:['disabled']});
  }}
+// The ff-off class in the markup is the DEFAULT (every section ships off). Reconcile it against
+// the actual toggle state at boot, so a section restored ON by a saved session/recipe is not left
+// looking disabled.
+document.querySelectorAll('.fx-fields[id^="ff-"]').forEach(ff=>{
+  const tg=document.getElementById('tg-'+ff.id.slice(3));
+  if(tg)ff.classList.toggle('ff-off',!tg.classList.contains('on'));
+});
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
  set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');set('hdr-log','log');
