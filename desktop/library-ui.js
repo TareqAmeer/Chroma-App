@@ -255,8 +255,13 @@
     #lib-filters-badge{display:none;margin-left:5px;background:var(--acc);color:#1a1208;font-size:9px;
       font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4}
     #lib-filters-badge.on{display:inline-block}
-    #lib-filters-pop{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:30;
-      flex-direction:column;gap:6px;min-width:190px;padding:8px;background:var(--glass-bg);
+    /* ⚠️ Anchored to the button's RIGHT edge, not its left. The Filters button is the last item
+       in a right-aligned row, so a left-anchored popover grew off the side of the window with no
+       gap and its contents were clipped. right:0 makes it open leftward from the trigger, which
+       keeps it inside the viewport at any window width; max-width stops a long camera/lens name
+       pushing it back out again. */
+    #lib-filters-pop{display:none;position:absolute;top:calc(100% + 4px);right:0;left:auto;z-index:30;
+      flex-direction:column;gap:6px;min-width:190px;max-width:min(280px,calc(100vw - 24px));padding:8px;background:var(--glass-bg);
       -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
       border:1px solid var(--bdr);border-radius:8px;box-shadow:var(--lift-2)}
     #lib-filters-pop.on{display:flex}

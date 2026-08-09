@@ -670,16 +670,17 @@ body.mobile-fx.sheet-open #fx-fab-export{display:none} /* the sheet already has 
 /* ── DESKTOP "one tool at a time" editor (body.fx-deskb) ── */
 #fx-deskbar,#fx-toolrail{display:none}
 body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 10px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);position:sticky;top:8px;z-index:20}
-.fx-db{display:inline-flex;align-items:center;gap:7px;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:8px 12px;cursor:pointer;transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.fx-db{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:8px 12px;cursor:pointer;transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
 .fx-db:hover{border-color:var(--mut)}
 .fx-db .fx-db-ic{display:inline-flex;color:var(--mut)}
 .fx-db-pri{background:var(--acc);border-color:var(--acc);color:#000;font-weight:600}
 .fx-db-pri .fx-db-ic{color:#000}
 .fx-db-pri:hover{background:#e8a54a}
-.fx-db-icon{padding:8px;gap:0}
+.fx-db-icon{padding:8px;gap:0;justify-content:center}
 body.deskx .fx-db-icon{padding:5px}
-.flag-btn{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--bdr);border-radius:6px;cursor:pointer;color:var(--mut);transition:color .1s,background .1s,border-color .1s}
-.flag-btn svg{width:15px;height:15px}
+.flag-btn{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:var(--rad-1,6px);cursor:pointer;color:var(--mut);transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.flag-btn:hover{background:var(--sur2);color:var(--txt)}
+.flag-btn svg{width:18px;height:18px;flex:0 0 auto}
 .flag-btn-green.on{color:#3fb556;background:rgba(63,181,86,.16);border-color:#3fb556}
 .flag-btn-red.on{color:#e05a4e;background:rgba(224,90,78,.16);border-color:#e05a4e}
 .flag-btn-fav.on{color:#e5484d;background:rgba(229,72,77,.16);border-color:#e5484d}
@@ -707,7 +708,8 @@ body.deskx #fx-overflow{margin-left:var(--sp-2);padding-left:var(--sp-2);border-
 /* Zoom cluster: was bare 18px text controls with no button affordance at all. */
 .zc-ic{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}
 body.deskx .fx-zoom-ctrl{position:static;background:transparent;border:none;padding:0;gap:1px}
-body.deskx .fx-zoom-ctrl button{height:28px;min-width:28px;font-size:var(--fs-1);font-weight:500;padding:0 9px}
+body.deskx .fx-zoom-ctrl button:not(.flag-btn){height:28px;min-width:28px;font-size:var(--fs-1);font-weight:500;padding:0 9px}
+body.deskx .fx-zoom-ctrl .flag-btn{width:32px;height:32px;min-width:32px;padding:0}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
 body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:66px;align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
 .fx-rail-btn{display:flex;align-items:center;gap:10px;width:120px;background:none;border:none;border-radius:var(--rad-1,6px);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:9px 10px;text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
@@ -802,21 +804,21 @@ body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;columns:i
   overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
   background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03),-6px 0 16px -8px rgba(0,0,0,.4)}
 body.deskx #fx-toolrail{grid-column:4;order:3;position:static;top:auto;align-self:stretch;width:72px;box-sizing:border-box;
-  border:none;border-left:1px solid var(--bdr);border-radius:0;padding:6px 4px;overflow-y:auto;overflow-x:hidden;
+  border:none;border-left:1px solid var(--bdr);border-radius:0;padding:4px 4px;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:2px;background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03)}
 /* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only.
    Widened 64 -> 72px so the label can sit at 10px instead of 9px (the smallest text anywhere in
    the app, and the reason 14 rail items all read as one grey smear). The active item now also
    gets a 2px accent bar, so which tool is open is legible in peripheral vision rather than
    requiring a colour comparison between two dim greys. */
-body.deskx .fx-rail-btn{width:100%;flex-direction:column;gap:5px;padding:9px 3px;justify-content:center;
+body.deskx .fx-rail-btn{width:100%;flex-direction:column;gap:4px;padding:6px 3px;justify-content:center;
   font-size:var(--fs-1);position:relative}
 body.deskx .fx-rail-btn .fx-rail-lb{white-space:normal;text-align:center;line-height:1.2}
 body.deskx .fx-rail-btn.on::before{content:'';position:absolute;left:-4px;top:7px;bottom:7px;width:2px;
   border-radius:0 2px 2px 0;background:var(--acc)}
 /* Group separators mirroring FX_GROUPS (Light · Colour · Detail · Film · Frame · Masks · Output),
    inserted by buildToolRail. */
-body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:var(--sp-2) 8px;flex:0 0 auto}
+body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px 10px;flex:0 0 auto}
 /* Reverted: a border/frame drawn around the PHOTO itself looked like a matte applied to the
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
