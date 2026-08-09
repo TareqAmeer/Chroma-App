@@ -31,6 +31,8 @@ mod faceparse;
 mod sam;
 mod rawdenoise;
 mod tiff_meta;
+#[cfg(target_os = "macos")]
+mod gainmap;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 fn percent_decode(s: &str) -> String {
@@ -629,6 +631,52 @@ fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
 // data_b64 (not a raw-bytes IPC body) mirrors the "recipe" base64 round-trip already used
 // elsewhere in this codebase (get_export_history/set_sidecar) — a proven-simple pattern here,
 // at the cost of ~33% transfer overhead which is a non-issue for a single-photo TIFF write.
+
+// ── Gain-map HDR export (ISO 21496-1) ────────────────────────────────────────────────────────
+// Takes OUR graded SDR render plus the ORIGINAL source path, and writes a HEIC whose base image is
+// the grade and whose auxiliary gain map carries the highlight headroom the source captured. See
+// gainmap.rs for why this shape was chosen over an extended-range render pipeline.
+//
+// Returns false when the source has no HDR headroom, so the caller can fall back to a normal
+// export instead of writing a gain map that encodes nothing.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<bool, String> {
+    use base64::Engine;
+    let hdr = |k: &str| -> Result<String, String> {
+        let v = request
+            .headers()
+            .get(k)
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| format!("missing {k} header"))?;
+        let b = base64::engine::general_purpose::STANDARD
+            .decode(v)
+            .map_err(|e| format!("decode {k}: {e}"))?;
+        String::from_utf8(b).map_err(|e| format!("{k} not utf8: {e}"))
+    };
+    let source = hdr("x-source")?;
+    let dest = hdr("x-dest")?;
+    let quality: f64 = request
+        .headers()
+        .get("x-quality")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.92);
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b,
+        _ => return Err("expected raw request body (the graded PNG)".into()),
+    };
+    gainmap::write_gainmap_heic(&source, bytes, &dest, quality)
+}
+
+// Reports whether a file carries HDR headroom, so the UI can offer the HDR option only when it
+// would actually do something.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn source_has_hdr(path: String) -> Result<bool, String> {
+    gainmap::source_has_hdr(&path)
+}
+
 #[tauri::command]
 fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
     use base64::Engine;
@@ -1194,6 +1242,10 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
+            #[cfg(target_os = "macos")]
+            write_gainmap_heic,
+            #[cfg(target_os = "macos")]
+            source_has_hdr,
             store_dcp_lut,
             decode_raw_v2,
             denoise_raw_high,
