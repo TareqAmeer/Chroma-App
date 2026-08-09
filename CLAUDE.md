@@ -64,7 +64,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-07-31e`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-08-09a`.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -101,10 +101,33 @@ python calib/optimize_hal.py     # autonomous dense-loss optimizer (background-a
 ### Export regression gate (`test/`) — the fast way to verify a shader edit
 
 ```bash
-npm test                          # export gate + scorecard
+npm test                          # everything below, in order
 node test/export_harness.mjs      # renders every fixture x recipe into test/output/
 node test/export_harness.mjs --golden   # regenerate test/golden/ (only when a change is intended)
+npm run mask:test                 # raster-mask storage + round-trip + copy-on-write undo
+npm run ui:test                   # desktop layout audit (see below); --json for detail
+npm run perf:test                 # perf budgets; --baseline to re-record
 ```
+
+**`test/ui_audit.mjs`** walks every tool section at 1440×820 / 1600×1000 / 1280×720 in `?deskx=1`
+and asserts six invariants: no panel fragmentation (§10.8), no control painted before its own
+label (§10.9), no overlapping siblings, a 28px pointer-target floor (18px for checkboxes/colour
+swatches, deliberately — see the comment in the file), an 11px font floor, and 4.5:1 text
+contrast. Baselines live in `test/baselines/` — **not** `test/output/`, which is gitignored.
+It exists because these defects are invisible in a screenshot of the DEFAULT panel and only
+appear once a panel grows tall; reading its JSON is also far cheaper than round-tripping
+screenshots through a model.
+
+**`test/perf_bench.mjs`** holds four budgets, each anchored to a real pre-optimisation
+measurement: `_boxFilterJS` ×6 @2048×1365 (was 1996ms), retained undo history with a brush mask
+(was 9.5MB for a *512×384* mask), renders during a 30-event slider drag (was **1** — grading a
+slider produced no feedback at all), and `getUISnapshot`. It also diffs `_boxFilterJS` against a
+reference implementation, so a faster filter can never quietly become a different filter.
+
+**`test/mask_raster.mjs`** exists because **no export golden contains a raster mask** — every
+recipe uses analytic shapes, so the entire brush/sky/AI storage path had zero coverage. It
+asserts byte-exact snapshot round-trips, that legacy plain-`Array` masks still load, and that
+painting cannot corrupt a history entry.
 
 `test/export_harness.mjs` loads the REAL `chromasmith-22.html` in Playwright/Chromium (software
 SwiftShader GL, so output doesn't depend on the host GPU) and drives it through the app's own
@@ -204,6 +227,34 @@ this in seconds. A silent no-op is worse than a crash, so never judge a shader c
 still loads".
 
 ---
+
+## 3b. Design tokens & typography (added 2026-08-09)
+
+All in the `:root` block at the top of the `<style>`. **Use the tokens; don't reintroduce literals.**
+
+- **`--sans` = Inter Variable 400–700, `--display` = Instrument Serif Italic** — both embedded as
+  base64 `@font-face` data URIs (Latin subsets, ~85KB combined; SIL OFL 1.1, credited in the
+  Guide). The app is offline and single-file, so there is no CDN to fetch from and no `font-display`
+  to worry about. `--serif` is kept as an alias of `--display` so older rules still resolve.
+- ⚠️ **`--mono` is for numerals, code and the build stamp — it is not a UI voice.** It was used
+  81× against 8 of `--sans`, with 23 `text-transform:uppercase` rules on top, which is what made
+  the app read as generated "technical" UI rather than a photo tool. **Uppercase now survives in
+  exactly one role: the panel/section eyebrow** (`.fx-ctrl-title`, `.fx-sub`). Numeric readouts
+  carry `font-variant-numeric:tabular-nums` so figures don't jitter as they change.
+- `--fs-0..7` type scale, `--sp-1..6` spacing, `--ease`/`--dur-1`/`--dur-2` motion. Smallest UI
+  text is 11px (`--fs-1`); `test/ui_audit.mjs` enforces that floor.
+- **Accent (`--acc`) is an information channel, not decoration**: primary action, active
+  navigation, and "you changed this" (`.fx-row.fx-mod`). It is deliberately NOT used for active
+  segmented-control items or for every slider fill.
+- **Icons**: one stroke set in `ICONS` (Lucide-shaped, ISC), rendered via `icon(name,size)` at
+  16 / 20 / 22px only. **No emoji and no unicode glyphs in desktop chrome** — they render
+  per-platform and never match a stroke weight.
+- **Sliders** fill from the CENTRE on symmetric ranges (`fxPaintSlider` derives bipolarity from
+  each element's own min/max, so dynamically built rows need no wiring) and stay neutral grey
+  until the value leaves its default.
+- **A section that is switched off is dimmed (`.fx-fields.ff-off`), not `display:none`** — and
+  touching any control inside it turns the section on. See §10.13 for why hiding it was actively
+  harmful.
 
 ## 4. The four tabs
 
@@ -391,6 +442,31 @@ a dedicated inner-glow term optimized to ~zero gain, so none is needed.
 ---
 
 ## 5b. Skin Tone — the one CONTRACTIVE colour operator
+
+### Panel layout (rebuilt 2026-08-09 — read this before editing `mskRebuild`)
+The panel is three **collapsible groups**, not one flat column: **Selection** (which pixels) ·
+**Adjust** (what to do to them) · **Skin Tone** (`origin==='skin'` ONLY). Open/closed state is
+per-GROUP in `localStorage`, not per-mask. Rare operations (reorder, rename, mute, solo, eraser,
+subtract, invert, delete) live in the `⋯` menu (`mskMoreMenu`) on the mask's own row, which also
+shows state as chips rather than glyphs appended to the name.
+
+⚠️ **The colour-range gate belongs to Selection, not to Skin Tone.** It chooses *pixels*; skin
+uniformity is an *adjustment*. On an ordinary mask it renders in Selection; on a Skin mask it is
+step 1 of the guided flow — so it appears exactly once either way. It previously rendered under a
+"Skin Tone" heading on every mask type including Radial, Linear and Luminance Range.
+
+The guided flow is **presentation only** — `skinUniformity()`, `colRangeWeight`, `mskSkinTarget`
+and `mskMeasureSrcV` are untouched. The label mapping is: Strength → `uH`+`uS` together (both
+axes remain under Advanced), Keep shading → `preserve`, Only darken → `tanOneWay`, Depth/Warmth →
+`tanDepth`/`tanWarm`. `MSK_SKIN_PRESETS` are plain value sets, nothing new.
+
+Two findings below are now surfaced *in the panel* rather than only documented here, because they
+are the ones that silently make results worse: a live "N samples · about X% selected" readout, a
+warning at one sample, and a warning when `feather > 0.4` lets the shape outvote the colour gate.
+⚠️ `crWeightJS(h,C,samples,range)` takes `range` as **0..100** and divides internally — pre-
+dividing collapses the kernel to ~zero width (this is how the coverage readout first shipped
+reporting 0% for every photo).
+
 
 Every other colour control in the app is **additive**: `adjSkin`, `applyHSL`,
 `applyPointColors` and `maskAdjust` all compute `x → x + Δ`. Adding a constant leaves the
@@ -710,6 +786,39 @@ Learned the hard/expensive way:
    (Preview shows the embedded JPEG, not the RAW).
 7. The app preset list must mirror `calib/LUT LIBRARY/` (11 looks); a LUT with a real
    non-`_composed` source (astia/classic_neg/velvia) beats its composed recreation.
+8. **`column-count:1` does NOT mean "not multi-column".** It still establishes a multicol
+   formatting context, and per CSS Multicol a multicol box with a **definite block-size**
+   fragments its overflow into EXTRA COLUMNS along the inline axis instead of overflowing
+   vertically. `.fx-panel` had `column-count:2` globally, `1` under `fx-deskb`, and a definite
+   height under `deskx` — so any tool panel taller than the window silently became 2–4
+   side-by-side columns with `scrollTop` pinned at 0: vertical scrolling did nothing and
+   everything past the first screenful was unreachable. Measured on Masks at 1440×820:
+   `scrollWidth 937` vs `clientWidth 319`. Use `columns:initial` to leave the context entirely.
+   The older `[data-fxsec="looks"]{column-span:all}` rule was a per-card patch for a symptom of
+   this same root cause — a hint that had been sitting in the file for a long time.
+9. **`.fx-row` assigns `order` to three specific children, so every other child must get one
+   too.** `.fx-label` is `order:1`, `.fx-val` is `2`, `.fx-slider` is `3`; anything else
+   (checkbox, `<select>`, colour input, button group) kept the flex default `order:0` and
+   painted BEFORE its own label. 18 rows read backwards, e.g. "Match pick Swatch Custom |
+   Target". `.fx-row>*{order:2}` is the base rule that prevents it recurring.
+10. **A comment claiming a complexity class is not evidence.** `_boxFilterJS` was documented as
+   an O(w·h) prefix sum and written as a naive O(w·h·r) window sum — it even computed a row
+   total into `acc` and never used it. Six calls at 2048×1365 cost ~2s of blocked main thread
+   per "Refine edges". When a hot path feels slow, read the loop, don't trust the header.
+11. **Typed arrays do not survive `JSON.stringify`.** `Uint8ClampedArray` serializes to
+   `{"0":…,"1":…}`, which is both enormous and lossy on the way back. Every mask persistence
+   path (session, Library sidecar, copy/paste recipe, undo history) must go through
+   `_mskToSnap`/`_mskFromSnap`, never a raw JSON clone of a live mask.
+12. **Seeded-`Math.random` goldens are order-dependent.** Every `FX.render` without an explicit
+   `opts.seed` consumes one number from the stream, so the three grain goldens depended on how
+   many PREVIEW renders happened during harness setup — adding a live preview render shifted all
+   three with no change to export output. `export_harness.mjs` now reseeds immediately before the
+   render. To prove an app change is output-neutral, render the pre-change file through the same
+   harness and byte-compare; don't reason about it.
+13. **Hiding a disabled section with `display:none` also hides it from the UI audit.** Switching
+   off-sections to dimmed-but-rendered immediately surfaced a control that had been unreadable
+   for a long time (an 8px "BLR" text label in a 24px circle). Anything permanently hidden is
+   permanently unaudited.
 
 ---
 

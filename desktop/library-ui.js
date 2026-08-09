@@ -202,7 +202,7 @@
       background:var(--bg);display:none;border-right:1px solid var(--bdr);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
-      font-family:-apple-system,'Helvetica Neue',sans-serif;transition:width .15s ease;}
+      font-family:var(--sans);transition:width .15s ease;}
     #lib-overlay.on{display:grid}
     /* 6 children = 6 tracks (top, filters, viewbar, side, main, bottom) — and each child is
        PINNED to its row so a future DOM insertion can never silently shift everything again
@@ -275,7 +275,7 @@
     .lib-coll-row.on{background:rgba(212,144,58,.14);color:var(--acc)}
     .lib-coll-ic{display:inline-flex;flex-shrink:0;color:inherit}
     .lib-coll-lb{flex:1}
-    .lib-coll-count{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--mut)}
+    .lib-coll-count{font-family:var(--mono);font-size:10px;color:var(--mut)}
     .lib-coll-row.on .lib-coll-count{color:var(--acc)}
     .lib-coll-sep{height:1px;background:var(--bdr);margin:8px 2px}
     .lib-coll-heading{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:2px 8px 6px}
@@ -317,7 +317,7 @@
     :root{--lib-list-cols:52px minmax(120px,1fr) 92px 92px 132px 56px 68px 60px 56px 70px 56px 60px}
     #lib-list-head{display:none;position:sticky;top:0;z-index:20;background:var(--bg);
       grid-template-columns:var(--lib-list-cols);gap:10px;padding:4px 8px 6px;
-      border-bottom:1px solid var(--bdr);font-size:10px;color:var(--mut);font-family:var(--mono,ui-monospace,Menlo,monospace);
+      border-bottom:1px solid var(--bdr);font-size:10px;color:var(--mut);font-family:var(--mono);
       text-transform:uppercase;letter-spacing:.04em}
     #lib-list-head.on{display:grid}
     .lib-lh-cell{cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
@@ -337,10 +337,10 @@
     #lib-grid.list-view .lib-name{padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
     #lib-grid.list-view .lib-tagrow{padding:0;display:contents}
     #lib-grid.list-view .lib-edited-badge,#lib-grid.list-view .lib-raw-badge,#lib-grid.list-view .lib-video-badge{position:static;width:16px;height:16px}
-    #lib-grid.list-view .lib-col{font-size:10px;color:var(--mut);font-family:ui-monospace,Menlo,monospace;
+    #lib-grid.list-view .lib-col{font-size:10px;color:var(--mut);font-family:var(--mono);
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .lib-meta-strip{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);color:#fff;
-      font-size:9px;font-family:ui-monospace,Menlo,monospace;padding:3px 5px;line-height:1.3;
+      font-size:9px;font-family:var(--mono);padding:3px 5px;line-height:1.3;
       pointer-events:none;opacity:0}
     .lib-card:hover .lib-meta-strip.hover-mode,.lib-meta-strip.always-mode{opacity:1}
     .lib-thumb-wrap{position:relative}
@@ -363,7 +363,7 @@
        get_thumbnail resolves — .loaded is added by the thumb pool once the blob URL is set. */
     #lib-grid:not(.list-view) .lib-thumb-wrap img{opacity:0;transition:opacity .15s ease}
     #lib-grid:not(.list-view) .lib-thumb-wrap img.loaded{opacity:1}
-    .lib-card .lib-name{font-size:10px;font-family:ui-monospace,Menlo,monospace;color:var(--mut);
+    .lib-card .lib-name{font-size:10px;font-family:var(--mono);color:var(--mut);
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-tagrow{display:flex;align-items:center;gap:6px;padding:0 6px 6px}
     /* Grid mode: overlaid on the thumbnail itself (not an in-flow footer row) so the card has
@@ -869,7 +869,7 @@
     const recents = getRecentFolders().filter((p) => p !== gDir && p !== lDirEarly);
     recentMenu = document.createElement('div');
     recentMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
-      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:220px;max-width:320px;box-shadow:var(--lift-2)';
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:220px;max-width:320px;box-shadow:var(--lift-2)';
     const item = (label, path) => {
       const el = document.createElement('div');
       el.textContent = label;
@@ -1979,7 +1979,7 @@
     const n = paths.length;
     ctxMenu = document.createElement('div');
     ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
-      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:180px;box-shadow:var(--lift-2)';
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:180px;box-shadow:var(--lift-2)';
     const item = (label, fn) => {
       const el = document.createElement('div');
       el.textContent = label;
@@ -2972,7 +2972,7 @@
       const back = document.createElement('div');
       back.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
       const box = document.createElement('div');
-      box.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px;min-width:300px;font-family:-apple-system,sans-serif;color:var(--txt);box-shadow:var(--lift-2)';
+      box.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px;min-width:300px;font-family:var(--sans);color:var(--txt);box-shadow:var(--lift-2)';
       box.innerHTML = `<div style="font-weight:600;font-size:14px;margin-bottom:4px">Import ${count > 1 ? count + ' photos' : 'photo'} from Lightroom</div>
         <div style="font-size:12px;color:var(--mut);margin-bottom:14px">Choose what to download.</div>`;
       const mk = (label, desc, val) => {
@@ -3085,7 +3085,7 @@
     closeContextMenu();
     const n = assets.length;
     ctxMenu = document.createElement('div');
-    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:-apple-system,sans-serif;min-width:180px;box-shadow:var(--lift-2)';
+    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:180px;box-shadow:var(--lift-2)';
     const item = (label, fn) => {
       const el = document.createElement('div');
       el.textContent = label;

@@ -44,7 +44,10 @@ const WRITE_BASELINE = process.argv.includes('--baseline');
 
 // name -> { budget, unit, cmp } — cmp 'lt' means lower is better, 'gt' means higher is better.
 const BUDGETS = {
-  refine_edges_ms: { budget: 900, unit: 'ms', cmp: 'lt', label: '_boxFilterJS x6 @2048x1365' },
+  // Budget sits between the fixed implementation (~650ms typical, ~1000ms on a loaded machine)
+  // and the naive O(w*h*r) one it replaced (~2000ms), so it still catches a revert without
+  // firing on scheduler noise. The measurement itself is a best-of-3 for the same reason.
+  refine_edges_ms: { budget: 1400, unit: 'ms', cmp: 'lt', label: '_boxFilterJS x6 @2048x1365 (best of 3)' },
   history_bytes: { budget: 1_500_000, unit: 'B', cmp: 'lt', label: 'retained history, 20 pushes w/ brush mask' },
   drag_renders: { budget: 8, unit: 'frames', cmp: 'gt', label: 'renders during a 30-event slider drag' },
   snapshot_ms: { budget: 6, unit: 'ms', cmp: 'lt', label: 'getUISnapshot() w/ brush mask' },
@@ -109,9 +112,16 @@ async function main() {
         const src = new Float32Array(W * H);
         let s = 12345;
         for (let i = 0; i < W * H; i++) { s = (s * 1103515245 + 12345) & 0x7fffffff; src[i] = s / 0x7fffffff; }
-        const t0 = performance.now();
-        for (let k = 0; k < 6; k++) _boxFilterJS(src, W, H, R);
-        res.refine_edges_ms = Math.round(performance.now() - t0);
+        // Best of 3. A single timing on a busy machine swings ~50% (measured 639 / 668 / 994ms
+        // for identical code while a release build was running), which would make this gate
+        // flaky — and a flaky gate gets ignored, which is worse than not having one.
+        let best = Infinity;
+        for (let run = 0; run < 3; run++) {
+          const t0 = performance.now();
+          for (let k = 0; k < 6; k++) _boxFilterJS(src, W, H, R);
+          best = Math.min(best, performance.now() - t0);
+        }
+        res.refine_edges_ms = Math.round(best);
 
         // Correctness guard: the optimised filter must agree with a straightforward reference
         // implementation. A fast filter that returns different numbers is not a fix.
