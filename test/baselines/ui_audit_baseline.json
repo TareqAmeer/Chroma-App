@@ -7,30 +7,34 @@
     "OVERLAP": 12,
     "TAP": 25,
     "FONT": 37,
-    "CONTRAST": 0
+    "CONTRAST": 0,
+    "SPILL": 1
   },
   "examples": {
     "FRAGMENT": [
-      ".fx-panel — scrollWidth 1246 > clientWidth 319 (~4 columns)",
-      ".fx-panel — content 2394px in a 776px panel but scrollHeight 776 — vertical scroll cannot reach it"
+      ".fx-panel \u2014 scrollWidth 1246 > clientWidth 319 (~4 columns)",
+      ".fx-panel \u2014 content 2394px in a 776px panel but scrollHeight 776 \u2014 vertical scroll cannot reach it"
     ],
     "ORDER": [
-      "div.fx-row — select#sel-dcp.fx-select paints before its label \"RAW profile\"",
-      "div.fx-row — select#sel-raw-nr.fx-select paints before its label \"RAW Noise Reduction\"",
-      "div.fx-row — button.btn paints before its label \"Target\""
+      "div.fx-row \u2014 select#sel-dcp.fx-select paints before its label \"RAW profile\"",
+      "div.fx-row \u2014 select#sel-raw-nr.fx-select paints before its label \"RAW Noise Reduction\"",
+      "div.fx-row \u2014 button.btn paints before its label \"Target\""
     ],
     "OVERLAP": [
-      "div.fx-ctrl-title \"Masks\" — overlaps div#ff-local.fx-fields by 277x29px (a multicol fragmentation artifact; cleared by the FRAGMENT fix)"
+      "div.fx-ctrl-title \"Masks\" \u2014 overlaps div#ff-local.fx-fields by 277x29px (a multicol fragmentation artifact; cleared by the FRAGMENT fix)"
     ],
     "TAP": [
-      "button#btn-before.btn \"○\" — 24x23 < 28",
-      "button#btn-split.btn \"⇔\" — 24x23 < 28",
-      "button#btn-history.btn \"⏱\" — 25x23 < 28"
+      "button#btn-before.btn \"\u25cb\" \u2014 24x23 < 28",
+      "button#btn-split.btn \"\u21d4\" \u2014 24x23 < 28",
+      "button#btn-history.btn \"\u23f1\" \u2014 25x23 < 28"
     ],
     "FONT": [
-      "button#btn-before.btn \"○\" — 9px < 11px",
-      "span.fx-rail-lb \"Image\" — 9px < 11px"
+      "button#btn-before.btn \"\u25cb\" \u2014 9px < 11px",
+      "span.fx-rail-lb \"Image\" \u2014 9px < 11px"
     ],
-    "CONTRAST": []
+    "CONTRAST": [],
+    "SPILL": [
+      "span#db-title-status \"512 x 384 - PNG\" \u2014 content spilled its squeezed box and painted over the tool cluster"
+    ]
   }
 }

@@ -167,6 +167,22 @@ function auditInPage({ minTap, minTapInline, inlineSel, minFont, minContrast }) 
       }
     });
 
+  // ── 3b. SPILL — content wider than its own box, with overflow:visible so it paints outside it.
+  // The rect-vs-rect OVERLAP check below cannot see this: the deskbar's centre title had a 25px
+  // box (so it "didn't overlap" anything) while the filename text inside it spilled ~75px and
+  // painted straight over the tool cluster. Flex children with min-width:0 shrink their BOX to
+  // nothing and let text escape, which is exactly the case worth catching.
+  document.querySelectorAll('#fx-deskbar *, .fx-panel .fx-row > *, #fx-toolrail *').forEach((el) => {
+    if (!vis(el) || el.children.length) return;                 // leaf text nodes only
+    if (!(el.textContent || '').trim()) return;
+    const cs = getComputedStyle(el);
+    if (cs.overflow !== 'visible') return;                      // clipping is the fix, not the bug
+    if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0) {
+      out.push({ kind: 'SPILL', el: desc(el),
+        detail: `content ${el.scrollWidth}px spills a ${el.clientWidth}px box (overflow:visible)` });
+    }
+  });
+
   // ── 4. OVERLAP — two visible siblings whose boxes intersect by more than a hairline.
   const OVERLAP_TOL = 2;
   document.querySelectorAll('.fx-panel, #fx-deskbar, #fx-toolrail, .fx-ctrl.sec-active').forEach((parent) => {
@@ -298,7 +314,7 @@ async function main() {
   // ── report ──
   const byKind = {};
   findings.forEach(f => { (byKind[f.kind] ||= []).push(f); });
-  const KINDS = ['FRAGMENT', 'ORDER', 'OVERLAP', 'TAP', 'FONT', 'CONTRAST'];
+  const KINDS = ['FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'TAP', 'FONT', 'CONTRAST'];
   // The same defect is re-reported once per (section, viewport) it is visible in, so every count
   // — table, baseline and comparison alike — is over DISTINCT defects. Mixing raw and deduped
   // counts would make the "vs baseline" delta meaningless.

@@ -112,6 +112,11 @@
     return Math.min(Math.max(gb, 4), 16) * 0.375 * 1024 * 1024 * 1024; // ~1.5GB@4GB … ~6GB@16GB
   })();
   const imgCache = new Map(); // path -> {entry, size, ts}
+  // The editor's stroke icon set (chromasmith-22.html ICONS/icon()). Emoji render differently on
+  // every OS and never match a stroke weight, which is exactly why they were pulled out of the
+  // editor chrome — the Library was still using them and looked like a different application.
+  // Module scope: used by the header markup AND by renderGrid's per-card badges.
+  const ic = (n, sz) => (typeof window.icon === 'function' ? window.icon(n, sz || 16) : '');
   function imgCacheSize() { let s = 0; imgCache.forEach((v) => { s += v.size; }); return s; }
   function imgCacheEvict() {
     if (imgCacheSize() <= IMG_CACHE_BUDGET) return;
@@ -251,6 +256,9 @@
        #lib-filters), collapsed to one button + a floating panel. The badge shows how many of
        the 7 aren't at their default "all" value, so it's clear at a glance whether anything is
        filtered without opening the panel. */
+    .lib-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+    .lib-btn svg{display:block;flex:0 0 auto}
+    .lib-btn-icon{width:30px;height:30px;padding:0}
     #lib-filters-btn-wrap{position:relative}
     #lib-filters-badge{display:none;margin-left:5px;background:var(--acc);color:#1a1208;font-size:9px;
       font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4}
@@ -398,12 +406,16 @@
     /* Video: same corner-badge slot the RAW "R" chip uses (mutually exclusive — a file is one
        kind or the other) plus a dark placeholder fill + centered play glyph in the thumbnail
        itself, since get_thumbnail has no still-frame decoder for video (see library.rs). */
-    .lib-video-badge{position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:5px;
-      background:rgba(0,0,0,.55);color:#cfcfd6;font-size:9px;display:flex;align-items:center;justify-content:center;z-index:2}
+    .lib-video-badge{position:absolute;top:4px;left:4px;min-width:18px;height:18px;padding:0 5px;border-radius:5px;
+      background:rgba(0,0,0,.6);color:#e6e6ea;font-size:10px;font-variant-numeric:tabular-nums;
+      display:flex;align-items:center;justify-content:center;gap:3px;z-index:2}
+    .lib-video-badge svg{width:10px;height:10px;flex:0 0 auto}
     .lib-thumb-video{background:linear-gradient(135deg,var(--sur2),var(--sur))}
-    .lib-thumb-video::before{content:'▶';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    .lib-thumb-video:not(:has(img.loaded))::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
       color:var(--mut);font-size:20px;opacity:.5;z-index:1}
-    .lib-thumb-video img{display:none} /* always empty (no thumbnail) — hide rather than show a broken icon */
+    /* A poster is decoded in the webview now, so show it; the gradient below is just the
+       backdrop while it loads, and remains visible if the decode fails. */
+    .lib-thumb-video img{display:block}
     /* Dupe chip: bottom-left (RAW already owns top-left, Edited owns top-right). Synced badge:
        bottom-right, mirroring it. Both passive-only indicators, no click handler. */
     .lib-dupe-badge{position:absolute;bottom:4px;left:4px;min-width:18px;height:18px;padding:0 4px;
@@ -498,12 +510,11 @@
   overlay.innerHTML = `
     <div id="lib-top">
       <span class="lib-title">Library</span>
-      <button class="lib-btn" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)">☰ Sidebar</button>
-      <button class="lib-btn" id="lib-pick" title="Choose root folder">📁</button>
-      <button class="lib-btn" id="lib-gphotos" title="Import from Google Photos">☁️</button>
-      <button class="lib-btn" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">🕘</button>
-      <button class="lib-btn" id="lib-expand" title="Full-window view — G">⛶</button>
-      <button class="lib-btn" id="lib-close" title="Hide library panel">⇤</button>
+      <button class="lib-btn" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)">${ic('log',15)}<span>Sidebar</span></button>
+      <button class="lib-btn lib-btn-icon" id="lib-pick" title="Choose root folder">${ic('library',17)}</button>
+      <button class="lib-btn lib-btn-icon" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',17)}</button>
+      <button class="lib-btn lib-btn-icon" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',17)}</button>
+      <button class="lib-btn lib-btn-icon" id="lib-expand" title="Full-window view — G">${ic('fit',17)}</button>
     </div>
     <div id="lib-filters">
       <input id="lib-search" placeholder="Search filename…" />
@@ -548,7 +559,7 @@
     <div id="lib-viewbar">
       <div class="lib-seg" id="lib-viewmode-seg">
         <button data-v="grid" title="Grid view">▦</button>
-        <button data-v="list" title="List view">☰</button>
+        <button data-v="list" title="List view">${ic('log',15)}</button>
         <button data-v="compare" title="Compare two photos/looks side by side — C">⇹</button>
       </div>
       <select id="lib-sort" title="Sort by">
@@ -967,15 +978,29 @@
       if (job.gen !== _thumbGen || !job.imgEl.isConnected) continue; // grid was rebuilt — skip
       _thumbActive++;
       updateThumbProgress();
-      invoke('get_thumbnail', { path: job.path })
-        .then((buf) => {
-          if (job.imgEl.isConnected) {
-            const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-            job.imgEl.src = url;
-            job.imgEl.classList.add('loaded');
-            _thumbUrlsThisGen.push(url);
-          }
-        })
+      (job.isVideo
+        ? videoPosterAndMeta(job.path).then((m) => {
+            if (!m || !m.url) throw new Error('no video poster');
+            if (job.imgEl.isConnected) {
+              job.imgEl.src = m.url;
+              job.imgEl.classList.add('loaded');
+              _thumbUrlsThisGen.push(m.url);
+              // Stamp the real duration/dimensions onto the card now that we know them.
+              const card = job.imgEl.closest('.lib-card');
+              const badge = card && card.querySelector('.lib-video-badge');
+              if (badge && m.dur) badge.textContent = fmtDuration(m.dur);
+              if (card && m.w && m.h) card.dataset.dims = m.w + 'x' + m.h;
+            }
+          })
+        : invoke('get_thumbnail', { path: job.path })
+          .then((buf) => {
+            if (job.imgEl.isConnected) {
+              const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+              job.imgEl.src = url;
+              job.imgEl.classList.add('loaded');
+              _thumbUrlsThisGen.push(url);
+            }
+          }))
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
           _thumbFailCount++;
@@ -1009,8 +1034,54 @@
     if (_thumbDoneCount >= _thumbTotalCount || _thumbTotalCount < 8) { el.textContent = ''; return; }
     el.textContent = `Loading photos… ${_thumbDoneCount}/${_thumbTotalCount}`;
   }
-  function loadThumb(path, imgEl) {
-    _thumbQueue.push({ path, imgEl, visible: false, gen: _thumbGen });
+  // ── Video posters + metadata, decoded in the webview ─────────────────────────────────────────
+  // library.rs's get_thumbnail has no still-frame decoder for MP4 (the `image` crate cannot read
+  // one, and an ffmpeg dependency is not worth carrying for a grid thumbnail) — so video cards
+  // showed a dark placeholder. But WKWebView decodes H.264/HEVC natively, so a <video> element
+  // plus a canvas gets both the poster frame AND the real duration/dimensions in one pass. Cached
+  // per path so scrolling the grid does not re-decode.
+  const _videoMetaCache = new Map();   // path -> {url, w, h, dur}
+  async function videoPosterAndMeta(path) {
+    if (_videoMetaCache.has(path)) return _videoMetaCache.get(path);
+    const buf = await invoke('read_file_bytes', { path });
+    const srcUrl = URL.createObjectURL(new Blob([buf], { type: mimeFromName(path) || 'video/mp4' }));
+    try {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'metadata'; v.src = srcUrl;
+      await new Promise((res, rej) => {
+        v.onloadedmetadata = res;
+        v.onerror = () => rej(new Error('video metadata failed'));
+        setTimeout(() => rej(new Error('video metadata timeout')), 12000);
+      });
+      // Seek a little way in: frame 0 of a real clip is very often black or a fade-in.
+      const t = Math.min(1, (v.duration || 2) * 0.1);
+      await new Promise((res, rej) => {
+        v.onseeked = res;
+        v.onerror = () => rej(new Error('video seek failed'));
+        setTimeout(res, 8000);            // resolve anyway — a poster is better than nothing
+        v.currentTime = t;
+      });
+      const W = 400, sc = Math.min(1, W / (v.videoWidth || W));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round((v.videoWidth || W) * sc));
+      c.height = Math.max(1, Math.round((v.videoHeight || W) * sc));
+      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.82));
+      const meta = { url: blob ? URL.createObjectURL(blob) : null,
+                     w: v.videoWidth || 0, h: v.videoHeight || 0, dur: v.duration || 0 };
+      _videoMetaCache.set(path, meta);
+      return meta;
+    } finally {
+      URL.revokeObjectURL(srcUrl);        // the decoded poster is its own blob; this one is done
+    }
+  }
+  function fmtDuration(sec) {
+    if (!sec || !isFinite(sec)) return '';
+    const m = Math.floor(sec / 60), r = Math.round(sec % 60);
+    return m + ':' + String(r).padStart(2, '0');
+  }
+  function loadThumb(path, imgEl, isVideo) {
+    _thumbQueue.push({ path, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen });
     _thumbTotalCount++;
     if (_thumbIO) _thumbIO.observe(imgEl);
     _thumbPump();
@@ -2165,7 +2236,7 @@
       const rawBadge = entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
       // No thumbnail decoder for video (get_thumbnail errors cleanly for it — see library.rs) —
       // a badge + CSS placeholder icon instead of a broken <img>, same idea as the RAW badge.
-      const videoBadge = entry.is_video ? `<div class="lib-video-badge" title="Video clip">▶</div>` : '';
+      const videoBadge = entry.is_video ? `<div class="lib-video-badge" title="Video clip">${ic('video',10)}</div>` : '';
       const dupeClusterId = state.dupeClusters.get(entry.path);
       const dupeSize = dupeClusterId ? state.dupeClusterSizes.get(dupeClusterId) : 0;
       const dupeBadge = dupeSize > 1
@@ -2205,9 +2276,9 @@
     // comment) sees it correctly instead of silently dropping the job.
     built.forEach(({ entry, card, idx }) => {
       const img = card.querySelector('img');
-      // No thumbnail decoder for video (get_thumbnail errors cleanly for it) — CSS placeholder
-      // only, see lib-thumb-video; card click/drag/flag wiring below still applies to video.
-      if (!entry.is_video) loadThumb(entry.path, img);
+      // Video now gets a real poster too — decoded in the webview rather than by get_thumbnail,
+      // which still has no MP4 still-frame decoder (see videoPosterAndMeta).
+      loadThumb(entry.path, img, entry.is_video);
       card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
       card.oncontextmenu = (e) => showContextMenu(e, entry, shown);
@@ -2303,9 +2374,9 @@
         </div>
         <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
         <div class="lib-cmp-chrome">
-          <div class="lib-flag" data-pane="${which}" data-flag="Green" title="Pick">🚩</div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Green" title="Pick">${ic('flagGreen',15)}</div>
           <div class="lib-flag" data-pane="${which}" data-flag="Red" title="Reject">✕</div>
-          <div class="lib-flag" data-pane="${which}" data-flag="Favorite" title="Favorite">♡</div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Favorite" title="Favorite">${ic('heart',15)}</div>
           <span style="margin-left:auto;color:var(--mut);font-size:10px" class="lib-cmp-name" data-pane="${which}"></span>
         </div>
       </div>`;
@@ -2496,7 +2567,7 @@
     if (typeof window.gpImportClick === 'function') window.gpImportClick();
   };
   overlay.querySelector('#lib-recent').onclick = toggleRecentMenu;
-  overlay.querySelector('#lib-close').onclick = () => { if (state.open) toggleLibrary(); };
+  // #lib-close removed: the top-bar Library button is the single control for this.
   overlay.querySelector('#lib-expand').onclick = () => toggleExpandedView();
   function toggleExpandedView(force) {
     state.expanded_view = force !== undefined ? force : !state.expanded_view;
