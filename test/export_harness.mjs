@@ -170,7 +170,6 @@ async function main() {
           // than the same recipe rendered from clean state. Nothing warned, because the readiness
           // loop below simply timed out and carried on. Recipes that DO want a LUT still override.
           clean.selects = { 'sel-lut': '', 'sel-print': '', ...(clean.selects || {}) };
-          window.__reseed();   // per-combo determinism — see addInitScript above
           window.applyUISnapshot(clean);
           if (typeof window.fxUpdate === 'function') window.fxUpdate();
           // Let a frame settle so any deferred UI-triggered rebakes (HSL/curves) run before render.
@@ -198,6 +197,14 @@ async function main() {
           // Fixed artifact/grain seed so the render is reproducible across harness runs —
           // exportFX() normally draws a fresh Math.random() seed per export; pin it here.
           fxState.artSeed = 7.7;
+          // ⚠️ Reseed HERE, immediately before the render — not before applyUISnapshot. Every
+          // FX.render() call without an explicit opts.seed consumes one number from the stream
+          // for its grain seed (see `Math.random()*100` in FXR.render), so the grain goldens used
+          // to depend on how many PREVIEW renders happened to fire during setup. That made them
+          // hostage to unrelated timing: when fxUpdate() gained a live rAF preview render, all
+          // three grain goldens shifted even though export output was untouched. Reseeding
+          // immediately before processToCanvas makes each golden depend only on its own render.
+          window.__reseed();
           const P = window.getFXParams(it.adjustOverride || undefined);
           const src = window.geomCanvas ? window.geomCanvas(it) : it.img;
           const iw = src.naturalWidth || src.width, ih = src.naturalHeight || src.height;

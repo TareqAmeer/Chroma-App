@@ -156,6 +156,15 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
    existing contenteditable tap-to-type value div needs no markup changes. */
 .fx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;margin-bottom:7px;min-height:20px}
 .fx-row:last-child{margin-bottom:0}
+/* ⚠️ The `order` values below are a THREE-slot scheme (label · value · track) and every direct
+   child must be assigned one. Without this base rule an unordered child keeps the flex default
+   `order:0` and therefore paints BEFORE its own label — which is what every non-slider control
+   did: checkboxes, <select>s, colour inputs and button groups all rendered to the LEFT of the
+   text describing them, so rows read "Match pick Swatch Custom | Target" and
+   "[Overlay|Isolate|Selection|Off] | Show on photo". 18 distinct rows were affected across the
+   app. Slot 2 is the correct default: it puts an arbitrary control after the label and before
+   any full-width track. */
+.fx-row>*{order:2}
 .fx-label{order:1;font-size:11px;color:var(--mut);flex-shrink:0}
 .fx-slider{order:3;flex:1 1 100%;width:100%;accent-color:var(--acc);cursor:pointer;margin-top:1px}
 /* Guards a vertical drag on the thumb from being captured by the bottom sheet's own vertical
@@ -537,7 +546,19 @@ body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:s
 .fx-rail-btn.on{background:rgba(212,144,58,.12);color:var(--acc)}
 .fx-rail-btn .fx-rail-ic{display:inline-flex;flex-shrink:0}
 .fx-rail-btn .fx-rail-lb{white-space:nowrap}
-body.fx-deskb .fx-panel{column-count:1;max-height:calc(100vh - 130px);overflow-y:auto;align-self:start}
+/* ⚠️ `column-count:1` is NOT the same as "not a multi-column element" — it still establishes a
+   multicol formatting context, and per CSS Multicol a multicol box with a DEFINITE block-size
+   fragments its overflow into EXTRA COLUMNS along the inline axis rather than overflowing
+   vertically. Both single-column panels below have a definite height (max-height here,
+   height:100% under deskx), so any section taller than the window used to fragment into
+   off-screen columns: `scrollTop` was pinned at 0, vertical scrolling did nothing, and
+   everything past the first screenful was unreachable. Measured on the Masks panel at
+   1440x820: scrollWidth 937 vs clientWidth 319 — four columns, three of them invisible.
+   `columns:initial` (count AND width back to auto) leaves the multicol context entirely, so the
+   panel becomes an ordinary block that scrolls. The `.fx-ctrl[data-fxsec="looks"]
+   {column-span:all}` rule above was an earlier per-card patch for a symptom of this same root
+   cause; it is now inert here and only still applies to the 2-column web layout. */
+body.fx-deskb .fx-panel{columns:initial;max-height:calc(100vh - 130px);overflow-y:auto;align-self:start;overscroll-behavior:contain}
 body.fx-deskb .fx-ctrl.sec-active:last-of-type{margin-bottom:0}
 body.fx-deskb .looks-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-height:480px}
 body.fx-deskb #fx-actionbar,body.fx-deskb #fx-secnav{display:none}
@@ -603,7 +624,13 @@ body.deskx.panel-closed .fx-panel{display:none}
    entirely blank despite a photo loading successfully). Pinning each item to its own numbered
    track makes every one of them independent of whether the other three exist in the DOM at all. */
 body.deskx .fx-preview-col{grid-column:2;order:1;position:static;top:auto;align-self:stretch;height:100%;display:flex;flex-direction:column;min-width:0;min-height:0}
-body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;overflow-y:auto;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
+/* `columns:initial` + `overflow-x:hidden`: see the multicol note on body.fx-deskb .fx-panel.
+   deskx sets a definite height:100%, which is exactly the condition that triggers overflow
+   columns, so this panel MUST stay outside the multicol formatting context. overflow-x:hidden
+   is a belt-and-braces guard — if anything ever re-introduces horizontal overflow here, it must
+   surface as a clipped element the audit gate catches, never as a silent sideways scroll. */
+body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;columns:initial;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
   background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03),-6px 0 16px -8px rgba(0,0,0,.4)}
 body.deskx #fx-toolrail{grid-column:4;order:3;position:static;top:auto;align-self:stretch;width:64px;box-sizing:border-box;
   border:none;border-left:1px solid var(--bdr);border-radius:0;padding:6px 4px;overflow-y:auto;overflow-x:hidden;
@@ -3737,7 +3764,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-08b';
+const BUILD='2026-08-09a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -5393,10 +5420,20 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Local-adjust masks: pack up to 4 masks into vec4 uniform arrays; global-uv mapped via
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const MK=(P.masks&&P.masks.length)?P.masks.slice(0,MSK_MAX):[];
-    const mA=new Float32Array(32),mB=new Float32Array(32),mC=new Float32Array(32),mD=new Float32Array(32),mE=new Float32Array(32),mF=new Float32Array(32),
-          mG=new Float32Array(32),mH=new Float32Array(32),mI=new Float32Array(32),
-          mS=new Float32Array(96),   // colour-gate samples: 8 masks x 6 samples x (h,s) = 24 vec4
-          mJ=new Float32Array(32);   // per-mask detail: x = Texture
+    // These eleven uniform-staging arrays are allocated ONCE per renderer and zero-filled per
+    // frame, not reallocated. render() is the hottest function in the app (every preview tick,
+    // every export tile), and eleven fresh typed arrays per call was pure allocator churn for
+    // buffers whose size never changes.
+    const U=this._mskU||(this._mskU={
+      mA:new Float32Array(32),mB:new Float32Array(32),mC:new Float32Array(32),mD:new Float32Array(32),
+      mE:new Float32Array(32),mF:new Float32Array(32),mG:new Float32Array(32),mH:new Float32Array(32),
+      mI:new Float32Array(32),
+      mS:new Float32Array(96),   // colour-gate samples: 8 masks x 6 samples x (h,s) = 24 vec4
+      mJ:new Float32Array(32)}); // per-mask detail: x = Texture
+    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ;
+    // ⚠️ MUST clear: the packing loop below only writes slots for masks that EXIST, so a stale
+    // value from a previous frame with more masks would otherwise linger in an unused slot.
+    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;}   // shapeless: gates only (Colour/Luminance Range masks)
@@ -7599,7 +7636,32 @@ function fxUpdate(){
   // the slider, not on every tick.
   clearTimeout(_fxHistPushTimer);_fxHistPushTimer=setTimeout(fxHistoryPush,400);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // grading changed → coarse full-res underlay is stale
-  clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,400);
+  fxScheduleRender();
+}
+// ── Live preview feedback while a control is moving ──────────────────────────────────────────
+// This used to be a bare `setTimeout(renderPreview,400)`, which meant that dragging a slider
+// produced NOTHING on screen until 400ms after you let go — measured: exactly ONE render for a
+// 30-event drag. You were grading blind and guessing.
+//
+// Two tiers now, the same shape the video playback path already uses:
+//   • while events keep arriving, render at most once per animation frame, with the halation /
+//     bloom blur buffers halved (fxPreviewGlowScale) and the opt-in full-res preview dropped
+//     back to the capped one, so the picture tracks the slider;
+//   • 180ms after the last event, one final full-quality render.
+// The settled frame is identical to a cold render — only the interim frames are cheap, and they
+// are all replaced by it. test/perf_bench.mjs asserts both halves.
+let _fxRenderRAF=0;
+function fxScheduleRender(){
+  if(!_fxRenderRAF){
+    _fxPreviewInteracting=true;
+    _fxRenderRAF=requestAnimationFrame(()=>{_fxRenderRAF=0;if(_fxPreviewInteracting)renderPreview();});
+  }
+  clearTimeout(fxTimer);
+  fxTimer=setTimeout(()=>{
+    if(_fxRenderRAF){cancelAnimationFrame(_fxRenderRAF);_fxRenderRAF=0;}
+    _fxPreviewInteracting=false;
+    renderPreview();
+  },180);
 }
 function resetAdjust(){
   ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin']
@@ -8369,6 +8431,66 @@ function oklch2rgb(h,C,L){
 }
 const MSK_MAX=8;   // must match mskA..mskJ[8] in the lut shader and the two maskTex/maskTex2 raster channels
 const CR_MAX_SAMPLES=6;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max
+
+// ══ RASTER MASK STORAGE ══════════════════════════════════════════════════════════════════════
+// A raster mask's `px` is a Uint8ClampedArray of 0..255 coverage, one byte per pixel, at
+// mskTexDims() resolution (up to 2048px on the long edge = ~2.8M px).
+//
+// ⚠️ It used to be a plain `new Array(w*h)` of JS numbers — 8 bytes per pixel instead of 1, and
+// far worse once serialized: `JSON.stringify` writes each entry as up to 4 characters of text.
+// Combined with history retaining 20 snapshots, ONE brush mask on a 24MP photo cost well over a
+// hundred megabytes (measured: 9.5MB of history JSON for a mere 512x384 mask). Typed storage
+// plus base64 for the serialized form is ~14x smaller in memory and ~3x smaller on disk.
+//
+// ⚠️ A Uint8ClampedArray does NOT survive JSON.stringify — it serializes to {"0":..,"1":..},
+// which is both enormous and lossy on the way back. Every persistence path (session save,
+// Library sidecar, copy/paste recipe, undo history) must therefore go through _mskToSnap /
+// _mskFromSnap rather than JSON-cloning a live mask directly.
+// Deep copy for plain state (curves/HSL/geometry/canvas). structuredClone is available in every
+// engine this app runs in; the JSON fallback keeps an ancient WKWebView from throwing.
+const _clone=(v)=>{try{return structuredClone(v);}catch(e){return JSON.parse(JSON.stringify(v));}};
+function _pxToB64(px){
+  let bin='';const CH=0x8000;                      // chunked: apply() blows the stack on ~2.8M args
+  for(let i=0;i<px.length;i+=CH)bin+=String.fromCharCode.apply(null,px.subarray(i,Math.min(i+CH,px.length)));
+  return btoa(bin);
+}
+function _pxFromB64(s){
+  const bin=atob(s),a=new Uint8ClampedArray(bin.length);
+  for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);
+  return a;
+}
+// Snapshot (plain-JSON) form of a live mask. `skipRaster` is for the undo-history path, which
+// keeps the raster alive by REFERENCE instead (see fxHistoryPush) — encoding it there would
+// re-pay base64 on every debounced slider tick for data that is already in memory.
+// ⚠️ Both directions must clone the nested arrays, not alias them. A shallow copy would leave a
+// live mask and the snapshot it came from sharing one crSamples/aiPoints array, so adding an
+// eyedropper sample would retroactively mutate the undo entry it was restored from.
+function _mskToSnap(m,skipRaster){
+  const o={};
+  for(const k in m){if(k==='px'||k[0]==='_')continue;o[k]=m[k];}
+  o.crSamples=(m.crSamples||[]).map(p=>Object.assign({},p));
+  if(m.aiPoints)o.aiPoints=m.aiPoints.map(p=>Object.assign({},p));
+  if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
+  return o;
+}
+function _mskFromSnap(o){
+  const m=Object.assign({},o);
+  m.crSamples=(o.crSamples||[]).map(p=>Object.assign({},p));
+  if(o.aiPoints)m.aiPoints=o.aiPoints.map(p=>Object.assign({},p));
+  return _mskMigrate(m);
+}
+function _mskCloneLive(m){return _mskFromSnap(_mskToSnap(m));}
+
+// ── Copy-on-write, so undo history can share rasters instead of copying them ──────────────────
+// fxHistoryPush marks every live raster frozen (some history entry now points at that exact
+// array). The next in-place mutation clones once, then keeps mutating freely until the next
+// push. Result: a slider-only edit session retains ONE raster across all 20 history entries
+// rather than 20 copies, while a genuine paint stroke still gets its own undoable state.
+// Only mskPaintAt mutates in place — every other writer already assigns a fresh array.
+function mskPxForWrite(m){
+  if(m._pxFrozen&&m.px){m.px=new Uint8ClampedArray(m.px);m._pxFrozen=false;}
+  return m.px;
+}
 function _mskSkinDefaults(){return{
   crOn:false,crSamples:[],crRange:35,        // colour gate: up to CR_MAX_SAMPLES picks + one range
   uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
@@ -8383,6 +8505,14 @@ function _mskMigrate(m){
   if(!m||typeof m!=='object')return m;
   const d=_mskSkinDefaults();
   for(const k in d)if(m[k]===undefined)m[k]=d[k];
+  // Raster storage normalisation. Three shapes reach here and all must end up as one:
+  //   pxb64          — current serialized form
+  //   plain Array    — every mask saved before the typed-array change (sessions, sidecars, XMP)
+  //   Uint8Clamped   — already live (re-migration is a no-op)
+  // Anything else (missing/empty) leaves px alone so analytic masks stay rasterless.
+  if(m.pxb64){m.px=_pxFromB64(m.pxb64);delete m.pxb64;}
+  else if(Array.isArray(m.px))m.px=Uint8ClampedArray.from(m.px);
+  m._pxFrozen=false;   // a freshly-materialised raster is owned by this mask, never shared
   // The colour gate shipped with a single centre (crH/crS/crV) before it took multiple samples.
   // Fold a legacy single pick into crSamples[0] so an older saved mask keeps selecting the same
   // pixels; the max-over-samples union with n=1 is identical to the old single-centre kernel.
@@ -8424,7 +8554,7 @@ function mskAdd(type){
     // With the subject segmented, the dog and the rocks are simply not in the mask, and the gate is
     // left doing the one thing it is genuinely good at: skin vs lips/hair inside the subject.
     const{w,h}=samInputDims();
-    m={type:'brush',origin:'skin',ai:true,px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],
+    m={type:'brush',origin:'skin',ai:true,px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],
       invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,
       subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
@@ -8436,7 +8566,7 @@ function mskAdd(type){
   }
   else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
-  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Array(w*h).fill(0),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
+  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
   else if(type==='sky'){ // sky: brush-type raster mask, seeded from a colour/position heuristic,
     // then handed to SAM (same segmentation the AI Select tool uses) for a real object-aware
     // boundary — the heuristic alone (row-weight + blueness) is unreliable on anything but a
@@ -8449,7 +8579,7 @@ function mskAdd(type){
     }
   }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
     const{w,h}=samInputDims();
-    m={type:'brush',origin:'ai',px:new Array(w*h).fill(0),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
+    m={type:'brush',origin:'ai',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
   Object.assign(m,_mskSkinDefaults());
   // Uniformity is a CONTRACTION, but each pixel moves by w*u*(target-x) — so if w varies across
@@ -8683,7 +8813,7 @@ async function samRunPoints(m){
       log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();return;
     }
     const refined=_samRefineMask(mask,header.width,header.height);
-    m.px=Array.from(refined);m.mtW=header.width;m.mtH=header.height;
+    m.px=Uint8ClampedArray.from(refined);m.mtW=header.width;m.mtH=header.height;
     _mskTexDirty=true;_samLastError=null;
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
@@ -8769,7 +8899,7 @@ async function mskFaceAutoExclude(){
       fm.isExclude=true;fm.name='Face features';
       fxState.masks.push(fm);
     }
-    fm.mtW=mtW;fm.mtH=mtH;fm.px=new Array(mtW*mtH).fill(0);
+    fm.mtW=mtW;fm.mtH=mtH;fm.px=new Uint8ClampedArray(mtW*mtH);
     for(let y=0;y<cropSize;y++)for(let x=0;x<cropSize;x++){
       fm.px[(cropY0+y)*mtW+(cropX0+x)]=combined[y*cropSize+x];
     }
@@ -8788,7 +8918,7 @@ async function mskFaceAutoExclude(){
 }
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
-  m.aiPoints=[];const{w,h}=samInputDims();m.px=new Array(w*h).fill(0);m.mtW=w;m.mtH=h;
+  m.aiPoints=[];const{w,h}=samInputDims();m.px=new Uint8ClampedArray(w*h);m.mtW=w;m.mtH=h;
   _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }
 function mskDelete(){if(mskSel<0)return;
@@ -8804,8 +8934,10 @@ function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.inve
 function mskCopyToAll(){
   if(fxImages.length<2)return;
   fxImages[fxCurIdx].masks=fxState.masks; // persist the source photo's own array first
-  const clone=JSON.parse(JSON.stringify(fxState.masks));
-  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=JSON.parse(JSON.stringify(clone));
+  // Each target photo needs its OWN raster, not a shared reference — painting on one photo must
+  // not paint on the rest. _mskCloneLive round-trips through the snapshot form, which copies the
+  // typed array (a JSON clone would have turned it into an object and silently lost the mask).
+  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=fxState.masks.map(_mskCloneLive);
   if(typeof hapt==='function')hapt();
   toast(`Copied ${fxState.masks.length} mask(s) to ${fxImages.length-1} other photo(s)`,true);
 }
@@ -8879,43 +9011,73 @@ function samInputDims(){
 function mskEnsureDims(m){
   const{w,h}=mskTexDims();
   if(m.mtW===w&&m.mtH===h&&m.px&&m.px.length===w*h)return;
-  const nw=new Array(w*h).fill(0);
+  const nw=new Uint8ClampedArray(w*h);
   if(m.px&&m.mtW&&m.mtH){for(let y=0;y<h;y++){const sy=Math.min(m.mtH-1,(y/h*m.mtH)|0);
     for(let x=0;x<w;x++){const sx=Math.min(m.mtW-1,(x/w*m.mtW)|0);nw[y*w+x]=m.px[sy*m.mtW+sx];}}}
   m.px=nw;m.mtW=w;m.mtH=h;
 }
+let _mskTexBufs=null;
 function mskBuildTex(){
   const{w,h}=mskTexDims();
-  const buf=new Uint8Array(w*h*4),buf2=new Uint8Array(w*h*4);
+  // Two w*h*4 staging buffers at 2048px are ~16MB each — reallocating both on every rebuild (a
+  // brush stroke rebuilds constantly) churned 32MB per stroke sample. Cache and reuse; only
+  // reallocate when the mask resolution itself changes, i.e. on a photo swap.
+  if(!_mskTexBufs||_mskTexBufs.w!==w||_mskTexBufs.h!==h){
+    _mskTexBufs={w,h,buf:new Uint8Array(w*h*4),buf2:new Uint8Array(w*h*4)};
+  }
+  const buf=_mskTexBufs.buf,buf2=_mskTexBufs.buf2;
+  buf.fill(0);buf2.fill(0);   // reused buffers must be cleared — a deleted mask's channel would otherwise persist
   fxState.masks.slice(0,MSK_MAX).forEach((m,i)=>{
     if(m.type!=='brush')return;
     mskEnsureDims(m);
     const px=m.px,dst=i<4?buf:buf2,ch=i<4?i:i-4;
-    for(let j=0;j<w*h;j++)dst[j*4+ch]=px[j]||0;
+    for(let j=0;j<w*h;j++)dst[j*4+ch]=px[j];
   });
   FX.setMaskTex(buf,w,h);
   FX.setMaskTex2(buf2,w,h);
   _mskTexDirty=false;
 }
-// Box filter via a per-row then per-column prefix sum — O(w*h) regardless of radius r, which is
-// what keeps the guided filter below responsive at mskTexDims (2048px) resolution.
+// Box filter via a per-row then per-column RUNNING SUM — genuinely O(w*h) regardless of radius,
+// which is what keeps the guided filter below responsive at mskTexDims (2048px) resolution.
+//
+// ⚠️ This function previously CLAIMED to be a prefix sum in its comment but was written as a
+// naive O(w*h*r) window sum: it computed a full row total into an `acc` variable, never used it,
+// and then re-summed all 2r+1 taps per pixel. The guided filter calls it six times, so at
+// 2048x1365 with r=8 that was ~2.6s of blocked main thread on every press of "Refine edges"
+// (measured; test/perf_bench.mjs holds the budget and diffs the output against a straightforward
+// reference implementation so a faster filter can never quietly become a different filter).
+//
+// The window at x is [max(0,x-r), min(w-1,x+r)] — clamped, so edge pixels average a shorter
+// window rather than wrapping or zero-padding. Stepping x->x+1 therefore adds index x+1+r when
+// it is still inside the row, and drops index x-r when that index was actually in the previous
+// window (it is not, while the window is still clamped against the left edge). The accumulator
+// is a plain JS number (float64), so it is if anything more accurate than the old per-pixel
+// float32 re-summation.
 function _boxFilterJS(src,w,h,r){
   const tmp=new Float32Array(w*h),out=new Float32Array(w*h);
   for(let y=0;y<h;y++){
-    let acc=0;const row=y*w;
-    for(let x=0;x<w;x++)acc+=src[row+x];
-    // running sum over a 2r+1 window, clamped at the edges (edge pixels average a shorter window)
+    const row=y*w;
+    let s=0;
+    const first=Math.min(w-1,r);                 // window at x=0 is [0, min(w-1,r)]
+    for(let k=0;k<=first;k++)s+=src[row+k];
     for(let x=0;x<w;x++){
-      const x0=Math.max(0,x-r),x1=Math.min(w-1,x+r);
-      let s=0;for(let k=x0;k<=x1;k++)s+=src[row+k];
+      const x0=x-r<0?0:x-r, x1=x+r>w-1?w-1:x+r;
       tmp[row+x]=s/(x1-x0+1);
+      const add=x+1+r, rem=x-r;
+      if(add<=w-1)s+=src[row+add];
+      if(rem>=0)s-=src[row+rem];
     }
   }
   for(let x=0;x<w;x++){
+    let s=0;
+    const first=Math.min(h-1,r);
+    for(let k=0;k<=first;k++)s+=tmp[k*w+x];
     for(let y=0;y<h;y++){
-      const y0=Math.max(0,y-r),y1=Math.min(h-1,y+r);
-      let s=0;for(let k=y0;k<=y1;k++)s+=tmp[k*w+x];
+      const y0=y-r<0?0:y-r, y1=y+r>h-1?h-1:y+r;
       out[y*w+x]=s/(y1-y0+1);
+      const add=y+1+r, rem=y-r;
+      if(add<=h-1)s+=tmp[add*w+x];
+      if(rem>=0)s-=tmp[rem*w+x];
     }
   }
   return out;
@@ -8947,7 +9109,7 @@ function mskRefineEdges(m){
     a[j]=covIP/(varI+EPS);b[j]=meanP[j]-a[j]*meanI[j];
   }
   const meanA=_boxFilterJS(a,w,h,R),meanB=_boxFilterJS(b,w,h,R);
-  const out=new Array(w*h);
+  const out=new Uint8ClampedArray(w*h);
   for(let j=0;j<w*h;j++)out[j]=Math.max(0,Math.min(255,Math.round((meanA[j]*I[j]+meanB[j])*255)));
   m.px=out;_mskTexDirty=true;
   if(typeof fxHistoryPush==='function')fxHistoryPush();
@@ -8958,12 +9120,12 @@ function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(
 // there is no in-app subject/sky segmentation model, by design (kept fully offline/small).
 function mskGenerateSky(m){
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
-  if(!img){m.px=[];m.mtW=0;m.mtH=0;return;}
+  if(!img){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
   const{w,h}=mskTexDims();
   const cv=document.createElement('canvas');cv.width=w;cv.height=h;
   const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
   const d=cx.getImageData(0,0,w,h).data;
-  const px=new Array(w*h);
+  const px=new Uint8ClampedArray(w*h);
   for(let y=0;y<h;y++){
     const rowW=1-_smoothstepJS(0.35,0.85,y/h); // strong at top, fades out by 85% down
     for(let x=0;x<w;x++){
@@ -9013,7 +9175,7 @@ function mskPaintToggle(){
 function mskPaintStop(){mskPaintMode=false;const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
 function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;const b=document.getElementById('btn-msk-erase');if(b)b.classList.toggle('on',mskPaintErase);}
-function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Array(m.mtW*m.mtH).fill(0);_mskTexDirty=true;fxUpdate();}
+function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
 function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
   const src=fxWork||fxImg;if(!src||!FX.cv)return null;
   const rect=FX.cv.getBoundingClientRect();
@@ -9023,6 +9185,12 @@ function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m
   return{nx:Math.min(1,Math.max(0,cx*sw/FX.cv.width/sw)),ny:Math.min(1,Math.max(0,cy*sh/FX.cv.height/sh))};
 }
 function mskPaintAt(m,nx,ny){
+  // The ONE in-place raster mutation in the app, so the ONE place copy-on-write has to fire.
+  // Undo history holds this array by reference (see fxHistoryPush); mskPxForWrite hands back a
+  // private copy the first time we write after a push, and the same array on every subsequent
+  // stroke sample until the next push. Painting therefore costs one clone per undo step, not
+  // one per pointermove.
+  const px=mskPxForWrite(m);
   const w=m.mtW,h=m.mtH,cx=nx*w,cy=ny*h;
   const rad=Math.max(2,(mskBrushSize/100)*0.25*Math.max(w,h));
   const flow=Math.max(0.02,mskBrushFlow/100);
@@ -9030,8 +9198,10 @@ function mskPaintAt(m,nx,ny){
   const y0=Math.max(0,Math.floor(cy-rad)),y1=Math.min(h-1,Math.ceil(cy+rad));
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
     const dd=Math.hypot(x-cx,y-cy)/rad;if(dd>1)continue;
-    const soft=1-dd*dd*(3-2*dd),add=flow*soft*255,idx=y*w+x,cur=m.px[idx];
-    m.px[idx]=mskPaintErase?Math.max(0,cur-add):Math.min(255,cur+add);
+    const soft=1-dd*dd*(3-2*dd),add=flow*soft*255,idx=y*w+x,cur=px[idx];
+    // Uint8ClampedArray clamps on store, but keep the explicit bounds: erase must floor at 0 and
+    // add must ceil at 255 with the SAME arithmetic as before, so painted values are unchanged.
+    px[idx]=mskPaintErase?Math.max(0,cur-add):Math.min(255,cur+add);
   }
   _mskTexDirty=true;
 }
@@ -9816,21 +9986,25 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
 const _FX_SNAP_TOGGLES=['adjust','curves','hsl','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
 const _FX_SNAP_SELECTS=['sel-input','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
-function getUISnapshot(){
+function getUISnapshot(opts){
   const s={sliders:{},toggles:{},selects:{},colors:{}};
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el)s.sliders[id]=el.value;});
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);if(el)s.toggles[id]=el.classList.contains('on');});
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s.selects[id]=el.value;});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s.colors[id]=el.value;});
-  const it=curItem();s.geom=(it&&it.geom)?JSON.parse(JSON.stringify(it.geom)):null; // this photo's own geometry (crop/rotate/flip/straighten) — per-photo, see broadcastGeom
+  const it=curItem();s.geom=(it&&it.geom)?_clone(it.geom):null; // this photo's own geometry (crop/rotate/flip/straighten) — per-photo, see broadcastGeom
   s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
-  s.curves=JSON.parse(JSON.stringify(fxState.curves));   // tone-curve control points
-  s.hsl=JSON.parse(JSON.stringify(fxState.hsl));         // HSL mixer band settings
-  s.pointColors=JSON.parse(JSON.stringify(fxState.pointColors||[])); // point color picks
+  // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
+  // strings. (These hold only plain arrays/objects/numbers, all structured-cloneable.)
+  s.curves=_clone(fxState.curves);   // tone-curve control points
+  s.hsl=_clone(fxState.hsl);         // HSL mixer band settings
+  s.pointColors=_clone(fxState.pointColors||[]); // point color picks
   s.artSeed=fxState.artSeed;                              // artifact placement seed
   s.dustMode=fxState.dustMode||0;                         // dust speck colour mode (0 both,1 black,2 white) — was missing, so it wasn't undoable and undo clobbered it
-  s.masks=JSON.parse(JSON.stringify(fxState.masks));      // local-adjustment masks
-  s.canvas=JSON.parse(JSON.stringify(fxState.canvas));    // canvas matte (ar/bg/blur)
+  // Masks carry a typed raster that JSON cannot represent — _mskToSnap base64s it. `skipRaster`
+  // is set only by fxHistoryPush, which keeps rasters alive by reference instead.
+  s.masks=fxState.masks.map(m=>_mskToSnap(m,opts&&opts.skipRaster));
+  s.canvas=_clone(fxState.canvas);    // canvas matte (ar/bg/blur)
   s.ver=2; // 2: exposure slider is /20 (±5 stops) — bumped from the unversioned /50 (±2 stops) mapping
   // Baked into the native RAW decode itself (not a shader term), so it can't live as a normal
   // toggle read at render time — it has to travel with the per-photo recipe so each photo
@@ -9905,7 +10079,7 @@ function applyUISnapshot(s){
   if(s.pointColors){fxState.pointColors=JSON.parse(JSON.stringify(s.pointColors));pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
   if(s.dustMode!==undefined){fxState.dustMode=s.dustMode;if(typeof dustModeBuildChips==='function')dustModeBuildChips();}
-  if(s.masks){fxState.masks=JSON.parse(JSON.stringify(s.masks)).map(_mskMigrate);mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
+  if(s.masks){fxState.masks=s.masks.map(_mskFromSnap);mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
     if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;} // keep the per-photo array reference (fxSelectImage/installFXImages) in sync with a restored recipe
   if(s.canvas){fxState.canvas=JSON.parse(JSON.stringify(s.canvas));cvBuildChips();}
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten) — CURRENT photo only, geometry is per-photo
@@ -9994,32 +10168,63 @@ function snapDiffLabel(prevSnap,nextSnap){
   if(changes.length===1)return changes[0].text;
   return `${changes.length} changes`;
 }
+// ⚠️ History deliberately does NOT serialize raster masks into its JSON string. Encoding a
+// 2048x1365 brush mask costs ~3.7MB of base64 per entry and this runs on a 400ms debounce after
+// every slider tick — 20 entries used to retain well over a hundred megabytes (measured: 9.5MB
+// for a mere 512x384 mask). Instead each entry holds the raster BY REFERENCE and copy-on-write
+// (mskPxForWrite) guarantees nobody mutates an array a history entry is pointing at. A
+// slider-only session therefore keeps ONE raster shared across all 20 entries.
 function fxHistoryPush(){
   if(_fxHistLocked)return;
-  const snap=getUISnapshot();
+  const snap=getUISnapshot({skipRaster:true});
   const j=JSON.stringify(snap);
-  if(fxHistory.length&&fxHistory[fxHistIdx].j===j)return;
-  const prev=fxHistory[fxHistIdx]?JSON.parse(fxHistory[fxHistIdx].j):null;
+  const rasters=fxState.masks.map(m=>(m.px&&m.px.length)?m.px:null);
+  // The JSON alone cannot detect a paint stroke (the raster is not in it), so compare raster
+  // identity too — copy-on-write makes a mutated raster a DIFFERENT array object, so reference
+  // equality is exactly the right test and costs nothing.
+  const cur=fxHistory[fxHistIdx];
+  if(cur&&cur.j===j&&cur.rasters.length===rasters.length&&cur.rasters.every((p,i)=>p===rasters[i]))return;
+  const prev=cur?cur.snap:null;   // kept as an object; re-parsing it per push was pure waste
   fxHistory=fxHistory.slice(0,fxHistIdx+1);
-  fxHistory.push({j,label:snapDiffLabel(prev,snap),ts:Date.now()});
+  fxHistory.push({j,snap,rasters,label:snapDiffLabel(prev,snap),ts:Date.now()});
   if(fxHistory.length>20){fxHistory.shift();}
   fxHistIdx=fxHistory.length-1;
-  if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(snap); // native-shell Library auto-save hook; no-op elsewhere
-  if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
+  // Freeze every live raster: an entry now references these exact arrays, so the next in-place
+  // write must clone first.
+  fxState.masks.forEach(m=>{if(m.px&&m.px.length)m._pxFrozen=true;});
+  // The persistence hooks below DO need the raster — a sidecar or saved session without it would
+  // silently lose the mask. Only pay the base64 encode when a raster actually exists.
+  if(typeof window.chromasmithOnEdit==='function'||typeof sessionAutosave==='function'){
+    const full=rasters.some(Boolean)?getUISnapshot():snap;
+    if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(full); // native-shell Library auto-save hook; no-op elsewhere
+    if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
+  }
+}
+// Restores one history entry. applyUISnapshot rebuilds the mask objects from the raster-less
+// JSON, so the shared rasters have to be re-attached afterwards — and re-frozen, because the
+// entry still points at them.
+function _fxHistoryRestore(i){
+  const e=fxHistory[i];if(!e)return;
+  _fxHistLocked=true;
+  applyUISnapshot(JSON.parse(e.j));
+  fxState.masks.forEach((m,k)=>{
+    const p=e.rasters[k];
+    if(p){m.px=p;m._pxFrozen=true;}
+  });
+  _mskTexDirty=true;
+  if(typeof mskRebuild==='function')mskRebuild();
+  fxUpdate();
+  _fxHistLocked=false;
 }
 function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}
-  fxHistIdx--;_fxHistLocked=true;
-  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx].j));
-  fxUpdate();_fxHistLocked=false;
+  fxHistIdx--;_fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Undo','info');
 }
 function fxRedo(){
   if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
-  fxHistIdx++;_fxHistLocked=true;
-  applyUISnapshot(JSON.parse(fxHistory[fxHistIdx].j));
-  fxUpdate();_fxHistLocked=false;
+  fxHistIdx++;_fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Redo','info');
 }
@@ -10027,9 +10232,7 @@ function fxResetAll(){
   if(!fxHistory.length)return;
   if(!confirm('Reset all edits on this photo? This cannot be undone.'))return;
   if(typeof hapt==='function')hapt();
-  _fxHistLocked=true;
-  applyUISnapshot(JSON.parse(fxHistory[0].j));
-  _fxHistLocked=false;
+  _fxHistoryRestore(0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
   if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
   fxHistoryPush();
   fxUpdate();
@@ -10145,10 +10348,7 @@ document.addEventListener('click',e=>{
 function fxTimelineScrub(idx){
   idx=Math.max(0,Math.min(fxHistory.length-1,idx|0));
   fxHistIdx=idx;
-  _fxHistLocked=true;
-  applyUISnapshot(JSON.parse(fxHistory[idx].j));
-  fxUpdate();
-  _fxHistLocked=false;
+  _fxHistoryRestore(idx);   // shared rasters must be re-attached — see fxHistoryPush
 }
 function fxToggleTimelinePopover(){
   const pop=document.getElementById('fx-timeline-popover');
@@ -10768,7 +10968,7 @@ function saveSession(quiet){
   s._pointColors=fxState.pointColors; // point color picks
   s._artSeed=fxState.artSeed; // artifact placement seed
   s._dustMode=fxState.dustMode; // dust speck colour mode (0 both,1 black,2 white)
-  s._masks=fxState.masks;     // local-adjustment masks
+  s._masks=fxState.masks.map(m=>_mskToSnap(m));  // local-adjustment masks (raster -> base64; a live typed array does not survive JSON)
   s._canvas=fxState.canvas;   // canvas matte (ar/bg/blur)
   // Geometry (crop/rotate/flip/straighten) was the one edit surface sessions LOST on reload.
   // It can't be restored blindly at boot (no photo is loaded yet, and a later-loaded different
@@ -10778,7 +10978,22 @@ function saveSession(quiet){
   s._geom=(git&&git.geom)?git.geom:null;
   s._geomFor=git?git.name:null;
   s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
-  try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));if(!quiet)log('Session saved','ok');}catch(e){if(!quiet)log('Session save failed: '+e.message,'warn');}
+  // ⚠️ localStorage is a ~5MB quota. A photo carrying brush/AI masks can exceed it on its own
+  // (each raster is base64'd), and the throw is a QuotaExceededError that used to be swallowed
+  // into a quiet log line during an autosave — so the user believed their session was saved when
+  // nothing had been written since the mask was painted. Retry once WITHOUT the rasters: the
+  // sliders, curves, LUT and mask geometry all still come back, and the user is told plainly
+  // which part could not be kept.
+  try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));if(!quiet)log('Session saved','ok');}
+  catch(e){
+    try{
+      const lean=Object.assign({},s,{_masks:fxState.masks.map(m=>_mskToSnap(m,true))});
+      localStorage.setItem(_SESS_KEY,JSON.stringify(lean));
+      const n=fxState.masks.filter(m=>m.px&&m.px.length).length;
+      log(`Session saved without ${n} painted mask${n===1?'':'s'} — too large for browser storage`,'warn');
+      if(!quiet&&typeof toast==='function')toast('Session saved, but painted masks were too large to keep');
+    }catch(e2){if(!quiet)log('Session save failed: '+e.message,'warn');}
+  }
 }
 // Browser autosave: a reload mid-edit used to lose everything (saveSession was button-only; the
 // chromasmithOnEdit auto-save hook only exists in the native shell). Debounced off every history
@@ -10803,7 +11018,7 @@ function loadSession(userTriggered){
     if(s._pointColors){fxState.pointColors=s._pointColors;pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
     if(s._artSeed!=null)fxState.artSeed=s._artSeed;
     if(s._dustMode!=null){fxState.dustMode=s._dustMode;dustModeBuildChips();}
-    if(s._masks){fxState.masks=s._masks.map(_mskMigrate);mskSel=fxState.masks.length-1;mskRebuild();}
+    if(s._masks){fxState.masks=s._masks.map(_mskFromSnap);mskSel=fxState.masks.length-1;mskRebuild();}
     if(s._canvas){fxState.canvas=s._canvas;cvBuildChips();}
     fxUpdate();
     // restore LUT preset selection if stored
@@ -11152,7 +11367,13 @@ function resolveSplitSnapshot(src){
   if(src==='pin')return fxPinned||'orig'; // nothing pinned yet → fall back to original, never throw
   if(src.hist!==undefined){
     const e=fxHistory[src.hist];
-    return e?JSON.parse(e.j):'orig';
+    if(!e)return 'orig';
+    // This snapshot is fed straight to renderSnapshotTo, which applies it without going through
+    // _fxHistoryRestore — so the raster-less history JSON has to be re-hydrated here or the
+    // "before" side of a split would render that step WITHOUT its brush masks.
+    const snap=JSON.parse(e.j);
+    if(snap.masks)snap.masks.forEach((mk,i)=>{const p=e.rasters[i];if(p)mk.pxb64=_pxToB64(p);});
+    return snap;
   }
   if(src.style!==undefined){
     const st=stylesList().find(s=>s.name===src.style);
@@ -11241,7 +11462,14 @@ function renderPreview(){
     pw=Math.max(2,Math.round(pw*fxVideoPreviewQuality));
     ph=Math.max(2,Math.round(ph*fxVideoPreviewQuality));
   }
-  FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx(),...seedOpt}); // same glow scale the export will use → faithful preview
+  // Once settled this is fxGlowScale() — i.e. the scale the export uses, so the preview stays
+  // faithful; only interim frames mid-drag are cheaper. See fxPreviewGlowScale.
+  const gs=fxPreviewGlowScale();
+  // ⚠️ In split mode this render is DISCARDED — renderSnapshotTo below repaints FX.cv with the
+  // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
+  // here as well meant split view paid for the graded frame TWICE on every single preview
+  // update. Only render it up front when we are not about to throw it away.
+  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),...seedOpt});
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
@@ -11249,7 +11477,7 @@ function renderPreview(){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,{glowScale:fxGlowScale(),showSel:mskShowSelIdx(),...seedOpt});      // re-render processed into FX.cv
+    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),...seedOpt});      // re-render processed into FX.cv
     _applySplitPos();
   } else {
     const orig=document.getElementById('fx-canvas-orig');
@@ -11888,6 +12116,11 @@ function isMemoryConstrained(){
   return iOS||lowMem||coarse;
 }
 function fxGlowScale(){return isMemoryConstrained()?2:1;}           // 2× reduced glow on phones
+// PREVIEW-ONLY glow scale. ⚠️ Deliberately separate from fxGlowScale() rather than making that
+// function interaction-aware: fxGlowScale() is also read by processToCanvas on the EXPORT path,
+// and an export that happened to start while _fxPreviewInteracting was still true would silently
+// render its halation at half resolution. Only renderPreview may use this.
+function fxPreviewGlowScale(){return _fxPreviewInteracting?Math.max(2,fxGlowScale()):fxGlowScale();}
 // Tile aggressively on phones: the single-shot path needs ~4 full-res GPU buffers, which is
 // what was killing the tab on 24–48MP iPhone photos. Tiles keep peak memory small & constant.
 function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}

@@ -1,0 +1,10 @@
+{
+  "refine_edges_ms": 1996,
+  "boxfilter_max_err": 0,
+  "mask_px": 196608,
+  "mask_dims": "512x384",
+  "snapshot_ms": 3.91,
+  "history_entries": 20,
+  "history_bytes": 9936755,
+  "drag_renders": 1
+}

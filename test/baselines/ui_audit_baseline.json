@@ -1,0 +1,36 @@
+{
+  "_note": "Captured BEFORE the 2026-08-09 UI overhaul, and deliberately left at those numbers for the duration of that work so every run shows progress against the original state. Re-baseline with `npm run ui:baseline` once the overhaul lands and the gate is green.",
+  "capturedAt": "2026-08-09",
+  "counts": {
+    "FRAGMENT": 6,
+    "ORDER": 18,
+    "OVERLAP": 12,
+    "TAP": 25,
+    "FONT": 37,
+    "CONTRAST": 0
+  },
+  "examples": {
+    "FRAGMENT": [
+      ".fx-panel — scrollWidth 1246 > clientWidth 319 (~4 columns)",
+      ".fx-panel — content 2394px in a 776px panel but scrollHeight 776 — vertical scroll cannot reach it"
+    ],
+    "ORDER": [
+      "div.fx-row — select#sel-dcp.fx-select paints before its label \"RAW profile\"",
+      "div.fx-row — select#sel-raw-nr.fx-select paints before its label \"RAW Noise Reduction\"",
+      "div.fx-row — button.btn paints before its label \"Target\""
+    ],
+    "OVERLAP": [
+      "div.fx-ctrl-title \"Masks\" — overlaps div#ff-local.fx-fields by 277x29px (a multicol fragmentation artifact; cleared by the FRAGMENT fix)"
+    ],
+    "TAP": [
+      "button#btn-before.btn \"○\" — 24x23 < 28",
+      "button#btn-split.btn \"⇔\" — 24x23 < 28",
+      "button#btn-history.btn \"⏱\" — 25x23 < 28"
+    ],
+    "FONT": [
+      "button#btn-before.btn \"○\" — 9px < 11px",
+      "span.fx-rail-lb \"Image\" — 9px < 11px"
+    ],
+    "CONTRAST": []
+  }
+}

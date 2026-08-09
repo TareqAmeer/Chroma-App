@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chromasmith — UI proposal wireframe</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   CHROMASMITH UI PROPOSAL — static wireframe for review. Not wired to the app.
+   LEFT column of each pair = today's rendering (real classes/values copied from
+   chromasmith-22.html). RIGHT column = the proposal.
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ── TODAY's tokens (verbatim from chromasmith-22.html:21) ── */
+.old{
+  --bg:#17171b;--sur:#1f1f25;--sur2:#26262d;--bdr:#34343f;--acc:#d4903a;--acc2:#4a9ddc;
+  --txt:#f0ece2;--mut:#9a968f;--ok:#52c97a;--err:#e05454;--r:8px;
+  --mono:ui-monospace,Menlo,'Courier New',monospace;
+  --serif:Palatino,'Palatino Linotype',Georgia,serif;
+  --sans:-apple-system,'Helvetica Neue',sans-serif;
+  --lift-1:inset 0 1px 0 rgba(255,255,255,.045),0 1px 2px rgba(0,0,0,.3),0 6px 16px -4px rgba(0,0,0,.35);
+}
+/* ── PROPOSED tokens ── */
+.new{
+  --bg:#131316;--sur-1:#1a1a1f;--sur-2:#212128;--sur-3:#2a2a33;
+  --bdr:#2c2c36;--bdr-strong:#3a3a46;
+  --acc:#d4903a;--acc-soft:rgba(212,144,58,.14);--acc2:#4a9ddc;
+  --txt:#f2efe9;--txt-2:#a6a29a;--txt-3:#726e68;
+  --ok:#52c97a;--err:#e05454;
+  --fs-0:10px;--fs-1:11px;--fs-2:12px;--fs-3:13px;--fs-4:15px;--fs-6:20px;--fs-7:26px;
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;
+  --rad-1:6px;--rad-2:8px;--rad-3:12px;
+  --ease:cubic-bezier(.2,.8,.3,1);--dur-1:120ms;--dur-2:200ms;
+  --lift-1:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.35),0 8px 20px -6px rgba(0,0,0,.4);
+  /* SF Pro / New York stand in for the fonts that will actually be EMBEDDED (Inter + a
+     display serif). The treatment — sentence case, no monospace, the size scale — is what
+     this specimen is for; the exact face is chosen in §2. */
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI Variable Text",sans-serif;
+  --display:ui-serif,"New York",Georgia,serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+body.light .new{
+  --bg:#f7f6f4;--sur-1:#ffffff;--sur-2:#f1efec;--sur-3:#e7e4e0;
+  --bdr:#dedad4;--bdr-strong:#c8c3bb;--acc-soft:rgba(212,144,58,.16);
+  --txt:#1c1a17;--txt-2:#6b665f;--txt-3:#9a948c;
+  --lift-1:inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.06),0 8px 20px -6px rgba(0,0,0,.10);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d10;color:#e9e6e0;font:14px/1.55 ui-sans-serif,system-ui,-apple-system,sans-serif;
+  padding:0 0 120px;-webkit-font-smoothing:antialiased}
+body.light{background:#eceae7;color:#1c1a17}
+
+/* ── page chrome ── */
+.pg{max-width:1280px;margin:0 auto;padding:0 28px}
+.pghdr{position:sticky;top:0;z-index:50;background:rgba(13,13,16,.86);backdrop-filter:blur(18px) saturate(1.3);
+  border-bottom:1px solid #26262e;padding:14px 28px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+body.light .pghdr{background:rgba(236,234,231,.88);border-bottom-color:#d6d2cc}
+.pghdr h1{font:600 16px/1.2 ui-sans-serif,system-ui;letter-spacing:-.01em}
+.pghdr .meta{font:11px/1 ui-monospace,Menlo,monospace;color:#7d7a74}
+.pgctl{margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pgctl label{font:11px/1 ui-sans-serif,system-ui;color:#8d8a84;display:flex;align-items:center;gap:6px}
+.pgctl button{background:#1e1e25;border:1px solid #33333d;color:#e9e6e0;border-radius:7px;
+  padding:6px 12px;font:12px/1 ui-sans-serif,system-ui;cursor:pointer}
+body.light .pgctl button{background:#fff;border-color:#d6d2cc;color:#1c1a17}
+.pgctl button:hover{border-color:#57545d}
+.pgctl input[type=range]{width:130px;accent-color:#d4903a}
+
+section{margin:52px 0 0}
+h2.sec{font:600 19px/1.2 ui-sans-serif,system-ui;letter-spacing:-.015em;margin-bottom:5px;
+  display:flex;align-items:baseline;gap:10px}
+h2.sec .num{font:600 11px/1 ui-monospace,Menlo,monospace;color:#d4903a;letter-spacing:.08em}
+.lede{color:#8d8a84;font-size:13px;max-width:76ch;margin-bottom:18px}
+body.light .lede{color:#6b665f}
+.lede b{color:#e9e6e0;font-weight:600}
+body.light .lede b{color:#1c1a17}
+.note{border-left:2px solid #d4903a;padding:6px 0 6px 12px;margin:14px 0;font-size:12.5px;color:#a29e97;max-width:80ch}
+body.light .note{color:#6b665f}
+.bad{color:#e88}
+.good{color:#7ec98f}
+
+/* ── the before/after frame ── */
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+@media(max-width:1000px){.pair{grid-template-columns:1fr}}
+.pane{border:1px solid #2a2a33;border-radius:12px;overflow:hidden;background:#17171b}
+body.light .pane{border-color:#d6d2cc}
+.pane.new{background:var(--bg)}
+.pane.old{background:var(--bg)}
+.panehd{display:flex;align-items:center;gap:8px;padding:8px 13px;border-bottom:1px solid #2a2a33;
+  font:600 10.5px/1 ui-sans-serif,system-ui;letter-spacing:.09em;text-transform:uppercase;color:#807d77;
+  background:#101014}
+body.light .panehd{background:#e4e1dc;border-bottom-color:#d6d2cc;color:#6b665f}
+.panehd .tag{margin-left:auto;font-weight:500;letter-spacing:.02em;text-transform:none;font-size:10.5px}
+.panehd.is-old .dot,.panehd.is-new .dot{width:7px;height:7px;border-radius:50%}
+.panehd.is-old .dot{background:#e05454}
+.panehd.is-new .dot{background:#52c97a}
+.panebody{padding:16px}
+
+/* ══════════ TODAY'S COMPONENT STYLES (copied verbatim so "before" is honest) ══════════ */
+.old .o-btn{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+  padding:9px 16px;border-radius:5px;border:1px solid var(--bdr);cursor:pointer;display:inline-flex;
+  align-items:center;gap:6px;white-space:nowrap;background:transparent;color:var(--txt)}
+.old .o-bdot{width:5px;height:5px;border-radius:50%;background:var(--mut);flex:none}
+.old .o-title{font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:10px;
+  border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.old .o-sub{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--mut);margin:4px 0;padding-top:6px;border-top:1px solid var(--bdr)}
+.old .o-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:2px 8px;margin-bottom:7px;min-height:20px}
+.old .o-label{order:1;font-size:11px;color:var(--mut);flex-shrink:0}
+.old .o-slider{order:3;flex:1 1 100%;width:100%;accent-color:var(--acc);cursor:pointer;margin-top:1px}
+.old .o-val{order:2;font-family:var(--mono);font-size:11px;color:var(--acc);text-align:right}
+.old .o-help{font-size:10px;color:var(--mut);font-family:var(--mono);margin:2px 0 6px;line-height:1.45}
+.old .o-rail{width:64px;background:var(--sur);border-left:1px solid var(--bdr);padding:6px 4px;
+  display:flex;flex-direction:column;gap:2px}
+.old .o-railbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  background:none;border:none;border-radius:6px;color:var(--mut);cursor:pointer;font-family:var(--mono);
+  font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:8px 2px;width:100%;line-height:1.15}
+.old .o-railbtn.on{background:rgba(212,144,58,.12);color:var(--acc)}
+
+/* ══════════ PROPOSED COMPONENT STYLES ══════════ */
+.new{font-family:var(--sans);color:var(--txt)}
+.new .n-eyebrow{font:600 var(--fs-0)/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3)}
+.new .n-title{display:flex;align-items:center;gap:var(--sp-2);padding-bottom:var(--sp-3);
+  margin-bottom:var(--sp-3);border-bottom:1px solid var(--bdr)}
+.new .n-title h4{font:600 var(--fs-3)/1.2 var(--sans);letter-spacing:-.005em;color:var(--txt)}
+.new .n-btn{font:500 var(--fs-2)/1 var(--sans);padding:8px 13px;border-radius:var(--rad-1);
+  border:1px solid var(--bdr);background:var(--sur-2);color:var(--txt);cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
+  transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+.new .n-btn:hover{background:var(--sur-3);border-color:var(--bdr-strong)}
+.new .n-btn.pri{background:linear-gradient(#e8a54a,#d4903a);
+  border-color:#c8842e;color:#1a1206;font-weight:600;box-shadow:var(--lift-1)}
+.new .n-btn.on{background:var(--acc-soft);border-color:rgba(212,144,58,.42);color:var(--acc)}
+.new .n-btn.ghost{background:transparent}
+.new .n-btn:focus-visible{outline:2px solid rgba(212,144,58,.55);outline-offset:2px}
+.new .n-btn svg{flex:none}
+
+/* proposed slider: bipolar fill from centre + detent */
+.new .n-row{display:grid;grid-template-columns:1fr auto;align-items:center;
+  gap:2px var(--sp-2);margin-bottom:var(--sp-3)}
+.new .n-row .n-lb{font:var(--fs-2)/1.3 var(--sans);color:var(--txt-2)}
+.new .n-row .n-v{font:var(--fs-2)/1.3 var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--txt-2);text-align:right;min-width:34px}
+.new .n-row.mod .n-v{color:var(--acc)}
+.new .n-row.mod .n-lb::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--acc);margin-left:6px;vertical-align:middle}
+.new .n-track{grid-column:1/-1;position:relative;height:16px;display:flex;align-items:center;cursor:pointer}
+.new .n-track .rail{position:absolute;inset:auto 0;height:3px;border-radius:2px;background:var(--sur-3)}
+.new .n-track .fill{position:absolute;height:3px;border-radius:2px;background:rgba(242,239,233,.34)}
+body.light .new .n-track .fill{background:rgba(28,26,23,.28)}
+.new .n-track .detent{position:absolute;left:50%;width:1px;height:7px;background:var(--bdr-strong);transform:translateX(-.5px)}
+.new .n-track .thumb{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--txt);
+  box-shadow:var(--lift-1);transform:translateX(-6.5px);border:none}
+body.light .new .n-track .thumb{background:#fff;border:1px solid var(--bdr-strong)}
+
+/* proposed segmented control */
+.new .n-seg{display:inline-flex;background:var(--sur-2);border:1px solid var(--bdr);
+  border-radius:var(--rad-1);padding:2px;gap:2px}
+/* Inside the 44px bar every control resolves to exactly 32px tall: the seg is 32 including its
+   1px border + 2px padding, so its buttons are 26. Same rule for .n-btn. */
+.new .n-bar .n-seg{height:32px}
+.new .n-bar .n-seg button{height:26px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center}
+.new .n-bar .n-btn{height:32px;padding:0 13px}
+.new .n-seg button{border:none;background:transparent;color:var(--txt-2);cursor:pointer;
+  font:500 var(--fs-2)/1 var(--sans);padding:6px 11px;border-radius:4px;
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+.new .n-seg button.on{background:var(--sur-3);color:var(--txt);box-shadow:0 1px 2px rgba(0,0,0,.28)}
+.new .n-seg button:hover:not(.on){color:var(--txt)}
+
+.new .n-help{font:var(--fs-1)/1.5 var(--sans);color:var(--txt-3);margin:var(--sp-1) 0 var(--sp-3)}
+.new .n-disc{display:inline-flex;align-items:center;gap:5px;font:var(--fs-1)/1 var(--sans);
+  color:var(--txt-3);background:none;border:none;cursor:pointer;padding:2px 0}
+.new .n-disc:hover{color:var(--txt-2)}
+
+/* proposed collapsible group */
+.new .n-grp{border-top:1px solid var(--bdr);margin-top:var(--sp-3)}
+.new .n-grp:first-of-type{border-top:none;margin-top:0}
+.new .n-grphd{display:flex;align-items:center;gap:var(--sp-2);width:100%;background:none;border:none;
+  cursor:pointer;padding:var(--sp-3) 0 var(--sp-2);color:var(--txt-2)}
+.new .n-grphd:hover{color:var(--txt)}
+.new .n-grphd .cv{transition:transform var(--dur-2) var(--ease);flex:none}
+.new .n-grp.closed .cv{transform:rotate(-90deg)}
+.new .n-grphd .lb{font:600 var(--fs-0)/1 var(--sans);letter-spacing:.1em;text-transform:uppercase}
+.new .n-grphd .count{margin-left:auto;font:var(--fs-0)/1 var(--mono);color:var(--txt-3);
+  font-variant-numeric:tabular-nums}
+.new .n-grp.closed .n-grpbody{display:none}
+
+/* proposed mask row */
+.new .n-mrow{display:flex;align-items:center;gap:var(--sp-2);padding:6px 7px;border-radius:var(--rad-1);
+  border:1px solid transparent;cursor:pointer;transition:background var(--dur-1) var(--ease)}
+.new .n-mrow:hover{background:var(--sur-2)}
+.new .n-mrow.sel{background:var(--acc-soft);border-color:rgba(212,144,58,.32)}
+.new .n-mrow .th{width:34px;height:24px;border-radius:4px;background:#26262d;flex:none;position:relative;overflow:hidden}
+.new .n-mrow .nm{font:var(--fs-2)/1.2 var(--sans);color:var(--txt);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.new .n-mrow .more{opacity:0;background:none;border:none;color:var(--txt-3);cursor:pointer;
+  padding:3px;border-radius:4px;flex:none;display:flex}
+.new .n-mrow:hover .more,.new .n-mrow.sel .more{opacity:1}
+.new .n-mrow .more:hover{background:var(--sur-3);color:var(--txt)}
+
+/* stepper */
+.new .n-step{border:1px solid var(--bdr);border-radius:var(--rad-2);margin-bottom:var(--sp-2);
+  background:var(--sur-2);overflow:hidden}
+.new .n-step.done{opacity:.72}
+.new .n-stephd{display:flex;align-items:center;gap:var(--sp-2);padding:10px var(--sp-3);width:100%;
+  background:none;border:none;cursor:pointer;text-align:left}
+.new .n-stephd .idx{width:19px;height:19px;border-radius:50%;background:var(--sur-3);color:var(--txt-2);
+  font:600 10px/19px var(--mono);text-align:center;flex:none}
+.new .n-step.active .n-stephd .idx{background:var(--acc);color:#1a1206}
+.new .n-step.done .n-stephd .idx{background:rgba(82,201,122,.2);color:var(--ok)}
+.new .n-stephd .t{font:600 var(--fs-2)/1.2 var(--sans);color:var(--txt)}
+.new .n-stephd .sum{margin-left:auto;font:var(--fs-1)/1 var(--sans);color:var(--txt-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:44%}
+.new .n-stepbody{padding:0 var(--sp-3) var(--sp-3);border-top:1px solid var(--bdr)}
+.new .n-step:not(.active) .n-stepbody{display:none}
+
+.new .n-chip{border:1px solid var(--bdr);background:var(--sur-3);color:var(--txt-2);
+  border-radius:20px;padding:5px 11px;font:500 var(--fs-1)/1 var(--sans);cursor:pointer}
+.new .n-chip:hover{color:var(--txt);border-color:var(--bdr-strong)}
+.new .n-chip.on{background:var(--acc-soft);border-color:rgba(212,144,58,.42);color:var(--acc)}
+.new .n-sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--bdr);cursor:pointer;padding:0;flex:none}
+.new .n-sw.on{border-color:var(--acc);box-shadow:0 0 0 2px rgba(212,144,58,.3)}
+
+/* proposed rail */
+.new .n-rail{width:72px;background:var(--sur-1);border-left:1px solid var(--bdr);padding:var(--sp-2) 5px;
+  display:flex;flex-direction:column;gap:1px}
+.new .n-railbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  background:none;border:none;border-radius:var(--rad-1);color:var(--txt-3);cursor:pointer;
+  padding:9px 2px;width:100%;position:relative;
+  font:500 var(--fs-0)/1.2 var(--sans);letter-spacing:.01em;
+  transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.new .n-railbtn:hover{color:var(--txt-2);background:var(--sur-2)}
+.new .n-railbtn.on{color:var(--acc);background:var(--acc-soft)}
+.new .n-railbtn.on::before{content:'';position:absolute;left:-5px;top:8px;bottom:8px;width:2px;
+  border-radius:0 2px 2px 0;background:var(--acc)}
+.new .n-railsep{height:1px;background:var(--bdr);margin:var(--sp-2) 8px}
+
+/* proposed deskbar */
+.new .n-bar{display:flex;align-items:center;gap:var(--sp-3);height:44px;padding:0 var(--sp-3);
+  background:var(--sur-1);border-bottom:1px solid var(--bdr)}
+.new .n-cluster{display:flex;align-items:center;gap:2px}
+.new .n-cluster+.n-cluster{padding-left:var(--sp-3);border-left:1px solid var(--bdr)}
+.new .db-btn{width:32px;height:32px;border-radius:var(--rad-1);border:1px solid transparent;
+  background:transparent;color:var(--txt-2);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;transition:background var(--dur-1) var(--ease)}
+.new .db-btn:hover{background:var(--sur-3);color:var(--txt)}
+.new .db-btn.on{background:var(--acc-soft);color:var(--acc)}
+.new .n-doc{font:500 var(--fs-2)/1.2 var(--sans);color:var(--txt);margin:0 auto;
+  display:flex;align-items:baseline;gap:8px}
+.new .n-doc .dim{color:var(--txt-3);font-family:var(--mono);font-size:var(--fs-1);font-variant-numeric:tabular-nums}
+
+/* misc layout */
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.iconcell{border:1px solid #2a2a33;border-radius:9px;padding:12px 8px;text-align:center;background:#17171b}
+body.light .iconcell{background:#fff;border-color:#d6d2cc}
+.iconcell .ic{display:flex;align-items:center;justify-content:center;gap:12px;height:34px;color:#e9e6e0}
+body.light .iconcell .ic{color:#1c1a17}
+.iconcell .nm{font:11px/1.3 ui-sans-serif,system-ui;color:#8d8a84;margin-top:7px}
+.iconcell .was{font:11px/1.3 ui-monospace,Menlo,monospace;color:#c98;margin-top:2px}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px}
+.tbl th{text-align:left;font:600 10px/1 ui-sans-serif,system-ui;letter-spacing:.09em;
+  text-transform:uppercase;color:#807d77;padding:7px 10px;border-bottom:1px solid #2a2a33}
+.tbl td{padding:8px 10px;border-bottom:1px solid #212129;vertical-align:top;color:#b5b1aa}
+body.light .tbl td{border-bottom-color:#e2ded8;color:#4a453f}
+body.light .tbl th{border-bottom-color:#d6d2cc}
+.tbl td.k{color:#e9e6e0;font-weight:500}
+body.light .tbl td.k{color:#1c1a17}
+.panelframe{display:flex;justify-content:center;background:#0b0b0e;padding:14px;border-radius:9px}
+body.light .panelframe{background:#dedbd6}
+.panelcol{width:var(--pw,320px);max-width:100%}
+.specimen{padding:6px 0}
+.fontpick{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+.fontpick button{border:1px solid #33333d;background:#1a1a20;color:#e9e6e0;border-radius:9px;
+  padding:12px 18px;cursor:pointer;text-align:left;min-width:150px}
+body.light .fontpick button{background:#fff;border-color:#d6d2cc;color:#1c1a17}
+.fontpick button.on{border-color:#d4903a;box-shadow:0 0 0 2px rgba(212,144,58,.25)}
+.fontpick .big{font-size:25px;letter-spacing:.1em;font-style:italic;color:#d4903a;display:block}
+.fontpick .lbl{font:11px/1 ui-sans-serif,system-ui;color:#8d8a84;margin-top:7px;display:block}
+.scrollhint{font:11px/1 ui-monospace,Menlo,monospace;color:#7d7a74;text-align:center;padding:6px}
+.overflowdemo{position:relative;height:250px;overflow:hidden;border:1px dashed #6a4}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#8d8a84;margin:10px 0 0}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+
+<div class="pghdr">
+  <h1>Chromasmith — UI proposal</h1>
+  <span class="meta">wireframe · not wired to the app</span>
+  <div class="pgctl">
+    <label>Panel width <input type="range" id="pw" min="280" max="400" value="320"><b id="pwv" style="font-family:ui-monospace,Menlo,monospace;font-size:11px">320px</b></label>
+    <button id="theme">Light theme</button>
+  </div>
+</div>
+
+<div class="pg">
+
+<section>
+  <h2 class="sec"><span class="num">§0</span> How to review this</h2>
+  <p class="lede">
+    Every block below is a <b>before / after pair</b>. The left pane copies the app's real classes and
+    values out of <code>chromasmith-22.html</code>, so it renders the way the desktop app renders today.
+    The right pane is the proposal. Nothing here touches the app — tell me what to change and I revise
+    <i>this file</i>, then implement once against an approved target.
+  </p>
+  <div class="legend">
+    <span><i style="background:#e05454"></i> Today</span>
+    <span><i style="background:#52c97a"></i> Proposed</span>
+    <span><i style="background:#d4903a"></i> Needs your decision</span>
+  </div>
+  <div class="note">
+    <b>On the fonts:</b> the app is single-file and offline, so webfonts must be base64-embedded — there
+    is no CDN. The "after" panes render in <b>SF Pro</b> (this Mac's <code>system-ui</code>), which stands
+    in for the <b>Inter</b> that will actually be embedded; they are close enough to judge the
+    <i>treatment</i> (sentence case, no monospace, the size scale). The wordmark face is a real choice
+    you make in §2 below — those are all rendering for real.
+  </div>
+</section>
+
+<!-- ══════════════════ 1. TYPE ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§1</span> Typography — the main "AI-made" tell</h2>
+  <p class="lede">
+    Measured in the current file: <code>var(--mono)</code> is used <b>81×</b>, <code>var(--sans)</code>
+    <b>8×</b>, with <b>23</b> <code>text-transform:uppercase</code> rules. Almost all UI chrome is
+    uppercase letter-spaced monospace. That is the signature look of generated "technical" UI — and it is
+    not what Lightroom, Capture One, Darkroom or Dehancer do. They use a neutral grotesque for labels and
+    reserve monospace for <b>numerals</b>.
+  </p>
+  <div class="pair">
+    <div class="pane old">
+      <div class="panehd is-old"><span class="dot"></span>Today <span class="tag">mono, uppercase, 9–11px</span></div>
+      <div class="panebody">
+        <div class="o-title">Local Adjustments <span style="font-family:var(--mono);font-size:10px;color:var(--mut)">ON</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="o-btn"><span class="o-bdot"></span>+ Radial</button>
+          <button class="o-btn"><span class="o-bdot"></span>+ Colour Range</button>
+        </div>
+        <div class="o-sub">Skin Tone</div>
+        <div class="o-row"><div class="o-label">Uniformity: Hue</div><div class="o-val">42</div>
+          <input class="o-slider" type="range" value="42"></div>
+        <div class="o-row"><div class="o-label">Preserve modeling</div><div class="o-val">70</div>
+          <input class="o-slider" type="range" value="70"></div>
+        <div class="o-help">Set the mask preview to Selection above, then shift-click each kind of skin
+          in the photo — matte, shaded, paler, pinker — until it ALL reads red.</div>
+      </div>
+    </div>
+    <div class="pane new">
+      <div class="panehd is-new"><span class="dot"></span>Proposed <span class="tag">sans, sentence case, 12–13px</span></div>
+      <div class="panebody">
+        <div class="n-title"><h4>Local adjustments</h4>
+          <span class="n-eyebrow" style="margin-left:auto">On</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="n-btn">Radial</button>
+          <button class="n-btn">Colour range</button>
+        </div>
+        <div class="n-eyebrow" style="margin-bottom:10px">Skin tone</div>
+        <div class="n-row mod"><span class="n-lb">Hue</span><span class="n-v">42</span>
+          <span class="n-track"><i class="rail"></i><i class="fill" style="left:50%;width:21%"></i>
+            <i class="detent"></i><i class="thumb" style="left:71%"></i></span></div>
+        <div class="n-row mod"><span class="n-lb">Keep shading</span><span class="n-v">70</span>
+          <span class="n-track"><i class="rail"></i><i class="fill" style="left:0;width:70%"></i>
+            <i class="thumb" style="left:70%"></i></span></div>
+        <p class="n-help">Click each kind of skin — matte, shaded, paler — until it all reads red.
+          <button class="n-disc">Why? ▾</button></p>
+      </div>
+    </div>
+  </div>
+  <table class="tbl">
+    <tr><th>Role</th><th>Today</th><th>Proposed</th></tr>
+    <tr><td class="k">Buttons</td><td>11px mono, UPPERCASE, .07em tracking, leading dot</td><td>12px sans 500, sentence case, no dot</td></tr>
+    <tr><td class="k">Slider labels</td><td>11px sans, muted</td><td>12px sans, muted; value uses <code>tabular-nums</code> so digits stop jittering</td></tr>
+    <tr><td class="k">Group headings</td><td>10px sans 700 UPPERCASE</td><td>10px sans 600 UPPERCASE — the <i>only</i> surviving uppercase role, so it still reads as a system</td></tr>
+    <tr><td class="k">Help text</td><td>10px <b>monospace</b>, up to 10 lines</td><td>11px sans, ≤2 lines, rest behind a disclosure</td></tr>
+    <tr><td class="k">Monospace</td><td>81 uses across all chrome</td><td>numerals, build stamp and the diagnostics log only</td></tr>
+  </table>
+</section>
+
+<!-- ══════════════════ 2. WORDMARK ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§2</span> Wordmark <span style="font:500 11px/1 ui-sans-serif;color:#d4903a;letter-spacing:.06em">DECIDE</span></h2>
+  <p class="lede">
+    Today the logo is <code>Palatino italic</code> at 20px/.12em. These are rendering for real on your
+    Mac — pick one and I'll embed a subset of the closest OFL-licensed equivalent (~8 KB) so it looks
+    identical on Windows and iOS too. <b>Click a card to apply it to the top bar in §3.</b>
+  </p>
+  <div class="fontpick" id="fontpick">
+    <button data-f="Palatino,'Palatino Linotype',Georgia,serif" class="on">
+      <span class="big" style="font-family:Palatino,Georgia,serif">CHROMASMITH</span>
+      <span class="lbl">Palatino italic — today</span></button>
+    <button data-f="ui-serif,'New York',Georgia,serif">
+      <span class="big" style="font-family:ui-serif,'New York',Georgia,serif">CHROMASMITH</span>
+      <span class="lbl">New York — warm, editorial</span></button>
+    <button data-f="Didot,'Bodoni 72',Georgia,serif">
+      <span class="big" style="font-family:Didot,'Bodoni 72',Georgia,serif">CHROMASMITH</span>
+      <span class="lbl">Didot — high contrast, fashion</span></button>
+    <button data-f="Baskerville,Georgia,serif">
+      <span class="big" style="font-family:Baskerville,Georgia,serif">CHROMASMITH</span>
+      <span class="lbl">Baskerville — classical</span></button>
+    <button data-f="Optima,Candara,sans-serif">
+      <span class="big" style="font-family:Optima,Candara,sans-serif;font-style:normal">CHROMASMITH</span>
+      <span class="lbl">Optima — humanist, no italic</span></button>
+    <button data-f="ui-sans-serif,system-ui">
+      <span class="big" style="font-family:ui-sans-serif,system-ui;font-style:normal;letter-spacing:.22em;font-weight:300">CHROMASMITH</span>
+      <span class="lbl">Light grotesque, wide tracking</span></button>
+  </div>
+</section>
+
+<!-- ══════════════════ 3. TOP BAR ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§3</span> Top bar — 5 button heights, 3 icon systems</h2>
+  <p class="lede">
+    Measured in the running app: the 44px deskbar contains buttons at <b>18, 24, 25, 27 and 30px</b> tall,
+    and mixes <b>SVG strokes</b> (undo/redo/reset), an <b>emoji</b> <code>🗂</code> for Library, and five
+    <b>24×24 unicode glyphs</b> <code>○ ⇔ ▾ ⏱ ▦</code> set at <b>9px</b>. The glyphs are effectively
+    unreadable and no two icon systems share a weight.
+  </p>
+  <div class="pane old" style="margin-bottom:20px">
+    <div class="panehd is-old"><span class="dot"></span>Today <span class="tag">18 buttons under 28px · 27 elements under 10px</span></div>
+    <div style="background:#1f1f25;border-bottom:1px solid #34343f;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font-family:ui-monospace,Menlo,monospace">
+      <button style="background:#26262d;border:1px solid #34343f;border-radius:6px;color:#f0ece2;padding:5px 10px;font-size:11px;cursor:pointer">🗂</button>
+      <span style="color:#9a968f;font-size:18px">↺</span><span style="color:#9a968f;font-size:18px">↻</span><span style="color:#9a968f;font-size:16px">⟳</span>
+      <span style="margin:0 auto;font-family:-apple-system,sans-serif;font-size:12px;color:#f0ece2">portrait <span style="color:#9a968f">512 × 384 · PNG</span></span>
+      <button style="width:24px;height:24px;font-size:9px;background:#26262d;border:1px solid #34343f;color:#f0ece2;border-radius:4px;cursor:pointer">○</button>
+      <button style="width:24px;height:24px;font-size:9px;background:#26262d;border:1px solid #34343f;color:#f0ece2;border-radius:4px;cursor:pointer">⇔</button>
+      <button style="width:24px;height:24px;font-size:9px;background:#26262d;border:1px solid #34343f;color:#f0ece2;border-radius:4px;cursor:pointer">▾</button>
+      <button style="width:24px;height:24px;font-size:9px;background:#26262d;border:1px solid #34343f;color:#f0ece2;border-radius:4px;cursor:pointer">⏱</button>
+      <button style="width:24px;height:24px;font-size:9px;background:#26262d;border:1px solid #34343f;color:#f0ece2;border-radius:4px;cursor:pointer">▦</button>
+      <span style="color:#f0ece2;font-size:11px">− <input type="range" style="width:60px;vertical-align:middle;accent-color:#4a9ddc" value="30"> + 100%</span>
+      <span style="color:#f0ece2;font-size:11px">Fit</span><span style="color:#f0ece2;font-size:11px">1:1</span><span style="color:#f0ece2;font-size:11px">Full res</span>
+      <span style="color:#f0ece2;font-size:13px">⋯</span>
+      <button style="background:#26262d;border:1px solid #34343f;border-radius:6px;color:#f0ece2;padding:6px 11px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">All FX</button>
+      <button style="background:#d4903a;border:1px solid #d4903a;border-radius:6px;color:#000;padding:6px 13px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Export</button>
+    </div>
+  </div>
+  <div class="pane new">
+    <div class="panehd is-new"><span class="dot"></span>Proposed <span class="tag">one 32×32 button · three clusters · segmented zoom</span></div>
+    <div class="n-bar">
+      <div class="n-cluster">
+        <button class="db-btn" title="Library" data-ic="library"></button>
+      </div>
+      <div class="n-cluster">
+        <button class="db-btn" title="Undo" data-ic="undo"></button>
+        <button class="db-btn" title="Redo" data-ic="redo"></button>
+        <button class="db-btn" title="Reset all edits" data-ic="reset"></button>
+        <button class="db-btn" title="Edit history" data-ic="history"></button>
+      </div>
+      <div class="n-doc" id="wordmarkbar">
+        <span style="font-family:var(--display);font-style:italic;letter-spacing:.11em;color:var(--acc)" id="wm">CHROMASMITH</span>
+        <span class="dim">portrait · 512×384 · PNG</span>
+      </div>
+      <div class="n-cluster">
+        <button class="db-btn" title="Hold to compare" data-ic="compare"></button>
+        <button class="db-btn" title="Split before/after" data-ic="split"></button>
+        <button class="db-btn" title="Scopes" data-ic="scope"></button>
+      </div>
+      <div class="n-cluster">
+        <div class="n-seg">
+          <button data-ic="zoomOut" title="Zoom out"></button>
+          <button class="on">Fit</button><button>1:1</button><button>Full</button>
+          <button data-ic="zoomIn" title="Zoom in"></button>
+        </div>
+      </div>
+      <div class="n-cluster">
+        <button class="db-btn" title="More" data-ic="more"></button>
+        <button class="n-btn" style="gap:6px"><span data-ic="enableAll"></span>All FX</button>
+        <button class="n-btn pri" style="gap:6px"><span data-ic="export"></span>Export</button>
+      </div>
+    </div>
+  </div>
+  <div class="note">Everything is 32×32 with a 18px stroke icon; the three clusters are separated by
+    hairlines rather than by inconsistent sizing. Zoom collapses from six loose controls to one
+    segmented control. <b>The wordmark moves into the bar</b> — currently it only exists on the web
+    header, which <code>body.deskx</code> hides, so the desktop app has no brand mark at all.</div>
+</section>
+
+<!-- ══════════════════ 4. ICONS ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§4</span> Icon set — replacing every emoji and glyph</h2>
+  <p class="lede">
+    The app already has a good 24×24 stroke set (<code>ICONS</code>, 30 entries). The problem is what
+    <i>isn't</i> in it: 17 emoji and unicode glyphs used inline in button labels. Below, each proposed
+    icon is drawn at <b>16 / 20 / 22px</b> — the only three sizes the proposal allows — with the glyph
+    it replaces underneath.
+  </p>
+  <div class="grid3" id="iconsheet"></div>
+</section>
+
+<!-- ══════════════════ 5. TOOL RAIL ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§5</span> Tool rail</h2>
+  <p class="lede">64px wide with 9px labels today. Proposed: 72px, 10px labels, grouped with hairline
+    separators, and an accent bar on the active item so it reads at a glance in peripheral vision.</p>
+  <div class="pair">
+    <div class="pane old"><div class="panehd is-old"><span class="dot"></span>Today <span class="tag">64px · 9px mono uppercase</span></div>
+      <div style="display:flex;justify-content:center;padding:14px;background:#0b0b0e"><div class="o-rail" id="oldrail"></div></div></div>
+    <div class="pane new"><div class="panehd is-new"><span class="dot"></span>Proposed <span class="tag">72px · 10px sans · grouped</span></div>
+      <div style="display:flex;justify-content:center;padding:14px;background:var(--bg)"><div class="n-rail" id="newrail"></div></div></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 6. CONTROL KIT ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§6</span> Control kit</h2>
+  <p class="lede">Toggle the theme in the header — both are styled. The slider is the control you touch
+    most, so it gets the most attention: <b>bipolar sliders fill from the centre</b> with a detent tick,
+    so "0" reads as neutral instead of as "empty".</p>
+  <div class="pair">
+    <div class="pane old"><div class="panehd is-old"><span class="dot"></span>Today</div>
+      <div class="panebody">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="o-btn"><span class="o-bdot"></span>Ghost</button>
+          <button class="o-btn" style="background:#26262d"><span class="o-bdot"></span>Secondary</button>
+          <button class="o-btn" style="background:linear-gradient(#e8a54a,#d4903a);border-color:#d4903a;color:#000;font-weight:600">Primary</button>
+        </div>
+        <div class="o-row"><div class="o-label">Exposure (bipolar, at 0)</div><div class="o-val">0</div>
+          <input class="o-slider" type="range" min="-100" max="100" value="0"></div>
+        <div class="o-row"><div class="o-label">Amount</div><div class="o-val">100</div>
+          <input class="o-slider" type="range" value="100"></div>
+        <div style="display:flex;border:1px solid #34343f;border-radius:7px;overflow:hidden;width:max-content;margin-top:14px">
+          <button style="background:#26262d;border:none;color:#d4903a;font-size:11px;padding:5px 9px;cursor:pointer">Overlay</button>
+          <button style="background:#26262d;border:none;color:#f0ece2;font-size:11px;padding:5px 9px;cursor:pointer">Isolate</button>
+          <button style="background:#26262d;border:none;color:#f0ece2;font-size:11px;padding:5px 9px;cursor:pointer">Selection</button>
+          <button style="background:#26262d;border:none;color:#f0ece2;font-size:11px;padding:5px 9px;cursor:pointer">Off</button>
+        </div>
+        <div class="o-help" style="margin-top:14px">No focus ring anywhere in the app — tab through this pane and the previous one to compare.</div>
+      </div></div>
+    <div class="pane new"><div class="panehd is-new"><span class="dot"></span>Proposed</div>
+      <div class="panebody">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+          <button class="n-btn ghost">Ghost</button>
+          <button class="n-btn">Secondary</button>
+          <button class="n-btn on">Active</button>
+          <button class="n-btn pri">Primary</button>
+        </div>
+        <div class="n-row"><span class="n-lb">Exposure (bipolar, at 0)</span><span class="n-v">0</span>
+          <span class="n-track"><i class="rail"></i><i class="detent"></i><i class="thumb" style="left:50%"></i></span></div>
+        <div class="n-row mod"><span class="n-lb">Exposure (bipolar, at −38)</span><span class="n-v">−38</span>
+          <span class="n-track"><i class="rail"></i><i class="fill" style="left:31%;width:19%"></i>
+            <i class="detent"></i><i class="thumb" style="left:31%"></i></span></div>
+        <div class="n-row"><span class="n-lb">Amount (unipolar)</span><span class="n-v">100</span>
+          <span class="n-track"><i class="rail"></i><i class="fill" style="left:0;width:100%"></i>
+            <i class="thumb" style="left:100%"></i></span></div>
+        <div style="margin-top:16px"><span class="n-seg">
+          <button class="on">Overlay</button><button>Isolate</button><button>Selection</button><button>Off</button>
+        </span></div>
+        <p class="n-help" style="margin-top:16px">Every interactive element gets a
+          <code>:focus-visible</code> ring — tab through this pane to see it.</p>
+      </div></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 7. MASKS PANEL ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§7</span> Masks panel — the headline change</h2>
+  <p class="lede">
+    Both panes are at your chosen panel width (<b id="pwv2">320px</b>), so this is an honest comparison.
+    A single <b>Radial</b> mask currently renders <b>35 control rows</b> — and because
+    <code>.fx-panel</code> is a CSS multi-column container with a definite height, everything past the
+    first screen <b class="bad">fragments into off-screen columns that vertical scrolling cannot reach</b>.
+    Measured: <code>scrollWidth 937</code> vs <code>clientWidth 319</code>, <code>scrollTop</code> stuck at 0.
+  </p>
+  <div class="pair">
+    <div class="pane old">
+      <div class="panehd is-old"><span class="dot"></span>Today <span class="tag">35 rows · Skin Tone on <i>every</i> mask type</span></div>
+      <div class="panelframe"><div class="panelcol" id="oldmask"></div></div>
+    </div>
+    <div class="pane new">
+      <div class="panehd is-new"><span class="dot"></span>Proposed <span class="tag">grouped · Skin Tone only on Skin masks</span></div>
+      <div class="panelframe"><div class="panelcol" id="newmask"></div></div>
+    </div>
+  </div>
+  <table class="tbl">
+    <tr><th>Problem</th><th>Fix</th></tr>
+    <tr><td class="k">8 "+ Add" buttons wrap into a ragged staircase</td><td>One <b>Add mask ▾</b> split button with a grouped menu</td></tr>
+    <tr><td class="k">Up / Down / Name / Mute / Solo / Eraser take 3 rows of prime space</td><td>Move to a <b>⋯</b> menu on the mask row itself; drag still reorders</td></tr>
+    <tr><td class="k">Skin Tone (13 rows) renders on Radial, Linear and Luminance masks where it is meaningless</td><td>Renders only when <code>origin==='skin'</code>, or opt-in via <b>Refine ▸</b></td></tr>
+    <tr><td class="k">Exposure sits ~1,000px down, past the fragmentation boundary</td><td><b>Adjust</b> is the default-open group; Selection collapses once set</td></tr>
+    <tr><td class="k">Every toggle reruns <code>mskRebuild()</code> and throws you back to the top</td><td>Split into list / body / state-sync so a toggle repaints one button</td></tr>
+    <tr><td class="k">"Show on photo" label renders <i>after</i> its control</td><td><code>.fx-row &gt; *{order:2}</code> — fixes 4 confirmed rows app-wide</td></tr>
+  </table>
+</section>
+
+<!-- ══════════════════ 8. SKIN TONE ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§8</span> Guided Skin Tone</h2>
+  <p class="lede">
+    <b>The maths does not change.</b> <code>skinUniformity()</code>, the OKLAB colour gate,
+    <code>mskSkinTarget</code> and the measured <code>srcV</code> anchor all stay exactly as calibrated —
+    this is presentation only, which is what makes it safe to do. Click through the steps.
+  </p>
+  <div class="pair">
+    <div class="pane old"><div class="panehd is-old"><span class="dot"></span>Today <span class="tag">13 flat rows, jargon labels</span></div>
+      <div class="panelframe"><div class="panelcol" id="oldskin"></div></div></div>
+    <div class="pane new"><div class="panehd is-new"><span class="dot"></span>Proposed <span class="tag">3 steps · presets · advanced hidden</span></div>
+      <div class="panelframe"><div class="panelcol" id="newskin"></div></div></div>
+  </div>
+  <table class="tbl">
+    <tr><th>Today</th><th>Proposed</th><th>Why</th></tr>
+    <tr><td class="k">"Colour range" + a separate ◉ Pick button, then find the "Selection" preview mode yourself</td><td>One <b>Pick skin</b> button that arms the eyedropper <i>and</i> switches the preview to Selection, restoring it on exit</td><td>The current help text literally instructs you to go do this manually</td></tr>
+    <tr><td class="k">Sample chips, no feedback on whether they're enough</td><td><b>"3 samples · 87% of the shape selected"</b> live read-out</td><td>Your own notes measure 1 sample → weights 0.04–1.00 and hue <i>diverges</i>; 3 → 0.86–1.00. Surface the number instead of documenting it</td></tr>
+    <tr><td class="k">"Match pick / Swatch / Custom"</td><td>"Even them out / Pick a shade / Custom"</td><td>Names the outcome, not the mechanism</td></tr>
+    <tr><td class="k">Uniformity: Hue + Saturation + Lightness, Preserve modeling, Tan darkens only, Tan Depth, Tan Warmth — 7 sliders</td><td><b>Strength · Depth · Warmth</b>, plus 4 presets. Originals live under <b>Advanced</b>, unchanged</td><td>Covers the 90% case in one slider without removing any control</td></tr>
+    <tr><td class="k">A 10-line monospace paragraph of caveats</td><td><b>Contextual warnings</b> that appear only when the trap is live</td><td>e.g. feather &gt; 0.4 stops convergence; 1 sample + Strength makes hue diverge</td></tr>
+  </table>
+</section>
+
+<!-- ══════════════════ 9. SECTION OFF ══════════════════ -->
+<section>
+  <h2 class="sec"><span class="num">§9</span> Switched-off sections look broken</h2>
+  <p class="lede">Confirmed in the running app: with the Basic Adjustments master switch off, the card is
+    <b>63px tall inside a 956px panel</b> — a title, a switch, and ~800px of void. You cannot see what
+    you would be turning on.</p>
+  <div class="pair">
+    <div class="pane old"><div class="panehd is-old"><span class="dot"></span>Today</div>
+      <div class="panebody" style="min-height:280px">
+        <div class="o-title">Basic Adjustments
+          <span style="width:34px;height:18px;border-radius:9px;background:#34343f;position:relative;display:inline-block">
+            <i style="position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#9a968f"></i></span></div>
+      </div></div>
+    <div class="pane new"><div class="panehd is-new"><span class="dot"></span>Proposed <span class="tag">dimmed, not hidden · moving a slider auto-enables</span></div>
+      <div class="panebody" style="min-height:280px">
+        <div class="n-title"><h4>Basic adjustments</h4>
+          <span style="margin-left:auto;width:34px;height:19px;border-radius:10px;background:var(--sur-3);position:relative;display:inline-block;border:1px solid var(--bdr)">
+            <i style="position:absolute;left:2px;top:2px;width:13px;height:13px;border-radius:50%;background:var(--txt-3)"></i></span></div>
+        <div style="opacity:.5;pointer-events:none">
+          <div class="n-row"><span class="n-lb">Exposure</span><span class="n-v">0</span>
+            <span class="n-track"><i class="rail"></i><i class="detent"></i><i class="thumb" style="left:50%"></i></span></div>
+          <div class="n-row"><span class="n-lb">Contrast</span><span class="n-v">0</span>
+            <span class="n-track"><i class="rail"></i><i class="detent"></i><i class="thumb" style="left:50%"></i></span></div>
+          <div class="n-row"><span class="n-lb">Highlights</span><span class="n-v">0</span>
+            <span class="n-track"><i class="rail"></i><i class="detent"></i><i class="thumb" style="left:50%"></i></span></div>
+          <div class="n-row"><span class="n-lb">Shadows</span><span class="n-v">0</span>
+            <span class="n-track"><i class="rail"></i><i class="detent"></i><i class="thumb" style="left:50%"></i></span></div>
+        </div>
+        <p class="n-help">Off — move any slider to enable.</p>
+      </div></div>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">§10</span> What I need from you</h2>
+  <table class="tbl">
+    <tr><th>#</th><th>Decision</th><th>Default if you say nothing</th></tr>
+    <tr><td class="k">1</td><td>Wordmark face (§2)</td><td>New York italic — warm, closest to the current Palatino</td></tr>
+    <tr><td class="k">2</td><td>Panel width — the slider at the top. 320px is today's.</td><td>Stay at 320px</td></tr>
+    <tr><td class="k">3</td><td>Rail 64 → 72px (§5): costs 8px of photo width</td><td>Go to 72px</td></tr>
+    <tr><td class="k">4</td><td>Bipolar sliders filling from centre (§6)</td><td>Yes</td></tr>
+    <tr><td class="k">5</td><td>Base UI size 11 → 12/13px (§1)</td><td>Yes — biggest single "cheap → considered" shift</td></tr>
+    <tr><td class="k">6</td><td>Mask management behind <b>⋯</b> (§7)</td><td>Yes</td></tr>
+    <tr><td class="k">7</td><td>Skin Tone: <b>Strength</b> merging Uniformity Hue+Sat (§8)</td><td>Yes, with both originals under Advanced</td></tr>
+    <tr><td class="k">8</td><td>Keep the amber accent, or shift it?</td><td>Keep — just use it far less (nav + primary + modified only)</td></tr>
+  </table>
+</section>
+
+</div>
+
+<script>
+/* ── icon set: existing app icons + the proposed additions ── */
+const SVG=(p,sz,sw)=>`<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="none" stroke="currentColor" stroke-width="${sw||(sz>=20?1.5:1.75)}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const ICONS={
+ /* — already in the app — */
+ image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5L5 20"/>',
+ looks:'<path d="M5 3v4M3 5h4"/><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"/>',
+ adjust:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
+ curves:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M6 18c6 0 6-12 12-12"/>',
+ lens:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+ grain:'<circle cx="6" cy="7" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="18" cy="8" r="1"/><circle cx="8" cy="13" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="19" cy="16" r="1"/><circle cx="6" cy="18" r="1"/><circle cx="12" cy="19" r="1"/>',
+ borders:'<rect x="3" y="3" width="18" height="18" rx="1"/><rect x="7" y="7" width="10" height="10"/>',
+ local:'<circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>',
+ crop:'<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/>',
+ export:'<path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/>',
+ info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+ undo:'<path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/>',
+ redo:'<path d="M15 7l5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h1"/>',
+ reset:'<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-6h6"/>',
+ history:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+ enableAll:'<path d="M5 3v3M3.5 4.5h3"/><path d="M18 14v3M16.5 15.5h3"/><path d="M13 4l2 5.5 5.5 2-5.5 2L13 19l-2-5.5L5.5 11.5 11 9.5z"/>',
+ /* — proposed additions (Lucide-shaped) — */
+ library:'<path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+ compare:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" opacity=".55"/>',
+ split:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M8 10l-2 2 2 2M16 10l2 2-2 2"/>',
+ scope:'<path d="M3 20V9M8 20V4M13 20v-8M18 20V7"/>',
+ zoomIn:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6M11 8.5v5M8.5 11h5"/>',
+ zoomOut:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6M8.5 11h5"/>',
+ fit:'<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>',
+ more:'<circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/>',
+ brush:'<path d="M9.5 14.5L3 21s3.5.5 5-1 1.5-4 1.5-4z"/><path d="M12 17l8.5-8.5a2.1 2.1 0 0 0-3-3L9 14"/>',
+ eraser:'<path d="M8 21H4l-1.3-1.3a2 2 0 0 1 0-2.8L13.5 6.1a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L13 21z"/><path d="M11 9l5 5"/>',
+ eyedropper:'<path d="M17.5 2.5a2.1 2.1 0 0 1 3 3l-2 2 1 1-2 2-1-1L9 17l-4 1 1-4 7.5-7.5-1-1 2-2 1 1z"/>',
+ wand:'<path d="M5 3v3M3.5 4.5h3M18 15v3M16.5 16.5h3"/><path d="M14 4l1.6 4.4L20 10l-4.4 1.6L14 16l-1.6-4.4L8 10l4.4-1.6z"/><path d="M11 13L3.5 20.5"/>',
+ scissors:'<circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M20 4L8.6 16.4M8.6 7.6L20 20M7.7 7.7l2.6 2.6"/>',
+ eye:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/>',
+ eyeOff:'<path d="M10.7 6.2A9.9 9.9 0 0 1 12 6c6.4 0 10 6 10 6a17 17 0 0 1-3 3.6M6.6 6.7A17 17 0 0 0 2 12s3.6 6 10 6c1.5 0 2.9-.3 4.1-.8"/><path d="M3 3l18 18"/><path d="M9.6 9.7a3 3 0 0 0 4.2 4.2"/>',
+ star:'<path d="M12 3.5l2.5 5.3 5.5.8-4 4 1 5.7-5-2.8-5 2.8 1-5.7-4-4 5.5-.8z"/>',
+ rename:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+ chevron:'<path d="M6 9l6 6 6-6"/>',
+ refine:'<path d="M4 12h4l3-7 4 14 3-7h4"/>'
+};
+function ic(n,sz,sw){return SVG(ICONS[n]||'',sz||20,sw);}
+document.querySelectorAll('[data-ic]').forEach(e=>e.innerHTML=ic(e.dataset.ic,e.classList.contains('db-btn')?18:15));
+
+/* ── icon sheet ── */
+const SHEET=[
+ ['library','🗂 emoji'],['compare','○ glyph'],['split','⇔ glyph'],['history','⏱ glyph'],['scope','▦ glyph'],
+ ['more','⋯ glyph'],['zoomIn','+ text'],['zoomOut','− text'],['fit','"Fit" text'],
+ ['brush','🖌 emoji'],['eraser','(none)'],['eyedropper','◉ glyph'],['wand','(none)'],['refine','◈ glyph'],
+ ['scissors','✂ glyph'],['eye','👁 emoji'],['eyeOff','⃠ glyph'],['star','★ / ☆ glyph'],
+ ['rename','✎ glyph'],['chevron','▾ glyph']
+];
+document.getElementById('iconsheet').innerHTML=SHEET.map(([k,was])=>
+ `<div class="iconcell"><div class="ic">${ic(k,16)}${ic(k,20)}${ic(k,22)}</div>
+  <div class="nm">${k}</div><div class="was">replaces ${was}</div></div>`).join('');
+
+/* ── rails ── */
+const OLDRAIL=[['image','Image'],['looks','Looks'],['adjust','Adjust'],['curves','Color'],['lens','Detail'],
+ ['grain','Film'],['borders','Frame'],['local','Masks'],['crop','Crop'],['export','Export'],['info','Info']];
+document.getElementById('oldrail').innerHTML=OLDRAIL.map(([k,l],i)=>
+ `<button class="o-railbtn ${k==='local'?'on':''}">${ic(k,22,1.7)}<span>${l}</span></button>`).join('');
+const NEWRAIL=[['image','Image'],['looks','Looks'],['adjust','Adjust'],'sep',
+ ['curves','Colour'],['lens','Detail'],'sep',['grain','Film'],['borders','Frame'],'sep',
+ ['local','Masks'],['crop','Crop'],'sep',['export','Export'],['info','Info']];
+document.getElementById('newrail').innerHTML=NEWRAIL.map(r=>r==='sep'?'<i class="n-railsep"></i>'
+ :`<button class="n-railbtn ${r[0]==='local'?'on':''}">${ic(r[0],22)}<span>${r[1]}</span></button>`).join('');
+
+/* ── old masks panel: the real 35 rows, in the real order ── */
+const orow=(l,v,bip)=>`<div class="o-row"><div class="o-label">${l}</div><div class="o-val">${v}</div>
+  <input class="o-slider" type="range" min="${bip?-100:0}" max="100" value="${v}"></div>`;
+const obtn=t=>`<button class="o-btn" style="font-size:10px;padding:7px 10px"><span class="o-bdot"></span>${t}</button>`;
+document.getElementById('oldmask').innerHTML=`
+<div style="background:#1f1f25;border:1px solid #34343f;border-radius:8px;padding:10px">
+<div class="o-title">Local Adjustments</div>
+<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+${['+ Radial','+ Linear','+ Brush','+ Sky','+ Skin','+ Colour Range','+ Luminance Range','+ AI Select'].map(obtn).join('')}</div>
+<div class="o-row"><div style="display:flex;border:1px solid #34343f;border-radius:7px;overflow:hidden">
+ <button style="background:#26262d;border:none;color:#d4903a;font-size:11px;padding:5px 8px">Overlay</button>
+ <button style="background:#26262d;border:none;color:#f0ece2;font-size:11px;padding:5px 8px">Isolate</button>
+ <button style="background:#26262d;border:none;color:#f0ece2;font-size:11px;padding:5px 8px">Selection</button>
+ <button style="background:#26262d;border:none;color:#f0ece2;font-size:11px;padding:5px 8px">Off</button></div>
+ <div class="o-label">Show on photo</div></div>
+<div style="font:10px/1.4 ui-monospace,Menlo,monospace;color:#e88;margin:4px 0 8px">↑ label renders AFTER its control (confirmed bug)</div>
+<div style="display:flex;gap:4px;margin-bottom:8px"><button class="o-btn" style="font-size:10px;padding:6px 9px;background:#26262d">
+ <span style="width:28px;height:18px;background:#333;border-radius:3px;display:inline-block"></span>Colour 1</button></div>
+${orow('X',50)}${orow('Y',50)}${orow('Width',37)}${orow('Height',37)}${orow('Feather',100)}
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${['↑ Up','↓ Down','✎ Name','👁 Mute','☆ Solo'].map(obtn).join('')}</div>
+<div style="display:flex;gap:6px;margin-bottom:8px">${obtn('✂ Use as eraser')}</div>
+${orow('Amount',100)}
+<div class="o-sub">Skin Tone</div>
+<div class="o-row"><input type="checkbox" checked><button class="o-btn" style="font-size:10px;padding:6px 9px"><span class="o-bdot"></span>◉ Pick</button><div class="o-label">Colour range</div></div>
+${orow('Range',35)}
+<div class="o-help">Set the mask preview to Selection above, then shift-click each kind of skin in the
+ photo — matte, shaded, paler, pinker — until it ALL reads red. Adding samples beats widening Range: a
+ patch left out won't even out with the rest (and if it's the patch furthest from the target, the
+ difference gets worse), while a huge Range starts swallowing things that merely share the hue. The gate
+ can't tell skin from a pet, sand or wood on colour alone — keep those out with the mask shape, a Brush
+ mask, or − Subtract prev.</div>
+<div class="o-row">${obtn('Match pick')}${obtn('Swatch')}${obtn('Custom')}<div class="o-label">Target</div></div>
+<div class="o-help">Uniformity pulls the selected tones TOWARD the target instead of shifting them all
+ equally — uneven areas even out rather than the darkest getting darker.</div>
+${orow('Uniformity: Hue',0)}${orow('Uniformity: Saturation',0)}${orow('Uniformity: Lightness',0)}${orow('Preserve modeling',70)}
+<div class="o-row"><input type="checkbox"><div class="o-label">Tan darkens only</div></div>
+${orow('Tan: Depth',0)}${orow('Tan: Warmth',0)}
+<div class="o-sub">Local Adjustments</div>
+${orow('Exposure',0,1)}${orow('Contrast',0,1)}${orow('Temp',0,1)}${orow('Tint',0,1)}${orow('Saturation',0,1)}
+${orow('Texture',0,1)}${orow('Hue',0,1)}
+<div class="o-row"><input type="color" value="#d4903a" style="width:28px;height:22px"><div class="o-label">Color</div></div>
+${orow('Hue (fine-tune)',0)}${orow('Color amount',0)}${orow('Highlights',0,1)}${orow('Shadows',0,1)}
+${orow('Lum floor',0)}${orow('Lum ceiling',100)}
+<div style="display:flex;gap:6px;margin-top:8px">${obtn('Invert')}${obtn('− Subtract prev')}${obtn('Delete mask')}</div>
+</div>`;
+
+/* ── proposed masks panel ── */
+const nrow=(l,v,bip,mod)=>{
+  const pct=bip?((v+100)/2):v;
+  const fill=bip?(v>=0?`left:50%;width:${v/2}%`:`left:${pct}%;width:${-v/2}%`):`left:0;width:${v}%`;
+  return `<div class="n-row ${mod?'mod':''}"><span class="n-lb">${l}</span><span class="n-v">${v}</span>
+   <span class="n-track"><i class="rail"></i>${v!==0?`<i class="fill" style="${fill}"></i>`:''}
+   ${bip?'<i class="detent"></i>':''}<i class="thumb" style="left:${pct}%"></i></span></div>`;
+};
+const grp=(id,lb,count,body,closed)=>`<div class="n-grp ${closed?'closed':''}" data-grp="${id}">
+  <button class="n-grphd"><span class="cv">${ic('chevron',14)}</span><span class="lb">${lb}</span>
+  <span class="count">${count}</span></button><div class="n-grpbody">${body}</div></div>`;
+document.getElementById('newmask').innerHTML=`
+<div style="background:var(--sur-1);border:1px solid var(--bdr);border-radius:var(--rad-3);padding:var(--sp-3);box-shadow:var(--lift-1)">
+<div class="n-title"><h4>Masks</h4>
+ <span style="margin-left:auto;width:34px;height:19px;border-radius:10px;background:var(--acc);position:relative;display:inline-block">
+ <i style="position:absolute;right:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#fff"></i></span></div>
+<button class="n-btn" style="width:100%;justify-content:center;margin-bottom:var(--sp-3)">
+ ${ic('local',15)} Add mask ${ic('chevron',13)}</button>
+<div style="margin-bottom:var(--sp-3)">
+ <div class="n-mrow sel"><span class="th" style="background:linear-gradient(135deg,#b98,#754)"></span>
+  <span class="nm">Face</span><button class="more">${ic('more',15)}</button></div>
+ <div class="n-mrow"><span class="th" style="background:linear-gradient(180deg,#5a7fa8,#22303f)"></span>
+  <span class="nm">Sky</span><button class="more">${ic('more',15)}</button></div>
+</div>
+<div class="n-row" style="grid-template-columns:auto 1fr;margin-bottom:var(--sp-4)">
+ <span class="n-lb">Show on photo</span>
+ <span style="justify-self:end"><span class="n-seg">
+  <button class="on">Overlay</button><button>Isolate</button><button>Select</button><button>Off</button></span></span></div>
+${grp('sel','Selection','Radial',`
+ ${nrow('X',50)}${nrow('Y',50)}${nrow('Width',37,0,1)}${nrow('Height',37,0,1)}${nrow('Feather',25,0,1)}
+ ${nrow('Amount',100)}
+ <button class="n-btn ghost" style="width:100%;justify-content:flex-start;margin-top:var(--sp-1)">
+  ${ic('refine',15)} Refine ${ic('chevron',13)}</button>`,true)}
+${grp('adj','Adjust','3 changed',`
+ ${nrow('Exposure',22,1,1)}${nrow('Contrast',0,1)}${nrow('Temp',-14,1,1)}${nrow('Tint',0,1)}
+ ${nrow('Saturation',0,1)}${nrow('Texture',-30,1,1)}${nrow('Highlights',0,1)}${nrow('Shadows',0,1)}
+ <div class="n-row" style="grid-template-columns:auto 1fr;margin-top:var(--sp-2)">
+  <span class="n-lb">Colour</span>
+  <span style="justify-self:end;display:flex;gap:6px;align-items:center">
+   <input type="color" value="#d4903a" style="width:28px;height:22px;border:1px solid var(--bdr);border-radius:5px;background:none;padding:1px;cursor:pointer">
+   <span class="n-v">0</span></span></div>`)}
+${grp('skin','Skin tone','—','<p class="n-help">Only shown on Skin masks. See §8.</p>',true)}
+<div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:1px solid var(--bdr)">
+ <button class="n-btn ghost" style="flex:1;justify-content:center">Invert</button>
+ <button class="n-btn ghost" style="flex:1;justify-content:center;color:var(--err)">Delete</button></div>
+</div>`;
+
+/* ── old skin tone block ── */
+document.getElementById('oldskin').innerHTML=`
+<div style="background:#1f1f25;border:1px solid #34343f;border-radius:8px;padding:10px">
+<div class="o-sub">Skin Tone</div>
+<div class="o-row"><input type="checkbox" checked><button class="o-btn" style="font-size:10px;padding:6px 9px"><span class="o-bdot"></span>◉ Pick</button><div class="o-label">Colour range</div></div>
+<div style="display:flex;gap:4px;margin:0 0 6px;align-items:center">
+ <button style="width:22px;height:22px;border-radius:50%;border:2px solid #34343f;background:rgb(199,152,120)"></button>
+ <button style="width:22px;height:22px;border-radius:50%;border:2px solid #34343f;background:rgb(163,113,90)"></button>
+ <span style="font:10px/1 ui-monospace,Menlo,monospace;color:#9a968f">2/6 — shift-click the photo to add</span></div>
+${orow('Range',35)}
+<div class="o-help">Set the mask preview to Selection above, then shift-click each kind of skin in the
+ photo — matte, shaded, paler, pinker — until it ALL reads red. Adding samples beats widening Range: a
+ patch left out won't even out with the rest (and if it's the patch furthest from the target, the
+ difference gets worse), while a huge Range starts swallowing things that merely share the hue. The gate
+ can't tell skin from a pet, sand or wood on colour alone — keep those out with the mask shape, a Brush
+ mask, or − Subtract prev.</div>
+<div class="o-row">${obtn('Match pick')}${obtn('Swatch')}${obtn('Custom')}<div class="o-label">Target</div></div>
+<div class="o-help">Uniformity pulls the selected tones TOWARD the target instead of shifting them all
+ equally — uneven areas even out rather than the darkest getting darker.</div>
+${orow('Uniformity: Hue',0)}${orow('Uniformity: Saturation',0)}${orow('Uniformity: Lightness',0)}${orow('Preserve modeling',70)}
+<div class="o-row"><input type="checkbox"><div class="o-label">Tan darkens only</div></div>
+${orow('Tan: Depth',0)}${orow('Tan: Warmth',0)}
+</div>`;
+
+/* ── proposed guided skin tone ── */
+const MST=['#f6ede4','#f3e7db','#f7ead0','#eadaba','#d7bd96','#a07e56','#825c43','#604134','#3a312a','#292420'];
+document.getElementById('newskin').innerHTML=`
+<div style="background:var(--sur-1);border:1px solid var(--bdr);border-radius:var(--rad-3);padding:var(--sp-3);box-shadow:var(--lift-1)">
+<div class="n-title"><h4>Skin tone</h4><span class="n-eyebrow" style="margin-left:auto">Skin mask</span></div>
+
+<div class="n-step done" data-step="1">
+ <button class="n-stephd"><span class="idx">✓</span><span class="t">Select the skin</span>
+  <span class="sum">3 samples · 87%</span></button>
+ <div class="n-stepbody">
+  <p class="n-help" style="margin-top:var(--sp-3)">Click the skin you want to even out. Add clicks for
+   shaded, paler or pinker areas.</p>
+  <button class="n-btn on" style="width:100%;justify-content:center;margin-bottom:var(--sp-2)">
+   ${ic('eyedropper',15)} Pick skin — click the photo</button>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:var(--sp-2)">
+   <button class="n-sw" style="background:rgb(199,152,120)"></button>
+   <button class="n-sw" style="background:rgb(163,113,90)"></button>
+   <button class="n-sw" style="background:rgb(214,175,148)"></button>
+   <span style="font:var(--fs-1)/1 var(--mono);color:var(--ok);font-variant-numeric:tabular-nums">87% of the shape selected</span></div>
+  ${nrow('How similar',55,0,1)}
+  <div style="display:flex;justify-content:space-between;font:var(--fs-0)/1 var(--sans);color:var(--txt-3);margin-top:-6px">
+   <span>Tight</span><span>Wide</span></div>
+ </div></div>
+
+<div class="n-step done" data-step="2">
+ <button class="n-stephd"><span class="idx">✓</span><span class="t">Choose the target</span>
+  <span class="sum">Shade 5</span></button>
+ <div class="n-stepbody">
+  <p class="n-help" style="margin-top:var(--sp-3)">Where should those tones end up?</p>
+  <span class="n-seg" style="width:100%;margin-bottom:var(--sp-3)">
+   <button style="flex:1">Even them out</button><button class="on" style="flex:1">Pick a shade</button><button style="flex:1">Custom</button></span>
+  <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+   ${MST.map((h,i)=>`<button class="n-sw ${i===4?'on':''}" style="background:${h};width:22px;height:22px" title="Monk ${i+1}"></button>`).join('')}
+  </div>
+  <p class="n-help">Monk Skin Tone scale · <b>4–6</b> is the useful span for tanning a light base.</p>
+ </div></div>
+
+<div class="n-step active" data-step="3">
+ <button class="n-stephd"><span class="idx">3</span><span class="t">Blend</span>
+  <span class="sum">Even out tan</span></button>
+ <div class="n-stepbody">
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin:var(--sp-3) 0">
+   <button class="n-chip on">Even out tan</button><button class="n-chip">Match face to chest</button>
+   <button class="n-chip">Warm up</button><button class="n-chip">Deepen tan</button></div>
+  ${nrow('Strength',60,0,1)}${nrow('Depth',25,0,1)}${nrow('Warmth',15,0,1)}
+  <div style="background:var(--sur-3);border-radius:var(--rad-1);padding:9px 11px;display:flex;
+    align-items:center;gap:11px;margin:var(--sp-3) 0">
+   <span style="width:26px;height:26px;border-radius:5px;background:#c79878;flex:none"></span>
+   ${ic('chevron',14)}
+   <span style="width:26px;height:26px;border-radius:5px;background:#bb8a68;flex:none"></span>
+   <span style="font:var(--fs-1)/1.3 var(--sans);color:var(--txt-3)">Mean selected tone, before → after</span></div>
+  <div style="border-left:2px solid var(--acc);padding:5px 0 5px 10px;margin-bottom:var(--sp-3)">
+   <p style="font:var(--fs-1)/1.5 var(--sans);color:var(--txt-2)">Feather is 0.55 — a high feather makes
+    the <b>shape</b> dominate and stops tones converging. Try 0.25.</p></div>
+  <button class="n-disc" id="advtoggle">${ic('chevron',13)} Advanced</button>
+  <div id="adv" style="display:none;padding-top:var(--sp-2)">
+   ${nrow('Uniformity: Hue',60)}${nrow('Uniformity: Saturation',60)}${nrow('Uniformity: Lightness',0)}
+   ${nrow('Keep shading',70,0,1)}
+   <div class="n-row" style="grid-template-columns:auto 1fr">
+    <span class="n-lb">Only darken</span>
+    <span style="justify-self:end"><input type="checkbox" checked style="accent-color:var(--acc)"></span></div>
+   <p class="n-help">Lightness is <b>not</b> expected to converge between shadowed and lit skin — that is
+    what Keep shading protects.</p>
+  </div>
+ </div></div>
+</div>`;
+
+/* ── interactions ── */
+document.getElementById('theme').onclick=e=>{
+  document.body.classList.toggle('light');
+  e.target.textContent=document.body.classList.contains('light')?'Dark theme':'Light theme';
+};
+const pw=document.getElementById('pw');
+pw.oninput=()=>{document.documentElement.style.setProperty('--pw',pw.value+'px');
+  document.getElementById('pwv').textContent=pw.value+'px';
+  const p2=document.getElementById('pwv2');if(p2)p2.textContent=pw.value+'px';};
+document.querySelectorAll('#fontpick button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#fontpick button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  const wm=document.getElementById('wm');
+  wm.style.fontFamily=b.dataset.f;
+  wm.style.fontStyle=/Optima|sans-serif$/.test(b.dataset.f)&&!/serif,/.test(b.dataset.f)?'normal':'italic';
+});
+document.querySelectorAll('.n-grphd').forEach(h=>h.onclick=()=>h.closest('.n-grp').classList.toggle('closed'));
+document.querySelectorAll('.n-stephd').forEach(h=>h.onclick=()=>{
+  const s=h.closest('.n-step');
+  document.querySelectorAll('.n-step').forEach(x=>{if(x!==s)x.classList.remove('active')});
+  s.classList.toggle('active');
+});
+document.getElementById('advtoggle').onclick=e=>{
+  const a=document.getElementById('adv');
+  const open=a.style.display==='none';
+  a.style.display=open?'block':'none';
+  e.currentTarget.innerHTML=ic('chevron',13)+(open?' Hide advanced':' Advanced');
+};
+document.querySelectorAll('.n-seg button, .n-chip').forEach(b=>b.onclick=()=>{
+  if(b.classList.contains('n-chip')){
+    b.parentElement.querySelectorAll('.n-chip').forEach(x=>x.classList.remove('on'));
+  } else {
+    b.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+  }
+  b.classList.add('on');
+});
+document.querySelectorAll('.n-sw').forEach(b=>b.onclick=()=>{
+  if(b.title&&b.title.startsWith('Monk')){
+    b.parentElement.querySelectorAll('.n-sw').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+  }
+});
+</script>
+</body>
+</html>
