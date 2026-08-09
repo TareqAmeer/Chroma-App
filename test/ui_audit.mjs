@@ -58,6 +58,12 @@ const VIEWPORTS = [
 ];
 
 const MIN_TAP = 28;   // px — below this a pointer target is uncomfortable
+// Small inline affordances are held to a lower floor ON PURPOSE. A checkbox or a colour swatch
+// sitting inside a labelled row is not a button: every desktop photo tool draws them at 16-22px,
+// and inflating them to 28px would make dense panels worse, not better. They still have to clear
+// 18px — the point of the exemption is to name the two shapes it covers, not to stop measuring.
+const MIN_TAP_INLINE = 18;
+const INLINE_TARGET_SEL = 'input[type=checkbox], input[type=color], input[type=radio], .pc-chip';
 const MIN_FONT = 11;  // px — below this UI text stops being comfortably legible
 const MIN_CONTRAST = 4.5;
 
@@ -84,7 +90,7 @@ function startServer(root) {
 }
 
 // ── the in-page audit. Runs once per (section, viewport). ───────────────────────────────────
-function auditInPage({ minTap, minFont, minContrast }) {
+function auditInPage({ minTap, minTapInline, inlineSel, minFont, minContrast }) {
   const out = [];
   const vis = (el) => {
     const r = el.getBoundingClientRect();
@@ -142,8 +148,9 @@ function auditInPage({ minTap, minFont, minContrast }) {
       if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return;
       const k = desc(el) + Math.round(r.top);
       if (seen.has(k)) return; seen.add(k);
-      if (r.height < minTap || r.width < minTap) {
-        out.push({ kind: 'TAP', el: desc(el), detail: `${Math.round(r.width)}x${Math.round(r.height)} < ${minTap}` });
+      const floor = el.matches(inlineSel) ? minTapInline : minTap;
+      if (r.height < floor || r.width < floor) {
+        out.push({ kind: 'TAP', el: desc(el), detail: `${Math.round(r.width)}x${Math.round(r.height)} < ${floor}` });
       }
     });
   document.querySelectorAll('.fx-label, .fx-val, .fx-rail-lb, .fx-sec-lb, .fx-ctrl-title, .fx-sub, button, .fx-select')
@@ -278,7 +285,8 @@ async function main() {
         if (!ok) continue;
         await page.waitForTimeout(60);
         const res = await page.evaluate(auditInPage,
-          { minTap: MIN_TAP, minFont: MIN_FONT, minContrast: MIN_CONTRAST });
+          { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL,
+            minFont: MIN_FONT, minContrast: MIN_CONTRAST });
         res.forEach(f => findings.push({ ...f, section: sec, viewport: vp.label }));
       }
     }
