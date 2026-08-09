@@ -4541,6 +4541,8 @@ vec2 vidUV(vec2 u){
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
 uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin,adjDehaze;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
+uniform float useHlg;    // 1 = source is unconverted HLG (see hlg2rec709; engine-dependent)
+uniform float hlgLw;     // HLG nominal peak luminance in nits (default 400; drives the BT.2408 system gamma)
 // Tone curves: 256x1 RGBA table baked on the CPU (master composed with per-channel point curves,
 // monotone cubic). Sampled at texel centers so an identity table is byte-identical passthrough.
 uniform sampler2D curveTex;uniform float useCurve;
@@ -4601,6 +4603,47 @@ float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.
 // V-Gamut -> Rec.709 primaries matrix (both D65, derived from the published chromaticities),
 // clamp, and sRGB-encode (the app's working space). 18% grey: V-Log 0.423 -> linear 0.18.
 float vlogInv(float v){return v<0.181?(v-0.125)/5.6:pow(10.0,(v-0.598206)/0.241514)-0.00873;}
+// ── HLG (BT.2100) -> Rec.709 ─────────────────────────────────────────────────────────────────
+// Applied ONLY when the browser engine hands us an UNCONVERTED HLG frame. Measured on a real
+// iPhone HLG clip (IMG_8015.MOV, frame 0, identical downsample):
+//     ffmpeg naive, no conversion   mean=137.2  meanSat=29.6
+//     Apple ColorSync HLG->709      mean=124.1  meanSat=41.3   <- the target
+//     WKWebView (the desktop app)   mean=137.5  meanSat=30.1   <- i.e. NOT converted
+//     Chromium (the web build)      mean=122.9  meanSat=41.3   <- converted correctly
+// WKWebView decodes HLG and tags the VideoFrame bt709/sRGB WITHOUT converting it, which is why
+// HLG footage rendered flat and ~30% under-saturated in the desktop app. See fxNeedsHlgTransform.
+//
+// ⚠️ This is the STANDARD chain, not a hand-rolled curve. Every constant comes from the ITU
+// specs and each step is cross-checked against the colour-science reference library in
+// calib/hlg_to_709.py (inverse OETF matches to 2.6e-9; full EOTF to 3.1e-6 cd/m^2):
+//   1. HLG inverse OETF                                    [BT.2100]
+//   2. OOTF with system gamma = 1.2 + 0.42*log10(L_W/1000)  [BT.2408 formula, NOT fitted]
+//   3. normalise by HLG reference white = 203 cd/m^2        [BT.2408; == eotf_BT2100_HLG(0.75)]
+//   4. linear BT.2020 -> linear BT.709
+//   5. clip, sRGB encode                                    [the space this pipeline works in]
+// L_W defaults to 400 nits — the documented nominal for HLG-mastered material, and the best
+// match to Apple's own conversion (mean abs error 6-8/255 across the sweep).
+// ⚠️ Never rename these to "sample"/"output"/"filter" — reserved words in GLSL ES (CLAUDE.md 3).
+const float HLG_A=0.17883277, HLG_B=0.28466892, HLG_C=0.55991073;
+const float HLG_REF_WHITE_NITS=203.0;
+vec3 hlgInvOetf(vec3 e){
+  vec3 lo=(e*e)/3.0;
+  vec3 hi=(exp((e-HLG_C)/HLG_A)+HLG_B)/12.0;
+  return mix(lo,hi,step(vec3(0.5),e));
+}
+vec3 hlg2rec709(vec3 c,float lW){
+  c=clamp(c,0.0,1.0);
+  vec3 lin=hlgInvOetf(c);                                    // scene linear, BT.2020
+  float ys=dot(lin,vec3(0.2627,0.6780,0.0593));              // BT.2020 luma
+  float g=1.2+0.42*(log(lW/1000.0)/2.302585093);             // BT.2408 system gamma (log10)
+  lin=lW*lin*pow(max(ys,1e-9),g-1.0);                        // OOTF -> display cd/m^2
+  lin/=HLG_REF_WHITE_NITS;                                   // reference white -> 1.0
+  lin=mat3( 1.660491,-0.124550,-0.018151,
+           -0.587641, 1.132900,-0.100579,
+           -0.072850,-0.008349, 1.118730)*lin;               // linear BT.2020 -> linear BT.709
+  lin=clamp(lin,0.0,1.0);                                    // hard clip (BT.2407 would desaturate)
+  return mix(lin*12.92, 1.055*pow(max(lin,1e-6),vec3(1.0/2.4))-0.055, step(vec3(0.0031308),lin));
+}
 vec3 vlog2rec709(vec3 c){
   vec3 lin=vec3(vlogInv(c.r),vlogInv(c.g),vlogInv(c.b));
   lin=mat3(1.806576,-0.170090,-0.025206,
@@ -4858,6 +4901,7 @@ if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
 }
 // Input transform BEFORE the look LUT (sharpen above runs on raw source values — consistent
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
+if(useHlg>.5)c.rgb=hlg2rec709(c.rgb,hlgLw);
 if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
 if(useLut>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(lut3,c.rgb*sc+of).rgb;}
 if(useHsl>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(hslLut,c.rgb*sc+of).rgb;}
@@ -5707,6 +5751,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
     }
     this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
+      useHlg:P.hlg&&P.hlg.enabled?1:0,
+      hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
       srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
@@ -6917,6 +6963,143 @@ function isHdrColorSpace(cs){
 }
 let _fxAudioCtx=null;
 function fxAudioCtx(){return _fxAudioCtx||(_fxAudioCtx=new(window.AudioContext||window.webkitAudioContext)());}
+// ══ HDR CAPABILITY PROBE ═════════════════════════════════════════════════════════════════════
+// Answers ONE question: does this engine hand us the HDR signal, or only its own already
+// tone-mapped SDR output? Everything about how HLG footage can be handled follows from that.
+//
+// Measured in Chromium (the test harness and the browser build) against a real iPhone HLG clip:
+//   VideoFrame.format === null, allocationSize() throws, and an RGBA16F upload with
+//   UNPACK_COLORSPACE_CONVERSION_WEBGL=NONE read back through an RGBA32F FBO peaked at 0.9565
+//   with ZERO pixels above 1.0 — i.e. already clamped to SDR, no headroom to recover. There is
+//   also no rec2100-hlg canvas and no configureHighDynamicRange.
+//
+// ⚠️ The DESKTOP app is WKWebView, not Chromium, and WebKit's macOS HDR support is materially
+// different — so the same numbers cannot be assumed. This probe re-measures in whatever engine
+// is actually running. If headroom survives here, a real BT.2446/BT.2390 tone map becomes
+// possible and is the right thing to build; if it does not, the only honest option is a display
+// LUT applied on top of the engine's SDR conversion.
+//
+// Runs once per session, only for an HDR clip, and only when diagnostics are on or the Tauri
+// shell is present. Writes JSON next to the app's temp dir in the native shell so the result can
+// be read without screenshotting the UI.
+let _hdrProbeDone=false;
+async function fxHdrProbe(videoFrameOrSample,label){
+  if(_hdrProbeDone)return null;_hdrProbeDone=true;
+  const R={label:label||'',ua:navigator.userAgent,engine:(/AppleWebKit/.test(navigator.userAgent)&&!/Chrome/.test(navigator.userAgent))?'WebKit/WKWebView':'Chromium-family'};
+  let vf=videoFrameOrSample;
+  try{ if(vf&&typeof vf.toVideoFrame==='function')vf=vf.toVideoFrame(); }catch(e){}
+  try{
+    R.videoFrameFormat = vf ? String(vf.format) : '(none)';
+    R.colorSpace = (vf&&vf.colorSpace)?{primaries:vf.colorSpace.primaries,transfer:vf.colorSpace.transfer,matrix:vf.colorSpace.matrix,fullRange:vf.colorSpace.fullRange}:null;
+    try{ R.allocationSize=vf.allocationSize(); R.rawPlanesReadable=true; }
+    catch(e){ R.allocationSize=null; R.rawPlanesReadable=false; R.allocationError=e.message; }
+    // The decisive test: does any headroom above 1.0 survive a float upload?
+    const W=64,H=36;
+    const c=document.createElement('canvas');c.width=W;c.height=H;
+    const gl=c.getContext('webgl2');
+    if(gl&&vf){
+      gl.getExtension('EXT_color_buffer_float');
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,gl.NONE);
+      const tx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tx);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,vf);
+      const ft=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,ft);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,H,0,gl.RGBA,gl.FLOAT,null);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      const fb=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,ft,0);
+      const mk=(t,src)=>{const sh=gl.createShader(t);gl.shaderSource(sh,src);gl.compileShader(sh);return sh;};
+      const pr=gl.createProgram();
+      gl.attachShader(pr,mk(gl.VERTEX_SHADER,"#version 300 es\nin vec2 p;out vec2 uv;void main(){uv=p*0.5+0.5;gl_Position=vec4(p,0,1);}"));
+      gl.attachShader(pr,mk(gl.FRAGMENT_SHADER,"#version 300 es\nprecision highp float;in vec2 uv;uniform sampler2D t;out vec4 o;void main(){o=texture(t,uv);}"));
+      gl.linkProgram(pr);gl.useProgram(pr);
+      const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+      const lo=gl.getAttribLocation(pr,'p');gl.enableVertexAttribArray(lo);gl.vertexAttribPointer(lo,2,gl.FLOAT,false,0,0);
+      gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tx);gl.uniform1i(gl.getUniformLocation(pr,'t'),0);
+      gl.viewport(0,0,W,H);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+      const px=new Float32Array(W*H*4);gl.readPixels(0,0,W,H,gl.RGBA,gl.FLOAT,px);
+      let mx=0,over=0;for(let i=0;i<px.length;i+=4){const m=Math.max(px[i],px[i+1],px[i+2]);if(m>mx)mx=m;if(m>1.0001)over++;}
+      R.floatReadback={maxChannel:+mx.toFixed(4),pixelsAbove1:over,total:W*H};
+      R.hdrHeadroomSurvives = over>0;
+    }
+    // Engine/display capability flags
+    R.rec2100hlgCanvas=(()=>{try{document.createElement('canvas').getContext('2d',{colorSpace:'rec2100-hlg'});return true;}catch(e){return false;}})();
+    R.displayP3Canvas=(()=>{try{const x=document.createElement('canvas').getContext('2d',{colorSpace:'display-p3'});return !!x;}catch(e){return false;}})();
+    R.configureHighDynamicRange=(typeof document.createElement('canvas').configureHighDynamicRange==='function');
+    R.dynamicRangeHigh=!!(window.matchMedia&&matchMedia('(dynamic-range: high)').matches);
+    R.videoDynamicRangeHigh=!!(window.matchMedia&&matchMedia('(video-dynamic-range: high)').matches);
+    R.colorGamutP3=!!(window.matchMedia&&matchMedia('(color-gamut: p3)').matches);
+    R.screen={w:screen.width,h:screen.height,dpr:devicePixelRatio,colorDepth:screen.colorDepth};
+    // What the SDR conversion actually produces, so it can be compared against the ColorSync
+    // anchor (Apple's own HLG->709 measured 255 / 132.2 / 141 on IMG_8015.MOV at t=2s).
+    if(vf){
+      const sc=document.createElement('canvas');sc.width=160;sc.height=90;
+      const sx=sc.getContext('2d',{willReadFrequently:true});sx.drawImage(vf,0,0,160,90);
+      const d=sx.getImageData(0,0,160,90).data;
+      let mx2=0,sum=0,n=0,satMax=0,satSum=0;
+      for(let i=0;i<d.length;i+=4){const Rr=d[i],G=d[i+1],B=d[i+2];
+        mx2=Math.max(mx2,Rr,G,B);sum+=(Rr+G+B)/3;n++;
+        const st=Math.max(Rr,G,B)-Math.min(Rr,G,B);satSum+=st;if(st>satMax)satMax=st;}
+      R.sdrStats={max:mx2,mean:+(sum/n).toFixed(1),meanSat:+(satSum/n).toFixed(1),maxSat:satMax};
+      // Frame 0 anchors, measured with ffmpeg + Apple ColorSync on the same downsample grid.
+      R.anchors={appleColorSync:{mean:124.1,meanSat:41.3,maxSat:141},
+                 naiveNoConversion:{mean:137.2,meanSat:29.6,maxSat:108}};
+      // Apply the shader's transform on the CPU so the probe reports what the fix will produce.
+      const A=0.17883277,Bc=0.28466892,C=0.55991073,REFW=203.0,LW=400.0;
+      const inv=(e)=>e<=0.5?(e*e)/3:(Math.exp((e-C)/A)+Bc)/12;
+      const g=1.2+0.42*Math.log10(LW/1000);
+      const s2l=(v)=>v<=0.0031308?v*12.92:1.055*Math.pow(Math.max(v,1e-6),1/2.4)-0.055;
+      let m3=0,su3=0,n3=0,sa3=0,sm3=0;
+      for(let i=0;i<d.length;i+=4){
+        let r=inv(d[i]/255),gg=inv(d[i+1]/255),b3=inv(d[i+2]/255);
+        const ys=0.2627*r+0.6780*gg+0.0593*b3, k=LW*Math.pow(Math.max(ys,1e-9),g-1)/REFW;
+        r*=k;gg*=k;b3*=k;
+        let R2=1.660491*r-0.587641*gg-0.072850*b3;
+        let G2=-0.124550*r+1.132900*gg-0.008349*b3;
+        let B2=-0.018151*r-0.100579*gg+1.118730*b3;
+        R2=s2l(Math.min(1,Math.max(0,R2)))*255;G2=s2l(Math.min(1,Math.max(0,G2)))*255;B2=s2l(Math.min(1,Math.max(0,B2)))*255;
+        m3=Math.max(m3,R2,G2,B2);su3+=(R2+G2+B2)/3;n3++;
+        const st=Math.max(R2,G2,B2)-Math.min(R2,G2,B2);sa3+=st;if(st>sm3)sm3=st;
+      }
+      R.afterHlgTransform={max:Math.round(m3),mean:+(su3/n3).toFixed(1),meanSat:+(sa3/n3).toFixed(1),maxSat:Math.round(sm3)};
+      R.trackColorSpace=window.__probeTrackCS||null;
+      R.needsHlgTransform=fxNeedsHlgTransform(R.trackColorSpace,vf);
+    }
+  }catch(e){ R.error=e.message; }
+  const json=JSON.stringify(R,null,2);
+  log('HDR probe: '+(R.hdrHeadroomSurvives?'HEADROOM SURVIVES — a real tone map is possible':'no headroom — engine hands us SDR only'),'info');
+  try{console.log('[HDR PROBE]\n'+json);}catch(e){}
+  window.__hdrProbe=R;
+  // Native shell: write it out so the result can be read without screenshotting the UI.
+  // ⚠️ Diagnostics only — this must not touch the filesystem during an ordinary clip load.
+  if(document.body.classList.contains('diag-on')&&window.__TAURI__&&window.__TAURI__.core){
+    try{
+      const b64=btoa(unescape(encodeURIComponent(json)));
+      await window.__TAURI__.core.invoke('write_file_bytes',{path:'/tmp/chromasmith_hdr_probe.json',dataB64:b64});
+      log('HDR probe written to /tmp/chromasmith_hdr_probe.json','ok');
+    }catch(e){ log('HDR probe write failed: '+e,'warn'); }
+  }
+  return R;
+}
+// Does THIS engine hand us HLG unconverted? Compare what the CONTAINER says the track is against
+// what the decoder says the delivered frame is. If the track is HLG/BT.2020 but the VideoFrame
+// claims bt709/sRGB, the engine relabelled without converting, and we must do it ourselves.
+//
+// Measured: WKWebView (the desktop app) reports the frame as I420 bt709/iec61966-2-1 for an HLG
+// track and its pixels match a naive no-conversion decode. Chromium reports bt2020/hlg and its
+// pixels match Apple's ColorSync conversion. So this test — not a UA sniff — is what decides it,
+// and it self-corrects if either engine changes.
+function fxNeedsHlgTransform(trackColorSpace,videoFrame){
+  if(!trackColorSpace||trackColorSpace.transfer!=='hlg')return false;   // only HLG for now
+  const fcs=videoFrame&&videoFrame.colorSpace;
+  if(!fcs)return false;                       // nothing to compare against — leave it alone
+  const framePrim=String(fcs.primaries||''),frameTrc=String(fcs.transfer||'');
+  // Engine converted (frame carries the source's own HLG/BT.2020 tags) -> do nothing.
+  if(frameTrc==='hlg'||framePrim==='bt2020')return false;
+  // Engine relabelled to SDR without converting -> we convert.
+  return framePrim==='bt709'||frameTrc==='iec61966-2-1'||frameTrc==='bt709';
+}
 async function loadFXVideoFile(file){
   const MB=await getMediabunny();
   const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(file)});
@@ -6941,6 +7124,13 @@ async function loadFXVideoFile(file){
   canvas.width=displayW;canvas.height=displayH;
   const ctx=canvas.getContext('2d');
   sample.draw(ctx,0,0,displayW,displayH);
+  // Probe BEFORE closing the sample — fxHdrProbe needs a live VideoFrame. Once per session,
+  // HDR clips only, and it swallows its own errors so it can never block a load.
+  let needsHlg=false;
+  if(isHdrColorSpace(colorSpace)){
+    try{window.__probeTrackCS=colorSpace;await fxHdrProbe(sample,file&&file.name);}catch(e){}
+    try{needsHlg=fxNeedsHlgTransform(colorSpace,sample.toVideoFrame?sample.toVideoFrame():null);}catch(e){}
+  }
   sample.close();
   const packetStats=await track.computePacketStats(100).catch(()=>null); // sampled estimate, not exact — good enough for a fps readout
   const isVfr=await probeVfr(track);
@@ -6966,7 +7156,7 @@ async function loadFXVideoFile(file){
   }
   return{
     kind:'video',img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi:72,bytes:null,
-    fileSize:file.size,videoFile:file,rotation,colorSpace,codec,isVfr,isHdr,
+    fileSize:file.size,videoFile:file,rotation,colorSpace,codec,isVfr,isHdr,needsHlg,
     durationUs:Math.round(duration*1e6),fps:packetStats?packetStats.averagePacketRate:null,
     _mbAudioTrack:audioTrack,_audioBuffer:audioBuffer,
     // Cached decode context, reused by every later scrub seek (fxVideoSeekTo) so scrubbing
@@ -11611,6 +11801,11 @@ function getFXParams(adjValsOverride){return{
   lut:fxState.lut,
   print:fxState.print,
   input:(document.getElementById('sel-input')||{}).value||'',   // '' standard | 'vlog' V-Log source
+  // HLG input transform — enabled ONLY for a video whose engine delivered the frame
+  // unconverted (see fxNeedsHlgTransform). Photos and correctly-converted clips get
+  // enabled:false, so this is identity everywhere else and the export goldens are untouched.
+  hlg:(function(){const it=typeof curItem==='function'?curItem():null;
+    return (it&&it.kind==='video'&&it.needsHlg)?{enabled:true,lw:400}:{enabled:false};})(),
   curves:!!(document.getElementById('tg-curves')||{classList:{contains:()=>false}}).classList.contains('on')&&!curvesIdentity(),
   hsl:(!!(document.getElementById('tg-hsl')||{classList:{contains:()=>false}}).classList.contains('on')&&!hslIdentity())||
       (!!(document.getElementById('tg-pointcolor')||{classList:{contains:()=>false}}).classList.contains('on')&&!pointColorsIdentity()),

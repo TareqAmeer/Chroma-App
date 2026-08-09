@@ -897,16 +897,45 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
   `13×7.7371≈100.58`) and confirmed the hash keeps >2.8 separation at the same offset. The `Grain
   motion` slider (0..100) blends between the frozen clip-constant seed and the fully independent
   per-frame hash.
-- ✅ **RESOLVED with a real clip: no manual HLG tonemap is needed, and adding one would be wrong.**
-  A real iPhone HLG/BT.2020 clip (`IMG_8015.MOV`, provided by the user) confirmed the risk this
-  section used to warn about is real and already handled: `VideoSampleSink.draw()`'s underlying
-  `VideoFrame`→canvas draw already tone-maps HLG/BT.2020 to SDR before this app ever sees a pixel.
-  Measured: a bright wall in the frame read `(219,215,213)` — correctly near-white — not the dull
-  ~130–150 mid-grey a RAW, un-tonemapped HLG signal displayed as Rec.709 would produce. `isHdr` is
-  now purely informational in the Clip info row (`fxUpdateClipInfoUI`), not a warning. Don't
-  re-add a manual HLG inverse-OETF/tonemap without RE-checking this on whatever browser/engine is
-  current at the time — the browser doing this for you is spec'd but not something this app
-  controls, and it could differ across engines/versions.
+- ⚠️ **HLG handling is ENGINE-DEPENDENT, and the desktop app was getting it wrong.** The previous
+  note here said "no manual HLG tonemap is needed" — that was measured in **Chromium only**, and
+  it was wrong for the shipping desktop app. Its own caveat ("re-check on whatever engine is
+  current") turned out to be the important sentence.
+  Measured on `IMG_8015.MOV` (HEVC yuv420p10le, BT.2020/HLG/bt2020-ncl), frame 0, identical
+  160×90 downsample:
+
+  | rendering | mean | meanSat | maxSat |
+  |---|---|---|---|
+  | ffmpeg naive (no conversion) | 137.2 | 29.6 | 108 |
+  | **Apple ColorSync HLG→709** (`sips --matchTo ITU-709.icc`) | **124.1** | **41.3** | **141** |
+  | **WKWebView** (the desktop app) | 137.5 | 30.1 | 118 |
+  | **Chromium** (the web build) | 122.9 | 41.3 | 147 |
+
+  **Chromium converts correctly; WKWebView does not** — it decodes HLG and relabels the
+  `VideoFrame` as `bt709`/`iec61966-2-1` *without* applying the conversion, so HLG footage rendered
+  flat and ~30% under-saturated in the desktop app.
+  `fxNeedsHlgTransform(trackColorSpace, videoFrame)` decides this by **comparing the container's
+  track colour space against the delivered frame's** — never a UA sniff — so it self-corrects if
+  either engine changes. When it fires, `hlg2rec709()` in the lut pass does the conversion.
+  ⚠️ The shader chain is the ITU standard, not a hand-rolled curve: HLG inverse OETF → OOTF with
+  system gamma from the **BT.2408** formula `1.2 + 0.42·log10(L_W/1000)` → normalise by the
+  **BT.2408 reference white of 203 cd/m²** (which is exactly `eotf_BT2100_HLG(0.75)`) → BT.2020→709
+  matrix → sRGB encode. `calib/hlg_to_709.py` derives and validates it, cross-checked against the
+  **colour-science** reference library (inverse OETF to 2.6e-9, full EOTF to 3.1e-6 cd/m²).
+  `L_W` defaults to **400 nits**, the documented nominal for HLG-mastered material.
+  ⚠️ **colour-science requires numpy≥2 and will break `.calibvenv`'s scipy pin** — keep it in a
+  separate venv (`python3 -m venv /tmp/colourvenv`). This was learned by breaking it.
+- ⚠️ **We cannot tone map HDR ourselves, and cannot preview/export HDR.** Verified in Chromium
+  against the same clip: `VideoFrame.format === null` for 10-bit and `allocationSize()` throws, so
+  `copyTo()` cannot read the planes; uploading to `RGBA16F` with
+  `UNPACK_COLORSPACE_CONVERSION_WEBGL=NONE` and reading back through an `RGBA32F` FBO peaks at
+  **0.9565 with zero pixels above 1.0** — already clamped to SDR. There is no `rec2100-hlg` canvas
+  and no `configureHighDynamicRange`. So a real BT.2446/BT.2390 operator is impossible here; the
+  HLG→709 conversion above is a colour-space fix, NOT a tone map. `fxHdrProbe()` re-measures all of
+  this in whatever engine is running (diagnostics only; writes JSON in the native shell when
+  `diag-on`).
+  ⚠️ **macOS previews HLG clips in HDR** (QuickLook shows an HDR badge), so a side-by-side against
+  QuickLook is SDR-vs-HDR and will never match exactly — that is not a bug.
 - ⚠️ **The extended Log input selector (S-Log3/C-Log3/Log-C) is still deferred, separately from
   HDR above** — no real reference footage for those has been obtained yet, and each needs its own
   verified curve constants. Same rule as before: don't implement from formula alone; get real
