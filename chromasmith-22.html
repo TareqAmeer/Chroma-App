@@ -1429,6 +1429,15 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- EXPORT -->
       <div class="fx-ctrl" data-fxsec="export">
         <div class="fx-ctrl-title">Export</div>
+        <!-- HDR (gain map). Hidden unless the ORIGINAL file actually carries HDR headroom — a gain
+             map over an SDR source encodes nothing, so offering it there would be a lie. Shown by
+             fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
+        <div class="fx-row" id="fx-hdr-row" style="display:none"
+             title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
+          <div class="fx-label">HDR (gain map)</div>
+          <input type="checkbox" id="tg-exp-hdr">
+        </div>
+        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
         <div class="vrow">
           <div class="vlb">Filename</div>
           <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px" title="Export filename. Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD; add {nover} to drop the _vN.N version suffix.">
@@ -7820,6 +7829,8 @@ async function loadRw2(file){
 // entries: [{img,name,ext,dpi,bytes,exif,icc?,rawFile?}, ...]; loadKey: same "is this a
 // genuinely different photo" string loadFXImages computes from file name+size+lastModified.
 function installFXImages(entries,loadKey){
+  if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
+
   if(typeof fxInvalidateMaskSource==='function')fxInvalidateMaskSource(); // A15: the cached photo-at-mask-resolution decode belongs to the OUTGOING photo
 
   if(!entries.length)return;
@@ -12494,6 +12505,8 @@ function buildFilmstrip(){
   });
 }
 function fxSelectImage(idx){
+  if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
+
   if(typeof fxInvalidateMaskSource==='function')fxInvalidateMaskSource(); // A15: the cached photo-at-mask-resolution decode belongs to the OUTGOING photo
 
   // The desktop Library (library-ui.js) sets this while a photo is decoding — switching the
@@ -13184,6 +13197,21 @@ async function exportFX(){
     }else if(results.length){
       setProg(N,`Saving ${results.length} file(s)…`);
       results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saving'));
+      // HDR (gain map): single photo only — the gain map is derived from ONE original file's
+      // headroom (window.chromasmithSourcePath), and a batch has no single source. Falls through
+      // to the normal save on any failure, so an HDR attempt can never lose an export.
+      if(fxHdrExportEnabled()&&results.length===1){
+        const r0=results[0];
+        const bytes=r0.content instanceof Uint8Array?r0.content:new Uint8Array(r0.content);
+        if(await fxSaveGainMapHeic(bytes,r0.fname)){
+          setExportPhotoStatus(r0.srcIdx,'saved');
+          toast('Exported HDR ✓',true);
+          if(results.length)fxVersion+=.1;
+          const vEl=document.getElementById('fx-ver');if(vEl)vEl.textContent=`v${fxVersion.toFixed(1)}`;
+          try{updateWork();renderPreview();}catch(e){}
+          return;
+        }
+      }
       const sr=await saveFiles(results);
       if(Array.isArray(sr)){
         // Native desktop save: every file has a real per-item result, so report SAVES rather
@@ -13792,6 +13820,55 @@ async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}]
 // Returns a per-item [{ok,path,err}] so the caller can report SAVES, not renders — or null if
 // this isn't the native shell (or it predates the command), meaning "unreportable, fall through".
 function tauriNative(){return !!(window.__TAURI__&&window.__TAURI__.core);}
+// ══ HDR (GAIN MAP) EXPORT ════════════════════════════════════════════════════════════════════
+// Native/desktop only. The gain map is derived at write time from the ORIGINAL file's headroom
+// (gainmap.rs), so the render pipeline stays SDR and every calibrated look keeps working — see
+// that module's header for why this shape was chosen over an extended-range pipeline.
+let fxHdrHeadroom=1.0;
+async function fxSyncHdrOption(){
+  const row=document.getElementById('fx-hdr-row'),note=document.getElementById('fx-hdr-note');
+  if(!row)return;
+  const path=window.chromasmithSourcePath;
+  const it=typeof curItem==='function'?curItem():null;
+  // Photos only: a video's HDR story is HLG, not gain maps (they are a stills format).
+  if(!capNative()||!path||!it||it.kind==='video'){row.style.display='none';if(note)note.style.display='none';fxHdrHeadroom=1.0;return;}
+  let has=false;
+  try{has=await window.__TAURI__.core.invoke('source_has_hdr',{path});}
+  catch(e){has=false;}   // older shell without the command — silently stay SDR
+  row.style.display=has?'':'none';
+  if(note){
+    note.style.display=has?'':'none';
+    note.textContent=has?'This photo carries HDR highlight detail. Photos, Preview and iPhone show it; everything else sees the SDR version.':'';
+  }
+  if(!has){const t=document.getElementById('tg-exp-hdr');if(t)t.checked=false;}
+}
+function fxHdrExportEnabled(){
+  const t=document.getElementById('tg-exp-hdr');
+  return !!(t&&t.checked&&capNative()&&window.chromasmithSourcePath);
+}
+// Writes ONE graded photo as a gain-map HEIC. Returns false when it could not (no headroom, older
+// shell, any failure), so the caller falls straight through to the normal SDR save rather than
+// losing the export.
+async function fxSaveGainMapHeic(pngBytes,fname){
+  const source=window.chromasmithSourcePath;
+  if(!source)return false;
+  const heicName=fname.replace(/\.[^.]+$/,'')+'.heic';
+  try{
+    const q=(parseFloat((document.getElementById('sl-exp-q')||{}).value)||92)/100;
+    // The command resolves the downloads folder and a unique name itself (same as
+    // save_export_file_raw) and returns the path it wrote, or null if there was no headroom.
+    const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic',pngBytes,{headers:{
+      'x-source':_u8b64(new TextEncoder().encode(source)),
+      'x-filename':_u8b64(new TextEncoder().encode(heicName)),
+      'x-quality':String(q)}});
+    if(wrote){log(`Saved ${wrote} (HDR gain map)`,'ok');return true;}
+    log('Source had no HDR headroom — exported as SDR','info');
+    return false;
+  }catch(e){
+    log('HDR export failed, falling back to SDR: '+(e&&e.message||e),'warn');
+    return false;
+  }
+}
 async function saveFilesNative(items){
   const out=[];
   for(const it of items){

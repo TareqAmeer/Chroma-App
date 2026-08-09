@@ -641,7 +641,7 @@ fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
 // export instead of writing a gain map that encodes nothing.
 #[cfg(target_os = "macos")]
 #[tauri::command]
-fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<bool, String> {
+fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
     use base64::Engine;
     let hdr = |k: &str| -> Result<String, String> {
         let v = request
@@ -655,7 +655,17 @@ fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<bool, String> 
         String::from_utf8(b).map_err(|e| format!("{k} not utf8: {e}"))
     };
     let source = hdr("x-source")?;
-    let dest = hdr("x-dest")?;
+    // Resolve the destination the same way save_export_file_raw does, rather than trusting a path
+    // from the webview — a filename must never be able to escape the downloads folder.
+    let name = hdr("x-filename")?;
+    let safe_name = Path::new(&name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("empty filename")?;
+    let dir = export_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create '{}': {e}", dir.display()))?;
+    let dest_path = unique_dest(&dir, safe_name);
+    let dest = dest_path.to_string_lossy().to_string();
     let quality: f64 = request
         .headers()
         .get("x-quality")
@@ -666,7 +676,8 @@ fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<bool, String> 
         tauri::ipc::InvokeBody::Raw(b) => b,
         _ => return Err("expected raw request body (the graded PNG)".into()),
     };
-    gainmap::write_gainmap_heic(&source, bytes, &dest, quality)
+    let wrote = gainmap::write_gainmap_heic(&source, bytes, &dest, quality)?;
+    Ok(if wrote { Some(dest) } else { None })
 }
 
 // Reports whether a file carries HDR headroom, so the UI can offer the HDR option only when it

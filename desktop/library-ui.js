@@ -1323,6 +1323,9 @@
         }
       }
       state.openedPath = path;
+      // The editor needs the ORIGINAL file path to read its HDR gain map at export
+      // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
+      window.chromasmithSourcePath = path;
       state.openedPaths = [];
       invoke('touch_recent', { path }).then(() => { if (state.source === 'recents') renderCollectionCounts(); }).catch(() => {});
       if (sc.recipe) {
@@ -1837,6 +1840,10 @@
         await loadFXImages([file]);
         window.chromasmithEditInPath = path;
         state.openedPath = path;
+        window.chromasmithSourcePath = path;
+      // The editor needs the ORIGINAL file path to read its HDR gain map at export
+      // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
+      window.chromasmithSourcePath = path;
         state.openedPaths = [];
         const sc = await getSidecar(path);
         if (sc.recipe) {
@@ -2015,6 +2022,7 @@
     const files = await readPathsAsFiles(paths);
     if (!files.length) return files;
     state.openedPath = '';
+    window.chromasmithSourcePath = null;
     state.openedPaths = paths;
     await loadFXImages(files);
     // Seed shared FX (LUT/grain/halation/curves/etc.) from the first photo's saved recipe —
@@ -2084,6 +2092,7 @@
       const files = await readPathsAsFiles(paths);
       if (!files.length) return;
       state.openedPath = '';
+    window.chromasmithSourcePath = null;
       state.openedPaths = paths;
       await loadFXImages(files);
       // Seed the SHARED FX state (LUT/grain/halation/curves/HSL/adjustments — everything
