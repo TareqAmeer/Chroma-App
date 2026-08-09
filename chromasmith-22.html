@@ -1803,6 +1803,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <li><b>Target</b> is independent of what you picked, so you can aim at a tan that appears nowhere in the photo: <b>Match pick</b> just evens out the tone you clicked, <b>Swatch</b> offers the 10-shade Monk Skin Tone scale (4–6 is the useful span for tanning a light base), and <b>Custom</b> takes any colour. <b>Tan Depth/Warmth</b> then nudge the target — never the pixels — so pushing them deepens the whole selection evenly.</li>
       <li><b>Preserve modeling</b> only affects the Lightness slider. At 0 it collapses lightness onto the target, which evens out a hard tan <i>line</i> but flattens the shading that gives a body its form. At 100 it shifts the overall lightness level instead, leaving the shading intact. Start high.</li>
     </ul>
+    <div class="gnote">Typefaces: <b>Inter</b> (Rasmus Andersson) and <b>Instrument Serif</b> (Rodrigo Fuenzalida / Instrument), both SIL Open Font License 1.1. Icons after <b>Lucide</b> (ISC). RAW decoding by <b>LibRaw</b>; MP4 handling by <b>Mediabunny</b> (MPL-2.0).</div>
     <div class="gnote">Skin tone swatches use the <b>Monk Skin Tone scale</b> (Ellis Monk / Google, 2023), licensed CC BY 4.0.</div>
 
     <h3>Film FX</h3>
@@ -10026,8 +10027,10 @@ function mskRebuild(){
     if((m.feather||0)>0.4&&strength>0){
       sk+='<div class="msk-warn">Feather is high, so the shape — not the colour gate — is deciding how much each pixel moves, and the tones will not converge. Lower Feather to about 25.</div>';
     }
+    // Routed through mskGroupToggle like every other group, so it PERSISTS — setting the flag
+    // inline meant Advanced silently collapsed again on the next app launch.
     const adv=_mskGroupOpen.skinAdv===true;
-    sk+='<button class="msk-adv-hd" onclick="_mskGroupOpen.skinAdv='+(!adv)+';mskRebuild()">'+(adv?'▾':'▸')+' Advanced</button>';
+    sk+='<button class="msk-adv-hd" onclick="mskGroupToggle(\'skinAdv\')">'+(adv?'▾':'▸')+' Advanced</button>';
     if(adv){
       sk+='<div class="msk-hint">Strength above moves Hue and Saturation together. These are the individual axes.</div>'
         +_mskRow('Hue uniformity','uH',m.uH||0,0,100,1,false)
