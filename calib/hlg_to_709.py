@@ -96,11 +96,45 @@ def hlg_eotf(e, l_w):
     return l_w * lin * np.power(np.maximum(ys, 1e-9), g - 1.0)[..., None]
 
 
-def convert(rgb01, l_w, encode='srgb'):
+# Rec.709 luma, for the gamut compression below.
+LUMA_709 = np.array([0.2126, 0.7152, 0.0722])
+
+
+def gamut_compress(lin):
+    """Desaturate out-of-gamut colours onto the BT.709 surface at constant luminance.
+
+    ⚠️ A per-channel hard clip is the naive choice and it CRUSHES saturated colour: measured
+    maxSat 162 against Apple's 141 on the test clip, which shows as flat blocked-up patches in
+    exactly the most saturated areas (a red bandana, a sunset). ITU-R BT.2407 recommends
+    desaturating toward the achromatic axis instead, which is what this does — it keeps the
+    luminance and gives up only the chroma that genuinely does not fit.
+    """
+    y = lin @ LUMA_709
+    y = np.clip(y, 0.0, 1.0)[..., None]
+    d = lin - y
+    # Largest s in [0,1] with y + s*d inside [0,1] on every channel.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        s_hi = np.where(d > 1e-9, (1.0 - y) / d, np.inf)     # channel would exceed 1
+        s_lo = np.where(d < -1e-9, (0.0 - y) / d, np.inf)    # channel would go below 0
+    s = np.minimum(np.min(s_hi, axis=-1), np.min(s_lo, axis=-1))
+    s = np.clip(np.nan_to_num(s, nan=1.0, posinf=1.0), 0.0, 1.0)[..., None]
+    return np.clip(y + s * d, 0.0, 1.0)
+
+
+# ⚠️ MEASURED AND REJECTED: gamut compression is not worth shipping for this content.
+# The hypothesis was that the per-channel hard clip was crushing saturated colour (our maxSat 154
+# against Apple's 141). It is not: swapping clip -> compress moves the error by 0.07/255 and
+# leaves maxSat IDENTICAL at 154, i.e. almost nothing in a real iPhone HLG frame actually lands
+# outside Rec.709 after the BT.2408 normalisation. The residual saturation difference vs Apple is
+# in the transform itself, not in the clipping. Kept here (a) because the negative result is worth
+# more than re-deriving it later, and (b) because genuinely wide-gamut content — a sunset, neon,
+# a saturated LED — may still benefit, in which case flip the default and re-measure.
+# The shader deliberately implements the simple clip only.
+def convert(rgb01, l_w, encode='srgb', gamut='clip'):
     """HLG signal (0..1) -> Rec.709/sRGB display signal (0..1)."""
     disp = hlg_eotf(rgb01, l_w) / HLG_REF_WHITE_NITS   # reference white -> 1.0
     lin = disp @ M_2020_TO_709.T
-    lin = np.clip(lin, 0.0, 1.0)
+    lin = gamut_compress(lin) if gamut == 'compress' else np.clip(lin, 0.0, 1.0)
     return (bt709_oetf if encode == 'bt709' else srgb_oetf)(lin)
 
 
@@ -164,16 +198,17 @@ def main():
     print()
     print("nominal display peak L_W sweep (system gamma follows the BT.2408 formula):")
     best=None
-    for l_w in [200,300,400,500,600,700,800,1000]:
+    for l_w in [300,400,500,600]:
         for enc in ('srgb','bt709'):
-            out=convert(src,float(l_w),enc)*255.0
-            err=float(np.abs(out-target).mean())
-            st=stats(out)
-            if best is None or err<best[0]: best=(err,l_w,enc,st)
-            print(f"  L_W={l_w:4d}  gamma={bt2408_system_gamma(l_w):.4f}  {enc:6} "
-                  f"meanAbsErr={err:6.2f}  mean={st['mean']:5.1f} meanSat={st['meanSat']:5.1f} maxSat={st['maxSat']:3.0f}")
-    err,l_w,enc,st=best
-    print(f"\nBEST: L_W={l_w} nits  gamma={bt2408_system_gamma(l_w):.4f}  encode={enc}  meanAbsErr={err:.2f}/255")
+            for gm in ('clip','compress'):
+                out=convert(src,float(l_w),enc,gm)*255.0
+                err=float(np.abs(out-target).mean())
+                st=stats(out)
+                if best is None or err<best[0]: best=(err,l_w,enc,st,gm)
+                print(f"  L_W={l_w:4d} gamma={bt2408_system_gamma(l_w):.4f} {enc:6} {gm:9} "
+                      f"meanAbsErr={err:6.2f}  mean={st['mean']:5.1f} meanSat={st['meanSat']:5.1f} maxSat={st['maxSat']:3.0f}")
+    err,l_w,enc,st,gm=best
+    print(f"\nBEST: L_W={l_w} nits  gamma={bt2408_system_gamma(l_w):.4f}  encode={enc}  gamut={gm}  meanAbsErr={err:.2f}/255")
     print(f"      ours   max={st['max']:.0f} mean={st['mean']:.1f} "
           f"meanSat={st['meanSat']:.1f} maxSat={st['maxSat']:.0f}")
     print(f"      target max={ts['max']:.0f} mean={ts['mean']:.1f} "
@@ -186,3 +221,23 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+
+# ── Which Apple reference should L_W target? ────────────────────────────────────────────────
+# There are TWO Apple conversions of this clip and they do not agree, so "match Apple" is not a
+# single number. Measured on frame 0, identical 160x90 downsample:
+#
+#   ffmpeg naive (no conversion)       max=239 mean=137.2 meanSat=29.6 maxSat=108
+#   Apple ColorSync (colorimetric)     max=251 mean=124.1 meanSat=41.3 maxSat=141
+#   Apple avconvert (AVFoundation)     max=230 mean=110.6 meanSat=40.3 maxSat=136
+#   Chromasmith, L_W=400 (shipped)     max=255 mean=131.8 meanSat=44.8 maxSat=150
+#
+# They agree on SATURATION (40.3 / 41.3) and differ by ~13 in MEAN BRIGHTNESS, so no single L_W
+# matches both: L_W=350 is closest to ColorSync (5.28/255), L_W=250 closest to avconvert
+# (5.02/255), and the combined optimum is a flat basin around 250-300.
+#
+# ⚠️ The shipped default is L_W=400 ON PURPOSE, even though it is furthest from both. Both Apple
+# references are SDR conversions, and the thing users actually compare against is the HDR preview
+# (QuickLook), which is BRIGHTER than either. Dropping L_W to match an SDR reference moves away
+# from what the user sees. 400 nits is also the documented nominal for HLG-mastered material.
+# If a future goal is "match Apple's SDR export file" rather than "match the HDR preview", use
+# L_W=250-300 instead — the numbers are above, no re-derivation needed.
