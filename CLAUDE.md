@@ -26,6 +26,8 @@ vendor/
   dcp/                      14 Panasonic DC-S9 Adobe DCP camera profiles (runtime copies)
   mediabunny/               MP4 demux/mux for video grading (§12) — MPL-2.0, kept as its own
                             file and lazy-`import()`ed like libraw, NOT inlined like pako/utif2
+  luts/                     102 of the 113 built-in look presets, as RAW 33³ RGB bytes
+                            (107,811 B each). Fetched + cached on demand — see §2's payload note
 ios/ + package.json + capacitor.config.json + build-ios.sh + patches/ + .github/workflows/
                             Capacitor iOS shell → unsigned IPA built by CI (see §2)
 calib/                      Calibration & analysis tooling (Python). Not needed to RUN the
@@ -36,15 +38,19 @@ calib/                      Calibration & analysis tooling (Python). Not needed 
   README.md                 Tooling notes
   IMG_5774_2x.PNG           Clean base test chart (4800×6400)
   dehancer halation x2.png  Dehancer halation-only reference (the calibration ground truth)
-  LUT LIBRARY/              The 11 shipped looks as .cube files (sideload-ready)
+  LUT LIBRARY/              46 of the shipped looks as .cube files (sideload-ready); the other
+                            67 are in dehancer/cubes/. Together these are the source of truth
+                            for every LUT_PRESETS / vendor/luts entry
+  split_lut_presets.py      Moves the non-core presets out of the HTML into vendor/luts/ (§2)
   DCP Camera Profiles/      Source Adobe DCPs for the DC-S9
   fujify/                   Fujifilm-look recreation pipeline (scripts + notes)
 ```
 
 **Not bundled** (gitignored; supply your own): original RAW/JPEG/TIFF captures, the venv,
-and the proof/validation PNGs the scripts emit. The app's 11 presets are embedded as
-base64 inside `chromasmith-22.html` (`LUT_PRESETS`), so the app is self-contained without
-`calib/`.
+and the proof/validation PNGs the scripts emit. The app ships **113** look presets: the 11
+`User Looks` are embedded as base64 inside `chromasmith-22.html` (`LUT_PRESETS`), the other 102
+live in `vendor/luts/`. `LUT_META` — not `LUT_PRESETS` — is the authoritative key list. Either
+way the app is self-contained without `calib/`.
 
 ---
 
@@ -64,7 +70,32 @@ Deploy the folder as-is to GitHub Pages or any static host.
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
   `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-08-09a`.
+  file** so users can spot a stale Pages/Safari cache. Current: `2026-08-14a`.
+- ⚠️ **Watch the payload.** "Single-file" is about the app CODE, not about inlining bulk data.
+  The preset library grew 11 → 113 as base64 string literals and took the file to **17.7 MB
+  (10.2 MB gzipped)** — parsed in full on every web cold load, every iOS launch and every
+  desktop `dist/` read. `calib/split_lut_presets.py` moved the 102 non-core presets into
+  `vendor/luts/<key>.bin` as raw bytes (**3.02 MB / 1.76 MB gzipped**, a 5.8× cut in transfer).
+  Before inlining any new bulk asset, check what it does to `gzip -9 -c chromasmith-22.html | wc -c`.
+  - Load order in `presetBytes()`: inline `LUT_PRESETS` → IndexedDB `lutcache` → `fetch`.
+  - The 11 `User Looks` stay inline **on purpose**: a bare copy of the HTML opened over
+    `file://` cannot `fetch()`, and those are the looks that have to survive that.
+  - ⚠️ The cache is a **second object store** (`lutcache`, DB v2). It must not share the `luts`
+    store — `lutLibList()` is a bare `getAllKeys()` feeding the "My library" optgroup, so 102
+    cached built-ins in there would all appear as the user's own uploaded LUTs.
+  - `lutWarmCache()` pulls the rest into IndexedDB on idle after `load`, so the WEB build is
+    genuinely offline-capable after one visit. Desktop/iOS read `vendor/` off local disk and
+    never depended on it. Both build scripts already `cp -R vendor`, so nothing to wire up.
+- **Heavy JS goes in the pixel worker** (`_cpuRun`, next to `srgbG`). `bakeDcpLUT` (65³ =
+  274,625 iterations; **1157 ms of frozen UI** on every RAW load / profile change) and
+  `exportSharpen` (a ~72M-channel loop over a 24MP export) both run there now.
+  ⚠️ The worker source is **built from the real functions** via `Function.prototype.toString`,
+  never hand-copied — `bakeDcpLUT` is an exact DNG-SDK transcription (§7) and a drifting second
+  copy would show up only as "RAW colour is subtly wrong". `perf_bench.mjs` asserts the worker
+  and main thread agree to **max|Δ| = 0** over all 823,875 LUT entries, and that adding a
+  dependency the worker can't see fails loudly rather than silently.
+  ⚠️ Transferred `ArrayBuffer`s are **detached** in the main thread, so `_cpuRun` falls back to
+  running inline only *before* dispatch, never after a job is in flight.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
@@ -118,11 +149,21 @@ It exists because these defects are invisible in a screenshot of the DEFAULT pan
 appear once a panel grows tall; reading its JSON is also far cheaper than round-tripping
 screenshots through a model.
 
-**`test/perf_bench.mjs`** holds four budgets, each anchored to a real pre-optimisation
+**`test/perf_bench.mjs`** holds seven budgets, each anchored to a real pre-optimisation
 measurement: `_boxFilterJS` ×6 @2048×1365 (was 1996ms), retained undo history with a brush mask
 (was 9.5MB for a *512×384* mask), renders during a 30-event slider drag (was **1** — grading a
-slider produced no feedback at all), and `getUISnapshot`. It also diffs `_boxFilterJS` against a
-reference implementation, so a faster filter can never quietly become a different filter.
+slider produced no feedback at all), `getUISnapshot`, the fraction of look thumbnails that render
+on a gallery build (was **all 113**, one rAF each), the retained `_presetLutCache` (was unbounded
+— 48.7MB of Float32Array after scrolling "All"), and the worst frame gap during a 65³ DCP bake
+(was a **1157ms** whole-second freeze on every RAW load).
+
+Three of them carry a correctness guard alongside the timing, because in each case a faster
+version that returns *different* numbers would be worse than the slow one and completely
+invisible: `_boxFilterJS` is diffed against a reference implementation, the worker's DCP bake is
+diffed against the main thread's (max|Δ| must be 0 over all 823,875 entries — this is also what
+catches a dependency that silently failed to reach the worker), and the lazy gallery asserts
+that *something* rendered, since "renders only what's visible" and "renders nothing at all"
+score identically on a ratio.
 
 **`test/mask_raster.mjs`** exists because **no export golden contains a raster mask** — every
 recipe uses analytic shapes, so the entire brush/sky/AI storage path had zero coverage. It
@@ -671,7 +712,7 @@ invisible at any size. Key points:
 - **Print profiles:** `extract_print_luts.py` recovers exact 33³ `.cube`s from the two
   5640×3840 print-applied LUT charts (`dehancer kodak/fuji lut print x2.png`) via the same
   patch-mean algorithm as the app's `chartToLUT` → `calib/PRINT PROFILES/*.cube` (kept OUT
-  of `LUT LIBRARY/` so the 11-film-look list stays clean). `gen_print_presets.py` then bakes
+  of `LUT LIBRARY/` so the film-look list stays clean). `gen_print_presets.py` then bakes
   them into the embedded `PRINT_PRESETS` blob. Validated: applying each cube to
   `dehancer base x2.PNG` matches the `dehancer kodak/fujifilm print x2.png` calib renders to
   <0.5/255 mean.
@@ -784,8 +825,11 @@ Learned the hard/expensive way:
    descendants (it makes the body a scroll-clipping context). Use `overflow-x:clip`.
 6. When the user reports a RAW colour mismatch, **first ask what's rendering the comparison**
    (Preview shows the embedded JPEG, not the RAW).
-7. The app preset list must mirror `calib/LUT LIBRARY/` (11 looks); a LUT with a real
+7. The app preset list must mirror its `.cube` sources — `calib/LUT LIBRARY/` (46) plus
+   `calib/dehancer/cubes/` (67) = the 113 keys in `LUT_META`; a LUT with a real
    non-`_composed` source (astia/classic_neg/velvia) beats its composed recreation.
+   ⚠️ Adding presets is not free any more — see §2's payload note. A new look belongs in
+   `vendor/luts/`, not inline, and `LUT_META` is what makes it appear.
 8. **`column-count:1` does NOT mean "not multi-column".** It still establishes a multicol
    formatting context, and per CSS Multicol a multicol box with a **definite block-size**
    fragments its overflow into EXTRA COLUMNS along the inline axis instead of overflowing

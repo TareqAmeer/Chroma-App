@@ -25,6 +25,14 @@
 //
 //  snapshot       getUISnapshot() on its own, with a brush mask present.
 //
+//  looks_*        The preset library grew 11 -> 113 without the gallery changing, so
+//                 buildLookGallery queued one requestAnimationFrame per preset — ~113 frames of
+//                 thumbnail work on every photo load, crop apply and geometry undo, nearly all
+//                 of it below the fold — and _presetLutCache was an unbounded object holding a
+//                 431KB Float32Array per look (48.7MB once "All" had been scrolled). Both are
+//                 now bounded: cells render only when in view, and the cache is LRU-capped.
+//                 These two budgets are what stops the next preset drop from undoing that.
+//
 // Timings vary with machine load, so budgets are set with generous headroom — they exist to
 // catch an order-of-magnitude regression, not to police a few percent.
 
@@ -51,6 +59,17 @@ const BUDGETS = {
   history_bytes: { budget: 1_500_000, unit: 'B', cmp: 'lt', label: 'retained history, 20 pushes w/ brush mask' },
   drag_renders: { budget: 8, unit: 'frames', cmp: 'gt', label: 'renders during a 30-event slider drag' },
   snapshot_ms: { budget: 6, unit: 'ms', cmp: 'lt', label: 'getUISnapshot() w/ brush mask' },
+  // Budgets are fractions of the preset count, not fixed numbers, so adding looks can never
+  // silently make either of these pass by drifting the denominator.
+  looks_rendered_frac: { budget: 0.5, unit: 'x', cmp: 'lt', label: 'looks painted on build / looks shown' },
+  looks_cache_bytes: { budget: 16_000_000, unit: 'B', cmp: 'lt', label: 'retained _presetLutCache after touching every look' },
+  // Longest gap between animation frames while a 65³ DCP LUT is baked. On the main thread this
+  // was a visible freeze on every RAW load and every RAW-profile change — 1157ms measured in a
+  // real browser, 237ms under this bench's SwiftShader build (the same run reports both, see
+  // dcp_bake_stall_main_ms in the output). Through the worker it drops to ~18ms. The budget is
+  // set between those two so a revert fails outright, while leaving ~5x headroom over frame
+  // jitter so a loaded machine can't flake it.
+  dcp_bake_stall_ms: { budget: 100, unit: 'ms', cmp: 'lt', label: 'worst frame gap during a 65³ DCP bake' },
 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
@@ -205,6 +224,67 @@ async function main() {
         sl.value = '0'; sl.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
+      // ── 5. Looks gallery — only what is on screen may render, and the decoded-LUT cache
+      // must stay bounded no matter how many looks the user scrolls past.
+      {
+        fxSection('looks');
+        fxLookCatFilter = 'All'; fxLookSearch = '';
+        buildLookGallery();
+        // Long enough for the in-view batch to drain (5 cells/frame) without being long enough
+        // to hide a regression back to "render everything": eagerly rendering all 113 would
+        // need ~23 frames, well inside this window.
+        await new Promise(r => setTimeout(r, 1500));
+        const cells = [...document.querySelectorAll('#fx-looks .look-cell')];
+        const painted = cells.filter((c) => {
+          const cv = c.querySelector('canvas');
+          return cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 1, 1).data[3] !== 0;
+        });
+        res.looks_cells = cells.length;
+        res.looks_painted = painted.length;
+        res.looks_rendered_frac = +(painted.length / Math.max(1, cells.length)).toFixed(3);
+        // A blank gallery would trivially "pass" the fraction budget, so assert the opposite
+        // failure too: at least the first cell must have rendered.
+        res.looks_any_painted = painted.length > 0;
+
+        // Now touch every single look and confirm the cache still cannot grow without bound.
+        for (const k of Object.keys(LUT_META)) await presetLut(k);
+        res.looks_cache_entries = _presetLutCache.size;
+        res.looks_cache_bytes = _presetLutCache.size * 33 * 33 * 33 * 3 * 4;
+      }
+
+      // ── 6. DCP bake — must not block the main thread, and the worker's answer must be
+      // bit-identical to the main thread's. A faster bake that returns different numbers would
+      // silently change RAW colour on every photo, which is exactly the class of bug the
+      // stringify-the-real-function approach exists to prevent — so assert it, don't assume it.
+      {
+        const buf = await (await fetch('vendor/dcp/Panasonic DC-S9 Camera Standard.dcp')).arrayBuffer();
+        const dcp = parseDCP(buf, 'Panasonic DC-S9 Camera Standard.dcp');
+        const fit = dcpFit(200, 'Panasonic DC-S9');
+
+        // requestAnimationFrame, not setTimeout: rAF is the honest "could the UI paint" signal,
+        // and unlike timers it is not throttled differently in background tabs.
+        const stallDuring = async (work) => {
+          let last = performance.now(), worst = 0, run = true;
+          const tick = () => { const n = performance.now(); worst = Math.max(worst, n - last); last = n; if (run) requestAnimationFrame(tick); };
+          requestAnimationFrame(tick);
+          await work();
+          await new Promise(r => requestAnimationFrame(r));  // let the frame AFTER the work land
+          run = false;
+          return Math.round(worst);
+        };
+
+        res.dcp_bake_stall_main_ms = await stallDuring(async () => { res._refLut = bakeDcpLUT(dcp, fit); });
+        res.dcp_bake_stall_ms = await stallDuring(async () => { res._wrkLut = await _cpuRun('bakeDcpLUT', [dcp, fit]); });
+        res.dcp_worker_used = !!_cpuGetWorker();
+
+        let dmax = 0;
+        const a = res._refLut.data, b = res._wrkLut.data;
+        res.dcp_lut_len = [a.length, b.length].join('/');
+        for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); if (d > dmax) dmax = d; }
+        res.dcp_worker_max_err = dmax;
+        delete res._refLut; delete res._wrkLut;      // don't ship 6MB of LUT back to node
+      }
+
       return res;
     });
   } finally {
@@ -241,6 +321,18 @@ async function main() {
   const errOk = m.boxfilter_max_err <= 1e-3;
   if (!errOk) fail = true;
   console.log(`_boxFilterJS vs reference implementation: max|Δ| = ${m.boxfilter_max_err.toExponential(2)}  ${errOk ? 'PASS' : 'FAIL (<=1e-3)'}`);
+  // The "render only what's visible" budget is a ratio, so a gallery that renders NOTHING would
+  // score a perfect 0. Lazy and broken look identical to that number — assert against it.
+  if (!m.looks_any_painted) fail = true;
+  console.log(`looks gallery painted ${m.looks_painted}/${m.looks_cells} on build, cache ${m.looks_cache_entries} entries`
+    + `  ${m.looks_any_painted ? 'PASS' : 'FAIL (gallery rendered nothing at all)'}`);
+  // Same guard as _boxFilterJS's: the worker copy of the DCP pipeline must agree exactly with
+  // the main-thread one. (Both come from ONE definition, stringified — this proves it stayed
+  // that way, and that nothing the function depends on failed to make it into the worker.)
+  const dcpOk = m.dcp_worker_max_err === 0 && m.dcp_worker_used;
+  if (!dcpOk) fail = true;
+  console.log(`DCP bake in worker vs main thread: max|Δ| = ${m.dcp_worker_max_err} over ${m.dcp_lut_len} entries`
+    + `, main-thread stall was ${m.dcp_bake_stall_main_ms}ms  ${dcpOk ? 'PASS' : (m.dcp_worker_used ? 'FAIL (worker disagrees)' : 'FAIL (no worker — ran inline)')}`);
   console.log(`context: mask ${m.mask_dims} (${m.mask_px} px), ${m.history_entries} history entries`);
   console.log(`\nRESULT: ${fail ? 'FAIL' : 'PASS'}`);
   return fail ? 1 : 0;
