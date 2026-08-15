@@ -33,6 +33,8 @@ mod rawdenoise;
 mod tiff_meta;
 #[cfg(target_os = "macos")]
 mod gainmap;
+mod subject;
+mod ingest;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 fn percent_decode(s: &str) -> String {
@@ -223,6 +225,100 @@ fn sam2_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Res
     out.extend_from_slice(&header_bytes);
     out.extend_from_slice(&mask);
     Ok(tauri::ipc::Response::new(out))
+}
+
+// ── Named subjects ("remember this dog") — see subject.rs for the method and its measured
+// limits. These commands add no model and no encode of their own: they run over whichever
+// embedding sam_encode/sam2_encode already cached for the open photo, so learning or finding a
+// subject costs a few thousand dot products, not an inference pass.
+
+/// Prefers SAM 2.1's features and falls back to EdgeSAM's, returning the grid and its token so the
+/// caller can verify it belongs to the photo it thinks it does. SAM 2.1 is preferred because its
+/// errors are better-shaped, not because it scores higher — see subject.rs's finding 2.
+fn subject_grid<'a>(
+    sam2: &'a Option<Sam2EmbedCache>,
+    edge: &'a Option<SamEmbedCache>,
+) -> Option<(subject::FeatureGrid<'a>, &'a str)> {
+    if let Some(c) = sam2.as_ref() {
+        return Some((subject::FeatureGrid::sam2(&c.embedding), c.token.as_str()));
+    }
+    edge.as_ref().map(|c| (subject::FeatureGrid::edgesam(&c.embedding), c.token.as_str()))
+}
+
+#[derive(serde::Deserialize)]
+struct SubjectLearnIn {
+    id: String,
+    name: String,
+    token: String,
+}
+
+/// Teaches (or reinforces) a subject from the CURRENT photo plus a mask of the subject in it —
+/// the same raster sam_points already returns for a scribble. Body is the mask, one byte per
+/// pixel of the encoded image; the JSON header carries the subject id/name/token.
+#[tauri::command]
+fn subject_learn(request: tauri::ipc::Request) -> Result<subject::Subject, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let opts: SubjectLearnIn = serde_json::from_value(json).map_err(|e| format!("subject_learn args: {e}"))?;
+    let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
+    let (grid, token) = subject_grid(&sam2, &edge).ok_or("subject_learn: no photo encoded yet")?;
+    if token != opts.id.as_str() && token != opts.token.as_str() {
+        return Err("subject_learn: the encoded photo has changed — re-encode before teaching".into());
+    }
+    let prototype = subject::learn(grid, payload)?;
+    subject::upsert_subject(&opts.id, &opts.name, prototype, grid.encoder_tag())
+}
+
+#[derive(serde::Serialize)]
+struct SubjectLocateResult {
+    x: f32,
+    y: f32,
+    score: f32,
+    width: u32,
+    height: u32,
+}
+
+/// Finds a taught subject in the current photo and segments it, returning the mask as the raw
+/// body and the point/score as the JSON header — the same framed shape as sam_points, so the
+/// frontend reuses that reader.
+#[tauri::command]
+fn subject_locate(token: String, id: String) -> Result<tauri::ipc::Response, String> {
+    let subjects = subject::load_subjects();
+    let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
+    let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
+    let (grid, tok) = subject_grid(&sam2, &edge).ok_or("subject_locate: no photo encoded yet")?;
+    if tok != token {
+        return Err("subject_locate: the encoded photo has changed — re-encode first".into());
+    }
+    let found = subject::locate_subject(grid, subj)?;
+    // The mask always comes from EdgeSAM's decoder: the POINT is what a prototype transfers, and
+    // EdgeSAM decodes it in a few ms against an embedding that is always present, whereas the
+    // SAM 2.1 decode would need its own cache slot checked for the same photo.
+    let edge_cache = edge.as_ref().ok_or("subject_locate: EdgeSAM embedding not ready")?;
+    let points = [(found.x, found.y, true), (found.neg_x, found.neg_y, false)];
+    let mask = sam::decode_points(&edge_cache.embedding, &points)?;
+    let header = SubjectLocateResult {
+        x: found.x,
+        y: found.y,
+        score: found.score,
+        width: edge_cache.embedding.orig_w,
+        height: edge_cache.embedding.orig_h,
+    };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("subject_locate header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&mask);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command]
+fn subject_list() -> Vec<subject::Subject> {
+    subject::load_subjects()
+}
+
+#[tauri::command]
+fn subject_delete(id: String) -> Result<(), String> {
+    subject::delete_subject(&id)
 }
 
 // ── Face-feature auto-exclusion (ROADMAP item 16) — see faceparse.rs for the model, the class
@@ -1014,6 +1110,12 @@ fn unique_dest(dir: &Path, name: &str) -> PathBuf {
     dest
 }
 
+/// `unique_dest` for the sibling modules — ingest.rs needs the identical collision-avoidance the
+/// export path uses (two cards routinely both hold a DSC_0001.JPG).
+pub(crate) fn unique_dest_pub(dir: &Path, name: &str) -> PathBuf {
+    unique_dest(dir, name)
+}
+
 // Raw-body writer, modelled on write_file_bytes_raw: the render arrives as the IPC request's
 // binary body with the filename in a header, so a full-res export isn't tripled in memory the
 // way the base64 path is (the same triple-copy that OOMed Lightroom TIFF saves — see
@@ -1302,6 +1404,14 @@ fn main() {
             library::save_lr_thumb,
             sam_encode,
             sam_points,
+            subject_learn,
+            subject_locate,
+            subject_list,
+            subject_delete,
+            ingest::list_volumes,
+            ingest::scan_card,
+            ingest::ingest_copy,
+            ingest::eject_volume,
             sam2_encode,
             sam2_points,
             faceparse_run,

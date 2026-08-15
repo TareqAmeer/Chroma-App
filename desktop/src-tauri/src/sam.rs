@@ -54,9 +54,17 @@ static DECODER_BYTES: &[u8] = include_bytes!("../vendor/sam/edge_sam_decoder.onn
 /// EdgeSAM's img_size — the model pads to this square canvas internally; callers resize so the
 /// image's LONGEST side equals this before feeding it in. Also the decoder's low-res mask output
 /// side length is SAM_SIZE/4 = 256 (see decode_point()'s two-stage upsample).
-const SAM_SIZE: u32 = 1024;
+pub(crate) const SAM_SIZE: u32 = 1024;
 /// Side length of the decoder's low-res mask logits output (SAM_SIZE / 4).
 const MASK_SIZE: u32 = 256;
+/// Side length of the encoder's spatial feature grid — the image embedding is [1,256,64,64], so
+/// 64x64 locations of 256 channels each. subject.rs walks this grid directly to build and match
+/// per-subject prototypes; it is derived from the model's own output shape, not a free parameter.
+pub(crate) const SAM_FEAT_GRID: u32 = 64;
+/// How many SAM_SIZE-canvas pixels one feature cell covers (SAM_SIZE / SAM_FEAT_GRID = 16).
+/// Needed to map a feature cell back to an image coordinate, and to tell which cells fall in the
+/// zero padding rather than the image.
+pub(crate) const SAM_PATCH: u32 = SAM_SIZE / SAM_FEAT_GRID;
 /// EdgeSAM's decoder always emits this many candidate masks; the highest-scoring one is used.
 const NUM_MASK_CANDIDATES: usize = 4;
 /// ONNX opset / OrtApi ABI version this file's struct layouts (via ort-sys 2.0.0-rc.12) target.

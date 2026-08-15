@@ -369,6 +369,7 @@ dependencies = [
  "image",
  "kamadak-exif",
  "lensfun",
+ "libc",
  "libloading 0.9.0",
  "mime_guess",
  "objc2",

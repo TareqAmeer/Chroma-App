@@ -1,0 +1,653 @@
+// One-shot subject recognition — "remember this dog", then find it again in any other photo.
+//
+// The method is PerSAM (Zhang et al., ICLR 2024) in its training-free point-prompt form, and the
+// reason it's worth doing at all is that it needs NO new model, NO fine-tuning and NO training
+// data: everything it runs on already exists in sam.rs. A subject is a 256-float vector — a few
+// KB on disk, not a checkpoint.
+//
+// How it works, in one paragraph. sam::encode() already produces a [1,256,64,64] image embedding:
+// a 64x64 grid of 256-dimensional semantic feature vectors. Given ONE reference photo plus a mask
+// of the subject in it (which the user already produces by scribbling — sam_points returns exactly
+// that raster), the masked mean of those feature vectors, L2-normalised, is a "prototype" of the
+// subject. In a NEW photo, the cosine similarity between that prototype and each of the 4096
+// spatial features gives a heat map of "how much does this location look like the subject"; its
+// argmax is a positive point prompt and its argmin a negative one, and those go straight into the
+// EXISTING decode_points() to produce a real, edge-accurate mask.
+//
+// Why this matters for this app specifically: CLAUDE.md §5b documents at length that a COLOUR gate
+// cannot separate this user's dark-brown dog from their own shadowed skin (measured: the dog's head
+// gated 0.75 on a skin colour range). Prototypes are semantic features, not colour, so they can —
+// and the repo's own __TM3390.jpg, which contains exactly that person-plus-brown-dog pair, is what
+// the test at the bottom of this file asserts against.
+//
+// ⚠️ Prototypes are tied to the ENCODER that produced them. The two encoders have different
+// preprocessing (resize-longest-side+pad vs a direct square resize) and different feature spaces,
+// so a prototype learned under one is meaningless under the other — `encoder` is recorded in the
+// stored JSON and checked before use, rather than silently returning confident nonsense.
+//
+// ── What this actually achieves, measured (examples/subject_eval.rs) ──────────────────────────
+//
+// Measured on 7 real photos of one dog (Lucifer, a curly apricot labradoodle), five of which
+// contain ANOTHER dog and two of which contain a similarly-brown smooth-coated one. Recall is
+// "the located point falls inside the dog", leave-one-out, and "wrong-dog" counts misses that
+// landed on a different animal:
+//
+//     references     EdgeSAM      SAM 2.1     wrong-dog (SAM 2.1)
+//         1            69%          71%              2
+//         2            86%          83%              1
+//         3            86%          86%              0
+//
+// Three findings drove the shipped design, none of which were obvious up front:
+//
+//  1. MORE REFERENCE PHOTOS, not a heavier encoder, is what closes the gap. Going 1 -> 3
+//     references buys ~15 points; swapping EdgeSAM for the much larger SAM 2.1 Hiera backbone at
+//     a fixed 1 reference buys 2. This is why `refs` is surfaced in the UI and why the flow pushes
+//     for a third photo — it is the single highest-value thing a user can do.
+//  2. SAM 2.1 features are nonetheless the right default, for the shape of the ERRORS rather than
+//     their count: at 3 references it confuses Lucifer with another dog ZERO times (EdgeSAM: 3),
+//     and its remaining misses land on background, which reads as obviously wrong. A wrong-dog
+//     match reads as plausible and is the one a user might accept by mistake.
+//  3. Spatial smoothing of the similarity map helps EdgeSAM (69 -> 74%) and HURTS SAM 2.1
+//     (71 -> 62%) — its map is sharper, so a 3x3 mean blurs the real peak away. So no smoothing.
+//     Top-3 centroid was also tried and was worse than argmax (67%); it is not in the code.
+//
+// ⚠️ There is NO reliable "is the subject even in this photo" signal. Raw cosine does not
+// separate present from absent at all (a prototype learned from SKY scored 0.937 on a frame where
+// the dog scored 0.892), and peak sharpness only separates on average, with ranges that overlap
+// (hits min 2.04 vs misses max 3.55). An argmax always returns a point, so this must be presented
+// as a suggestion the user confirms, never auto-applied across a batch. `score` is returned for
+// display and relative ranking, and is deliberately NOT thresholded anywhere.
+//
+// ⚠️ n = 7 photos of one dog. These are honest measurements of a real case, not a benchmark —
+// treat them as "this works well enough to assist", not as a precise accuracy figure.
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+
+use crate::sam::{Embedding, Sam2Embedding, SAM_FEAT_GRID, SAM_PATCH, SAM_SIZE};
+
+/// A 64x64 grid of 256-d features plus the geometry needed to map a cell back to the photo.
+///
+/// Both encoders emit the same [1,256,64,64] shape but arrange the image inside it DIFFERENTLY,
+/// and that difference is the whole reason this type exists rather than a bare slice: EdgeSAM
+/// resizes the longest side and zero-pads the rest of the square (so a large slice of the grid is
+/// padding that must be excluded), while SAM 2.1 resizes directly to a square (so every cell is
+/// image, and the aspect distortion is undone in coordinate space instead).
+#[derive(Clone, Copy)]
+pub struct FeatureGrid<'a> {
+    data: &'a [f32],
+    orig_w: u32,
+    orig_h: u32,
+    /// True for EdgeSAM's resize-longest-side-and-pad layout, false for SAM 2.1's square resize.
+    padded: bool,
+}
+
+impl<'a> FeatureGrid<'a> {
+    pub fn edgesam(e: &'a Embedding) -> Self {
+        Self { data: &e.data, orig_w: e.orig_w, orig_h: e.orig_h, padded: true }
+    }
+    pub fn sam2(e: &'a Sam2Embedding) -> Self {
+        Self { data: &e.image_embed, orig_w: e.orig_w, orig_h: e.orig_h, padded: false }
+    }
+    /// Which encoder produced these features — stored alongside every prototype and checked
+    /// before matching, since the two feature spaces are not interchangeable.
+    pub fn encoder_tag(&self) -> &'static str {
+        if self.padded { ENC_EDGESAM } else { ENC_SAM2 }
+    }
+    /// The unpadded canvas extent, in canvas pixels. For the square-resize encoder the image fills
+    /// the canvas by definition.
+    fn extent(&self) -> (f32, f32) {
+        if self.padded {
+            input_extent(self.orig_w, self.orig_h)
+        } else {
+            (SAM_SIZE as f32, SAM_SIZE as f32)
+        }
+    }
+}
+
+/// Feature-vector length of one spatial location in the [1,256,64,64] embedding.
+const PROTO_DIM: usize = 256;
+/// Tags recorded in the stored JSON so a prototype can never be matched against features from a
+/// different encoder. Prefer SAM 2.1 (see finding 2 in the module comment); EdgeSAM is the
+/// fallback for when its slower encode hasn't landed yet.
+pub const ENC_SAM2: &str = "sam2-1024";
+pub const ENC_EDGESAM: &str = "edgesam-1024";
+
+/// A learned subject: a name, and the averaged L2-normalised feature prototype.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Subject {
+    pub id: String,
+    pub name: String,
+    /// L2-normalised, PROTO_DIM long.
+    pub prototype: Vec<f32>,
+    /// How many reference photos have been folded in — shown in the UI ("Dog · 3 photos") and
+    /// used to weight `merge_prototypes` so the 4th reference doesn't outvote the first three.
+    pub refs: u32,
+    pub encoder: String,
+}
+
+// ── Pure vector maths, all unit-testable without the model ────────────────────────────────────
+
+/// L2-normalises in place. A zero vector is left as-is (all-zero) rather than producing NaNs —
+/// callers treat an all-zero prototype as "learning failed", which is what an empty mask gives.
+fn l2_normalise(v: &mut [f32]) {
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 1e-12 {
+        for x in v.iter_mut() {
+            *x /= norm;
+        }
+    }
+}
+
+fn is_zero(v: &[f32]) -> bool {
+    v.iter().all(|&x| x == 0.0)
+}
+
+/// Folds a newly-learned prototype into an existing one, weighted by how many references each
+/// already represents, then renormalises. This is what makes "add another photo of the dog" cover
+/// pose and lighting change: a single reference is one viewpoint, and averaging pulls the
+/// prototype toward whatever is INVARIANT across viewpoints.
+///
+/// ⚠️ Weighted, not a plain mean of the two: with a plain mean the 4th reference photo would carry
+/// as much weight as the first three combined, so one bad scribble could dominate a well-taught
+/// subject.
+pub fn merge_prototypes(existing: &[f32], existing_refs: u32, incoming: &[f32]) -> Vec<f32> {
+    if existing.len() != incoming.len() || is_zero(existing) {
+        return incoming.to_vec();
+    }
+    let w = existing_refs.max(1) as f32;
+    let mut out: Vec<f32> = existing
+        .iter()
+        .zip(incoming)
+        .map(|(&a, &b)| (a * w + b) / (w + 1.0))
+        .collect();
+    l2_normalise(&mut out);
+    out
+}
+
+/// Cosine similarity of two vectors that are BOTH already L2-normalised — i.e. just a dot product.
+/// Kept as a named function because the "already normalised" precondition is the whole reason this
+/// is cheap, and inlining a bare dot product would lose that.
+fn cosine_prenormalised(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(&x, &y)| x * y).sum()
+}
+
+// ── Feature-grid geometry ─────────────────────────────────────────────────────────────────────
+//
+// EdgeSAM resizes the longest side to SAM_SIZE and zero-pads to a square, so the image occupies
+// only the TOP-LEFT (input_w x input_h) of the 1024x1024 canvas — see sam::encode. The 64x64
+// feature grid covers that whole padded square, so a large part of it can be pure padding.
+//
+// ⚠️ The padded cells must be excluded from BOTH the masked mean and the similarity search.
+// Leaving them in is not a subtle inaccuracy: padding is a large, perfectly uniform region, so it
+// produces its own strong self-consistent feature, and an argmin (the negative point prompt) would
+// land there essentially every time — handing the decoder a "background" hint that points at
+// nothing in the actual photo.
+
+/// The unpadded region of the SAM canvas that the resized image actually occupies, in canvas
+/// pixels. Mirrors the identical computation in sam::encode/decode_points.
+fn input_extent(orig_w: u32, orig_h: u32) -> (f32, f32) {
+    let scale = SAM_SIZE as f32 / orig_w.max(orig_h) as f32;
+    ((orig_w as f32 * scale).max(1.0), (orig_h as f32 * scale).max(1.0))
+}
+
+/// Whether feature cell (fx, fy)'s CENTRE falls inside the real image rather than the zero padding.
+///
+/// Centre-inside rather than fully-inside on purpose: a subject touching the frame edge lands in a
+/// cell that straddles the boundary, and requiring full containment would drop it exactly when the
+/// user has framed the subject to the edge.
+fn cell_is_image(fx: u32, fy: u32, input_w: f32, input_h: f32) -> bool {
+    let px = (fx as f32 + 0.5) * SAM_PATCH as f32;
+    let py = (fy as f32 + 0.5) * SAM_PATCH as f32;
+    px < input_w && py < input_h
+}
+
+/// Feature cell centre → normalised (0..1) coordinate in the ORIGINAL image, the convention
+/// sam::decode_points takes its point prompts in.
+fn cell_to_norm(fx: u32, fy: u32, input_w: f32, input_h: f32) -> (f32, f32) {
+    let px = (fx as f32 + 0.5) * SAM_PATCH as f32;
+    let py = (fy as f32 + 0.5) * SAM_PATCH as f32;
+    ((px / input_w).clamp(0.0, 1.0), (py / input_h).clamp(0.0, 1.0))
+}
+
+/// Reads the 256-d feature vector at one spatial cell out of the [1,256,64,64] row-major embedding.
+/// Channel c of cell (fx,fy) lives at `c*64*64 + fy*64 + fx` — the tensor is channel-planar, so a
+/// feature VECTOR is a strided gather, not a contiguous slice. (Reading it as contiguous is the
+/// obvious mistake here and would silently produce 256 values from one channel of 256 different
+/// locations, which still normalises and still yields plausible-looking similarities.)
+fn feature_at(data: &[f32], fx: u32, fy: u32) -> Vec<f32> {
+    let plane = (SAM_FEAT_GRID * SAM_FEAT_GRID) as usize;
+    let idx = (fy * SAM_FEAT_GRID + fx) as usize;
+    (0..PROTO_DIM).map(|c| data[c * plane + idx]).collect()
+}
+
+/// Mean mask coverage (0..1) of the original-image pixels that map into feature cell (fx, fy).
+/// `mask` is one byte per ORIGINAL pixel, row-major — exactly what sam::decode_points returns.
+fn cell_mask_weight(mask: &[u8], orig_w: u32, orig_h: u32, fx: u32, fy: u32, padded: bool) -> f32 {
+    // Padded (EdgeSAM): one uniform scale on both axes, image in the top-left of the canvas.
+    // Square-resize (SAM 2.1): independent per-axis scales, image fills the canvas.
+    let (sx, sy) = if padded {
+        let s = SAM_SIZE as f32 / orig_w.max(orig_h) as f32;
+        (s, s)
+    } else {
+        (SAM_SIZE as f32 / orig_w as f32, SAM_SIZE as f32 / orig_h as f32)
+    };
+    let x0 = (fx as f32 * SAM_PATCH as f32 / sx).floor().max(0.0) as u32;
+    let y0 = (fy as f32 * SAM_PATCH as f32 / sy).floor().max(0.0) as u32;
+    let x1 = (((fx + 1) as f32 * SAM_PATCH as f32 / sx).ceil() as u32).min(orig_w);
+    let y1 = (((fy + 1) as f32 * SAM_PATCH as f32 / sy).ceil() as u32).min(orig_h);
+    if x1 <= x0 || y1 <= y0 {
+        return 0.0;
+    }
+    let mut sum = 0f32;
+    for y in y0..y1 {
+        let row = (y as usize) * (orig_w as usize);
+        for x in x0..x1 {
+            sum += mask[row + x as usize] as f32;
+        }
+    }
+    sum / (((x1 - x0) * (y1 - y0)) as f32 * 255.0)
+}
+
+// ── Learn ─────────────────────────────────────────────────────────────────────────────────────
+
+/// Builds a prototype from one reference photo: the mask-weighted mean of the embedding's spatial
+/// features, L2-normalised.
+///
+/// `mask` is one byte per pixel of the ORIGINAL image (sam::decode_points' output format). Cells
+/// are weighted by how much of the subject they contain, so a cell half-covered by the subject
+/// contributes half as much as one fully inside it — a hard threshold would either discard the
+/// subject's whole boundary or drag in a ring of background.
+pub fn learn(grid: FeatureGrid, mask: &[u8]) -> Result<Vec<f32>, String> {
+    let expect = (grid.orig_w as usize) * (grid.orig_h as usize);
+    if mask.len() != expect {
+        return Err(format!(
+            "subject learn: mask is {} bytes, expected {}x{} = {expect}",
+            mask.len(),
+            grid.orig_w,
+            grid.orig_h
+        ));
+    }
+    let (input_w, input_h) = grid.extent();
+    let mut acc = vec![0f32; PROTO_DIM];
+    let mut total = 0f32;
+    for fy in 0..SAM_FEAT_GRID {
+        for fx in 0..SAM_FEAT_GRID {
+            if !cell_is_image(fx, fy, input_w, input_h) {
+                continue;
+            }
+            let w = cell_mask_weight(mask, grid.orig_w, grid.orig_h, fx, fy, grid.padded);
+            if w <= 0.0 {
+                continue;
+            }
+            let feat = feature_at(grid.data, fx, fy);
+            for (a, f) in acc.iter_mut().zip(&feat) {
+                *a += f * w;
+            }
+            total += w;
+        }
+    }
+    if total <= 0.0 {
+        return Err("subject learn: the reference mask is empty — scribble over the subject first".into());
+    }
+    for a in acc.iter_mut() {
+        *a /= total;
+    }
+    l2_normalise(&mut acc);
+    if is_zero(&acc) {
+        return Err("subject learn: degenerate prototype (all-zero features)".into());
+    }
+    Ok(acc)
+}
+
+// ── Locate ────────────────────────────────────────────────────────────────────────────────────
+
+/// Where the subject appears to be in a photo, before any segmentation.
+#[derive(Debug, Clone, Copy)]
+pub struct Located {
+    /// Normalised (0..1) position of the best-matching feature cell — the positive point prompt.
+    pub x: f32,
+    pub y: f32,
+    /// Normalised position of the worst-matching cell — the negative prompt.
+    pub neg_x: f32,
+    pub neg_y: f32,
+    /// Cosine similarity at the argmax, in -1..1. This is the ONLY signal that the subject is
+    /// present at all: an argmax always exists, so without a score a photo with no dog in it
+    /// returns a confident-looking point on something that merely looks most dog-like.
+    pub score: f32,
+}
+
+/// The raw similarity field: cosine of the prototype against every one of the 64x64 spatial
+/// features, plus which cells are image rather than zero padding, plus the unpadded canvas extent
+/// so a caller can map cells back to image coordinates. Exposed for `examples/subject_eval.rs`,
+/// which compares peak-picking strategies over the same field.
+pub fn similarity_map(grid: FeatureGrid, prototype: &[f32]) -> Result<(Vec<f32>, Vec<bool>, f32, f32), String> {
+    if prototype.len() != PROTO_DIM {
+        return Err(format!("subject map: prototype is {} long, expected {PROTO_DIM}", prototype.len()));
+    }
+    let (input_w, input_h) = grid.extent();
+    let n = (SAM_FEAT_GRID * SAM_FEAT_GRID) as usize;
+    let mut map = vec![f32::NEG_INFINITY; n];
+    let mut valid = vec![false; n];
+    for fy in 0..SAM_FEAT_GRID {
+        for fx in 0..SAM_FEAT_GRID {
+            if !cell_is_image(fx, fy, input_w, input_h) {
+                continue;
+            }
+            let i = (fy * SAM_FEAT_GRID + fx) as usize;
+            let mut feat = feature_at(grid.data, fx, fy);
+            l2_normalise(&mut feat);
+            map[i] = cosine_prenormalised(prototype, &feat);
+            valid[i] = true;
+        }
+    }
+    Ok((map, valid, input_w, input_h))
+}
+
+/// Public wrapper over the cell→normalised-coordinate mapping, for the same harness.
+pub fn cell_norm(fx: u32, fy: u32, input_w: f32, input_h: f32) -> (f32, f32) {
+    cell_to_norm(fx, fy, input_w, input_h)
+}
+
+/// Scores every non-padded spatial feature against the prototype and returns the best and worst
+/// locations. Pure given an embedding — no model call, ~4096 dot products of length 256.
+pub fn locate(grid: FeatureGrid, prototype: &[f32]) -> Result<Located, String> {
+    if prototype.len() != PROTO_DIM {
+        return Err(format!("subject locate: prototype is {} long, expected {PROTO_DIM}", prototype.len()));
+    }
+    let (input_w, input_h) = grid.extent();
+    let mut best = (f32::NEG_INFINITY, 0u32, 0u32);
+    let mut worst = (f32::INFINITY, 0u32, 0u32);
+    for fy in 0..SAM_FEAT_GRID {
+        for fx in 0..SAM_FEAT_GRID {
+            if !cell_is_image(fx, fy, input_w, input_h) {
+                continue;
+            }
+            let mut feat = feature_at(grid.data, fx, fy);
+            l2_normalise(&mut feat);
+            let s = cosine_prenormalised(prototype, &feat);
+            if s > best.0 {
+                best = (s, fx, fy);
+            }
+            if s < worst.0 {
+                worst = (s, fx, fy);
+            }
+        }
+    }
+    if !best.0.is_finite() {
+        return Err("subject locate: no image-region features (degenerate embedding)".into());
+    }
+    let (x, y) = cell_to_norm(best.1, best.2, input_w, input_h);
+    let (neg_x, neg_y) = cell_to_norm(worst.1, worst.2, input_w, input_h);
+    Ok(Located { x, y, neg_x, neg_y, score: best.0 })
+}
+
+/// Locate a stored Subject, refusing to match across feature spaces.
+///
+/// Returns a distinct, matchable error when the grid on hand is the wrong encoder — the frontend
+/// fires sam2_encode in the background AFTER sam_encode, so "taught under SAM 2.1, asked while
+/// only EdgeSAM is ready" is a normal transient state to retry, not a failure to report.
+pub fn locate_subject(grid: FeatureGrid, subject: &Subject) -> Result<Located, String> {
+    if subject.encoder != grid.encoder_tag() {
+        return Err(format!(
+            "encoder-mismatch: \"{}\" was taught with {} but this photo is encoded with {}",
+            subject.name, subject.encoder, grid.encoder_tag()
+        ));
+    }
+    locate(grid, &subject.prototype)
+}
+
+/// Locate, then hand the resulting point pair to the EXISTING SAM decoder for a real mask.
+/// Returns the mask raster (one byte per original pixel) alongside the match score, so a caller
+/// can reject a weak match without a second call.
+pub fn locate_and_segment(embed: &Embedding, prototype: &[f32]) -> Result<(Vec<u8>, Located), String> {
+    let found = locate(FeatureGrid::edgesam(embed), prototype)?;
+    let points = [(found.x, found.y, true), (found.neg_x, found.neg_y, false)];
+    let mask = crate::sam::decode_points(embed, &points)?;
+    Ok((mask, found))
+}
+
+// ── Persistence ───────────────────────────────────────────────────────────────────────────────
+//
+// Application Support, NOT Library/Caches where library.rs keeps thumbnails: a thumbnail can be
+// regenerated from the photo, but a prototype represents work the user did (scribbling over their
+// dog in several photos) and cannot be. macOS is free to purge Caches at any time.
+
+fn subjects_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let dir = PathBuf::from(home).join("Library/Application Support/com.tareq.chromasmith");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("subjects.json")
+}
+
+fn read_subjects_at(path: &Path) -> Vec<Subject> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Vec<Subject>>(&t).ok())
+        .unwrap_or_default()
+        .into_iter()
+        // A malformed prototype can never be used by anything; a FOREIGN-encoder one still names a
+        // subject the user taught, so it is kept and rejected at match time (with a message that
+        // says to re-teach) rather than vanishing silently from their list.
+        .filter(|s| s.prototype.len() == PROTO_DIM)
+        .collect()
+}
+
+fn write_subjects_at(path: &Path, subjects: &[Subject]) -> Result<(), String> {
+    let text = serde_json::to_string_pretty(subjects).map_err(|e| format!("serialise subjects: {e}"))?;
+    // Write-then-rename so an interrupted write can't truncate the file the user's taught
+    // subjects live in.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, text).map_err(|e| format!("write subjects: {e}"))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("commit subjects: {e}"))
+}
+
+pub fn load_subjects() -> Vec<Subject> {
+    read_subjects_at(&subjects_path())
+}
+
+/// Inserts a new subject or folds another reference into an existing one (matched by id).
+pub fn upsert_subject(id: &str, name: &str, prototype: Vec<f32>, encoder: &str) -> Result<Subject, String> {
+    let path = subjects_path();
+    let mut all = read_subjects_at(&path);
+    let updated = match all.iter_mut().find(|s| s.id == id) {
+        Some(existing) => {
+            // ⚠️ Folding features from one encoder into a prototype built by the other would
+            // average two unrelated vector spaces and quietly degrade a subject the user had
+            // already taught well. Replace outright instead, and restart the reference count so
+            // the UI's "3 photos" promise stays truthful.
+            if existing.encoder != encoder {
+                existing.prototype = prototype;
+                existing.refs = 1;
+                existing.encoder = encoder.to_string();
+            } else {
+                existing.prototype = merge_prototypes(&existing.prototype, existing.refs, &prototype);
+                existing.refs += 1;
+            }
+            if !name.is_empty() {
+                existing.name = name.to_string();
+            }
+            existing.clone()
+        }
+        None => {
+            let s = Subject {
+                id: id.to_string(),
+                name: if name.is_empty() { "Subject".into() } else { name.to_string() },
+                prototype,
+                refs: 1,
+                encoder: encoder.to_string(),
+            };
+            all.push(s.clone());
+            s
+        }
+    };
+    write_subjects_at(&path, &all)?;
+    Ok(updated)
+}
+
+pub fn delete_subject(id: &str) -> Result<(), String> {
+    let path = subjects_path();
+    let mut all = read_subjects_at(&path);
+    all.retain(|s| s.id != id);
+    write_subjects_at(&path, &all)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn setup_model() {
+        let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib");
+        crate::sam::set_dylib_path(dylib);
+    }
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    #[test]
+    fn merge_weights_by_reference_count() {
+        // Two references, then a third that disagrees: the merged prototype must stay closer to
+        // the established pair than to the newcomer, which is the whole point of weighting.
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        let merged = merge_prototypes(&a, 3, &b);
+        assert!(merged[0] > merged[1], "3 references should outweigh 1: {merged:?}");
+        let unit = merged.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!((unit - 1.0).abs() < 1e-5, "merge must stay L2-normalised, got {unit}");
+        // An empty/absent existing prototype is replaced outright, not averaged toward zero.
+        assert_eq!(merge_prototypes(&[0.0, 0.0, 0.0], 0, &b), b);
+    }
+
+    #[test]
+    fn padded_cells_are_excluded() {
+        // A 4000x6000 portrait: the resized image is 683x1024, so everything right of x=683 in the
+        // 1024 canvas is padding — cells from fx=43 on. Getting this wrong is what would send the
+        // negative point prompt into the zero padding on every portrait photo.
+        let (iw, ih) = input_extent(4000, 6000);
+        assert!((ih - 1024.0).abs() < 0.5, "longest side should map to SAM_SIZE, got {ih}");
+        assert!(cell_is_image(42, 10, iw, ih), "cell 42 is inside a 683px-wide image");
+        assert!(!cell_is_image(43, 10, iw, ih), "cell 43 centre (696px) is past the image edge");
+        // And the mapping back out stays in range at the extremes.
+        let (nx, ny) = cell_to_norm(0, 0, iw, ih);
+        assert!(nx > 0.0 && nx < 0.05 && ny > 0.0 && ny < 0.05, "top-left cell → {nx},{ny}");
+        let (nx, _) = cell_to_norm(42, 0, iw, ih);
+        assert!(nx <= 1.0, "last image cell must not exceed 1.0, got {nx}");
+    }
+
+    #[test]
+    fn feature_gather_is_channel_planar() {
+        // Synthesise an embedding where cell (fx,fy)'s channel c holds a value encoding all three,
+        // so a contiguous (wrong) read is distinguishable from a strided (right) one.
+        let plane = (SAM_FEAT_GRID * SAM_FEAT_GRID) as usize;
+        let mut data = vec![0f32; PROTO_DIM * plane];
+        for c in 0..PROTO_DIM {
+            for i in 0..plane {
+                data[c * plane + i] = (c * 10_000 + i) as f32;
+            }
+        }
+        let feat = feature_at(&data, 5, 3);
+        let idx = (3 * SAM_FEAT_GRID + 5) as usize;
+        for (c, &v) in feat.iter().enumerate() {
+            assert_eq!(v, (c * 10_000 + idx) as f32, "channel {c} gathered from the wrong offset");
+        }
+    }
+
+    /// The real test, and the reason this module exists: __TM3390.jpg holds a person and a
+    /// dark-brown dog whose fur CLAUDE.md §5b measured at 0.75 on a skin colour gate — i.e. colour
+    /// cannot separate them. Learn the dog from a box over the dog, then locate it, and the match
+    /// must land on the dog rather than on the person a few hundred pixels away.
+    #[test]
+    fn learned_dog_is_located_over_the_person() {
+        setup_model();
+        let path = repo_root().join("__TM3390.jpg");
+        if !path.exists() {
+            eprintln!("skipping: {} not present in this checkout", path.display());
+            return;
+        }
+        let img = image::open(&path).expect("open __TM3390.jpg").to_rgb8();
+        let (iw, ih) = img.dimensions();
+        // Downsample the way the app does before encoding (the model resizes to 1024 regardless).
+        let (sw, sh) = (iw / 8, ih / 8);
+        let small = crate::sam::resize_rgb8(img.as_raw(), iw, ih, sw, sh);
+        let embed = crate::sam::encode(&small, sw, sh).expect("EdgeSAM encode");
+
+        // Subject regions as fractions of frame, read off the photo: the dog sits right of and
+        // below the person's head, the person's face left of it.
+        let frac_box = |x0: f32, y0: f32, x1: f32, y1: f32| {
+            let mut m = vec![0u8; (sw * sh) as usize];
+            for y in (y0 * sh as f32) as u32..(y1 * sh as f32) as u32 {
+                for x in (x0 * sw as f32) as u32..(x1 * sw as f32) as u32 {
+                    m[(y * sw + x) as usize] = 255;
+                }
+            }
+            m
+        };
+        let dog_mask = frac_box(0.52, 0.58, 0.72, 0.78);
+        let proto = learn(FeatureGrid::edgesam(&embed), &dog_mask).expect("learn dog prototype");
+        assert_eq!(proto.len(), PROTO_DIM);
+
+        let found = locate(FeatureGrid::edgesam(&embed), &proto).expect("locate dog");
+        println!("dog located at ({:.3},{:.3}) score {:.3}", found.x, found.y, found.score);
+        // Must land in the dog's half of the frame, not on the face at x≈0.35, y≈0.63.
+        assert!(found.x > 0.45, "expected the dog side of frame, got x={:.3}", found.x);
+        assert!(found.y > 0.45 && found.y < 0.9, "expected the dog's band, got y={:.3}", found.y);
+        // Self-similarity on the photo it was learned from should be strong.
+        assert!(found.score > 0.5, "self-match should be confident, got {:.3}", found.score);
+
+        // The converse: a prototype learned from the FACE must not resolve to the dog. This is the
+        // assertion that would fail if the features carried mostly colour, since both are brown.
+        let face_mask = frac_box(0.25, 0.55, 0.45, 0.72);
+        let face_proto = learn(FeatureGrid::edgesam(&embed), &face_mask).expect("learn face prototype");
+        let face_found = locate(FeatureGrid::edgesam(&embed), &face_proto).expect("locate face");
+        println!("face located at ({:.3},{:.3}) score {:.3}", face_found.x, face_found.y, face_found.score);
+        assert!(face_found.x < 0.5, "face prototype drifted onto the dog: x={:.3}", face_found.x);
+
+        // And the two prototypes must actually be distinguishable from each other.
+        let cross = cosine_prenormalised(&proto, &face_proto);
+        println!("dog·face prototype similarity {cross:.3}");
+        assert!(cross < 0.95, "dog and face prototypes are nearly identical ({cross:.3})");
+    }
+
+    #[test]
+    fn locate_rejects_a_wrong_sized_prototype() {
+        let embed = Embedding { data: vec![0.0; PROTO_DIM * 64 * 64], orig_w: 100, orig_h: 100 };
+        assert!(locate(FeatureGrid::edgesam(&embed), &[0.0; 8]).is_err(), "a short prototype must be rejected, not padded");
+    }
+
+    #[test]
+    fn learn_rejects_a_mismatched_mask() {
+        let embed = Embedding { data: vec![0.0; PROTO_DIM * 64 * 64], orig_w: 100, orig_h: 100 };
+        let grid = FeatureGrid::edgesam(&embed);
+        assert!(learn(grid, &[0u8; 99]).is_err(), "mask/embedding size mismatch must be caught");
+        assert!(learn(grid, &[0u8; 10_000]).is_err(), "an all-zero mask has nothing to learn from");
+    }
+
+    #[test]
+    fn persistence_round_trips_and_drops_foreign_encoders() {
+        let dir = std::env::temp_dir().join(format!("cs_subjects_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("subjects.json");
+
+        let mine = Subject {
+            id: "dog".into(),
+            name: "Dog".into(),
+            prototype: vec![0.5; PROTO_DIM],
+            refs: 2,
+            encoder: ENC_EDGESAM.into(),
+        };
+        let foreign = Subject { encoder: "some-future-encoder".into(), ..mine.clone() };
+        write_subjects_at(&path, &[mine.clone(), foreign.clone()]).unwrap();
+
+        let back = read_subjects_at(&path);
+        assert_eq!(back.len(), 2, "a foreign-encoder subject stays listed (it names real user work)");
+        // ...but it must be refused at MATCH time rather than silently compared across spaces.
+        let embed = Embedding { data: vec![0.0; PROTO_DIM * 64 * 64], orig_w: 100, orig_h: 100 };
+        let grid = FeatureGrid::edgesam(&embed);
+        assert!(locate_subject(grid, &mine).is_ok(), "same-encoder match should run");
+        let err = locate_subject(grid, &foreign).unwrap_err();
+        assert!(err.starts_with("encoder-mismatch:"), "frontend matches on this prefix, got: {err}");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

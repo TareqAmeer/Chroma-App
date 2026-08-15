@@ -433,6 +433,12 @@ fn read_meta(path: &str) -> PhotoMeta {
     }
 }
 
+/// `read_meta` for sibling modules — ingest.rs derives a capture date from EXIF, and duplicating
+/// the RAW-vs-JPEG reader split there would be a second thing to keep in sync with the decoders.
+pub fn read_meta_public(path: &str) -> PhotoMeta {
+    read_meta(path)
+}
+
 #[tauri::command]
 pub fn get_meta(path: String) -> PhotoMeta {
     let Ok(meta) = std::fs::metadata(&path) else { return PhotoMeta::default() };

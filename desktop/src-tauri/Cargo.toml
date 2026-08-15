@@ -63,6 +63,10 @@ demosaic = "0.3"
 # end-to-end (real model, real photo, real inference) before writing sam.rs this way.
 ort-sys = { version = "=2.0.0-rc.12", default-features = false, features = ["disable-linking", "api-17", "std"] }
 libloading = "0.9"
+# Card ingest: statfs(2) for a card's capacity/free space. Already in the tree as a transitive
+# dependency of tauri/rawler — this only makes the direct use explicit. Nothing else needs it,
+# and the alternative (shelling out to `df` and parsing it) would be worse.
+libc = "0.2"
 
 [profile.release]
 strip = true
