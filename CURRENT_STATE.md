@@ -6,51 +6,45 @@ This file tracks **what is in flight right now**. Anything finished and durable 
 `CLAUDE.md`; anything planned belongs in `ROADMAP.md`. If this file is older than the last few
 commits, trust `git log` over it.
 
-## In flight — the performance / feature / UI plan
+## The performance / feature / UI plan
 
-Full plan: `~/.claude/plans/identify-additional-performance-feature-elegant-boole.md`. It came
-out of an audit across the three surfaces (Tauri desktop, Pages web, Capacitor iOS) plus a
-comparison against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
+Full plan: `~/.claude/plans/identify-additional-performance-feature-elegant-boole.md`. It came out
+of an audit across the three surfaces (Tauri desktop, Pages web, Capacitor iOS) plus a comparison
+against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
 
-### ✅ Phase A — payload and main thread (done)
+### ✅ Shipped
 
-The app file was **17.7 MB / 10.2 MB gzipped**, and 16.3 MB of that was 113 base64 LUT presets
-(the original 11 plus 102 added since) parsed on every cold load. Four changes, none of which
-touch a shader — all 18 export goldens stayed byte-exact throughout:
+| | what landed |
+|---|---|
+| **A** | Payload + main thread: **17.7MB → 3.02MB** (gzip 10.2 → 1.76MB), lazy Looks gallery, LRU preset cache, `bakeDcpLUT`/`exportSharpen` in a worker (1157ms freeze → ~18ms) |
+| **B** | `ingest.rs` (card import) and `subject.rs` (PerSAM one-shot subject recognition) |
+| **C** | The UI for both, plus auto-seeded skin samples and a shoot-wide skin target |
+| **D** | Per-mask Clarity, Defringe, gate weave + film breath — one shader cycle |
+| **E2** | Perspective / keystone (a real homography) + Rotate + Scale |
+| **F1** | Virtual copies (backward-compatible sidecar versions) |
+| **G** | A 375×812 phone pass in `ui_audit`, and the 12×20px tap target it found |
 
-| | before | after |
-|---|---|---|
-| `chromasmith-22.html` | 17.68 MB | **3.02 MB** |
-| gzipped (what Pages serves) | 10.19 MB | **1.76 MB** |
-| look thumbnails rendered per gallery build | 114 / 114 | **11 / 114** |
-| retained `_presetLutCache` | 48.7 MB | **9.87 MB** (LRU, 24) |
-| main-thread freeze per DCP bake | 1157 ms | **~18 ms** (worker) |
+### ⏳ Not done
 
-- 102 presets moved to `vendor/luts/*.bin` (`calib/split_lut_presets.py`, idempotent, `--check`
-  verifies). The 11 `User Looks` stay inline so a `file://` copy still works. `lutWarmCache()`
-  pulls the rest into IndexedDB on idle, so the web build stays offline-capable.
-- The Looks gallery renders only what is in view, and gained a name filter (113 looks had
-  outgrown the category chips).
-- `bakeDcpLUT` and `exportSharpen` run in an inline worker built by stringifying the real
-  functions — verified bit-identical to the main thread, and to the inline fallback.
-- New perf budgets guard all of it; see `CLAUDE.md` §2 and the `test/perf_bench.mjs` header.
+- **D4 — film-edge / overscan frames.** *Blocked on assets, not code.* It needs real scanned edge
+  plates vendored the way the DCPs are; a procedurally faked sprocket edge would undercut the one
+  thing the feature exists for. Supply scans and this becomes a composite-stage job.
+- **E1 — spot removal / clone / heal.** The largest remaining item: needs a clone-source picker,
+  the stamp paint path (reuse `mskPaintAt`), and a heal blend. Not started.
+- **E2's auto-horizon** — needs line detection (a Hough pass), which is its own piece of work
+  rather than another slider. Manual Rotate ships in the meantime.
+- **F2 — library polish**: full colour labels, metadata/info panel, undo for Delete and Reset
+  edit, empty-state CTA, `#lib-bottom` as a real status bar, batch-operations bar.
+- **F3 — grid virtualization + thumbnail decode tiering.**
 
-### Next — Phase B
+## Things a future session should know
 
-One Rust build covering both new native features:
-
-1. **`ingest.rs`** — SD-card import (volume/DCIM detection, date-folder + filename templates,
-   second-copy backup, verify, skip-duplicates, progress, eject). This is the piece that
-   replaces Lightroom in the user's workflow; there is no card path in `library.rs` today.
-2. **`subject.rs`** — "remember this dog": PerSAM-style one-shot subject recognition, reusing
-   the existing `Embedding` / `encode` / `decode_points` in `sam.rs`. Training-free — a
-   256-float prototype per subject, no new model.
-
-Then Phase C (the UI for both, plus auto-seeded skin colour samples), Phase D (one shader cycle:
-per-mask Clarity/Smoothing + Dehancer-parity film depth), E (heal/clone, perspective), F
-(virtual copies, Library workflow), G (mobile polish).
-
-## Open questions
-
-- Nothing blocking. Phase B needs a real card and a few reference photos of the dog to verify
-  against, in the same way `faceparse.rs` was verified against a real photo.
+- **Two tests on this machine are flaky, and both are characterised in `CLAUDE.md` §2.** Re-run
+  before bisecting. The export harness one is a confirmed **WebGL context loss** (SwiftShader) and
+  the harness now retries once; the `video_harness` "still byte-exact after video" check fails
+  about 2 runs in 5 on the *clean* tree and is still unattributed.
+- **`subject.rs`'s header is the source of truth for what subject recognition can and cannot do.**
+  Read it before building anything on top: ~77-80% recall, no usable "is it present" signal, so it
+  must stay a suggestion the user confirms.
+- Phase B/C added Rust commands, so a `dist/`-only refresh is no longer enough to update the
+  installed app — `desktop/install-app.sh` (full `cargo build`) is required.
