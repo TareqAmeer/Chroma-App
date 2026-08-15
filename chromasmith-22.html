@@ -1317,8 +1317,8 @@ setTimeout(()=>window.hideBootSplash(),6000);
         </div>
         <div class="fx-row"><div class="fx-label">Aspect</div>
           <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value)">
-            <option value="0">Free</option>
             <option value="shot">As shot</option>
+            <option value="0">Free</option>
             <option value="custom">Custom…</option>
             <option value="1">1:1 Square</option>
             <option value="1.5">3:2</option>
@@ -1421,6 +1421,21 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Outer border</div>
         <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
         <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Film frame</div>
+        <div class="fx-row"><div class="fx-label">Style</div>
+          <select class="fx-select" id="sel-film-frame" onchange="filmFrameChanged(this.value)">
+            <option value="none">None</option>
+            <option value="sprocket35">35mm sprockets</option>
+            <option value="sprocket35-wide">35mm sprocket bleed</option>
+            <option value="rollfilm">120 roll film</option>
+            <option value="carrier">Ragged carrier</option>
+            <option value="custom">Load frame…</option>
+          </select>
+        </div>
+        <div class="fx-row" id="row-frame-edge"><div class="fx-label">Edge text</div>
+          <input class="fx-select" type="text" id="in-frame-edge" placeholder="e.g. KODAK PORTRA 400   12A" style="flex:1;min-width:0" oninput="fxUpdate()">
+        </div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">The sprocket styles are drawn to the real 35mm standard, so they stay correct at any aspect ratio. <b>Load frame…</b> takes any scanned rebate PNG you have a licence to use.</div>
         </div>
       </div>
       <!-- CANVAS (aspect-ratio matte around image + borders) -->
@@ -12311,6 +12326,13 @@ function getFXParams(adjValsOverride){return{
     const amp=wv*1.5/Math.max(1,(it.img&&(it.img.width||it.img.videoWidth))||1920);
     return{weave:[hx*2*amp,hy*2*amp],breath:1+hb*2*br*0.06};
   })(),
+  filmFrame:(function(){
+    const sel=document.getElementById('sel-film-frame');
+    const style=(sel&&sel.value)||'none';
+    if(style==='none')return null;
+    const t=document.getElementById('in-frame-edge');
+    return{style,edgeText:(t&&t.value.trim())||'',customUrl:fxState.frameUrl||null};
+  })(),
   lens:{dist:adjVal('sl-lens-dist')/200, vig:adjVal('sl-lens-vig')/200, ca:adjVal('sl-lens-ca')/1000, defringe:adjVal('sl-lens-defr')/100,
     // Perspective in -0.4..0.4: past that the near edge stretches faster than any amount of
     // Scale can hide, so the slider stops where the result stops being usable.
@@ -12900,6 +12922,127 @@ async function exportResample(cv){
   if(out.width!==w0||out.height!==h0)log(`Resized ${w0}×${h0} → ${out.width}×${out.height}`,'info');
   return out;
 }
+// ══ FILM FRAME (D4) ═══════════════════════════════════════════════════════════════════════
+// Mounts the photo in a film frame, between the borders and the canvas matte. ONE function, called
+// by both the preview and the export path, so "does the export match what I saw" is not a
+// question anyone has to ask — it is the same code on the same input.
+//
+// ⚠️ Two kinds of frame, because neither alone is enough:
+//
+//  · PROCEDURAL (sprocket35 / sprocket35-wide / rollfilm) draws the rebate from ISO 1007 / SMPTE
+//    nominal geometry — 35mm film width, 24x36mm frame, KS-1870 perforations at 0.187in
+//    (4.7498mm) pitch, 8 per frame. Those are published measurements, i.e. facts, so nothing is
+//    copied from anyone. This is the DEFAULT because it is the only kind that adapts: a plate is
+//    locked to the aspect it was scanned at (the bundled one is 1.625), and stretching it onto a
+//    4:3 photo visibly ovals the sprocket holes and smears the grain.
+//  · PLATE — a real scan composited over the photo. Photographic texture no formula reproduces.
+//    Only ONE is bundled (MIT — see vendor/frames/README.md); "Load frame…" takes any PNG the
+//    USER has a licence to, which is what makes the good commercial rebate packs usable without
+//    this repo redistributing them.
+const FILM_FRAMES={
+  none:{label:'None'},
+  sprocket35:{label:'35mm sprockets',kind:'proc',mode:'full'},
+  'sprocket35-wide':{label:'35mm sprocket bleed',kind:'proc',mode:'bleed'},
+  rollfilm:{label:'120 roll film',kind:'proc',mode:'roll'},
+  carrier:{label:'Ragged carrier',kind:'plate',src:'vendor/frames/carrier-ragged.png'},
+  custom:{label:'Load frame…',kind:'plate',src:null},
+};
+const _framePlates=new Map();   // url -> HTMLImageElement, decoded once
+function _framePlate(url){
+  if(!url)return null;
+  const hit=_framePlates.get(url);
+  if(hit)return hit.complete&&hit.naturalWidth?hit:null;
+  const img=new Image();
+  img.onload=()=>{if(typeof renderPreview==='function')renderPreview();};  // repaint once it lands
+  img.src=url;
+  _framePlates.set(url,img);
+  return null;
+}
+/// 35mm still film, in millimetres — ISO 1007 nominal. Kept as real units rather than baked
+/// fractions so the numbers can be checked against the standard rather than reverse-engineered.
+const FILM35={width:35.0,frameH:24.0,frameW:36.0,perfW:1.98,perfH:2.79,pitch:4.7498,perfEdge:0.66};
+/// Mounts `src` in a film frame. Returns a NEW canvas, or `src` untouched when the style is off
+/// or a plate has not decoded yet — never a half-drawn frame.
+function filmFrameCompose(src,FR){
+  if(!FR||!FR.style||FR.style==='none')return src;
+  const spec=FILM_FRAMES[FR.style];
+  if(!spec||spec.kind==='none')return src;
+  const sw=src.width,sh=src.height;
+  if(spec.kind==='plate'){
+    const url=FR.style==='custom'?FR.customUrl:spec.src;
+    const plate=_framePlate(url);
+    if(!plate)return src;                       // still decoding — show the photo, not a flash of frame
+    // The plate's own aspect is honoured: the OUTPUT takes the photo's size, and the plate is
+    // drawn to cover it, cropping the plate rather than stretching it. Stretching is what makes
+    // a bundled border look cheap — it ovals every sprocket hole and shears the grain.
+    const out=document.createElement('canvas');out.width=sw;out.height=sh;
+    const x=out.getContext('2d');
+    x.drawImage(src,0,0);
+    const sc=Math.max(sw/plate.naturalWidth,sh/plate.naturalHeight);
+    const pw=plate.naturalWidth*sc,ph=plate.naturalHeight*sc;
+    x.drawImage(plate,(sw-pw)/2,(sh-ph)/2,pw,ph);
+    return out;
+  }
+  // ── procedural ──
+  const M=FILM35;
+  const roll=spec.mode==='roll';
+  // Rebate depth as a fraction of the IMAGE height, straight from the standard: a 24mm frame on
+  // 35mm stock leaves 5.5mm each side. Roll film has no perforations and a wider rebate.
+  const rebFrac=roll?0.12:((M.width-M.frameH)/2)/M.frameH;
+  const reb=Math.round(sh*rebFrac);
+  const bleed=spec.mode==='bleed';
+  const outW=sw,outH=sh+2*reb;
+  const out=document.createElement('canvas');out.width=outW;out.height=outH;
+  const x=out.getContext('2d');
+  // Rebate colour: unexposed processed film is not black — it is a dense near-neutral with a
+  // slight warm cast from the base. Pure #000 is the tell of a fake border.
+  x.fillStyle=FR.color||(roll?'#0a0908':'#0d0b0a');
+  x.fillRect(0,0,outW,outH);
+  // "Sprocket bleed" is the scanner-wider-than-the-gate look, where the image spills across the
+  // perforations — so the photo is drawn FULL height and the holes punch through it.
+  x.drawImage(src,0,bleed?0:reb,sw,bleed?outH:sh);
+  // Where edge printing may sit, in px from the top of the rebate. On perforated stock this is
+  // the narrow band BETWEEN the perforation row and the image — printing across the holes is the
+  // one mistake that instantly reads as fake, and the first version of this did exactly that.
+  let textTop=0,textBot=reb;
+  if(!roll){
+    // Perforations, at true pitch. Everything derives from the mm table, so the hole count is
+    // whatever the photo's width actually implies rather than a hardcoded 8.
+    const mmPx=sh/M.frameH;                       // px per mm, from the image height = 24mm
+    const pw=M.perfW*mmPx,phh=M.perfH*mmPx,pitch=M.pitch*mmPx;
+    const edge=M.perfEdge*mmPx;
+    const r=Math.min(pw,phh)*0.22;                // corner radius — 135 perfs are rounded, not square
+    const n=Math.max(1,Math.round(outW/pitch));
+    const start=(outW-(n-1)*pitch)/2;
+    x.save();
+    // Punching with destination-out on the bleed variant lets the photo show THROUGH nothing —
+    // the hole is the scanner's backlight, so it reads as bright, not as a black rectangle.
+    x.fillStyle=FR.holeColor||'#e8e4dc';
+    for(let i=0;i<n;i++){
+      const cx=start+i*pitch-pw/2;
+      for(const cy of [edge,outH-edge-phh]){
+        x.beginPath();
+        if(x.roundRect)x.roundRect(cx,cy,pw,phh,r);else x.rect(cx,cy,pw,phh);
+        x.fill();
+      }
+    }
+    x.restore();
+    textTop=edge+phh;                             // just below the perforation row
+  }
+  // Edge printing. Real stock carries frame numbers and a stock name along the rebate; without
+  // something there the frame reads as a plain black bar. Kept subtle and off by default.
+  if(FR.edgeText){
+    const band=Math.max(1,textBot-textTop);
+    x.save();
+    x.fillStyle=FR.edgeColor||'rgba(232,168,90,0.85)';
+    // Sized to the BAND, not the whole rebate, so it cannot grow back over the perforations.
+    x.font=`${Math.max(7,Math.round(band*0.62))}px ui-monospace,Menlo,monospace`;
+    x.textBaseline='middle';
+    x.fillText(FR.edgeText,Math.round(outW*0.04),Math.round(textTop+band*0.5));
+    x.restore();
+  }
+  return out;
+}
 function canvasCompose(src,CV){
   if(!CV||!CV.enabled||!CV.ar)return src;
   const sw=src.width,sh=src.height,ar=CV.ar,zoom=CV.zoom||1;
@@ -12948,12 +13091,16 @@ function applyPreviewBorders(P,pw,ph){
     x.fillStyle=P.b1.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
     x.drawImage(FX.cv,b1t+b2t,b1t+b2t,pw,ph);
   }
-  // stage 2: canvas matte around image+borders
-  const fin=canvasCompose(stage,P.canvas);
+  // stage 1b: film frame around the bordered image, BEFORE the matte — the frame is part of the
+  // photograph, the matte is the wall behind it.
+  const framed=filmFrameCompose(stage,P.filmFrame);
+  // stage 2: canvas matte around image+borders+frame
+  const fin=canvasCompose(framed,P.canvas);
   bd.width=fin.width;bd.height=fin.height;
   bd.getContext('2d').drawImage(fin,0,0);
   if(stage!==FX.cv)stage.width=stage.height=0;
-  if(fin!==stage&&fin!==FX.cv)fin.width=fin.height=0;
+  if(framed!==stage&&framed!==FX.cv)framed.width=framed.height=0;
+  if(fin!==framed&&fin!==stage&&fin!==FX.cv)fin.width=fin.height=0;
   FX.cv.style.display='none';bd.style.display='block';
   // Where the photo itself sits inside the composited frame, so pointer handlers can undo it.
   // canvasCompose centres the bordered stage, so the matte inset is half the size difference.
@@ -12982,7 +13129,17 @@ function geomApplyToAll(){
   updateWork();renderPreview();buildLookGallery();fxHistoryPush();
   log(`Geometry applied to all ${fxImages.length} images`,'ok');
 }
-function resetGeomUI(){const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;const sv=document.getElementById('vl-straighten');if(sv)sv.textContent='0°';const ar=document.getElementById('sel-crop-ar');if(ar)ar.value=0;cropAR=0;}
+// Crop defaults to "As shot": keeping the camera's own frame is what almost every edit wants, and
+// a free crop is the deliberate choice rather than the accident. ⚠️ The <select> and `cropAR` are
+// SEPARATE state — setting only the dropdown would display "As shot" while cropping freely, so
+// this routes through cropSetAspect, which also re-reads the aspect from the photo now loaded
+// (it differs per photo, and resetGeomUI runs on every load/switch).
+function resetGeomUI(){
+  const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;
+  const sv=document.getElementById('vl-straighten');if(sv)sv.textContent='0°';
+  const ar=document.getElementById('sel-crop-ar');
+  if(ar){ar.value='shot';cropSetAspect('shot');}else{cropAR=0;}
+}
 function curItem(){return fxImages[fxCurIdx]||null;}
 // ── multi-photo filmstrip: switch which loaded photo the preview/crop/export-current shows ──
 function buildFilmstrip(){
@@ -13176,6 +13333,24 @@ function cropMove(e){
   positionCropRect();
 }
 function cropUp(){_cropDrag=null;window.removeEventListener('pointermove',cropMove);window.removeEventListener('pointerup',cropUp);}
+// "Load frame…" opens a file picker and keeps the plate as an object URL for the session. Not
+// persisted: the URL is meaningless in a later session, and silently restoring a dead reference
+// would render a frameless photo while the dropdown still claimed a frame.
+function filmFrameChanged(v){
+  if(v!=='custom'){fxUpdate();return;}
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/png,image/webp';
+  inp.onchange=()=>{
+    const f=inp.files&&inp.files[0];
+    if(!f){document.getElementById('sel-film-frame').value='none';fxUpdate();return;}
+    if(fxState.frameUrl)URL.revokeObjectURL(fxState.frameUrl);
+    fxState.frameUrl=URL.createObjectURL(f);
+    _framePlates.delete(fxState.frameUrl);
+    toast('Frame loaded — '+f.name,true);
+    fxUpdate();
+  };
+  inp.click();
+}
 function cropSetAspect(v){
   const customRow=document.getElementById('crop-custom-row');
   if(customRow)customRow.style.display=(v==='custom')?'flex':'none';
@@ -13654,7 +13829,7 @@ async function exportFX(){
         // CANVAS matte (aspect ratio + background) around the bordered image — same helper
         // as the preview, so what you see is exactly what exports.
         if(P.canvas&&P.canvas.enabled&&P.canvas.ar){
-          const matted=canvasCompose(ec,P.canvas);
+          const matted=canvasCompose(filmFrameCompose(ec,P.filmFrame),P.canvas);
           if(matted!==ec){ec.width=ec.height=0;ec=matted;}
         }
         // Resize + output sharpening, LAST — after borders and the matte, so the target long edge

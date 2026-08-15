@@ -745,9 +745,25 @@ One batched shader cycle (§3's reserved-word and compile-silence traps apply):
   0, 0/16 at +80, 16/0 at −80, and Scale 40 pulls the lost edge back to 16/18).
   *Auto-horizon is NOT included* — it needs line detection (a Hough pass), which is its own piece
   of work rather than a slider.
-- **NOT done: D4, film-edge/overscan frames.** It needs real scanned edge plates vendored (like
-  the DCPs), and a procedurally faked sprocket edge would undercut the one thing the feature is
-  for. Blocked on assets, not on code.
+- **Film frames (D4)** — `filmFrameCompose`, one function called by BOTH the preview and export
+  paths, between the borders and the canvas matte. Two kinds, because neither alone is enough:
+  - **Procedural** (`sprocket35`, `sprocket35-wide`, `rollfilm`) — drawn from ISO 1007 / SMPTE
+    nominal geometry (35mm width, 24×36mm frame, KS-1870 perforations at 0.187in / 4.7498mm
+    pitch). Those are published measurements, i.e. **facts**, so nothing is copied from anyone.
+    This is the default because it is the only kind that ADAPTS: a scanned plate is locked to the
+    aspect it was scanned at and visibly ovals its sprockets on a 4:3 photo.
+  - **Plates** — a real scan composited over the photo, drawn to COVER (cropped, never stretched).
+  ⚠️ **Licensing is the binding constraint here, not code.** Most film-border packs — including
+  ones advertised as "free" — permit use in media projects but NOT redistribution inside
+  software. Exactly one plate is bundled (`vendor/frames/carrier-ragged.png`, **MIT**, from
+  romnn/film-borders); `vendor/frames/README.md` records the rule and why FilterGrade's and
+  Freepik's are deliberately absent. **Load frame…** takes any PNG the user has a licence to,
+  which is what makes commercial packs usable without this repo redistributing them.
+  ⚠️ Edge printing goes in the band BETWEEN the perforations and the image. The first version
+  centred it in the rebate, which drew the text straight across the sprocket holes — the single
+  detail that reads as fake at a glance.
+  Not wired into VIDEO export yet (`_videoComposeBorderMatte` precomputes its sizes once per
+  clip, so it needs the frame folded into that computation rather than called per frame).
 
 ---
 
