@@ -232,17 +232,26 @@ fn sam2_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Res
 // embedding sam_encode/sam2_encode already cached for the open photo, so learning or finding a
 // subject costs a few thousand dot products, not an inference pass.
 
-/// Prefers SAM 2.1's features and falls back to EdgeSAM's, returning the grid and its token so the
-/// caller can verify it belongs to the photo it thinks it does. SAM 2.1 is preferred because its
-/// errors are better-shaped, not because it scores higher — see subject.rs's finding 2.
+/// Picks the feature grid for the photo identified by `token`, preferring SAM 2.1.
+///
+/// ⚠️ Selection is by MATCHING TOKEN, not merely "is a SAM 2.1 embedding cached". The frontend
+/// encodes with EdgeSAM first and SAM 2.1 in the background, so right after a photo switch the
+/// SAM 2.1 slot still holds the PREVIOUS photo while EdgeSAM already holds the current one.
+/// Preferring the sam2 slot unconditionally there returns a grid for the wrong photo, whose token
+/// then fails the caller's equality check — so the feature would intermittently refuse to work
+/// on a photo EdgeSAM could have handled perfectly well, in a way that looks random to the user
+/// because it depends on how fast they clicked after switching.
 fn subject_grid<'a>(
     sam2: &'a Option<Sam2EmbedCache>,
     edge: &'a Option<SamEmbedCache>,
-) -> Option<(subject::FeatureGrid<'a>, &'a str)> {
-    if let Some(c) = sam2.as_ref() {
-        return Some((subject::FeatureGrid::sam2(&c.embedding), c.token.as_str()));
+    token: &str,
+) -> Option<subject::FeatureGrid<'a>> {
+    if let Some(c) = sam2.as_ref().filter(|c| c.token == token) {
+        return Some(subject::FeatureGrid::sam2(&c.embedding));
     }
-    edge.as_ref().map(|c| (subject::FeatureGrid::edgesam(&c.embedding), c.token.as_str()))
+    edge.as_ref()
+        .filter(|c| c.token == token)
+        .map(|c| subject::FeatureGrid::edgesam(&c.embedding))
 }
 
 #[derive(serde::Deserialize)]
@@ -250,6 +259,12 @@ struct SubjectLearnIn {
     id: String,
     name: String,
     token: String,
+    /// Identifies the reference PHOTO, so re-teaching from the same one replaces it instead of
+    /// stacking a near-duplicate that would silently double its weight.
+    #[serde(default)]
+    ref_id: String,
+    #[serde(default)]
+    ref_label: String,
 }
 
 /// Teaches (or reinforces) a subject from the CURRENT photo plus a mask of the subject in it —
@@ -260,12 +275,12 @@ fn subject_learn(request: tauri::ipc::Request) -> Result<subject::Subject, Strin
     let (json, payload) = parse_framed(request.body())?;
     let opts: SubjectLearnIn = serde_json::from_value(json).map_err(|e| format!("subject_learn args: {e}"))?;
     let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
-    let (grid, token) = subject_grid(&sam2, &edge).ok_or("subject_learn: no photo encoded yet")?;
-    if token != opts.id.as_str() && token != opts.token.as_str() {
-        return Err("subject_learn: the encoded photo has changed — re-encode before teaching".into());
-    }
+    let grid = subject_grid(&sam2, &edge, &opts.token)
+        .ok_or("subject_learn: this photo is not encoded — run AI Select on it first")?;
     let prototype = subject::learn(grid, payload)?;
-    subject::upsert_subject(&opts.id, &opts.name, prototype, grid.encoder_tag())
+    let ref_id = if opts.ref_id.is_empty() { opts.token.clone() } else { opts.ref_id.clone() };
+    let ref_label = if opts.ref_label.is_empty() { ref_id.clone() } else { opts.ref_label.clone() };
+    subject::upsert_subject(&opts.id, &opts.name, prototype, grid.encoder_tag(), &ref_id, &ref_label)
 }
 
 #[derive(serde::Serialize)]
@@ -285,10 +300,8 @@ fn subject_locate(token: String, id: String) -> Result<tauri::ipc::Response, Str
     let subjects = subject::load_subjects();
     let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
     let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
-    let (grid, tok) = subject_grid(&sam2, &edge).ok_or("subject_locate: no photo encoded yet")?;
-    if tok != token {
-        return Err("subject_locate: the encoded photo has changed — re-encode first".into());
-    }
+    let grid = subject_grid(&sam2, &edge, &token)
+        .ok_or("subject_locate: this photo is not encoded — run AI Select on it first")?;
     let found = subject::locate_subject(grid, subj)?;
     // The mask always comes from EdgeSAM's decoder: the POINT is what a prototype transfers, and
     // EdgeSAM decodes it in a few ms against an embedding that is always present, whereas the
@@ -319,6 +332,18 @@ fn subject_list() -> Vec<subject::Subject> {
 #[tauri::command]
 fn subject_delete(id: String) -> Result<(), String> {
     subject::delete_subject(&id)
+}
+
+#[tauri::command]
+fn subject_rename(id: String, name: String) -> Result<(), String> {
+    subject::rename_subject(&id, &name)
+}
+
+/// Drops one reference photo from a subject and re-merges. Returns the updated subject, or null
+/// when that was its last reference (in which case the subject itself is gone).
+#[tauri::command]
+fn subject_remove_ref(id: String, ref_id: String) -> Result<Option<subject::Subject>, String> {
+    subject::remove_reference(&id, &ref_id)
 }
 
 // ── Face-feature auto-exclusion (ROADMAP item 16) — see faceparse.rs for the model, the class
@@ -1408,6 +1433,8 @@ fn main() {
             subject_locate,
             subject_list,
             subject_delete,
+            subject_remove_ref,
+            subject_rename,
             ingest::list_volumes,
             ingest::scan_card,
             ingest::ingest_copy,

@@ -660,6 +660,35 @@ Auto-exclude face features" button (Skin mask panel, desktop only) derives a hea
 subject mask's own bounding box and turns the result into one eraser mask via the same
 `isExclude` mechanism a hand-painted eraser uses.
 
+### Card import, named subjects, and auto-seeded skin samples (Phase C, 2026-08-15)
+
+- **Card import** (`desktop/src-tauri/src/ingest.rs` + a "Devices" section in `library-ui.js`)
+  replaces the Lightroom trip: volume detection, date-organised copy with folder/filename
+  templates, an optional second copy in the same pass, size verification, duplicate skipping,
+  progress and eject. Never moves, only copies. ⚠️ Dates come from EXIF **DateTimeOriginal**, not
+  `DateTime` — for the repo's own test photos those differ by 2 and 5 days because an editor
+  rewrote them, and Finder/`sips -g creation` show the *wrong* one. `ingest_run` is split out of
+  the `#[tauri::command]` so the whole path is testable without an AppHandle.
+- **Named subjects** (`subject.rs`, "Subjects" in the AI-mask panel): teach a subject from a
+  selection, then find it in another photo. Read that file's header before touching the UI — its
+  measured limits are what the UI shape is *for* (~77-80% recall, no usable presence signal, so
+  Find always presents a result to confirm and never applies across a batch; references are kept
+  individually because WHICH photos you teach from matters more than how many; and a haircut does
+  **not** break a subject, so there is deliberately no re-teach prompt).
+- **Skin samples are auto-seeded** from the segmented region (`mskAutoSamples`) — k-means, k=4, in
+  Oklab LCh — instead of requiring the shift-click ritual that produced §5b's one-sample failure.
+  Measured against the hand-picked 3-sample baseline on `__TM3390` (`test/probe_tm3390.mjs`'s
+  `AUTO-seeded` case): effective-weight spread **0.018 vs 0.039**, hue closed **73% vs 70%**,
+  chroma **67% vs 65%** — better on all three.
+  ⚠️ Two things it needs, both found by measuring: seed only from pixels above §5b's **0.016**
+  chroma cut (not the shader's 0.010 smoothstep floor, a different job — at 0.010 grey rock inside
+  the selection formed its own cluster and the gate then leaked onto rock at 0.258), and **drop
+  clusters holding <8% of the pixels**, or a rim of contamination inside the mask gets a sample of
+  its own and blows the weight spread out to 0.247.
+- **`Match shoot`** (a 4th skin target mode) saves one measured tone in `localStorage` so a whole
+  set converges on ONE skin rendering; `Even them out` converges each photo onto its own mean,
+  which is why two frames of the same person in different light drift apart.
+
 ---
 
 ## 6. Calibration tooling (`calib/`)

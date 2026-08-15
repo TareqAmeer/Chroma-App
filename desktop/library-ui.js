@@ -48,6 +48,24 @@
         }));
       }
       case 'registry_set_cmd': return Promise.resolve();
+      case 'list_volumes': return Promise.resolve([
+        { name: 'LUMIX', path: '/Volumes/LUMIX', has_dcim: true, total_bytes: 128e9, free_bytes: 71e9 },
+        { name: 'Backup T7', path: '/Volumes/Backup T7', has_dcim: false, total_bytes: 2e12, free_bytes: 9e11 },
+      ]);
+      case 'scan_card': {
+        // A realistic mix: two shoot days, a video, and three already-imported duplicates, so
+        // every state the panel can show is reachable in the harness.
+        const out = [];
+        for (let i = 1; i <= 24; i++) out.push({
+          path: `/Volumes/LUMIX/DCIM/100LUMIX/P10${(6500 + i)}.RW2`, name: `P10${6500 + i}.RW2`,
+          size: 25e6 + i * 1e5, kind: 'raw', date: i > 14 ? '2026-08-14' : '2026-08-13', duplicate: i <= 3,
+        });
+        out.push({ path: '/Volumes/LUMIX/PRIVATE/M4ROOT/C0001.MP4', name: 'C0001.MP4', size: 810e6, kind: 'video', date: '2026-08-14', duplicate: false });
+        return Promise.resolve(out);
+      }
+      case 'ingest_copy': return new Promise((res) => setTimeout(() => res({ copied: 22, skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
+      case 'eject_volume': return Promise.resolve();
+      case 'plugin:dialog|open': return Promise.resolve('/test/Pictures/2026');
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
       case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
       case 'get_lr_thumb': return Promise.reject(new Error('miss')); // always a miss → exercises the network+save path
@@ -2934,6 +2952,199 @@
     rejected: (p) => setLabel(p, 'Red'),
   };
 
+  // ── Devices: card import (ingest.rs) ───────────────────────────────────────────────────
+  // Lives above Cloud in the same sidebar, because a card is a source of photos in exactly the
+  // way an album is. Everything here is a thin shell over ingest.rs — the layout rules, the
+  // verification and the duplicate matching are all Rust-side; this chooses the options and
+  // shows progress.
+  const CARD_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5V3h7l3 3"/><circle cx="12" cy="13" r="2.5"/></svg>';
+  const cardState = { volumes: [], scanning: false };
+
+  function fmtBytes(n) {
+    if (!n) return '';
+    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0, v = Number(n);
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${u[i]}`;
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  async function refreshVolumes() {
+    try {
+      const vols = await invoke('list_volumes');
+      // Only cards (a DCIM folder) get a sidebar row on their own. A user importing from a plain
+      // external drive can still reach it through the panel's own "Choose folder", but listing
+      // every mounted Time Machine disk as an import source would be noise.
+      const next = (vols || []).filter((v) => v.has_dcim);
+      const changed = next.length !== cardState.volumes.length
+        || next.some((v, i) => v.path !== cardState.volumes[i].path);
+      cardState.volumes = next;
+      if (changed) renderCollections();
+    } catch (e) { console.error('list_volumes', e); }
+  }
+
+  function devicesSectionHtml() {
+    if (!cardState.volumes.length) return '';
+    const rows = cardState.volumes.map((v) => `
+      <div class="lib-coll-row lib-card-row" data-card="${esc(v.path)}" title="${esc(v.path)} — click to import">
+        <span class="lib-coll-ic">${CARD_SVG}</span><span class="lib-coll-lb">${esc(v.name)}</span>
+        <span class="lib-coll-count">${v.total_bytes ? fmtBytes(v.total_bytes - v.free_bytes) : ''}</span>
+      </div>`).join('');
+    return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Devices</div>' + rows;
+  }
+
+  const IMPORT_PREFS_KEY = 'cs.import.prefs.v1';
+  function importPrefs() {
+    try { return JSON.parse(localStorage.getItem(IMPORT_PREFS_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveImportPrefs(p) {
+    try { localStorage.setItem(IMPORT_PREFS_KEY, JSON.stringify(p)); } catch (e) { /* quota — not worth failing an import over */ }
+  }
+
+  /// The import sheet. Scans first (so the user is choosing against what is actually on the card,
+  /// including which files are already imported), then copies with live progress.
+  async function openImportPanel(cardPath) {
+    if (cardState.scanning) return;
+    const prefs = importPrefs();
+    const back = document.createElement('div');
+    back.id = 'lib-import-back';
+    back.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px;width:min(680px,92vw);max-height:86vh;overflow:auto;font-family:var(--sans);color:var(--txt);box-shadow:var(--lift-2)';
+    box.innerHTML = `<div style="font-weight:600;font-size:15px;margin-bottom:2px">Import from ${esc(baseName(cardPath))}</div>
+      <div id="imp-sub" style="font-size:12px;color:var(--mut);margin-bottom:14px">Scanning card…</div>
+      <div id="imp-body"></div>`;
+    back.appendChild(box);
+    document.body.appendChild(back);
+    let cancelled = false;
+    const cleanup = () => { document.removeEventListener('keydown', onKey); back.remove(); };
+    const onKey = (ev) => { if (ev.key === 'Escape' && !cardState.scanning) { cancelled = true; cleanup(); } };
+    document.addEventListener('keydown', onKey);
+    back.onclick = (ev) => { if (ev.target === back && !cardState.scanning) { cancelled = true; cleanup(); } };
+
+    let files = [];
+    try {
+      files = await invoke('scan_card', { path: cardPath, destRoot: prefs.dest || null });
+    } catch (e) {
+      document.getElementById('imp-sub').textContent = 'Could not read this card: ' + String(e.message || e);
+      return;
+    }
+    if (cancelled) return;
+    if (!files.length) {
+      document.getElementById('imp-sub').textContent = 'No photos or videos found on this card.';
+      return;
+    }
+
+    const dupes = files.filter((f) => f.duplicate).length;
+    const dates = files.map((f) => f.date).filter(Boolean).sort();
+    const totalBytes = files.reduce((a, f) => a + (f.size || 0), 0);
+    const span = dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} → ${dates[dates.length - 1]}`) : 'no date';
+    document.getElementById('imp-sub').innerHTML =
+      `${files.length} files · ${fmtBytes(totalBytes)} · ${esc(span)}${dupes ? ` · <span style="color:var(--acc)">${dupes} already imported</span>` : ''}`;
+
+    const row = (label, html, hint) => `<div style="margin-bottom:10px">
+        <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">${label}</div>
+        ${html}${hint ? `<div style="font-size:11px;color:var(--mut);margin-top:3px">${hint}</div>` : ''}</div>`;
+    const inputCss = 'width:100%;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 9px;font-size:12px;font-family:var(--sans)';
+    document.getElementById('imp-body').innerHTML =
+      row('Copy to', `<div style="display:flex;gap:6px"><input id="imp-dest" style="${inputCss}" value="${esc(prefs.dest || '')}" placeholder="Choose a destination folder…" readonly>
+          <button id="imp-dest-pick" style="white-space:nowrap;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer">Choose…</button></div>`)
+      + row('Organise into', `<select id="imp-folder" style="${inputCss}">
+          <option value="{YYYY}/{YYYY-MM-DD}">2026 / 2026-08-15</option>
+          <option value="{YYYY}/{MM}/{DD}">2026 / 08 / 15</option>
+          <option value="{YYYY-MM-DD}">2026-08-15</option>
+          <option value="">No subfolders</option></select>`,
+        'Folders come from each photo\'s capture date, not the file date.')
+      + row('Rename', `<select id="imp-name" style="${inputCss}">
+          <option value="">Keep camera filenames</option>
+          <option value="{YYYY-MM-DD}_{name}">2026-08-15_P1000123</option>
+          <option value="{YYYY-MM-DD}_{n}">2026-08-15_0001</option></select>`)
+      + row('Also copy to', `<div style="display:flex;gap:6px"><input id="imp-backup" style="${inputCss}" value="${esc(prefs.backup || '')}" placeholder="Optional second copy — another drive" readonly>
+          <button id="imp-backup-pick" style="white-space:nowrap;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer">Choose…</button>
+          <button id="imp-backup-clear" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);border-radius:7px;padding:7px 9px;font-size:12px;cursor:pointer">✕</button></div>`,
+        'Written in the same pass, before the card is reused — which is when a single copy is most fragile.')
+      + `<label style="display:flex;align-items:center;gap:7px;font-size:12px;margin:12px 0 4px;cursor:pointer">
+          <input type="checkbox" id="imp-skip" ${prefs.skip === false ? '' : 'checked'}> Skip files already imported${dupes ? ` (${dupes})` : ''}</label>
+        <label style="display:flex;align-items:center;gap:7px;font-size:12px;margin-bottom:14px;cursor:pointer">
+          <input type="checkbox" id="imp-eject" ${prefs.eject ? 'checked' : ''}> Eject card when finished</label>
+        <div id="imp-prog" style="display:none;margin-bottom:12px">
+          <div style="height:6px;background:var(--sur2);border-radius:3px;overflow:hidden"><div id="imp-bar" style="height:100%;width:0;background:var(--acc);transition:width .15s"></div></div>
+          <div id="imp-prog-txt" style="font-size:11px;color:var(--mut);margin-top:5px"></div></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
+          <div id="imp-cancel" style="font-size:12px;color:var(--mut);cursor:pointer;padding:8px 10px">Cancel</div>
+          <button id="imp-go" style="background:var(--acc);border:none;color:#1a1206;font-weight:600;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer">Import</button>
+        </div>`;
+
+    const $ = (id) => document.getElementById(id);
+    if (prefs.folder) $('imp-folder').value = prefs.folder;
+    if (prefs.name) $('imp-name').value = prefs.name;
+    const pickFolder = async (target) => {
+      try {
+        const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
+        if (chosen) target.value = Array.isArray(chosen) ? chosen[0] : chosen;
+      } catch (e) { console.error('pick folder', e); }
+    };
+    $('imp-dest-pick').onclick = () => pickFolder($('imp-dest'));
+    $('imp-backup-pick').onclick = () => pickFolder($('imp-backup'));
+    $('imp-backup-clear').onclick = () => { $('imp-backup').value = ''; };
+    $('imp-cancel').onclick = () => { if (!cardState.scanning) { cancelled = true; cleanup(); } };
+
+    $('imp-go').onclick = async () => {
+      const dest = $('imp-dest').value.trim();
+      if (!dest) { $('imp-dest').style.borderColor = 'var(--acc)'; return; }
+      const opts = {
+        destRoot: dest,
+        backupRoot: $('imp-backup').value.trim() || null,
+        folderTemplate: $('imp-folder').value,
+        filenameTemplate: $('imp-name').value,
+        skipDuplicates: $('imp-skip').checked,
+        only: [],
+      };
+      saveImportPrefs({ dest, backup: opts.backupRoot || '', folder: opts.folderTemplate, name: opts.filenameTemplate, skip: opts.skipDuplicates, eject: $('imp-eject').checked });
+      cardState.scanning = true;
+      $('imp-go').disabled = true;
+      $('imp-go').style.opacity = '.6';
+      $('imp-go').textContent = 'Importing…';
+      $('imp-cancel').style.opacity = '.4';
+      $('imp-prog').style.display = 'block';
+      let unlisten = null;
+      try {
+        unlisten = await window.__TAURI__.event.listen('ingest-progress', (ev) => {
+          const p = ev.payload || {};
+          const frac = p.bytes_total ? p.bytes_done / p.bytes_total : (p.total ? p.done / p.total : 0);
+          $('imp-bar').style.width = `${Math.round(frac * 100)}%`;
+          $('imp-prog-txt').textContent = `${p.done} of ${p.total} · ${fmtBytes(p.bytes_done)} of ${fmtBytes(p.bytes_total)}${p.current ? ' · ' + p.current : ''}`;
+        });
+        const res = await invoke('ingest_copy', { source: cardPath, options: opts });
+        if (unlisten) unlisten();
+        cardState.scanning = false;
+        const failed = (res.failed || []).length;
+        if (typeof toast === 'function') {
+          toast(failed
+            ? `Imported ${res.copied} of ${res.copied + failed} — ${failed} failed`
+            : `Imported ${res.copied} file${res.copied === 1 ? '' : 's'} (${fmtBytes(res.bytes)})`, !failed);
+        }
+        // Per-file failures are listed, not summarised away: a card that dropped three files is
+        // exactly when the user needs to know WHICH three before formatting it.
+        if (failed) console.warn('import failures:', res.failed);
+        if ($('imp-eject') && $('imp-eject').checked) {
+          try { await invoke('eject_volume', { path: cardPath }); refreshVolumes(); }
+          catch (e) { if (typeof toast === 'function') toast('Import finished, but the card would not eject', false); }
+        }
+        cleanup();
+        await importDroppedFolder(dest);
+      } catch (e) {
+        if (unlisten) unlisten();
+        cardState.scanning = false;
+        $('imp-go').disabled = false;
+        $('imp-go').style.opacity = '';
+        $('imp-go').textContent = 'Import';
+        $('imp-cancel').style.opacity = '';
+        $('imp-prog-txt').textContent = 'Import failed: ' + String(e.message || e);
+      }
+    };
+  }
+
   // ── Cloud sources (approved wireframe): Adobe Lightroom lives in the sidebar between the
   // smart collections and the folder tree. Albums render as tree children once connected;
   // selecting one fills the normal grid with cloud thumbnails (see openLrAlbum below). The
@@ -3214,7 +3425,10 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
-      </div>`).join('') + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
+      </div>`).join('') + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
+    host.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
+      row.onclick = () => openImportPanel(row.dataset.card);
+    });
     host.querySelectorAll('.lib-coll-row[data-coll]').forEach((row) => {
       row.onclick = () => {
         const name = row.dataset.coll;
@@ -3348,6 +3562,12 @@
   window.chromasmithToggleLibrary = toggleLibrary; // called from the header button in desktop-native.js
 
   window.__TAURI__.event.listen('menu-library', toggleLibrary);
+
+  // Card detection. macOS emits no mount notification that reaches a Tauri webview, so this
+  // polls /Volumes — cheap (one readdir plus a statfs per volume) and only while the Library is
+  // actually open, so a backgrounded app does no work.
+  refreshVolumes();
+  setInterval(() => { const ov = document.getElementById('lib-overlay'); if (ov && ov.style.display !== 'none') refreshVolumes(); }, 4000);
 
   // ── deskx home screen: the app opens to the full-window Library, not the editor (matches
   // the approved Darkroom-style wireframe). desktop-native.js sets body.deskx synchronously

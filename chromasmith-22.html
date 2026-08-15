@@ -9324,6 +9324,162 @@ async function samRunPoints(m){
     mskRebuild();
   }
 }
+// ── Named subjects: "remember this dog", then find it again in another photo ──────────────────
+// Desktop only (needs the SAM embeddings — see desktop/src-tauri/src/subject.rs for the method
+// and, importantly, its measured limits). Three of those measurements shape this UI directly:
+//
+//  · ~77-80% recall, and NO usable "is the subject present" score. So Find always presents a
+//    RESULT TO CONFIRM on the current photo, never applies anything across a batch. A miss is
+//    one visible wrong selection the user re-scribbles, not forty silently wrong exports.
+//  · WHICH photos you teach from matters more than how many, so references are listed
+//    individually and can be removed one at a time — a bad reference is swapped, not buried
+//    under a fourth.
+//  · A haircut does NOT break a taught subject, so there is deliberately no "re-teach after
+//    grooming" prompt. That was the intuitive guess and the measurements say it is wrong.
+let _subjects=null,_subjBusy=false;
+async function subjRefresh(){
+  if(!window.__TAURI__)return;
+  try{_subjects=await window.__TAURI__.core.invoke('subject_list');}
+  catch(e){_subjects=[];log('subject_list: '+(e&&e.message||e),'err');}
+}
+function subjToken(){return _sam2Token||_samToken;}
+function subjPanelHtml(m){
+  if(!window.__TAURI__)return '';
+  if(_subjects===null){subjRefresh().then(()=>{if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();});return '';}
+  const hasSel=!!(m.px&&m.px.length);
+  const rows=(_subjects||[]).map((s,i)=>{
+    const n=(s.refs||[]).length;
+    return '<div class="fx-row" style="align-items:center;gap:6px">'
+      +'<div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'
+        +_esc(s.name)+' — taught from '+n+' photo'+(n===1?'':'s')+'">'+_esc(s.name)
+      +'<span style="color:var(--mut);font-variant-numeric:tabular-nums"> · '+n+'</span></div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFind('+i+')" title="Find '+_esc(s.name)+' in this photo and select it. Always check the result — this suggests, it does not guarantee.">'+icon('wand',12)+' Find</button>'
+      +(hasSel?'<button class="btn bgh" style="order:3;padding:3px 8px" onclick="subjTeach('+i+')" title="Add the CURRENT selection as another reference photo. More references help, and a varied one helps most.">+ Ref</button>':'')
+      +'<button class="btn bgh" style="order:4;padding:3px 6px" onclick="subjMenu('+i+',event)" title="References, rename, forget">⋯</button>'
+      +'</div>';
+  }).join('');
+  return '<div class="fx-sub" style="margin-top:8px">Subjects</div>'
+    +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">Select something, then <b>Remember</b> it to find the same subject in other photos.</div>')
+    +(hasSel?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="subjTeach(-1)" title="Name this selection so you can find the same subject in other photos">'+icon('star',14)+(_subjBusy?' Working…':' Remember this subject')+'</button></div>':'')
+    +((_subjects||[]).some(s=>(s.refs||[]).length<3)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Three or more reference photos works noticeably better than one — add a few taken in different places.</div>':'');
+}
+function _esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+/// Teaches a subject from the current mask raster. `idx` -1 creates a new one (prompting for a
+/// name), otherwise it adds another reference to an existing subject.
+async function subjTeach(idx){
+  const m=fxState.masks[mskSel];
+  if(!m||!m.px||!m.px.length){toast('Select the subject first — scribble over it');return;}
+  const token=subjToken();
+  if(!token){toast('This photo is not prepared yet — scribble once to run AI Select');return;}
+  let id,name;
+  if(idx<0){
+    name=(prompt('Name this subject (e.g. the dog’s name)','')||'').trim();
+    if(!name)return;
+    id='subj-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+  }else{const s=_subjects[idx];id=s.id;name=s.name;}
+  // The mask raster is stored at mtW x mtH, which is the SAME working resolution samEnsureEncoded
+  // encoded from — so it can go straight across with no rescale. If that ever stops being true,
+  // subject_learn will reject it on size rather than learn from misaligned pixels.
+  const raster=new Uint8Array(m.px.length);raster.set(m.px);
+  _subjBusy=true;mskRebuild();
+  try{
+    const item=(typeof curItem==='function')?curItem():null;
+    const refId=(item&&(item.path||item.name))||('photo-'+Date.now());
+    const refLabel=(item&&item.name)||refId;
+    const s=await _samFramedInvoke('subject_learn',{id,name,token,refId,refLabel},raster);
+    await subjRefresh();
+    const n=(s.refs||[]).length;
+    toast(n>=3?`${s.name} — ${n} reference photos`:`${s.name} — ${n} reference photo${n===1?'':'s'}, add more for better results`,true);
+  }catch(e){
+    const msg='Could not remember this subject — '+(e&&e.message||e);
+    log(msg,'err');toast(msg);
+  }finally{_subjBusy=false;mskRebuild();}
+}
+/// Locates a taught subject in the CURRENT photo and installs the result as this mask's raster.
+/// Always a suggestion: the mask lands on screen for the user to look at, and Undo reverts it.
+async function subjFind(idx){
+  const s=(_subjects||[])[idx];if(!s)return;
+  const m=fxState.masks[mskSel];if(!m)return;
+  await samEnsureEncoded();
+  const token=subjToken();
+  if(!token){toast('This photo is not prepared yet — try again in a moment');return;}
+  _subjBusy=true;mskRebuild();
+  try{
+    const buf=await window.__TAURI__.core.invoke('subject_locate',{token,id:s.id});
+    const dv=new DataView(buf);
+    const hlen=dv.getUint32(0,true);
+    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const mask=new Uint8Array(buf,4+hlen);
+    if(mask.length!==header.width*header.height){toast('Find: mask size mismatch');return;}
+    m.px=Uint8ClampedArray.from(_samRefineMask(mask,header.width,header.height));
+    m.mtW=header.width;m.mtH=header.height;
+    // The scribble points that produced any PREVIOUS selection no longer describe this raster —
+    // leaving them would make the next stroke resubmit a contradictory point set and appear to
+    // undo the find.
+    m.aiPoints=[];
+    _mskTexDirty=true;
+    if(typeof hapt==='function')hapt();
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    // No confidence threshold is applied, and the score is not shown as one: hits and misses
+    // both measure 0.70-0.79, so a number here would imply a certainty that does not exist.
+    toast(`Found ${s.name} — check the selection`,true);
+  }catch(e){
+    const raw=String(e&&e.message||e);
+    const msg=/encoder-mismatch/.test(raw)
+      ? `${s.name} was taught with a different model — re-teach it on a photo`
+      : 'Could not find '+s.name+' — '+raw;
+    log(msg,'err');toast(msg);
+  }finally{_subjBusy=false;mskRebuild();}
+}
+function subjMenu(idx,ev){
+  const s=(_subjects||[])[idx];if(!s)return;
+  ev&&ev.stopPropagation();
+  const refs=(s.refs||[]).map((r,j)=>({label:'Remove reference: '+(r.label||r.id),fn:()=>subjRemoveRef(s.id,r.id)}));
+  const items=[
+    {label:'Rename…',fn:async()=>{
+      const n=(prompt('Rename subject',s.name)||'').trim();if(!n)return;
+      // Rename rides the same upsert as teaching, minus a new reference: re-send the FIRST
+      // reference under its own id, which replaces it in place rather than adding a duplicate.
+      try{await window.__TAURI__.core.invoke('subject_rename',{id:s.id,name:n});await subjRefresh();mskRebuild();}
+      catch(e){toast('Rename failed — '+(e&&e.message||e));}
+    }},
+    ...refs,
+    {label:'Forget '+s.name,fn:async()=>{
+      try{await window.__TAURI__.core.invoke('subject_delete',{id:s.id});await subjRefresh();mskRebuild();toast('Forgot '+s.name,true);}
+      catch(e){toast('Could not forget — '+(e&&e.message||e));}
+    }},
+  ];
+  _subjPopup(items,ev);
+}
+async function subjRemoveRef(id,refId){
+  try{
+    const s=await window.__TAURI__.core.invoke('subject_remove_ref',{id,refId});
+    await subjRefresh();mskRebuild();
+    toast(s?`Removed — ${(s.refs||[]).length} reference${(s.refs||[]).length===1?'':'s'} left`:'That was its last reference — subject forgotten',true);
+  }catch(e){toast('Could not remove — '+(e&&e.message||e));}
+}
+function _subjPopup(items,ev){
+  document.querySelectorAll('.subj-pop').forEach(n=>n.remove());
+  const pop=document.createElement('div');
+  pop.className='subj-pop';
+  pop.style.cssText='position:fixed;z-index:9999;background:var(--glass-bg,var(--sur2));backdrop-filter:blur(20px);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:200px;box-shadow:var(--lift-2)';
+  items.forEach(it=>{
+    const b=document.createElement('div');
+    b.textContent=it.label;
+    b.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    b.onmouseenter=()=>b.style.background='var(--sur2)';
+    b.onmouseleave=()=>b.style.background='';
+    b.onclick=()=>{pop.remove();it.fn();};
+    pop.appendChild(b);
+  });
+  document.body.appendChild(pop);
+  const r=ev&&ev.target&&ev.target.getBoundingClientRect?ev.target.getBoundingClientRect():{left:100,bottom:100};
+  pop.style.left=Math.min(r.left,innerWidth-pop.offsetWidth-8)+'px';
+  pop.style.top=Math.min(r.bottom+4,innerHeight-pop.offsetHeight-8)+'px';
+  const close=(e)=>{if(!pop.contains(e.target)){pop.remove();document.removeEventListener('mousedown',close);}};
+  setTimeout(()=>document.addEventListener('mousedown',close),0);
+}
+
 // ── Face-feature auto-exclusion (ROADMAP item 16) — desktop only, see
 // desktop/src-tauri/src/faceparse.rs for the model and desktop/src-tauri/vendor/faceparse/README.md
 // for why its class table needed independent verification. Runs the AI subject mask's own head
@@ -10031,7 +10187,7 @@ function crSampleMean(samples){
 function mskSkinTarget(m){
   let h,s,v;
   if(m.tgtMode==='match'||!m.tgtMode){const mn=crSampleMean(m.crSamples);h=mn.h;s=mn.s;v=mn.v;}
-  else{const[r,g,b]=_hexToRgb01(m.tgtHex||'#d7bd96');[h,s,v]=rgb2oklch(r,g,b);}
+  else{const[r,g,b]=_hexToRgb01(m.tgtHex||'#d7bd96');[h,s,v]=rgb2oklch(r,g,b);}  // swatch/custom/ref are all absolute
   const td=(m.tanDepth||0)/100,tw=(m.tanWarm||0)/100;
   if(tw){ // rotate the target toward the warm skin hue, the short way round the wheel.
     // 0.085 turn in OKLAB hue, not 25/360: Oklab's hue angles are not HSV's — skin measures
@@ -10096,6 +10252,138 @@ function mskSrcVDebounced(){clearTimeout(_mskSrcVT);_mskSrcVT=setTimeout(()=>{
   mskMeasureSrcV(m);fxUpdate();
 },60);}
 let _mskCrEyeActive=false;
+// ── Auto-seed the colour samples from the segmented region ────────────────────────────────────
+// `+ Skin` is segmentation-first (CLAUDE.md §5b): SAM has already answered "which pixels are this
+// person" before any colour is picked. So the samples can be DERIVED from those pixels instead of
+// clicked — which removes the measured one-sample failure mode outright rather than warning about
+// it, because the picks are guaranteed to span the whole selected region instead of whatever one
+// spot the user happened to click.
+//
+// k-means in OKLAB LCh, k = 4, over the masked pixels. Oklab because the whole skin path is in it
+// and chroma is the axis that separates skin from bright rock (§5b's table); k = 4 because the
+// gate holds CR_MAX_SAMPLES = 6 and the shaded/lit/pale/sheen split measured on __TM3390 is about
+// four clusters — enough to cover a body, with headroom for the user to shift-click more.
+//
+// ⚠️ Hue is CIRCULAR. Every mean here goes through the same cos/sin construction crSampleMean
+// uses; averaging 0.98 and 0.02 arithmetically gives cyan, which is the bug that would make an
+// auto-seeded gate select worse than a single hand pick.
+function _circMean(hs){
+  let x=0,y=0;
+  for(const h of hs){const a=h*2*Math.PI;x+=Math.cos(a);y+=Math.sin(a);}
+  let h=Math.atan2(y/hs.length,x/hs.length)/(2*Math.PI);
+  return h<0?h+1:h;
+}
+function _circDist(a,b){let d=Math.abs(a-b);return d>0.5?1-d:d;}
+/// Samples the mask's own raster against the graded preview, returning [{h,C,v,rgb}] in Oklab.
+/// Reads the SAME canvas mskMeasureSrcV does, so the auto-seeded samples and the srcV anchor are
+/// measured in one space.
+function _mskSkinPixels(m,maxN){
+  const cv=FX.cv;if(!cv||!m.px||!m.mtW||!m.mtH)return[];
+  const w=Math.min(cv.width,420),h=Math.max(1,Math.round(w*cv.height/cv.width));
+  const t=document.createElement('canvas');t.width=w;t.height=h;
+  const c=t.getContext('2d',{willReadFrequently:true});
+  c.drawImage(cv,0,0,w,h);
+  const d=c.getImageData(0,0,w,h).data;
+  const out=[];
+  for(let y=0;y<h;y++){
+    // Nearest-neighbour into the mask raster: it is a different resolution to the preview, and
+    // this only needs to know "is this pixel in the selection", not a precise edge.
+    const my=Math.min(m.mtH-1,Math.floor(y*m.mtH/h));
+    for(let x=0;x<w;x++){
+      const mx=Math.min(m.mtW-1,Math.floor(x*m.mtW/w));
+      if(m.px[my*m.mtW+mx]<128)continue;
+      const i=(y*w+x)*4;
+      const[hh,C,v]=rgb2oklch(d[i]/255,d[i+1]/255,d[i+2]/255);
+      // ⚠️ Use §5b's MEASURED cut (0.016), not the shader's smoothstep floor (0.010). Those are
+      // different jobs: the shader ramps a weight, this decides whether a pixel may DEFINE a
+      // cluster centre. Seeding at 0.010 let grey rock inside the selection form its own cluster,
+      // and the resulting gate then leaked onto rock at 0.258 — measured in probe_tm3390.
+      if(C<0.016)continue;
+      out.push({h:hh,s:C,v,rgb:[d[i],d[i+1],d[i+2]]});
+    }
+  }
+  if(out.length>maxN){ // deterministic stride, not random — same input must give the same samples
+    const step=out.length/maxN,thin=[];
+    for(let i=0;i<maxN;i++)thin.push(out[Math.floor(i*step)]);
+    return thin;
+  }
+  return out;
+}
+function mskAutoSamples(){
+  const m=fxState.masks[mskSel];
+  if(!m){return;}
+  if(!m.px||!m.px.length){toast('Select the subject first — scribble over them');return;}
+  const px=_mskSkinPixels(m,4000);
+  if(px.length<20){toast('Not enough skin in the selection to sample');return;}
+  const K=Math.min(4,Math.max(1,Math.floor(px.length/8)));
+  // Seed on the VALUE spread rather than at random: the clusters that matter are shaded vs lit
+  // skin, so starting the centres spread along v converges to that split in a couple of passes
+  // and — unlike random seeding — gives the same answer every time it is run on the same photo.
+  const byV=px.slice().sort((a,b)=>a.v-b.v);
+  let cent=[];
+  for(let i=0;i<K;i++)cent.push(byV[Math.floor((i+0.5)*byV.length/K)]);
+  cent=cent.map(p=>({h:p.h,s:p.s,v:p.v}));
+  const asg=new Array(px.length).fill(0);
+  for(let iter=0;iter<12;iter++){
+    let moved=false;
+    for(let i=0;i<px.length;i++){
+      let best=0,bd=Infinity;
+      for(let k=0;k<K;k++){
+        // Weight the axes the way the gate does: hue and chroma decide selection, value does not
+        // (the gate has no value term), so value gets a small weight — enough to keep shaded and
+        // lit skin in separate clusters without letting brightness dominate the split.
+        const dh=_circDist(px[i].h,cent[k].h),ds=px[i].s-cent[k].s,dv=(px[i].v-cent[k].v)*0.35;
+        const d=dh*dh*4+ds*ds+dv*dv;
+        if(d<bd){bd=d;best=k;}
+      }
+      if(asg[i]!==best){asg[i]=best;moved=true;}
+    }
+    for(let k=0;k<K;k++){
+      const mem=px.filter((_,i)=>asg[i]===k);
+      if(!mem.length)continue;
+      cent[k]={h:_circMean(mem.map(p=>p.h)),
+               s:mem.reduce((a,p)=>a+p.s,0)/mem.length,
+               v:mem.reduce((a,p)=>a+p.v,0)/mem.length};
+    }
+    if(!moved)break;
+  }
+  // ⚠️ Drop MINORITY clusters before anything else. A segmentation is never perfectly tight —
+  // a rim of hair, background or rock inside the mask is a small share of the pixels but k-means
+  // gives it a centre of its own, and every sample widens the gate equally. Measured: without
+  // this the gate leaked onto grey rock (0.258) and the dog's body (0.327), and the effective
+  // weight spread across skin went from 0.039 to 0.247 — which §5b's central finding says
+  // matters MORE than the weight being high.
+  const counts=new Array(K).fill(0);
+  for(const a of asg)counts[a]++;
+  const MIN_SHARE=0.08;
+  const sized=cent.map((c,k)=>({c,n:counts[k]})).filter(o=>o.n/px.length>=MIN_SHARE)
+                  .sort((a,b)=>b.n-a.n);
+  // Drop clusters that ended up nearly identical — two samples on the same tone add no coverage
+  // and just eat one of the six slots.
+  const keep=[];
+  for(const{c}of sized){
+    if(keep.some(k=>_circDist(k.h,c.h)<0.01&&Math.abs(k.s-c.s)<0.006))continue;
+    keep.push(c);
+  }
+  if(!keep.length){toast('Could not find a consistent skin tone in the selection');return;}
+  m.crSamples=keep.slice(0,CR_MAX_SAMPLES).map(c=>{
+    const[r,g,b]=oklch2rgb(c.h,c.s,c.v);
+    return{h:c.h,s:c.s,v:c.v,rgb:[Math.round(r*255),Math.round(g*255),Math.round(b*255)]};
+  });
+  m.crOn=true;m._okSpace=true;
+  // ⚠️ The range is deliberately LEFT ALONE at the skin default (55), and the alternative was
+  // measured rather than assumed. Narrowing it to 40 removes a gate leak onto grey rock
+  // (0.277 -> 0.000) but triples the effective-weight spread across skin (0.018 -> 0.085) and
+  // costs 6 points of chroma convergence. §5b's central finding is that FLAT weight matters more
+  // than high weight, and the leak it trades against is an artifact of measuring with a
+  // frame-sized ellipse: this button only exists on a Skin mask, which is segmentation-first, so
+  // rock and animals are outside the SHAPE and multiplied to zero regardless of the gate.
+  // If a user does see spill, "How similar" is right there to lower.
+  mskSrcVDebounced();
+  mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+  log(`Auto-sampled ${m.crSamples.length} skin tones from the selection`,'info');
+  toast(`Sampled ${m.crSamples.length} tones from the selection`,true);
+}
 function mskCrEyedropper(force){
   _mskCrEyeActive=force!=null?!!force:!_mskCrEyeActive;
   const btn=document.getElementById('btn-msk-cr-eye');if(btn)btn.classList.toggle('on',_mskCrEyeActive);
@@ -10147,6 +10435,35 @@ function mskTgtSwatch(hex){
 function mskTgtPicked(el){
   const m=fxState.masks[mskSel];if(!m)return;
   m.tgtHex=el.value;m.tgtMode='custom';fxUpdate();
+}
+// ── C4: one skin rendering across a whole shoot ───────────────────────────────────────────────
+// "Even them out" converges each photo onto ITS OWN measured mean, so two frames of the same
+// person in different light still land on two different skins — the exact thing that reads as
+// inconsistent across a set. Saving one frame's measured tone and pointing the other frames at it
+// makes the whole shoot converge to a single rendering.
+//
+// Stored as a plain hex in localStorage rather than per-mask, because the point is that it
+// OUTLIVES the photo it was measured on — it has to still be there when you open tomorrow's
+// frame. Per-mask state would be copied by the recipe paste path and then drift.
+const SKIN_REF_KEY='cs.skinRef.v1';
+function skinRefGet(){try{return localStorage.getItem(SKIN_REF_KEY)||'';}catch(e){return '';}}
+function mskSetSkinRef(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  if(!m.crSamples||!m.crSamples.length){toast('Sample the skin first');return;}
+  // The mean of the gate's own samples, through the SAME circular hue mean mskSkinTarget uses in
+  // match mode — so "save this" stores exactly the tone match mode would have converged to here.
+  const mn=crSampleMean(m.crSamples);
+  const[r,g,b]=oklch2rgb(mn.h,mn.s,mn.v);
+  const hex='#'+[r,g,b].map(v=>Math.round(Math.min(1,Math.max(0,v))*255).toString(16).padStart(2,'0')).join('');
+  try{localStorage.setItem(SKIN_REF_KEY,hex);}catch(e){}
+  m.tgtHex=hex;m.tgtMode='ref';mskRebuild();fxUpdate();
+  toast('Saved as the reference skin for this shoot',true);
+}
+function mskUseSkinRef(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const hex=skinRefGet();
+  if(!hex){toast('No reference skin saved yet — set one on a photo you like');return;}
+  m.tgtHex=hex;m.tgtMode='ref';mskRebuild();fxUpdate();
 }
 // Local Adjustments are static analytic masks in FRAME space — on a moving subject they visibly
 // swim, so video hides the whole panel rather than offering a feature that reads as broken.
@@ -10259,6 +10576,7 @@ function mskRebuild(){
         +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over">Clear points</button></div>'
         +(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button></div>':'')
+        +subjPanelHtml(m)
         +'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>'
         +(_sam2Encoding?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">◠</span> Improving selection quality in the background…</div>':'')
         // Previously a failed encode/select was only logged to the hidden diagnostics panel — a
@@ -10311,8 +10629,14 @@ function mskRebuild(){
     const strength=Math.round(((m.uH||0)+(m.uS||0))/2);
     let sk='<div class="msk-step"><span class="msk-step-n">1</span>Select the skin</div>'
       +'<div class="msk-hint">Click the skin you want to even out. Add clicks for shaded, paler or pinker areas — one sample is never enough for a whole body.</div>'
-      +'<div class="btn-row"><button class="btn '+(_mskCrEyeActive?'bsec':'bgh')+'" id="btn-msk-cr-eye" onclick="mskPickSkin()">'
-      +icon('eyedropper',14)+(_mskCrEyeActive?' Picking — shift-click to add':' Pick skin')+'</button></div>'
+      // Auto first, and primary: SAM has already decided which pixels are this person, so the
+      // samples can be derived from them. Hand-picking stays for correcting the result, but it is
+      // no longer the only route — and it was the route that produced the measured one-sample
+      // failure (CLAUDE.md §5b).
+      +'<div class="btn-row"><button class="btn bsec" onclick="mskAutoSamples()" title="Read the skin tones straight out of the selected area — covers shaded and lit skin without hunting for spots to click.">'
+      +icon('wand',14)+' Sample from selection</button>'
+      +'<button class="btn '+(_mskCrEyeActive?'bsec':'bgh')+'" id="btn-msk-cr-eye" onclick="mskPickSkin()">'
+      +icon('eyedropper',14)+(_mskCrEyeActive?' Picking — shift-click to add':' Pick manually')+'</button></div>'
       +chipRow();
     if(CS.length){
       sk+=_mskRow('How similar','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
@@ -10323,7 +10647,7 @@ function mskRebuild(){
     sk+='<div class="msk-step"><span class="msk-step-n">2</span>Choose the target</div>'
       +'<div class="msk-hint">Where those tones should end up. It does not have to be a colour that appears in the photo.</div>'
       +'<div class="seg msk-seg">'
-      +[['match','Even them out'],['swatch','Pick a shade'],['custom','Custom']]
+      +[['match','Even them out'],['ref','Match shoot'],['swatch','Pick a shade'],['custom','Custom']]
         .map(([v,lb])=>'<button class="'+(tgtMode===v?'on':'')+'" onclick="mskTgtMode(\''+v+'\')">'+lb+'</button>').join('')
       +'</div>';
     if(tgtMode==='swatch'){
@@ -10334,6 +10658,12 @@ function mskRebuild(){
     }else if(tgtMode==='custom'){
       sk+='<div class="fx-row"><div class="fx-label">Target colour</div>'
         +'<input type="color" value="'+tgtHex+'" oninput="mskTgtPicked(this)"></div>';
+    }else if(tgtMode==='ref'){
+      const ref=skinRefGet();
+      sk+='<div class="msk-hint">Every photo you set to <b>Match shoot</b> converges on one saved tone, so a set shot in changing light still reads as the same skin. <b>Even them out</b> uses each photo\'s own average instead, which is why two frames can drift apart.</div>'
+        +(ref?'<div class="fx-row"><div class="fx-label">Reference</div><span class="pc-chip" style="background:'+ref+';width:22px;height:22px;border-radius:5px;order:2"></span></div>':'')
+        +'<div class="btn-row"><button class="btn bgh" onclick="mskSetSkinRef()" title="Measure this photo\'s skin and use it as the reference for the whole shoot">'+icon('eyedropper',14)+' Set from this photo</button>'
+        +(ref?'<button class="btn bgh" onclick="mskUseSkinRef()">Use saved</button>':'')+'</div>';
     }
     sk+='<div class="msk-step"><span class="msk-step-n">3</span>Blend</div>'
       +'<div class="msk-chiprow msk-presets">'

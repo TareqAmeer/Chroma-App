@@ -147,12 +147,29 @@ pub const ENC_EDGESAM: &str = "edgesam-1024";
 pub struct Subject {
     pub id: String,
     pub name: String,
-    /// L2-normalised, PROTO_DIM long.
+    /// The merged, L2-normalised prototype actually used for matching. Derived from `refs` —
+    /// stored rather than recomputed only so `load_subjects` stays a plain file read.
     pub prototype: Vec<f32>,
-    /// How many reference photos have been folded in — shown in the UI ("Dog · 3 photos") and
-    /// used to weight `merge_prototypes` so the 4th reference doesn't outvote the first three.
-    pub refs: u32,
+    /// Every reference kept SEPARATELY, not just folded into a running average.
+    ///
+    /// The measurements say WHICH photos you teach from matters more than how many (three good
+    /// references transfer across datasets at 84%; a poor triple managed 1 in 7). Acting on that
+    /// means a user has to be able to drop the bad reference and keep the rest — impossible from
+    /// a merged vector alone, which is why an earlier running-average version of this struct was
+    /// replaced. The cost is 1KB per reference.
+    #[serde(default)]
+    pub refs: Vec<Reference>,
     pub encoder: String,
+}
+
+/// One taught photo: the prototype it contributed plus enough to name it in a list.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Reference {
+    /// Stable id — the source photo path when there is one, else a timestamp.
+    pub id: String,
+    /// What to show in the references list (a filename, usually).
+    pub label: String,
+    pub prototype: Vec<f32>,
 }
 
 // ── Pure vector maths, all unit-testable without the model ────────────────────────────────────
@@ -192,6 +209,28 @@ pub fn merge_prototypes(existing: &[f32], existing_refs: u32, incoming: &[f32]) 
         .collect();
     l2_normalise(&mut out);
     out
+}
+
+/// Folds every kept reference into one prototype, weighting each equally. Equal weighting is the
+/// point of keeping them separately: with a running average the first reference would carry more
+/// influence than the fifth purely because it arrived first, which is not a property anyone asked
+/// for and makes "remove the bad one" only partially effective.
+pub fn merge_all(refs: &[Reference]) -> Vec<f32> {
+    if refs.is_empty() {
+        return Vec::new();
+    }
+    let dim = refs[0].prototype.len();
+    let mut acc = vec![0f32; dim];
+    for r in refs {
+        if r.prototype.len() != dim {
+            continue;
+        }
+        for (a, v) in acc.iter_mut().zip(&r.prototype) {
+            *a += v;
+        }
+    }
+    l2_normalise(&mut acc);
+    acc
 }
 
 /// Cosine similarity of two vectors that are BOTH already L2-normalised — i.e. just a dot product.
@@ -458,7 +497,7 @@ fn read_subjects_at(path: &Path) -> Vec<Subject> {
         // A malformed prototype can never be used by anything; a FOREIGN-encoder one still names a
         // subject the user taught, so it is kept and rejected at match time (with a message that
         // says to re-teach) rather than vanishing silently from their list.
-        .filter(|s| s.prototype.len() == PROTO_DIM)
+        .filter(|s| s.prototype.len() == PROTO_DIM && !s.refs.is_empty())
         .collect()
 }
 
@@ -476,34 +515,45 @@ pub fn load_subjects() -> Vec<Subject> {
 }
 
 /// Inserts a new subject or folds another reference into an existing one (matched by id).
-pub fn upsert_subject(id: &str, name: &str, prototype: Vec<f32>, encoder: &str) -> Result<Subject, String> {
+pub fn upsert_subject(
+    id: &str,
+    name: &str,
+    prototype: Vec<f32>,
+    encoder: &str,
+    ref_id: &str,
+    ref_label: &str,
+) -> Result<Subject, String> {
     let path = subjects_path();
     let mut all = read_subjects_at(&path);
+    let reference = Reference { id: ref_id.to_string(), label: ref_label.to_string(), prototype };
     let updated = match all.iter_mut().find(|s| s.id == id) {
         Some(existing) => {
-            // ⚠️ Folding features from one encoder into a prototype built by the other would
-            // average two unrelated vector spaces and quietly degrade a subject the user had
-            // already taught well. Replace outright instead, and restart the reference count so
-            // the UI's "3 photos" promise stays truthful.
+            // ⚠️ Mixing feature spaces would average two unrelated vector spaces and quietly
+            // degrade a subject the user had already taught well. Start over instead, and say so
+            // by dropping the old references rather than leaving a misleading count.
             if existing.encoder != encoder {
-                existing.prototype = prototype;
-                existing.refs = 1;
+                existing.refs.clear();
                 existing.encoder = encoder.to_string();
-            } else {
-                existing.prototype = merge_prototypes(&existing.prototype, existing.refs, &prototype);
-                existing.refs += 1;
             }
+            // Re-teaching from the SAME photo replaces that reference instead of stacking a near
+            // duplicate, which would silently double its weight in the merge.
+            match existing.refs.iter_mut().find(|r| r.id == reference.id) {
+                Some(slot) => *slot = reference,
+                None => existing.refs.push(reference),
+            }
+            existing.prototype = merge_all(&existing.refs);
             if !name.is_empty() {
                 existing.name = name.to_string();
             }
             existing.clone()
         }
         None => {
+            let refs = vec![reference];
             let s = Subject {
                 id: id.to_string(),
                 name: if name.is_empty() { "Subject".into() } else { name.to_string() },
-                prototype,
-                refs: 1,
+                prototype: merge_all(&refs),
+                refs,
                 encoder: encoder.to_string(),
             };
             all.push(s.clone());
@@ -512,6 +562,34 @@ pub fn upsert_subject(id: &str, name: &str, prototype: Vec<f32>, encoder: &str) 
     };
     write_subjects_at(&path, &all)?;
     Ok(updated)
+}
+
+/// Renames a subject without touching its references — a rename must not perturb what it matches.
+pub fn rename_subject(id: &str, name: &str) -> Result<(), String> {
+    let path = subjects_path();
+    let mut all = read_subjects_at(&path);
+    let Some(s) = all.iter_mut().find(|s| s.id == id) else { return Err(format!("no subject {id}")) };
+    s.name = name.to_string();
+    write_subjects_at(&path, &all)
+}
+
+/// Drops one reference and re-merges what is left. Removing the last one deletes the subject —
+/// a subject with no references cannot match anything, and leaving an empty shell in the list
+/// would be a row that silently never works.
+pub fn remove_reference(id: &str, ref_id: &str) -> Result<Option<Subject>, String> {
+    let path = subjects_path();
+    let mut all = read_subjects_at(&path);
+    let Some(idx) = all.iter().position(|s| s.id == id) else { return Ok(None) };
+    all[idx].refs.retain(|r| r.id != ref_id);
+    if all[idx].refs.is_empty() {
+        all.remove(idx);
+        write_subjects_at(&path, &all)?;
+        return Ok(None);
+    }
+    all[idx].prototype = merge_all(&all[idx].refs);
+    let out = all[idx].clone();
+    write_subjects_at(&path, &all)?;
+    Ok(Some(out))
 }
 
 pub fn delete_subject(id: &str) -> Result<(), String> {
@@ -533,6 +611,22 @@ mod tests {
 
     fn repo_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    #[test]
+    fn merge_all_weights_references_equally() {
+        let r = |v: [f32; 3]| Reference { id: "x".into(), label: "x".into(), prototype: v.to_vec() };
+        // Two references agreeing on one axis and one disagreeing: the majority must win, and
+        // the order they were taught in must not matter (the property a running average lacked).
+        let a = merge_all(&[r([1.0, 0.0, 0.0]), r([1.0, 0.0, 0.0]), r([0.0, 1.0, 0.0])]);
+        let b = merge_all(&[r([0.0, 1.0, 0.0]), r([1.0, 0.0, 0.0]), r([1.0, 0.0, 0.0])]);
+        assert!(a[0] > a[1], "majority axis should dominate: {a:?}");
+        for (x, y) in a.iter().zip(&b) {
+            assert!((x - y).abs() < 1e-6, "merge must not depend on teaching order: {a:?} vs {b:?}");
+        }
+        let unit = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!((unit - 1.0).abs() < 1e-5, "merge must stay L2-normalised, got {unit}");
+        assert!(merge_all(&[]).is_empty());
     }
 
     #[test]
@@ -659,11 +753,12 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("subjects.json");
 
+        let mkref = |id: &str, v: f32| Reference { id: id.into(), label: id.into(), prototype: vec![v; PROTO_DIM] };
         let mine = Subject {
             id: "dog".into(),
             name: "Dog".into(),
             prototype: vec![0.5; PROTO_DIM],
-            refs: 2,
+            refs: vec![mkref("a.jpg", 0.5), mkref("b.jpg", 0.4)],
             encoder: ENC_EDGESAM.into(),
         };
         let foreign = Subject { encoder: "some-future-encoder".into(), ..mine.clone() };

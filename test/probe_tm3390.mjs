@@ -170,6 +170,11 @@ const out = await page.evaluate(async ({ SKIN, OTHER, PICK_FROM }) => {
     ['3 samples, feather 1.0', { crSamples: P3 }],
     ['3 samples, feather 0.5', { crSamples: P3, feather: 0.5 }],
     ['3 samples, feather 0.3', { crSamples: P3, feather: 0.3 }],
+    // AUTO-SEEDED (mskAutoSamples): the samples are derived by k-means over the segmented
+    // region rather than clicked. This is the comparison that matters — the plan's bar is that
+    // auto matches or beats the HAND-PICKED 3-sample numbers, since if it does, the shift-click
+    // ritual (and the measured one-sample failure it invites) can stop being the primary route.
+    ['AUTO-seeded, feather 0.3', { _auto: true, feather: 0.3 }],
     ['3 samples, feather 0.15', { crSamples: P3, feather: 0.15 }],
     ['3 samples, BRUSH (flat shape)', { crSamples: P3, _flatShape: true }],
     // Ceiling checks: how close can the CURRENT per-pixel operator get before a
@@ -181,6 +186,20 @@ const out = await page.evaluate(async ({ SKIN, OTHER, PICK_FROM }) => {
   ];
   for (const [label, over] of cases) {
     const m = mkMask(over);
+    // Auto-seeding runs against the mask's own raster, so give the probe's analytic ellipse an
+    // equivalent one: the same shape rasterised, which is what a real segmented Skin mask holds.
+    if (m._auto) {
+      const mw = 256, mh = Math.round(mw * H / W);
+      m.mtW = mw; m.mtH = mh;
+      m.px = new Uint8ClampedArray(mw * mh);
+      for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
+        m.px[y * mw + x] = shapeOf(m, Math.round(x * W / mw), Math.round(y * H / mh)) > 0.5 ? 255 : 0;
+      }
+      const prev = fxState.masks[mskSel];
+      fxState.masks[mskSel] = m;
+      mskAutoSamples();
+      fxState.masks[mskSel] = prev;
+    }
     // A huge, hard-edged ellipse is flat 1.0 everywhere in frame — the same weight field a fully
     // painted brush mask gives, so the shader render matches shapeOf's flat 1.0.
     if (m._flatShape) { m.rx = 9; m.ry = 9; m.feather = 0.02; }
