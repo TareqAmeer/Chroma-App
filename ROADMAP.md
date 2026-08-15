@@ -25,7 +25,6 @@ shipped, and 6's Clarity half shipped). Nothing here blocks anything else:
 | ~~6~~ | ~~Per-mask Sharpness / Noise~~ | — | ✅ **Substantively complete.** Texture is bipolar (negative softens, positive sharpens) and Clarity shipped, so these would be the same operator under new names. True edge-aware per-mask NR is a different, larger item |
 | ~~11~~ | ~~Auto-horizon~~ | — | ✅ **Done** — `autoHorizon`, a real Hough transform. 0.30° worst error on ground truth. ⚠️ Read the KNOWN LIMITATION in CLAUDE.md before touching it |
 | 13 | **16-bit source path** | M/L | ⚠️ Revised again — this is the prerequisite for **HDR from RAW**, not just precision. See the entry; measured |
-| 14 | Export **Display-P3 / wide-gamut ICC** | S/M | Colour science, not compositing — see the entry for why the sRGB tag already shipping isn't the same thing |
 | ~~15~~ | ~~Auto-match a series to a reference~~ | — | ✅ **Done** — `matchSeriesToReference`. Solves exposure in stops + WB after brightness equalisation, per photo, into `adjustOverride`. See CLAUDE.md |
 
 ✅ **Shipped since this list was written:** 10 (spot removal / clone / heal — see CLAUDE.md's
@@ -84,16 +83,39 @@ keystroke. 15 improvements below, ordered by value-per-effort. All touch only
    `data-path` in the live DOM — and is left as a follow-up if a real large-folder profile shows
    it's still needed.
 
-**Remaining (revised 2026-08-15) — 4 of the 10:**
+**All 15 Library items are now closed.** 11, 12 and 14 were already built when checked (the
+previous revision of this file listed them as open without verifying); 2 and 15 shipped
+2026-08-15, along with two latent bugs the check surfaced:
 
-11. **Filmstrip affordances** — `body.deskx` mode hides filters, viewbar, sidebar and footer
-    entirely; at minimum surface flags and filename on hover.
-12. **Saved filter/sort views** — persist named filter+sort combinations alongside the existing
-    smart collections.
-14. **Compare mode ↔ grid parity** — ratings, flags and navigation should behave identically in
-    both; compare still has its own separate keyboard branch.
-15. **Thumbnail decode tiering** — the concurrency pool + viewport priority shipped, but not the
-    two-tier decode (low-res proxy first, upgrade on idle).
+2. **Star ratings** — this had been recorded as shipped and **never was**. `ratingFilter` and a
+   `lib-rating` id were already referenced by the saved-views capture and the filter map, both
+   pointing at a state key and a DOM element that did not exist. Now real: `starsHtml`/`setRating`
+   mirroring `flagsHtml`/`setLabel`, click-to-set (clicking the current star clears, or 1★ is a
+   trap), `0`-`5` on the keyboard in the grid **and in compare** (which is what actually completes
+   item 14), a rating filter and a Rating sort key.
+15. **Thumbnail decode tiering** — worth doing only because of WHICH files are slow, and that is
+   the opposite of the obvious guess. Measured cold (`examples/thumb_timing.rs`):
+
+   | file | full decode | embedded preview |
+   |---|---|---|
+   | `__TM4202.jpg` | 803.8 ms | ~17 ms |
+   | `__TM5132.jpg` | 515.9 ms | ~8 ms |
+   | `P_TM5168.RW2` | 174.5 ms | n/a (already embedded) |
+
+   JPEGs are the slow case, not RAWs: `image::open` decodes all 24MP before downsizing to 360px,
+   while the RAW path already reads the camera's preview. A 6-wide pool therefore needs ~27s to
+   fill a 200-photo JPEG folder. `get_thumbnail_fast` returns the camera's own embedded preview
+   (256x171 here) for the first paint and the real decode is queued on idle.
+
+⚠️ **Two latent bugs found while verifying, both in code that looked done:**
+- `syncFilterControls`' id map used `lib-type`/`lib-tag`/… where every real id ends in `-filter`,
+  so **7 of its 8 lookups returned null**. Applying a saved view updated state but left every
+  dropdown showing the previous view — exactly the failure that function's comment says it exists
+  to prevent. Item 12 was written but broken.
+- `test/ui_audit.mjs`'s token check stripped `/* */` before `//`, so a `/*` inside a string
+  (`'video/*,.mp4'`) opened a phantom comment running **3,940 lines**. The check silently never
+  scanned lines 7644-11584. Replaced with a region-aware scanner (JS rules inside `<script>`, CSS
+  rules elsewhere); see its comment for the two ways a naive fix breaks.
 
 **Partly open:**
 
@@ -345,6 +367,12 @@ change, not a compositing one, and correspondingly harder to verify without a co
 reference to diff against.
 
 ### ❌ REJECTED (2026-08-15, user decision)
+
+- **Display-P3 / wide-gamut ICC export** — every film look, print profile and calibration constant
+  in `calib/` is fitted against sRGB primaries, so a wide-gamut pipeline would change all 113 of
+  them with no colour-managed reference to verify against. Gain-map HDR already ships and delivers
+  a larger visible gain on the same displays (range rather than gamut). Revisit only as a
+  final-stage export conversion, never as a pipeline change.
 
 - **Undo for Delete** — `trash_file` hands the file to the macOS Trash, which is already
   recoverable in Finder. An in-app `restore_from_trash` duplicates an OS affordance.

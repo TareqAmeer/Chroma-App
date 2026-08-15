@@ -33,6 +33,8 @@ mod rawdenoise;
 mod tiff_meta;
 #[cfg(target_os = "macos")]
 mod gainmap;
+#[cfg(target_os = "macos")]
+mod fastthumb;
 mod subject;
 mod ingest;
 
@@ -1406,6 +1408,7 @@ fn main() {
             google_oauth_loopback,
             library::list_dir,
             library::get_thumbnail,
+            library::get_thumbnail_fast,
             library::get_preview,
             library::get_meta,
             library::get_sidecar,

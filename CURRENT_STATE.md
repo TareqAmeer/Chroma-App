@@ -35,9 +35,9 @@ against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
   in all four cases and 16-bit export would store 8-bit steps in a wider container. The real work
   is a >8-bit source upload. See ROADMAP item 13.
 
-- **Display-P3 export.** The only roadmap item left that is neither rejected nor done. ⚠️ The film
-  looks are calibrated in sRGB, so a wide-gamut PIPELINE would change every one of them — the safe
-  shape is a final-stage sRGB→P3 conversion on export pixels with an embedded profile.
+- ~~**Display-P3 export.**~~ Rejected 2026-08-15: the film looks are calibrated in sRGB, so a
+  wide-gamut pipeline would change all 113 of them with nothing to verify against, and gain-map
+  HDR already gives a bigger visible gain on the same displays.
 - ~~**Undo for Delete.**~~ Rejected 2026-08-15 (duplicates the macOS Trash).  Old note: Needs a Rust `restore_from_trash`: `trash_file` hands the file to the
   macOS Trash, so it is recoverable in Finder but not from in-app. Everything else in F2 shipped.
 

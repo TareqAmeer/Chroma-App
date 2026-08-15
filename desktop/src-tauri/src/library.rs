@@ -174,6 +174,68 @@ fn cache_key(path: &str, mtime: u64, size: u64) -> String {
 /// extraction (falls back thumbnail -> preview -> full decode internally) — this reads the
 /// camera's own embedded JPEG in the common case, NOT a full demosaic, so opening a folder of
 /// hundreds of RAWs stays fast. Cache key includes mtime+size so edits/replacements invalidate.
+/// TIER 1 of the thumbnail path: the preview the camera already embedded, returned as-is with no
+/// decode of the full image at all.
+///
+/// Measured cold, per source (examples/thumb_timing.rs) — and the result is the opposite of what
+/// you would guess:
+///
+/// | file            | full decode | embedded |
+/// |-----------------|-------------|----------|
+/// | `__TM4202.jpg`  | 803.8 ms    | ~1 ms    |
+/// | `__TM5132.jpg`  | 515.9 ms    | ~1 ms    |
+/// | `P_TM5168.RW2`  | 174.5 ms    | (already embedded) |
+/// | `__TM3719.RW2`  |  97.4 ms    | (already embedded) |
+///
+/// JPEGs are the SLOW case, not RAWs: the RAW path already calls rawler's
+/// `extract_thumbnail_pixels`, while `image::open` on a JPEG decodes all 24 megapixels and then
+/// throws almost all of them away to make a 360px square. A 6-wide decode pool therefore needs
+/// ~27s to fill a 200-photo JPEG folder, which is what "scrolling a large folder stutters" is.
+///
+/// The embedded preview is 256x171 on this camera — smaller than `LONG_EDGE`, so it is a PROXY,
+/// not a replacement. The frontend paints it immediately and upgrades to the real thumbnail on
+/// idle. Returns Err when a file has no embedded preview, which is the caller's signal to skip
+/// straight to tier 2 rather than show nothing.
+#[tauri::command]
+pub fn get_thumbnail_fast(path: String) -> Result<tauri::ipc::Response, String> {
+    let ext = ext_lower(Path::new(&path));
+    if !matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff") {
+        return Err("no embedded preview for this type".into());
+    }
+    let file = std::fs::File::open(&path).map_err(|e| format!("open {path}: {e}"))?;
+    let mut br = std::io::BufReader::new(file);
+    let exif = exif::Reader::new()
+        .read_from_container(&mut br)
+        .map_err(|e| format!("exif: {e}"))?;
+    // IFD1 is the thumbnail directory; these two tags give its byte range in the file.
+    let offset = exif
+        .get_field(exif::Tag::JPEGInterchangeFormat, exif::In::THUMBNAIL)
+        .and_then(|f| f.value.get_uint(0))
+        .ok_or("no embedded thumbnail")? as usize;
+    let len = exif
+        .get_field(exif::Tag::JPEGInterchangeFormatLength, exif::In::THUMBNAIL)
+        .and_then(|f| f.value.get_uint(0))
+        .ok_or("no embedded thumbnail length")? as usize;
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    // ⚠️ The offset is relative to the start of the TIFF header inside the APP1 segment, not to
+    // the start of the file. Locating the embedded SOI directly is both simpler and robust to
+    // that, and a sanity check on the recovered slice keeps a malformed file from panicking.
+    let start = find_embedded_soi(&bytes).ok_or("no embedded JPEG found")?;
+    let end = (start + len).min(bytes.len());
+    let slice = if end > start + 4 { &bytes[start..end] } else { return Err("embedded thumbnail too small".into()) };
+    if slice.len() < 128 || slice[0] != 0xFF || slice[1] != 0xD8 {
+        return Err(format!("embedded thumbnail malformed (offset hint {offset})"));
+    }
+    Ok(tauri::ipc::Response::new(slice.to_vec()))
+}
+
+/// Byte offset of the SECOND JPEG SOI marker — i.e. the embedded preview, not the main image.
+fn find_embedded_soi(bytes: &[u8]) -> Option<usize> {
+    let pat = [0xFFu8, 0xD8, 0xFF];
+    // Skip the main image's own SOI at 0, then find the next one.
+    bytes.windows(3).skip(3).position(|w| w == pat).map(|i| i + 3)
+}
+
 #[tauri::command]
 pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
     // rawler's embedded-preview extraction and the `image` crate can both panic on malformed
@@ -200,6 +262,21 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
     let cache_path = cache_dir().join(&key);
     if let Ok(bytes) = std::fs::read(&cache_path) {
         return Ok(tauri::ipc::Response::new(bytes));
+    }
+    // ImageIO first for non-RAW stills (ROADMAP 15). Measured cold, this is the difference
+    // between ~800ms and a fraction of it on a 24MP JPEG, because the `image` crate decodes every
+    // pixel before downsizing while ImageIO decodes at a reduced DCT scale. RAW deliberately does
+    // NOT come through here: rawler's embedded-preview path is already fast (97-175ms) and is the
+    // one that applies the camera's own rendering. See fastthumb.rs's header for the numbers.
+    #[cfg(target_os = "macos")]
+    {
+        let ext = ext_lower(Path::new(&path));
+        if !is_raw_ext(&ext) && is_image_ext(&ext) {
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(&path, 360) {
+                let _ = std::fs::write(&cache_path, &bytes);
+                return Ok(tauri::ipc::Response::new(bytes));
+            }
+        }
     }
 
     let ext = ext_lower(Path::new(&path));

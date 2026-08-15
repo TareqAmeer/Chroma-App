@@ -197,6 +197,10 @@
     syncedFilter: 'all',   // 'all' | 'synced' | 'notsynced'
     showInfo: false,       // metadata panel for the focused photo (I) — see renderInfoPanel
     tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
+    // ⚠️ This existed in the saved-views capture list and the filter-id map before the feature
+    // did — ROADMAP claimed star ratings had shipped and they never had, so those were dead
+    // references to a control that was not in the DOM and a state key that was not here.
+    ratingFilter: 'all',   // 'all' | '0' (unrated) | '1'..'5' (that many stars or more)
     search: '',
     open: false,
     expanded_view: false,  // full-window library grid (vs the docked 340px strip)
@@ -445,6 +449,12 @@
     .lib-card .lib-name{font-size:10px;font-family:var(--mono);color:var(--mut);
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-tagrow{display:flex;align-items:center;gap:6px;padding:0 6px 6px}
+    .lib-stars{display:inline-flex;gap:1px;line-height:1;user-select:none}
+    .lib-star{color:var(--bdr);cursor:pointer;font-size:12px;padding:1px}
+    .lib-star.on{color:#ffc35c}
+    .lib-star:hover{color:#ffd98a}
+    /* The filmstrip has no room for a star row; the rating still shows via the hover info strip. */
+    body.deskx #lib-overlay:not(.full) .lib-stars{display:none}
     /* Grid mode: overlaid on the thumbnail itself (not an in-flow footer row) so the card has
        no reserved chrome underneath the image — hidden until hover/on, so an at-rest grid is
        just photos. List mode keeps its own in-flow column cell (styled further down). */
@@ -502,8 +512,11 @@
       border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
     .lib-cmp-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--bdr);
       font-size:11px;flex-wrap:wrap}
-    .lib-cmp-head select{background:var(--sur1);border:1px solid var(--bdr);color:var(--txt);
-      border-radius:6px;padding:3px 6px;font-size:10.5px;max-width:120px}
+    /* --sur2, not --sur1: there is no --sur1 token and this had NO fallback, so background
+       resolved to nothing and the compare picker rendered as a default white system select on
+       a dark panel — the one phantom-token site with a visible consequence. */
+    .lib-cmp-head select{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
+      border-radius:var(--r-sm);padding:3px 6px;font-size:10.5px;max-width:120px}
     .lib-cmp-canvas-wrap{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
     .lib-cmp-canvas-wrap canvas{max-width:100%;max-height:100%;transform-origin:center center}
     .lib-cmp-chrome{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--bdr);font-size:12px}
@@ -511,6 +524,7 @@
       border-radius:5px;cursor:pointer;opacity:.6}
     .lib-cmp-chrome .lib-flag.on,.lib-cmp-chrome .lib-flag:hover{opacity:1;background:var(--bdr)}
     #lib-compare-bar{display:flex;align-items:center;gap:8px;padding:2px 4px;font-size:11px;color:var(--mut)}
+    .lib-cmp-pane.cmp-focus{outline:2px solid var(--acc);outline-offset:-2px;border-radius:6px}
     #lib-compare-bar button{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
     #lib-empty{color:var(--mut);font-size:12px;padding:30px 10px;text-align:center}
@@ -549,7 +563,31 @@
     /* The tree toggle only means anything in full mode (the filmstrip already force-hides
        #lib-side below) — its text label doesn't fit the 120px filmstrip's icon-only top bar. */
     body.deskx #lib-overlay:not(.full) #lib-tree-toggle{display:none}
+    /* ROADMAP 11 — filmstrip affordances. The 120px strip is pure thumbnails, which means that
+       while culling in the Darkroom shell there was no way to see WHICH photo you were on or
+       whether you had already flagged it — the two things culling depends on. Both surface on
+       hover (and on the current photo always), rather than permanently, so the strip stays a
+       strip. Pointer-events off so they can never eat the click that selects the card. */
+    body.deskx #lib-overlay:not(.full) .lib-card{position:relative}
+    /* ⚠️ Default to hidden UNCONDITIONALLY. Scoping only the "show" rule to the filmstrip left the
+       element with no display at all in the normal grid, where a div defaults to block — so the
+       name + gradient rendered over every grid card. Caught by asserting the grid was unaffected,
+       not by looking at the filmstrip. */
+    .lib-strip-info{display:none}
+    body.deskx #lib-overlay:not(.full) .lib-strip-info{
+      position:absolute;left:0;right:0;bottom:0;padding:2px 4px 3px;pointer-events:none;
+      background:linear-gradient(to top,rgba(0,0,0,.82),rgba(0,0,0,0));
+      font-size:9px;line-height:1.25;color:#fff;opacity:0;transition:opacity .12s var(--ease,ease);
+      display:flex;align-items:center;gap:3px;justify-content:space-between}
+    body.deskx #lib-overlay:not(.full) .lib-card:hover .lib-strip-info{opacity:1}
+    body.deskx #lib-overlay:not(.full) .lib-card:hover .lib-strip-info,
+    body.deskx #lib-overlay:not(.full) .lib-card.sel .lib-strip-info{opacity:1}
+    body.deskx #lib-overlay:not(.full) .lib-strip-name{
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+    body.deskx #lib-overlay:not(.full) .lib-strip-flag{flex:none;width:7px;height:7px;border-radius:50%}
+    /* The same markup therefore costs the grid nothing — it is inert until the filmstrip. */
     body.deskx #lib-overlay:not(.full) #lib-main{padding:10px}
+
     /* minmax(0,1fr), not 1fr — a bare 1fr track never shrinks below its content's min-content
        size, so a wide thumbnail image blew the grid (and the whole 120px column) out past the
        editor preview it sits in front of ("images covering the editor"). min-width:0 on the
@@ -609,6 +647,15 @@
             <option value="synced">Synced to Google Photos</option>
             <option value="notsynced">Not synced</option>
           </select>
+          <select id="lib-rating-filter" title="Filter by star rating">
+            <option value="all">Any rating</option>
+            <option value="0">Unrated</option>
+            <option value="1">★1+</option>
+            <option value="2">★2+</option>
+            <option value="3">★3+</option>
+            <option value="4">★4+</option>
+            <option value="5">★5</option>
+          </select>
           <select id="lib-tag-filter" title="Filter by tag">
             <option value="all">All tags</option>
             <option value="red">Rejected (X)</option>
@@ -644,9 +691,11 @@
         <option value="focal">Focal length</option>
         <option value="camera">Camera</option>
         <option value="edited">Edit status</option>
+        <option value="rating">Rating</option>
         <option value="editedts">Date edited</option>
       </select>
       <button class="lib-btn" id="lib-sort-dir" title="Reverse sort order">↑</button>
+      <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option></select>
       <select id="lib-metadisp" title="Show metadata on cards">
         <option value="off">Metadata: Off</option>
         <option value="hover">Metadata: On hover</option>
@@ -1017,6 +1066,44 @@
     recentMenu.style.top = (r.bottom + 4) + 'px';
   }
 
+  /// TWO-TIER thumbnail load (ROADMAP Library 15). Tier 1 is the preview the camera already
+  /// embedded in the file; tier 2 is the real 360px decode.
+  ///
+  /// ⚠️ Worth doing only because of which files are slow, and that is the opposite of the obvious
+  /// guess. Measured cold (`examples/thumb_timing.rs`): a 24MP JPEG costs **426-804ms** because
+  /// `image::open` decodes every pixel before downsizing, while an RW2 costs **97-175ms** because
+  /// the RAW path already reads the camera's embedded preview. So the tier that matters is for
+  /// JPEG/TIFF, and RAW is left exactly as it was — `get_thumbnail_fast` returns Err for it and
+  /// this falls straight through.
+  ///
+  /// The proxy is genuinely lower quality (256x171 on this camera vs a 360px target), so it is
+  /// never the final state: the full decode is queued on idle and replaces it. Measured 17.3ms vs
+  /// 426.5ms for the first paint.
+  function thumbTiered(job) {
+    const setSrc = (buf, isProxy) => {
+      if (!job.imgEl.isConnected) return;
+      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      job.imgEl.src = url;
+      job.imgEl.classList.add('loaded');
+      if (isProxy) job.imgEl.dataset.proxy = '1'; else delete job.imgEl.dataset.proxy;
+      _thumbUrlsThisGen.push(url);
+    };
+    const full = () => invoke('get_thumbnail', { path: job.path }).then((b) => setSrc(b, false));
+    const gen = _thumbGen;
+    return invoke('get_thumbnail_fast', { path: job.path })
+      .then((buf) => {
+        // ⚠️ A generation check here as well as in the pump: the proxy resolves in ~1ms but the
+        // idle upgrade lands much later, and without this a folder switch mid-flight would paint
+        // the previous folder's thumbnail into a recycled card.
+        if (gen !== _thumbGen) return;
+        setSrc(buf, true);
+        const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300));
+        idle(() => { if (gen === _thumbGen && job.imgEl.isConnected) full().catch(() => {}); });
+      })
+      // No embedded preview (RAW, PNG, or a JPEG that lacks one) — go straight to the real decode.
+      .catch(() => full());
+  }
+
   // Folder size at which the grid switches to windowed rendering. Chosen off the measurement in
   // renderGrid's comment: 200 files is comfortable, 1,000 is heavy, 5,000 does not load.
   const VIRT_MIN = 400;
@@ -1130,15 +1217,7 @@
               if (card && m.w && m.h) card.dataset.dims = m.w + 'x' + m.h;
             }
           })
-        : invoke('get_thumbnail', { path: job.path })
-          .then((buf) => {
-            if (job.imgEl.isConnected) {
-              const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-              job.imgEl.src = url;
-              job.imgEl.classList.add('loaded');
-              _thumbUrlsThisGen.push(url);
-            }
-          }))
+        : thumbTiered(job))
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
           _thumbFailCount++;
@@ -1289,6 +1368,31 @@
            `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Pick (flag)">${FLAG_SVG_GREEN}</span>` +
            `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>` +
            `<span class="lib-lbls">${labelDotsHtml(label)}</span>`;
+  }
+
+  /// Five stars, filled to `n`. Click sets that rating; clicking the current rating clears it,
+  /// which is the Lightroom behaviour and the only way to get back to unrated with the mouse.
+  function starsHtml(n) {
+    n = Math.max(0, Math.min(5, parseInt(n, 10) || 0));
+    let out = '<span class="lib-stars">';
+    for (let i = 1; i <= 5; i++) {
+      out += `<span class="lib-star${i <= n ? ' on' : ''}" data-star="${i}" title="${i} star${i > 1 ? 's' : ''} (${i})">★</span>`;
+    }
+    return out + '</span>';
+  }
+  /// Mirrors setLabel exactly — optimistic local update, sidecar write, same failure handling —
+  /// because a rating and a flag are the same kind of edit and should not drift apart.
+  async function setRating(path, rating) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
+    const updated = { ...cur, rating: n };
+    state.sidecars.set(path, updated);
+    await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
+      .catch((e) => sidecarWriteFailed(path, cur, e));
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    const holder = card && card.querySelector('.lib-stars');
+    if (holder) holder.outerHTML = starsHtml(n);
+    if (typeof renderCollectionCounts === 'function') renderCollectionCounts();
   }
 
   // ── options for a <select> populated with the distinct values present in this folder ─────
@@ -1902,6 +2006,7 @@
       case 'aperture': return parseFloat((m.aperture || '').replace('f/', '')) || 0;
       case 'focal': return parseFloat(m.focal_len || '') || 0;
       case 'edited': return sc.edited ? 1 : 0;
+      case 'rating': return sc.rating || 0;
       case 'editedts': return entry.edited_ts || 0;
       case 'camera': return (m.camera || '').toLowerCase();
       default: return (entry.name || '').toLowerCase();
@@ -1936,6 +2041,12 @@
     if (state.syncedFilter === 'synced' && !state.syncedPaths.has(entry.path)) return false;
     if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
     if (state.search && !entry.name.toLowerCase().includes(state.search)) return false;
+    // "N or more", except '0' which means exactly unrated — the two useful questions.
+    if (state.ratingFilter !== 'all') {
+      const want = parseInt(state.ratingFilter, 10);
+      const got = sc.rating || 0;
+      if (want === 0 ? got !== 0 : got < want) return false;
+    }
     if (state.tagFilter === 'red' && sc.label !== 'Red') return false;
     if (state.tagFilter === 'green' && sc.label !== 'Green') return false;
     if (state.tagFilter === 'labelled' && !sc.label) return false;
@@ -2343,7 +2454,14 @@
       const vsc = state.sidecars.get(vcPath) || {};
       const vers = vsc.versions || [];
       item(vers.length ? `New virtual copy (${vers.length} versions)` : 'New virtual copy', async () => {
-        const name = window.prompt('Name this version', vers.length ? `Copy ${vers.length}` : 'Copy 1');
+        // askTextModal (a global from chromasmith-22.html), never window.prompt: prompt() is a
+        // silent no-op under the Tauri/WKWebView shell — and this file ONLY runs there, so the
+        // row appeared to do nothing at all. Fall back to prompt() only if the host page somehow
+        // predates the helper, which is strictly better than throwing.
+        const ask = window.askTextModal
+          ? window.askTextModal('Name this version', '', vers.length ? `Copy ${vers.length}` : 'Copy 1')
+          : Promise.resolve(window.prompt('Name this version', vers.length ? `Copy ${vers.length}` : 'Copy 1'));
+        const name = await ask;
         if (name === null) return;
         try {
           const sc = await invoke('sidecar_add_version', { path: vcPath, name });
@@ -2544,18 +2662,22 @@
           <div class="lib-col">${esc(m.shutter)}</div>
           <div class="lib-col">${esc(m.aperture)}</div>
           <div class="lib-col">${esc(m.focal_len)}</div>
-          <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
+          <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
           <div class="lib-col">${sc.edited ? 'Yes' : ''}</div>`;
       } else {
+        const stripFlag = sc.label ? `<span class="lib-strip-flag" style="background:${LIB_LABEL_CSS.get(sc.label) || '#888'}"></span>` : '';
+        const escName = String(entry.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        const stripInfo = `<div class="lib-strip-info"><span class="lib-strip-name">${escName}</span>${stripFlag}</div>`;
         card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}
-            <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>
+            <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
           </div>
           ${sc.edited ? EDITED_BADGE_HTML : ''}
           ${rawBadge}
           ${videoBadge}
           ${dupeBadge}
           ${syncedBadge}
-          ${state.showTitle ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}`;
+          ${state.showTitle ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}
+          ${stripInfo}`;
       }
       frag.appendChild(card);
       built.push({ entry, card, idx });
@@ -2570,6 +2692,17 @@
       loadThumb(entry.path, img, entry.is_video);
       card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
+      const starRow = card.querySelector('.lib-stars');
+      if (starRow) starRow.onclick = (e) => {
+        const st = e.target.closest('.lib-star');
+        if (!st) return;
+        e.stopPropagation();
+        const want = parseInt(st.dataset.star, 10);
+        const cur = (state.sidecars.get(entry.path) || {}).rating || 0;
+        // Clicking the star you are already on clears the rating — otherwise 1 star is a trap
+        // you can never get out of with the mouse.
+        setRating(entry.path, want === cur ? 0 : want);
+      };
       card.oncontextmenu = (e) => showContextMenu(e, entry, shown);
       // Drag the card (or, if it's already part of a multi-selection, the whole selection) onto
       // a Favorites/Flagged/Rejected row in the sidebar — see the collection-row drop handlers
@@ -2627,9 +2760,13 @@
     if (!el) {
       el = document.createElement('div');
       el.id = 'lib-info';
+      // --glass-bg + --lift-2, matching every other floating surface (#fx-overflow-menu, the
+      // context menus, the toast). `var(--pan,#1c1c1e)` was a phantom token, so this panel was
+      // pinned to a hardcoded near-black that no theme could reach.
       el.style.cssText = 'position:absolute;right:12px;top:56px;width:232px;z-index:38;padding:10px 12px;'
-        + 'border-radius:10px;background:var(--pan,#1c1c1e);border:1px solid var(--bdr);'
-        + 'box-shadow:0 8px 28px rgba(0,0,0,.4);font-size:11px;line-height:1.55';
+        + 'border-radius:10px;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);'
+        + 'backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);'
+        + 'box-shadow:var(--lift-2);font-size:11px;line-height:1.55';
       (document.getElementById('lib-main') || document.body).appendChild(el);
     }
     const entry = (state.entries || []).find((e) => e.path === path) || {};
@@ -2661,7 +2798,8 @@
       bar.id = 'lib-batchbar';
       bar.style.cssText = 'position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;'
         + 'display:flex;gap:8px;align-items:center;padding:8px 12px;border-radius:10px;'
-        + 'background:var(--pan,#1c1c1e);border:1px solid var(--bdr);box-shadow:0 8px 28px rgba(0,0,0,.45)';
+        + 'background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);'
+        + 'backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);box-shadow:var(--lift-2)';
       (document.getElementById('lib-main') || document.body).appendChild(bar);
     }
     const paths = () => Array.from(state.selected);
@@ -2757,6 +2895,9 @@
     paths: [],                          // the ordered selection Compare was entered with
     paneA: { idx: 0, srcKey: 'live' },
     paneB: { idx: 0, srcKey: 'live' },
+    // Which pane flags/labels apply to. B by default because that is the pane the arrows cycle:
+    // Compare is "hold A, judge candidates in B", so the candidate is what you are rating.
+    focus: 'B',
     zoom: 1, panX: 0, panY: 0,
     prevViewMode: 'grid',
   };
@@ -2806,7 +2947,7 @@
       </div>`;
     host.innerHTML = `
       <div id="lib-compare-bar">
-        <span>Compare — ←/→ cycles the right pane · ⏎ promotes it to the left · Esc exits</span>
+        <span>Compare — ←/→ cycles the right pane · ⏎ promotes it · X/P/U and colour keys flag · Tab swaps pane · Esc exits</span>
       </div>
       <div id="lib-compare-panes">${paneHtml('A')}${paneHtml('B')}</div>`;
     host.querySelectorAll('.lib-cmp-photo-sel').forEach((sel) => {
@@ -2916,6 +3057,121 @@
     }
     return true;
   }
+  /// Applies a label from Compare and repaints just the affected pane's flag row. Routed through
+  /// the grid's own setLabel so the sidecar write, the cache update and the grid's later repaint
+  /// all stay in one place — a second writer here is how the two views drift apart, which is the
+  /// defect ROADMAP 14 describes.
+  async function compareApplyLabel(path, label) {
+    await setLabel(path, label);
+    ['A', 'B'].forEach((w) => {
+      if (comparePathForIdx(compareState[w === 'A' ? 'paneA' : 'paneB'].idx) === path) renderComparePane(w);
+    });
+    compareSyncFocus();
+  }
+  /// Marks which pane the keyboard is acting on. Without a visible marker, Tab silently changes
+  /// what X does — the kind of hidden mode that makes a culling shortcut untrustworthy.
+  function compareSyncFocus() {
+    const host = document.getElementById('lib-compare');
+    if (!host) return;
+    host.querySelectorAll('.lib-cmp-pane').forEach((el) => {
+      el.classList.toggle('cmp-focus', el.dataset.pane === compareState.focus);
+    });
+    const bar = document.getElementById('lib-compare-bar');
+    if (bar) {
+      const t = bar.querySelector('.cmp-focus-note') || (() => {
+        const sp = document.createElement('span'); sp.className = 'cmp-focus-note';
+        sp.style.cssText = 'margin-left:auto;color:var(--acc)'; bar.appendChild(sp); return sp;
+      })();
+      t.textContent = `X/P/U → pane ${compareState.focus} (Tab swaps)`;
+    }
+  }
+
+  // ── ROADMAP 12: saved filter/sort views ─────────────────────────────────────────────────
+  // A named snapshot of the filter bar plus the sort. Not a smart collection: a collection asks
+  // "which photos", a view asks "how am I looking at this folder" — so this deliberately does NOT
+  // capture the folder, and applying one leaves you where you are.
+  const LS_VIEWS = 'chromasmith_lib_views';
+  // Exactly the fields the filter popover and the sort control own. Listed explicitly rather than
+  // cloned from `state`, so a future unrelated state field can never silently become part of a
+  // saved view (and so an old saved view stays readable when one is added).
+  const VIEW_FIELDS = ['typeFilter','cameraFilter','lensFilter','isoFilter','dupeFilter',
+                       'syncedFilter','tagFilter','ratingFilter','search','sortBy','sortDir',
+                       'viewMode','thumbSize'];
+  function loadViews() {
+    try { const v = JSON.parse(localStorage.getItem(LS_VIEWS) || '[]'); return Array.isArray(v) ? v : []; }
+    catch { return []; }
+  }
+  function saveViews(v) { try { localStorage.setItem(LS_VIEWS, JSON.stringify(v)); } catch {} }
+  function captureView() {
+    const out = {};
+    VIEW_FIELDS.forEach((k) => { if (state[k] !== undefined) out[k] = state[k]; });
+    return out;
+  }
+  function applyView(v) {
+    if (!v || !v.fields) return;
+    VIEW_FIELDS.forEach((k) => { if (v.fields[k] !== undefined) state[k] = v.fields[k]; });
+    // Persist the two that have their own localStorage keys, so a view survives a reload the same
+    // way manually setting them would.
+    try {
+      localStorage.setItem('chromasmith_lib_sort', state.sortBy);
+      localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
+      localStorage.setItem('chromasmith_lib_view', state.viewMode);
+      localStorage.setItem('chromasmith_lib_thumbsize', String(state.thumbSize));
+    } catch {}
+    syncFilterControls();
+    renderGrid();
+    renderViewsMenu();
+    if (typeof toast === 'function') toast(`View: ${v.name}`, true);
+  }
+  /// Pushes the restored values back into the actual <select>s, or the popover would keep showing
+  /// the previous view's settings while the grid showed the new one.
+  function syncFilterControls() {
+    // ⚠️ These ids all end in "-filter"; an earlier version of this map omitted that suffix on
+    // every entry except lib-sort, so getElementById returned null for seven of the eight and
+    // applying a saved view left every dropdown showing the PREVIOUS view's settings while the
+    // grid showed the new one — the exact failure this function's comment promises to prevent.
+    const map = { 'lib-type-filter': 'typeFilter', 'lib-camera-filter': 'cameraFilter',
+                  'lib-lens-filter': 'lensFilter', 'lib-iso-filter': 'isoFilter',
+                  'lib-dupe-filter': 'dupeFilter', 'lib-synced-filter': 'syncedFilter',
+                  'lib-tag-filter': 'tagFilter', 'lib-rating-filter': 'ratingFilter',
+                  'lib-sort': 'sortBy' };
+    Object.entries(map).forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      if (el && state[key] !== undefined) el.value = state[key];
+    });
+    const se = document.getElementById('lib-search');
+    if (se) se.value = state.search || '';
+    if (typeof updateFilterChips === 'function') updateFilterChips();
+  }
+  function renderViewsMenu() {
+    const sel = document.getElementById('lib-views');
+    if (!sel) return;
+    const views = loadViews();
+    sel.innerHTML = '<option value="">Views…</option>'
+      + views.map((v, i) => `<option value="${i}">${String(v.name).replace(/</g,'&lt;')}</option>`).join('')
+      + '<option value="__save">＋ Save current…</option>'
+      + (views.length ? '<option value="__del">✕ Delete a view…</option>' : '');
+    sel.value = '';
+  }
+  function onViewsChange(e) {
+    const v = e.target.value;
+    const views = loadViews();
+    if (v === '__save') {
+      const name = prompt('Name this view (filters + sort, not the folder):', '');
+      if (name && name.trim()) { views.push({ name: name.trim(), fields: captureView() }); saveViews(views); }
+      renderViewsMenu();
+      return;
+    }
+    if (v === '__del') {
+      const name = prompt('Delete which view?\n\n' + views.map((x) => '· ' + x.name).join('\n'), '');
+      if (name) { saveViews(views.filter((x) => x.name !== name.trim())); }
+      renderViewsMenu();
+      return;
+    }
+    if (v !== '') applyView(views[parseInt(v, 10)]);
+    renderViewsMenu();
+  }
+
   async function enterCompareMode() {
     if (!canEnterCompare()) return;
     const paths = state.selected.size ? Array.from(state.selected) : (state.openedPath ? [state.openedPath] : []);
@@ -3069,6 +3325,32 @@
       if (e.key === 'ArrowRight') { e.preventDefault(); compareCycleB(1); return; }
       if (e.key === 'Enter') { e.preventDefault(); comparePromoteB(); return; }
       if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); return; }
+      // ROADMAP 14 — grid parity. Culling is the whole point of Compare, and until now the one
+      // thing you could not do here was the culling verb itself: X/P/U and the colour labels were
+      // grid-only, so judging two frames side by side meant leaving Compare to act on the answer.
+      // Same setLabel() the grid calls, so there is no second write path to keep in sync.
+      const target = comparePathForIdx(compareState[compareState.focus === 'A' ? 'paneA' : 'paneB'].idx);
+      if (!target) return;
+      // Ratings work here exactly as they do in the grid — that parity IS ROADMAP Library 14,
+      // and compare is where a rating is most useful, since it is the mode built for choosing
+      // between two frames.
+      if (e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const n = parseInt(e.key, 10);
+        e.preventDefault(); if (target) setRating(target, n); return;
+      }
+      if (e.key === 'x' || e.key === 'X') { e.preventDefault(); compareApplyLabel(target, 'Red'); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); compareApplyLabel(target, 'Green'); return; }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); compareApplyLabel(target, ''); return; }
+      if (LIB_LABEL_BY_KEY.has(e.key)) {
+        e.preventDefault();
+        const want = LIB_LABEL_BY_KEY.get(e.key);
+        const cur = (state.sidecars.get(target) || {}).label || '';
+        compareApplyLabel(target, cur === want ? '' : want);   // same toggle-off as the grid
+        return;
+      }
+      // Tab swaps which pane the above applies to — without it, B's rating is reachable and A's
+      // is not, which is exactly the asymmetry this item was filed about.
+      if (e.key === 'Tab') { e.preventDefault(); compareState.focus = compareState.focus === 'A' ? 'B' : 'A'; compareSyncFocus(); return; }
       return;
     }
     if ((e.key === 'c' || e.key === 'C') && (state.selected.size >= 1 || state.openedPath)) { enterCompareMode(); return; }
@@ -3111,6 +3393,12 @@
     if (e.key === 'Enter' && (state._kbCursor || state.selected.size === 1)) {
       e.preventDefault(); openInEditor(state._kbCursor || [...state.selected][0]); return;
     }
+    // 0-5 set a rating on the same targets X/P/U flag — ROADMAP Library 2, which had been
+    // recorded as shipped but never was.
+    if (e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const n = parseInt(e.key, 10);
+      e.preventDefault(); kbTargets().forEach((p) => setRating(p, n)); return;
+    }
     if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
     if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
     if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
@@ -3148,8 +3436,9 @@
   overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-rating-filter').onchange = (e) => { state.ratingFilter = e.target.value; renderGrid(); };
   // ── Filters popover: toggle button, active-filter chips, clear-all ──────────────────────
-  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-tag-filter'];
+  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-tag-filter', 'lib-rating-filter'];
   function syncFilterUI() {
     const chipsEl = document.getElementById('lib-filter-chips');
     const badgeEl = document.getElementById('lib-filters-badge');
@@ -3207,6 +3496,8 @@
     if (grid) grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
   };
 
+  const viewsSel = overlay.querySelector('#lib-views');
+  if (viewsSel) { viewsSel.onchange = onViewsChange; renderViewsMenu(); }
   const sortSel = overlay.querySelector('#lib-sort');
   sortSel.value = state.sortBy;
   sortSel.onchange = (e) => { state.sortBy = e.target.value; localStorage.setItem('chromasmith_lib_sort', state.sortBy); renderGrid(); };

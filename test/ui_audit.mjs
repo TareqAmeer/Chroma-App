@@ -49,8 +49,13 @@ const WRITE_BASELINE = process.argv.includes('--baseline');
 const DUMP_JSON = process.argv.includes('--json');
 
 // Every rail section key in FX_SECTIONS, plus the deskx group keys those collapse into.
-const SECTIONS = ['image', 'looks', 'adjust', 'color', 'detail', 'film', 'frame',
+// ⚠️ Keep in sync with FX_SECTIONS/FX_GROUPS. A section missing here is simply never opened, so
+// it is never measured — which is how `retouch` went unaudited for as long as it went unreachable.
+const SECTIONS = ['image', 'looks', 'adjust', 'color', 'detail', 'retouch', 'film', 'frame',
   'local', 'crop', 'export', 'info'];
+
+// Source files the token check reads. Anything that writes CSS the app renders belongs here.
+const TOKEN_SOURCES = ['chromasmith-22.html', 'desktop/library-ui.js', 'desktop/desktop-native.js'];
 const VIEWPORTS = [
   { w: 1440, h: 820, label: '1440x820' },   // 13" MacBook, the tightest realistic desktop
   { w: 1600, h: 1000, label: '1600x1000' },
@@ -87,6 +92,130 @@ function startServer(root) {
     });
     server.listen(0, '127.0.0.1', () => resolve(server));
   });
+}
+
+// ── 0. TOKEN — a source check, not a render one. ─────────────────────────────────────────────
+// Every `var(--x)` must resolve to something the design system actually defines. It is worth a
+// gate because the failure is SILENT and cosmetic-looking: an undefined token with a fallback
+// quietly paints an off-palette literal that no theme can reach, and one WITHOUT a fallback
+// resolves to nothing at all. Both shipped here. The set found when this check was written:
+//   --accent,#4a9eff  the denoise progress bar rendered blue; every other bar in the app is amber
+//   --bg3,#2a2a2a     its track, off-palette
+//   --sur1            no fallback -> a default white system <select> on a dark panel
+//   --sur3 x7         popover/menu hover, frozen at rgba(255,255,255,.08)
+//   --rad-1,6px x3    a second radius scale competing with --r
+//   --fg,#eee         dialog text, missing the real --txt and the light theme with it
+// Each was a later feature written against a GUESSED token vocabulary instead of the one in
+// :root — so the check reports the name and every site, and says which vocabulary is real.
+/// Blanks comments (and, inside JS only, string literals), preserving every newline and the
+/// original length so line numbers computed against the result stay true to the source.
+///
+/// ⚠️ The region matters, and getting it wrong is how this check spent a long time with a blind
+/// spot. Two real cases from this repo, both found by measuring rather than reasoning:
+///
+///   · `'video/*,.mp4,.mov,.m4v'` — a `/*` inside a JS STRING. Treated as code, it opens a block
+///     comment that the scanner closes at the next `*/` **3,940 lines later** (7644-11584), so
+///     every var() and setProperty in between is invisible. That is what made `--app-h` report as
+///     "never setProperty'd" when its setProperty call sits at line 8958, inside the hole.
+///   · A prose apostrophe in CSS or markup — `don't`. Treated as a string delimiter, it blanks
+///     everything up to the next apostrophe, which swallowed the whole `:root` block and reported
+///     all 25 real design tokens (`--acc`, 72 uses) as undefined.
+///
+/// So strings are blanked inside <script> and .js only; CSS and markup get comments stripped but
+/// their quotes left alone.
+function stripRegion(src, isJs) {
+  const out = Array.from(src);
+  const blank = (i) => { if (out[i] !== '\n') out[i] = ' '; };
+  const n = src.length;
+  let i = 0;
+  while (i < n) {
+    const c = src[i], d = src[i + 1];
+    if (c === '/' && d === '*') {
+      const end = src.indexOf('*/', i + 2);
+      const stop = end === -1 ? n : end + 2;
+      for (let k = i; k < stop; k++) blank(k);
+      i = stop; continue;
+    }
+    // `//` is a comment in JS only, and only when not preceded by `:` (else every https:// URL
+    // swallows its line). CSS has no line comments.
+    if (isJs && c === '/' && d === '/' && src[i - 1] !== ':') {
+      let k = i;
+      while (k < n && src[k] !== '\n') blank(k++);
+      i = k; continue;
+    }
+    if (isJs && (c === '"' || c === "'" || c === '`')) {
+      let k = i + 1;
+      while (k < n) {
+        if (src[k] === '\\') { k += 2; continue; }
+        if (src[k] === c) { k++; break; }
+        k++;
+      }
+      for (let j = i; j < Math.min(k, n); j++) blank(j);
+      i = k; continue;
+    }
+    i++;
+  }
+  return out.join('');
+}
+
+/// Splits an HTML file into <script> (JS rules) and everything else (CSS/markup rules), so each
+/// region is stripped by the language it actually is.
+function stripComments(src, file) {
+  if (!/\.html?$/i.test(file)) return stripRegion(src, true);   // a .js file is all JS
+  let out = '';
+  let i = 0;
+  const re = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(src))) {
+    const bodyStart = m.index + m[0].indexOf('>') + 1;
+    out += stripRegion(src.slice(i, bodyStart), false);
+    out += stripRegion(src.slice(bodyStart, bodyStart + m[1].length), true);
+    i = bodyStart + m[1].length;
+  }
+  out += stripRegion(src.slice(i), false);
+  return out;
+}
+
+function auditTokens(sources) {
+  const defined = new Set(), runtime = new Set(), used = new Map();
+  for (const { file, text: raw } of sources) {
+    // Blank out comments before scanning, preserving newlines so reported line numbers stay
+    // true. Without this the check reports its own prose: a comment explaining that
+    // `var(--pan,…)` used to be a phantom reads to the regex as a live use of --pan.
+    //
+    // ⚠️ This is a single left-to-right scan, NOT two regex passes, and the difference is not
+    // cosmetic. The previous version stripped /* */ first and // second, so a `//` comment that
+    // merely CONTAINED the characters `/*` opened a block comment the regex then closed at the
+    // next `*/` thousands of lines later. Measured on chromasmith-22.html: one such line opened a
+    // phantom comment spanning lines 7042-11584 — **4,542 lines the token check silently never
+    // scanned**, which is both a false negative for every var() in that range and the false
+    // POSITIVE that surfaced it (--app-h, whose setProperty call sits at line 8958, inside the
+    // blanked region). Swapping the order just moves the bug; only a real scan fixes it.
+    const text = stripComments(raw, file);
+    // Any `--name:` declaration counts, wherever it lives (:root, body.light, a media query).
+    for (const m of text.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)) defined.add(m[1]);
+    // ⚠️ Read from the RAW source, not the stripped one: the token name lives INSIDE a string
+    // literal (`setProperty('--app-h', …)`), and JS string-blanking necessarily destroys it. A
+    // setProperty that only appears in a comment would at worst whitelist a token that is never
+    // written, which under-reports by one rather than fabricating a failure — the safe direction.
+    for (const m of raw.matchAll(/setProperty\(\s*['"`](--[a-zA-Z0-9-]+)/g)) runtime.add(m[1]);
+    for (const m of text.matchAll(/var\(\s*(--[a-zA-Z0-9-]+)\s*(,)?/g)) {
+      const line = text.slice(0, m.index).split('\n').length;
+      if (!used.has(m[1])) used.set(m[1], []);
+      used.get(m[1]).push({ file, line, hasFallback: !!m[2] });
+    }
+  }
+  const findings = [];
+  for (const [tok, sites] of [...used].sort()) {
+    if (defined.has(tok) || runtime.has(tok)) continue;
+    const where = sites.map(s => `${s.file}:${s.line}`).join(', ');
+    findings.push({
+      kind: 'TOKEN', section: 'source', viewport: '-', el: tok,
+      detail: `used ${sites.length}x but never defined and never setProperty'd`
+        + `${sites.every(s => s.hasFallback) ? '' : ' (and NO fallback — resolves to nothing)'} — ${where}`,
+    });
+  }
+  return findings;
 }
 
 // ── the in-page audit. Runs once per (section, viewport). ───────────────────────────────────
@@ -259,6 +388,12 @@ function seedFn() {
 
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
+
+  // Source-level, so it runs before a browser is even launched.
+  const tokenFindings = auditTokens(await Promise.all(TOKEN_SOURCES.map(async (f) => ({
+    file: f, text: await readFile(path.join(ROOT, f), 'utf8'),
+  }))));
+
   const server = await startServer(ROOT);
   const { port } = server.address();
   const browser = await chromium.launch({
@@ -266,7 +401,7 @@ async function main() {
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
   });
 
-  const findings = [];
+  const findings = [...tokenFindings];
   try {
     const page = await browser.newPage({ viewport: { width: VIEWPORTS[0].w, height: VIEWPORTS[0].h } });
     page.on('pageerror', (e) => console.error('  [pageerror]', e.message));
@@ -338,7 +473,7 @@ async function main() {
   // ── report ──
   const byKind = {};
   findings.forEach(f => { (byKind[f.kind] ||= []).push(f); });
-  const KINDS = ['FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'TAP', 'FONT', 'CONTRAST'];
+  const KINDS = ['TOKEN', 'FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'TAP', 'FONT', 'CONTRAST'];
   // The same defect is re-reported once per (section, viewport) it is visible in, so every count
   // — table, baseline and comparison alike — is over DISTINCT defects. Mixing raw and deduped
   // counts would make the "vs baseline" delta meaningless.
