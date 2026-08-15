@@ -765,6 +765,38 @@ One batched shader cycle (§3's reserved-word and compile-silence traps apply):
   Not wired into VIDEO export yet (`_videoComposeBorderMatte` precomputes its sizes once per
   clip, so it needs the frame folded into that computation rather than called per frame).
 
+### Retouch: heal / clone (E1, 2026-08-15)
+
+Spot removal is unlike every other tool here: masks and sliders feed the shader, but a healed
+blemish has to be **gone before grading starts**. So `healApply` runs as a pre-pass on the SOURCE
+image and the existing pipeline treats the result as the photograph — which is what makes a repair
+take the same LUT, grain and halation as its surroundings. Patch after grading and the repair
+shows up as a suspiciously clean spot in a grainy frame.
+
+- ⚠️ **Ops are normalised against the ORIGINAL image and applied BEFORE `applyGeomTo`**, not
+  against `fxWork` the way mask coordinates are. Masks tolerate the `fxWork` convention because a
+  radial mask drifting under a re-crop is cosmetic; a heal spot drifting leaves the blemish visible
+  AND smears a copy of it nearby. Pinning to the source means crop/rotate/flip/straighten carry
+  repairs along for free (verified: rotate 90° keeps them). Both preview (`updateWork`) and export
+  reach the image through `geomCanvas`, so there is no second path that could disagree.
+- ⚠️ **Heal matches the ANNULUS around the spot, never the disc.** Matching the destination disc
+  means matching the blemish being removed, which tints the donor dark and defeats the operation.
+  Measured on a textured field (surround 163, blemish 67): disc-matching landed at **97 — worse
+  than a plain clone at 149** — while ring-matching lands at 161. `healAutoSource` targets the ring
+  for the same reason, or it hunts for a donor resembling the defect.
+- ⚠️ **The opaque core is `r*(1-0.65*fe)`, not `r*(1-fe)`.** The latter leaves the patch only half
+  opaque at 0.5r, so a spot sized just larger than the blemish shows a visible RING of the original
+  through the feather — clearly visible in `test/output/heal_probe.png` before the fix.
+- **Heal vs Clone is a real difference, not a label.** With a deliberately wrong donor (what
+  shift-drag can produce) on a gradient: heal lands at 141.3 against a 141 target, clone at 203.3.
+  Clone skips the colour match on purpose — duplicating a real object wants the donor's own colour.
+- `s.heal` is in `getUISnapshot`, and that is load-bearing: `fxHistoryPush` dedupes on the
+  snapshot's JSON, so an op absent from it makes consecutive states compare equal, the push is
+  skipped, and ⌘Z silently does nothing. An absent key means "leave alone", an explicit null means
+  "no repairs" — the latter is what lets undo clear the first spot.
+- `test/probe_heal.mjs` measures the above; `test/probe_heal_undo.mjs` covers undo/redo and
+  survival through geometry.
+
 ---
 
 ## 6. Calibration tooling (`calib/`)

@@ -23,12 +23,12 @@ against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
 | **E2** | Perspective / keystone (a real homography) + Rotate + Scale |
 | **F1** | Virtual copies (backward-compatible sidecar versions) |
 | **G** | A 375×812 phone pass in `ui_audit`, and the 12×20px tap target it found |
+| **D4** | Film frames — procedural (ISO 1007 geometry) + MIT plate + user-loaded plates; crop defaults to "As shot" |
 
 ### ⏳ Not done
 
-- **D4 — film-edge / overscan frames.** *Blocked on assets, not code.* It needs real scanned edge
-  plates vendored the way the DCPs are; a procedurally faked sprocket edge would undercut the one
-  thing the feature exists for. Supply scans and this becomes a composite-stage job.
+- **D4 for VIDEO.** Stills are done; `_videoComposeBorderMatte` precomputes its sizes once per
+  clip, so the frame needs folding into that rather than being called per frame.
 - **E1 — spot removal / clone / heal.** The largest remaining item: needs a clone-source picker,
   the stamp paint path (reuse `mskPaintAt`), and a heal blend. Not started.
 - **E2's auto-horizon** — needs line detection (a Hough pass), which is its own piece of work

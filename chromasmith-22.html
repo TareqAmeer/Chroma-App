@@ -1438,6 +1438,24 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">The sprocket styles are drawn to the real 35mm standard, so they stay correct at any aspect ratio. <b>Load frame…</b> takes any scanned rebate PNG you have a licence to use.</div>
         </div>
       </div>
+      <!-- RETOUCH (heal / clone) -->
+      <div class="fx-ctrl" data-fxsec="retouch">
+        <div class="fx-ctrl-title">Retouch <div class="fx-toggle" id="tg-retouch" onclick="toggleFX('retouch')"></div></div>
+        <div class="fx-fields ff-off" id="ff-retouch">
+        <div class="fx-row"><div class="fx-label">Mode</div>
+          <select class="fx-select" id="sel-heal-mode"><option value="heal">Heal (blend colour)</option><option value="clone">Clone (copy exactly)</option></select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-size">4%</div></div>
+        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-feather">50</div></div>
+        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
+        <div class="fx-row" style="gap:6px">
+          <button class="fx-btn" id="btn-heal-paint" onclick="healToggle()">Retouch</button>
+          <button class="fx-btn" onclick="healUndoLast()">Undo spot</button>
+          <button class="fx-btn" onclick="healClear()">Clear all</button>
+        </div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</div>
+        </div>
+      </div>
       <!-- CANVAS (aspect-ratio matte around image + borders) -->
       <div class="fx-ctrl" data-fxsec="canvas">
         <div class="fx-ctrl-title">Canvas <div class="fx-toggle" id="tg-canvas" onclick="toggleFX('canvas')"></div></div>
@@ -11115,6 +11133,11 @@ function getUISnapshot(opts){
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s.selects[id]=el.value;});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s.colors[id]=el.value;});
   const it=curItem();s.geom=(it&&it.geom)?_clone(it.geom):null; // this photo's own geometry (crop/rotate/flip/straighten) — per-photo, see broadcastGeom
+  // ⚠️ Retouch MUST be in the snapshot, not merely saved by healAdd. fxHistoryPush dedupes on
+  // this object's JSON, so a heal op absent from it makes two consecutive states compare equal,
+  // the push is skipped, and Cmd-Z silently does nothing to a repair. Plain numbers — no raster,
+  // so `skipRaster` does not apply and history stays cheap.
+  s.heal=(it&&it.heal&&it.heal.length)?_clone(it.heal):null;
   s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
   // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
   // strings. (These hold only plain arrays/objects/numbers, all structured-cloneable.)
@@ -11191,6 +11214,14 @@ function applyUISnapshot(s){
   // an old raw slider value unchanged would apply 2.5x the intended exposure shift. Rescale once.
   if(s.sliders&&s.sliders['adj-exp']!==undefined&&s.ver!==2){
     s.sliders['adj-exp']=Math.max(-100,Math.min(100,parseFloat(s.sliders['adj-exp'])*(20/50)));
+  }
+  // Retouch. An ABSENT key means "leave alone" (selective paste, same rule as `selects` — see
+  // the harness note in CLAUDE.md §2); an explicit null means "this state had no repairs", which
+  // is what makes undoing back past the first spot actually clear it.
+  if(s.heal!==undefined){
+    const hit=curItem();
+    if(hit)hit.heal=s.heal?_clone(s.heal):[];
+    if(typeof healSyncUI==='function')healSyncUI();
   }
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
@@ -12097,6 +12128,11 @@ function saveSession(quiet){
   const git=fxImages[0];
   s._geom=(git&&git.geom)?git.geom:null;
   s._geomFor=git?git.name:null;
+  // Retouch ops ride with geometry: same "only restore onto the matching photo" rule, for the
+  // same reason — a spot list is meaningless on a different picture, and applying it blindly
+  // would smear patches over whatever happened to load next. Plain numbers, so unlike mask
+  // rasters this cannot blow the localStorage quota.
+  s._heal=(git&&git.heal&&git.heal.length)?git.heal:null;
   s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
   // ⚠️ localStorage is a ~5MB quota. A photo carrying brush/AI masks can exceed it on its own
   // (each raster is base64'd), and the throw is a QuotaExceededError that used to be swallowed
@@ -12154,8 +12190,12 @@ function loadSessionGeomFor(){
   try{
     const raw=localStorage.getItem(_SESS_KEY);if(!raw)return;
     const s=JSON.parse(raw);
-    if(!s._geom||!s._geomFor||!fxImages.length)return;
+    if(!s._geomFor||!fxImages.length)return;
     if(fxImages[0].name!==s._geomFor)return;
+    // Retouch is PER-PHOTO — a blemish belongs to one frame — so unlike geometry it is restored
+    // only onto the photo it was recorded for, never broadcast across the batch.
+    if(s._heal&&fxImages[0])fxImages[0].heal=JSON.parse(JSON.stringify(s._heal));
+    if(!s._geom)return;
     fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
     const ang=s._geom.angle||0;if(ss)ss.value=ang;if(sv)sv.textContent=ang.toFixed(1)+'°';
@@ -13248,7 +13288,146 @@ function applyGeomTo(cv,g){
   }
   return cv;
 }
-function geomCanvas(item){return applyGeomTo(item.img,item.geom||defGeom());}
+// ══ RETOUCH: heal / clone (E1) ════════════════════════════════════════════════════════════
+// Spot removal replaces PIXELS, which makes it unlike every other tool in this app — masks and
+// sliders all feed the shader, but a healed blemish has to be gone before grading starts. So it
+// runs as a pre-pass on the SOURCE image and the whole existing pipeline then treats the result
+// as the photograph. That is what makes a patched area take the same LUT, grain and halation as
+// its surroundings; patch after grading and the repair shows up as a clean spot in a grainy frame.
+//
+// ⚠️ Ops are normalised against the ORIGINAL image and applied BEFORE applyGeomTo, not against
+// fxWork the way mask coordinates are. Masks can tolerate the fxWork convention because a radial
+// mask drifting slightly under a re-crop is cosmetic; a heal spot drifting leaves the blemish
+// visible AND smears a copy of it nearby. Pinning to the source means crop, rotate, flip and
+// straighten all carry repairs along for free.
+//
+// Both the preview (updateWork) and the export path reach the image through geomCanvas, so
+// hooking here means there is no second code path that could disagree.
+/// Mean colour of the ANNULUS around a spot — the healthy pixels surrounding a blemish, which is
+/// what a repair has to match.
+///
+/// ⚠️ NOT the disc itself. Matching the donor to the destination DISC means matching it to the
+/// blemish being removed, which tints the repair dark and defeats the whole operation. Measured
+/// on a textured field with a dark spot (surround 163, blemish 67): matching the disc landed at
+/// 97 — worse than a plain clone at 149 — and matching the ring lands on the surround.
+function healRingStats(data,w,h,cx,cy,r){
+  const rIn=r,rOut=r*1.9;
+  let n=0,sr=0,sg=0,sb=0;
+  const x0=Math.max(0,(cx-rOut)|0),x1=Math.min(w-1,(cx+rOut)|0);
+  const y0=Math.max(0,(cy-rOut)|0),y1=Math.min(h-1,(cy+rOut)|0);
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const dx=x-cx,dy=y-cy,d2=dx*dx+dy*dy;
+    if(d2<rIn*rIn||d2>rOut*rOut)continue;
+    const i=(y*w+x)*4;sr+=data[i];sg+=data[i+1];sb+=data[i+2];n++;
+  }
+  return n?{r:sr/n,g:sg/n,b:sb/n,n}:null;
+}
+function healPatchStats(data,w,h,cx,cy,r){
+  // Mean and variance over a disc. Variance is what picks a CLEAN donor: the lowest-variance
+  // nearby patch is the one without an edge, a second blemish, or an eyelash running through it.
+  let n=0,sr=0,sg=0,sb=0,s2=0;
+  const x0=Math.max(0,(cx-r)|0),x1=Math.min(w-1,(cx+r)|0);
+  const y0=Math.max(0,(cy-r)|0),y1=Math.min(h-1,(cy+r)|0);
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const dx=x-cx,dy=y-cy;if(dx*dx+dy*dy>r*r)continue;
+    const i=(y*w+x)*4,R=data[i],G=data[i+1],B=data[i+2];
+    sr+=R;sg+=G;sb+=B;s2+=(R*R+G*G+B*B)/3;n++;
+  }
+  if(!n)return null;
+  const mr=sr/n,mg=sg/n,mb=sb/n,lum=(mr+mg+mb)/3;
+  return{r:mr,g:mg,b:mb,n,varr:Math.max(0,s2/n-lum*lum)};
+}
+/// Picks a donor patch near (cx,cy): similar in colour, as flat as possible, and not overlapping
+/// the spot being repaired. Mirrors what Lightroom's spot tool does on a plain click, so the
+/// common case (dust, a blemish) is one click rather than a manual drag.
+function healAutoSource(data,w,h,cx,cy,r){
+  // Same reasoning as healRingStats: the donor should look like the healthy surround, not like
+  // the blemish. Searching against the disc hunts for a donor that MATCHES the defect.
+  const target=healRingStats(data,w,h,cx,cy,r)||healPatchStats(data,w,h,cx,cy,r);
+  if(!target)return null;
+  let best=null;
+  for(const dist of [2.2,3.0,4.0]){
+    for(let a=0;a<12;a++){
+      const th=a*Math.PI/6;
+      const sx=cx+Math.cos(th)*r*dist,sy=cy+Math.sin(th)*r*dist;
+      if(sx-r<0||sy-r<0||sx+r>=w||sy+r>=h)continue;
+      const st=healPatchStats(data,w,h,sx,sy,r);
+      if(!st)continue;
+      // Colour distance from the area being repaired, plus a penalty for busy donors. The
+      // weighting is deliberate: a donor that MATCHES but is busy leaves visible structure,
+      // and one that is flat but the wrong colour leaves a patch.
+      const dc=Math.hypot(st.r-target.r,st.g-target.g,st.b-target.b);
+      const score=dc+Math.sqrt(st.varr)*0.6;
+      if(!best||score<best.score)best={sx,sy,score};
+    }
+  }
+  return best;
+}
+/// Applies every retouch op to a copy of `img`. Returns `img` untouched when there are none, so
+/// a photo with no repairs costs nothing and stays byte-identical.
+function healApply(img,ops){
+  if(!ops||!ops.length)return img;
+  const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+  const out=document.createElement('canvas');out.width=w;out.height=h;
+  const x=out.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0);
+  let data=null;   // read lazily, and re-read per op so each repair sees the previous one
+  for(const op of ops){
+    const cx=op.x*w,cy=op.y*h,r=Math.max(2,op.r*Math.max(w,h));
+    data=x.getImageData(0,0,w,h).data;
+    let sx,sy;
+    if(op.sx!=null&&op.sy!=null){sx=op.sx*w;sy=op.sy*h;}
+    else{
+      const auto=healAutoSource(data,w,h,cx,cy,r);
+      if(!auto)continue;
+      sx=auto.sx;sy=auto.sy;
+    }
+    // The donor patch, cut to a soft-edged disc.
+    const d=Math.ceil(r*2)+2;
+    const t=document.createElement('canvas');t.width=t.height=d;
+    const tx=t.getContext('2d');
+    tx.drawImage(out,sx-d/2,sy-d/2,d,d,0,0,d,d);
+    if(op.mode!=='clone'){
+      // HEAL = clone plus a colour match. Shifting the donor by (destination mean - donor mean)
+      // is what makes a patch taken from a slightly different tone disappear instead of reading
+      // as a disc. Clone deliberately skips this: for duplicating a real object you want the
+      // donor's own colour, unaltered.
+      const ds=healRingStats(data,w,h,cx,cy,r),ss=healPatchStats(data,w,h,sx,sy,r);
+      if(ds&&ss){
+        tx.globalCompositeOperation='source-atop';
+        const dr=ds.r-ss.r,dg=ds.g-ss.g,db=ds.b-ss.b;
+        // Two passes: 'lighter' can only add, so the negative side is done by subtracting with
+        // difference-free arithmetic on an inverted fill.
+        if(dr>0||dg>0||db>0){tx.fillStyle=`rgb(${Math.max(0,dr)|0},${Math.max(0,dg)|0},${Math.max(0,db)|0})`;tx.globalCompositeOperation='lighter';tx.fillRect(0,0,d,d);}
+        if(dr<0||dg<0||db<0){
+          tx.globalCompositeOperation='difference';tx.fillStyle='#fff';tx.fillRect(0,0,d,d);
+          tx.globalCompositeOperation='lighter';tx.fillStyle=`rgb(${Math.max(0,-dr)|0},${Math.max(0,-dg)|0},${Math.max(0,-db)|0})`;tx.fillRect(0,0,d,d);
+          tx.globalCompositeOperation='difference';tx.fillStyle='#fff';tx.fillRect(0,0,d,d);
+        }
+        tx.globalCompositeOperation='source-over';
+      }
+    }
+    // Feather the donor to a soft disc so the repair has no hard rim.
+    const fe=Math.min(0.98,Math.max(0,op.feather!=null?op.feather:0.5));
+    // ⚠️ The opaque core is r*(1-0.65*fe), NOT r*(1-fe). Starting the falloff at r*(1-fe) makes
+    // the patch only half-opaque at 0.5r, so a spot sized just larger than the blemish leaves a
+    // visible RING of the original showing through the feather — measured, and clearly visible
+    // in test/output/heal_probe.png before this. Feather still reaches fully transparent at r,
+    // so edges stay soft; there is just more solid coverage under it.
+    const g=tx.createRadialGradient(d/2,d/2,r*(1-0.65*fe),d/2,d/2,r);
+    g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');
+    tx.globalCompositeOperation='destination-in';
+    tx.fillStyle=g;tx.beginPath();tx.arc(d/2,d/2,r,0,6.2832);tx.fill();
+    tx.globalCompositeOperation='source-over';
+    x.save();
+    x.globalAlpha=op.opacity!=null?op.opacity:1;
+    x.drawImage(t,cx-d/2,cy-d/2);
+    x.restore();
+    t.width=t.height=0;
+  }
+  return out;
+}
+function geomCanvas(item){return applyGeomTo(healApply(item.img,item.heal),item.geom||defGeom());}
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
   const it=curItem();
@@ -13260,6 +13439,84 @@ function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360
 function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
 function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(1)+'°';g.crop=null;broadcastGeom();updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
+
+// ── retouch interaction ───────────────────────────────────────────────────────────────────
+let healMode=false,_healShiftFrom=null;
+function healOps(){const it=curItem();if(!it)return null;return it.heal||(it.heal=[]);}
+function healSyncUI(){
+  const g=(id,f)=>{const e=document.getElementById(id);return e?(f?parseFloat(e.value):e.value):0;};
+  const sv=(id,t)=>{const e=document.getElementById(id);if(e)e.textContent=t;};
+  sv('vl-heal-size',g('sl-heal-size',1)+'%');
+  sv('vl-heal-feather',g('sl-heal-feather',1));
+  sv('vl-heal-opacity',g('sl-heal-opacity',1));
+  const ops=healOps(),n=ops?ops.length:0;
+  const lbl=document.getElementById('heal-count');
+  if(lbl)lbl.textContent=n?`${n} spot${n===1?'':'s'} removed${healMode?' · click to add another':''}`
+    :'No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.';
+}
+function healToggle(){
+  healMode=!healMode;
+  const b=document.getElementById('btn-heal-paint');if(b)b.classList.toggle('on',healMode);
+  if(FX.cv)FX.cv.style.cursor=healMode?'crosshair':'';
+  // Retouch and mask painting both want the pointer; arming one disarms the other rather than
+  // letting a click do two things at once.
+  if(healMode&&typeof mskPaintStop==='function')mskPaintStop();
+  healSyncUI();
+  toast(healMode?'Retouch on — click a spot to remove it':'Retouch off',true);
+}
+function healAdd(nx,ny,src){
+  const ops=healOps();if(!ops)return;
+  ops.push({
+    x:nx,y:ny,
+    sx:src?src.nx:null,sy:src?src.ny:null,
+    r:(parseFloat((document.getElementById('sl-heal-size')||{}).value)||4)/100,
+    feather:(parseFloat((document.getElementById('sl-heal-feather')||{}).value)||50)/100,
+    opacity:(parseFloat((document.getElementById('sl-heal-opacity')||{}).value)||100)/100,
+    mode:(document.getElementById('sel-heal-mode')||{}).value||'heal',
+  });
+  updateWork();renderPreview();healSyncUI();fxHistoryPush();
+  if(typeof hapt==='function')hapt();
+}
+function healUndoLast(){
+  const ops=healOps();if(!ops||!ops.length){toast('No spots to undo');return;}
+  ops.pop();updateWork();renderPreview();healSyncUI();fxHistoryPush();
+}
+function healClear(){
+  const ops=healOps();if(!ops||!ops.length)return;
+  const it=curItem();it.heal=[];updateWork();renderPreview();healSyncUI();fxHistoryPush();
+  toast('Retouching cleared',true);
+}
+// Pointer coordinates arrive in the DISPLAYED canvas's space, but heal ops are normalised
+// against the ORIGINAL image (see healApply) — and geometry sits between the two. So a click is
+// mapped back through the crop/rotate the photo is currently showing, or every spot would land
+// somewhere else the moment the photo was cropped.
+function _healPointToSource(e){
+  const uv=(typeof _mskPointToUV==='function')?_mskPointToUV(e):null;
+  if(!uv)return null;
+  const it=curItem(),g=it&&it.geom;
+  let{nx,ny}=uv;
+  if(g){
+    if(g.crop){nx=g.crop.x+nx*g.crop.w;ny=g.crop.y+ny*g.crop.h;}
+    const rot=(((g.rot||0)%360)+360)%360;
+    if(rot===90){const t=nx;nx=ny;ny=1-t;}
+    else if(rot===180){nx=1-nx;ny=1-ny;}
+    else if(rot===270){const t=nx;nx=1-ny;ny=t;}
+    if(g.flipH)nx=1-nx;
+    if(g.flipV)ny=1-ny;
+  }
+  return{nx:Math.min(1,Math.max(0,nx)),ny:Math.min(1,Math.max(0,ny))};
+}
+(function initHeal(){
+  const cv=document.getElementById('fx-canvas');if(!cv)return;
+  cv.addEventListener('pointerdown',e=>{
+    if(!healMode)return;
+    e.preventDefault();e.stopPropagation();
+    const p=_healPointToSource(e);if(!p)return;
+    if(e.shiftKey){_healShiftFrom=p;toast('Source set — now click the spot to repair',true);return;}
+    healAdd(p.nx,p.ny,_healShiftFrom);
+    _healShiftFrom=null;
+  },true);
+})();
 
 // ── interactive crop overlay ──
 function cropToggle(){if(typeof hapt==='function')hapt();cropMode?cropCancel():cropEnter();}

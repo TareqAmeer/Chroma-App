@@ -1,0 +1,30 @@
+import { chromium } from 'playwright';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+const ROOT=process.cwd();
+const server=createServer(async(req,res)=>{try{const u=req.url.split('?')[0];const d=await readFile(path.join(ROOT,decodeURIComponent(u).slice(1)));
+  res.writeHead(200,{'Content-Type':u.endsWith('.html')?'text/html':u.endsWith('.png')?'image/png':'application/octet-stream'});res.end(d);}catch{res.writeHead(404);res.end();}}).listen(0,'127.0.0.1');
+await new Promise(r=>server.on('listening',r));
+const b=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});
+const p=await b.newPage();
+p.on('pageerror',e=>console.log('[pageerror]',e.message));
+await p.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html`,{waitUntil:'load'});
+await p.waitForFunction(()=>typeof healApply==='function');
+const out=await p.evaluate(async()=>{
+  const blob=await (await fetch('test/fixtures/portrait.png')).blob();
+  await loadFXImages([new File([blob],'portrait.png',{type:'image/png'})]);
+  await new Promise(r=>setTimeout(r,400));
+  const n=()=>{const it=curItem();return it&&it.heal?it.heal.length:0;};
+  const r={start:n()};
+  healAdd(0.5,0.5,null);            r.afterAdd=n();
+  healAdd(0.3,0.3,null);            r.afterSecond=n();
+  fxUndo();  await new Promise(r2=>setTimeout(r2,120)); r.afterUndo=n();
+  fxUndo();  await new Promise(r2=>setTimeout(r2,120)); r.afterUndo2=n();
+  fxRedo();  await new Promise(r2=>setTimeout(r2,120)); r.afterRedo=n();
+  // Geometry must carry repairs, not lose them: rotate and confirm the ops survive.
+  geomRotate(90); r.afterRotate=n();
+  return r;
+});
+console.log(JSON.stringify(out));
+await b.close();server.close();
