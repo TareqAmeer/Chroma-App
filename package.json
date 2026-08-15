@@ -1,7 +1,7 @@
 {
   "name": "chromasmith",
   "version": "1.0.0",
-  "description": "Chromasmith — offline film-emulation photo editor (iOS shell wraps the single-file web app)",
+  "description": "Chromasmith \u2014 offline film-emulation photo editor (iOS shell wraps the single-file web app)",
   "private": true,
   "scripts": {
     "postinstall": "patch-package",
@@ -17,7 +17,8 @@
     "perf:test": "node test/perf_bench.mjs",
     "perf:baseline": "node test/perf_bench.mjs --baseline",
     "scorecard": "if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 calib/export_scorecard.py; else python3 calib/export_scorecard.py; fi",
-    "test": "npm run lint:ai && npm run export:test && npm run scorecard && npm run mask:test && npm run perf:test && npm run ui:test"
+    "test": "npm run lint:ai && npm run export:test && npm run scorecard && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test",
+    "lib:test": "node test/library_perf.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",

@@ -25,7 +25,11 @@
         const dir = String(A.path || '/test');
         if (/Folders only/.test(dir)) return Promise.resolve([]);
         const out = [];
-        for (let i = 1; i <= 18; i++) out.push({ path: `${dir}/IMG_${1000 + i}.RW2`, name: `IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, kind: 'raw', ext: 'rw2', mtime: 1700000000 + i, size: 1000 + i });
+        // ?libn=N synthesises a large folder. 18 is enough to eyeball layout, but grid cost is a
+        // question about 500-5000 files and cannot be answered at 18 — see the virtualisation
+        // budget in test/perf_bench.mjs.
+        const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+        for (let i = 1; i <= N; i++) out.push({ path: `${dir}/IMG_${1000 + i}.RW2`, name: `IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, kind: 'raw', ext: 'rw2', mtime: 1700000000 + i, size: 1000 + i });
         out.push({ path: `${dir}/sub`, name: 'sub', is_dir: true, is_image: false, kind: '', ext: '', mtime: 0, size: 0 });
         return Promise.resolve(out);
       }
@@ -971,6 +975,63 @@
     recentMenu.style.top = (r.bottom + 4) + 'px';
   }
 
+  // Folder size at which the grid switches to windowed rendering. Chosen off the measurement in
+  // renderGrid's comment: 200 files is comfortable, 1,000 is heavy, 5,000 does not load.
+  const VIRT_MIN = 400;
+  // Test hook: the grid probe needs the measured metrics, which are otherwise closure-local.
+  if (LIBTEST) {
+    window.__libState = () => ({ m: state._virtMetrics, on: state._virtOn, n: (state._virtAll || []).length, range: state._virtRange });
+    window.__libRenderGrid = () => renderGrid();
+  }
+  // How many rows of cards to keep mounted beyond the viewport in each direction. Two rows is
+  // enough that a normal scroll flick never exposes a gap, without mounting a screenful of cards
+  // nobody sees.
+  const VIRT_OVERSCAN_ROWS = 2;
+  let _virtScrollBound = null;
+
+  /// Measures the live grid's geometry from the DOM rather than recomputing it from CSS. The
+  /// column count comes from `auto-fill` and the card height from content, so both depend on the
+  /// thumbnail size, the dock state, the window width and whether titles are shown — deriving
+  /// them by hand would be a second source of truth that drifts the moment any of that changes.
+  function virtMetrics(gridEl) {
+    const cards = gridEl.querySelectorAll('.lib-card');
+    if (cards.length < 2) return null;
+    const top0 = cards[0].offsetTop;
+    let cols = 1;
+    while (cols < cards.length && cards[cols].offsetTop === top0) cols++;
+    // Row pitch from the first card that actually starts a new row.
+    const next = cards[cols];
+    const rowH = next ? (next.offsetTop - top0) : (cards[0].offsetHeight + 16);
+    return { cols, rowH: Math.max(1, rowH), cardH: cards[0].offsetHeight };
+  }
+
+  /// Mounts only the rows near the viewport, with a spacer above and below holding the scroll
+  /// height. Spacers span the full row (`grid-column:1/-1`) so the CSS grid's auto-fill column
+  /// maths is untouched — the alternative, absolutely positioning cards, would mean
+  /// reimplementing the responsive layout this file already gets from the browser.
+  function virtUpdate(force) {
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl || !state._virtOn) return;
+    const all = state._virtAll || [];
+    const m = state._virtMetrics;
+    if (!m) return;
+    const scroller = gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
+      ? gridEl.parentElement : (gridEl.closest('#lib-overlay') || document.documentElement);
+    const viewTop = Math.max(0, (scroller.scrollTop || 0) - gridEl.offsetTop);
+    const viewH = scroller.clientHeight || window.innerHeight;
+    const totalRows = Math.ceil(all.length / m.cols);
+    const firstRow = Math.max(0, Math.floor(viewTop / m.rowH) - VIRT_OVERSCAN_ROWS);
+    const lastRow = Math.min(totalRows - 1, Math.ceil((viewTop + viewH) / m.rowH) + VIRT_OVERSCAN_ROWS);
+    if (!force && state._virtRange && state._virtRange[0] === firstRow && state._virtRange[1] === lastRow) return;
+    state._virtRange = [firstRow, lastRow];
+    const from = firstRow * m.cols, to = Math.min(all.length, (lastRow + 1) * m.cols);
+    renderCards(gridEl, all.slice(from, to), all, false, {
+      offset: from,
+      padTop: firstRow * m.rowH,
+      padBot: Math.max(0, (totalRows - 1 - lastRow) * m.rowH),
+    });
+  }
+
   // Thumbnail loader with a small concurrency pool + viewport priority. renderGrid used to
   // fire one get_thumbnail invoke per card synchronously — opening a 500-RAW folder launched
   // 500 concurrent Rust decodes at once (the <img loading="lazy"> attribute is useless here,
@@ -1587,16 +1648,41 @@
     while (x) { n += x & 1n; x >>= 1n; }
     return Number(n);
   }
+  /// Population count of a 32-bit int — the standard SWAR bit-twiddle, no allocation, no loop.
+  function popcount32(v) {
+    v = v - ((v >>> 1) & 0x55555555);
+    v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+    return (((v + (v >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+  }
   const DUPE_HAMMING_THRESHOLD = 6;
-  // Simple union-find over the folder's hashes.
+  // Union-find over the folder's hashes.
+  //
+  // ⚠️ The union-find is not the expensive part — the PAIRWISE HAMMING is, and it is O(n^2).
+  // Measured: opening a synthetic 5,000-file folder took 41.9s, effectively all of it here,
+  // because the original inner comparison called hammingHex, which allocated TWO BigInts from
+  // hex strings per pair and then counted bits one at a time in a `while (x)` loop — about 64
+  // BigInt operations and 2 allocations, 12.5 million times.
+  //
+  // The fix is entirely constant-factor: parse each 64-bit hash ONCE into a hi/lo pair of plain
+  // 32-bit ints, then compare with two XORs and two SWAR popcounts. Same clusters out, no
+  // allocation in the loop. hammingHex is kept because the hex form is what phash_batch returns
+  // and it remains the readable reference for what this is computing.
   function clusterByHash(pairs) {
     const parent = new Map();
     const find = (p) => { while (parent.get(p) !== p) { parent.set(p, parent.get(parent.get(p))); p = parent.get(p); } return p; };
     const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
     pairs.forEach(([p]) => parent.set(p, p));
-    for (let i = 0; i < pairs.length; i++) {
-      for (let j = i + 1; j < pairs.length; j++) {
-        if (hammingHex(pairs[i][1], pairs[j][1]) <= DUPE_HAMMING_THRESHOLD) union(pairs[i][0], pairs[j][0]);
+    const n = pairs.length;
+    const hi = new Int32Array(n), lo = new Int32Array(n);
+    for (let i = 0; i < n; i++) {
+      const h = pairs[i][1] || '';
+      hi[i] = parseInt(h.slice(0, 8), 16) | 0;
+      lo[i] = parseInt(h.slice(8, 16), 16) | 0;
+    }
+    for (let i = 0; i < n; i++) {
+      const ai = hi[i], bi = lo[i];
+      for (let j = i + 1; j < n; j++) {
+        if (popcount32(ai ^ hi[j]) + popcount32(bi ^ lo[j]) <= DUPE_HAMMING_THRESHOLD) union(pairs[i][0], pairs[j][0]);
       }
     }
     const groups = new Map(); // root -> [paths]
@@ -2304,14 +2390,66 @@
     const listHead = document.getElementById('lib-list-head');
     if (listHead) { listHead.classList.toggle('on', isList); syncListHead(); }
     const shown = sortEntries(state.entries.filter(passesFilters));
+    // ── Virtualisation ────────────────────────────────────────────────────────────────────
+    // Measured (test/probe_grid.mjs, before this): 200 files = 5,114 DOM nodes, 1,000 = 17,914,
+    // and 5,000 never finished loading at all — the page timed out at 30s. About 18 nodes per
+    // card is fine for a shoot and fatal for a library, and "a year of photos" is the normal
+    // case for the folder this tool points at.
+    //
+    // ⚠️ Below VIRT_MIN the OLD path runs unchanged. Virtualising a 40-photo folder buys nothing
+    // and would put a scroll listener, a measurement pass and two spacer nodes between every
+    // existing behaviour (drag-select, keyboard nav, the dupe badges) and its DOM. Small folders
+    // keep exactly the code they had.
+    state._virtAll = shown;
+    const virtOn = shown.length >= VIRT_MIN && !isList;
+    state._virtOn = virtOn;
     // Build every card into a detached DocumentFragment and append ONCE, instead of one
     // appendChild() per card — on a large folder that was one reflow per photo. Wiring
     // (thumbnail load, click/drag handlers) still has to happen in a SEPARATE pass after the
     // fragment lands in the live grid: loadThumb()'s pump checks img.isConnected synchronously
     // (see its comment above), so calling it on a still-detached card silently drops the job.
+    renderCards(grid, virtOn ? [] : shown, shown, isList, { offset: 0 });
+    if (virtOn) {
+      // Mount one screenful first so the live grid can be MEASURED (column count and row pitch
+      // both come from the browser's own auto-fill layout — see virtMetrics), then window to the
+      // real scroll position.
+      renderCards(grid, shown.slice(0, Math.min(shown.length, 60)), shown, isList, { offset: 0 });
+      state._virtMetrics = virtMetrics(grid);
+      state._virtRange = null;
+      virtUpdate(true);
+      const scroller = grid.parentElement || document.documentElement;
+      if (_virtScrollBound) _virtScrollBound.el.removeEventListener('scroll', _virtScrollBound.fn);
+      // rAF-coalesced: a scroll fires far more often than a row boundary is crossed, and
+      // virtUpdate already no-ops when the row range has not changed.
+      let queued = false;
+      const fn = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; virtUpdate(false); }); };
+      scroller.addEventListener('scroll', fn, { passive: true });
+      _virtScrollBound = { el: scroller, fn };
+    } else if (_virtScrollBound) {
+      _virtScrollBound.el.removeEventListener('scroll', _virtScrollBound.fn);
+      _virtScrollBound = null;
+    }
+    renderGridTail(shown);
+  }
+
+  /// Builds and wires a set of cards into the grid, replacing whatever was there. `allList` is the
+  /// FULL filtered set even when only a window is mounted, because click-range selection and the
+  /// context menu operate over the folder, not over what happens to be on screen; `offset` keeps
+  /// each card's index global for the same reason.
+  function renderCards(grid, list, allList, isList, opts) {
+    const offset = (opts && opts.offset) || 0;
+    const shown = allList;
+    grid.innerHTML = '';
     const frag = document.createDocumentFragment();
     const built = [];
-    shown.forEach((entry, idx) => {
+    if (opts && opts.padTop) {
+      const pad = document.createElement('div');
+      pad.className = 'lib-virt-pad';
+      pad.style.cssText = `grid-column:1/-1;height:${opts.padTop}px;pointer-events:none`;
+      frag.appendChild(pad);
+    }
+    list.forEach((entry, _i) => {
+      const idx = offset + _i;
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
@@ -2389,6 +2527,17 @@
         };
       });
     });
+    if (opts && opts.padBot) {
+      const pad = document.createElement('div');
+      pad.className = 'lib-virt-pad';
+      pad.style.cssText = `grid-column:1/-1;height:${opts.padBot}px;pointer-events:none`;
+      grid.appendChild(pad);
+    }
+  }
+
+  /// Everything renderGrid did AFTER the cards: empty states, counts, selection chrome.
+  function renderGridTail(shown) {
+    const grid = document.getElementById('lib-grid');
     if (!shown.length && state.entries.length) {
       // Only the richer "nothing matches" message when a filter/search actually hid photos —
       // an empty FOLDER (state.entries.length === 0) gets its own message below instead.

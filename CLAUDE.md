@@ -170,6 +170,31 @@ catches a dependency that silently failed to reach the worker), and the lazy gal
 that *something* rendered, since "renders only what's visible" and "renders nothing at all"
 score identically on a ratio.
 
+**`test/library_perf.mjs`** (`npm run lib:test`) covers the Library grid, which had two
+independent scaling faults, both measured on a synthetic folder (`?libtest=1&libn=N` — the
+`list_dir` mock takes a count):
+
+| entries | DOM nodes | folder open |
+|---|---|---|
+| 200 | 5,114 → 5,114 (unchanged — below `VIRT_MIN`, deliberately the old path) | ~3s |
+| 1,000 | 17,914 → **1,995** | 4.3s → 3.0s |
+| 5,000 | never loaded | **>30s timeout → ~3-4s** |
+
+- The grid built a card per file (~18 DOM nodes each). It now mounts only the rows near the
+  viewport, with full-width spacers holding the scroll height. ⚠️ Below `VIRT_MIN` (400) the OLD
+  path runs untouched — virtualising a 40-photo folder buys nothing and would put a scroll
+  listener and a measurement pass between every existing behaviour and its DOM.
+  ⚠️ Column count and row pitch are measured from the LIVE grid (`virtMetrics`), never recomputed
+  from CSS: both come from `auto-fill` and depend on thumbnail size, dock state and window width,
+  so a hand-derived copy would be a second source of truth that drifts.
+- `clusterByHash` is O(n²) and its inner comparison allocated **two BigInts from hex strings and
+  counted bits one at a time** — ~64 BigInt ops per pair, 12.5M times at n=5,000. That was
+  effectively the entire 41.9s. Now each hash is parsed once into hi/lo `Int32Array`s and compared
+  with two XORs and two SWAR popcounts. The gate asserts the fast path agrees with the original
+  BigInt implementation **exactly** over 83,436 pairs, including deliberate near-duplicates at
+  every Hamming distance 0-8 so the threshold boundary is covered — a faster hamming returning
+  different distances would silently re-cluster the user's duplicates and still look like a win.
+
 **`test/mask_raster.mjs`** exists because **no export golden contains a raster mask** — every
 recipe uses analytic shapes, so the entire brush/sky/AI storage path had zero coverage. It
 asserts byte-exact snapshot round-trips, that legacy plain-`Array` masks still load, and that
