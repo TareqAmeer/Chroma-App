@@ -24,20 +24,16 @@ against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
 | **F1** | Virtual copies (backward-compatible sidecar versions) |
 | **G** | A 375×812 phone pass in `ui_audit`, and the 12×20px tap target it found |
 | **E1** | Heal / clone spot removal (pre-pass on the source, so repairs take the grade) |
-| **F2** | Five colour labels + a real status bar |
+| **F2** | Five colour labels, status bar, metadata panel (I), batch bar, empty-state CTA |
 | **F3** | Library grid virtualisation, and an O(n²) BigInt hot loop in dupe clustering |
-| **D4** | Film frames — procedural (ISO 1007 geometry) + MIT plate + user-loaded plates; crop defaults to "As shot" |
+| **D4** | Film frames — procedural (ISO 1007 geometry) + MIT plate + user plates, stills **and video**; crop defaults to "As shot" |
 
 ### ⏳ Not done
 
-- **D4 for VIDEO.** Stills are done; `_videoComposeBorderMatte` precomputes its sizes once per
-  clip, so the frame needs folding into that rather than being called per frame.
 - **E2's auto-horizon** — needs line detection (a Hough pass), which is its own piece of work
   rather than another slider. Manual Rotate ships in the meantime.
-- **F2 leftovers**: a metadata/info panel, undo for Delete and Reset-edit, an empty-state CTA,
-  and a batch-operations bar. Colour labels and the status bar shipped. ⚠️ Undo for Delete needs
-  a Rust `restore_from_trash` — `trash_file` moves to the macOS Trash, which is recoverable in
-  Finder but not from in-app today.
+- **Undo for Delete.** Needs a Rust `restore_from_trash`: `trash_file` hands the file to the
+  macOS Trash, so it is recoverable in Finder but not from in-app. Everything else in F2 shipped.
 
 ## Things a future session should know
 
