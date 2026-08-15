@@ -257,4 +257,17 @@ async function main() {
   console.log(`\nDone. Wrote ${results.length} PNG(s) to ${path.relative(ROOT, OUT_DIR)}/`);
 }
 
-main().catch((e) => { console.error('FATAL:', e); process.exit(1); });
+// ⚠️ Retry once on a lost GL context. SwiftShader intermittently drops the context mid-run — the
+// guard above catches it (every program reports LINK FAILED and glError 37442 = CONTEXT_LOST_WEBGL)
+// and it poisons everything after it, so there is nothing to salvage from that attempt. A whole
+// fresh run is the honest recovery: the failure is environmental, and before this the same event
+// silently wrote 18 blank PNGs and reported success. NOT a blanket retry — anything that is not a
+// blank render still fails immediately and loudly on the first attempt.
+main().catch((e) => {
+  if (/BLANK RENDER/.test(String(e && e.message))) {
+    console.error('  [retry] lost GL context (SwiftShader); re-running once from scratch');
+    return main().catch((e2) => { console.error('FATAL (after retry):', e2); process.exit(1); });
+  }
+  console.error('FATAL:', e);
+  process.exit(1);
+});

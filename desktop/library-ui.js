@@ -13,6 +13,9 @@
   const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
   if (!window.__TAURI__ && !LIBTEST) return;
   const invoke = LIBTEST ? libtestInvoke : window.__TAURI__.core.invoke;
+  // Virtual-copy state for the harness, so the version rows in the context menu are reachable
+  // without a real sidecar on disk.
+  let ltVersions = [], ltActive = 0;
   function libtestInvoke(cmd, args) {
     const A = args || {};
     const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
@@ -28,7 +31,19 @@
       }
       case 'get_thumbnail': return Promise.resolve(png.buffer);
       case 'read_file_bytes': return Promise.resolve(png.buffer);
-      case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false });
+      case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive });
+      case 'sidecar_add_version': {
+        if (!ltVersions.length) ltVersions.push({ name: 'Original', recipe: 'R0' });
+        ltVersions.push({ name: A.name || 'Copy ' + ltVersions.length, recipe: 'R' + ltVersions.length });
+        ltActive = ltVersions.length - 1;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
+      }
+      case 'sidecar_set_active_version': { ltActive = A.index; return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive }); }
+      case 'sidecar_delete_version': {
+        ltVersions.splice(A.index, 1);
+        if (ltVersions.length <= 1) { ltVersions.length = 0; ltActive = 0; } else if (ltActive >= ltVersions.length) ltActive = ltVersions.length - 1;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
+      }
       case 'set_sidecar': return Promise.resolve();
       case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
       case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
@@ -2167,6 +2182,48 @@
     });
     if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
     sep();
+    // ── Virtual copies: a second set of edits over the SAME file (no pixels duplicated).
+    // Single selection only — "make a virtual copy of these 40 photos" is a different feature
+    // with a different confirmation, and quietly doing it to a whole selection is not it.
+    if (n === 1) {
+      const vcPath = paths[0];
+      const vsc = state.sidecars.get(vcPath) || {};
+      const vers = vsc.versions || [];
+      item(vers.length ? `New virtual copy (${vers.length} versions)` : 'New virtual copy', async () => {
+        const name = window.prompt('Name this version', vers.length ? `Copy ${vers.length}` : 'Copy 1');
+        if (name === null) return;
+        try {
+          const sc = await invoke('sidecar_add_version', { path: vcPath, name });
+          state.sidecars.set(vcPath, sc);
+          await renderGrid();
+          if (vcPath === state.openedPath) openInEditor(vcPath);
+          toast(`Created "${sc.versions[sc.active].name}"`, true);
+        } catch (e) { toast('Could not create a virtual copy — ' + (e.message || e), false); }
+      });
+      // Switching versions is the common action once copies exist, so each gets its own row
+      // rather than hiding behind a submenu.
+      vers.forEach((v, i) => {
+        const row = item(`${i === vsc.active ? '● ' : '○ '}${v.name}`, async () => {
+          try {
+            const sc = await invoke('sidecar_set_active_version', { path: vcPath, index: i });
+            state.sidecars.set(vcPath, sc);
+            await renderGrid();
+            if (vcPath === state.openedPath) openInEditor(vcPath);  // re-open so the editor shows this version's edits
+          } catch (e) { toast('Could not switch version — ' + (e.message || e), false); }
+        });
+        row.oncontextmenu = async (ev) => {
+          ev.preventDefault(); ev.stopPropagation();
+          if (!window.confirm(`Delete version "${v.name}"? This cannot be undone.`)) return;
+          try {
+            const sc = await invoke('sidecar_delete_version', { path: vcPath, index: i });
+            state.sidecars.set(vcPath, sc);
+            closeContextMenu(); await renderGrid();
+          } catch (e) { toast('Could not delete version — ' + (e.message || e), false); }
+        };
+        row.title = 'Switch to this version — right-click to delete it';
+      });
+      sep();
+    }
     item('Copy edit', async () => {
       const sc = await getSidecar(paths[0]);
       window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());

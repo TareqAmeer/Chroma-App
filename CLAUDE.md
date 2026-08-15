@@ -202,8 +202,12 @@ by running the CLEAN tree repeatedly, so neither is caused by whatever you just 
   RENDER error** instead: alpha is the tell, since the pipeline always writes `vec4(rgb,1.0)` and
   no shader edit can produce alpha 0. ⚠️ This guard matters most for `--golden`, which would
   otherwise happily overwrite all 18 goldens with blank PNGs.
-  Appears to be GL/SwiftShader resource pressure — it got markedly less frequent with a Chromium
-  preview browser closed. Not attributed further.
+  **Root cause, confirmed by that guard's diagnostics: the WebGL context is LOST**
+  (`contextLost: true`, `glError` 37442 = `CONTEXT_LOST_WEBGL`, and every program then reports
+  `LINK FAILED`). It is a SwiftShader/driver event, not anything in the app, and it poisons every
+  render after it — which is why the whole run fails at once rather than one image. The harness
+  now **retries the entire run once** on a blank render; anything else still fails immediately on
+  the first attempt. Frequency drops noticeably with fewer Chromium instances running.
 - **`video_harness`'s "still byte-exact after video" check fails ~40% of runs** (measured: clean
   tree, 2 of 5), reporting e.g. `chart.png x identity ... 5531 vs 5365 bytes`. A real image that
   differs slightly, not a blank, so it is a different fault from the one above. Unattributed;

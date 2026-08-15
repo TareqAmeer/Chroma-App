@@ -469,8 +469,29 @@ pub struct Sidecar {
     pub rating: i32,
     pub label: String,  // "" | "Red" | "Green" | "Star"
     pub edited: bool,
-    pub recipe: String, // base64 FX-snapshot JSON, "" if none
+    /// base64 FX-snapshot JSON of the ACTIVE version, "" if none.
+    ///
+    /// ⚠️ This stays the active version's recipe even once several exist, rather than moving into
+    /// the versions list. Everything that reads a recipe today — the grid's decode cache key, the
+    /// editor's restore path, export history — keeps working untouched, and a sidecar written by
+    /// this build still opens correctly in a build that predates virtual copies. Moving it would
+    /// have been tidier and would have silently dropped every existing edit.
+    pub recipe: String,
     pub favorite: bool,
+    /// Named alternates. EMPTY for a photo that has never been virtual-copied, which is the
+    /// normal case — `versions[active].recipe` and `recipe` are kept in step by set_sidecar.
+    #[serde(default)]
+    pub versions: Vec<Version>,
+    #[serde(default)]
+    pub active: usize,
+}
+
+/// One virtual copy: a name and its own full recipe. No pixels are duplicated — a virtual copy is
+/// a second set of edits over the same file, which is the whole point.
+#[derive(Serialize, serde::Deserialize, Default, Clone, PartialEq)]
+pub struct Version {
+    pub name: String,
+    pub recipe: String,
 }
 
 /// Pull one XML attribute value out of the sidecar text (attribute or element form).
@@ -493,13 +514,102 @@ fn xmp_get(xmp: &str, name: &str) -> Option<String> {
 #[tauri::command]
 pub fn get_sidecar(path: String) -> Sidecar {
     let Ok(text) = std::fs::read_to_string(sidecar_path(&path)) else { return Sidecar::default() };
+    let recipe = xmp_get(&text, "chromasmith:Recipe").unwrap_or_default();
+    // Versions ride as base64 JSON so the payload stays XML-attribute-safe by construction, the
+    // same trick the recipe itself uses.
+    let versions: Vec<Version> = xmp_get(&text, "chromasmith:Versions")
+        .and_then(|b64| {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.decode(b64).ok()
+        })
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    let active = xmp_get(&text, "chromasmith:ActiveVersion")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
     Sidecar {
         rating: xmp_get(&text, "xmp:Rating").and_then(|v| v.parse().ok()).unwrap_or(0),
         label: xmp_get(&text, "xmp:Label").unwrap_or_default(),
         edited: xmp_get(&text, "chromasmith:Edited").as_deref() == Some("True"),
-        recipe: xmp_get(&text, "chromasmith:Recipe").unwrap_or_default(),
+        recipe,
         favorite: xmp_get(&text, "chromasmith:Favorite").as_deref() == Some("True"),
+        // Clamp rather than trust: a hand-edited or truncated sidecar must not index out of
+        // bounds, and silently falling back to the first version is the safe read.
+        active: if active < versions.len() { active } else { 0 },
+        versions,
     }
+}
+
+/// Reads the sidecar, mutates it, writes it back — the shared spine for every version command, so
+/// they cannot drift on how `recipe` and `versions[active]` are kept in step.
+fn edit_sidecar<F: FnOnce(&mut Sidecar)>(path: &str, f: F) -> Result<Sidecar, String> {
+    let mut sc = get_sidecar(path.to_string());
+    f(&mut sc);
+    // The invariant: whenever versions exist, the flat `recipe` field IS the active version's.
+    if let Some(v) = sc.versions.get(sc.active) {
+        sc.recipe = v.recipe.clone();
+    }
+    write_sidecar(path, &sc)?;
+    Ok(sc)
+}
+
+/// Adds a virtual copy carrying the CURRENT edits, and switches to it. Duplicating the current
+/// recipe (rather than starting blank) matches what "virtual copy" means everywhere else: a
+/// branch from where you are, not a reset.
+#[tauri::command]
+pub fn sidecar_add_version(path: String, name: String) -> Result<Sidecar, String> {
+    edit_sidecar(&path, |sc| {
+        if sc.versions.is_empty() {
+            // Promote whatever is already there to a first named version, so the original edits
+            // remain reachable instead of becoming the unnamed thing a copy was branched from.
+            sc.versions.push(Version { name: "Original".into(), recipe: sc.recipe.clone() });
+        }
+        let base = sc.versions.get(sc.active).map(|v| v.recipe.clone()).unwrap_or_default();
+        let name = if name.trim().is_empty() { format!("Copy {}", sc.versions.len()) } else { name };
+        sc.versions.push(Version { name, recipe: base });
+        sc.active = sc.versions.len() - 1;
+    })
+}
+
+#[tauri::command]
+pub fn sidecar_set_active_version(path: String, index: usize) -> Result<Sidecar, String> {
+    edit_sidecar(&path, |sc| {
+        if index < sc.versions.len() {
+            sc.active = index;
+        }
+    })
+}
+
+#[tauri::command]
+pub fn sidecar_rename_version(path: String, index: usize, name: String) -> Result<Sidecar, String> {
+    edit_sidecar(&path, |sc| {
+        if let Some(v) = sc.versions.get_mut(index) {
+            v.name = name;
+        }
+    })
+}
+
+/// Removes a virtual copy. Deleting down to one version collapses the list entirely, so a photo
+/// that is no longer virtual-copied looks exactly like one that never was.
+#[tauri::command]
+pub fn sidecar_delete_version(path: String, index: usize) -> Result<Sidecar, String> {
+    edit_sidecar(&path, |sc| {
+        if index >= sc.versions.len() {
+            return;
+        }
+        sc.versions.remove(index);
+        if sc.versions.len() <= 1 {
+            if let Some(v) = sc.versions.first() {
+                sc.recipe = v.recipe.clone();
+            }
+            sc.versions.clear();
+            sc.active = 0;
+        } else if sc.active >= sc.versions.len() {
+            sc.active = sc.versions.len() - 1;
+        } else if sc.active > index {
+            sc.active -= 1;   // the list shifted under it
+        }
+    })
 }
 
 /// Writes the whole sidecar in one shot. `recipe: None` keeps the existing recipe (so a
@@ -515,13 +625,33 @@ pub fn set_sidecar(
     favorite: Option<bool>,
 ) -> Result<(), String> {
     let existing = get_sidecar(path.clone());
-    let recipe = recipe.unwrap_or(existing.recipe);
+    let recipe = recipe.unwrap_or_else(|| existing.recipe.clone());
     let favorite = favorite.unwrap_or(existing.favorite);
     let rating = rating.clamp(-1, 5);
     let label = match label.as_str() {
         "Red" | "Green" | "Star" => label,
         _ => String::new(),
     };
+    // Editing a photo edits the version you are looking at — otherwise switching back to
+    // "Original" would show the edits you just made to a copy.
+    let mut versions = existing.versions;
+    if let Some(v) = versions.get_mut(existing.active) {
+        v.recipe = recipe.clone();
+    }
+    let sc = Sidecar { rating, label: label.clone(), edited, recipe, favorite, versions, active: existing.active };
+    write_sidecar(&path, &sc)?;
+    registry_set("edited", &path, edited);
+    registry_set("favorites", &path, favorite);
+    registry_set("flagged", &path, label == "Green");
+    registry_set("rejected", &path, label == "Red");
+    Ok(())
+}
+
+/// The single writer. Everything that changes a sidecar goes through here so the serialisation
+/// lives in exactly one place.
+fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
+    let (rating, label, edited, favorite, recipe) =
+        (sc.rating, sc.label.clone(), sc.edited, sc.favorite, sc.recipe.clone());
     let mut attrs = format!("xmp:Rating=\"{rating}\"");
     if !label.is_empty() {
         attrs.push_str(&format!(" xmp:Label=\"{label}\""));
@@ -536,6 +666,13 @@ pub fn set_sidecar(
         // base64 payload — XML-attribute-safe by construction
         attrs.push_str(&format!(" chromasmith:Recipe=\"{recipe}\""));
     }
+    if !sc.versions.is_empty() {
+        use base64::Engine;
+        if let Ok(json) = serde_json::to_vec(&sc.versions) {
+            let b64 = base64::engine::general_purpose::STANDARD.encode(json);
+            attrs.push_str(&format!(" chromasmith:Versions=\"{b64}\" chromasmith:ActiveVersion=\"{}\"", sc.active));
+        }
+    }
     let xmp = format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Chromasmith">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -544,11 +681,7 @@ pub fn set_sidecar(
 </x:xmpmeta>
 "#
     );
-    std::fs::write(sidecar_path(&path), xmp).map_err(|e| format!("write sidecar: {e}"))?;
-    registry_set("edited", &path, edited);
-    registry_set("favorites", &path, favorite);
-    registry_set("flagged", &path, label == "Green");
-    registry_set("rejected", &path, label == "Red");
+    std::fs::write(sidecar_path(path), xmp).map_err(|e| format!("write sidecar: {e}"))?;
     Ok(())
 }
 
@@ -980,4 +1113,110 @@ fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
 
 fn dirs_trash() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".Trash"))
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    /// A scratch photo path whose sidecar we can freely write.
+    fn scratch(tag: &str) -> String {
+        let dir = std::env::temp_dir().join(format!("cs_ver_{}_{}", std::process::id(), tag));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("photo.jpg");
+        std::fs::write(&p, b"x").unwrap();
+        p.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn virtual_copies_round_trip_and_stay_independent() {
+        let path = scratch("rt");
+        set_sidecar(path.clone(), 3, "Green".into(), true, Some("RECIPE_A".into()), Some(true)).unwrap();
+
+        // A photo that has never been copied carries NO versions — it must look exactly like one
+        // written before this feature existed.
+        let sc = get_sidecar(path.clone());
+        assert!(sc.versions.is_empty(), "an uncopied photo must not grow a versions list");
+        assert_eq!(sc.recipe, "RECIPE_A");
+
+        // Branching promotes the existing edits to "Original" rather than orphaning them.
+        let sc = sidecar_add_version(path.clone(), "Mono".into()).unwrap();
+        assert_eq!(sc.versions.len(), 2);
+        assert_eq!(sc.versions[0].name, "Original");
+        assert_eq!(sc.versions[0].recipe, "RECIPE_A");
+        assert_eq!(sc.active, 1, "a new copy becomes the active one");
+        assert_eq!(sc.versions[1].recipe, "RECIPE_A", "a copy branches from where you were");
+
+        // Editing writes to the ACTIVE version only.
+        set_sidecar(path.clone(), 3, "Green".into(), true, Some("RECIPE_B".into()), None).unwrap();
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.versions[1].recipe, "RECIPE_B");
+        assert_eq!(sc.versions[0].recipe, "RECIPE_A", "editing a copy must not touch the original");
+        assert_eq!(sc.recipe, "RECIPE_B", "the flat recipe tracks the active version");
+
+        // Switching back surfaces the original's recipe through the SAME flat field every
+        // existing reader uses.
+        let sc = sidecar_set_active_version(path.clone(), 0).unwrap();
+        assert_eq!(sc.recipe, "RECIPE_A");
+        assert_eq!(get_sidecar(path.clone()).recipe, "RECIPE_A");
+
+        // Rating/label survive all of it.
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.rating, 3);
+        assert_eq!(sc.label, "Green");
+        assert!(sc.favorite);
+
+        std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn deleting_down_to_one_collapses_the_list() {
+        let path = scratch("del");
+        set_sidecar(path.clone(), 0, String::new(), true, Some("BASE".into()), None).unwrap();
+        sidecar_add_version(path.clone(), "B".into()).unwrap();
+        sidecar_add_version(path.clone(), "C".into()).unwrap();
+        assert_eq!(get_sidecar(path.clone()).versions.len(), 3);
+
+        // Deleting a version BELOW the active one must shift the active index with it, or the
+        // selection silently jumps to a different copy.
+        let sc = sidecar_set_active_version(path.clone(), 2).unwrap();
+        assert_eq!(sc.active, 2);
+        let sc = sidecar_delete_version(path.clone(), 0).unwrap();
+        assert_eq!(sc.versions.len(), 2);
+        assert_eq!(sc.versions[1].name, "C");
+        assert_eq!(sc.active, 1, "active must still point at C after the list shifted");
+
+        // Down to one: the list collapses so the photo looks un-copied again.
+        let sc = sidecar_delete_version(path.clone(), 0).unwrap();
+        assert!(sc.versions.is_empty(), "one remaining version should not be a list");
+        assert_eq!(sc.active, 0);
+        assert!(!sc.recipe.is_empty(), "the surviving version's recipe must be kept");
+
+        std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn a_legacy_sidecar_still_loads() {
+        // Exactly the shape written before virtual copies existed — no Versions attribute.
+        let path = scratch("legacy");
+        let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF><rdf:Description rdf:about="" xmp:Rating="4" chromasmith:Edited="True" chromasmith:Recipe="OLDRECIPE"/></rdf:RDF></x:xmpmeta>"#;
+        std::fs::write(sidecar_path(&path), xmp).unwrap();
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.rating, 4);
+        assert_eq!(sc.recipe, "OLDRECIPE");
+        assert!(sc.versions.is_empty());
+        assert_eq!(sc.active, 0);
+        std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn an_out_of_range_active_index_is_clamped() {
+        let path = scratch("clamp");
+        let xmp = r#"<x:xmpmeta><rdf:Description chromasmith:Recipe="R" chromasmith:ActiveVersion="9"/></x:xmpmeta>"#;
+        std::fs::write(sidecar_path(&path), xmp).unwrap();
+        // No versions at all, ActiveVersion=9 — a hand-edited or truncated file must not index
+        // out of bounds later.
+        assert_eq!(get_sidecar(path.clone()).active, 0);
+        std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
+    }
 }
