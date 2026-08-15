@@ -359,6 +359,30 @@
     #lib-viewbar .lib-seg button{background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer}
     #lib-viewbar .lib-seg button.on{background:var(--acc);color:#000}
     #lib-viewbar .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
+    /* Colour-label dots: small, only fully visible on hover or when set, so a grid of unlabelled
+       photos does not read as a grid of grey pips. The active one keeps its colour always. */
+    .lib-lbls{display:inline-flex;gap:1px;margin-left:6px;vertical-align:middle}
+    /* ⚠️ The DOT is 9px but the clickable box is 19px: padding plus background-clip:content-box
+       keeps the visual small (five of these sit in a thumbnail's flag strip) while giving the
+       pointer something it can actually hit. Sizing the element itself to 9px would be a target
+       under half the 18px floor the FX panels are held to — and the Library is not covered by
+       test/ui_audit.mjs, so nothing would have flagged it. */
+    .lib-lbl{width:9px;height:9px;padding:5px;background:var(--lbl);background-clip:content-box;
+      border-radius:50%;opacity:.18;cursor:pointer;transition:opacity .12s,transform .12s;
+      box-sizing:content-box}
+    .lib-card:hover .lib-lbl{opacity:.5}
+    .lib-lbl:hover{opacity:1}
+    .lib-lbl.on{opacity:1}
+    /* The active dot needs a ring drawn on the DOT, not the padded box — a box-shadow on the
+       element would trace the 19px hit area and read as a huge halo. */
+    .lib-lbl.on{background-image:radial-gradient(circle at center,transparent 55%,rgba(255,255,255,.75) 56%,rgba(255,255,255,.75) 72%,transparent 73%)}
+    /* A labelled card carries its colour on the frame — visible at any thumbnail size, unlike a
+       9px dot, which is the point of colour labels when culling a wall of photos. */
+    .lib-card.lbl-red .lib-thumb-wrap{box-shadow:0 0 0 2px #e05252}
+    .lib-card.lbl-yellow .lib-thumb-wrap{box-shadow:0 0 0 2px #e0c04a}
+    .lib-card.lbl-green .lib-thumb-wrap{box-shadow:0 0 0 2px #5cb85c}
+    .lib-card.lbl-blue .lib-thumb-wrap{box-shadow:0 0 0 2px #4a90d9}
+    .lib-card.lbl-purple .lib-thumb-wrap{box-shadow:0 0 0 2px #9b6dd0}
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
     #lib-grid.lib-dragover{outline:2px dashed var(--acc2);outline-offset:-6px;border-radius:8px}
     .lib-coll-row.lib-coll-dragover{outline:2px dashed var(--acc2);outline-offset:-2px;background:var(--sur2)}
@@ -584,6 +608,12 @@
             <option value="all">All tags</option>
             <option value="red">Rejected (X)</option>
             <option value="green">Picked (flag)</option>
+            <option value="labelled">Any colour label</option>
+            <option value="lbl:Red">Label · Red</option>
+            <option value="lbl:Yellow">Label · Yellow</option>
+            <option value="lbl:Green">Label · Green</option>
+            <option value="lbl:Blue">Label · Blue</option>
+            <option value="lbl:Purple">Label · Purple</option>
             <option value="edited">Edited</option>
             <option value="noedited">Not edited</option>
             <option value="favorite">Favorites</option>
@@ -643,7 +673,14 @@
       <div id="lib-grid"></div>
       <div id="lib-compare"></div>
     </div>
-    <div id="lib-bottom"><span style="font-size:11px;color:var(--mut)" id="lib-count"></span><span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span></div>
+    <div id="lib-bottom">
+      <span style="font-size:11px;color:var(--mut)" id="lib-count"></span>
+      <span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span>
+      <span id="lib-status-labels" style="font-size:11px;color:var(--mut);display:flex;gap:8px;align-items:center"></span>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--mut)" id="lib-status-size"></span>
+      <span style="font-size:11px;color:var(--mut)" id="lib-status-sel"></span>
+    </div>
   `;
   // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
   // body-level overlay — see the big comment above the style block. .fx-layout already exists
@@ -1219,10 +1256,32 @@
   function libSkeletonHtml(n = 24) {
     return Array.from({ length: n }, () => '<div class="lib-card lib-skel"><div class="lib-thumb-wrap"></div></div>').join('');
   }
+  // Lightroom's five colour labels. Red and Green already existed as reject/pick and keep their
+  // flag glyphs and X/P shortcuts — the other three are additive, so an existing sidecar that
+  // says "Red" still means exactly what it did. The Rust side stores `label` as a free-form
+  // String, so nothing there had to change to support them.
+  //
+  // ⚠️ Numeric shortcuts follow Lightroom (6=Red, 7=Yellow, 8=Green, 9=Blue) rather than
+  // inventing a scheme, and Purple takes 0 — Lightroom leaves it unbound, but an unreachable
+  // label is a label nobody uses.
+  const LIB_LABELS = [
+    { name: 'Red',    key: '6', css: '#e05252' },
+    { name: 'Yellow', key: '7', css: '#e0c04a' },
+    { name: 'Green',  key: '8', css: '#5cb85c' },
+    { name: 'Blue',   key: '9', css: '#4a90d9' },
+    { name: 'Purple', key: '0', css: '#9b6dd0' },
+  ];
+  const LIB_LABEL_BY_KEY = new Map(LIB_LABELS.map((l) => [l.key, l.name]));
+  const LIB_LABEL_CSS = new Map(LIB_LABELS.map((l) => [l.name, l.css]));
+  function labelDotsHtml(label) {
+    return LIB_LABELS.map((l) => `<span class="lib-lbl${label === l.name ? ' on' : ''}" data-label="${l.name}" `
+      + `style="--lbl:${l.css}" title="${l.name} (${l.key})"></span>`).join('');
+  }
   function flagsHtml(label, favorite) {
     return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Reject (X)">${FLAG_SVG_RED}</span>` +
            `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Pick (flag)">${FLAG_SVG_GREEN}</span>` +
-           `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>`;
+           `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>` +
+           `<span class="lib-lbls">${labelDotsHtml(label)}</span>`;
   }
 
   // ── options for a <select> populated with the distinct values present in this folder ─────
@@ -1872,6 +1931,8 @@
     if (state.search && !entry.name.toLowerCase().includes(state.search)) return false;
     if (state.tagFilter === 'red' && sc.label !== 'Red') return false;
     if (state.tagFilter === 'green' && sc.label !== 'Green') return false;
+    if (state.tagFilter === 'labelled' && !sc.label) return false;
+    if (state.tagFilter.startsWith('lbl:') && sc.label !== state.tagFilter.slice(4)) return false;
     if (state.tagFilter === 'edited' && !sc.edited) return false;
     if (state.tagFilter === 'noedited' && sc.edited) return false;
     if (state.tagFilter === 'favorite' && !sc.favorite) return false;
@@ -1898,8 +1959,7 @@
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) {
       card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite);
-      card.classList.toggle('flag-red', label === 'Red');
-      card.classList.toggle('flag-green', label === 'Green');
+      LIB_LABELS.forEach((l) => card.classList.toggle('lbl-' + l.name.toLowerCase(), label === l.name));
     }
     if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
   }
@@ -2453,7 +2513,7 @@
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
-        (sc.label === 'Red' ? ' flag-red' : sc.label === 'Green' ? ' flag-green' : '') + (entry.missing ? ' lib-missing' : '');
+        (sc.label ? ' lbl-' + sc.label.toLowerCase() : '') + (entry.missing ? ' lib-missing' : '');
       card.dataset.path = entry.path;
       const rawBadge = entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
       // No thumbnail decoder for video (get_thumbnail errors cleanly for it — see library.rs) —
@@ -2513,6 +2573,14 @@
         e.dataTransfer.setData('application/x-chromasmith-paths', JSON.stringify(paths));
         e.dataTransfer.effectAllowed = 'copy';
       };
+      card.querySelectorAll('.lib-lbl').forEach((dot) => {
+        dot.onclick = (e) => {
+          e.stopPropagation();
+          const want = dot.dataset.label;
+          const cur = state.sidecars.get(entry.path) || { label: '' };
+          setLabel(entry.path, cur.label === want ? '' : want); // click the active dot to clear
+        };
+      });
       card.querySelectorAll('.lib-flag').forEach((flag) => {
         flag.onclick = (e) => {
           e.stopPropagation();
@@ -2535,8 +2603,38 @@
     }
   }
 
+  /// A real status bar rather than two loose spans: what the current filter is actually showing,
+  /// how it breaks down by colour label, and what the selection weighs. The label tallies are
+  /// the point — when culling, "how many did I flag" is the question the grid cannot answer at a
+  /// glance once a folder is bigger than a screen.
+  function renderStatusBar(shown) {
+    const lblEl = document.getElementById('lib-status-labels');
+    const sizeEl = document.getElementById('lib-status-size');
+    const selEl = document.getElementById('lib-status-sel');
+    if (!lblEl) return;
+    const counts = new Map();
+    let bytes = 0;
+    for (const e of shown) {
+      bytes += e.size || 0;
+      const l = (state.sidecars.get(e.path) || {}).label;
+      if (l) counts.set(l, (counts.get(l) || 0) + 1);
+    }
+    lblEl.innerHTML = LIB_LABELS.filter((l) => counts.get(l.name))
+      .map((l) => `<span style="display:inline-flex;align-items:center;gap:3px">`
+        + `<span style="width:8px;height:8px;border-radius:50%;background:${l.css};display:inline-block"></span>`
+        + `${counts.get(l.name)}</span>`).join('');
+    const fmt = (b) => b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b > 1e6 ? Math.round(b / 1e6) + ' MB' : Math.round(b / 1e3) + ' KB';
+    sizeEl.textContent = shown.length ? fmt(bytes) : '';
+    if (state.selected.size) {
+      let sel = 0;
+      for (const e of shown) if (state.selected.has(e.path)) sel += e.size || 0;
+      selEl.textContent = `${state.selected.size} selected · ${fmt(sel)}`;
+    } else selEl.textContent = '';
+  }
+
   /// Everything renderGrid did AFTER the cards: empty states, counts, selection chrome.
   function renderGridTail(shown) {
+    renderStatusBar(shown);
     const grid = document.getElementById('lib-grid');
     if (!shown.length && state.entries.length) {
       // Only the richer "nothing matches" message when a filter/search actually hid photos —
@@ -2922,6 +3020,16 @@
     if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
     if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
     if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
+    if (LIB_LABEL_BY_KEY.has(e.key)) {
+      const want = LIB_LABEL_BY_KEY.get(e.key);
+      // Pressing the key a photo already carries clears it, matching how the dots behave and how
+      // Lightroom toggles — otherwise there is no keyboard route back to "no label".
+      kbTargets().forEach((p) => {
+        const cur = (state.sidecars.get(p) || { label: '' }).label;
+        setLabel(p, cur === want ? '' : want);
+      });
+      return;
+    }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
   });
