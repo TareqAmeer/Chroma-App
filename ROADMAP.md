@@ -17,17 +17,20 @@ button) still needs a hands-on check in the built app. Everything else below is 
 the export gate with the untouched goldens byte-identical, i.e. each is a true no-op at its
 defaults.
 
-**Still open — 6 items, each independent.** Nothing here blocks anything else, so they can be
-picked off in any order and in separate sessions:
+**Still open — 5 items, each independent** (revised 2026-08-15; items 10 and 11's keystone half
+shipped, and 6's Clarity half shipped). Nothing here blocks anything else:
 
-| # | item | size |
-|---|---|---|
-| 6 | Per-mask Clarity / Sharpness / Noise (Texture done) | M |
-| 10 | Spot removal / clone / heal | M |
-| 11 | Perspective / keystone + auto horizon | M |
-| 13 | JXL / AVIF / HEIC in, 16-bit out | L |
-| 14 | Export Display-P3 / wide-gamut ICC (presets + watermark done) | S/M |
-| 15 | Auto-match a series to a reference photo | M |
+| # | item | size | note |
+|---|---|---|---|
+| 6 | Per-mask **Sharpness / Noise** | S | Texture and Clarity both shipped; these two are what's left |
+| 11 | **Auto-horizon** | M | Keystone shipped (E2). This half needs line detection — a Hough pass, which is its own piece of work rather than another slider |
+| 13 | JXL / AVIF / HEIC in, **16-bit out** | L | The one item that raises the pipeline's ceiling rather than its surface |
+| 14 | Export **Display-P3 / wide-gamut ICC** | S/M | Colour science, not compositing — see the entry for why the sRGB tag already shipping isn't the same thing |
+| 15 | Auto-match a series to a reference photo | M | Colour Copy's histogram matching is the algorithm; it needs to emit per-photo `adjustOverride` instead of a LUT |
+
+✅ **Shipped since this list was written:** 10 (spot removal / clone / heal — see CLAUDE.md's
+Retouch section), 11's perspective/keystone homography, 6's per-mask Clarity, plus Library items
+5, 6, 7, 9, 10 and 13 below.
 
 To pick one up in a fresh session, quote its number and heading from this file — each entry states
 the gap, the files it touches and the functions to reuse. Read `CLAUDE.md` §5b first if the item
@@ -81,26 +84,38 @@ keystroke. 15 improvements below, ordered by value-per-effort. All touch only
    `data-path` in the live DOM — and is left as a follow-up if a real large-folder profile shows
    it's still needed.
 
-**Remaining 10:**
+**Remaining (revised 2026-08-15) — 4 of the 10:**
 
-6. **Full colour labels** — the sidecar has a `label` field but only red/green are wired up.
-7. **Metadata / info panel** — an EXIF + histogram inspector; today metadata is only a 2-line hover
-   strip (`metaStripHtml`, ~1441) or list-view columns.
-8. **Undo for destructive actions** — Delete and Reset edit (~1810, ~1862) are irreversible.
-9. **A real empty state** — the "No photos match this filter" text (~1970) has no CTA; give it a
-   "Choose a folder" button like the Lightroom-cloud branch already has.
-10. **Use `#lib-bottom`** (~551) — currently just a photo count; make it a status bar (selection
-    count, active-filter summary, import/export progress).
-11. **Filmstrip affordances** — `body.deskx` mode (~438-441) hides filters, viewbar, sidebar and
-    footer entirely; at minimum surface flags and filename on hover.
+11. **Filmstrip affordances** — `body.deskx` mode hides filters, viewbar, sidebar and footer
+    entirely; at minimum surface flags and filename on hover.
 12. **Saved filter/sort views** — persist named filter+sort combinations alongside the existing
-    smart collections (~2453-2626).
-13. **Batch operations bar** — when >1 card is selected, show inline flag/rate/export/delete
-    actions instead of requiring the right-click context menu.
+    smart collections.
 14. **Compare mode ↔ grid parity** — ratings, flags and navigation should behave identically in
-    both; compare currently has its own separate keyboard branch (~2292-2298).
-15. **Thumbnail decode tiering** — decode a low-res proxy first, upgrade on idle, so scrolling a
-    large folder stays smooth even after virtualization (item 5) lands.
+    both; compare still has its own separate keyboard branch.
+15. **Thumbnail decode tiering** — the concurrency pool + viewport priority shipped, but not the
+    two-tier decode (low-res proxy first, upgrade on idle).
+
+**Partly open:**
+
+8. **Undo for destructive actions** — Reset-edit is still irreversible, and Delete needs a Rust
+   `restore_from_trash`: `trash_file` hands the file to the macOS Trash, so it is recoverable in
+   Finder but not in-app. This is the only item in the Library list that needs new Rust.
+
+✅ **Done (2026-08-15):**
+
+5. **Grid virtualization** — the follow-up this list explicitly deferred as "too invasive to do
+   blind". A real profile was taken first, which is what made it safe: 200 files = 5,114 DOM
+   nodes, 1,000 = 17,914, and 5,000 never loaded at all. Below 400 files the old path runs
+   untouched. ⚠️ Profiling also found the *other* half of the problem, which was not the grid:
+   `clusterByHash`'s pairwise Hamming allocated two BigInts per comparison and counted bits one at
+   a time — 12.5M times at n=5,000, and effectively the whole 41.9s. Guarded by
+   `npm run lib:test`.
+6. **Full colour labels** — the Lightroom five, with 6-9/0 shortcuts.
+7. **Metadata / info panel** — EXIF inspector on `I`. (The *histogram* half of the original entry
+   is not built; the panel is metadata only.)
+9. **A real empty state** — with card-import and choose-folder CTAs.
+10. **`#lib-bottom` as a status bar** — filtered count, per-label tallies, total and selected size.
+13. **Batch operations bar** — appears above one selected photo.
 
 ---
 
