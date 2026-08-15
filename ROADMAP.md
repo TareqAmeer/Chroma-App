@@ -24,7 +24,7 @@ shipped, and 6's Clarity half shipped). Nothing here blocks anything else:
 |---|---|---|---|
 | 6 | Per-mask **Sharpness / Noise** | S | Texture and Clarity both shipped; these two are what's left |
 | 11 | **Auto-horizon** | M | Keystone shipped (E2). This half needs line detection — a Hough pass, which is its own piece of work rather than another slider |
-| 13 | JXL / AVIF / HEIC in, **16-bit out** | L | The one item that raises the pipeline's ceiling rather than its surface |
+| 13 | JXL / AVIF in, **16-bit out** | L | ⚠️ Revised — HEIC shipped, and the 16-bit bottleneck is the 8-bit SOURCE upload, not the file format. Read the entry before starting |
 | 14 | Export **Display-P3 / wide-gamut ICC** | S/M | Colour science, not compositing — see the entry for why the sRGB tag already shipping isn't the same thing |
 | 15 | Auto-match a series to a reference photo | M | Colour Copy's histogram matching is the algorithm; it needs to emit per-photo `adjustOverride` instead of a LUT |
 
@@ -271,11 +271,35 @@ different, larger piece of work; folded into item 13's territory rather than tra
 
 ## Tier 3 — pipeline and output
 
-### 13. Wider format support in and out; 16-bit — L
-There is already a stray `IMG_7522.jxl` in the repo, so the need is real. JPEG XL / AVIF / HEIC
-decode (WASM, same vendoring pattern as libraw) plus **16-bit** PNG/TIFF export would make the
-RAW→edit→export path credible end to end. Today an 8-bit export throws away most of what the RW2
-pipeline and DCP work earn.
+### 13. Wider format support in and out; 16-bit — L  *(revised 2026-08-15 — measured)*
+
+**✅ HEIC/HEIF done.** They were absent from `library.rs`'s `IMAGE_EXTS` and `ingest.rs`'s
+`media_kind`, so an iPhone shoot read as an empty folder and a card import would have been
+silently partial. Now listed, importable, thumbnailed via `sips` (ImageIO — the same decoder
+WKWebView already uses to display them in the editor), and EXIF-dated via kamadak-exif's HEIF
+support. Chromium genuinely cannot decode HEIC, so the web build now says so and names where it
+does work. JXL/AVIF still open, and both would need a real vendored WASM decoder.
+
+**⚠️ 16-bit export is NOT the win it looks like, and the reason is upstream.** Measured before
+building anything:
+
+- `FXR.setImage` uploads `UNSIGNED_BYTE`. There is exactly one upload path and it is 8-bit.
+- The RAW path writes its DCP-corrected result into a `Uint8ClampedArray` before `putImageData`,
+  so a **12-14 bit RW2 is already 8-bit before it reaches the GPU**.
+- Consequently, switching stills to the float (`RGBA16F`) intermediate — which already exists and
+  is already used for video — changes **nothing**: identical output across a shallow gradient, an
+  overshoot past white, an overshoot-then-highlight-recovery, and a halation composite. All four
+  byte-identical between `RGBA8` and `RGBA16F`.
+
+So writing a 16-bit FILE from this pipeline would store the same 8-bit steps in a wider container.
+The real item is **carrying more than 8 bits from the RAW decode to the texture** — a 16-bit
+upload path (`RGBA16UI`/`RGBA16F` from the existing `Uint16Array`) — after which the float
+intermediate and 16-bit export both become meaningful, in that order. That touches the calibrated
+RAW path, so it wants its own session and its own before/after measurement.
+
+⚠️ Whatever measures this next: `getFXParams()` returns a NESTED structure (`adjust`, `halation`,
+`grain`…). Setting `P.adjExp` on the returned object does nothing and every configuration comes
+back identical — which looks exactly like "the change has no effect". Drive the real UI controls.
 
 ### 14. ✅ MOSTLY DONE — Export resize + sharpening + named presets + watermark shipped; ICC/P3 still open — S/M
 Named export presets (`exportPresetSaveCurrent`/`exportPresetApply`/`exportPresetDeleteCurrent`)

@@ -30,6 +30,11 @@ against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
 
 ### ⏳ Not done
 
+- **16-bit precision.** Not a file-format job: `setImage` uploads `UNSIGNED_BYTE` and the RAW path
+  truncates to `Uint8ClampedArray` before the GPU, so the float intermediate measured **identical**
+  in all four cases and 16-bit export would store 8-bit steps in a wider container. The real work
+  is a >8-bit source upload. See ROADMAP item 13.
+
 - **E2's auto-horizon** — needs line detection (a Hough pass), which is its own piece of work
   rather than another slider. Manual Rotate ships in the meantime.
 - **Undo for Delete.** Needs a Rust `restore_from_trash`: `trash_file` hands the file to the
