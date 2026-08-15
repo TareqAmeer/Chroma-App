@@ -101,6 +101,10 @@ fn media_kind(ext: &str) -> Option<&'static str> {
     match ext {
         "rw2" | "raw" | "dng" | "cr2" | "cr3" | "nef" | "arw" | "orf" => Some("raw"),
         "jpg" | "jpeg" => Some("jpeg"),
+        // iPhone photos come off a card as HEIC too — importing everything EXCEPT those would be
+        // a silent partial import, the worst possible failure for a tool whose job is not losing
+        // photos. library.rs lists them for the same reason.
+        "heic" | "heif" => Some("heic"),
         "png" => Some("png"),
         "tif" | "tiff" => Some("tiff"),
         "mp4" | "mov" | "m4v" => Some("video"),

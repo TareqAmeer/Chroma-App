@@ -4155,7 +4155,27 @@ function parseXMP(txt){
 // browsers IGNORE UNPACK_FLIP_Y for ImageBitmap uploads (and Safari ignores
 // imageOrientation:'from-image'), so both the preview and the export came out rotated/flipped.
 // Object URL instead of FileReader dataURL avoids the ~33% base64 memory overhead on big photos.
-function loadImg(file){return new Promise((res,rej)=>{const url=URL.createObjectURL(file);const i=new Image();i.onload=()=>{URL.revokeObjectURL(url);res(i)};i.onerror=e=>{URL.revokeObjectURL(url);rej(e)};i.src=url})}
+// HEIC/HEIF is decoded by the ENGINE, not by this app, and the engines disagree: WKWebView (the
+// desktop shell and iOS) hands it to ImageIO and it just works, while Chromium — i.e. the Pages
+// web build — cannot decode it at all and fails with a bare "could not be decoded".
+//
+// ⚠️ Verified rather than assumed, because a bare decode error is indistinguishable from a
+// corrupt file and would send someone hunting for a bad photo: Chromium's createImageBitmap AND
+// <img> both reject a real iPhone HEIC (test/probe_heic.mjs), and macOS ImageIO decodes the same
+// files fine. So the message has to name the FORMAT and the surface, not just say "failed".
+const HEIC_RE=/\.(heic|heif)$/i;
+function loadImg(file){return new Promise((res,rej)=>{
+  const url=URL.createObjectURL(file);const i=new Image();
+  i.onload=()=>{URL.revokeObjectURL(url);res(i)};
+  i.onerror=()=>{
+    URL.revokeObjectURL(url);
+    if(HEIC_RE.test(file.name||'')||/heic|heif/i.test(file.type||'')){
+      rej(new Error('HEIC/HEIF is not supported by this browser. The Chromasmith desktop app and '
+        +'the iPhone app both open it — or convert to JPEG first.'));
+    }else rej(new Error('could not be decoded (unsupported or damaged image)'));
+  };
+  i.src=url;
+})}
 function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
 function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
 

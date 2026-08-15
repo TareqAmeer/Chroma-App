@@ -13,7 +13,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const IMAGE_EXTS: &[&str] = &[
     "rw2", "raw", "dng", "cr2", "cr3", "nef", "arw", "orf", "jpg", "jpeg", "png", "tif", "tiff",
+    // HEIC/HEIF: every iPhone photo. These were absent, so an iPhone shoot did not appear in the
+    // Library AT ALL — not as a broken thumbnail, simply missing, which reads as "the folder is
+    // empty" rather than as a missing decoder. The editor could always open them (WKWebView hands
+    // HEIC to ImageIO), so the Library was the only thing standing in the way.
+    "heic", "heif",
 ];
+const HEIC_EXTS: &[&str] = &["heic", "heif"];
 const RAW_EXTS: &[&str] = &["rw2", "raw", "dng", "cr2", "cr3", "nef", "arw", "orf"];
 // Same three extensions chromasmith-22.html's VID_EXT_RE accepts for video grading — kept in
 // sync deliberately so a clip the Library lists is always one the editor can actually open.
@@ -27,6 +33,9 @@ fn is_image_ext(ext: &str) -> bool {
 }
 fn is_raw_ext(ext: &str) -> bool {
     RAW_EXTS.contains(&ext)
+}
+fn is_heic_ext(ext: &str) -> bool {
+    HEIC_EXTS.contains(&ext)
 }
 fn is_video_ext(ext: &str) -> bool {
     VIDEO_EXTS.contains(&ext)
@@ -67,6 +76,7 @@ fn kind_of(ext: &str) -> &'static str {
             "jpg" | "jpeg" => "jpeg",
             "png" => "png",
             "tif" | "tiff" => "tiff",
+            "heic" | "heif" => "heic",
             _ => "",
         }
     }
@@ -198,6 +208,33 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
     // back to its generic video-clip placeholder icon instead of a broken <img>.
     if is_video_ext(&ext) {
         return Err("no thumbnail decoder for video".into());
+    }
+    // The `image` crate has no HEIC decoder, but macOS itself does — ImageIO, which is what
+    // WKWebView already uses to display these in the editor. `sips` is the shell front end to it
+    // and ships with every macOS, so no dependency is added and no patented decoder is vendored.
+    //
+    // ⚠️ Shelling out is acceptable HERE and nowhere else in this file: it costs a process spawn
+    // per photo, which is fine against a cache that makes it happen once per file, and the
+    // alternative (vendoring libheif) means shipping a ~2MB decoder for a format the OS already
+    // reads. Falls through to the normal error path if sips fails, so a corrupt HEIC still shows
+    // the placeholder rather than hanging.
+    if is_heic_ext(&ext) {
+        let tmp = cache_path.with_extension("heicthumb.jpg");
+        let ok = std::process::Command::new("/usr/bin/sips")
+            .args(["-s", "format", "jpeg", "-Z", "360", &path, "--out"])
+            .arg(&tmp)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if ok {
+            if let Ok(bytes) = std::fs::read(&tmp) {
+                let _ = std::fs::remove_file(&tmp);
+                let _ = std::fs::write(&cache_path, &bytes);
+                return Ok(tauri::ipc::Response::new(bytes));
+            }
+        }
+        let _ = std::fs::remove_file(&tmp);
+        return Err("heic thumbnail: sips could not decode this file".into());
     }
     let img = if is_raw_ext(&ext) {
         let img = rawler::analyze::extract_thumbnail_pixels(&path, &RawDecodeParams::default())
@@ -399,7 +436,7 @@ fn read_meta(path: &str) -> PhotoMeta {
             aperture: md.exif.fnumber.as_ref().map(|r| format!("f/{:.1}", ratio(r))),
             focal_len: md.exif.focal_length.as_ref().map(|r| format!("{:.0}mm", ratio(r))),
         }
-    } else if matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff") {
+    } else if matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff" | "heic" | "heif") {
         let Ok(file) = std::fs::File::open(path) else { return PhotoMeta::default() };
         let mut br = std::io::BufReader::new(file);
         let Ok(exif) = exif::Reader::new().read_from_container(&mut br) else { return PhotoMeta::default() };
@@ -1113,6 +1150,56 @@ fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
 
 fn dirs_trash() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".Trash"))
+}
+
+#[cfg(test)]
+mod heic_tests {
+    use super::*;
+
+    /// HEIC is the format every iPhone photo arrives in, and it was invisible to the Library —
+    /// not broken, absent. Uses a real file from the repo's own `lucifer/` folder (gitignored
+    /// user captures) and skips cleanly when it is not in the checkout.
+    /// ⚠️ Without this, an iPhone import files every photo under its FILE mtime instead of when
+    /// it was taken — the same class of bug ingest.rs's own test guards for JPEG, and the one that
+    /// makes a date-organised folder tree lie.
+    #[test]
+    fn heic_exif_date_is_readable() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lucifer");
+        let Some(sample) = std::fs::read_dir(&dir).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| is_heic_ext(&ext_lower(p)))
+        }) else { eprintln!("skipping: no HEIC present"); return; };
+        let m = read_meta(&sample.to_string_lossy());
+        println!("HEIC meta: date={:?} camera={:?} iso={:?}", m.date, m.camera, m.iso);
+        assert!(m.date.is_some(), "no EXIF date read from HEIC — import would file it by mtime");
+        let d = m.date.unwrap();
+        assert!(d.len() >= 10 && d.chars().take(4).all(|c| c.is_ascii_digit()),
+            "unexpected date format: {d}");
+    }
+
+    #[test]
+    fn heic_is_listed_and_thumbnails() {
+        assert!(is_image_ext("heic") && is_image_ext("heif"), "HEIC must be a listable image type");
+        assert_eq!(kind_of("heic"), "heic");
+        assert!(!is_raw_ext("heic"), "HEIC is not a RAW — it must not take the rawler path");
+
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lucifer");
+        let Some(sample) = std::fs::read_dir(&dir).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| is_heic_ext(&ext_lower(p)))
+        }) else {
+            eprintln!("skipping: no HEIC in {}", dir.display());
+            return;
+        };
+
+        // list_dir must actually surface it.
+        let listed = list_dir(dir.to_string_lossy().into_owned()).expect("list_dir");
+        let found = listed.iter().find(|e| e.path == sample.to_string_lossy());
+        assert!(found.is_some(), "HEIC did not appear in list_dir");
+        assert!(found.unwrap().is_image, "HEIC listed but not flagged as an image");
+
+        // ...and produce a real thumbnail via ImageIO, not an error.
+        let resp = get_thumbnail(sample.to_string_lossy().into_owned());
+        assert!(resp.is_ok(), "HEIC thumbnail failed: {:?}", resp.err());
+    }
 }
 
 #[cfg(test)]
