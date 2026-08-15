@@ -27,39 +27,69 @@
 //
 // ── What this actually achieves, measured (examples/subject_eval.rs) ──────────────────────────
 //
-// Measured on 7 real photos of one dog (Lucifer, a curly apricot labradoodle), five of which
-// contain ANOTHER dog and two of which contain a similarly-brown smooth-coated one. Recall is
-// "the located point falls inside the dog", leave-one-out, and "wrong-dog" counts misses that
-// landed on a different animal:
+// Two datasets of one dog (Lucifer, a curly apricot labradoodle), both gitignored user captures:
+// `geneva/` is 7 frames from ONE trip, `lucifer/` is 25 spanning years, six cameras, snow /
+// blossom / indoors / beach / city, and both coat states. Recall is "the located point falls
+// inside the dog"; the reference window is rotated over the whole set so no lucky choice of
+// reference photos can flatter it; "wrong-dog" counts misses landing on a different animal.
 //
-//     references     EdgeSAM      SAM 2.1     wrong-dog (SAM 2.1)
-//         1            69%          71%              2
-//         2            86%          83%              1
-//         3            86%          86%              0
+//   set        encoder  refs  recall     95% CI      wrong-dog
+//   lucifer    edgesam    1     58%     54-62%  n=600     6
+//   lucifer    edgesam    6     65%     60-69%  n=475     6
+//   lucifer    sam2       1     71%     67-74%  n=600     3
+//   lucifer    sam2       2     75%     71-78%  n=575     1
+//   lucifer    sam2       3     77%     73-80%  n=550     1
+//   lucifer    sam2       4     79%     75-82%  n=525     0
+//   lucifer    sam2       6     80%     76-84%  n=475     0
 //
-// Three findings drove the shipped design, none of which were obvious up front:
+// ⚠️ The realistic number is ~77-80%, NOT the ~86% the first round reported. That round used only
+// the 7-frame single-trip set, where 86% came out of 28 trials with a 69-95% interval — consistent
+// with anything from mediocre to excellent. One trip, one coat, one camera flatters this task
+// badly. Do not quote a recall figure from a small same-session set.
 //
-//  1. MORE REFERENCE PHOTOS, not a heavier encoder, is what closes the gap. Going 1 -> 3
-//     references buys ~15 points; swapping EdgeSAM for the much larger SAM 2.1 Hiera backbone at
-//     a fixed 1 reference buys 2. This is why `refs` is surfaced in the UI and why the flow pushes
-//     for a third photo — it is the single highest-value thing a user can do.
-//  2. SAM 2.1 features are nonetheless the right default, for the shape of the ERRORS rather than
-//     their count: at 3 references it confuses Lucifer with another dog ZERO times (EdgeSAM: 3),
-//     and its remaining misses land on background, which reads as obviously wrong. A wrong-dog
-//     match reads as plausible and is the one a user might accept by mistake.
-//  3. Spatial smoothing of the similarity map helps EdgeSAM (69 -> 74%) and HURTS SAM 2.1
-//     (71 -> 62%) — its map is sharper, so a 3x3 mean blurs the real peak away. So no smoothing.
-//     Top-3 centroid was also tried and was worse than argmax (67%); it is not in the code.
+// Four findings drive the shipped design:
 //
-// ⚠️ There is NO reliable "is the subject even in this photo" signal. Raw cosine does not
+//  1. SAM 2.1 features, decisively. On the single-trip set the two encoders looked comparable
+//     (86% vs 86%); on realistic data EdgeSAM is ~15 points worse (65% vs 80%) AND keeps landing
+//     on other dogs (6 vs 0). This gap is invisible without a varied photo set, which is why the
+//     harness carries one.
+//  2. References keep helping past 3, slowly: 71 -> 75 -> 77 -> 79 -> 80% for 1/2/3/4/6. An
+//     earlier "plateau at 3" reading was an artifact of the small set. Three is a reasonable
+//     default to ask a user for; more is genuinely better, so the UI should let them keep adding.
+//  3. WRONG-DOG GOES TO ZERO at 4+ references (1 in 550 trials at 2-3). This is the property that
+//     makes the feature safe to offer at all: a miss onto background reads as obviously wrong,
+//     where a confident match on the neighbours dog is the one a user accepts by mistake.
+//     (Spatial smoothing of the map was also measured: it helps EdgeSAM 69->74% and HURTS
+//     SAM 2.1 71->62%, whose map is sharper. There is none in the code. A top-3 centroid was
+//     worse than argmax at 67%.)
+//  4. ⚠️ WHICH photos you teach from matters MORE than how many. Three good references transfer
+//     across datasets at 84% (geneva -> lucifer, wrong-dog 0); a poor triple went the other way at
+//     1/7. So the UI must show what a reference contributes, not just count them — and a user
+//     whose results are bad should be told to swap a reference, not merely add another.
+//
+// ── A haircut does NOT break a taught subject ─────────────────────────────────────────────────
+//
+// This was the open question the single-trip set structurally could not answer, since a curly
+// doodles coat is its largest appearance change. Learning on one coat state and testing on the
+// other is statistically indistinguishable from the same-state controls:
+//
+//   shaggy  -> groomed              75%   (n=36)
+//   groomed -> shaggy               78%   (n=36)
+//   shaggy  -> shaggy   (control)   71%   (n=24)
+//   groomed -> groomed  (control)   79%   (n=24)
+//
+// Cross-coat actually beat one control. So the features are keying on something more stable than
+// coat texture, and the UI must NOT tell users to re-teach after a groom — that advice would have
+// been the intuitive guess and it is wrong.
+//
+// ⚠️ There is still NO reliable "is the subject even in this photo" signal. Raw cosine does not
 // separate present from absent at all (a prototype learned from SKY scored 0.937 on a frame where
-// the dog scored 0.892), and peak sharpness only separates on average, with ranges that overlap
-// (hits min 2.04 vs misses max 3.55). An argmax always returns a point, so this must be presented
-// as a suggestion the user confirms, never auto-applied across a batch. `score` is returned for
-// display and relative ranking, and is deliberately NOT thresholded anywhere.
+// the dog scored 0.892), and peak sharpness only separates on average, with overlapping ranges.
+// An argmax always returns a point, so this must be presented as a suggestion the user confirms,
+// never auto-applied across a batch. `score` is returned for display and deliberately never
+// thresholded. Note in the per-frame table that hits and misses both sit around 0.70-0.79.
 //
-// ⚠️ n = 7 photos of one dog. These are honest measurements of a real case, not a benchmark —
-// treat them as "this works well enough to assist", not as a precise accuracy figure.
+// ⚠️ One dog. These are honest measurements of a real case, not a benchmark.
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
