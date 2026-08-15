@@ -35,9 +35,10 @@ against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
   in all four cases and 16-bit export would store 8-bit steps in a wider container. The real work
   is a >8-bit source upload. See ROADMAP item 13.
 
-- **E2's auto-horizon** — needs line detection (a Hough pass), which is its own piece of work
-  rather than another slider. Manual Rotate ships in the meantime.
-- **Undo for Delete.** Needs a Rust `restore_from_trash`: `trash_file` hands the file to the
+- **Display-P3 export.** The only roadmap item left that is neither rejected nor done. ⚠️ The film
+  looks are calibrated in sRGB, so a wide-gamut PIPELINE would change every one of them — the safe
+  shape is a final-stage sRGB→P3 conversion on export pixels with an embedded profile.
+- ~~**Undo for Delete.**~~ Rejected 2026-08-15 (duplicates the macOS Trash).  Old note: Needs a Rust `restore_from_trash`: `trash_file` hands the file to the
   macOS Trash, so it is recoverable in Finder but not from in-app. Everything else in F2 shipped.
 
 ## Things a future session should know

@@ -822,6 +822,29 @@ shows up as a suspiciously clean spot in a grainy frame.
 - `test/probe_heal.mjs` measures the above; `test/probe_heal_undo.mjs` covers undo/redo and
   survival through geometry.
 
+### Auto level / auto horizon (ROADMAP 11's second half, 2026-08-15)
+
+`autoHorizon` finds the dominant near-horizontal or near-vertical line and levels it. Accuracy on
+ground truth (synthetic frames at known tilts, `test/probe_horizon.mjs`): **worst error 0.30°**
+across 13 cases spanning ±8°, with foliage and a soft gradient correctly declined.
+
+- ⚠️ **It is a real Hough transform — voting on line POSITION — not a histogram of per-pixel
+  gradient orientations.** That distinction is the whole accuracy of the feature and was measured:
+  the orientation-histogram version reported a median edge angle of **−9.7° for a true −8°**
+  horizon, a systematic ~1.35× overshoot. On a near-horizontal edge `gx` is small and dominated by
+  the rasteriser's own stair-stepping, so `atan2(gy,gx)` is noisiest exactly where this has to be
+  precise. Voting on position gives a sharp peak regardless of any single pixel's gradient.
+- Candidates are re-scored by **frame span** and by a mild **level prior**, and a near-tie at a
+  materially different angle **declines** rather than guessing.
+- ⚠️ **KNOWN LIMITATION, measured, do not "fix" it by tuning.** "The strongest long straight line"
+  is not always the horizon. On `geneva/__TM5132.jpg` (lake, hazy far shore broken by people) a
+  clean diagonal boundary in the water genuinely outscores the true horizon, and the tool returns
+  **−7°**, which is wrong. Span weighting, a level prior and an ambiguity test were each tried:
+  none separated them, because the diagonal really is the stronger line. Tightening the ambiguity
+  threshold far enough to reject it (0.72) also **lost a correct detection** on `__TM4933`, so it
+  sits at 0.85. This is a limitation of edge-based auto-level, not a bug — the correction is
+  applied to a visible slider and ⌘Z undoes it, which is why a suggestion is acceptable here.
+
 ### Match series to a reference (ROADMAP 15, 2026-08-15)
 
 Batch editing shares one `fxState`, which is right for a LOOK and wrong for exposure/WB drift: a

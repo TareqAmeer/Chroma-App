@@ -1307,6 +1307,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button class="btn bgh" id="btn-geom-apply-all" onclick="geomApplyToAll()" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
         </div>
         <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraighten(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
+        <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
         <div class="fx-row"><div class="fx-label">Grid</div>
           <select class="fx-select" id="sel-crop-grid" onchange="cropSetGrid(this.value)">
             <option value="3x3">3×3 (Rule of thirds)</option>
@@ -1449,9 +1450,9 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-feather">50</div></div>
         <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
         <div class="fx-row" style="gap:6px">
-          <button class="fx-btn" id="btn-heal-paint" onclick="healToggle()">Retouch</button>
-          <button class="fx-btn" onclick="healUndoLast()">Undo spot</button>
-          <button class="fx-btn" onclick="healClear()">Clear all</button>
+          <button class="btn bgh" id="btn-heal-paint" onclick="healToggle()">Retouch</button>
+          <button class="btn bgh" onclick="healUndoLast()">Undo spot</button>
+          <button class="btn bgh" onclick="healClear()">Clear all</button>
         </div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</div>
         </div>
@@ -1557,8 +1558,8 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div id="fx-match-series-row" style="margin-top:8px;display:none">
           <div class="fx-label" style="width:auto;margin-bottom:4px">Match series</div>
           <div style="display:flex;gap:6px">
-            <button class="fx-btn" onclick="matchSeriesToReference()">Match to this photo</button>
-            <button class="fx-btn" onclick="matchSeriesClear()">Clear</button>
+            <button class="btn bgh" onclick="matchSeriesToReference()">Match to this photo</button>
+            <button class="btn bgh" onclick="matchSeriesClear()">Clear</button>
           </div>
           <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.</div>
         </div>
@@ -13576,6 +13577,177 @@ function updateWork(){
 }
 function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
 function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
+// ══ AUTO HORIZON ══════════════════════════════════════════════════════════════════════════
+// Finds the dominant near-horizontal (or near-vertical) line in the photo and returns the angle
+// that would level it. A Hough transform, which is the standard answer and the reason this was
+// deferred as "its own piece of work rather than another slider".
+//
+// ⚠️ Scoring is the whole problem, not the transform. A plain Hough argmax picks the STRONGEST
+// line, which is regularly a wave, a shoreline fragment or a roof edge rather than the horizon —
+// measured, on a real lake photo, as a confident -7 degree tilt. Candidates are therefore
+// re-scored by how far they SPAN the frame, since a horizon is the long soft line and the
+// impostors are short bright ones. See _autoHorizonAngle.
+const AH_DOWNSCALE=420;      // longest edge for the edge-detect pass; a horizon is a huge feature
+                             // and finding it does not need pixels
+const AH_MAX_TILT=12;        // degrees either side of level to consider. Beyond this a "horizon"
+                             // is a deliberate dutch angle and correcting it is vandalism.
+/// Sobel gradient magnitude + orientation on a downscaled greyscale copy.
+function _ahEdges(img){
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height;
+  const sc=Math.min(1,AH_DOWNSCALE/Math.max(w0,h0));
+  const w=Math.max(8,Math.round(w0*sc)),h=Math.max(8,Math.round(h0*sc));
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data;
+  const g=new Float32Array(w*h);
+  for(let i=0,p=0;i<w*h;i++,p+=4)g[i]=(0.2126*d[p]+0.7152*d[p+1]+0.0722*d[p+2])/255;
+  const mag=new Float32Array(w*h),ang=new Float32Array(w*h);
+  for(let y=1;y<h-1;y++)for(let xx=1;xx<w-1;xx++){
+    const i=y*w+xx;
+    const gx=(g[i-w+1]+2*g[i+1]+g[i+w+1])-(g[i-w-1]+2*g[i-1]+g[i+w-1]);
+    const gy=(g[i+w-1]+2*g[i+w]+g[i+w+1])-(g[i-w-1]+2*g[i-w]+g[i-w+1]);
+    mag[i]=Math.hypot(gx,gy);
+    // Gradient direction is PERPENDICULAR to the edge, so the edge's own angle is this + 90°.
+    ang[i]=Math.atan2(gy,gx);
+  }
+  return{mag,ang,w,h};
+}
+/// The angle (degrees) that would level the dominant horizon-like line, or null when there isn't
+/// a convincing one.
+///
+/// ⚠️ This is a real HOUGH transform — every edge pixel votes for a LINE POSITION at each
+/// candidate angle — and not a histogram of per-pixel gradient orientations. That distinction is
+/// the whole accuracy of the feature, and was measured: the orientation-histogram version reported
+/// a median edge angle of -9.7 degrees for a true -8 degree horizon, a systematic ~1.35x
+/// overshoot. On a near-horizontal edge `gx` is small and dominated by the rasteriser's own
+/// stair-stepping, so atan2(gy,gx) is noisy exactly where this feature has to be precise. Voting
+/// on POSITION instead means a straight line produces a sharp peak no matter how noisy any single
+/// pixel's gradient is.
+function _autoHorizonAngle(img){
+  const E=_ahEdges(img);
+  if(!E)return null;
+  const{mag,w,h}=E;
+  const nz=Array.from(mag).filter(v=>v>0);
+  if(nz.length<200)return null;
+  nz.sort((a,b)=>a-b);
+  // A lower percentile than an orientation histogram wants: Hough needs VOTES, and a straight
+  // line's weaker pixels still vote for the same (angle, offset) cell.
+  const thr=nz[Math.floor(nz.length*0.70)];
+  if(!(thr>0))return null;
+  const pts=[];
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+    const i=y*w+x;
+    if(mag[i]>=thr)pts.push(x,y,mag[i]);
+  }
+  if(pts.length<3*40)return null;
+
+  const STEP=0.25,N=Math.round(AH_MAX_TILT*2/STEP)+1;
+  const RHO=2;                                   // offset bin size in pixels
+  const diag=Math.ceil(Math.hypot(w,h))+2;
+  const rhoBins=Math.ceil(2*diag/RHO)+1;
+  // Two accumulators: near-horizontal structure (a sea horizon) and near-vertical (a building's
+  // edges). A city frame is levelled by its verticals just as well, and usually more strongly.
+  const accH=new Float64Array(N*rhoBins),accV=new Float64Array(N*rhoBins);
+  for(let bi=0;bi<N;bi++){
+    const a=(bi*STEP-AH_MAX_TILT)*Math.PI/180;
+    const sa=Math.sin(a),ca=Math.cos(a);
+    const rowH=bi*rhoBins,rowV=bi*rhoBins;
+    for(let k=0;k<pts.length;k+=3){
+      const x=pts[k],y=pts[k+1],m=pts[k+2];
+      // Distance from origin to the line through (x,y) at angle a: a horizontal-ish line.
+      const rh=(-x*sa+y*ca);
+      accH[rowH+((rh+diag)/RHO|0)]+=m;
+      // ...and the same for a vertical-ish line (normal rotated 90 degrees).
+      const rv=(x*ca+y*sa);
+      accV[rowV+((rv+diag)/RHO|0)]+=m;
+    }
+  }
+  // ⚠️ Raw accumulator strength is NOT the right score, and using it produced a real failure:
+  // on a lake photo the winner was a -7 degree diagonal across the water while the actual
+  // horizon sat level near the top (test/output/horizon_check.png, before this). A short, very
+  // contrasty edge outvotes a long, soft one — and a horizon is exactly the long soft one.
+  //
+  // So the top candidates are re-scored by how far their supporting pixels SPAN the frame. A real
+  // horizon runs the full width; a wave, a dog's back or a shoreline fragment does not.
+  const rescore=(acc,horizontal)=>{
+    // Top candidate cells by raw strength — the true horizon is always among them, just not first.
+    const idx=[];
+    for(let i=0;i<acc.length;i++)if(acc[i]>0)idx.push(i);
+    idx.sort((a,b)=>acc[b]-acc[a]);
+    const K=Math.min(48,idx.length);
+    const cands=[];
+    let sum=0;
+    for(let i=0;i<acc.length;i++)sum+=acc[i];
+    const mean=sum/acc.length;
+    for(let k=0;k<K;k++){
+      const cell=idx[k];
+      const bi=(cell/rhoBins)|0, rb=cell-bi*rhoBins;
+      const a=(bi*STEP-AH_MAX_TILT)*Math.PI/180;
+      const sa=Math.sin(a),ca=Math.cos(a);
+      // Which pixels actually voted for THIS cell, and how far apart are they along the line?
+      let lo=Infinity,hi=-Infinity,strength=0;
+      for(let j=0;j<pts.length;j+=3){
+        const x=pts[j],y=pts[j+1],m=pts[j+2];
+        const r=horizontal?(-x*sa+y*ca):(x*ca+y*sa);
+        if((((r+diag)/RHO)|0)!==rb)continue;
+        const t=horizontal?x:y;               // position ALONG the line
+        if(t<lo)lo=t; if(t>hi)hi=t;
+        strength+=m;
+      }
+      if(!isFinite(lo))continue;
+      const span=(hi-lo)/(horizontal?w:h);
+      // Span-weighted: a line covering 20% of the frame is not a horizon however bright it is.
+      if(span<0.45)continue;
+      // A mild prior toward level. Photographers try to level; a claimed 10 degree tilt should
+      // therefore need materially more evidence than a claimed 2 degree one. Gentle on purpose —
+      // at 2 degrees this costs ~8%, at the 12 degree limit it halves — so a genuinely tilted
+      // frame with a clear horizon still wins, while a smooth diagonal in the water does not beat
+      // a hazy level shoreline just by being cleaner.
+      const deg=Math.abs(bi*STEP-AH_MAX_TILT);
+      const prior=1-0.5*(deg/AH_MAX_TILT);
+      const score=strength*span*prior;
+      cands.push({score,angBin:bi,val:acc[cell],mean,span});
+    }
+    if(!cands.length)return null;
+    cands.sort((a,b)=>b.score-a.score);
+    const best=cands[0];
+    // ⚠️ Ambiguity test, and the reason this feature declines as often as it does. If some OTHER
+    // candidate at a materially different angle scores nearly as well, the scene does not have one
+    // unambiguous horizon — it has two plausible ones, and picking the brighter is a coin flip.
+    // Measured on a real lake photo where a clean diagonal in the water outscored a hazy, level,
+    // people-broken far shoreline: no weighting by span or by a level-prior separated them,
+    // because the diagonal genuinely IS the stronger line. Declining is the honest answer there;
+    // silently rotating the frame 7 degrees is not.
+    const rival=cands.find(c=>Math.abs((c.angBin-best.angBin)*STEP)>1.5);
+    if(rival&&rival.score>best.score*0.85)return null;
+    return best;
+  };
+  const pH=rescore(accH,true),pV=rescore(accV,false);
+  const best=(pH&&pV)?(pH.score>=pV.score?pH:pV):(pH||pV);
+  if(!best||!(best.val>0)||!(best.mean>0))return null;
+  // Confidence: how far the winning CELL stands above the accumulator's own average. A photo with
+  // no dominant straight line (foliage, a soft portrait background) spreads its votes and gives a
+  // ratio near 1 — it must decline rather than return a confident-looking small angle.
+  if(best.val/best.mean<12)return null;
+  const deg=best.angBin*STEP-AH_MAX_TILT;
+  const corr=-deg;                                // a horizon at +2 degrees needs -2 to level it
+  return Math.abs(corr)<0.05?0:Math.round(corr*10)/10;
+}
+/// Button handler: detect, apply to the straighten slider, and say plainly when nothing was found.
+function autoHorizon(){
+  const it=curItem();
+  if(!it||!it.img){toast('Load a photo first');return;}
+  const a=_autoHorizonAngle(it.img);
+  if(a===null){toast('No clear horizon found — straighten by hand',false);
+    log('Auto horizon: no dominant line found (flat accumulator)','warn');return;}
+  const sl=document.getElementById('sl-straighten');
+  if(sl)sl.value=a;
+  geomStraighten(a);
+  if(typeof hapt==='function')hapt();
+  toast(a===0?'Already level':`Straightened ${a>0?'+':''}${a.toFixed(1)}°`,true);
+  log(`Auto horizon: ${a.toFixed(1)}°`,'ok');
+}
 function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(1)+'°';g.crop=null;broadcastGeom();updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
 

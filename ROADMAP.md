@@ -23,7 +23,7 @@ shipped, and 6's Clarity half shipped). Nothing here blocks anything else:
 | # | item | size | note |
 |---|---|---|---|
 | ~~6~~ | ~~Per-mask Sharpness / Noise~~ | — | ✅ **Substantively complete.** Texture is bipolar (negative softens, positive sharpens) and Clarity shipped, so these would be the same operator under new names. True edge-aware per-mask NR is a different, larger item |
-| 11 | **Auto-horizon** | M | Keystone shipped (E2). This half needs line detection — a Hough pass, which is its own piece of work rather than another slider |
+| ~~11~~ | ~~Auto-horizon~~ | — | ✅ **Done** — `autoHorizon`, a real Hough transform. 0.30° worst error on ground truth. ⚠️ Read the KNOWN LIMITATION in CLAUDE.md before touching it |
 | 13 | **16-bit source path** | M/L | ⚠️ Revised again — this is the prerequisite for **HDR from RAW**, not just precision. See the entry; measured |
 | 14 | Export **Display-P3 / wide-gamut ICC** | S/M | Colour science, not compositing — see the entry for why the sRGB tag already shipping isn't the same thing |
 | ~~15~~ | ~~Auto-match a series to a reference~~ | — | ✅ **Done** — `matchSeriesToReference`. Solves exposure in stops + WB after brightness equalisation, per photo, into `adjustOverride`. See CLAUDE.md |
