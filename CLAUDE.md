@@ -184,6 +184,27 @@ raw `origin==='ai'` / `origin!=='ai'` comparison exists outside `mskIsAI()`. It 
 whole segmentation path is gated on `window.__TAURI__` and therefore **invisible to the browser
 harness** — see the warning in §5b.
 
+### ⚠️ Two tests on this machine are FLAKY, and both were measured, not guessed (2026-08-15)
+
+Before spending hours bisecting a "regression" in either of these, re-run. Both were characterised
+by running the CLEAN tree repeatedly, so neither is caused by whatever you just changed:
+
+- **`export_harness` intermittently renders NOTHING.** Every fixture x recipe comes back as an
+  all-zero **RGBA (0,0,0,0)** canvas, so all 18 goldens mismatch at once with identical deltas
+  (max 255, mean ~107-178). It used to report `ok` for every render and exit 0, which reads
+  exactly like a catastrophic shader regression and sends you looking in the wrong place — it was
+  the single most expensive false lead in the Phase D work. The harness now **throws a BLANK
+  RENDER error** instead: alpha is the tell, since the pipeline always writes `vec4(rgb,1.0)` and
+  no shader edit can produce alpha 0. ⚠️ This guard matters most for `--golden`, which would
+  otherwise happily overwrite all 18 goldens with blank PNGs.
+  Appears to be GL/SwiftShader resource pressure — it got markedly less frequent with a Chromium
+  preview browser closed. Not attributed further.
+- **`video_harness`'s "still byte-exact after video" check fails ~40% of runs** (measured: clean
+  tree, 2 of 5), reporting e.g. `chart.png x identity ... 5531 vs 5365 bytes`. A real image that
+  differs slightly, not a blank, so it is a different fault from the one above. Unattributed;
+  suspect the seeded-`Math.random` ordering rule below, since the number of renders a video path
+  fires before the still is timing-dependent.
+
 ⚠️ Two determinism rules the harness enforces, both learned by having them fail silently:
 - **Recipes are isolated per combo.** `applyUISnapshot` treats an *absent* `selects` key as "leave
   this alone" (correct for selective paste), so a recipe with no LUT used to inherit the previous
@@ -688,6 +709,27 @@ subject mask's own bounding box and turns the result into one eraser mask via th
 - **`Match shoot`** (a 4th skin target mode) saves one measured tone in `localStorage` so a whole
   set converges on ONE skin rendering; `Even them out` converges each photo onto its own mean,
   which is why two frames of the same person in different light drift apart.
+
+### Per-mask Clarity, Defringe, gate weave / film breath (Phase D, 2026-08-15)
+
+One batched shader cycle (§3's reserved-word and compile-silence traps apply):
+- **Per-mask Clarity** (`mskJ[i].w`, `srcHPW`) — a SECOND, wider high-pass (radius 3) beside the
+  radius-1 one Texture already shares, gated on `mskAnyClarity` so its 4 taps are never paid by
+  default. Deliberately a different radius: Texture moves skin *grain*, Clarity moves midtone
+  *structure*, and at one radius they would be one control with two names. This is the portrait
+  move — soften skin while the eyes keep their Texture.
+- **Defringe** (`lnsDefr`, in the lens pass) — desaturates purple/green edge fringes toward local
+  luminance, gated on a luminance-gradient so flat lilac or green *subjects* are left alone. Not
+  the same thing as the existing CA slider, which geometrically shifts R/B and cannot touch
+  local, edge-only fringing.
+- **Gate weave + film breath** (`vidWeave`, `vidBreath`, video only) — sub-pixel per-frame offset
+  and per-frame exposure jitter, both off by default. ⚠️ Driven by the SAME `fxVideoFrameSeed`
+  hash as the grain, with two decorrelated salts for x and y: §12's rejected linear step would
+  read as rhythmic judder on a positional offset, and one hash for both axes would slide the
+  frame along a diagonal instead of wandering.
+- **NOT done: D4, film-edge/overscan frames.** It needs real scanned edge plates vendored (like
+  the DCPs), and a procedurally faked sprocket edge would undercut the one thing the feature is
+  for. Blocked on assets, not on code.
 
 ---
 

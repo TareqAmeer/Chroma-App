@@ -1288,6 +1288,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-dist" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-dist">0</div></div>
         <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-vig">0</div></div>
         <div class="fx-row" title="Corrects red/blue fringing near high-contrast edges, worst in the corners."><div class="fx-label">Chromatic Aberration</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ca" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ca">0</div></div>
+        <div class="fx-row" title="Removes purple/green colour fringes on high-contrast edges — the local fringing that survives the geometric CA correction above, or that a fast lens makes wide open. Gated on edges, so flat purple or green subjects are left alone."><div class="fx-label">Defringe</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-lens-defr" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-defr">0</div></div>
       </div>
       <!-- CROP & ROTATE -->
       <div class="fx-ctrl" data-fxsec="crop">
@@ -1355,6 +1356,15 @@ setTimeout(()=>window.hideBootSplash(),6000);
                similar intensity — neither extreme is what real stock looks like. -->
           <div class="fx-row" id="row-grain-motion" style="display:none" title="0 = grain frozen to the screen. 100 = fully independent every frame (can boil at high Amount). Real film sits in between.">
             <div class="fx-label">Grain motion</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-grain-motion" oninput="fxVideoGrainMotionChanged(this.value)"><div class="fx-val" id="vl-grain-motion">75</div>
+          </div>
+          <!-- VIDEO ONLY, same row group. A projector gate never holds a frame perfectly still and
+               the lamp never repeats an exposure exactly; without these a clip reads as digital
+               however good the grain is. Both default OFF so nothing changes unless asked for. -->
+          <div class="fx-row" id="row-gate-weave" style="display:none" title="Sub-pixel frame-to-frame wobble, the way a projector gate holds film. A little goes a long way — past about 30 it reads as a shaky camera rather than a projector.">
+            <div class="fx-label">Gate weave</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-gate-weave" oninput="fxUpdate()"><div class="fx-val" id="vl-gate-weave">0</div>
+          </div>
+          <div class="fx-row" id="row-film-breath" style="display:none" title="Per-frame exposure flicker, the way a projector lamp and shutter never deliver exactly the same light twice.">
+            <div class="fx-label">Film breath</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-film-breath" oninput="fxUpdate()"><div class="fx-val" id="vl-film-breath">0</div>
           </div>
         </div>
       </div>
@@ -4449,6 +4459,15 @@ uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
 // srcXf: 2x2 rotation packed (a,b,c,d) -> [x',y']=[a*x+b*y, c*x+d*y], applied about the uv centre,
 // for the MP4 display-matrix rotation (0/90/180/270) WebCodecs does not apply for you.
 uniform float srcFlipY;uniform vec4 srcXf;
+// GATE WEAVE + FILM BREATH (video). A film projector's gate never holds a frame perfectly still,
+// and the lamp/shutter never delivers exactly the same exposure twice — a clip graded with
+// otherwise-perfect stability reads as digital no matter how good the grain is. Both default to
+// zero, so a still (which has no frame index) is byte-identical to before.
+// ⚠️ Both are driven by the SAME per-frame hash the grain uses (fxVideoFrameSeed), never a
+// linear ramp: CLAUDE.md §12 records that a linear step near-repeats and produces a visible
+// periodic pulse, which on a POSITIONAL offset would read as a rhythmic judder rather than weave.
+uniform vec2 vidWeave;   // sub-pixel source offset, in uv
+uniform float vidBreath; // per-frame exposure multiplier, 1.0 = none
 vec2 vidUV(vec2 u){
   if(srcFlipY>0.5)u.y=1.0-u.y;
   vec2 c=u-0.5;
@@ -4493,6 +4512,7 @@ uniform vec4 mskH[8];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "prese
 uniform vec4 mskI[8];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
 uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
+uniform float mskAnyClarity;  // same idea for per-mask Clarity, which needs a WIDER tap set
 // Quarter-res blurred luminance of this render's own source (see progs.lumdown + two blur passes).
 // Sampled in LOCAL uv, not global: the buffer is built from the same tile that is being rendered,
 // and renderTiled's halo guarantees the neighbourhood the blur needed is present.
@@ -4797,7 +4817,8 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
   if(B.z>0.5)w=1.0-w;
   return w;
 }
-void main(){vec4 c=texture(img,vidUV(uv));
+void main(){vec4 c=texture(img,vidUV(uv)+vidWeave);
+if(vidBreath!=1.0)c.rgb*=vidBreath;
 // Source-pixel high-pass, computed ONCE. Used by the global Sharpen/Clarity below and, when any
 // mask asks for it, by the per-mask Texture control in the mask loop. Hoisted (rather than
 // recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
@@ -4808,6 +4829,18 @@ if(needHP){
   vec3 nb=(texture(img,vidUV(uv+vec2(0.,texSize.y)))+texture(img,vidUV(uv-vec2(0.,texSize.y)))
           +texture(img,vidUV(uv+vec2(texSize.x,0.)))+texture(img,vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
   srcHP=c.rgb-nb;
+}
+// WIDE source high-pass, for per-mask Clarity. Deliberately a separate, larger radius rather
+// than reusing srcHP: Texture (radius 1) moves skin GRAIN, Clarity (radius 3) moves the
+// midtone structure a portrait retoucher actually reaches for, and at the same radius the two
+// controls would just be one control with two names. Gated so the 4 extra taps are never paid
+// by a photo that doesn't ask for them, exactly like mskAnyTex.
+vec3 srcHPW=vec3(0.0);
+if(mskAnyClarity>0.5){
+  float rW=3.0;
+  vec3 nbW=(texture(img,vidUV(uv+vec2(0.,texSize.y*rW)))+texture(img,vidUV(uv-vec2(0.,texSize.y*rW)))
+           +texture(img,vidUV(uv+vec2(texSize.x*rW,0.)))+texture(img,vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
+  srcHPW=c.rgb-nbW;
 }
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
 // adjSharp boosts all frequencies; adjClarity weights by midtone mask (4*lum*(1-lum)).
@@ -4867,6 +4900,13 @@ if(mskN>0.5){
       // on SOURCE pixels while this applies post-grade; that mismatch is deliberate and matches
       // what the global Sharpen/Clarity already do.
       if(mskJ[i].x!=0.0)c.rgb=clamp(c.rgb+srcHP*(mskJ[i].x*w),0.0,1.0);
+      // Clarity: midtone-weighted wide-radius contrast, the same 4*l*(1-l) weighting the global
+      // Clarity uses — so it builds structure in the midtones without touching highlight
+      // roll-off or crushing shadows, and negative smooths.
+      if(mskJ[i].w!=0.0){
+        float lvC=dot(c.rgb,vec3(.2126,.7152,.0722));
+        c.rgb=clamp(c.rgb+srcHPW*(mskJ[i].w*w*4.0*lvC*(1.0-lvC)),0.0,1.0);
+      }
       c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow,mskJ[i].z); // converge toward the target FIRST,
       c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
@@ -5050,7 +5090,30 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA;uniform vec2 aspect;
+uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr;uniform vec2 aspect;uniform vec2 texSize;
+// Defringe: desaturate the purple/green edge fringes left on high-contrast boundaries by lateral
+// chromatic aberration. Distinct from lnsCA above, which geometrically SHIFTS the red and blue
+// channels — that fixes a fringe that is uniform across the frame, and does nothing for the
+// local, edge-only fringing that survives it (or that a fast lens produces wide open). This
+// instead finds pixels that are BOTH near a luminance edge AND strongly purple or green, and
+// pulls their chroma toward the local luminance, which is what Lightroom's own defringe does.
+vec3 defringe(vec3 col,vec2 uvc,float amt){
+  float l=dot(col,vec3(.2126,.7152,.0722));
+  // Local luminance gradient: fringes only exist at edges, so gating on one keeps flat purple
+  // or green SUBJECTS (a lilac shirt, foliage) untouched — the failure that makes a naive
+  // "desaturate purple" defringe unusable on real photos.
+  float lx=dot(texture(img,uvc+vec2(texSize.x,0.)).rgb,vec3(.2126,.7152,.0722))
+          -dot(texture(img,uvc-vec2(texSize.x,0.)).rgb,vec3(.2126,.7152,.0722));
+  float ly=dot(texture(img,uvc+vec2(0.,texSize.y)).rgb,vec3(.2126,.7152,.0722))
+          -dot(texture(img,uvc-vec2(0.,texSize.y)).rgb,vec3(.2126,.7152,.0722));
+  float edge=smoothstep(0.04,0.20,length(vec2(lx,ly)));
+  // Purple = red and blue both above green; green fringe = the converse. Measured against the
+  // channel MEAN rather than a hue angle so it stays cheap and has no wrap-around case.
+  float purple=max(0.0,min(col.r,col.b)-col.g);
+  float grn=max(0.0,col.g-max(col.r,col.b));
+  float fringe=smoothstep(0.02,0.14,max(purple,grn));
+  return mix(col,vec3(l),clamp(amt*edge*fringe,0.0,1.0));
+}
 void main(){
   vec2 c=uv-0.5; vec2 ca=c*aspect;              // aspect-correct so the effect is circular, not elliptical
   float r2=dot(ca,ca);
@@ -5059,6 +5122,7 @@ void main(){
   vec2 uvG=0.5+c*distScale;
   vec2 uvR=0.5+c*distScale*caScaleR, uvB=0.5+c*distScale*caScaleB;
   vec3 col=vec3(texture(img,uvR).r,texture(img,uvG).g,texture(img,uvB).b);
+  if(lnsDefr>0.0)col=defringe(col,uvG,lnsDefr);
   float vig=1.0+lnsVig*r2;                        // + brightens corners (fixes vignetting)
   col*=clamp(vig,0.0,4.0);
   bool outside=uvG.x<0.0||uvG.x>1.0||uvG.y<0.0||uvG.y>1.0;
@@ -5606,6 +5670,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
       mJ[o+2]=m.tanOneWay?1:0;// tanning only ever darkens — never lifts already-dark skin
+      mJ[o+3]=(m.clarity||0)/100;  // Clarity: -1..1 gain on the WIDE source high-pass (see srcHPW)
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -5627,10 +5692,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
     // skipped (reading straight from the previous stage's output name) so the default
     // no-correction path never touches these buffers.
-    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca));
+    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe));
     if(lnsOn){
       this._pass(this.progs.lens,this.fbs.lens,
-        {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,
+        {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
+         texSize:[1/this.imgW,1/this.imgH],
          aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]]);
     }
     const srcAfterLens=lnsOn?'lens':'img';
@@ -5672,12 +5738,15 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       useHlg:P.hlg&&P.hlg.enabled?1:0,
       hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
       srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
+      vidWeave:(P.filmMotion&&P.filmMotion.weave)||[0,0],
+      vidBreath:(P.filmMotion&&P.filmMotion.breath!=null)?P.filmMotion.breath:1.0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       maskTex:4,maskTex2:7,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
       'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,
       mskAnyTex:MK.some(m=>m.tex)?1:0,
+      mskAnyClarity:MK.some(m=>m.clarity)?1:0,
       skinLum:5,useSkinLum:skinLumOn?1:0,skinCol:6,useSkinCol:anyGate?1:0,
       mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
       uvOffL,uvScaleL,
@@ -7319,9 +7388,12 @@ function fxSyncTransportUI(){
   const bar=document.getElementById('fx-transport');if(!bar)return;
   fxVideoPause(); // switching photo/video (or between videos) must not leave a RAF loop targeting the OUTGOING item
   const it=curItem();
-  const motionRow=document.getElementById('row-grain-motion');
-  if(!it||it.kind!=='video'){bar.style.display='none';if(motionRow)motionRow.style.display='none';return;}
+  // Every video-only row hides together — one list so a new one can't be added to the show path
+  // and forgotten in the hide path, which is how a control ends up stranded on a still photo.
+  const vidRows=['row-grain-motion','row-gate-weave','row-film-breath'].map(id=>document.getElementById(id));
+  if(!it||it.kind!=='video'){bar.style.display='none';vidRows.forEach(r=>{if(r)r.style.display='none';});return;}
   bar.style.display='';
+  vidRows.forEach(r=>{if(r)r.style.display='';});
   const scrub=document.getElementById('vid-scrub'),trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
   const maxFrame=Math.max(0,it.frameCount-1);
   scrub.max=maxFrame;trimIn.max=maxFrame;trimOut.max=maxFrame;
@@ -7331,11 +7403,10 @@ function fxSyncTransportUI(){
   document.getElementById('vid-time-total').textContent=fxVideoTimeLabel(maxFrame,it.fps);
   document.getElementById('vid-fps-readout').textContent='—';
   fxVideoTrimChanged();
-  if(motionRow){
-    motionRow.style.display='';
+  {  // visibility is handled by vidRows above; this only restores the per-clip value
     const sl=document.getElementById('sl-grain-motion');
-    sl.value=it.grainMotion!=null?it.grainMotion:75;
-    document.getElementById('vl-grain-motion').textContent=sl.value;
+    if(sl){sl.value=it.grainMotion!=null?it.grainMotion:75;
+      document.getElementById('vl-grain-motion').textContent=sl.value;}
   }
   const mb=document.getElementById('btn-vid-mute');if(mb)mb.textContent=fxVideoMuted?'🔇':'🔊';
   if(typeof fxVideoBuildThumbs==='function')fxVideoBuildThumbs(it); // fire-and-forget — fills in #vid-thumbstrip as frames decode
@@ -8060,7 +8131,7 @@ document.addEventListener('change',_ffAutoEnable,true);
 document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button,.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','vig'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','lens-defr','gate-weave','film-breath','vig'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -8988,6 +9059,7 @@ function mskPxForWrite(m){
   return m.px;
 }
 function _mskSkinDefaults(){return{
+  clarity:0,                                // wide-radius midtone contrast; negative smooths
   crOn:false,crSamples:[],crRange:35,        // colour gate: up to CR_MAX_SAMPLES picks + one range
   uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
   tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
@@ -10119,9 +10191,9 @@ function mskSkinCoverage(m){
     return tot?Math.round(hit/tot*100):null;
   }catch(e){return null;}
 }
-function _mskRow(label,k,val,min,max,sc,flip){
+function _mskRow(label,k,val,min,max,sc,flip,title){
   const sv=Math.round(flip?(1-val)*100:val/sc);
-  return '<div class="fx-row"><div class="fx-label">'+label+'</div>'
+  return '<div class="fx-row"'+(title?' title="'+title.replace(/"/g,'&quot;')+'"':'')+'><div class="fx-label">'+label+'</div>'
     +'<input class="fx-slider" type="range" min="'+min+'" max="'+max+'" value="'+sv+'" data-k="'+k+'" data-sc="'+sc+'" data-fl="'+(flip?1:0)+'" oninput="mskSlide(this)">'
     +'<div class="fx-val">'+sv+'</div></div>';
 }
@@ -10706,6 +10778,7 @@ function mskRebuild(){
     +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
     // Texture: the local detail control masks never had. Negative softens — the standard portrait
     // move of calming skin texture while eyes and hair stay sharp.
+    +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
     +'<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or colour."><div class="fx-label">Texture</div>'
     +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
     +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
@@ -10989,7 +11062,7 @@ window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskO
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
 const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det',
-  'lens-dist','lens-vig','lens-ca',
+  'lens-dist','lens-vig','lens-ca','lens-defr',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig'];
 const _FX_SNAP_TOGGLES=['adjust','curves','hsl','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
@@ -11958,7 +12031,7 @@ function exportPresetListRefresh(selectName){
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat',
-  'sl-lens-dist','sl-lens-vig','sl-lens-ca',
+  'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-pointcolor','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
@@ -12196,7 +12269,24 @@ function getFXParams(adjValsOverride){return{
   // Lens correction: manual-only (no per-lens profile database — see the shader comment for
   // why). dist/vig/ca in -0.5..0.5, small enough that the single-term radial model stays
   // well-behaved at the frame corners.
-  lens:{dist:adjVal('sl-lens-dist')/200, vig:adjVal('sl-lens-vig')/200, ca:adjVal('sl-lens-ca')/1000},
+  // Gate weave / film breath: video only, and derived from fxVideoFrameSeed so they share the
+  // grain's per-frame hash rather than inventing a second (and possibly periodic) sequence.
+  // A still has no frame index, so filmMotion is null and the shader uniforms stay at identity.
+  filmMotion:(function(){
+    const it=(typeof curItem==='function')?curItem():null;
+    if(!it||it.kind!=='video')return null;
+    const wv=adjVal('sl-gate-weave')/100, br=adjVal('sl-film-breath')/100;
+    if(!wv&&!br)return null;
+    const f=(it.curFrame||0)+1;
+    // Two decorrelated hashes per frame (different salts) so the x and y wobble aren't the same
+    // number, which would make the frame slide along a diagonal instead of wandering.
+    const hx=fxHash01(f*2.0)-0.5, hy=fxHash01(f*2.0+1.0)-0.5, hb=fxHash01(f*3.0+7.0)-0.5;
+    // Peak ~1.5px at full slider, expressed in uv so it is resolution-independent (a fixed pixel
+    // wobble would be invisible in a downscaled preview and huge at export).
+    const amp=wv*1.5/Math.max(1,(it.img&&(it.img.width||it.img.videoWidth))||1920);
+    return{weave:[hx*2*amp,hy*2*amp],breath:1+hb*2*br*0.06};
+  })(),
+  lens:{dist:adjVal('sl-lens-dist')/200, vig:adjVal('sl-lens-vig')/200, ca:adjVal('sl-lens-ca')/1000, defringe:adjVal('sl-lens-defr')/100},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
   artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
     dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed,dustMode:fxState.dustMode||0},

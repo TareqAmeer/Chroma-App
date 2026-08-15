@@ -209,6 +209,32 @@ async function main() {
           const src = window.geomCanvas ? window.geomCanvas(it) : it.img;
           const iw = src.naturalWidth || src.width, ih = src.naturalHeight || src.height;
           const canvas = await window.processToCanvas(P, src, iw, ih);
+          // ⚠️ A BLANK render must fail loudly, not be written as if it were a result.
+          // Observed for real: the whole run occasionally produced RGBA-all-zero canvases while
+          // every render still reported "ok" and the harness exited 0 — the failure only surfaced
+          // as 18 simultaneous golden mismatches, which reads like a shader regression and sends
+          // you looking in entirely the wrong place. Alpha is the tell: the pipeline always writes
+          // vec4(rgb,1.0), so alpha 0 means nothing was drawn at all, which no shader edit can
+          // cause. Checking a sparse grid rather than every pixel keeps this ~free.
+          {
+            const g = document.createElement('canvas');
+            g.width = Math.min(32, canvas.width); g.height = Math.min(32, canvas.height);
+            const gx = g.getContext('2d');
+            gx.drawImage(canvas, 0, 0, g.width, g.height);
+            const d = gx.getImageData(0, 0, g.width, g.height).data;
+            let nonZero = 0;
+            for (let i = 0; i < d.length; i += 4) if (d[i] || d[i+1] || d[i+2] || d[i+3]) nonZero++;
+            if (!nonZero) {
+              const gl = (typeof FX !== 'undefined' && FX.gl) || null;
+              const diag = gl ? {
+                contextLost: gl.isContextLost(), glError: gl.getError(),
+                progs: Object.fromEntries(Object.entries(FX.progs).map(([k,v]) => [k, gl.getProgramParameter(v, gl.LINK_STATUS) ? 'ok' : (gl.getProgramInfoLog(v)||'LINK FAILED')])),
+                fxCv: FX.cv ? [FX.cv.width, FX.cv.height] : null,
+                imgTx: !!FX.imgTx, imgWH: [FX.imgW, FX.imgH],
+              } : 'no FX.gl';
+              throw new Error('BLANK RENDER (all-zero RGBA) ' + `${canvas.width}x${canvas.height} ` + JSON.stringify(diag));
+            }
+          }
           const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png'));
           const buf = await blob.arrayBuffer();
           const bytes = new Uint8Array(buf);
