@@ -727,6 +727,15 @@ One batched shader cycle (§3's reserved-word and compile-silence traps apply):
   hash as the grain, with two decorrelated salts for x and y: §12's rejected linear step would
   read as rhythmic judder on a positional offset, and one hash for both axes would slide the
   frame along a diagonal instead of wandering.
+- **Perspective / keystone** (`lensPersp`, same pass) — a real homography (both terms in the
+  DENOMINATOR), plus fine Rotate and a Scale to hide the wedges a correction opens at the frame
+  edge. ⚠️ A shear is NOT a substitute: it straightens converging verticals but leaves the
+  spacing wrong, which reads as a stretched building rather than a corrected one. The pole is
+  clamped at `d>=0.15` so an over-driven slider stays ugly-but-sane instead of flipping the image
+  through infinity. Verified with a synthetic line grid (`top/bottom` lit-pixel counts: 14/14 at
+  0, 0/16 at +80, 16/0 at −80, and Scale 40 pulls the lost edge back to 16/18).
+  *Auto-horizon is NOT included* — it needs line detection (a Hough pass), which is its own piece
+  of work rather than a slider.
 - **NOT done: D4, film-edge/overscan frames.** It needs real scanned edge plates vendored (like
   the DCPs), and a procedurally faked sprocket edge would undercut the one thing the feature is
   for. Blocked on assets, not on code.
