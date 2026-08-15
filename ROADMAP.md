@@ -24,7 +24,7 @@ shipped, and 6's Clarity half shipped). Nothing here blocks anything else:
 |---|---|---|---|
 | ~~6~~ | ~~Per-mask Sharpness / Noise~~ | — | ✅ **Substantively complete.** Texture is bipolar (negative softens, positive sharpens) and Clarity shipped, so these would be the same operator under new names. True edge-aware per-mask NR is a different, larger item |
 | 11 | **Auto-horizon** | M | Keystone shipped (E2). This half needs line detection — a Hough pass, which is its own piece of work rather than another slider |
-| 13 | JXL / AVIF in, **16-bit out** | L | ⚠️ Revised — HEIC shipped, and the 16-bit bottleneck is the 8-bit SOURCE upload, not the file format. Read the entry before starting |
+| 13 | **16-bit source path** | M/L | ⚠️ Revised again — this is the prerequisite for **HDR from RAW**, not just precision. See the entry; measured |
 | 14 | Export **Display-P3 / wide-gamut ICC** | S/M | Colour science, not compositing — see the entry for why the sRGB tag already shipping isn't the same thing |
 | ~~15~~ | ~~Auto-match a series to a reference~~ | — | ✅ **Done** — `matchSeriesToReference`. Solves exposure in stops + WB after brightness equalisation, per photo, into `adjustOverride`. See CLAUDE.md |
 
@@ -271,7 +271,28 @@ different, larger piece of work; folded into item 13's territory rather than tra
 
 ## Tier 3 — pipeline and output
 
-### 13. Wider format support in and out; 16-bit — L  *(revised 2026-08-15 — measured)*
+### 13. The 16-bit SOURCE path — M/L  *(revised twice, 2026-08-15 — measured)*
+
+⚠️ **This item's real value is HDR, not precision.** Gain-map HDR export already ships
+(`gainmap.rs`, ISO 21496-1 — the same thing Lightroom does), but it is only offered when the
+SOURCE file carries headroom, and measured on this machine:
+
+| file | headroom | HDR export offered |
+|---|---|---|
+| `P_TM5168.RW2` (Lumix) | 1.0000 | **no** |
+| `__TM3719.RW2` (Lumix) | 1.0024 | **no** |
+| `IMG_1320.HEIC` (iPhone) | 1.3697 | yes |
+| `IMG_8008.HEIC` (iPhone) | 1.4015 | yes |
+| `__TM4202.jpg` | 1.0000 | no |
+
+So HDR works on iPhone photos and **not on the user's own RAWs**. Core Image's
+`kCIImageExpandToHDR` finds no headroom in an RW2 because a RAW carries linear sensor data, not
+an encoded HDR rendition — the highlight range above SDR white is there in the file and is thrown
+away by this app's own 8-bit truncation before anything can use it.
+
+Lightroom produces HDR from RAW precisely because it keeps that range. Doing the same here means
+the source path below — which is why 16-bit, HDR-from-RAW and heavy-grade gradient quality are
+one piece of work rather than three.
 
 **✅ HEIC/HEIF done.** They were absent from `library.rs`'s `IMAGE_EXTS` and `ingest.rs`'s
 `media_kind`, so an iPhone shoot read as an empty folder and a card import would have been
@@ -280,8 +301,7 @@ WKWebView already uses to display them in the editor), and EXIF-dated via kamada
 support. Chromium genuinely cannot decode HEIC, so the web build now says so and names where it
 does work. JXL/AVIF still open, and both would need a real vendored WASM decoder.
 
-**⚠️ 16-bit export is NOT the win it looks like, and the reason is upstream.** Measured before
-building anything:
+**⚠️ 16-bit EXPORT on its own is not the win it looks like.** Measured before building anything:
 
 - `FXR.setImage` uploads `UNSIGNED_BYTE`. There is exactly one upload path and it is 8-bit.
 - The RAW path writes its DCP-corrected result into a `Uint8ClampedArray` before `putImageData`,
@@ -323,6 +343,13 @@ and every colour op), so true P3 output needs an actual sRGB→Display-P3 primar
 final pixels plus a real embedded Display-P3 ICC profile, not just a metadata tag — a color-science
 change, not a compositing one, and correspondingly harder to verify without a colour-managed
 reference to diff against.
+
+### ❌ REJECTED (2026-08-15, user decision)
+
+- **Undo for Delete** — `trash_file` hands the file to the macOS Trash, which is already
+  recoverable in Finder. An in-app `restore_from_trash` duplicates an OS affordance.
+- **JXL / AVIF decode** — would mean vendoring a WASM decoder for formats that neither the user's
+  camera nor their phone produces. HEIC (which they do produce) shipped instead.
 
 ### 15. Auto-match a series to a reference photo — M
 Batch editing shares one `fxState` across photos, which is right for a look but wrong for
