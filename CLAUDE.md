@@ -822,6 +822,38 @@ shows up as a suspiciously clean spot in a grainy frame.
 - `test/probe_heal.mjs` measures the above; `test/probe_heal_undo.mjs` covers undo/redo and
   survival through geometry.
 
+### Match series to a reference (ROADMAP 15, 2026-08-15)
+
+Batch editing shares one `fxState`, which is right for a LOOK and wrong for exposure/WB drift: a
+set walked through changing light meters each frame differently, so one shared exposure leaves
+half the shoot dark. `matchSeriesToReference` solves a per-photo offset and writes it into that
+photo's own `adjustOverride` — the same mechanism the manual "make this photo independent" toggle
+uses, so render, export, session and XMP need no knowledge of the feature.
+
+- ⚠️ **Exposure only, plus white balance — never contrast/saturation/look.** Those are what the
+  user chose; matching them would flatten the set to one frame's interpretation. Drift is a
+  capture problem, not a taste problem.
+- ⚠️ **Exposure is solved in STOPS** (`log2(refLum/tgtLum)`), not as a linear difference — the
+  slider is exposure compensation, so a frame half as bright needs +1 stop wherever it sits.
+  Verified: a synthetic half-brightness frame solves to exactly **+20**, which is +1 stop at the
+  slider's ±5-stops-over-±100 mapping, and closes the luminance gap **100%**.
+- ⚠️ **White balance is measured AFTER equalising brightness**, or an exposure difference
+  masquerades as a colour cast. Verified: a pure ×1.25R/×0.8B cast solves to temp −40 with an
+  exposure term of −1.
+- Statistics are **trimmed means** (10-90th percentile) on source pixels at 160px — a bright sky
+  or black frame edge would otherwise drag the average and make the correction chase the
+  background. Matching a photo to itself solves to exactly zero, which is the guard that a
+  no-op stays a no-op.
+- `test/probe_match_series.mjs` measures all of the above end to end.
+
+### ROADMAP 6 (per-mask detail) is substantively complete
+
+Texture is **bipolar** — its own tooltip says "negative softens, positive sharpens" — so the
+"Sharpness" and "Noise" halves of that item would be the same radius-1 operator under two more
+names. That is exactly the trap the Texture/Clarity split was designed to avoid (§ Phase D: "at
+one radius they would be one control with two names"). A genuinely different per-mask NR would
+need an edge-aware filter, which is its own piece of work rather than a slider.
+
 ---
 
 ## 6. Calibration tooling (`calib/`)

@@ -22,11 +22,11 @@ shipped, and 6's Clarity half shipped). Nothing here blocks anything else:
 
 | # | item | size | note |
 |---|---|---|---|
-| 6 | Per-mask **Sharpness / Noise** | S | Texture and Clarity both shipped; these two are what's left |
+| ~~6~~ | ~~Per-mask Sharpness / Noise~~ | — | ✅ **Substantively complete.** Texture is bipolar (negative softens, positive sharpens) and Clarity shipped, so these would be the same operator under new names. True edge-aware per-mask NR is a different, larger item |
 | 11 | **Auto-horizon** | M | Keystone shipped (E2). This half needs line detection — a Hough pass, which is its own piece of work rather than another slider |
 | 13 | JXL / AVIF in, **16-bit out** | L | ⚠️ Revised — HEIC shipped, and the 16-bit bottleneck is the 8-bit SOURCE upload, not the file format. Read the entry before starting |
 | 14 | Export **Display-P3 / wide-gamut ICC** | S/M | Colour science, not compositing — see the entry for why the sRGB tag already shipping isn't the same thing |
-| 15 | Auto-match a series to a reference photo | M | Colour Copy's histogram matching is the algorithm; it needs to emit per-photo `adjustOverride` instead of a LUT |
+| ~~15~~ | ~~Auto-match a series to a reference~~ | — | ✅ **Done** — `matchSeriesToReference`. Solves exposure in stops + WB after brightness equalisation, per photo, into `adjustOverride`. See CLAUDE.md |
 
 ✅ **Shipped since this list was written:** 10 (spot removal / clone / heal — see CLAUDE.md's
 Retouch section), 11's perspective/keystone homography, 6's per-mask Clarity, plus Library items

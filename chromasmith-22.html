@@ -1554,6 +1554,14 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <button class="btn bgh" id="btn-exp-preset-del" onclick="exportPresetDeleteCurrent()" disabled title="Delete the selected preset">Delete</button>
           </div>
         </div>
+        <div id="fx-match-series-row" style="margin-top:8px;display:none">
+          <div class="fx-label" style="width:auto;margin-bottom:4px">Match series</div>
+          <div style="display:flex;gap:6px">
+            <button class="fx-btn" onclick="matchSeriesToReference()">Match to this photo</button>
+            <button class="fx-btn" onclick="matchSeriesClear()">Clear</button>
+          </div>
+          <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.</div>
+        </div>
         <div id="fx-export-scope-row" style="margin-top:8px;display:none">
           <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope</div>
           <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
@@ -12334,6 +12342,100 @@ function showExif(exif){
 // given, is a raw-slider-value object (see domAdjustVals) sourced from that photo's own
 // it.adjustOverride instead of the live DOM — used by exportFX so each photo renders with ITS
 // own Adjust values instead of whichever photo happens to be previewed at export time.
+// ══ MATCH SERIES TO A REFERENCE ═══════════════════════════════════════════════════════════
+// Batch editing shares one fxState across every photo, which is right for a LOOK and wrong for
+// exposure and white-balance drift: a set walked through changing light has each frame metered
+// slightly differently, so one shared exposure leaves half the shoot too dark. This solves a
+// per-photo offset instead, and writes it into that photo's own `adjustOverride` — the exact
+// mechanism the manual "make this photo independent" toggle already uses, so nothing downstream
+// (render, export, session, XMP) needs to know this feature exists.
+//
+// ⚠️ Deliberately only exposure + white balance. Contrast, saturation and the look are what the
+// user CHOSE; matching those too would flatten a set to one frame's interpretation and undo the
+// grade. Drift is a capture problem, not a taste problem.
+const MATCH_STAT_PX=160;   // longest edge for the statistics pass — a match is a global average,
+                           // and sampling more pixels costs time without moving the numbers
+/// Robust per-channel statistics for one photo, measured on the SOURCE pixels (pre-grade), since
+/// the offsets have to be independent of whatever look is currently applied.
+function _matchStats(img){
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height;
+  const sc=Math.min(1,MATCH_STAT_PX/Math.max(w0,h0));
+  const w=Math.max(1,Math.round(w0*sc)),h=Math.max(1,Math.round(h0*sc));
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data;
+  // Trimmed means: a bright sky or a black frame edge would otherwise drag the average and make
+  // the correction chase the background rather than the subject. Collect, sort, drop the tails.
+  const R=[],G=[],B=[],L=[];
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
+    R.push(r);G.push(g);B.push(b);L.push(0.2126*r+0.7152*g+0.0722*b);
+  }
+  const trimmed=(a)=>{
+    a.sort((p,q)=>p-q);
+    const lo=Math.floor(a.length*0.10),hi=Math.ceil(a.length*0.90);
+    let s=0,n=0;for(let i=lo;i<hi;i++){s+=a[i];n++;}
+    return n?s/n:0.5;
+  };
+  return{r:trimmed(R),g:trimmed(G),b:trimmed(B),lum:Math.max(1e-4,trimmed(L))};
+}
+/// Solves the exposure/temp/tint offsets that carry `tgt` onto `ref`.
+///
+/// ⚠️ Exposure is solved in STOPS (a log ratio), not as a linear difference: the slider is
+/// exposure-compensation, so a photo half as bright needs +1 stop regardless of where it sits on
+/// the scale. A linear delta would over-correct the shadows and under-correct the highlights.
+function _matchOffsets(ref,tgt){
+  const stops=Math.log2(ref.lum/Math.max(1e-4,tgt.lum));
+  // White balance from the channel ratios AFTER equalising brightness, or an exposure difference
+  // would masquerade as a colour cast.
+  const norm=(s)=>({r:s.r/Math.max(1e-4,s.lum),g:s.g/Math.max(1e-4,s.lum),b:s.b/Math.max(1e-4,s.lum)});
+  const nr=norm(ref),nt=norm(tgt);
+  // Temp moves blue against red; tint moves green against the other two — the same axes the
+  // Temp/Tint sliders drive, so the solved numbers land on the controls the user already reads.
+  const temp=((nr.r-nr.b)-(nt.r-nt.b))*100;
+  const tint=((nr.g-(nr.r+nr.b)/2)-(nt.g-(nt.r+nt.b)/2))*100;
+  const clamp=(v,l)=>Math.max(-l,Math.min(l,v));
+  // The exposure slider is ±5 stops over ±100 (see getFXParams' /20), so stops*20 is the slider
+  // value. Capped well short of the rail: a solved correction bigger than ~2 stops means the two
+  // frames are not the same scene, and silently pushing the slider to 100 would look like a bug.
+  return{exp:Math.round(clamp(stops*20,40)),temp:Math.round(clamp(temp,40)),tint:Math.round(clamp(tint,40))};
+}
+/// Matches every loaded photo to `refIdx`, writing per-photo adjustOverride values.
+async function matchSeriesToReference(refIdx){
+  if(fxImages.length<2){toast('Load a set of photos first');return;}
+  refIdx=(refIdx==null)?fxCurIdx:refIdx;
+  const ref=fxImages[refIdx];
+  if(!ref||!ref.img){toast('Reference photo is not loaded');return;}
+  const base=domAdjustVals();                 // the shared grade every photo starts from
+  const refStat=_matchStats(ref.img);
+  let changed=0;
+  for(let i=0;i<fxImages.length;i++){
+    const it=fxImages[i];
+    if(!it||!it.img||it.kind==='video')continue;
+    if(i===refIdx){it.adjustOverride=null;continue;}   // the reference itself follows the batch
+    const off=_matchOffsets(refStat,_matchStats(it.img));
+    // Offsets ride ON TOP of the shared grade rather than replacing it — the look stays, only the
+    // capture drift is corrected.
+    const v={...base};
+    v.exp=Math.max(-100,Math.min(100,(base.exp||0)+off.exp));
+    v.temp=Math.max(-100,Math.min(100,(base.temp||0)+off.temp));
+    v.tint=Math.max(-100,Math.min(100,(base.tint||0)+off.tint));
+    it.adjustOverride=v;
+    if(off.exp||off.temp||off.tint)changed++;
+  }
+  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
+  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
+  toast(`Matched ${changed} photo(s) to ${ref.name}`,true);
+  log(`Match series: ${changed} photo(s) adjusted to reference "${ref.name}"`,'ok');
+}
+/// Undoes it: every photo goes back to following the shared batch values.
+function matchSeriesClear(){
+  let n=0;
+  fxImages.forEach(it=>{if(it.adjustOverride){it.adjustOverride=null;n++;}});
+  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
+  toast(n?`${n} photo(s) back to the shared grade`:'Nothing to clear',true);
+}
 const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','skin','dehaze'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
 function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:0;if(sl)sl.value=val;if(vl)vl.textContent=val;});}
@@ -13960,6 +14062,9 @@ function setExportScope(scope){fxExportScope=scope;syncExportScopeUI();}
 function syncExportScopeUI(){
   const n=fxImages.length,row=document.getElementById('fx-export-scope-row');
   if(row)row.style.display=n>1?'block':'none';
+  // Same "only with a batch" rule as the export scope — matching one photo to itself is a no-op.
+  const mrow=document.getElementById('fx-match-series-row');
+  if(mrow)mrow.style.display=n>1?'block':'none';
   const lb=document.getElementById('fx-export-scope-lb');if(lb)lb.textContent=`Export scope (${n} photos loaded)`;
   const bAll=document.getElementById('btn-scope-all'),bCur=document.getElementById('btn-scope-cur');
   if(bAll)bAll.className='btn '+(fxExportScope==='all'?'bsec':'bgh');
