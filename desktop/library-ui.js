@@ -195,6 +195,7 @@
     isoFilter: 'all',
     dupeFilter: 'all',     // 'all' | 'dupes'
     syncedFilter: 'all',   // 'all' | 'synced' | 'notsynced'
+    showInfo: false,       // metadata panel for the focused photo (I) — see renderInfoPanel
     tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
     search: '',
     open: false,
@@ -250,7 +251,11 @@
        PINNED to its row so a future DOM insertion can never silently shift everything again
        (auto-placement has mis-stacked this panel twice). */
     #lib-top{grid-row:1}#lib-filters{grid-row:2}#lib-viewbar{grid-row:3}
-    #lib-side{grid-row:4}#lib-main{grid-row:5}#lib-bottom{grid-row:6}
+    #lib-side{grid-row:4}#lib-bottom{grid-row:6}
+    /* position:relative so the info panel and batch bar (both position:absolute, appended here)
+       resolve against the GRID area. Without it they resolved against a far outer ancestor and
+       landed on top of the filter toolbar. */
+    #lib-main{grid-row:5;position:relative}
     /* FULL (expanded) mode: real LEFT SIDEBAR layout (approved Lightroom-in-Library wireframe)
        — #lib-side becomes a 230px left column spanning the filters/viewbar/main rows, instead
        of the old horizontal band squeezed above the grid ("top bar only, no sidebar"). The
@@ -1019,6 +1024,8 @@
   if (LIBTEST) {
     window.__libState = () => ({ m: state._virtMetrics, on: state._virtOn, n: (state._virtAll || []).length, range: state._virtRange });
     window.__libRenderGrid = () => renderGrid();
+    window.__libSelect = (p) => { state.selected.add(p); };
+    window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
   }
   // How many rows of cards to keep mounted beyond the viewport in each direction. Two rows is
   // enough that a normal scroll flick never exposes a gap, without mounting a screenful of cards
@@ -2603,6 +2610,75 @@
     }
   }
 
+  /// A metadata panel for the focused photo. The list view already exposes EXIF as columns, but
+  /// the GRID had no way to see any of it without opening the editor — and the grid is where
+  /// culling happens, which is exactly when "what lens was this" gets asked.
+  ///
+  /// Reuses getMeta's cache, so opening the panel costs nothing on a photo the grid has already
+  /// described; the sidecar (rating/label/edited) comes from state.sidecars for the same reason.
+  function renderInfoPanel() {
+    // Falls back to the first of a multi-selection rather than showing nothing: with several
+    // photos selected the panel still has a sensible subject (the same "active photo" idea
+    // Lightroom uses), and blanking the panel the moment a second photo is picked reads as a bug.
+    const path = state._kbCursor || state.openedPath
+      || (state.selected.size ? [...state.selected][0] : null);
+    let el = document.getElementById('lib-info');
+    if (!state.showInfo || !path) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'lib-info';
+      el.style.cssText = 'position:absolute;right:12px;top:56px;width:232px;z-index:38;padding:10px 12px;'
+        + 'border-radius:10px;background:var(--pan,#1c1c1e);border:1px solid var(--bdr);'
+        + 'box-shadow:0 8px 28px rgba(0,0,0,.4);font-size:11px;line-height:1.55';
+      (document.getElementById('lib-main') || document.body).appendChild(el);
+    }
+    const entry = (state.entries || []).find((e) => e.path === path) || {};
+    const m = state.meta.get(path) || {};
+    const sc = state.sidecars.get(path) || {};
+    if (!state.meta.has(path)) getMeta(path).then(() => { if (state.showInfo) renderInfoPanel(); }).catch(() => {});
+    const fmt = (b) => !b ? '' : b > 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b > 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1e3) + ' KB';
+    const row = (k, v) => v ? `<div style="display:flex;gap:8px"><span style="color:var(--mut);min-width:74px">${k}</span><span style="flex:1;word-break:break-word">${esc(String(v))}</span></div>` : '';
+    el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;word-break:break-all">${esc(entry.name || baseName(path))}</div>`
+      + row('Date', m.date) + row('Camera', m.camera) + row('Lens', m.lens)
+      + row('ISO', m.iso) + row('Shutter', m.shutter) + row('Aperture', m.aperture)
+      + row('Focal', m.focal_len) + row('Size', fmt(entry.size))
+      + row('Label', sc.label) + row('Edited', sc.edited ? 'Yes' : '')
+      + `<div style="margin-top:8px;text-align:right"><button class="lib-btn" id="lib-info-close">Close</button></div>`;
+    const c = document.getElementById('lib-info-close');
+    if (c) c.onclick = () => { state.showInfo = false; renderInfoPanel(); };
+  }
+
+  /// Operations that only make sense on a multi-selection, surfaced as a bar rather than living
+  /// exclusively in a right-click menu — the context menu is fine when you know it is there, and
+  /// invisible when you do not. Shown only when more than one photo is selected, so it costs a
+  /// single-photo workflow nothing.
+  function renderBatchBar() {
+    let bar = document.getElementById('lib-batchbar');
+    const n = state.selected.size;
+    if (n < 2) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'lib-batchbar';
+      bar.style.cssText = 'position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;'
+        + 'display:flex;gap:8px;align-items:center;padding:8px 12px;border-radius:10px;'
+        + 'background:var(--pan,#1c1c1e);border:1px solid var(--bdr);box-shadow:0 8px 28px rgba(0,0,0,.45)';
+      (document.getElementById('lib-main') || document.body).appendChild(bar);
+    }
+    const paths = () => Array.from(state.selected);
+    bar.innerHTML = `<span style="font-size:11px;color:var(--mut)">${n} selected</span>`
+      + `<span style="width:1px;height:16px;background:var(--bdr)"></span>`
+      + LIB_LABELS.map((l) => `<span class="lib-lbl" data-batch="${l.name}" style="--lbl:${l.css};opacity:.6" title="Label ${l.name}"></span>`).join('')
+      + `<button class="lib-btn" data-act="clear-label">No label</button>`
+      + `<button class="lib-btn" data-act="fav">Favorite</button>`
+      + `<button class="lib-btn" data-act="deselect">Deselect</button>`;
+    bar.querySelectorAll('.lib-lbl[data-batch]').forEach((d) => {
+      d.onclick = () => { paths().forEach((p) => setLabel(p, d.dataset.batch)); };
+    });
+    bar.querySelector('[data-act="clear-label"]').onclick = () => paths().forEach((p) => setLabel(p, ''));
+    bar.querySelector('[data-act="fav"]').onclick = () => paths().forEach((p) => setFavorite(p, true));
+    bar.querySelector('[data-act="deselect"]').onclick = () => { state.selected.clear(); renderGrid(); };
+  }
+
   /// A real status bar rather than two loose spans: what the current filter is actually showing,
   /// how it breaks down by colour label, and what the selection weighs. The label tallies are
   /// the point — when culling, "how many did I flag" is the question the grid cannot answer at a
@@ -2635,6 +2711,8 @@
   /// Everything renderGrid did AFTER the cards: empty states, counts, selection chrome.
   function renderGridTail(shown) {
     renderStatusBar(shown);
+    renderBatchBar();
+    renderInfoPanel();
     const grid = document.getElementById('lib-grid');
     if (!shown.length && state.entries.length) {
       // Only the richer "nothing matches" message when a filter/search actually hid photos —
@@ -2644,7 +2722,22 @@
       const clearLink = document.getElementById('lib-empty-clear');
       if (clearLink) clearLink.onclick = () => clearAllLibFilters();
     } else if (!shown.length) {
-      grid.innerHTML = '<div id="lib-empty">No photos in this folder.</div>';
+      // An empty folder is a dead end without a way out of it. The two things that actually fill
+      // one are a card and a folder, so offer both rather than just stating the fact.
+      grid.innerHTML = '<div id="lib-empty">No photos in this folder.'
+        + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'
+        + '<button class="lib-btn" id="lib-empty-import">Import from card…</button>'
+        + '<button class="lib-btn" id="lib-empty-open">Choose another folder…</button>'
+        + '</div></div>';
+      const impBtn = document.getElementById('lib-empty-import');
+      if (impBtn) impBtn.onclick = () => {
+        // Jump to the Devices section if a card is already mounted, otherwise say why not.
+        const dev = document.querySelector('.lib-card-row[data-card]');
+        if (dev) { dev.click(); dev.scrollIntoView({ block: 'nearest' }); }
+        else toast('No camera card detected — insert one and it appears under Devices');
+      };
+      const openBtn = document.getElementById('lib-empty-open');
+      if (openBtn) openBtn.onclick = () => { const b = document.getElementById('lib-pick'); if (b) b.click(); };
     }
     document.getElementById('lib-count').textContent = state.selected.size
       ? `${state.selected.size} selected — ${shown.length} of ${state.entries.length} photo(s)`
@@ -2964,7 +3057,8 @@
     // X/P/U would act on invisible photos (Enter even opened one; X/P wrote its sidecar).
     // Only the view toggles stay live.
     if (state.source === 'lr') {
-      if (e.key === 'g' || e.key === 'G') toggleExpandedView();
+      if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
+    if (e.key === 'g' || e.key === 'G') toggleExpandedView();
       else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
       return;
     }
@@ -3030,6 +3124,7 @@
       });
       return;
     }
+    if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
   });

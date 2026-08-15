@@ -13001,6 +13001,23 @@ function _framePlate(url){
 /// 35mm still film, in millimetres — ISO 1007 nominal. Kept as real units rather than baked
 /// fractions so the numbers can be checked against the standard rather than reverse-engineered.
 const FILM35={width:35.0,frameH:24.0,frameW:36.0,perfW:1.98,perfH:2.79,pitch:4.7498,perfEdge:0.66};
+/// Output size a film frame produces for a given input, WITHOUT rendering. The video export path
+/// pre-allocates its canvases once per clip (border thickness and matte aspect are invariant
+/// across frames), so it needs the size before the first frame exists.
+///
+/// ⚠️ Shared with filmFrameCompose rather than duplicated: a second copy of the rebate maths
+/// would drift, and the failure mode is a per-frame canvas one row too small — i.e. a clipped
+/// sprocket row on export and nowhere else.
+function filmFrameOutSize(w,h,FR){
+  if(!FR||!FR.style||FR.style==='none')return{w,h,reb:0};
+  const spec=FILM_FRAMES[FR.style];
+  if(!spec||spec.kind==='none')return{w,h,reb:0};
+  if(spec.kind==='plate')return{w,h,reb:0};          // plates composite over, they do not extend
+  const roll=spec.mode==='roll';
+  const rebFrac=roll?0.12:((FILM35.width-FILM35.frameH)/2)/FILM35.frameH;
+  const reb=Math.round(h*rebFrac);
+  return{w,h:h+2*reb,reb};
+}
 /// Mounts `src` in a film frame. Returns a NEW canvas, or `src` untouched when the style is off
 /// or a plate has not decoded yet — never a half-drawn frame.
 function filmFrameCompose(src,FR){
@@ -13028,10 +13045,10 @@ function filmFrameCompose(src,FR){
   const roll=spec.mode==='roll';
   // Rebate depth as a fraction of the IMAGE height, straight from the standard: a 24mm frame on
   // 35mm stock leaves 5.5mm each side. Roll film has no perforations and a wider rebate.
-  const rebFrac=roll?0.12:((M.width-M.frameH)/2)/M.frameH;
-  const reb=Math.round(sh*rebFrac);
+  const sz=filmFrameOutSize(sw,sh,FR);
+  const reb=sz.reb;
   const bleed=spec.mode==='bleed';
-  const outW=sw,outH=sh+2*reb;
+  const outW=sz.w,outH=sz.h;
   const out=document.createElement('canvas');out.width=outW;out.height=outH;
   const x=out.getContext('2d');
   // Rebate colour: unexposed processed film is not black — it is a dense near-neutral with a
@@ -14315,8 +14332,8 @@ async function exportFX(){
 // output size is invariant across frames; only allocate-and-drawImage-into-existing per frame.
 // Returns the canvas actually holding the composed result (borderedCanvas or finalCanvas — never
 // gradeCanvas itself, so the caller can always treat the return value as "final size").
-function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas){
-  const{gradedW,gradedH,b1t,b2t,borderedW,borderedH,finalW,finalH,hasMatte}=dims;
+function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas,framedCanvas){
+  const{gradedW,gradedH,b1t,b2t,borderedW,borderedH,framedW,framedH,hasFrame,finalW,finalH,hasMatte}=dims;
   let bordered=gradeCanvas;
   if(b1t||b2t){
     const bctx=borderedCanvas.getContext('2d');
@@ -14324,6 +14341,17 @@ function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas)
     bctx.fillStyle=P.b1.color;bctx.fillRect(b2t,b2t,borderedW-2*b2t,borderedH-2*b2t);
     bctx.drawImage(gradeCanvas,b1t+b2t,b1t+b2t);
     bordered=borderedCanvas;
+  }
+  if(hasFrame&&framedCanvas){
+    // filmFrameCompose allocates its own canvas per call, which is exactly what a per-frame loop
+    // must not do — so blit its result into the pre-allocated one and let it be garbage in one
+    // step rather than accumulating a canvas per frame.
+    const framed=filmFrameCompose(bordered,dims.filmFrame);
+    const fx=framedCanvas.getContext('2d');
+    fx.clearRect(0,0,framedW,framedH);
+    fx.drawImage(framed,0,0);
+    if(framed!==bordered)framed.width=framed.height=0;
+    bordered=framedCanvas;
   }
   if(!hasMatte)return bordered;
   const CV=P.canvas;
@@ -14333,13 +14361,15 @@ function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas)
     const t=_videoComposeBorderMatte._blurTmp||(_videoComposeBorderMatte._blurTmp=document.createElement('canvas'));
     const tw=Math.max(1,Math.round(finalW/16)),th=Math.max(1,Math.round(finalH/16));
     t.width=tw;t.height=th;const tx=t.getContext('2d');
-    const s=Math.max(tw/borderedW,th/borderedH);
-    tx.drawImage(bordered,(tw-borderedW*s)/2,(th-borderedH*s)/2,borderedW*s,borderedH*s);
+    const bw=bordered.width,bh=bordered.height;
+    const s=Math.max(tw/bw,th/bh);
+    tx.drawImage(bordered,(tw-bw*s)/2,(th-bh*s)/2,bw*s,bh*s);
     fctx.imageSmoothingEnabled=true;fctx.drawImage(t,0,0,finalW,finalH);
     fctx.fillStyle='rgba(0,0,0,.22)';fctx.fillRect(0,0,finalW,finalH);
   }
   const zoom=CV.zoom||1;
-  fctx.drawImage(bordered,(finalW-borderedW*zoom)/2,(finalH-borderedH*zoom)/2,borderedW*zoom,borderedH*zoom);
+  const bw=bordered.width,bh=bordered.height;
+  fctx.drawImage(bordered,(finalW-bw*zoom)/2,(finalH-bh*zoom)/2,bw*zoom,bh*zoom);
   return finalCanvas;
 }
 // V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget) unless
@@ -14419,19 +14449,28 @@ async function fxVideoExportSmall(it){
   const P=getFXParams(it.adjustOverride||undefined);
   const b1t=P.bordersEnabled?Math.round(outW*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(outW*P.b2.thickness/100):0;
   const borderedW=outW+2*(b1t+b2t),borderedH=outH+2*(b1t+b2t);
+  // Film frame sits between the borders and the matte, exactly as it does for stills. Its size is
+  // as invariant across the clip as the borders are, so it folds into this same precompute rather
+  // than being called per frame.
+  const frameSz=filmFrameOutSize(borderedW,borderedH,P.filmFrame);
+  const hasFrame=frameSz.h!==borderedH||frameSz.w!==borderedW||
+    !!(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none');
+  const framedW=frameSz.w,framedH=frameSz.h;
   const hasMatte=!!(P.canvas&&P.canvas.enabled&&P.canvas.ar);
-  let finalW=borderedW,finalH=borderedH;
+  let finalW=framedW,finalH=framedH;
   if(hasMatte){
     const ar=P.canvas.ar;
-    const mw=borderedW/borderedH>ar?borderedW:borderedH*ar,mh=borderedW/borderedH>ar?borderedW/ar:borderedH;
+    const mw=framedW/framedH>ar?framedW:framedH*ar,mh=framedW/framedH>ar?framedW/ar:framedH;
     finalW=Math.max(2,Math.round(mw/2)*2);finalH=Math.max(2,Math.round(mh/2)*2);
-  }else{finalW=Math.max(2,Math.round(borderedW/2)*2);finalH=Math.max(2,Math.round(borderedH/2)*2);}
-  const composeDims={gradedW:outW,gradedH:outH,b1t,b2t,borderedW,borderedH,finalW,finalH,hasMatte};
+  }else{finalW=Math.max(2,Math.round(framedW/2)*2);finalH=Math.max(2,Math.round(framedH/2)*2);}
+  const composeDims={gradedW:outW,gradedH:outH,b1t,b2t,borderedW,borderedH,
+                     framedW,framedH,hasFrame,filmFrame:P.filmFrame,finalW,finalH,hasMatte};
 
   const gradeCanvas=document.createElement('canvas');gradeCanvas.width=outW;gradeCanvas.height=outH;
   const gradeCtx=gradeCanvas.getContext('2d');
   const borderedCanvas=(b1t||b2t)?Object.assign(document.createElement('canvas'),{width:borderedW,height:borderedH}):null;
   const finalCanvas=hasMatte?Object.assign(document.createElement('canvas'),{width:finalW,height:finalH}):null;
+  const framedCanvas=hasFrame?Object.assign(document.createElement('canvas'),{width:framedW,height:framedH}):null;
   // compCanvas is the ONE canvas object bound to CanvasSource below — mediabunny reads whatever
   // is currently drawn on it at add() time, so every frame must end by drawing INTO this same
   // object (fades need an off-canvas source to fade FROM, hence the two-stage draw below).
@@ -14484,7 +14523,7 @@ async function fxVideoExportSmall(it){
       FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
       gradeCtx.clearRect(0,0,outW,outH);
       gradeCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
-      const composed=_videoComposeBorderMatte(gradeCanvas,P,composeDims,borderedCanvas,finalCanvas);
+      const composed=_videoComposeBorderMatte(gradeCanvas,P,composeDims,borderedCanvas,finalCanvas,framedCanvas);
       // Fade in/out (B5): picture only — passthrough audio can't be faded without a decode/
       // re-encode pass (out of scope, see the plan's non-goals). Skip the extra full-frame copy
       // entirely when neither fade is configured (the common case).
