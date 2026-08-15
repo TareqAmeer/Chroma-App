@@ -8617,7 +8617,7 @@ function _csModal(title,bodyHtml){
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   const panel=document.createElement('div');
   panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:-apple-system,sans-serif;box-shadow:var(--lift-2)';
-  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1">×</button></div>${bodyHtml}`;
+  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${bodyHtml}`;
   ov.appendChild(panel);document.body.appendChild(ov);
   panel.querySelector('#cs-modal-x').onclick=()=>ov.remove();
   document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});

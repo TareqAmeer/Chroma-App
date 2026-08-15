@@ -240,6 +240,23 @@ function auditInPage({ minTap, minTapInline, inlineSel, minFont, minContrast }) 
   return out;
 }
 
+// Shared page setup for both the desktop and phone passes: dismiss the first-run overlay, then
+// put the Masks panel in its WORST case — a mask with the skin-tone block expanded, the
+// configuration that fragmented. Auditing masks without it would miss the whole bug.
+function seedFn() {
+  const b = [...document.querySelectorAll('button')].find(x => /got it/i.test(x.textContent || ''));
+  if (b) b.click();
+  if (typeof mskAdd !== 'function') return;
+  mskAdd('radial');
+  const m = fxState.masks[0];
+  if (m) {
+    m.crOn = true;
+    m.crSamples = [{ h: 0.05, s: 0.30, v: 0.70, rgb: [200, 150, 120] },
+                   { h: 0.02, s: 0.25, v: 0.50, rgb: [160, 110, 90] }];
+  }
+  if (typeof mskRebuild === 'function') mskRebuild();
+}
+
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
   const server = await startServer(ROOT);
@@ -268,25 +285,7 @@ async function main() {
     }, fixture);
     await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages.length > 0, null, { timeout: 15000 });
 
-    // Dismiss the first-run welcome overlay if present — it covers the UI.
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll('button')].find(x => /got it/i.test(x.textContent || ''));
-      if (b) b.click();
-    });
-
-    // Worst case for the Masks panel: a mask WITH the skin-tone block expanded. This is the
-    // configuration that fragmented, so auditing masks without it would miss the whole bug.
-    await page.evaluate(() => {
-      if (typeof mskAdd !== 'function') return;
-      mskAdd('radial');
-      const m = fxState.masks[0];
-      if (m) {
-        m.crOn = true;
-        m.crSamples = [{ h: 0.05, s: 0.30, v: 0.70, rgb: [200, 150, 120] },
-                       { h: 0.02, s: 0.25, v: 0.50, rgb: [160, 110, 90] }];
-      }
-      if (typeof mskRebuild === 'function') mskRebuild();
-    });
+    await page.evaluate(seedFn);
 
     for (const vp of VIEWPORTS) {
       await page.setViewportSize({ width: vp.w, height: vp.h });
@@ -305,6 +304,31 @@ async function main() {
             minFont: MIN_FONT, minContrast: MIN_CONTRAST });
         res.forEach(f => findings.push({ ...f, section: sec, viewport: vp.label }));
       }
+    }
+    // ── MOBILE PASS ──────────────────────────────────────────────────────────────────────
+    // Deliberately a SEPARATE page without ?deskx=1: under 700px the app is a different shell
+    // (photo fills the screen, tools live in a bottom sheet — CLAUDE.md §4), and deskx pins the
+    // desktop layout, so adding 375px to VIEWPORTS above would have audited a layout no phone
+    // ever shows. Sections are opened the same way a tap does, then the SHEET is audited.
+    if (!process.env.CS_UI_NO_MOBILE) {
+      const mp = await browser.newPage({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+      try {
+        await mp.goto(`http://127.0.0.1:${port}/chromasmith-22.html`, { waitUntil: 'load' });
+        await mp.waitForFunction(() => typeof fxSection === 'function', null, { timeout: 20000 });
+        await mp.evaluate(seedFn);
+        for (const sec of SECTIONS) {
+          const ok = await mp.evaluate((s) => {
+            try { fxSection(s, true); } catch { return false; }
+            return document.body.classList.contains('sheet-open') || !!document.querySelector('.fx-ctrl.sec-active');
+          }, sec);
+          if (!ok) continue;
+          await mp.waitForTimeout(80);
+          const res = await mp.evaluate(auditInPage,
+            { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL,
+              minFont: MIN_FONT, minContrast: MIN_CONTRAST });
+          res.forEach(f => findings.push({ ...f, section: sec, viewport: '375x812 (phone)' }));
+        }
+      } finally { await mp.close(); }
     }
   } finally {
     await browser.close();

@@ -140,7 +140,12 @@ npm run ui:test                   # desktop layout audit (see below); --json for
 npm run perf:test                 # perf budgets; --baseline to re-record
 ```
 
-**`test/ui_audit.mjs`** walks every tool section at 1440×820 / 1600×1000 / 1280×720 in `?deskx=1`
+**`test/ui_audit.mjs`** walks every tool section at 1440×820 / 1600×1000 / 1280×720 in `?deskx=1`,
+**plus a separate 375×812 phone pass** (2026-08-15). The phone pass loads its own page WITHOUT
+`?deskx=1` and audits the bottom sheet: under 700px the app is a different shell entirely
+(CLAUDE.md §4), and `deskx` pins the desktop one — so adding 375px to `VIEWPORTS` would have
+audited a layout no phone ever renders. It found a real defect on its first run (a 12×20px modal
+close button, less than half the 28px touch floor). `CS_UI_NO_MOBILE=1` skips it. It
 and asserts six invariants: no panel fragmentation (§10.8), no control painted before its own
 label (§10.9), no overlapping siblings, a 28px pointer-target floor (18px for checkboxes/colour
 swatches, deliberately — see the comment in the file), an 11px font floor, and 4.5:1 text
