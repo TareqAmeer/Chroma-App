@@ -4066,7 +4066,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16g';
+const BUILD='2026-08-16i';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -5105,7 +5105,10 @@ if(mskN>0.5){
     if(float(i)>=mskN)break;
     if(mskJ[i].y>0.5)continue;                                   // an eraser mask applies nothing itself
     float w=mskShapeWeight(i,gm);
-    if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm));   // legacy "subtract prev" — kept so saved masks render unchanged
+    // mskE[i].x: 0 none, 1 subtract-previous (legacy "mask inside a mask", kept so saved masks
+    // render unchanged), 2 intersect-previous (AND — Lightroom-style "Intersect Mask With").
+    if(mskE[i].x>1.5&&i>0)w=min(w,mskShapeWeight(i-1,gm));
+    else if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm));
     // Subtract EVERY mask flagged as an eraser. This is what lets several regions be excluded at
     // once (lips AND a pet AND a bystander); "subtract prev" reaches back exactly one slot, so it
     // could only ever remove one of them.
@@ -5914,7 +5917,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
       mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
-      mE[o]=m.subtract?1:0;mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
+      mE[o]=m.intersect?2:(m.subtract?1:0);mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would
       // renumber the slots and silently repoint every later mask's "subtract prev".
@@ -9287,7 +9290,7 @@ function mskIsAI(m){return !!(m&&(m.origin==='ai'||m.ai));}
 // negated form silently excluded it and scribbling did literally nothing (CLAUDE.md 5b).
 // Ask what a mask CAN DO, not what it was called. mskIsAI and the lint rule stay as backstops.
 function mskCaps(m){
-  if(!m)return{raster:false,segmentable:false,skinTools:false,toneTool:false,shapeless:false,sky:false,painterly:false};
+  if(!m)return{raster:false,segmentable:false,skinTools:false,toneTool:false,shapeless:false,sky:false,painterly:false,coatDepth:false,eyeBright:false};
   const ai=mskIsAI(m);
   return{
     raster:m.type==='brush',            // has a px buffer: paint, erase, refine edges
@@ -9300,7 +9303,9 @@ function mskCaps(m){
     toneTool:m.origin==='skin'||m.origin==='coat',  // the guided Skin/Coat Tone flow
     shapeless:m.type==='none',          // Colour/Luminance Range — the gates do the selecting
     sky:m.origin==='sky',               // offers "Re-detect sky"
-    painterly:m.type==='brush'&&!ai     // hand-painted: show the brush hint, no scribble UI
+    painterly:m.type==='brush'&&!ai,    // hand-painted: show the brush hint, no scribble UI
+    coatDepth:m.origin==='coat',        // "Red depth" one-slider exp+sat push — see mskCoatDepth
+    eyeBright:m.origin==='coatEye'      // "Eye brightness" one-slider exp+highlights push
   };
 }
 
@@ -9538,7 +9543,13 @@ function mskAdd(type){
   // cases. Range is wider than Skin's default: fur genuinely spans more hue/chroma per-strand
   // (undercoat vs guard hairs, wet vs dry) than skin does, so the tighter skin default would
   // under-select a coat's own natural variation and leave the gate looking "broken".
-  if(type==='coat'){Object.assign(m,_mskToneBlendDefaults('coat'));m.crOn=true;m.crRange=65;m.crRangeC=65;}
+  if(type==='coat'){
+    Object.assign(m,_mskToneBlendDefaults('coat'));m.crOn=true;m.crRange=65;m.crRangeC=65;
+    // "Red depth" defaults ON (not 0) — the whole point raised was that the effect should be
+    // visibly there right away, not just wired infrastructure waiting to be discovered. 35/100
+    // is the same non-zero starting strength the auto-added eye mask uses.
+    m.coatDepth=35;m.exp=-0.6*0.35;m.sat=0.55*0.35;
+  }
   if(type==='color'){m.crOn=true;m.crRange=40;}
   if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
@@ -9549,6 +9560,13 @@ function mskAdd(type){
   if(type==='skin'){
     _samLastError=null;samEnsureEncoded();mskAiTapToggle(true);
     log('Scribble over yourself on the photo to select you. The dog, the rocks and the background are then outside the mask entirely \u2014 the color samples below only have to tell skin from lips and hair INSIDE you.','info');
+  }
+  // \u26a0\ufe0f Coat used to fall through here with NO scribble prompt at all \u2014 Skin arms scribble mode
+  // and tells you to draw; Coat silently did neither, so clicking "+ Coat" appeared to do nothing
+  // until you separately found "Scribble to select" yourself. Now matches Skin's own behaviour.
+  if(type==='coat'){
+    _samLastError=null;samEnsureEncoded();mskAiTapToggle(true);
+    log('Scribble over the coat to select it. Once selected, an eye-brightness mask is added automatically \u2014 drag it onto the eye(s) and use the two Strength sliders below.','info');
   }
   if(type==='color'){mskCrEyedropper(true);log('Click the color you want to select — this mask has no shape, the color range IS the selection','info');}
   if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
@@ -9759,6 +9777,10 @@ async function samRunPoints(m){
     const refined=_samRefineMask(mask,header.width,header.height);
     m.px=Uint8ClampedArray.from(refined);m.mtW=header.width;m.mtH=header.height;
     _mskTexDirty=true;_samLastError=null;
+    // "+ Coat" is one button making two masks: the FIRST real segmentation of a coat mask spawns
+    // its paired eye-brightness mask right alongside it. Only once — re-scribbling to refine the
+    // coat selection later must not keep spawning new eye masks.
+    if(m.origin==='coat'&&!m._coatEyeAdded){m._coatEyeAdded=true;_mskAddCoatEyeMask(m);}
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
   }catch(e){
@@ -10543,6 +10565,19 @@ function mskDelete(){if(mskSel<0)return;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();}
 function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.invert;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+// Lightroom-style "Duplicate" / "Duplicate Inverted" from a mask's own context menu.
+// _mskCloneLive round-trips through the snapshot form so a brush/sky/AI raster (a typed array)
+// is copied, not aliased — painting on the duplicate must not paint on the original.
+function mskDuplicate(inverted){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const d=_mskCloneLive(m);
+  delete d.name; // let mskAutoLabel derive a fresh "<Origin> N" rather than duplicating the name too
+  if(inverted)d.invert=!d.invert;
+  fxState.masks.splice(mskSel+1,0,d);
+  mskSel=mskSel+1;_mskTexDirty=true;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
 // Explicit opt-in for the one case masks ARE meant to be shared across a batch: deep-clones
 // the CURRENT photo's mask set onto every other loaded photo, overwriting whatever masks they
 // had. Masks are per-photo by default (see installFXImages/fxSelectImage) specifically so this
@@ -11036,6 +11071,8 @@ function mskMoreMenu(ev){
   const html=item('Move up','undo','mskMove(-1)',false,mskSel<1)
     +item('Move down','redo','mskMove(1)',false,mskSel>=fxState.masks.length-1)
     +item('Rename…','rename','mskRename()')
+    +item('Duplicate','copy','mskDuplicate(false)')
+    +item('Duplicate inverted','compare','mskDuplicate(true)')
     // Copies the BLEND settings (Strength/Depth/Warmth/Preserve/target/one-way) from another
     // Skin or Coat mask on this SAME photo — e.g. a group shot with one Skin mask per person,
     // where person B's mask should start from person A's already-dialed-in look. Deliberately
@@ -11046,6 +11083,7 @@ function mskMoreMenu(ev){
     +item(mskSolo===mskSel?'Stop soloing':'Solo','star','mskToggleSolo()',mskSolo===mskSel)
     +item(m.isExclude?'Stop using as eraser':'Use as eraser','eraser','mskToggleExclude()',m.isExclude)
     +(mskSel>0?item(m.subtract?'Stop subtracting previous':'Subtract previous mask','scissors','mskToggleSubtract()',m.subtract):'')
+    +(mskSel>0?item(m.intersect?'Stop intersecting previous':'Intersect with previous mask','eyedropper','mskToggleIntersect()',m.intersect):'')
     +item(m.invert?'Un-invert':'Invert','compare','mskInvert()',m.invert)
     +'<div class="msk-more-sep"></div>'
     +item('Delete mask','trash','mskDelete()',false,false,true);
@@ -11080,6 +11118,149 @@ function mskSkinStrength(v){
   m.uH=v;m.uS=v;
   const lb=document.getElementById('msk-strength-val');if(lb)lb.textContent=Math.round(v);
   fxUpdate();
+}
+// ── Coat pair: "+ Coat" creates a coat mask AND, on its first successful segmentation, a second
+// eye-brightness mask alongside it — one button, two masks, two direct one-slider strengths.
+// Deliberately NOT the Skin-Tone/Uniformity convergence machinery: "deepen the coat's red" and
+// "brighten the eyes" are plain directional pushes (darker+more saturated / brighter), not a
+// contraction toward a sampled target — the simpler, more predictable move for what was asked.
+// m.exp/m.sat/m.sh are the SAME per-mask adjustment fields the ordinary Exposure/Saturation/
+// Shadows sliders already drive (see ADJ_FIELDS and the mskC/mskD packing in render()), just
+// driven by one combined "strength" instead of three separate sliders.
+function mskCoatDepth(v){
+  const m=fxState.masks[mskSel];if(!m||m.origin!=='coat')return;
+  m.coatDepth=v;
+  m.exp=-0.6*(v/100);   // up to -0.6 stops, darker
+  m.sat=0.55*(v/100);   // up to +0.55 saturation, more vivid red
+  const lb=document.getElementById('msk-coatdepth-val');if(lb)lb.textContent=Math.round(v);
+  fxUpdate();
+}
+function mskEyeBright(v){
+  const m=fxState.masks[mskSel];if(!m||m.origin!=='coatEye')return;
+  m.eyeBright=v;
+  m.exp=0.45*(v/100);   // up to +0.45 stops, unambiguously brighter
+  m.sh=0.5*(v/100);     // up to +0.5 shadow lift, opens the dark iris/fur without blowing any catchlight highlight
+  const lb=document.getElementById('msk-eyebright-val');if(lb)lb.textContent=Math.round(v);
+  fxUpdate();
+}
+// Auto-placed the FIRST time a Coat mask gets a real selection (called from samRunPoints, right
+// after m.px is installed) — never again after that, so re-scribbling the coat later doesn't
+// keep spawning new eye masks. Position is a heuristic from the coat's own bounding box (same
+// self-calibrating idea mskFaceAutoExclude's head-crop uses for a human) — there is no per-animal
+// eye detector here, so this is a STARTING POINT: an ordinary Radial mask the user drags/resizes
+// onto the actual eye(s), not a claim of automatic eye detection.
+// ── Eye detection: classical, not learned ────────────────────────────────────────────────────
+// A first version guessed the eye position as a fixed fraction of the coat mask's own bounding
+// box — measured wrong on every real photo tried (a fluffy head with the ears up, a tilted pose,
+// or eyes hidden under fur bangs all break a fixed fraction). No trained landmark model exists in
+// this app for animals (faceparse.rs is human-only, see its own doc comment) and bundling one is
+// its own project — so this is a classical detector instead: a dog's eye is a small, roughly
+// round DARK region, usually with a small bright CATCHLIGHT highlight near its centre, and real
+// eyes come as a horizontally-separated, similarly-sized, similarly-placed PAIR — which a nostril,
+// a shadow fold, or a single stray dark curl of fur is not. Scored on all three; if no confident
+// pair turns up (eyes closed, occluded, extreme angle), this DECLINES rather than guessing — same
+// philosophy as auto-horizon's own "an ambiguous answer is worse than an honest no" rule.
+//
+// Returns {cx,cy,rx,ry} in TOP-DOWN normalised fractions (0,0 = top-left) spanning both eyes, or
+// null. Caller is responsible for flipping cy into the stored bottom-up mask convention.
+function _mskDetectEyes(m){
+  if(!m||!m.px||!m.mtW||!m.mtH)return null;
+  const bbox=_mskSubjectBBox(m);if(!bbox)return null;
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img)return null;
+  const w=m.mtW,h=m.mtH;
+  const d=mskSourceData(w,h,img);if(!d)return null;
+  const bh=bbox.y1-bbox.y0;
+  // Eyes are never in the lower half of a whole-subject selection — restrict the search to a
+  // "head band" (top 45% of the selection's own bbox) so legs/paws/tail can't compete, without
+  // assuming exactly where in that band the head actually is (pose/crop vary too much). Measured
+  // on a real photo: 60% reached far enough down to include an open mouth's dark interior, which
+  // out-competed the real eyes for the "best dark pair" — 45% is the tightened, re-measured value.
+  const headY0=bbox.y0,headY1=Math.min(bbox.y1,bbox.y0+Math.round(bh*0.45));
+  const headX0=bbox.x0,headX1=bbox.x1,headW=Math.max(1,headX1-headX0);
+  if(headY1<=headY0||headX1<=headX0)return null;
+  const luma=new Float32Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x;
+    const inHead=y>=headY0&&y<=headY1&&x>=headX0&&x<=headX1&&(m.px[i]||0)>32;
+    luma[i]=inHead?(0.2126*d[i*4]+0.7152*d[i*4+1]+0.0722*d[i*4+2]):128;  // outside -> neutral, can never win
+  }
+  // Blur radius scaled to a PLAUSIBLE EYE size (a fraction of the head band's own width), not a
+  // fixed pixel count — fur strands are much finer texture than this and get smoothed away, while
+  // an eye-sized dark region survives as a genuine local peak in "darker than its surround".
+  const r=Math.max(2,Math.round(headW*0.035));
+  const localMean=_boxFilterMean(luma,w,h,r*3);
+  const darkness=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++)darkness[i]=localMean[i]-luma[i];
+  let dmax=0;
+  for(let y=headY0;y<=headY1;y++)for(let x=headX0;x<=headX1;x++){const v=darkness[y*w+x];if(v>dmax)dmax=v;}
+  if(dmax<8)return null;   // no meaningfully dark region anywhere in the head band
+  const floor=dmax*0.45;   // adaptive, not absolute — works in both flat and contrasty light
+  const cand=[];
+  const step=Math.max(1,Math.round(r*0.5));
+  for(let y=headY0+r;y<=headY1-r;y+=step)for(let x=headX0+r;x<=headX1-r;x+=step){
+    const i=y*w+x,v=darkness[i];
+    if(v<floor)continue;
+    let isMax=true;
+    for(let dy=-r;dy<=r&&isMax;dy+=r)for(let dx=-r;dx<=r&&isMax;dx+=r){
+      if(!dx&&!dy)continue;
+      const yy=y+dy,xx=x+dx;
+      if(yy<0||yy>=h||xx<0||xx>=w)continue;
+      if(darkness[yy*w+xx]>v)isMax=false;
+    }
+    if(!isMax)continue;
+    let hasCatch=false;
+    const cr=Math.max(1,Math.round(r*0.4));
+    for(let dy=-cr;dy<=cr&&!hasCatch;dy++)for(let dx=-cr;dx<=cr&&!hasCatch;dx++){
+      const yy=y+dy,xx=x+dx;if(yy<0||yy>=h||xx<0||xx>=w)continue;
+      if(luma[yy*w+xx]>210)hasCatch=true;
+    }
+    cand.push({x,y,score:v+(hasCatch?dmax*0.3:0)});
+  }
+  if(cand.length<2)return null;
+  cand.sort((a,b)=>b.score-a.score);
+  const top=cand.slice(0,12);
+  // Best symmetric pair: similarly high, roughly level, separated by a plausible inter-eye gap —
+  // all as fractions of the head band's own width, so it scales with a close-up vs a full-body
+  // shot. Bounds re-measured against a real photo (see the head-band comment above): the original
+  // dx<=0.65*headW/dy<=0.18*headW were loose enough to match a false pair once the mouth was in
+  // play. Also prefers pairs sitting HIGHER in the head band — nose/mouth/chin are always below
+  // the eyes within it, never above, so "higher" is a real, not arbitrary, tiebreaker.
+  let best=null;
+  for(let i=0;i<top.length;i++)for(let j=i+1;j<top.length;j++){
+    const a=top[i],b=top[j];
+    const dx=Math.abs(a.x-b.x),dy=Math.abs(a.y-b.y);
+    if(dx<headW*0.14||dx>headW*0.42)continue;
+    if(dy>headW*0.10)continue;
+    const avgY=(a.y+b.y)/2,yFrac=(avgY-headY0)/Math.max(1,headY1-headY0);   // 0=top of band,1=bottom
+    const symScore=a.score+b.score-dy*2-yFrac*dmax*1.5;
+    if(!best||symScore>best.symScore)best={a,b,symScore};
+  }
+  if(!best)return null;
+  const{a,b}=best;
+  const spanX=Math.abs(a.x-b.x);
+  return{
+    cx:(a.x+b.x)/2/w,cy:(a.y+b.y)/2/h,
+    rx:Math.max(0.02,(spanX/2+r*1.6)/w),
+    ry:Math.max(0.018,(r*2.2)/h),
+  };
+}
+function _mskAddCoatEyeMask(coatM){
+  if(fxState.masks.length>=MSK_MAX)return;   // silently skip — the coat mask itself still succeeded
+  const det=_mskDetectEyes(coatM);
+  if(!det){
+    log('Could not confidently find the eyes (hidden under fur, closed, or a difficult angle) — add a Radial mask by hand if you want to brighten them.','warn');
+    return;
+  }
+  // det.cy is TOP-DOWN; m.cy is stored BOTTOM-UP (see the mask-thumbnail preview's `(1-m.cy)*H`
+  // and the drag handler, both of which treat it that way) — flip once, here.
+  const em={type:'radial',origin:'coatEye',cx:det.cx,cy:1-det.cy,rx:det.rx,ry:det.ry,
+    rot:0,feather:0.35,eyeBright:35,..._mskAdjustDefaults()};
+  Object.assign(em,_mskSkinDefaults());
+  em.name='Eyes';
+  em.exp=0.45*0.35;em.sh=0.5*0.35;   // mskEyeBright's formula pre-applied at the default strength (35)
+  fxState.masks.push(em);
+  log('Added an eye-brightness mask over the detected eyes — nudge it if it is slightly off.','info');
 }
 // Each preset is just a set of the existing values — no new machinery, and every one of them can
 // be taken apart in Advanced afterwards.
@@ -11703,6 +11884,7 @@ function mskRebuild(){
     +(mskSolo===mskSel?'<span class="msk-tag on">Solo</span>':'')
     +(m.isExclude?'<span class="msk-tag">Eraser</span>':'')
     +(m.subtract?'<span class="msk-tag">Subtracting</span>':'')
+    +(m.intersect?'<span class="msk-tag">Intersecting</span>':'')
     +(m.invert?'<span class="msk-tag">Inverted</span>':'')
     +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'');
@@ -11791,6 +11973,27 @@ function mskRebuild(){
   selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
     +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
   h+=_mskGroup('selection','Selection',selBody);
+
+  // ── "+ Coat"'s two direct one-slider controls ─────────────────────────────────────────────
+  // Plain directional pushes (see mskCoatDepth/mskEyeBright's own doc comment), not the
+  // convergence-toward-a-target Uniformity flow below — this is the obvious, first thing shown
+  // on either half of the pair, not something buried under "Advanced".
+  if(caps.coatDepth){
+    const cd=m.coatDepth!=null?m.coatDepth:35;
+    h+=_mskGroup('coatdepth','Red depth',
+      '<div class="fx-row" title="Darkens and saturates the selected coat — the classic \'deep, rich colour\' move (lower exposure, higher saturation), scaled by one strength."><div class="fx-label">Strength</div>'
+      +'<input class="fx-slider" type="range" min="0" max="100" value="'+cd+'" oninput="mskCoatDepth(parseFloat(this.value))">'
+      +'<div class="fx-val" id="msk-coatdepth-val">'+Math.round(cd)+'</div></div>'
+      +'<div class="msk-hint">Exposure and Saturation above (in Selection) move together with this — drag them individually afterward if you want to break from the single slider.</div>');
+  }
+  if(caps.eyeBright){
+    const eb=m.eyeBright!=null?m.eyeBright:35;
+    h+=_mskGroup('eyebright','Eye brightness',
+      '<div class="fx-row" title="Brightens and opens shadow detail inside this mask — drag the ellipse on the photo onto the eye(s) first, this only controls how strong the brightening is."><div class="fx-label">Strength</div>'
+      +'<input class="fx-slider" type="range" min="0" max="100" value="'+eb+'" oninput="mskEyeBright(parseFloat(this.value))">'
+      +'<div class="fx-val" id="msk-eyebright-val">'+Math.round(eb)+'</div></div>'
+      +'<div class="msk-hint">Auto-placed as a starting guess near the top of the coat selection — it is an ordinary Radial mask, so drag/resize it directly on the photo to land on the eye(s).</div>');
+  }
 
   // ── UNIFORMITY on an ordinary Color-Range mask ────────────────────────────────────────────
   // skinUniformity() in the shader was never actually type-gated — uH/uS/uL/preserve default to
@@ -11966,7 +12169,12 @@ function mskRebuild(){
   ctl.innerHTML=h;
   mskOverlaySync();
 }
-function mskToggleSubtract(){const m=fxState.masks[mskSel];if(!m||mskSel<1)return;m.subtract=!m.subtract;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+function mskToggleSubtract(){const m=fxState.masks[mskSel];if(!m||mskSel<1)return;m.subtract=!m.subtract;if(m.subtract)m.intersect=false;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+// Lightroom-style "Intersect Mask With" — this mask's shape ANDed with the one just before it
+// (min, not subtract), so only their overlap survives. Reuses the same single reach-back-one-
+// slot mechanism as "subtract prev" (mskE[i].x), just a different value (2 vs 1) read in the
+// shader — see mskShapeWeight's caller in the lut pass.
+function mskToggleIntersect(){const m=fxState.masks[mskSel];if(!m||mskSel<1)return;m.intersect=!m.intersect;if(m.intersect)m.subtract=false;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
 // ── Mask list management: order, name, mute ──────────────────────────────────────────────────
 // Order is not cosmetic — "− Subtract prev" reads the mask immediately before this one, so a
 // wrongly-ordered pair previously had to be deleted and rebuilt. Moving a mask carries the
@@ -12019,6 +12227,7 @@ function mskToggleExclude(){
   const m=fxState.masks[mskSel];if(!m)return;
   m.isExclude=!m.isExclude;
   if(m.isExclude&&m.subtract)m.subtract=false;   // the two mechanisms would fight; exclude wins
+  if(m.isExclude&&m.intersect)m.intersect=false;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
 }
@@ -17844,7 +18053,8 @@ function fxDesktopFoldImageIntoLooks(){
   const movable=document.getElementById('fx-image-movable');
   const looksCard=document.querySelector('.fx-ctrl[data-fxsec="looks"]');
   if(!movable||!looksCard)return;
-  looksCard.insertBefore(movable,looksCard.firstChild.nextSibling); // right after the title
+  const title=looksCard.querySelector('.fx-ctrl-title');
+  looksCard.insertBefore(movable,title?title.nextSibling:looksCard.firstChild); // right after the title
 }
 // ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
 let _mqMobile=window.matchMedia('(max-width:700px)');

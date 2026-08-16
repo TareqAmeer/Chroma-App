@@ -1154,6 +1154,13 @@
     if (!path) return;
     const gridEl = document.getElementById('lib-grid');
     if (!gridEl) return;
+    if (state._virtOn) {
+      // A caller may have toggled expanded/docked view (different column count) just before
+      // this runs, without an intervening renderGrid() — refresh so row/scrollTop math below
+      // isn't computed against stale geometry from the old layout.
+      const fresh = virtMetrics(gridEl);
+      if (fresh) { state._virtMetrics = fresh; state._virtRange = null; }
+    }
     if (state._virtOn && state._virtMetrics) {
       const idx = (state._virtAll || []).findIndex((e) => e.path === path);
       if (idx < 0) return;
