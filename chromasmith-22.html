@@ -1168,12 +1168,19 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <!-- tap OR drag-down to close — both handled by the pointer logic (no onclick: a
            click also fires after a spring-back drag and would wrongly close the sheet) -->
       <div id="fx-sheet-handle" title="Close"><div class="fx-sheet-bar"></div></div>
+      <!-- Image Input: on the desktop (Tauri) app this whole card is folded into the Looks card
+           at boot by fxDesktopFoldImageIntoLooks() below, because photos are loaded from the
+           native Library there, not by dragging onto this panel — a dedicated tab for it stood
+           out as dead weight. Left as its own tab on web/mobile, where drag/drop IS how a photo
+           gets in. The wrapper div (id="fx-image-movable") is what gets relocated; #dz-fx-img
+           itself (and its file input, used by fxPickPhotos/"+") always stays put right here. -->
       <div class="fx-ctrl" data-fxsec="image">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
           <input type="file" id="in-fx-img" accept="image/*,.tif,.tiff,.rw2,.raw" multiple onchange="fi(event,'fx-img')">
           <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
+        <div id="fx-image-movable">
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
           <select class="fx-select" id="sel-dcp" onchange="setRawProfile(this.value)"></select>
         </div>
@@ -1202,6 +1209,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" onclick="downloadLutChart()" title="Replicate any Lightroom preset: download this chart, apply the preset to it in Lightroom, export (sRGB, full size), drop the export on the LUT zone above">LUT chart</button>
           <button class="btn bgh" id="btn-lut-dl" disabled onclick="if(lastUploadedLUT)dl(writeCube(lastUploadedLUT.lut,lastUploadedLUT.name),lastUploadedLUT.name+'.cube')">Download .cube</button>
+        </div>
         </div>
       </div>
       <!-- LOOKS GALLERY + PRESET -->
@@ -4057,7 +4065,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16d';
+const BUILD='2026-08-16e';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -9815,12 +9823,14 @@ function subjPanelHtml(m){
     // Whichever reference has a thumbnail first — usually the first-taught one, but a subject
     // taught before this feature existed (or on another machine) may have none, and that's fine.
     const thumb=(s.refs||[]).map(r=>_subjThumbGet(s.id,r.id)).find(Boolean);
+    const findStatsHint=_subjFindStatsHint(s.id);
     return '<div class="fx-row" style="align-items:center;gap:6px">'
       +(thumb?'<img src="'+thumb+'" style="order:0;width:28px;height:28px;border-radius:5px;object-fit:cover;flex:0 0 auto" alt="">':'')
       +'<div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'
         +_esc(s.name)+' — taught from '+n+' photo'+(n===1?'':'s')+' using '+_esc(s.encoder||'an unknown encoder')+'">'+_esc(s.name)
       +'<span style="color:var(--mut);font-variant-numeric:tabular-nums"> · '+n+'</span>'
       +(mismatch?' <span style="color:var(--warn,#c90)" title="Taught with '+_esc(s.encoder)+', this session currently has '+_esc(curEnc)+' ready — Find will fail until you re-teach or the matching encoder loads.">⚠</span>':'')
+      +findStatsHint
       +'</div>'
       +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFind('+i+')" title="Find '+_esc(s.name)+' in this photo and select it. Always check the result — this suggests, it does not guarantee.">'+icon('wand',12)+' Find</button>'
       +'<button class="btn bgh" style="order:3;padding:3px 6px" onclick="subjFindInstances('+i+')" title="More than one '+_esc(s.name)+' in this photo? Look for several distinct locations, each installed as its own mask.">'+(_subjMultiBusy?'…':'×?')+'</button>'
@@ -9836,11 +9846,22 @@ function subjPanelHtml(m){
   const readiness=_sam2Encoding
     ?'<div style="font-size:var(--fs-1);color:var(--acc);font-family:var(--sans);margin-top:3px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">◠</span> Preparing the higher-accuracy model — teaching now will use the faster, less accurate one. Worth waiting a few seconds.</div>'
     :(curEnc==='edgesam-1024'?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Using the faster EdgeSAM model (lower accuracy). The higher-accuracy model did not become available for this photo.</div>':'');
+  const pendingHtml=m._subjPending
+    ?'<div class="fx-row" style="align-items:center;gap:6px;background:var(--sur2);border-radius:6px;padding:4px 6px"><div class="fx-label" style="order:1">Was that '+_esc(m._subjPending.subjName)+'?</div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFindConfirm(true)">'+icon('flagGreen',12)+' Yes</button>'
+      +'<button class="btn bgh" style="order:3;padding:3px 8px" onclick="subjFindConfirm(false)">'+icon('flagRed',12)+' No</button></div>'
+    :'';
   return '<div class="fx-sub" style="margin-top:8px">Subjects</div>'
+    +pendingHtml
     +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">Select something, then <b>Remember</b> it to find the same subject in other photos.</div>')
     +(hasSel?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="subjTeach(-1)" title="Name this selection so you can find the same subject in other photos. Measured reliability (~77-80% recall on one dog across varied conditions) is a general guide, not a per-species guarantee — a person, a different animal, or a busier scene may do better or worse.">'+icon('star',14)+(_subjBusy?' Working…':' Remember this subject')+'</button></div>':'')
     +((_subjects||[]).some(s=>(s.refs||[]).length<3)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Three or more reference photos works noticeably better than one — add a few taken in different places.</div>':'')
     +readiness
+    +(_subjLowConfPending?'<div class="fx-row" style="align-items:center;gap:6px;background:var(--sur2);border-radius:6px;padding:4px 6px"><div class="fx-label" style="order:1">'+_esc(_subjLowConfPending.s.name)+' matched at only '+_subjLowConfPending.header.score.toFixed(3)+'</div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjApplyLowConf()">Use it anyway</button></div>':'')
+    +('<div class="fx-row" style="align-items:center;gap:6px" title="Apple Photos-style: suppress a Find result below this raw similarity instead of always applying it. Off by default — score cannot reliably tell a hit from a miss (subject.rs measures both around 0.70-0.79), so treat this as a personal tolerance, not a real confidence cutoff."><div class="fx-label" style="order:1">Minimum similarity</div>'
+      +'<input class="fx-slider" style="order:2" type="range" min="0" max="0.95" step="0.01" value="'+_subjMinScore+'" oninput="this.nextElementSibling.textContent=(+this.value).toFixed(2)" onchange="subjSetMinScore(this.value)">'
+      +'<div class="fx-val" style="order:3">'+_subjMinScore.toFixed(2)+'</div></div>')
     +subjMultiResultsHtml()
     +subjScanResultsHtml()
     +('<div class="btn-row" style="margin-top:6px">'
@@ -9862,6 +9883,22 @@ function _esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 function _subjThumbKey(subjId,refId){return 'cs.subjThumb.'+subjId+'.'+refId;}
 function _subjThumbGet(subjId,refId){try{return localStorage.getItem(_subjThumbKey(subjId,refId));}catch(e){return null;}}
 function _subjThumbRemove(subjId,refId){try{localStorage.removeItem(_subjThumbKey(subjId,refId));}catch(e){}}
+// Open-set animal re-ID research (background-bias bracketing: bounding-box embedding vs SAM-
+// silhouette embedding) measures that background pixels leaking into a learned embedding
+// measurably inflates apparent match confidence without it reflecting the real subject. subject.rs
+// already weights `learn()` by the mask's own per-pixel coverage (not just a bounding box), so
+// Chromasmith is on the better side of that finding by construction — but a LOOSE scribble (a
+// tight subject inside a much bigger box) still means more of what got fed in was background than
+// intended. Cheap proxy, computed from data already on hand at teach time: painted-pixel density
+// within the selection's own bounding box.
+function _subjSelectionDensity(m){
+  if(!m||!m.px||!m.mtW||!m.mtH)return null;
+  const bbox=_mskSubjectBBox(m);if(!bbox)return null;
+  const area=(bbox.x1-bbox.x0+1)*(bbox.y1-bbox.y0+1);if(area<=0)return null;
+  let painted=0;
+  for(let y=bbox.y0;y<=bbox.y1;y++)for(let x=bbox.x0;x<=bbox.x1;x++)if(m.px[y*m.mtW+x]>32)painted++;
+  return painted/area;
+}
 function _subjSaveThumb(subjId,refId,m){
   try{
     const cv=FX&&FX.cv;if(!cv||!cv.width||!m||!m.px||!m.mtW||!m.mtH)return;
@@ -9911,6 +9948,10 @@ async function subjTeach(idx){
     // which subjMenu already supports, before it has a chance to drag the merged prototype down.
     const notes=_subjRefOutlierNotes(s);
     const justAddedIdx=(s.refs||[]).findIndex(r=>r.id===refId);
+    const density=_subjSelectionDensity(m);
+    if(density!=null&&density<0.35){
+      log(`Loose selection (${Math.round(density*100)}% of its own box is actually painted) — more of what got learned may be background than intended. A tighter scribble usually helps.`,'warn');
+    }
     if(justAddedIdx>=0&&notes[justAddedIdx]){
       toast(`${s.name}: this reference${notes[justAddedIdx]} — consider removing it (⋯ menu) if Find gets worse`,true);
     }else{
@@ -9921,6 +9962,46 @@ async function subjTeach(idx){
     log(msg,'err');toast(msg);
   }finally{_subjBusy=false;mskRebuild();}
 }
+// Apple Photos suppresses low-confidence face groupings rather than always surfacing them (the
+// opposite philosophy from Google's "always suggest, let the user correct" — which is what
+// subjFind already does by default). Score can't separate a hit from a miss in any absolute sense
+// (subject.rs: both measure 0.70-0.79), so this is deliberately opt-in and framed as a personal
+// tolerance knob, not a real confidence cutoff — default 0 (off) preserves today's behaviour.
+let _subjMinScore=0;
+try{_subjMinScore=parseFloat(localStorage.getItem('cs.subjMinScore')||'0')||0;}catch(e){}
+function subjSetMinScore(v){_subjMinScore=parseFloat(v)||0;try{localStorage.setItem('cs.subjMinScore',String(_subjMinScore));}catch(e){}mskRebuild();}
+let _subjLowConfPending=null;
+/// Installs a subject_locate result as the given mask's raster — shared by subjFind's normal path
+/// and subjApplyLowConf's "use it anyway" path, so the two can't drift on what "applying a Find"
+/// actually does.
+function _subjInstallFindResult(m,s,header,mask){
+  m.px=Uint8ClampedArray.from(_samRefineMask(mask,header.width,header.height));
+  m.mtW=header.width;m.mtH=header.height;
+  // The scribble points that produced any PREVIOUS selection no longer describe this raster —
+  // leaving them would make the next stroke resubmit a contradictory point set and appear to
+  // undo the find.
+  m.aiPoints=[];
+  _mskTexDirty=true;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+  // No confidence THRESHOLD is applied by default, and the score is deliberately not shown as one
+  // in the toast: hits and misses both measure 0.70-0.79 (subject.rs), so a number there would
+  // imply a certainty that does not exist. The raw score still goes to the diagnostics log, the
+  // same surface _samLastError already uses — a power user comparing two Finds can see it moved,
+  // without the UI presenting it as a confidence meter.
+  log(`Find ${s.name}: raw similarity ${(+header.score).toFixed(3)} (not a confidence — hits and misses both fall in 0.70-0.79)`,'info');
+  toast(`Found ${s.name} — check the selection`,true);
+  // Google Photos' "same person?" model — present the suggestion, let the user correct it, and
+  // USE the correction — rather than a one-way toast with no feedback path. Cleared on the next
+  // Find/scribble on this mask (it describes THIS specific result, not the mask in general).
+  m._subjPending={subjId:s.id,subjName:s.name};
+}
+function subjApplyLowConf(){
+  const p=_subjLowConfPending;if(!p)return;
+  const m=fxState.masks[mskSel];if(!m)return;
+  _subjInstallFindResult(m,p.s,p.header,p.mask);
+  _subjLowConfPending=null;
+}
 /// Locates a taught subject in the CURRENT photo and installs the result as this mask's raster.
 /// Always a suggestion: the mask lands on screen for the user to look at, and Undo reverts it.
 async function subjFind(idx){
@@ -9929,7 +10010,7 @@ async function subjFind(idx){
   await samEnsureEncoded();
   const token=subjToken();
   if(!token){toast('This photo is not prepared yet — try again in a moment');return;}
-  _subjBusy=true;mskRebuild();
+  _subjBusy=true;_subjLowConfPending=null;mskRebuild();
   try{
     const buf=await window.__TAURI__.core.invoke('subject_locate',{token,id:s.id});
     const dv=new DataView(buf);
@@ -9937,22 +10018,16 @@ async function subjFind(idx){
     const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
     const mask=new Uint8Array(buf,4+hlen);
     if(mask.length!==header.width*header.height){toast('Find: mask size mismatch');return;}
-    m.px=Uint8ClampedArray.from(_samRefineMask(mask,header.width,header.height));
-    m.mtW=header.width;m.mtH=header.height;
-    // The scribble points that produced any PREVIOUS selection no longer describe this raster —
-    // leaving them would make the next stroke resubmit a contradictory point set and appear to
-    // undo the find.
-    m.aiPoints=[];
-    _mskTexDirty=true;
-    if(typeof hapt==='function')hapt();
-    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
-    // No confidence THRESHOLD is applied, and the score is deliberately not shown as one in the
-    // toast: hits and misses both measure 0.70-0.79 (subject.rs), so a number there would imply a
-    // certainty that does not exist. The raw score still goes to the diagnostics log, the same
-    // surface _samLastError already uses — a power user comparing two Finds can see it moved,
-    // without the UI presenting it as a confidence meter.
-    log(`Find ${s.name}: raw similarity ${(+header.score).toFixed(3)} (not a confidence — hits and misses both fall in 0.70-0.79)`,'info');
-    toast(`Found ${s.name} — check the selection`,true);
+    if(_subjMinScore>0&&header.score<_subjMinScore){
+      // Below the user's own tolerance: don't install it, but don't throw the work away either —
+      // "Use it anyway" applies the exact same result a moment later with no need to re-run Find.
+      _subjLowConfPending={idx,s,header,mask};
+      log(`Find ${s.name}: below your minimum similarity (${header.score.toFixed(3)} < ${_subjMinScore.toFixed(2)}) — not applied.`,'warn');
+      toast(`${s.name}: match too weak by your setting — not applied`,false);
+      mskRebuild();
+      return;
+    }
+    _subjInstallFindResult(m,s,header,mask);
   }catch(e){
     const raw=String(e&&e.message||e);
     const msg=/encoder-mismatch/.test(raw)
@@ -10102,14 +10177,36 @@ async function subjUseInstance(hitIdx){
   m.aiPoints=[{nx:hit.x,ny:hit.y,positive:true}];
   mskSel=fxState.masks.length-1;
   await samRunPoints(m);
-  _subjMultiResults=null;
+  // Used to clear _subjMultiResults here, which meant the SECOND candidate could never be added
+  // without re-running the whole scan — self-defeating for a feature whose entire point is "there
+  // are several of these, handle each". The list is only cleared on an actual photo switch now
+  // (fxSelectImage), which is when it would genuinely go stale.
+  mskRebuild();
   toast(`${r.name} — added as a new mask`,true);
+}
+// Companion to subjUseInstance: adds the SAME candidate as an eraser mask instead of a plain one.
+// isExclude subtracts from every other non-eraser mask (mskMoreMenu's "Use as eraser" already does
+// this by hand for any existing mask) — building "every instance except this one" used to mean
+// Add-as-new-mask then a separate trip to that mask's own ⋯ menu; one click here does both.
+async function subjExcludeInstance(hitIdx){
+  const r=_subjMultiResults;if(!r||!r.hits[hitIdx])return;
+  const hit=r.hits[hitIdx];
+  mskAdd('ai');
+  const m=fxState.masks[fxState.masks.length-1];
+  if(!m)return;
+  m.isExclude=true;m.name=r.name+' (excluded)';
+  m.aiPoints=[{nx:hit.x,ny:hit.y,positive:true}];
+  mskSel=fxState.masks.length-1;
+  await samRunPoints(m);
+  mskRebuild();
+  toast(`${r.name} — added as an eraser (excluded from other masks)`,true);
 }
 function subjMultiResultsHtml(){
   const r=_subjMultiResults;if(!r)return '';
   const rows=r.hits.map((h,i)=>
-    '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label">Candidate '+(i+1)+'</div>'
-    +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjUseInstance('+i+')">Add as new mask</button></div>').join('');
+    '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label" style="order:1">Candidate '+(i+1)+'</div>'
+    +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjUseInstance('+i+')">Add as new mask</button>'
+    +'<button class="btn bgh" style="order:3;padding:3px 8px" onclick="subjExcludeInstance('+i+')" title="Add this one as an eraser instead — subtracted from every other mask, for building \'every instance except this one\'.">Exclude instead</button></div>').join('');
   const sepRow='<div class="fx-row" style="align-items:center;gap:6px" title="How far apart two candidates must be to count as separate instances rather than the same subject\'s own neighbouring cells. Tighten for a litter of small, closely-packed subjects; loosen for two large ones."><div class="fx-label" style="order:1">Separation</div>'
     +'<div class="seg" style="order:2">'+['close','normal','far'].map(k=>'<button class="'+(_subjSep===k?'on':'')+'" onclick="subjSetSep(\''+k+'\')">'+k[0].toUpperCase()+k.slice(1)+'</button>').join('')+'</div></div>';
   const maxRow='<div class="fx-row" style="align-items:center;gap:6px" title="Most instances to look for."><div class="fx-label" style="order:1">Max instances</div>'
@@ -10215,6 +10312,8 @@ async function subjReplaceRef(idx,refId){
     _subjThumbRemove(s.id,refId);_subjSaveThumb(s.id,refId,m);
     await _samFramedInvoke('subject_learn',{id:s.id,name:s.name,token,refId,refLabel},raster);
     await subjRefresh();mskRebuild();
+    const density=_subjSelectionDensity(m);
+    if(density!=null&&density<0.35)log(`Loose selection (${Math.round(density*100)}% of its own box is actually painted) for this replacement — a tighter scribble usually helps.`,'warn');
     toast(`Replaced reference for ${s.name}`,true);
   }catch(e){toast('Could not replace — '+(e&&e.message||e));}
   finally{_subjBusy=false;mskRebuild();}
@@ -10270,50 +10369,68 @@ function _mskSubjectBBox(m){
   if(x1<x0||y1<y0)return null;
   return{x0,y0,x1,y1};
 }
+// Shared by mskFaceAutoExclude (union of all 4 groups, into an eraser) and mskFaceSelectFeature
+// (ONE group, as a new plain selection) — both need the identical head-crop-and-run plumbing,
+// only what they DO with the 4 returned layers differs.
+async function _faceparseRunLayers(m){
+  const bbox=_mskSubjectBBox(m);
+  if(!bbox)throw new Error('No selection yet — scribble over the subject first');
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img)throw new Error('no photo loaded');
+  const{w:mtW,h:mtH}=mskTexDims();
+  // Head crop: a square anchored at the TOP of the subject's own bounding box, sized as a
+  // fraction of the subject's height (self-calibrating regardless of how tightly the person
+  // fills the frame) rather than guessing an absolute size.
+  const bboxH=bbox.y1-bbox.y0,bboxCX=(bbox.x0+bbox.x1)/2;
+  const cropSize=Math.max(40,Math.min(mtH,Math.round(bboxH*0.34)));
+  const cropX0=Math.max(0,Math.min(mtW-cropSize,Math.round(bboxCX-cropSize/2)));
+  const cropY0=Math.max(0,Math.min(mtH-cropSize,bbox.y0));
+  const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
+  const cv=document.createElement('canvas');cv.width=cropSize;cv.height=cropSize;
+  const cx=cv.getContext('2d');
+  cx.drawImage(img,cropX0/mtW*sw,cropY0/mtH*sh,cropSize/mtW*sw,cropSize/mtH*sh,0,0,cropSize,cropSize);
+  const d=cx.getImageData(0,0,cropSize,cropSize).data;
+  const rgb=new Uint8Array(cropSize*cropSize*3);
+  for(let i=0,j=0;i<cropSize*cropSize;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+  const buf=await _samFramedInvoke('faceparse_run',{width:cropSize,height:cropSize},rgb);
+  const dv=new DataView(buf);
+  const hlen=dv.getUint32(0,true);
+  const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+  const groupLen=header.width*header.height;
+  const body=new Uint8Array(buf,4+hlen);
+  if(header.width!==cropSize||header.height!==cropSize||body.length!==groupLen*4){
+    throw new Error('face-parse: unexpected response size');
+  }
+  // Fixed order — see faceparse_run in main.rs / FaceMasks in faceparse.rs.
+  const layers=[0,1,2,3].map(g=>body.subarray(g*groupLen,(g+1)*groupLen));
+  return{mtW,mtH,cropX0,cropY0,cropSize,layers};
+}
+/// Places one or more of the 4 face-parse layers (union, max not sum) into a full mtW*mtH raster.
+function _facePlace(r,groupIdxs){
+  const{mtW,mtH,cropX0,cropY0,cropSize,layers}=r;
+  const out=new Uint8ClampedArray(mtW*mtH);
+  for(const g of groupIdxs){
+    const layer=layers[g];
+    for(let y=0;y<cropSize;y++)for(let x=0;x<cropSize;x++){
+      const idx=(cropY0+y)*mtW+(cropX0+x),v=layer[y*cropSize+x];
+      if(v>out[idx])out[idx]=v;
+    }
+  }
+  return out;
+}
 async function mskFaceAutoExclude(){
   if(!window.__TAURI__){log('Face-feature exclusion needs the desktop app (on-device model)','warn');return;}
   const m=fxState.masks[mskSel];
   if(!m||m.origin!=='skin'){log('Select a Skin mask first','warn');return;}
   if(!mskIsAI(m)||!m.px||!m.px.length){log('Scribble to select yourself first — the face crop is derived from that selection','warn');return;}
   if(_faceparseRunning)return;
-  const bbox=_mskSubjectBBox(m);
-  if(!bbox){log('No selection yet — scribble over yourself first','warn');return;}
   _faceparseRunning=true;
   if(typeof toast==='function')toast('Finding face features…',true);
   try{
-    const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
-    if(!img)throw new Error('no photo loaded');
-    const{w:mtW,h:mtH}=mskTexDims();
-    // Head crop: a square anchored at the TOP of the subject's own bounding box, sized as a
-    // fraction of the subject's height (self-calibrating regardless of how tightly the person
-    // fills the frame) rather than guessing an absolute size.
-    const bboxH=bbox.y1-bbox.y0,bboxCX=(bbox.x0+bbox.x1)/2;
-    const cropSize=Math.max(40,Math.min(mtH,Math.round(bboxH*0.34)));
-    const cropX0=Math.max(0,Math.min(mtW-cropSize,Math.round(bboxCX-cropSize/2)));
-    const cropY0=Math.max(0,Math.min(mtH-cropSize,bbox.y0));
-    const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
-    const cv=document.createElement('canvas');cv.width=cropSize;cv.height=cropSize;
-    const cx=cv.getContext('2d');
-    cx.drawImage(img,cropX0/mtW*sw,cropY0/mtH*sh,cropSize/mtW*sw,cropSize/mtH*sh,0,0,cropSize,cropSize);
-    const d=cx.getImageData(0,0,cropSize,cropSize).data;
-    const rgb=new Uint8Array(cropSize*cropSize*3);
-    for(let i=0,j=0;i<cropSize*cropSize;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-
-    const buf=await _samFramedInvoke('faceparse_run',{width:cropSize,height:cropSize},rgb);
-    const dv=new DataView(buf);
-    const hlen=dv.getUint32(0,true);
-    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-    const groupLen=header.width*header.height;
-    const body=new Uint8Array(buf,4+hlen);
-    if(header.width!==cropSize||header.height!==cropSize||body.length!==groupLen*4){
-      throw new Error('face-parse: unexpected response size');
-    }
-    // Body is eyes_brows, glasses, lips, hair (fixed order — see faceparse_run in main.rs).
+    const r=await _faceparseRunLayers(m);
     // Union (max), not sum: these are independent features and we want "any of them", not a
     // brighter alpha where two happen to overlap.
-    const combined=new Uint8Array(groupLen);
-    for(let g=0;g<4;g++){const off=g*groupLen;for(let i=0;i<groupLen;i++){const v=body[off+i];if(v>combined[i])combined[i]=v;}}
-
+    const combined=_facePlace(r,[0,1,2,3]);
     // Reuse the mask if we already made one (re-running after moving/resizing the subject
     // scribble should refine in place, not pile up new masks against the 4-mask cap), else create
     // a fresh eraser. A full mtW*mtH buffer is always reallocated at the CURRENT resolution rather
@@ -10327,10 +10444,7 @@ async function mskFaceAutoExclude(){
       fm.isExclude=true;fm.name='Face features';
       fxState.masks.push(fm);
     }
-    fm.mtW=mtW;fm.mtH=mtH;fm.px=new Uint8ClampedArray(mtW*mtH);
-    for(let y=0;y<cropSize;y++)for(let x=0;x<cropSize;x++){
-      fm.px[(cropY0+y)*mtW+(cropX0+x)]=combined[y*cropSize+x];
-    }
+    fm.mtW=r.mtW;fm.mtH=r.mtH;fm.px=combined;
     _mskTexDirty=true;
     mskSel=fxState.masks.indexOf(fm);
     if(typeof hapt==='function')hapt();
@@ -10344,10 +10458,80 @@ async function mskFaceAutoExclude(){
     _faceparseRunning=false;
   }
 }
+// Lightroom's People mask lets you select individual features (facial skin, lips, eyes, hair…) as
+// their OWN target, not just exclude them. faceparse.rs only classifies 4 groups (eyes_brows,
+// glasses, lips, hair — see that file's doc comment for why no finer classes like teeth/sclera
+// exist here), so that's what's offered — a plain new AI-origin mask, not tied to Skin/Coat, so
+// it picks up the generalised Uniformity block (above) or any other adjustment on its own.
+const FACE_FEATURES=[{i:0,label:'Eyes & brows'},{i:1,label:'Glasses'},{i:2,label:'Lips'},{i:3,label:'Hair'}];
+async function mskFaceSelectFeature(groupIdx){
+  if(!window.__TAURI__){log('Face-feature selection needs the desktop app (on-device model)','warn');return;}
+  const src=fxState.masks[mskSel];
+  if(!src||!mskIsAI(src)||!src.px||!src.px.length){log('Scribble to select the subject first — the face crop is derived from that selection','warn');return;}
+  if(_faceparseRunning)return;
+  if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+  _faceparseRunning=true;
+  const feat=FACE_FEATURES.find(f=>f.i===groupIdx);
+  if(typeof toast==='function')toast('Finding '+(feat?feat.label.toLowerCase():'feature')+'…',true);
+  try{
+    const r=await _faceparseRunLayers(src);
+    const px=_facePlace(r,[groupIdx]);
+    let has=false;for(let i=0;i<px.length;i++)if(px[i]>32){has=true;break;}
+    if(!has){log((feat?feat.label:'That feature')+' was not found in this selection (occluded, or not facing the camera?)','warn');toast('Not found — try a clearer view',false);return;}
+    const nm={type:'brush',origin:'ai',ai:true,px,mtW:r.mtW,mtH:r.mtH,aiPoints:[],name:feat?feat.label:'Face feature',..._mskAdjustDefaults()};
+    Object.assign(nm,_mskSkinDefaults());
+    fxState.masks.push(nm);mskSel=fxState.masks.length-1;
+    _mskTexDirty=true;
+    if(typeof hapt==='function')hapt();
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    toast((feat?feat.label:'Feature')+' selected — added as a new mask',true);
+  }catch(e){
+    const msg='Face-feature selection failed — '+(e&&e.message||e);
+    log(msg,'err');if(typeof toast==='function')toast(msg);
+  }finally{
+    _faceparseRunning=false;mskRebuild();
+  }
+}
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
   m.aiPoints=[];const{w,h}=samInputDims();m.px=new Uint8ClampedArray(w*h);m.mtW=w;m.mtH=h;
+  delete m._subjPending;   // a fresh scribble replaces whatever Find result was pending confirmation
   _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+}
+// ── Confirm/reject a Find result ──────────────────────────────────────────────────────────────
+// subject_locate has no presence signal (subject.rs) and the score can't distinguish a hit from a
+// miss (both measure 0.70-0.79) — so unlike the outlier-reference heuristic (which has real vector
+// data to work with), this can only ever be a per-SUBJECT tally, not "which reference is at
+// fault": a Find queries the merged prototype, not one reference. Still a real, cheap signal that
+// nothing else here provides — repeated user-marked misses on one subject means something about
+// its references (collectively) isn't working, worth surfacing even without pinpointing which one.
+function _subjFindStatsKey(subjId){return 'cs.subjFindStats.'+subjId;}
+function _subjFindStatsGet(subjId){
+  try{const v=JSON.parse(localStorage.getItem(_subjFindStatsKey(subjId))||'null');return(v&&Array.isArray(v.ok))?v:{ok:[]};}
+  catch(e){return{ok:[]};}
+}
+function _subjFindStatsRecord(subjId,wasOk){
+  const s=_subjFindStatsGet(subjId);
+  s.ok.push(!!wasOk);
+  if(s.ok.length>10)s.ok=s.ok.slice(-10);   // rolling window — old feedback about old references shouldn't haunt a subject forever
+  try{localStorage.setItem(_subjFindStatsKey(subjId),JSON.stringify(s));}catch(e){}
+  return s;
+}
+function subjFindConfirm(wasOk){
+  const m=fxState.masks[mskSel];
+  if(!m||!m._subjPending)return;
+  const{subjId,subjName}=m._subjPending;
+  _subjFindStatsRecord(subjId,wasOk);
+  delete m._subjPending;
+  if(!wasOk)toast(`Noted — check ${subjName}'s references (⋯ menu) if this keeps happening`,true);
+  mskRebuild();
+}
+function _subjFindStatsHint(subjId){
+  const s=_subjFindStatsGet(subjId);
+  if(s.ok.length<3)return '';
+  const wrong=s.ok.filter(v=>!v).length;
+  if(wrong/s.ok.length<0.4)return '';
+  return ' <span style="color:var(--warn,#c90)" title="'+wrong+' of your last '+s.ok.length+' Finds for this subject were marked wrong — its references may need attention.">⚠ '+wrong+'/'+s.ok.length+' recent misses</span>';
 }
 function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
@@ -10813,9 +10997,15 @@ function mskAddMenu(ev){
   const item=(label,ic,type)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());mskAdd(\''+type+'\')">'
     +icon(ic,15)+'<span>'+label+'</span></button>';
   const hd=(label)=>'<div class="msk-more-hd">'+label+'</div>';
-  // Same condition the CSS rule these used to be gated by used (body.deskx), preserved exactly —
-  // see the panel markup's own comment on why that rule is gone rather than just unused.
-  const desktop=document.body.classList.contains('deskx');
+  // ⚠️ Was gated on `body.deskx` — a LAYOUT class toggled purely by window WIDTH (a media query,
+  // see the listener a few hundred lines up), unrelated to whether the on-device SAM/faceparse
+  // models this section actually needs are even available. The desktop app just gained window-
+  // state persistence (it can now launch at whatever size the user last left it), so a Tauri
+  // window narrower than the deskx breakpoint made Skin/Coat/AI Select silently disappear from
+  // + Mask entirely — reported as "no Coat/dog button under masks" even though the feature was
+  // wired correctly. Every OTHER AI-mask entry point (subjPanelHtml, mskFaceAutoExclude, etc.)
+  // already gates on window.__TAURI__ — the actual "can this run" check — so this now matches.
+  const desktop=!!window.__TAURI__;
   const html=hd('Shape')
     +item('Radial','local','radial')+item('Linear','linearGrad','linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
@@ -11410,6 +11600,19 @@ function mskUseSkinRef(){
   const m=fxState.masks[mskSel];if(!m)return;
   const hex=skinRefGet();
   if(!hex){toast('No reference skin saved yet — set one on a photo you like');return;}
+  // A flat saved hex is a single POINT target — real colour-transfer research (Reinhard-style
+  // methods) matches mean AND spread precisely because a lighting gap between the reference photo
+  // and this one means a single point is a worse fit than it looks. Cheap partial version of that
+  // without a schema/shader change: warn when THIS selection's own measured lightness is already
+  // far from the reference's, since that's the case where "even it out toward one fixed tone" is
+  // most likely to fight the photo's own exposure rather than just its colour cast.
+  if(m.crSamples&&m.crSamples.length){
+    const mn=crSampleMean(m.crSamples);
+    const[,,refV]=rgb2oklch(..._hexToRgb01(hex));
+    if(Math.abs(mn.v-refV)>0.15){
+      log(`This selection's measured lightness is quite different from the saved reference's — Depth/Warmth may need a bigger push than usual to converge, or the two photos' exposure genuinely differs enough that matching them exactly will look forced.`,'warn');
+    }
+  }
   m.tgtHex=hex;m.tgtMode='ref';mskRebuild();fxUpdate();
 }
 // Local Adjustments are static analytic masks in FRAME space — on a moving subject they visibly
@@ -11522,7 +11725,14 @@ function mskRebuild(){
       shape+='<div class="btn-row">'
         +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over">Clear points</button></div>'
-        +(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button></div>':'')
+        +(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button></div>'
+          // Same model, the opposite job: instead of excluding these from a Skin selection, make
+          // ONE of them its own selection (Lightroom's People mask offers this per-feature list —
+          // Face Skin/Lips/Eyes/Hair as individually selectable targets, not just exclusions).
+          +'<div class="btn-row" style="margin-top:4px;flex-wrap:wrap">'
+            +FACE_FEATURES.map(f=>'<button class="btn bgh" style="padding:3px 8px" onclick="mskFaceSelectFeature('+f.i+')" title="Select just the '+f.label.toLowerCase()+' as a new mask.">'+f.label+'</button>').join('')
+          +'</div>'
+        :'')
         +subjPanelHtml(m)
         // subjPanelHtml renders nothing outside window.__TAURI__ — say WHY rather than just being
         // silent, so a web/iOS user doesn't wonder whether "Remember this subject" ever existed
@@ -11577,6 +11787,43 @@ function mskRebuild(){
   selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
     +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
   h+=_mskGroup('selection','Selection',selBody);
+
+  // ── UNIFORMITY on an ordinary Color-Range mask ────────────────────────────────────────────
+  // skinUniformity() in the shader was never actually type-gated — uH/uS/uL/preserve default to
+  // 0 for every mask, skin or not, so the operator has been usable on any colour-gated selection
+  // since it shipped. Only the PANEL restricted Strength/Target/Preserve to Skin/Coat masks.
+  // Capture One's own Uniformity tool is explicitly the same thing applied to skin, clothing OR
+  // background — this exposes that on any Color Range mask (clothing, sky, foliage…) rather than
+  // requiring a Skin/Coat mask just to even out, say, a sky's blue. Deliberately the compact
+  // single-block form, not the guided Skin/Coat 3-step flow — that flow's chrome (hue-wrap
+  // warnings, presets phrased around "tan") is specific to that use case.
+  if(!isSkin&&m.crOn&&CS.length){
+    const tm=m.tgtMode||'match',th=m.tgtHex||'#d7bd96';
+    const uStrength=Math.round(((m.uH||0)+(m.uS||0))/2);
+    const uCurMean=(m.srcH!=null&&m.srcC!=null&&m.srcV!=null)?{h:m.srcH,s:m.srcC,v:m.srcV}:crSampleMean(CS);
+    const uTgt=mskSkinTarget(m);
+    const[ucr,ucg,ucb]=oklch2rgb(uCurMean.h,uCurMean.s,uCurMean.v);
+    const[utr,utg,utb]=oklch2rgb(uTgt.h,uTgt.s,uTgt.v);
+    const uToRgb=(r,g,b)=>'rgb('+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(1,v))*255)).join(',')+')';
+    let uf='<div class="fx-row" title="How far the selected tones move toward the target — a CONVERGENCE, not a shift."><div class="fx-label">Strength</div>'
+      +'<input class="fx-slider" type="range" min="0" max="100" value="'+uStrength+'" oninput="mskSkinStrength(parseFloat(this.value))">'
+      +'<div class="fx-val" id="msk-strength-val">'+uStrength+'</div></div>'
+      +'<div class="seg msk-seg">'+[['match','Match picks'],['swatch','Swatch'],['custom','Custom']]
+        .map(([v,lb])=>'<button class="'+(tm===v?'on':'')+'" onclick="mskTgtMode(\''+v+'\')">'+lb+'</button>').join('')+'</div>';
+    if(tm==='swatch'){
+      uf+='<div class="msk-chiprow msk-mst">'+MST_SWATCHES.map((hx,i)=>'<button class="pc-chip msk-swatch'+(th.toLowerCase()===hx?' on':'')
+        +'" style="background:'+hx+'" onclick="mskTgtSwatch(\''+hx+'\')"><span>'+(i+1)+'</span></button>').join('')+'</div>';
+    }else if(tm==='custom'){
+      uf+='<div class="fx-row"><div class="fx-label">Target color</div><input type="color" value="'+th+'" oninput="mskTgtPicked(this)"></div>';
+    }
+    uf+='<div class="fx-row" style="align-items:center;gap:6px" title="Measured mean of the selection, and what it converges toward."><div class="fx-label">Now → Target</div>'
+      +'<span class="pc-chip" style="order:2;background:'+uToRgb(ucr,ucg,ucb)+';width:20px;height:20px;border-radius:5px"></span>'
+      +'<span style="order:3;color:var(--mut);font-family:var(--sans)">&rarr;</span>'
+      +'<span class="pc-chip" style="order:4;background:'+uToRgb(utr,utg,utb)+';width:20px;height:20px;border-radius:5px"></span></div>'
+      +_mskRow('Preserve modeling','preserve',m.preserve!=null?m.preserve:70,0,100,1,false,
+        '0 flattens the selection to one level; 100 only shifts colour, keeping its own lightness variation.');
+    h+=_mskGroup('uniformity','Uniformity',uf);
+  }
 
   // ── SKIN TONE: a guided three-step flow, skin masks only ─────────────────────────────────────
   if(isSkin){
@@ -17339,6 +17586,7 @@ function _eachSection(cb){
   const diagOn=document.body.classList.contains('diag-on');
   FX_SECTIONS.forEach(([key,lb])=>{
     if(key==='diag'&&!diagOn)return;
+    if(key==='image'&&window.__TAURI__)return; // folded into Looks on desktop — see fxDesktopFoldImageIntoLooks
     if(!_fxSectionCard(key))return;
     cb(key,lb);
   });
@@ -17383,7 +17631,7 @@ function buildSecNav(){          // mobile horizontal strip
     b.onclick=()=>fxSection(key);
     nav.appendChild(b);
   });
-  fxSection(_activeSec()||'image',true);
+  fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
 }
 function buildToolRail(){        // desktop vertical labelled rail
   const rail=document.getElementById('fx-toolrail');if(!rail)return;
@@ -17408,7 +17656,7 @@ function buildToolRail(){        // desktop vertical labelled rail
     b.onclick=()=>fxSection(bKey);
     rail.appendChild(b);
   });
-  fxSection(_activeSec()||'image',true);
+  fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
   syncSectionEnabled();
 }
 function fxSection(name,noSheet){
@@ -17577,6 +17825,21 @@ function syncThemeBtns(){
   const light=document.body.classList.contains('light');
   document.querySelectorAll('.theme-ic').forEach(e=>e.innerHTML=icon(light?'moon':'sun',18));
 }
+// Desktop (Tauri) app only: the "Image Input" tab exists so web/mobile can drag/drop a photo in,
+// but the desktop app loads photos from its native Library, so the tab is dead weight there — its
+// only still-useful controls (RAW profile, Apply LUT + its buttons) move into the Looks card
+// instead. #dz-fx-img itself (and its file input, which fxPickPhotos/"+" still reach via
+// querySelector) is deliberately left behind in the now-hidden Image card: it doesn't need to be
+// visible to keep working, and physically relocating it would risk the drop-target/dz styling.
+// Runs once at boot, before the first applyFxLayout(); _eachSection() is what actually hides the
+// 'image' rail/nav entry on desktop (gated on window.__TAURI__, same check as here).
+function fxDesktopFoldImageIntoLooks(){
+  if(!window.__TAURI__)return;
+  const movable=document.getElementById('fx-image-movable');
+  const looksCard=document.querySelector('.fx-ctrl[data-fxsec="looks"]');
+  if(!movable||!looksCard)return;
+  looksCard.insertBefore(movable,looksCard.firstChild.nextSibling); // right after the title
+}
 // ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
 let _mqMobile=window.matchMedia('(max-width:700px)');
 function applyFxLayout(){
@@ -17590,8 +17853,8 @@ function applyFxLayout(){
   document.body.classList.toggle('fx-deskb',desk);
   document.body.classList.toggle('fx-single',mob||desk);
   if(!mob)document.body.classList.remove('sheet-open'); // sheet state is mobile-only
-  if(mob){buildSecNav();if(!_activeSec())fxSection('image',true);}
-  else if(desk){buildToolRail();if(!_activeSec())fxSection('image',true);}
+  if(mob){buildSecNav();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
+  else if(desk){buildToolRail();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
   relocatePreviewTools(mob,desk);
 }
 // On desktop the zoom + compare/split/histogram controls live in the top action bar;
@@ -17689,6 +17952,7 @@ exportPresetListRefresh();  // populate the Export preset dropdown from localSto
 setTimeout(tourMaybeShow,400); // first-run tour — after layout settles, only for a genuinely empty/new session
 initZoomPan();
 initEditableVals();
+fxDesktopFoldImageIntoLooks(); // desktop app only: Image tab has no reason to exist there (see fn)
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
 // Per-section reset (mobile bottom sheet only — see .fx-ctrl-title-reset CSS): resets just the
 // sliders/toggles inside ONE section back to their factory-default value (_fxPristineDefault,
