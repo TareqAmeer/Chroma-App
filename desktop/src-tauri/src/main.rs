@@ -326,6 +326,32 @@ fn subject_locate(token: String, id: String) -> Result<tauri::ipc::Response, Str
     Ok(tauri::ipc::Response::new(out))
 }
 
+#[derive(serde::Serialize)]
+struct SubjectMultiHit {
+    x: f32,
+    y: f32,
+    score: f32,
+}
+
+/// Up to `max_n` distinct-looking matches for a taught subject in the current photo, for the
+/// "more than one in this frame" case a plain argmax `subject_locate` can't handle (a litter, two
+/// dogs, etc — see subject::locate_topk's doc comment). Returns points/scores ONLY, no mask: the
+/// frontend already has a well-tested single-point decoder (sam_points/sam2_points, the same one
+/// manual scribbling uses) and can hand any of these points straight to it, so this stays a plain
+/// JSON command rather than a second framed mask-response format to maintain.
+#[tauri::command]
+fn subject_locate_multi(token: String, id: String, max_n: u32) -> Result<Vec<SubjectMultiHit>, String> {
+    let subjects = subject::load_subjects();
+    let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
+    let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
+    let grid = subject_grid(&sam2, &edge, &token)
+        .ok_or("subject_locate_multi: this photo is not encoded — run AI Select on it first")?;
+    // 6 cells (of 64) apart — close enough to allow two genuinely separate small subjects in frame,
+    // far enough that the same blob's own neighbouring high-similarity cells don't count as two.
+    let hits = subject::locate_topk_subject(grid, subj, max_n.max(1) as usize, 6)?;
+    Ok(hits.into_iter().map(|h| SubjectMultiHit { x: h.x, y: h.y, score: h.score }).collect())
+}
+
 #[tauri::command]
 fn subject_list() -> Vec<subject::Subject> {
     subject::load_subjects()
@@ -346,6 +372,14 @@ fn subject_rename(id: String, name: String) -> Result<(), String> {
 #[tauri::command]
 fn subject_remove_ref(id: String, ref_id: String) -> Result<Option<subject::Subject>, String> {
     subject::remove_reference(&id, &ref_id)
+}
+
+/// Merges `other_id`'s references into `keep_id` and deletes `other_id` — for the "taught the same
+/// dog twice under two names" case: subject_locate has no presence signal, so a user experimenting
+/// with Find is expected to sometimes duplicate a subject before noticing.
+#[tauri::command]
+fn subject_merge(keep_id: String, other_id: String) -> Result<subject::Subject, String> {
+    subject::merge_subjects(&keep_id, &other_id)
 }
 
 // ── Face-feature auto-exclusion (ROADMAP item 16) — see faceparse.rs for the model, the class
@@ -1439,6 +1473,10 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
+        // Restores window position/size/maximized-state on launch, and saves it on resize/move/
+        // close — the window otherwise always opened at tauri.conf.json's fixed 1440x900. Default
+        // config (all flags) tracks every window the app creates, which today is just "main".
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             #[cfg(target_os = "macos")]
             write_gainmap_heic,
@@ -1505,9 +1543,11 @@ fn main() {
             sam_points,
             subject_learn,
             subject_locate,
+            subject_locate_multi,
             subject_list,
             subject_delete,
             subject_remove_ref,
+            subject_merge,
             subject_rename,
             ingest::list_volumes,
             ingest::scan_card,
@@ -1591,6 +1631,13 @@ fn main() {
 
             let open_item =
                 MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Some("CmdOrCtrl+O"))?;
+            // library-ui.js already keeps a recents list (its own header "Recent" button,
+            // getRecentFolders()/#lib-recent) with no native menu entry point — this reuses that
+            // SAME dropdown rather than a parallel Rust-side mirror of the same folder list; see
+            // the JS-side listener (library-ui.js, next to its "menu-library" one) for why.
+            let open_recent_item = MenuItem::with_id(
+                handle, "menu-open-recent", "Open Recent…", true, Some("CmdOrCtrl+Shift+O"),
+            )?;
             let library_item =
                 MenuItem::with_id(handle, "menu-library", "Library…", true, Some("CmdOrCtrl+L"))?;
             let export_item =
@@ -1601,6 +1648,7 @@ fn main() {
                 true,
                 &[
                     &open_item,
+                    &open_recent_item,
                     &library_item,
                     &export_item,
                     &PredefinedMenuItem::separator(handle)?,
@@ -1721,12 +1769,22 @@ fn main() {
                 &[&shortcuts_item, &guide_item, &whatsnew_item],
             )?;
 
+            // No dedicated preferences window exists yet, so this opens the same About panel
+            // (csAbout(), chromasmith-22.html) the header's info button does — build/diagnostics
+            // today, the natural home for real app-wide settings if any are added later. Still
+            // worth having: Cmd+, is where every macOS user's muscle memory reaches first, and
+            // before this it did nothing at all.
+            let settings_item = MenuItem::with_id(
+                handle, "menu-settings", "Settings…", true, Some("CmdOrCtrl+,"),
+            )?;
             let app_menu = Submenu::with_items(
                 handle,
                 "Chromasmith",
                 true,
                 &[
                     &PredefinedMenuItem::about(handle, None, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &settings_item,
                     &PredefinedMenuItem::separator(handle)?,
                     &PredefinedMenuItem::hide(handle, None)?,
                     &PredefinedMenuItem::hide_others(handle, None)?,
@@ -1747,7 +1805,7 @@ fn main() {
                 let id = event.id().0.as_str();
                 if matches!(
                     id,
-                    "menu-open" | "menu-library" | "menu-export" | "menu-undo" | "menu-redo"
+                    "menu-open" | "menu-open-recent" | "menu-settings" | "menu-library" | "menu-export" | "menu-undo" | "menu-redo"
                         | "menu-reject" | "menu-pick" | "menu-clear-flag" | "menu-reset-edit"
                         | "menu-rotate-left" | "menu-rotate-right" | "menu-flip-h" | "menu-flip-v"
                         | "menu-copy-edit" | "menu-paste-edit"

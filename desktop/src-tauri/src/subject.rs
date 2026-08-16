@@ -450,6 +450,69 @@ pub fn locate(grid: FeatureGrid, prototype: &[f32]) -> Result<Located, String> {
     Ok(Located { x, y, neg_x, neg_y, score: best.0 })
 }
 
+/// One candidate location from `locate_topk`, without the negative-point/mask machinery `Located`
+/// carries — a caller re-locating a SECOND instance just needs a point to feed back into the
+/// existing single-point sam_points/sam2_points decoder, not a fresh mask-decode path of its own.
+#[derive(Debug, Clone, Copy)]
+pub struct MultiLocated {
+    pub x: f32,
+    pub y: f32,
+    pub score: f32,
+}
+
+/// Up to `k` distinct-looking matches for `prototype` in `grid`, greedily picked highest-score
+/// first and rejecting any candidate within `min_cell_dist` feature cells of one already picked.
+///
+/// Exists because plain `locate()` is an argmax — it always returns exactly one point, so a photo
+/// with the same taught subject appearing twice (e.g. a litter, or two dogs in one frame) can only
+/// ever have one instance found. The minimum-distance rule is what keeps this from just returning
+/// the top-k cells of the SAME blob (which all score similarly near a real match's centre) as if
+/// they were separate instances.
+pub fn locate_topk(grid: FeatureGrid, prototype: &[f32], k: usize, min_cell_dist: u32) -> Result<Vec<MultiLocated>, String> {
+    let (map, valid, input_w, input_h) = similarity_map(grid, prototype)?;
+    let mut cells: Vec<(f32, u32, u32)> = Vec::new();
+    for fy in 0..SAM_FEAT_GRID {
+        for fx in 0..SAM_FEAT_GRID {
+            let i = (fy * SAM_FEAT_GRID + fx) as usize;
+            if valid[i] {
+                cells.push((map[i], fx, fy));
+            }
+        }
+    }
+    // NaN can't appear here (cosine of two finite, non-degenerate vectors), so total_cmp is safe
+    // and avoids partial_cmp's Option unwrap on every comparison.
+    cells.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mind2 = (min_cell_dist as i64) * (min_cell_dist as i64);
+    // ⚠️ Without a score floor, once the real peak(s) are exhausted this would keep filling up to
+    // `k` with whatever's farthest away regardless of how poorly it matches — i.e. it would present
+    // plain background as if it were additional "instances". RELATIVE_MARGIN keeps only candidates
+    // within this much cosine similarity of the single best match in the whole grid, so a second
+    // instance has to look genuinely comparable, not merely be the least-bad leftover cell.
+    const RELATIVE_MARGIN: f32 = 0.15;
+    let min_score = cells.first().map(|c| c.0 - RELATIVE_MARGIN).unwrap_or(f32::NEG_INFINITY);
+    let mut picked: Vec<(f32, u32, u32)> = Vec::new();
+    for &(s, fx, fy) in &cells {
+        if picked.len() >= k || s < min_score {
+            break;
+        }
+        let far_enough = picked.iter().all(|&(_, px, py)| {
+            let dx = fx as i64 - px as i64;
+            let dy = fy as i64 - py as i64;
+            dx * dx + dy * dy >= mind2
+        });
+        if far_enough {
+            picked.push((s, fx, fy));
+        }
+    }
+    Ok(picked
+        .into_iter()
+        .map(|(score, fx, fy)| {
+            let (x, y) = cell_to_norm(fx, fy, input_w, input_h);
+            MultiLocated { x, y, score }
+        })
+        .collect())
+}
+
 /// Locate a stored Subject, refusing to match across feature spaces.
 ///
 /// Returns a distinct, matchable error when the grid on hand is the wrong encoder — the frontend
@@ -463,6 +526,17 @@ pub fn locate_subject(grid: FeatureGrid, subject: &Subject) -> Result<Located, S
         ));
     }
     locate(grid, &subject.prototype)
+}
+
+/// `locate_topk`, with the same encoder guard as `locate_subject`.
+pub fn locate_topk_subject(grid: FeatureGrid, subject: &Subject, k: usize, min_cell_dist: u32) -> Result<Vec<MultiLocated>, String> {
+    if subject.encoder != grid.encoder_tag() {
+        return Err(format!(
+            "encoder-mismatch: \"{}\" was taught with {} but this photo is encoded with {}",
+            subject.name, subject.encoder, grid.encoder_tag()
+        ));
+    }
+    locate_topk(grid, &subject.prototype, k, min_cell_dist)
 }
 
 /// Locate, then hand the resulting point pair to the EXISTING SAM decoder for a real mask.
@@ -592,6 +666,49 @@ pub fn remove_reference(id: &str, ref_id: &str) -> Result<Option<Subject>, Strin
     Ok(Some(out))
 }
 
+/// Merges `other_id` INTO `keep_id`: every reference from both (deduped by reference id, `keep`'s
+/// copy winning a collision), one recomputed prototype, `other_id` deleted. Exists for the case
+/// subject_locate's own doc comment predicts — no "is it even in this photo" signal means a user
+/// experimenting with Find is expected to sometimes teach the same real subject twice under two
+/// names before realising it, and there was previously no way back from that short of manually
+/// re-teaching one from scratch.
+///
+/// ⚠️ Refuses to merge across encoders, same as upsert_subject's own encoder guard — averaging
+/// prototypes from two different feature spaces would silently produce a degenerate merged vector
+/// rather than a visible error.
+pub fn merge_subjects(keep_id: &str, other_id: &str) -> Result<Subject, String> {
+    if keep_id == other_id {
+        return Err("merge_subjects: cannot merge a subject with itself".into());
+    }
+    let path = subjects_path();
+    let mut all = read_subjects_at(&path);
+    let other = all
+        .iter()
+        .find(|s| s.id == other_id)
+        .cloned()
+        .ok_or_else(|| format!("merge_subjects: no subject {other_id}"))?;
+    let keep_idx = all
+        .iter()
+        .position(|s| s.id == keep_id)
+        .ok_or_else(|| format!("merge_subjects: no subject {keep_id}"))?;
+    if all[keep_idx].encoder != other.encoder {
+        return Err(format!(
+            "merge_subjects: \"{}\" was taught with {} but \"{}\" was taught with {} — re-teach one to match before merging",
+            all[keep_idx].name, all[keep_idx].encoder, other.name, other.encoder
+        ));
+    }
+    for r in other.refs {
+        if !all[keep_idx].refs.iter().any(|k| k.id == r.id) {
+            all[keep_idx].refs.push(r);
+        }
+    }
+    all[keep_idx].prototype = merge_all(&all[keep_idx].refs);
+    let merged = all[keep_idx].clone();
+    all.retain(|s| s.id != other_id);
+    write_subjects_at(&path, &all)?;
+    Ok(merged)
+}
+
 pub fn delete_subject(id: &str) -> Result<(), String> {
     let path = subjects_path();
     let mut all = read_subjects_at(&path);
@@ -675,6 +792,39 @@ mod tests {
         for (c, &v) in feat.iter().enumerate() {
             assert_eq!(v, (c * 10_000 + idx) as f32, "channel {c} gathered from the wrong offset");
         }
+    }
+
+    /// Synthetic — no model or fixture photo needed. Two feature cells, far apart, are set exactly
+    /// equal to the prototype (cosine 1.0); every other cell is left at zero (cosine 0, since
+    /// l2_normalise leaves an all-zero vector as-is and cosine_prenormalised of a zero vector is
+    /// 0). This is the "two instances of the same taught subject in one photo" case §5b/subject.rs
+    /// flagged as unhandled by a plain argmax `locate()`.
+    #[test]
+    fn locate_topk_finds_distinct_instances_and_respects_min_distance() {
+        let plane = (SAM_FEAT_GRID * SAM_FEAT_GRID) as usize;
+        let mut data = vec![0f32; PROTO_DIM * plane];
+        let mut prototype = vec![0f32; PROTO_DIM];
+        prototype[0] = 1.0; // already unit-length
+        let idx_a = (10 * SAM_FEAT_GRID + 10) as usize; // (fx=10,fy=10)
+        let idx_b = (50 * SAM_FEAT_GRID + 50) as usize; // (fx=50,fy=50) — far corner
+        data[0 * plane + idx_a] = 1.0;
+        data[0 * plane + idx_b] = 1.0;
+        let embed = Sam2Embedding { image_embed: data, high_res_feats_0: vec![], high_res_feats_1: vec![], orig_w: 1024, orig_h: 1024 };
+        let grid = FeatureGrid::sam2(&embed);
+
+        // Both peaks are ~57 cells apart, so a small min-distance keeps them both.
+        let two = locate_topk(grid, &prototype, 4, 5).expect("locate_topk");
+        assert_eq!(two.len(), 2, "two well-separated peaks should both survive: {two:?}");
+        assert!(two.iter().all(|c| (c.score - 1.0).abs() < 1e-5), "both peaks should score ~1.0: {two:?}");
+
+        // k=1 still returns exactly one, the (tied) best.
+        let one = locate_topk(grid, &prototype, 1, 5).expect("locate_topk k=1");
+        assert_eq!(one.len(), 1);
+
+        // A min-distance larger than the actual separation collapses back to one instance — this
+        // is the guard against reporting the same blob's neighbouring cells as separate subjects.
+        let collapsed = locate_topk(grid, &prototype, 4, 100).expect("locate_topk large min-dist");
+        assert_eq!(collapsed.len(), 1, "peaks closer than min_cell_dist must collapse to one: {collapsed:?}");
     }
 
     /// The real test, and the reason this module exists: __TM3390.jpg holds a person and a

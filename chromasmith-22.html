@@ -333,6 +333,9 @@ body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center
 .msk-more-it.on{color:var(--acc)}
 .msk-more-it.danger{color:var(--err)}
 .msk-more-sep{height:1px;background:var(--bdr);margin:4px 6px}
+/* "+ Mask" menu group headers — same menu, same rows (.msk-more-it), just labelled sections
+   (Shape / Paint / AI / Range) instead of one flat list of 8 peers. */
+.msk-more-hd{font-size:var(--fs-1);font-weight:600;color:var(--mut);padding:6px 9px 2px}
 /* Inline icons inside text buttons must never absorb the flex squeeze — a shrunk 14px glyph next
    to a full-size label looks like a rendering fault. */
 .btn>svg,.msk-more-it>svg{flex:0 0 auto}
@@ -879,7 +882,8 @@ body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:trans
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
 body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
-body.deskx #btn-msk-add-ai,body.deskx #btn-msk-add-skin{display:inline-flex!important} /* AI Select needs the native SAM commands — desktop only */
+/* Skin/AI Select used to be individual buttons gated by a rule here; mskAddMenu() now checks
+   body.deskx itself (see the Masks panel's own comment) so this rule has nothing left to gate. */
 /* ⋯ overflow menu (deskbar): navigation to the non-editor tabs + utilities */
 #fx-overflow{display:none;position:relative}
 body.deskx #fx-overflow{display:inline-flex}
@@ -1366,15 +1370,18 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <div class="fx-ctrl" data-fxsec="local">
         <div class="fx-ctrl-title">Masks <div class="fx-toggle" id="tg-local" onclick="toggleFX('local')"></div></div>
         <div class="fx-fields ff-off" id="ff-local">
+          <!-- Was 8 peer buttons in one row ("+ Radial + Linear + Brush + Sky + Skin + Color
+               Range + Luminance Range + AI Select") — reads as a list, not a control, and the
+               row wrapped to 3 lines once Skin/AI Select showed on desktop. One trigger, one
+               grouped menu (mskAddMenu), built on the exact same .msk-more-menu/.msk-more-it
+               popover the mask row's own "⋯" menu already uses — no new component, no new CSS
+               beyond the group-header label. The #btn-msk-add-skin/#btn-msk-add-ai elements this
+               replaced are gone, along with the `body.deskx …!important` CSS rule that only
+               existed to show them — mskAddMenu checks `body.deskx` itself to decide whether the
+               Skin/AI Select ENTRIES belong in the menu, the same condition that rule used, so
+               they still appear in exactly the same contexts (including ?deskx=1 for testing). -->
           <div class="btn-row">
-            <button class="btn bgh" onclick="mskAdd('radial')">+ Radial</button>
-            <button class="btn bgh" onclick="mskAdd('linear')">+ Linear</button>
-            <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye">+ Brush</button>
-            <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed">+ Sky</button>
-            <button class="btn bgh" id="btn-msk-add-skin" onclick="mskAdd('skin')" title="Even out uneven skin (patchy tan, pale chest vs tanned face) and tan it consistently. Scribble over the subject to segment them, then refine skin vs lips/hair with color samples. Desktop app only — needs the on-device segmentation model." style="display:none">+ Skin</button>
-            <button class="btn bgh" onclick="mskAdd('color')" title="Select by COLOR alone, anywhere in the frame — no shape. Pick a color, then shift-click to add more.">+ Color Range</button>
-            <button class="btn bgh" onclick="mskAdd('lum')" title="Select by BRIGHTNESS alone, anywhere in the frame — no shape. Set the Lum floor/ceiling to pick a band (shadows, midtones, highlights).">+ Luminance Range</button>
-            <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Brush over an object on the photo to select it (EdgeSAM, on-device — desktop app only)" style="display:none">+ AI Select</button>
+            <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
           </div>
           <div class="fx-row"><div class="fx-label">Show on photo</div>
             <div class="seg lib-seg msk-prevmode-seg"><button data-v="overlay" class="on" onclick="mskSetPreviewMode('overlay')">Overlay</button><button data-v="isolate" onclick="mskSetPreviewMode('isolate')">Isolate</button><button data-v="select" onclick="mskSetPreviewMode('select')" title="Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.">Selection</button><button data-v="off" onclick="mskSetPreviewMode('off')">Off</button></div>
@@ -4050,7 +4057,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16a';
+const BUILD='2026-08-16b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4715,12 +4722,15 @@ uniform vec4 mskE[8];  // x: subtract-previous-mask flag (0/1) — simple "mask 
 uniform vec4 mskF[8];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z: radial rotation (rad), w unused
 // SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
 // mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.
-uniform vec4 mskG[8];  // x: number of colour samples (0 = gate off), y,z unused, w: gate range 0..1
-// Colour-gate SAMPLES, 6 per mask, two packed per vec4 as (h0,s0,h1,s1). Mask i reads mskCS[i*3..i*3+2].
+uniform vec4 mskG[8];  // x: number of colour samples (0 = gate off), y: CHROMA gate range 0..1
+                        // (independent of hue — skin varies far more in hue/shade than in chroma,
+                        // so a shared slider either over-widens chroma or under-widens hue), z
+                        // unused, w: HUE gate range 0..1
+// Colour-gate SAMPLES, 8 per mask, two packed per vec4 as (h0,s0,h1,s1). Mask i reads mskCS[i*4..i*4+3].
 // Skin is not a ball in hue/sat space — sheen pushes lit skin toward magenta —
 // so one centre cannot cover a whole body without a range so wide it swallows everything else.
 // The gate is the UNION (max) of the per-sample kernels, i.e. a locus traced by several picks.
-uniform vec4 mskCS[24];   // 8 masks x 6 samples, 2 per vec4 => 3 vec4 per mask (mask i: i*3 .. i*3+2)
+uniform vec4 mskCS[32];   // 8 masks x 8 samples, 2 per vec4 => 4 vec4 per mask (mask i: i*4 .. i*4+3)
 uniform vec4 mskH[8];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
 uniform vec4 mskI[8];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
@@ -4868,13 +4878,13 @@ float crSampleWeight(vec2 hc,float ch,float cc,float hHalf,float cHalf){
   float dh=abs(hc.x-ch);if(dh>0.5)dh=1.0-dh;
   return crAxis(dh,hHalf)*crAxis(abs(hc.y-cc),cHalf);
 }
-float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2){
+float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2,vec4 S3){
   int n=int(G.x+0.5);
   if(n<1)return 1.0;
   vec3 lch=rgb2oklch(c);
   vec2 hc=lch.zy;                                 // (hue turn, chroma) — the two gate axes
-  float hHalf=0.02+G.w*0.14;                      // range 0-100 -> +/-7deg .. +/-58deg
-  float cHalf=0.012+G.w*0.10;                     // Oklab chroma: skin spans ~0.019..0.075
+  float hHalf=0.02+G.w*0.14;                      // hue range 0-100 -> +/-7deg .. +/-58deg
+  float cHalf=0.012+G.y*0.10;                     // chroma range 0-100; skin spans ~0.019..0.075
   // UNION, not sum: overlapping samples must not push past 1, and a pixel belongs to the selection
   // if it is near ANY pick. Keeping the weight FLAT across the sampled region is what lets the
   // uniformity contraction actually converge — see CLAUDE.md 5b.
@@ -4884,6 +4894,8 @@ float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2){
   if(n>3)w=max(w,crSampleWeight(hc,S1.z,S1.w,hHalf,cHalf));
   if(n>4)w=max(w,crSampleWeight(hc,S2.x,S2.y,hHalf,cHalf));
   if(n>5)w=max(w,crSampleWeight(hc,S2.z,S2.w,hHalf,cHalf));
+  if(n>6)w=max(w,crSampleWeight(hc,S3.x,S3.y,hHalf,cHalf));
+  if(n>7)w=max(w,crSampleWeight(hc,S3.z,S3.w,hHalf,cHalf));
   // CHROMA FLOOR — skin always carries some chroma; rock, snow, concrete, sunglasses and pupils do
   // not. This ONE threshold replaces the two hand-tuned luminance-gated cuts the HSV version
   // needed, and that simplification is the whole reason for moving to Oklab. Measured on
@@ -4934,7 +4946,10 @@ vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T,float vLow,float oneWay){
   // ONE-WAY TAN: tanning should only ever darken. Without this, any skin already darker than the
   // target gets LIGHTENED toward it — so shadowed areas, the underside of the jaw and the edges of
   // hair are lifted, which reads as a flat, washed-out patch rather than a tan.
-  if(oneWay>0.5)dL=min(dL,0.0);
+  // "oneWay" is now a 0..1 STRENGTH, not a hard flag: at 1 it's the original full clamp, at 0 no
+  // clamp at all, and in between it blends toward the clamp — lets a photo allow a little shadow
+  // lift instead of an absolute one-way rule.
+  dL=mix(dL,min(dL,0.0),oneWay);
   lch.x+=w*U.z*dL;
   return clamp(oklch2rgb(vec3(clamp(lch.x,0.0,1.0),max(lch.y,0.0),lch.z)),0.0,1.0);
 }
@@ -5093,7 +5108,7 @@ if(mskN>0.5){
     vec4 D=mskD[i];
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
-    w*=colRangeWeight(gateCol,mskG[i],mskCS[i*3],mskCS[i*3+1],mskCS[i*3+2]);
+    w*=colRangeWeight(gateCol,mskG[i],mskCS[i*4],mskCS[i*4+1],mskCS[i*4+2],mskCS[i*4+3]);
     // Shapeless (Colour Range / Luminance Range) masks invert their GATES, not their shape —
     // see mskShapeWeight. Applied after both gates so it means "everything except this range".
     if(mskB[i].x>1.5&&mskB[i].z>0.5)w=1.0-w;
@@ -5875,7 +5890,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mA:new Float32Array(32),mB:new Float32Array(32),mC:new Float32Array(32),mD:new Float32Array(32),
       mE:new Float32Array(32),mF:new Float32Array(32),mG:new Float32Array(32),mH:new Float32Array(32),
       mI:new Float32Array(32),
-      mS:new Float32Array(96),   // colour-gate samples: 8 masks x 6 samples x (h,s) = 24 vec4
+      mS:new Float32Array(128),  // colour-gate samples: 8 masks x 8 samples x (h,s) = 32 vec4
       mJ:new Float32Array(32)}); // per-mask detail: x = Texture
     const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ;
     // ⚠️ MUST clear: the packing loop below only writes slots for masks that EXIST, so a stale
@@ -5902,15 +5917,21 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
       mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
-      mJ[o+2]=m.tanOneWay?1:0;// tanning only ever darkens — never lifts already-dark skin
+      // 0..1 strength of the one-way clamp (was a hard boolean) — see tanOneWayAmt's doc comment.
+      mJ[o+2]=(m.tanOneWayAmt!=null?m.tanOneWayAmt:(m.tanOneWay?100:0))/100;
       mJ[o+3]=(m.clarity||0)/100;  // Clarity: -1..1 gain on the WIDE source high-pass (see srcHPW)
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
       const CS=(m.crOn&&m.crSamples)?m.crSamples.slice(0,CR_MAX_SAMPLES):[];
       mG[o]=CS.length;mG[o+3]=(m.crRange!=null?m.crRange:35)/100;
-      // Two samples per vec4: mskCS[i*2]=(h0,s0,h1,s1), mskCS[i*2+1]=(h2,s2,h3,s3).
-      CS.forEach((p,k)=>{const q=i*12+k*2;mS[q]=p.h||0;mS[q+1]=p.s||0;});
+      // Chroma range defaults to following the hue range (crRangeC null) so an untouched mask
+      // behaves exactly as it did with one shared slider; setting it independently narrows/widens
+      // ONLY the colour-purity axis, e.g. to exclude wood/sand without also shrinking valid skin
+      // hue variation.
+      mG[o+1]=(m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35))/100;
+      // Two samples per vec4, 4 vec4 per mask (16 floats/mask): mskCS[i*4]=(h0,s0,h1,s1), etc.
+      CS.forEach((p,k)=>{const q=i*16+k*2;mS[q]=p.h||0;mS[q+1]=p.s||0;});
       mH[o]=(m.uH||0)/100;mH[o+1]=(m.uS||0)/100;mH[o+2]=(m.uL||0)/100;
       mH[o+3]=(m.preserve!=null?m.preserve:70)/100;
       const tgt=mskSkinTarget(m);
@@ -8966,7 +8987,7 @@ function _cpCommands(){
   const printSel=document.getElementById('sel-print');
   if(printSel)Array.from(printSel.options).forEach(o=>{if(o.value)add('Print profile','Apply print: '+o.textContent,()=>{printSel.value=o.value;selectPrint(o.value);});});
   if(typeof mskAdd==='function'){
-    const MASKS={radial:'Radial',linear:'Linear',color:'Color Range',lum:'Luminance Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin'};
+    const MASKS={radial:'Radial',linear:'Linear',color:'Color Range',lum:'Luminance Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin',coat:'Coat'};
     Object.entries(MASKS).forEach(([k,label])=>add('Mask','Add mask: '+label,()=>{switchTab('fx');fxSection('local');mskAdd(k);}));
   }
   add('Action','Export',()=>{if(typeof exportFX==='function')exportFX();});
@@ -9254,12 +9275,17 @@ function mskIsAI(m){return !!(m&&(m.origin==='ai'||m.ai));}
 // negated form silently excluded it and scribbling did literally nothing (CLAUDE.md 5b).
 // Ask what a mask CAN DO, not what it was called. mskIsAI and the lint rule stay as backstops.
 function mskCaps(m){
-  if(!m)return{raster:false,segmentable:false,skinTools:false,shapeless:false,sky:false,painterly:false};
+  if(!m)return{raster:false,segmentable:false,skinTools:false,toneTool:false,shapeless:false,sky:false,painterly:false};
   const ai=mskIsAI(m);
   return{
     raster:m.type==='brush',            // has a px buffer: paint, erase, refine edges
     segmentable:ai,                     // scribble-to-select via the on-device model
-    skinTools:m.origin==='skin',        // the guided Skin Tone flow
+    // skinTools is HUMAN-ONLY (faceparse.rs is a human face-parsing model — running it on a Coat
+    // mask's fur would find nothing meaningful, or worse, something that looks plausible and
+    // isn't). toneTool is the shared "even out a patchy tone" guided flow, offered to both Skin
+    // and Coat masks since colRangeWeight/skinUniformity genuinely don't care what's under them.
+    skinTools:m.origin==='skin',        // Auto-exclude face features — skin masks only
+    toneTool:m.origin==='skin'||m.origin==='coat',  // the guided Skin/Coat Tone flow
     shapeless:m.type==='none',          // Colour/Luminance Range — the gates do the selecting
     sky:m.origin==='sky',               // offers "Re-detect sky"
     painterly:m.type==='brush'&&!ai     // hand-painted: show the brush hint, no scribble UI
@@ -9304,7 +9330,10 @@ function oklch2rgb(h,C,L){
          l2s(-0.0041960863*l-0.7034186147*m+1.7076147010*s2)];
 }
 const MSK_MAX=8;   // must match mskA..mskJ[8] in the lut shader and the two maskTex/maskTex2 raster channels
-const CR_MAX_SAMPLES=6;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max
+const CR_MAX_SAMPLES=8;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max.
+// Raised from 6: auto-seeding (mskAutoSamples, k=4) already claims 4 of the old 6 slots, leaving
+// only 2 for a manual shift-click add-on — too little headroom on a subject with more than two
+// extra tonal zones (group shots, mixed lighting). 8 gives auto-seed the same 4 plus 4 free slots.
 
 // ══ RASTER MASK STORAGE ══════════════════════════════════════════════════════════════════════
 // A raster mask's `px` is a Uint8ClampedArray of 0..255 coverage, one byte per pixel, at
@@ -9372,12 +9401,20 @@ function _mskSkinDefaults(){return{
   tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
   tanDepth:0,tanWarm:0,srcV:null,_okSpace:true,
   amount:100,name:'',muted:false,     // amount = master scale on the whole mask; name = user label
-  tex:0,isExclude:false,tanOneWay:false};}            // Texture: +sharpen / -soften; isExclude: use as an eraser
+  tex:0,isExclude:false,tanOneWay:false,tanOneWayAmt:0};}  // Texture: +sharpen/-soften; isExclude: eraser.
+  // tanOneWayAmt (0..100): strength of the one-way clamp, replacing the old hard on/off. 0 behaves
+  // exactly like tanOneWay:false (skin can lighten toward the target); 100 exactly like
+  // tanOneWay:true (skin only ever darkens). Values in between allow a SMALL amount of shadow lift
+  // instead of none at all — some photos want "mostly darken" rather than an absolute clamp.
 // Masks saved by an older build have none of the fields above. Fill them in on load (defaults are
 // all-zero, so a restored recipe renders exactly as it did) — without this the panel would read
 // undefined into its sliders and the target resolver would see no tgtMode.
 function _mskMigrate(m){
   if(!m||typeof m!=='object')return m;
+  // tanOneWayAmt replaces the old boolean tanOneWay. Derive it from the legacy field BEFORE the
+  // generic default-fill below runs (which would otherwise stamp in the default 0 first and hide
+  // a saved mask's true setting).
+  if(m&&m.tanOneWayAmt===undefined&&m.tanOneWay!==undefined)m.tanOneWayAmt=m.tanOneWay?100:0;
   const d=_mskSkinDefaults();
   for(const k in d)if(m[k]===undefined)m[k]=d[k];
   // Raster storage normalisation. Three shapes reach here and all must end up as one:
@@ -9423,7 +9460,7 @@ function _mskAdjustDefaults(){return{invert:false,lumLo:0,lumHi:1,exp:0,con:0,te
 function mskAdd(type){
   if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks','warn');return;}
   let m;
-  if(type==='skin'){
+  if(type==='skin'||type==='coat'){
     // SEGMENTATION FIRST — desktop only, by design. Scribble over the subject, the on-device model
     // (EdgeSAM/SAM2, desktop/src-tauri/src/sam.rs) returns them, and the colour samples then refine
     // WITHIN that region.
@@ -9436,8 +9473,14 @@ function mskAdd(type){
     // chest, because saturation cannot separate those two. Geometry separates them trivially.
     // With the subject segmented, the dog and the rocks are simply not in the mask, and the gate is
     // left doing the one thing it is genuinely good at: skin vs lips/hair inside the subject.
+    //
+    // "Coat" is the SAME machinery under a different origin tag — colRangeWeight/skinUniformity
+    // don't know or care whether the gated pixels are skin or fur, "evening out an uneven tone" is
+    // the identical operation either way (see CLAUDE.md 5b's Named Subjects section: subject.rs
+    // was purpose-built and measured against a real dog, but nothing downstream of segmentation
+    // ever got a fur-appropriate tool of its own — this is that tool, at zero shader cost).
     const{w,h}=samInputDims();
-    m={type:'brush',origin:'skin',ai:true,px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],
+    m={type:'brush',origin:type,ai:true,px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],
       invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,
       subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
@@ -9473,7 +9516,13 @@ function mskAdd(type){
   // chest: ONE sample gave gate weights 0.04-1.00 and hue DIVERGED 10%; two samples gave
   // 0.86-1.00 and closed hue 40% / sat 45%; three closed sat 49%. Hence a mid Range plus the
   // shift-click-to-add-samples flow the panel pushes, rather than one pick and a huge Range.
-  if(type==='skin'){m.crOn=true;m.crRange=55;m.tanOneWay=true;}  // a Skin mask is for tanning
+  if(type==='skin'){m.crOn=true;m.crRange=55;m.tanOneWay=true;m.tanOneWayAmt=100;}  // a Skin mask is for tanning
+  // A Coat mask starts EVENING OUT, not darkening — sun-bleaching lightens a coat as often as
+  // shade darkens it, so defaulting to one-way (like Skin's tanning) would fight half the real
+  // cases. Range is wider than Skin's default: fur genuinely spans more hue/chroma per-strand
+  // (undercoat vs guard hairs, wet vs dry) than skin does, so the tighter skin default would
+  // under-select a coat's own natural variation and leave the gate looking "broken".
+  if(type==='coat'){m.crOn=true;m.crRange=65;m.crRangeC=65;m.tanOneWay=false;m.tanOneWayAmt=0;}
   if(type==='color'){m.crOn=true;m.crRange=40;}
   if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
@@ -9722,25 +9771,48 @@ async function subjRefresh(){
   catch(e){_subjects=[];log('subject_list: '+(e&&e.message||e),'err');}
 }
 function subjToken(){return _sam2Token||_samToken;}
+// Which encoder `subjToken()` currently resolves to — "sam2-1024" (71-80% recall, the encoder
+// worth teaching on) or "edgesam-1024" (58-65%, only used while SAM2's background encode hasn't
+// landed yet — see samEnsureEncoded2). Tags MUST match subject.rs's ENC_SAM2/ENC_EDGESAM exactly,
+// since that's what a subject's stored `encoder` field is compared against.
+function _subjCurEncoder(){return _sam2Token?'sam2-1024':(_samToken?'edgesam-1024':null);}
 function subjPanelHtml(m){
   if(!window.__TAURI__)return '';
   if(_subjects===null){subjRefresh().then(()=>{if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();});return '';}
   const hasSel=!!(m.px&&m.px.length);
+  const curEnc=_subjCurEncoder();
   const rows=(_subjects||[]).map((s,i)=>{
     const n=(s.refs||[]).length;
+    // Flag it BEFORE Find is clicked, not only as an error toast after — a stored subject taught
+    // under a different encoder than the one this session currently has ready will always fail.
+    const mismatch=curEnc&&s.encoder&&s.encoder!==curEnc;
     return '<div class="fx-row" style="align-items:center;gap:6px">'
       +'<div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'
-        +_esc(s.name)+' — taught from '+n+' photo'+(n===1?'':'s')+'">'+_esc(s.name)
-      +'<span style="color:var(--mut);font-variant-numeric:tabular-nums"> · '+n+'</span></div>'
+        +_esc(s.name)+' — taught from '+n+' photo'+(n===1?'':'s')+' using '+_esc(s.encoder||'an unknown encoder')+'">'+_esc(s.name)
+      +'<span style="color:var(--mut);font-variant-numeric:tabular-nums"> · '+n+'</span>'
+      +(mismatch?' <span style="color:var(--warn,#c90)" title="Taught with '+_esc(s.encoder)+', this session currently has '+_esc(curEnc)+' ready — Find will fail until you re-teach or the matching encoder loads.">⚠</span>':'')
+      +'</div>'
       +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFind('+i+')" title="Find '+_esc(s.name)+' in this photo and select it. Always check the result — this suggests, it does not guarantee.">'+icon('wand',12)+' Find</button>'
-      +(hasSel?'<button class="btn bgh" style="order:3;padding:3px 8px" onclick="subjTeach('+i+')" title="Add the CURRENT selection as another reference photo. More references help, and a varied one helps most.">+ Ref</button>':'')
-      +'<button class="btn bgh" style="order:4;padding:3px 6px" onclick="subjMenu('+i+',event)" title="References, rename, forget">⋯</button>'
+      +'<button class="btn bgh" style="order:3;padding:3px 6px" onclick="subjFindInstances('+i+')" title="More than one '+_esc(s.name)+' in this photo? Look for several distinct locations, each installed as its own mask.">'+(_subjMultiBusy?'…':'×?')+'</button>'
+      +(hasSel?'<button class="btn bgh" style="order:4;padding:3px 8px" onclick="subjTeach('+i+')" title="Add the CURRENT selection as another reference photo. More references help, and a varied one helps most.">+ Ref</button>':'')
+      +((typeof fxImages!=='undefined'&&fxImages&&fxImages.length>1)?'<button class="btn bgh" style="order:5;padding:3px 6px" onclick="subjFindAll('+i+')" title="Check every other loaded photo for '+_esc(s.name)+' (coarse pass — jump to a result and Find again for a real check).">'+(_subjScanBusy?'…':'Scan all')+'</button>':'')
+      +'<button class="btn bgh" style="order:6;padding:3px 6px" onclick="subjMenu('+i+',event)" title="References, rename, forget">⋯</button>'
       +'</div>';
   }).join('');
+  // Readiness line: teaching before SAM2's background encode lands silently locks a subject onto
+  // the weaker EdgeSAM path (58-65% recall vs 71-80% — subject.rs's own measured table). Waiting a
+  // few seconds for "Improving selection quality…" to finish before hitting Remember/+ Ref is the
+  // single highest-leverage thing a user can do here, so say so instead of staying silent about it.
+  const readiness=_sam2Encoding
+    ?'<div style="font-size:var(--fs-1);color:var(--acc);font-family:var(--sans);margin-top:3px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">◠</span> Preparing the higher-accuracy model — teaching now will use the faster, less accurate one. Worth waiting a few seconds.</div>'
+    :(curEnc==='edgesam-1024'?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Using the faster EdgeSAM model (lower accuracy). The higher-accuracy model did not become available for this photo.</div>':'');
   return '<div class="fx-sub" style="margin-top:8px">Subjects</div>'
     +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">Select something, then <b>Remember</b> it to find the same subject in other photos.</div>')
-    +(hasSel?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="subjTeach(-1)" title="Name this selection so you can find the same subject in other photos">'+icon('star',14)+(_subjBusy?' Working…':' Remember this subject')+'</button></div>':'')
-    +((_subjects||[]).some(s=>(s.refs||[]).length<3)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Three or more reference photos works noticeably better than one — add a few taken in different places.</div>':'');
+    +(hasSel?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="subjTeach(-1)" title="Name this selection so you can find the same subject in other photos. Measured reliability (~77-80% recall on one dog across varied conditions) is a general guide, not a per-species guarantee — a person, a different animal, or a busier scene may do better or worse.">'+icon('star',14)+(_subjBusy?' Working…':' Remember this subject')+'</button></div>':'')
+    +((_subjects||[]).some(s=>(s.refs||[]).length<3)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Three or more reference photos works noticeably better than one — add a few taken in different places.</div>':'')
+    +readiness
+    +subjMultiResultsHtml()
+    +subjScanResultsHtml();
 }
 function _esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 /// Teaches a subject from the current mask raster. `idx` -1 creates a new one (prompting for a
@@ -9771,7 +9843,17 @@ async function subjTeach(idx){
     const s=await _samFramedInvoke('subject_learn',{id,name,token,refId,refLabel},raster);
     await subjRefresh();
     const n=(s.refs||[]).length;
-    toast(n>=3?`${s.name} — ${n} reference photos`:`${s.name} — ${n} reference photo${n===1?'':'s'}, add more for better results`,true);
+    // Catch a bad reference at TEACH time rather than only after later Finds go wrong. Real
+    // "preview before commit" would need a second round trip to score the prototype before
+    // saving it; checking right after the save still lets the user remove it in one more click,
+    // which subjMenu already supports, before it has a chance to drag the merged prototype down.
+    const notes=_subjRefOutlierNotes(s);
+    const justAddedIdx=(s.refs||[]).findIndex(r=>r.id===refId);
+    if(justAddedIdx>=0&&notes[justAddedIdx]){
+      toast(`${s.name}: this reference${notes[justAddedIdx]} — consider removing it (⋯ menu) if Find gets worse`,true);
+    }else{
+      toast(n>=3?`${s.name} — ${n} reference photos`:`${s.name} — ${n} reference photo${n===1?'':'s'}, add more for better results`,true);
+    }
   }catch(e){
     const msg='Could not remember this subject — '+(e&&e.message||e);
     log(msg,'err');toast(msg);
@@ -9802,8 +9884,12 @@ async function subjFind(idx){
     _mskTexDirty=true;
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
-    // No confidence threshold is applied, and the score is not shown as one: hits and misses
-    // both measure 0.70-0.79, so a number here would imply a certainty that does not exist.
+    // No confidence THRESHOLD is applied, and the score is deliberately not shown as one in the
+    // toast: hits and misses both measure 0.70-0.79 (subject.rs), so a number there would imply a
+    // certainty that does not exist. The raw score still goes to the diagnostics log, the same
+    // surface _samLastError already uses — a power user comparing two Finds can see it moved,
+    // without the UI presenting it as a confidence meter.
+    log(`Find ${s.name}: raw similarity ${(+header.score).toFixed(3)} (not a confidence — hits and misses both fall in 0.70-0.79)`,'info');
     toast(`Found ${s.name} — check the selection`,true);
   }catch(e){
     const raw=String(e&&e.message||e);
@@ -9813,19 +9899,164 @@ async function subjFind(idx){
     log(msg,'err');toast(msg);
   }finally{_subjBusy=false;mskRebuild();}
 }
+// subject.rs keeps every reference's own prototype (not just the merged average) specifically so
+// "which references matter" can be acted on — its own doc comment measures that a good triple
+// transfers at 84% while a poor one manages 1/7, i.e. reference QUALITY dominates count. Cosine
+// similarity between one reference's prototype and the mean of the OTHERS is a cheap, local (no
+// backend round-trip — every prototype is already in `s.refs` from subject_list) proxy for "does
+// this one look like the rest of what was taught", so a bad reference can be spotted before
+// wasting a Find on it rather than only after noticing bad results.
+function _subjDot(a,b){let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return s;}
+function _subjRefOutlierNotes(s){
+  const refs=s.refs||[];
+  if(refs.length<3)return refs.map(()=>'');   // need at least 3 to call any ONE of them the odd one out
+  const sims=refs.map((r,i)=>{
+    let sum=0,n=0;
+    for(let j=0;j<refs.length;j++){if(j===i)continue;sum+=_subjDot(r.prototype,refs[j].prototype);n++;}
+    return n?sum/n:0;
+  });
+  const mean=sims.reduce((a,b)=>a+b,0)/sims.length;
+  return sims.map(sim=>(sim<mean-0.12||sim<0.35)?' — looks different from the others, may be hurting more than helping':'');
+}
+// ── Scan every loaded photo for a taught subject ─────────────────────────────────────────────
+// subject_locate only ever ran against whichever ONE photo sam_encode/sam2_encode had cached
+// (SAM_EMBED/SAM2_EMBED are single-slot — see subject_grid's doc comment in main.rs), so finding
+// a subject across a whole shoot meant opening every photo by hand, waiting for its encode, then
+// clicking Find. This drives that loop from JS instead, reusing the EXISTING sam_encode/
+// subject_locate commands (no backend change, so nothing here is untested).
+// ⚠️ Never applies a mask — subject.rs's own doc comment is explicit that there's no reliable
+// presence signal (a prototype learned from SKY once scored higher than a real dog), so this only
+// ever produces a sorted list of candidates to jump to and confirm by hand, exactly like a single
+// Find. It also deliberately uses EdgeSAM only (skips the slower SAM2 background upgrade) — this
+// is a coarse "which photos are worth a look" pass, not a final answer; a real Find (SAM2-quality)
+// still happens per-photo once the user jumps there.
+let _subjScanBusy=false,_subjScanResults=null;
+function _samInputDimsFor(img){
+  const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
+  const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih));
+  return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
+}
+async function subjFindAll(idx){
+  if(_subjScanBusy)return;
+  const s=(_subjects||[])[idx];if(!s)return;
+  if(typeof fxImages==='undefined'||!fxImages||fxImages.length<2){toast('Load more than one photo to scan a batch');return;}
+  _subjScanBusy=true;_subjScanResults=null;mskRebuild();
+  const origIdx=fxCurIdx;
+  const results=[];
+  for(let i=0;i<fxImages.length;i++){
+    if(i===origIdx)continue;   // the current photo already has a direct Find button
+    const item=fxImages[i];
+    if(!item||!item.img)continue;
+    try{
+      const{w,h}=_samInputDimsFor(item.img);
+      const d=mskSourceData(w,h,item.img);
+      if(!d)continue;
+      const rgb=new Uint8Array(w*h*3);
+      for(let p=0,q=0;p<w*h;p++){rgb[q++]=d[p*4];rgb[q++]=d[p*4+1];rgb[q++]=d[p*4+2];}
+      const token='subj-scan-'+i+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
+      const buf=await window.__TAURI__.core.invoke('subject_locate',{token,id:s.id});
+      const dv=new DataView(buf);
+      const hlen=dv.getUint32(0,true);
+      const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+      results.push({idx:i,label:item.name||('Photo '+(i+1)),score:header.score});
+    }catch(e){/* skip a photo that fails to encode/locate rather than aborting the whole scan */}
+  }
+  // The scan's own sam_encode calls evicted whatever the user's actual current photo had cached —
+  // restore it so returning to normal editing doesn't hit a stale-token error on the next scribble.
+  _samToken=null;_sam2Token=null;
+  results.sort((a,b)=>b.score-a.score);
+  _subjScanResults={subjId:s.id,name:s.name,results};
+  _subjScanBusy=false;
+  samEnsureEncoded();
+  mskRebuild();
+}
+function subjScanResultsHtml(){
+  const r=_subjScanResults;if(!r)return '';
+  const rows=r.results.slice(0,20).map(o=>
+    '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(o.label)+'</div>'
+    +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="fxSelectImage('+o.idx+')" title="Jump to this photo and check it yourself — a scan score is not a confidence.">Go</button></div>').join('');
+  return '<div class="fx-sub" style="margin-top:6px">Scan of other loaded photos for '+_esc(r.name)+'</div>'
+    +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No other photos to check.</div>')
+    +'<div class="msk-hint">Sorted by raw similarity — not a confidence score. Open each and confirm by eye; nothing here was applied automatically.</div>';
+}
+// ── More than one instance of a taught subject in one photo (a litter, two dogs, etc) ──────────
+// subjFind is an argmax — one point, one mask. subject_locate_multi (subject.rs's locate_topk)
+// instead returns several separated candidate points; each is handed to the SAME single-point
+// sam_points/sam2_points decoder a manual scribble tap already uses, installed as its OWN new
+// mask rather than overwriting the current one, so multiple instances end up independently
+// adjustable exactly like any other set of masks.
+let _subjMultiResults=null,_subjMultiBusy=false;
+async function subjFindInstances(idx){
+  if(_subjMultiBusy)return;
+  const s=(_subjects||[])[idx];if(!s)return;
+  await samEnsureEncoded();
+  const token=subjToken();
+  if(!token){toast('This photo is not prepared yet — try again in a moment');return;}
+  _subjMultiBusy=true;_subjMultiResults=null;mskRebuild();
+  try{
+    const hits=await window.__TAURI__.core.invoke('subject_locate_multi',{token,id:s.id,maxN:4});
+    _subjMultiResults={subjIdx:idx,name:s.name,hits:hits||[]};
+    if(!hits||hits.length<2)toast(`${s.name}: only one distinct location found`,true);
+  }catch(e){
+    const raw=String(e&&e.message||e);
+    toast(/encoder-mismatch/.test(raw)?`${s.name} was taught with a different model — re-teach it on a photo`:'Could not scan for instances — '+raw);
+  }finally{_subjMultiBusy=false;mskRebuild();}
+}
+/// Installs one candidate point as a brand-new AI mask (not overwriting the current selection),
+/// via the exact same accumulated-point path a manual scribble stroke uses.
+async function subjUseInstance(hitIdx){
+  const r=_subjMultiResults;if(!r||!r.hits[hitIdx])return;
+  const hit=r.hits[hitIdx];
+  mskAdd('ai');
+  const m=fxState.masks[fxState.masks.length-1];
+  if(!m)return;
+  m.aiPoints=[{nx:hit.x,ny:hit.y,positive:true}];
+  mskSel=fxState.masks.length-1;
+  await samRunPoints(m);
+  _subjMultiResults=null;
+  toast(`${r.name} — added as a new mask`,true);
+}
+function subjMultiResultsHtml(){
+  const r=_subjMultiResults;if(!r)return '';
+  const rows=r.hits.map((h,i)=>
+    '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label">Candidate '+(i+1)+'</div>'
+    +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjUseInstance('+i+')">Add as new mask</button></div>').join('');
+  return '<div class="fx-sub" style="margin-top:6px">Possible instances of '+_esc(r.name)+'</div>'
+    +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No additional distinct locations found.</div>')
+    +'<div class="msk-hint">Each candidate becomes its own mask so you can check, adjust or delete it independently. Not a confidence ranking — check each on the photo.</div>';
+}
 function subjMenu(idx,ev){
   const s=(_subjects||[])[idx];if(!s)return;
   ev&&ev.stopPropagation();
-  const refs=(s.refs||[]).map((r,j)=>({label:'Remove reference: '+(r.label||r.id),fn:()=>subjRemoveRef(s.id,r.id)}));
+  const outlierNotes=_subjRefOutlierNotes(s);
+  const refs=(s.refs||[]).map((r,j)=>({label:'Remove reference: '+(r.label||r.id)+outlierNotes[j],fn:()=>subjRemoveRef(s.id,r.id)}));
   const items=[
     {label:'Rename…',fn:async()=>{
       const n=(await askTextModal('Rename subject','',s.name)||'').trim();if(!n)return;
-      // Rename rides the same upsert as teaching, minus a new reference: re-send the FIRST
-      // reference under its own id, which replaces it in place rather than adding a duplicate.
+      // ⚠️ This comment used to claim rename "rides the same upsert as teaching, re-sending the
+      // first reference" — checked against subject.rs's actual rename_subject() and that's not
+      // what happens: it's a plain name-field update with no reference touched at all, so
+      // renaming can never drop, reorder or duplicate a reference. Fixing the stale claim here
+      // rather than leaving a future reader to re-derive it from the Rust source.
       try{await window.__TAURI__.core.invoke('subject_rename',{id:s.id,name:n});await subjRefresh();mskRebuild();}
       catch(e){toast('Rename failed — '+(e&&e.message||e));}
     }},
     ...refs,
+    // Covers "taught the same subject twice under two names" — subject_locate has no presence
+    // signal (subject.rs), so noticing that only after a second "Remember" is the normal case,
+    // not a mistake to avoid entirely. Only offered when there's something to merge into.
+    ...((_subjects||[]).length>1?[{label:'Merge into…',fn:()=>{
+      const others=(_subjects||[]).filter(o=>o.id!==s.id)
+        .map(o=>({label:o.name,fn:async()=>{
+          try{
+            await window.__TAURI__.core.invoke('subject_merge',{keepId:o.id,otherId:s.id});
+            await subjRefresh();mskRebuild();
+            toast(`${s.name} merged into ${o.name}`,true);
+          }catch(e){toast('Could not merge — '+(e&&e.message||e));}
+        }}));
+      _subjPopup(others,ev);
+    }}]:[]),
     {label:'Forget '+s.name,fn:async()=>{
       try{await window.__TAURI__.core.invoke('subject_delete',{id:s.id});await subjRefresh();mskRebuild();toast('Forgot '+s.name,true);}
       catch(e){toast('Could not forget — '+(e&&e.message||e));}
@@ -10413,6 +10644,34 @@ function _mskGroup(key,label,body,note){
 }
 // Rare, destructive or ordering operations. They still matter (order drives "Subtract prev"), but
 // they are not what you touch while grading, so they no longer cost three rows of panel height.
+// "+ Mask" — replaces a row of up to 8 peer buttons (CLAUDE.md called this out by name: "Nine
+// `+`-prefixed buttons in a single mask row"). Same popover component as mskMoreMenu below
+// (.msk-more-menu/.msk-more-it), grouped into the 4 kinds a mask actually is: a SHAPE, something
+// you PAINT, an AI-segmented one (desktop only), or a shapeless RANGE gate.
+function mskAddMenu(ev){
+  ev.stopPropagation();
+  document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
+  const item=(label,ic,type)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());mskAdd(\''+type+'\')">'
+    +icon(ic,15)+'<span>'+label+'</span></button>';
+  const hd=(label)=>'<div class="msk-more-hd">'+label+'</div>';
+  // Same condition the CSS rule these used to be gated by used (body.deskx), preserved exactly —
+  // see the panel markup's own comment on why that rule is gone rather than just unused.
+  const desktop=document.body.classList.contains('deskx');
+  const html=hd('Shape')
+    +item('Radial','local','radial')+item('Linear','linearGrad','linear')
+    +'<div class="msk-more-sep"></div>'+hd('Paint')
+    +item('Brush','brush','brush')+item('Sky','sky','sky')
+    +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
+      +item('Skin','wand','skin')+item('Coat','wand','coat')+item('AI Select','wand','ai'):'')
+    +'<div class="msk-more-sep"></div>'+hd('Range')
+    +item('Color Range','eyedropper','color')+item('Luminance Range','sun','lum');
+  const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
+  document.body.appendChild(d);
+  const r=ev.currentTarget.getBoundingClientRect();
+  d.style.top=(r.bottom+4)+'px';
+  d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
+  setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+}
 function mskMoreMenu(ev){
   ev.stopPropagation();
   const m=fxState.masks[mskSel];if(!m)return;
@@ -10454,13 +10713,23 @@ function mskSkinStrength(v){
 // Each preset is just a set of the existing values — no new machinery, and every one of them can
 // be taken apart in Advanced afterwards.
 const MSK_SKIN_PRESETS={
-  even:{label:'Even out tan',uH:55,uS:50,uL:25,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false},
-  match:{label:'Match face to chest',uH:70,uS:65,uL:40,preserve:55,tanDepth:0,tanWarm:0,tanOneWay:false},
-  warm:{label:'Warm up',uH:35,uS:30,uL:10,preserve:80,tanDepth:10,tanWarm:35,tanOneWay:true},
-  deepen:{label:'Deepen tan',uH:45,uS:45,uL:20,preserve:75,tanDepth:45,tanWarm:20,tanOneWay:true}
+  even:{label:'Even out tan',uH:55,uS:50,uL:25,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  match:{label:'Match face to chest',uH:70,uS:65,uL:40,preserve:55,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  warm:{label:'Warm up',uH:35,uS:30,uL:10,preserve:80,tanDepth:10,tanWarm:35,tanOneWay:true,tanOneWayAmt:100},
+  deepen:{label:'Deepen tan',uH:45,uS:45,uL:20,preserve:75,tanDepth:45,tanWarm:20,tanOneWay:true,tanOneWayAmt:100}
+};
+// Same machinery, fur-appropriate labels/defaults. No one-way clamp by default (see mskAdd's
+// 'coat' branch): sun-bleaching lightens as often as shade darkens, unlike skin tanning which only
+// ever goes one direction.
+const MSK_COAT_PRESETS={
+  even:{label:'Even out coat',uH:55,uS:50,uL:25,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  sunfix:{label:'Fix sun-bleaching',uH:65,uS:55,uL:45,preserve:60,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  deepen:{label:'Deepen coat',uH:45,uS:45,uL:20,preserve:75,tanDepth:35,tanWarm:15,tanOneWay:true,tanOneWayAmt:100},
+  warm:{label:'Warm undertone',uH:35,uS:30,uL:10,preserve:80,tanDepth:5,tanWarm:35,tanOneWay:false,tanOneWayAmt:0}
 };
 function mskSkinPreset(k){
-  const m=fxState.masks[mskSel],p=MSK_SKIN_PRESETS[k];if(!m||!p)return;
+  const m=fxState.masks[mskSel];if(!m)return;
+  const p=(m.origin==='coat'?MSK_COAT_PRESETS:MSK_SKIN_PRESETS)[k];if(!p)return;
   Object.keys(p).forEach(key=>{if(key!=='label')m[key]=p[key];});
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
@@ -10486,16 +10755,26 @@ function mskSkinCoverage(m){
   if(!m||!m.crOn||!m.crSamples||!m.crSamples.length)return null;
   const cv=FX&&FX.cv;if(!cv||!cv.width)return null;
   try{
+    // Sample only the mask's own bounding box, not the whole frame — a mask that covers a small
+    // fraction of a large photo was spending all 48x48 samples mostly on pixels the mask doesn't
+    // even touch, wasting resolution and under-reporting coverage for a tightly cropped subject.
+    const bbox=(m.px&&m.mtW&&m.mtH)?_mskSubjectBBox(m):null;
+    let sx=0,sy=0,sw=cv.width,sh=cv.height;
+    if(bbox){
+      const fx0=bbox.x0/m.mtW,fy0=bbox.y0/m.mtH,fx1=(bbox.x1+1)/m.mtW,fy1=(bbox.y1+1)/m.mtH;
+      sx=Math.floor(fx0*cv.width);sy=Math.floor(fy0*cv.height);
+      sw=Math.max(1,Math.ceil((fx1-fx0)*cv.width));sh=Math.max(1,Math.ceil((fy1-fy0)*cv.height));
+    }
     const S=48,t=document.createElement('canvas');t.width=S;t.height=S;
     const cx=t.getContext('2d',{willReadFrequently:true});
-    cx.drawImage(cv,0,0,S,S);
+    cx.drawImage(cv,sx,sy,sw,sh,0,0,S,S);
     const d=cx.getImageData(0,0,S,S).data;
     let hit=0,tot=0;
     for(let i=0;i<S*S;i++){
       const[h,C]=rgb2oklch(d[i*4]/255,d[i*4+1]/255,d[i*4+2]/255);
       // ⚠️ crRange is passed RAW (0..100) — crWeightJS divides by 100 itself. Pre-dividing here
       // collapsed the kernel to ~zero width and made this readout report 0% for every photo.
-      const w=crWeightJS(h,C,m.crSamples,(m.crRange!=null?m.crRange:35));
+      const w=crWeightJS(h,C,m.crSamples,(m.crRange!=null?m.crRange:35),(m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35)));
       tot++;if(w>0.5)hit++;
     }
     return tot?Math.round(hit/tot*100):null;
@@ -10514,7 +10793,7 @@ function mskSlide(el){
   el.nextElementSibling.textContent=el.dataset.k==='colHue'?Math.round(v)+'°':Math.round(v);
   // Widening/narrowing the colour gate changes WHICH pixels are selected, so the mean value that
   // "preserve modeling" anchors to has to be re-measured (debounced — it reads back the canvas).
-  if(el.dataset.k==='crRange')mskSrcVDebounced();
+  if(el.dataset.k==='crRange'||el.dataset.k==='crRangeC')mskSrcVDebounced();
   fxUpdate();
 }
 // hue(0-360)+sat(0-1) at a fixed 50% lightness -> #rrggbb, for the native <input type="color"> picker.
@@ -10566,6 +10845,10 @@ function crSampleMean(samples){
   let h=Math.atan2(y/n,x/n)/(2*Math.PI);if(h<0)h+=1;
   return{h,s:s/n,v:v/n};
 }
+// ⚠️ Verified consistent across Print profiles: skinUniformity() runs in the LUT PASS, and Print
+// LUTs apply later in the comp pass (§3's pipeline order) — so a Monk swatch always resolves
+// against the pre-print graded pixel, never a print-shifted one. A swatch aims at the same place
+// regardless of which Print profile (or none) is selected.
 function mskSkinTarget(m){
   let h,s,v;
   if(m.tgtMode==='match'||!m.tgtMode){const mn=crSampleMean(m.crSamples);h=mn.h;s=mn.s;v=mn.v;}
@@ -10597,9 +10880,10 @@ function _crAxisJS(d,half){
   const t=Math.min(1,Math.max(0,(d-core)/Math.max(half-core,1e-6)));
   return 1-t*t;
 }
-function crWeightJS(h,C,samples,range){
+function crWeightJS(h,C,samples,hRange,cRange){
   if(!samples||!samples.length)return 1;
-  const R=range/100,hHalf=0.02+R*0.14,cHalf=0.012+R*0.10;
+  if(cRange==null)cRange=hRange;   // legacy 2-arg callers: chroma range follows hue range
+  const R=hRange/100,RC=cRange/100,hHalf=0.02+R*0.14,cHalf=0.012+RC*0.10;
   let w=0;
   for(const p of samples){
     let dh=Math.abs(h-(p.h||0));if(dh>0.5)dh=1-dh;
@@ -10610,20 +10894,36 @@ function crWeightJS(h,C,samples,range){
   // needed; see that function for the measurements behind the thresholds.
   return w*_smoothstepJS(0.010,0.016,C);
 }
+// Shared downsample for mskMeasureSrcV — several Skin masks on one photo (e.g. one per person in
+// a group shot) each used to draw+readback their OWN 180px copy of FX.cv independently. A 50ms
+// cache (short relative to mskSrcVDebounced's 60ms debounce, so a genuinely new render still gets
+// a fresh readback) lets back-to-back measurements across masks share one canvas draw + one
+// getImageData call instead of paying for each separately.
+let _srcVFrameCache=null;
+function _srcVFrameData(){
+  const cv=FX&&FX.cv;if(!cv||!cv.width)return null;
+  const now=performance.now();
+  if(_srcVFrameCache&&_srcVFrameCache.cvw===cv.width&&_srcVFrameCache.cvh===cv.height&&now-_srcVFrameCache.ts<50)
+    return _srcVFrameCache;
+  const N=180,cw=cv.width,ch=cv.height;
+  const sc=Math.min(1,N/Math.max(cw,ch)),tw=Math.max(1,Math.round(cw*sc)),th=Math.max(1,Math.round(ch*sc));
+  const tc=document.createElement('canvas');tc.width=tw;tc.height=th;
+  try{tc.getContext('2d').drawImage(cv,0,0,tw,th);}catch(err){return null;}
+  const data=tc.getContext('2d').getImageData(0,0,tw,th).data;
+  _srcVFrameCache={cvw:cw,cvh:ch,tw,th,data,ts:now};
+  return _srcVFrameCache;
+}
 function mskMeasureSrcV(m){
   if(!m||!m.crOn||!m.crSamples||!m.crSamples.length||!FX.cv){if(m)m.srcV=null;return;}
   _fxEnsureNormalRender();
-  const N=180,cw=FX.cv.width,ch=FX.cv.height;
-  if(!cw||!ch){m.srcV=null;return;}
-  const sc=Math.min(1,N/Math.max(cw,ch)),tw=Math.max(1,Math.round(cw*sc)),th=Math.max(1,Math.round(ch*sc));
-  const tc=document.createElement('canvas');tc.width=tw;tc.height=th;
-  try{tc.getContext('2d').drawImage(FX.cv,0,0,tw,th);}catch(err){m.srcV=null;return;}
-  const d=tc.getContext('2d').getImageData(0,0,tw,th).data;
-  const R=(m.crRange!=null?m.crRange:35);
+  const frame=_srcVFrameData();
+  if(!frame){m.srcV=null;return;}
+  const d=frame.data;
+  const R=(m.crRange!=null?m.crRange:35),RC=(m.crRangeC!=null?m.crRangeC:R);
   let acc=0,wsum=0;
   for(let i=0;i<d.length;i+=4){
     const[h,C,L]=rgb2oklch(d[i]/255,d[i+1]/255,d[i+2]/255);
-    const w=crWeightJS(h,C,m.crSamples,R);if(w<=0)continue;
+    const w=crWeightJS(h,C,m.crSamples,R,RC);if(w<=0)continue;
     acc+=w*L;wsum+=w;   // srcV is Oklab L — the space the shader compares it against
   }
   m.srcV=wsum>1e-6?acc/wsum:null;   // null => the shader falls back to the target's own value
@@ -10695,9 +10995,18 @@ function mskAutoSamples(){
   const m=fxState.masks[mskSel];
   if(!m){return;}
   if(!m.px||!m.px.length){toast('Select the subject first — scribble over them');return;}
+  const subjWord=m.origin==='coat'?'coat':'skin';
   const px=_mskSkinPixels(m,4000);
-  if(px.length<20){toast('Not enough skin in the selection to sample');return;}
-  const K=Math.min(4,Math.max(1,Math.floor(px.length/8)));
+  if(px.length<20){toast('Not enough '+subjWord+' in the selection to sample');return;}
+  // K used to be a flat 4, tuned on one photo (__TM3390.jpg). It now also responds to how spread
+  // out the selection's tone actually is (value std-dev) — a tight headshot doesn't need 4-6
+  // clusters just because it has plenty of pixels, and a group shot with strong mixed lighting
+  // genuinely does. CR_MAX_SAMPLES=8 gives this room to grow to 6 and still leave 2 slots free for
+  // a manual shift-click add-on.
+  const vMean=px.reduce((a,p)=>a+p.v,0)/px.length;
+  const vStd=Math.sqrt(px.reduce((a,p)=>a+(p.v-vMean)*(p.v-vMean),0)/px.length);
+  const kBySpread=Math.round(2+vStd*22);   // ~0 std -> 2, ~0.18 std (shade+lit+highlight) -> 6
+  const K=Math.min(6,Math.max(1,Math.min(kBySpread,Math.floor(px.length/8))));
   // Seed on the VALUE spread rather than at random: the clusters that matter are shaded vs lit
   // skin, so starting the centres spread along v converges to that split in a couple of passes
   // and — unlike random seeding — gives the same answer every time it is run on the same photo.
@@ -10747,23 +11056,30 @@ function mskAutoSamples(){
     if(keep.some(k=>_circDist(k.h,c.h)<0.01&&Math.abs(k.s-c.s)<0.006))continue;
     keep.push(c);
   }
-  if(!keep.length){toast('Could not find a consistent skin tone in the selection');return;}
+  if(!keep.length){toast('Could not find a consistent '+subjWord+' tone in the selection');return;}
+  // If most of the candidate clusters got dropped (as noise or near-duplicates), the survivors are
+  // few and the selection collapses back toward the "1-sample" failure mode §5b measured — warn
+  // instead of silently sampling fewer tones than the selection's actual spread suggested.
+  if(K>=3&&keep.length<=Math.ceil(K/2)){
+    toast(`Only ${keep.length} of ${K} candidate tones were consistent enough to keep — check the selection isn't including background`,'warn');
+  }
   m.crSamples=keep.slice(0,CR_MAX_SAMPLES).map(c=>{
     const[r,g,b]=oklch2rgb(c.h,c.s,c.v);
     return{h:c.h,s:c.s,v:c.v,rgb:[Math.round(r*255),Math.round(g*255),Math.round(b*255)]};
   });
   m.crOn=true;m._okSpace=true;
-  // ⚠️ The range is deliberately LEFT ALONE at the skin default (55), and the alternative was
-  // measured rather than assumed. Narrowing it to 40 removes a gate leak onto grey rock
+  // ⚠️ The range is deliberately LEFT ALONE at the mask's own default (measured for skin at 55;
+  // see mskAdd's 'coat' branch for why coat's default is wider), and the alternative was measured
+  // rather than assumed for skin. Narrowing it to 40 removes a gate leak onto grey rock
   // (0.277 -> 0.000) but triples the effective-weight spread across skin (0.018 -> 0.085) and
   // costs 6 points of chroma convergence. §5b's central finding is that FLAT weight matters more
   // than high weight, and the leak it trades against is an artifact of measuring with a
-  // frame-sized ellipse: this button only exists on a Skin mask, which is segmentation-first, so
-  // rock and animals are outside the SHAPE and multiplied to zero regardless of the gate.
+  // frame-sized ellipse: this button only exists on Skin/Coat masks, which are segmentation-first,
+  // so rock and other subjects are outside the SHAPE and multiplied to zero regardless of the gate.
   // If a user does see spill, "How similar" is right there to lower.
   mskSrcVDebounced();
   mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
-  log(`Auto-sampled ${m.crSamples.length} skin tones from the selection`,'info');
+  log(`Auto-sampled ${m.crSamples.length} ${subjWord} tones from the selection`,'info');
   toast(`Sampled ${m.crSamples.length} tones from the selection`,true);
 }
 function mskCrEyedropper(force){
@@ -10959,6 +11275,10 @@ function mskRebuild(){
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over">Clear points</button></div>'
         +(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button></div>':'')
         +subjPanelHtml(m)
+        // subjPanelHtml renders nothing outside window.__TAURI__ — say WHY rather than just being
+        // silent, so a web/iOS user doesn't wonder whether "Remember this subject" ever existed
+        // for them or is simply missing on this platform.
+        +(!window.__TAURI__?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px">Named subjects ("remember this dog, find it in other photos") needs the desktop app — it runs an on-device model this platform doesn\'t have.</div>':'')
         +'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>'
         +(_sam2Encoding?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">◠</span> Improving selection quality in the background…</div>':'')
         // Previously a failed encode/select was only logged to the hidden diagnostics panel — a
@@ -10978,7 +11298,7 @@ function mskRebuild(){
   // ── SELECTION: Amount, the colour gate (non-skin masks) and the luminance band ──────────────
   // Amount is a master scale on the finished selection, so a mask can be dialled back without
   // rescaling every slider below it by hand.
-  const isSkin=caps.skinTools;
+  const isSkin=caps.toneTool,isCoat=m.origin==='coat',subjWord=isCoat?'coat':'skin';
   const tgtMode=m.tgtMode||'match',tgtHex=m.tgtHex||'#d7bd96';
   const CS=m.crSamples||[];
   const chipRow=()=>CS.length?('<div class="msk-chiprow">'
@@ -10998,8 +11318,11 @@ function mskRebuild(){
       +'<input type="checkbox" '+(m.crOn?'checked':'')+' onchange="mskCrToggle(this)">'
       +'<button class="btn bgh" id="btn-msk-cr-eye" onclick="mskPickSkin()" style="flex:0 0 auto">'+icon('eyedropper',14)+' Pick</button></div>'
       +chipRow()
-      +(m.crOn?_mskRow('How similar','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
-        +'<div class="msk-hint">Color alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous.</div>':'');
+      +(m.crOn?_mskRow('Hue range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false,
+          'How far around the picked hue counts as a match.')
+        +_mskRow('Color purity range','crRangeC',m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35),0,100,1,false,
+          'How far from the picked saturation/purity counts as a match — independent of hue range, so you can tighten this alone to exclude a same-hued but duller/more-vivid object (e.g. sand vs skin) without also narrowing valid hue variation.')
+        +'<div class="msk-hint">Color alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous. For a whole person or animal, <b>+ Skin</b>, <b>+ Coat</b> or <b>+ AI Select</b> segments the subject first, which sidesteps this entirely.</div>':'');
   }
   selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
     +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
@@ -11009,30 +11332,38 @@ function mskRebuild(){
   if(isSkin){
     const cov=mskSkinCoverage(m);
     const strength=Math.round(((m.uH||0)+(m.uS||0))/2);
-    let sk='<div class="msk-step"><span class="msk-step-n">1</span>Select the skin</div>'
-      +'<div class="msk-hint">Click the skin you want to even out. Add clicks for shaded, paler or pinker areas — one sample is never enough for a whole body.</div>'
-      // Auto first, and primary: SAM has already decided which pixels are this person, so the
+    let sk='<div class="msk-step"><span class="msk-step-n">1</span>Select the '+subjWord+'</div>'
+      +'<div class="msk-hint">Click the '+subjWord+' you want to even out. Add clicks for shaded, paler or '+(isCoat?'sun-bleached':'pinker')+' areas — one sample is never enough for a whole '+(isCoat?'coat':'body')+'.</div>'
+      // Auto first, and primary: SAM has already decided which pixels are this subject, so the
       // samples can be derived from them. Hand-picking stays for correcting the result, but it is
       // no longer the only route — and it was the route that produced the measured one-sample
       // failure (CLAUDE.md §5b).
-      +'<div class="btn-row"><button class="btn bsec" onclick="mskAutoSamples()" title="Read the skin tones straight out of the selected area — covers shaded and lit skin without hunting for spots to click.">'
+      +'<div class="btn-row"><button class="btn bsec" onclick="mskAutoSamples()" title="Read the '+subjWord+' tones straight out of the selected area — covers shaded and lit areas without hunting for spots to click.">'
       +icon('wand',14)+' Sample from selection</button>'
       +'<button class="btn '+(_mskCrEyeActive?'bsec':'bgh')+'" id="btn-msk-cr-eye" onclick="mskPickSkin()">'
       +icon('eyedropper',14)+(_mskCrEyeActive?' Picking — shift-click to add':' Pick manually')+'</button></div>'
       +chipRow();
     if(CS.length){
       sk+=_mskRow('How similar','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
+        +_mskRow('Color purity range','crRangeC',m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35),0,100,1,false,
+          'Independent of "How similar" (hue) — narrow this alone to exclude a same-hued but duller/more-vivid object without also shrinking valid skin hue variation.')
         +(cov!=null?'<div class="msk-cov"><b>'+CS.length+' sample'+(CS.length>1?'s':'')+'</b> · about <b>'+cov+'%</b> of the frame selected</div>':'')
         // The measured failure mode, stated where it can still be acted on. See CLAUDE.md 5b.
-        +(CS.length<2?'<div class="msk-warn">One sample rarely covers a whole body — skin straddles the hue wrap point, so a single pick can leave the palest area barely selected and push its hue further away, not closer. Shift-click a couple more.</div>':'');
+        // The specific "straddles the hue wrap point" claim is a SKIN measurement (§5b, __TM3390.jpg)
+        // — not re-asserted for Coat, which hasn't been separately measured, but the general "one
+        // sample rarely covers a whole subject" lesson still applies to any patchy tone.
+        +(CS.length<2?('<div class="msk-warn">One sample rarely covers a whole '+(isCoat?'coat':'body')+'.'+(isCoat?'':' Skin straddles the hue wrap point, so a single pick can leave the palest area barely selected and push its hue further away, not closer.')+' Shift-click a couple more.</div>'):'');
     }
+    // Monk Skin Tone is a human skin-tone reference scale — meaningless as a fur target, so Coat
+    // masks skip that mode entirely rather than offering a swatch strip that doesn't apply to them.
+    const tgtModes=isCoat?[['match','Even them out'],['ref','Match shoot'],['custom','Custom']]
+                          :[['match','Even them out'],['ref','Match shoot'],['swatch','Pick a shade'],['custom','Custom']];
     sk+='<div class="msk-step"><span class="msk-step-n">2</span>Choose the target</div>'
       +'<div class="msk-hint">Where those tones should end up. It does not have to be a color that appears in the photo.</div>'
       +'<div class="seg msk-seg">'
-      +[['match','Even them out'],['ref','Match shoot'],['swatch','Pick a shade'],['custom','Custom']]
-        .map(([v,lb])=>'<button class="'+(tgtMode===v?'on':'')+'" onclick="mskTgtMode(\''+v+'\')">'+lb+'</button>').join('')
+      +tgtModes.map(([v,lb])=>'<button class="'+(tgtMode===v?'on':'')+'" onclick="mskTgtMode(\''+v+'\')">'+lb+'</button>').join('')
       +'</div>';
-    if(tgtMode==='swatch'){
+    if(tgtMode==='swatch'&&!isCoat){
       sk+='<div class="msk-chiprow msk-mst">'
         +MST_SWATCHES.map((hx,i)=>'<button class="pc-chip msk-swatch'+(tgtHex.toLowerCase()===hx?' on':'')
           +(i>=3&&i<=5?' rec':'')+'" style="background:'+hx+'" title="Monk Skin Tone '+(i+1)+(i>=3&&i<=5?' — a good span for tanning a light base':'')+'" onclick="mskTgtSwatch(\''+hx+'\')"><span>'+(i+1)+'</span></button>').join('')
@@ -11047,9 +11378,24 @@ function mskRebuild(){
         +'<div class="btn-row"><button class="btn bgh" onclick="mskSetSkinRef()" title="Measure this photo\'s skin and use it as the reference for the whole shoot">'+icon('eyedropper',14)+' Set from this photo</button>'
         +(ref?'<button class="btn bgh" onclick="mskUseSkinRef()">Use saved</button>':'')+'</div>';
     }
+    // Now -> Target swatch pair: a legible readout of what the guided flow is aiming for, instead
+    // of making the user eyeball the graded photo to judge whether Preserve/Depth/Warmth are doing
+    // what they intend. "Now" is the mean of the picked/auto-seeded samples (crSampleMean, the same
+    // number Match-pick's target already uses) — a cheap, already-computed proxy for the gated
+    // region's colour, not a fresh per-render measurement.
+    if(CS.length){
+      const curMean=crSampleMean(CS),tgtSw=mskSkinTarget(m);
+      const[cr,cg,cb]=oklch2rgb(curMean.h,curMean.s,curMean.v);
+      const[tr,tg,tb]=oklch2rgb(tgtSw.h,tgtSw.s,tgtSw.v);
+      const toRgb=(r,g,b)=>'rgb('+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(1,v))*255)).join(',')+')';
+      sk+='<div class="fx-row" style="align-items:center;gap:6px" title="Measured mean of your picked '+subjWord+' samples, and the target Depth/Warmth resolve to. A guide, not a guarantee — per-pixel results also depend on Preserve and Strength."><div class="fx-label">Now → Target</div>'
+        +'<span class="pc-chip" style="order:2;background:'+toRgb(cr,cg,cb)+';width:20px;height:20px;border-radius:5px"></span>'
+        +'<span style="order:3;color:var(--mut);font-family:var(--sans)">&rarr;</span>'
+        +'<span class="pc-chip" style="order:4;background:'+toRgb(tr,tg,tb)+';width:20px;height:20px;border-radius:5px"></span></div>';
+    }
     sk+='<div class="msk-step"><span class="msk-step-n">3</span>Blend</div>'
       +'<div class="msk-chiprow msk-presets">'
-      +Object.entries(MSK_SKIN_PRESETS).map(([k,p])=>'<button class="btn bgh msk-preset" onclick="mskSkinPreset(\''+k+'\')">'+p.label+'</button>').join('')
+      +Object.entries(isCoat?MSK_COAT_PRESETS:MSK_SKIN_PRESETS).map(([k,p])=>'<button class="btn bgh msk-preset" onclick="mskSkinPreset(\''+k+'\')">'+p.label+'</button>').join('')
       +'</div>'
       +'<div class="fx-row" title="How far the selected tones move toward the target. This is a CONVERGENCE, not a shift: uneven areas even out instead of the darkest simply getting darker."><div class="fx-label">Strength</div>'
       +'<input class="fx-slider" type="range" min="0" max="100" value="'+strength+'" oninput="mskSkinStrength(parseFloat(this.value))">'
@@ -11076,11 +11422,13 @@ function mskRebuild(){
         +'<div class="fx-row" title="0 collapses lightness onto the target — it evens out a tan LINE but flattens the shading that gives a body its form. 100 shifts the overall level with shading fully intact."><div class="fx-label">Keep shading</div>'
         +'<input class="fx-slider" type="range" min="0" max="100" value="'+(m.preserve!=null?m.preserve:70)+'" data-k="preserve" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
         +'<div class="fx-val">'+(m.preserve!=null?m.preserve:70)+'</div></div>'
-        +'<div class="fx-row" title="Tanning only darkens. With this off, skin already darker than the target gets LIFTED toward it, washing out shadows and the edges of hair."><div class="fx-label">Only darken</div>'
-        +'<input type="checkbox" '+(m.tanOneWay?'checked':'')+' onchange="mskSetFlag(\'tanOneWay\',this.checked)"></div>'
-        +'<div class="msk-hint">Lightness is not expected to match across sunlit and shadowed skin — forcing that is what flattens a subject, and what Keep shading exists to prevent. Judge the result on lit skin.</div>';
+        +_mskRow('Only darken','tanOneWayAmt',m.tanOneWayAmt!=null?m.tanOneWayAmt:(m.tanOneWay?100:0),0,100,1,false,
+          isCoat
+            ?'At 100 the target only ever darkens the coat (like tanning); at 0 it can lighten a sun-bleached patch back down too, which is usually what a Coat mask wants. In between allows a little of each.'
+            :'Tanning only darkens. At 0 skin already darker than the target gets LIFTED toward it, washing out shadows and the edges of hair. At 100 it never lifts at all; in between allows a little lift instead of none.')
+        +'<div class="msk-hint">Lightness is not expected to match across sunlit and shadowed '+subjWord+' — forcing that is what flattens a subject, and what Keep shading exists to prevent. Judge the result on lit '+subjWord+'.</div>';
     }
-    h+=_mskGroup('skin','Skin tone',sk,isSkin&&strength>0?'on':'');
+    h+=_mskGroup('skin',isCoat?'Coat tone':'Skin tone',sk,isSkin&&strength>0?'on':'');
   }
 
   // ── ADJUST ───────────────────────────────────────────────────────────────────────────────────
@@ -11159,7 +11507,6 @@ function mskToggleMute(){
 // Turn a mask into an ERASER: it applies nothing of its own and is subtracted from every other
 // mask. Paint one over the lips, another over a pet, and both come out of the skin selection —
 // which "subtract prev" cannot do, since it only ever reaches back a single slot.
-function mskSetFlag(k,v){const m=fxState.masks[mskSel];if(!m)return;m[k]=!!v;mskRebuild();fxUpdate();}
 function mskToggleExclude(){
   const m=fxState.masks[mskSel];if(!m)return;
   m.isExclude=!m.isExclude;
@@ -11169,7 +11516,8 @@ function mskToggleExclude(){
 }
 // The label shown on the list chip when the user hasn't named the mask themselves.
 function mskAutoLabel(m,i){
-  const t=m.origin==='skin'?(mskIsAI(m)?'Skin AI':'Skin'):m.origin==='color'?'Color':m.origin==='lum'?'Lum'
+  const t=m.origin==='skin'?(mskIsAI(m)?'Skin AI':'Skin'):m.origin==='coat'?(mskIsAI(m)?'Coat AI':'Coat')
+    :m.origin==='color'?'Color':m.origin==='lum'?'Lum'
     :m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
     :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Color':'Radial'):'Brush';
   return t+' '+(i+1);
@@ -11639,9 +11987,9 @@ function fxRedo(){
   if(typeof hapt==='function')hapt();
   log('Redo','info');
 }
-function fxResetAll(){
+async function fxResetAll(){
   if(!fxHistory.length)return;
-  if(!confirm('Reset all edits on this photo? This cannot be undone.'))return;
+  if(!await confirmModal('Reset all edits on this photo? This cannot be undone.','Reset all'))return;
   if(typeof hapt==='function')hapt();
   _fxHistoryRestore(0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
   if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
@@ -12252,7 +12600,7 @@ async function styleSaveCurrent(){
   const list=stylesList();
   const existing=list.findIndex(s=>s.name===name);
   const entry={name,recipe:snap,created:Date.now()}; // stored as a plain object (localStorage.setItem below JSON.stringifies the whole list) — no base64 needed for a pure-JS/localStorage feature
-  if(existing>=0){if(!confirm(`A Style named "${name}" already exists. Overwrite it?`))return;list[existing]=entry;}
+  if(existing>=0){if(!await confirmModal(`A Style named "${name}" already exists. Overwrite it?`,'Overwrite'))return;list[existing]=entry;}
   else list.push(entry);
   stylesSave(list);styleListRefresh();
   toast(`Style "${name}" saved`,true);
@@ -12262,8 +12610,8 @@ function styleApply(name){
   try{applyUISnapshot(JSON.parse(JSON.stringify(s.recipe)));fxUpdate();log(`Style applied: ${name}`,'ok');}
   catch(e){log('Could not apply style: '+e.message,'err');}
 }
-function styleDelete(name){
-  if(!confirm(`Delete Style "${name}"? This cannot be undone.`))return;
+async function styleDelete(name){
+  if(!await confirmModal(`Delete Style "${name}"? This cannot be undone.`,'Delete'))return;
   stylesSave(stylesList().filter(s=>s.name!==name));styleListRefresh();
 }
 function styleExport(name){
@@ -12326,7 +12674,7 @@ async function exportPresetSaveCurrent(){
   const list=exportPresetsList();
   const existing=list.findIndex(p=>p.name===name);
   const entry={name,settings:_exportPresetRead()};
-  if(existing>=0){if(!confirm(`An export preset named "${name}" already exists. Overwrite it?`))return;list[existing]=entry;}
+  if(existing>=0){if(!await confirmModal(`An export preset named "${name}" already exists. Overwrite it?`,'Overwrite'))return;list[existing]=entry;}
   else list.push(entry);
   exportPresetsSave(list);exportPresetListRefresh(name);
   toast(`Export preset "${name}" saved`,true);
@@ -12343,9 +12691,9 @@ function exportPresetApply(name){
   const delBtn=document.getElementById('btn-exp-preset-del');if(delBtn)delBtn.disabled=false;
   log(`Export preset applied: ${name}`,'ok');
 }
-function exportPresetDeleteCurrent(){
+async function exportPresetDeleteCurrent(){
   const sel=document.getElementById('sel-exp-preset');const name=sel&&sel.value;if(!name)return;
-  if(!confirm(`Delete export preset "${name}"? This cannot be undone.`))return;
+  if(!await confirmModal(`Delete export preset "${name}"? This cannot be undone.`,'Delete'))return;
   exportPresetsSave(exportPresetsList().filter(p=>p.name!==name));exportPresetListRefresh();
 }
 function exportPresetListRefresh(selectName){
@@ -14508,9 +14856,9 @@ async function exportFX(){
   if(exportRawNr==='high'){
     const highCount=items.filter(it=>it.rawFile&&!it._nrHighApplied).length;
     if(highCount>5){
-      const proceed=confirm(`${highCount} of ${items.length} photo(s) use High noise reduction (~30-90s each, several minutes total).\n\nOK = continue with High. Cancel = choose Fast instead.`);
+      const proceed=await confirmModal(`${highCount} of ${items.length} photo(s) use High noise reduction (~30-90s each, several minutes total).`,'Continue with High');
       if(!proceed){
-        if(!confirm('Export this batch using Fast noise reduction instead?')){log('Export cancelled','info');return;}
+        if(!await confirmModal('Export this batch using Fast noise reduction instead?','Use Fast')){log('Export cancelled','info');toast('Export cancelled','err');return;}
         exportRawNr='fast';
       }
     }
@@ -15716,6 +16064,41 @@ function askTextModal(title,msg,defVal){
     input.focus();input.select();
   });
 }
+// ⚠️ window.confirm() has the EXACT same silent-no-op bug as window.prompt() (see askTextModal's
+// own comment) and it went unfixed for a long time because nobody checked the sibling API when
+// prompt() was fixed. Verified against wry 0.55.1's actual source
+// (wry-0.55.1/src/wkwebview/class/wry_web_view_ui_delegate.rs): its WKUIDelegate implements
+// window-close, the open-file panel, media-capture permission and popup creation — none of the
+// three JS-dialog methods (alert/confirm/prompt). Per WKUIDelegate's documented default, an
+// unimplemented runJavaScriptConfirmPanel makes confirm() return `false` IMMEDIATELY, no dialog
+// ever shown. Every `if(!confirm(...))return` in the app therefore ALWAYS took the early return
+// in the packaged desktop build: Reset All Edits, Delete Style, Delete export preset, and (in
+// library-ui.js) Reset Edit/Delete version/Move to Trash/Delete album all silently did nothing,
+// and the High-NR batch-export prompt silently self-cancelled every time. confirmModal() is the
+// same <dialog> pattern as askTextModal — real DOM, works identically in the browser and the
+// WKWebView shell — resolving true/false instead of a string.
+function confirmModal(msg,okLabel){
+  return new Promise(res=>{
+    let dlg=document.getElementById('fx-confirm-modal');
+    if(!dlg){
+      dlg=document.createElement('dialog');dlg.id='fx-confirm-modal';
+      dlg.style.cssText='border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.innerHTML='<div id="fx-confirm-msg" style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:14px"></div>'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+        '<button type="button" id="fx-confirm-cancel" class="btn bgh">Cancel</button>'+
+        '<button type="button" id="fx-confirm-ok" class="btn bpri"></button></div>';
+      document.body.appendChild(dlg);
+    }
+    dlg.querySelector('#fx-confirm-msg').textContent=msg;
+    dlg.querySelector('#fx-confirm-ok').textContent=okLabel||'OK';
+    const finish=v=>{dlg.close();res(v)};
+    dlg.querySelector('#fx-confirm-ok').onclick=()=>finish(true);
+    dlg.querySelector('#fx-confirm-cancel').onclick=()=>finish(false);
+    dlg.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();finish(true)}else if(e.key==='Escape'){finish(false)}};
+    dlg.showModal();
+    dlg.querySelector('#fx-confirm-cancel').focus();
+  });
+}
 async function gpAskClientId(force){
   let cid=gpClientId();
   if(cid&&!force)return cid;
@@ -16637,7 +17020,10 @@ const ICONS={
  pin:'<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.4"/>',
  alertTriangle:'<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17h.01"/>',
  stepBack:'<path d="M19 4v16"/><path d="M15 12L5 5v14z"/>',
- stepFwd:'<path d="M5 4v16"/><path d="M9 12l10-7v14z"/>'
+ stepFwd:'<path d="M5 4v16"/><path d="M9 12l10-7v14z"/>',
+ // + Mask menu (mskAddMenu): 'linearGrad' for the Linear mask entry, 'sky' for Sky.
+ linearGrad:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18" opacity=".5"/>',
+ sky:'<path d="M3 17a9 4.5 0 0 0 18 0"/><circle cx="12" cy="9" r="4"/>'
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // Label per section, in rail / strip order.
