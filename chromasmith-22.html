@@ -1222,6 +1222,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <select class="fx-select" id="sel-print" onchange="selectPrint(this.value)" style="display:none"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
         <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
         <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)" style="display:none"><option value="">None</option></select>
+        <div class="fx-row" id="row-lut-mix" style="display:none;margin-top:8px"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-lut-mix" oninput="fxUpdate()" title="Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original."><div class="fx-val" id="vl-lut-mix">100</div></div>
         <div id="fx-looks-ctrl" style="display:none;margin-top:10px">
           <div class="fx-label" style="margin-bottom:4px">Preset</div>
           <input class="vinput" id="fx-looks-search" type="search" placeholder="Search looks…" autocomplete="off"
@@ -4065,7 +4066,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16e';
+const BUILD='2026-08-16g';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4678,7 +4679,7 @@ vec3 oklch2rgb(vec3 lch){
 precision highp float;
 precision highp sampler3D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;
+uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;uniform float lutMix;
 // VIDEO source transform — the only two uniforms a video frame needs at the actual entry
 // point of the pipeline (everything downstream already treats img as just "the source pixel").
 // Both default to the identity so every still golden in test/golden/ stays byte-exact.
@@ -5090,7 +5091,7 @@ if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
 if(useHlg>.5)c.rgb=hlg2rec709(c.rgb,hlgLw);
 if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
-if(useLut>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(lut3,c.rgb*sc+of).rgb;}
+if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;c.rgb=mix(lb,texture(lut3,c.rgb*sc+of).rgb,lutMix);}
 if(useHsl>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(hslLut,c.rgb*sc+of).rgb;}
 c.rgb=basicAdjust(c.rgb);
 if(mskN>0.5){
@@ -5997,7 +5998,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.blur,this.fbs.sklo_b,{img:0,dir:[1/this.w4,0],sig:sigQ},[[0,'skbox',false]],RQ);
       this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
     }
-    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,useVlog:P.input==='vlog'?1:0,
+    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,
       useHlg:P.hlg&&P.hlg.enabled?1:0,
       hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
       srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
@@ -6221,7 +6222,7 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},pointColors:[],artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,print:null,sharedAdjust:null};
+const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},pointColors:[],artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,lutMix:1,print:null,sharedAdjust:null};
 let fxImg=null,fxTimer=null,_fxHistPushTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
 let _fxAmtTouched=false; // true once the user manually moves grain/halation/bloom Amount after a look pick
 let _fxPristineDefault=null; // captured once at boot, before loadSession() — see loadFXImages
@@ -6974,6 +6975,8 @@ async function refreshLUTSelect(keep){
 async function selectLUT(v,skipFxDefaults){
   const del=document.getElementById('btn-lut-del');del.disabled=!v.startsWith('l:');
   if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+  const rowMix=document.getElementById('row-lut-mix');
+  if(rowMix)rowMix.style.display=v?'flex':'none';
   try{
     if(!v){fxState.lut=null;renderPreview();log('LUT off');return}
     let lut;
@@ -8436,10 +8439,11 @@ document.addEventListener('change',_ffAutoEnable,true);
 document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button,.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
+  {const slLM=document.getElementById('sl-lut-mix');if(slLM)fxState.lutMix=parseFloat(slLM.value)/100;}
   if(typeof nrSyncGate==='function')nrSyncGate();
   // Persist the live Adjust sliders into whichever store the CURRENT photo actually reads at
   // render/export time: its own it.adjustOverride if it's been made independent (adjToggleScope),
@@ -12232,7 +12236,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
-  'b1-t','b2-t','vig'];
+  'b1-t','b2-t','vig','lut-mix'];
 const _FX_SNAP_TOGGLES=['adjust','curves','hsl','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
 const _FX_SNAP_SELECTS=['sel-input','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
@@ -12276,7 +12280,7 @@ function getUISnapshot(opts){
 // a BASE snapshot (the current live state), so unchecked categories are left exactly as they
 // were instead of being overwritten. Field lists mirror getFXParams'/_FX_SNAP_*'s own grouping.
 const PASTE_CATEGORIES=[
-  {key:'lut',label:'Look (LUT + Print profile)',sliders:[],toggles:[],selects:['sel-lut','sel-print']},
+  {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','hsl','pointColors']},
   {key:'adjust',label:'Basic Adjustments',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin'],toggles:['tg-adjust'],selects:[]},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:[],selects:[]},
@@ -12338,6 +12342,7 @@ function applyUISnapshot(s){
     if(typeof healSyncUI==='function')healSyncUI();
   }
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
+  if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
   let _lutPromise;
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')_lutPromise=selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
@@ -13547,6 +13552,7 @@ function computeAdjustBlock(v){
 }
 function getFXParams(adjValsOverride){return{
   lut:fxState.lut,
+  lutMix:fxState.lutMix!=null?fxState.lutMix:1,
   print:fxState.print,
   input:(document.getElementById('sel-input')||{}).value||'',   // '' standard | 'vlog' V-Log source
   // HLG input transform — enabled ONLY for a video whose engine delivered the frame

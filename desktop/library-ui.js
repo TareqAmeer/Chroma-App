@@ -1092,6 +1092,7 @@
     window.__libRenderGrid = () => renderGrid();
     window.__libSelect = (p) => { state.selected.add(p); };
     window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
+    window.__libScrollTo = (p) => scrollLibraryToPath(p);
   }
   // How many rows of cards to keep mounted beyond the viewport in each direction. Two rows is
   // enough that a normal scroll flick never exposes a gap, without mounting a screenful of cards
@@ -1140,6 +1141,37 @@
       padTop: firstRow * m.rowH,
       padBot: Math.max(0, (totalRows - 1 - lastRow) * m.rowH),
     });
+  }
+
+  /// Scrolls the sidebar grid so the given path's card is visible. Used after opening a photo
+  /// into the editor so the newly-active card doesn't stay scrolled off-screen. Works whether or
+  /// not the grid is virtualized: a virtualized grid may not have mounted a DOM card for `path`
+  /// at all, so this computes the target row from state._virtAll/_virtMetrics and sets scrollTop
+  /// directly (same coordinate space virtUpdate reads: scroller.scrollTop - gridEl.offsetTop),
+  /// then forces a virtUpdate so the row actually mounts. Non-virtualized grids fall back to a
+  /// plain scrollIntoView on the existing card.
+  function scrollLibraryToPath(path) {
+    if (!path) return;
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl) return;
+    if (state._virtOn && state._virtMetrics) {
+      const idx = (state._virtAll || []).findIndex((e) => e.path === path);
+      if (idx < 0) return;
+      const inRange = state._virtRange && idx >= state._virtRange[0] * state._virtMetrics.cols && idx < (state._virtRange[1] + 1) * state._virtMetrics.cols;
+      if (inRange) {
+        const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+        if (card) { card.scrollIntoView({ block: 'nearest' }); return; }
+      }
+      const scroller = gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
+        ? gridEl.parentElement : (gridEl.closest('#lib-overlay') || document.documentElement);
+      const row = Math.floor(idx / state._virtMetrics.cols);
+      const targetTop = gridEl.offsetTop + row * state._virtMetrics.rowH;
+      scroller.scrollTop = Math.max(0, targetTop - scroller.clientHeight / 2 + state._virtMetrics.rowH / 2);
+      virtUpdate(true);
+      return;
+    }
+    const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) card.scrollIntoView({ block: 'nearest' });
   }
 
   // Thumbnail loader with a small concurrency pool + viewport priority. renderGrid used to
@@ -1616,6 +1648,7 @@
       } catch (e) { console.error('load metadata', e); }
       // Docked layout: the panel stays open next to the editor; just mark the active card.
       overlay.querySelectorAll('.lib-card.sel').forEach((c) => c.classList.remove('sel'));
+      scrollLibraryToPath(path);
       const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
       if (card) card.classList.add('sel');
     } catch (e) {
