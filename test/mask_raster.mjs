@@ -147,9 +147,14 @@ async function main() {
 
       fxHistoryPush();                                  // entry 2 = painted state
       ck('4. paint produced a new history entry', fxHistory.length === 3);
-      fxUndo();
-      ck('4. undo restores the pre-paint raster', same(beforePaint, fxState.masks[0].px), digest(fxState.masks[0].px));
-      fxRedo();
+      // fxUndo/fxRedo became async (they now await applyUISnapshot's in-flight LUT-load promise
+      // before _fxHistoryRestore reattaches the shared rasters) — an un-awaited call here reads
+      // fxState.masks[0].px BEFORE the reattachment runs, so px is still undefined at that point
+      // (the raster-less JSON restore hasn't had its raster put back yet). Not a flaky timing
+      // window: it failed the same way on every run once fxUndo/fxRedo picked up their await.
+      await fxUndo();
+      ck('4. undo restores the pre-paint raster', same(beforePaint, fxState.masks[0].px), fxState.masks[0].px?digest(fxState.masks[0].px):'undefined');
+      await fxRedo();
       ck('4. redo restores the painted raster', same(painted, fxState.masks[0].px));
 
       // ── 6. mskCopyToAll gives each photo its OWN raster ──

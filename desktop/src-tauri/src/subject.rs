@@ -647,6 +647,19 @@ pub fn rename_subject(id: &str, name: &str) -> Result<(), String> {
     write_subjects_at(&path, &all)
 }
 
+/// Renames one reference's display label — the filename/path shown in the references list, not
+/// the id used to match/replace it. Never touches the prototype or the merged subject prototype.
+pub fn rename_reference(id: &str, ref_id: &str, label: &str) -> Result<(), String> {
+    let path = subjects_path();
+    let mut all = read_subjects_at(&path);
+    let Some(s) = all.iter_mut().find(|s| s.id == id) else { return Err(format!("no subject {id}")) };
+    let Some(r) = s.refs.iter_mut().find(|r| r.id == ref_id) else {
+        return Err(format!("no reference {ref_id} on subject {id}"));
+    };
+    r.label = label.to_string();
+    write_subjects_at(&path, &all)
+}
+
 /// Drops one reference and re-merges what is left. Removing the last one deletes the subject —
 /// a subject with no references cannot match anything, and leaving an empty shell in the list
 /// would be a row that silently never works.
@@ -707,6 +720,28 @@ pub fn merge_subjects(keep_id: &str, other_id: &str) -> Result<Subject, String> 
     all.retain(|s| s.id != other_id);
     write_subjects_at(&path, &all)?;
     Ok(merged)
+}
+
+/// Merges an imported list into the store: an imported subject REPLACES any existing one sharing
+/// its id, and is otherwise added. Existing subjects absent from the import are left untouched —
+/// import is additive/restoring, never a wholesale replace, so importing a backup from one machine
+/// can't silently delete subjects taught since on another. Malformed entries are dropped with the
+/// same filter `read_subjects_at` already applies to whatever's on disk, so a hand-edited or
+/// corrupted import file can't wedge the store.
+pub fn import_subjects(imported: Vec<Subject>) -> Result<Vec<Subject>, String> {
+    let path = subjects_path();
+    let mut all = read_subjects_at(&path);
+    for s in imported {
+        if s.prototype.len() != PROTO_DIM || s.refs.is_empty() {
+            continue;
+        }
+        match all.iter_mut().find(|x| x.id == s.id) {
+            Some(existing) => *existing = s,
+            None => all.push(s),
+        }
+    }
+    write_subjects_at(&path, &all)?;
+    Ok(all)
 }
 
 pub fn delete_subject(id: &str) -> Result<(), String> {

@@ -340,21 +340,33 @@ struct SubjectMultiHit {
 /// manual scribbling uses) and can hand any of these points straight to it, so this stays a plain
 /// JSON command rather than a second framed mask-response format to maintain.
 #[tauri::command]
-fn subject_locate_multi(token: String, id: String, max_n: u32) -> Result<Vec<SubjectMultiHit>, String> {
+fn subject_locate_multi(token: String, id: String, max_n: u32, min_cell_dist: Option<u32>) -> Result<Vec<SubjectMultiHit>, String> {
     let subjects = subject::load_subjects();
     let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
     let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
     let grid = subject_grid(&sam2, &edge, &token)
         .ok_or("subject_locate_multi: this photo is not encoded — run AI Select on it first")?;
-    // 6 cells (of 64) apart — close enough to allow two genuinely separate small subjects in frame,
-    // far enough that the same blob's own neighbouring high-similarity cells don't count as two.
-    let hits = subject::locate_topk_subject(grid, subj, max_n.max(1) as usize, 6)?;
+    // 6 cells (of 64) apart by default — close enough to allow two genuinely separate small
+    // subjects in frame, far enough that the same blob's own neighbouring high-similarity cells
+    // don't count as two. Overridable from the frontend ("Instance separation": Close/Normal/Far)
+    // since a litter of small, closely-packed puppies wants a tighter default than two large dogs
+    // at opposite ends of a frame.
+    let dist = min_cell_dist.unwrap_or(6).clamp(1, 63);
+    let hits = subject::locate_topk_subject(grid, subj, max_n.max(1) as usize, dist)?;
     Ok(hits.into_iter().map(|h| SubjectMultiHit { x: h.x, y: h.y, score: h.score }).collect())
 }
 
 #[tauri::command]
 fn subject_list() -> Vec<subject::Subject> {
     subject::load_subjects()
+}
+
+/// Merges a previously-exported subject list (subject_list's own JSON shape) into the local store
+/// — for moving taught subjects to another machine or restoring a backup. Additive: see
+/// import_subjects's doc comment for why this can't delete anything.
+#[tauri::command]
+fn subject_import(subjects: Vec<subject::Subject>) -> Result<Vec<subject::Subject>, String> {
+    subject::import_subjects(subjects)
 }
 
 #[tauri::command]
@@ -365,6 +377,11 @@ fn subject_delete(id: String) -> Result<(), String> {
 #[tauri::command]
 fn subject_rename(id: String, name: String) -> Result<(), String> {
     subject::rename_subject(&id, &name)
+}
+
+#[tauri::command]
+fn subject_rename_ref(id: String, ref_id: String, label: String) -> Result<(), String> {
+    subject::rename_reference(&id, &ref_id, &label)
 }
 
 /// Drops one reference photo from a subject and re-merges. Returns the updated subject, or null
@@ -1547,10 +1564,12 @@ fn main() {
             subject_locate,
             subject_locate_multi,
             subject_list,
+            subject_import,
             subject_delete,
             subject_remove_ref,
             subject_merge,
             subject_rename,
+            subject_rename_ref,
             ingest::list_volumes,
             ingest::scan_card,
             ingest::ingest_copy,

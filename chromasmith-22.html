@@ -4057,7 +4057,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16c';
+const BUILD='2026-08-16d';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -9516,13 +9516,17 @@ function mskAdd(type){
   // chest: ONE sample gave gate weights 0.04-1.00 and hue DIVERGED 10%; two samples gave
   // 0.86-1.00 and closed hue 40% / sat 45%; three closed sat 49%. Hence a mid Range plus the
   // shift-click-to-add-samples flow the panel pushes, rather than one pick and a huge Range.
-  if(type==='skin'){m.crOn=true;m.crRange=55;m.tanOneWay=true;m.tanOneWayAmt=100;}  // a Skin mask is for tanning
+  // Blend defaults (uH/uS/uL/preserve/tanDepth/tanWarm/tanOneWay/tanOneWayAmt) come from
+  // _mskToneBlendDefaults so "Reset" (mskToneReset) can return to exactly this later without a
+  // second copy of the constants. Selection defaults (crOn/crRange/crRangeC) stay here — Reset
+  // deliberately leaves those alone, they aren't part of "the blend".
+  if(type==='skin'){Object.assign(m,_mskToneBlendDefaults('skin'));m.crOn=true;m.crRange=55;}  // a Skin mask is for tanning
   // A Coat mask starts EVENING OUT, not darkening — sun-bleaching lightens a coat as often as
   // shade darkens it, so defaulting to one-way (like Skin's tanning) would fight half the real
   // cases. Range is wider than Skin's default: fur genuinely spans more hue/chroma per-strand
   // (undercoat vs guard hairs, wet vs dry) than skin does, so the tighter skin default would
   // under-select a coat's own natural variation and leave the gate looking "broken".
-  if(type==='coat'){m.crOn=true;m.crRange=65;m.crRangeC=65;m.tanOneWay=false;m.tanOneWayAmt=0;}
+  if(type==='coat'){Object.assign(m,_mskToneBlendDefaults('coat'));m.crOn=true;m.crRange=65;m.crRangeC=65;}
   if(type==='color'){m.crOn=true;m.crRange=40;}
   if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
@@ -9770,6 +9774,28 @@ async function subjRefresh(){
   try{_subjects=await window.__TAURI__.core.invoke('subject_list');}
   catch(e){_subjects=[];log('subject_list: '+(e&&e.message||e),'err');}
 }
+// ── Export/import the whole taught-subjects store ────────────────────────────────────────────
+// subjects.json lives in the app's own support directory with no UI path to it — moving taught
+// subjects to another machine, or just backing them up, meant finding the file by hand (or not
+// realising it existed at all). subject_list's own JSON shape (id/name/prototype/refs/encoder) IS
+// the export format — no separate serialisation to keep in sync — and subject_import (Rust) is
+// additive (see its own doc comment): importing a backup can never delete a subject taught since.
+async function subjExport(){
+  if(!_subjects||!_subjects.length){toast('No subjects to export yet');return;}
+  await saveFile(JSON.stringify(_subjects,null,2),'chromasmith-subjects.json','application/json');
+}
+async function subjImportFile(file){
+  if(!file)return;
+  try{
+    const parsed=JSON.parse(await file.text());
+    const list=Array.isArray(parsed)?parsed:(parsed&&Array.isArray(parsed.subjects)?parsed.subjects:null);
+    if(!list)throw new Error('not a Chromasmith subjects file');
+    const merged=await window.__TAURI__.core.invoke('subject_import',{subjects:list});
+    await subjRefresh();mskRebuild();
+    toast(`Imported — ${merged.length} subject${merged.length===1?'':'s'} total`,true);
+  }catch(e){log('Subject import failed: '+(e&&e.message||e),'err');toast('Not a valid subjects file');}
+  finally{const inp=document.getElementById('subj-import-input');if(inp)inp.value='';}
+}
 function subjToken(){return _sam2Token||_samToken;}
 // Which encoder `subjToken()` currently resolves to — "sam2-1024" (71-80% recall, the encoder
 // worth teaching on) or "edgesam-1024" (58-65%, only used while SAM2's background encode hasn't
@@ -9786,7 +9812,11 @@ function subjPanelHtml(m){
     // Flag it BEFORE Find is clicked, not only as an error toast after — a stored subject taught
     // under a different encoder than the one this session currently has ready will always fail.
     const mismatch=curEnc&&s.encoder&&s.encoder!==curEnc;
+    // Whichever reference has a thumbnail first — usually the first-taught one, but a subject
+    // taught before this feature existed (or on another machine) may have none, and that's fine.
+    const thumb=(s.refs||[]).map(r=>_subjThumbGet(s.id,r.id)).find(Boolean);
     return '<div class="fx-row" style="align-items:center;gap:6px">'
+      +(thumb?'<img src="'+thumb+'" style="order:0;width:28px;height:28px;border-radius:5px;object-fit:cover;flex:0 0 auto" alt="">':'')
       +'<div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'
         +_esc(s.name)+' — taught from '+n+' photo'+(n===1?'':'s')+' using '+_esc(s.encoder||'an unknown encoder')+'">'+_esc(s.name)
       +'<span style="color:var(--mut);font-variant-numeric:tabular-nums"> · '+n+'</span>'
@@ -9812,11 +9842,42 @@ function subjPanelHtml(m){
     +((_subjects||[]).some(s=>(s.refs||[]).length<3)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Three or more reference photos works noticeably better than one — add a few taken in different places.</div>':'')
     +readiness
     +subjMultiResultsHtml()
-    +subjScanResultsHtml();
+    +subjScanResultsHtml()
+    +('<div class="btn-row" style="margin-top:6px">'
+      +((_subjects||[]).length?'<button class="btn bgh" onclick="subjExport()" title="Save every taught subject (names, references, prototypes) as a JSON file — to back up or move to another machine.">'+icon('export',14)+' Export…</button>':'')
+      +'<button class="btn bgh" onclick="document.getElementById(\'subj-import-input\').click()" title="Load a subjects file exported from this app (this or another machine). Adds/replaces by name — never deletes an existing subject not in the file.">'+icon('image',14)+' Import…</button>'
+      +'<input type="file" id="subj-import-input" accept="application/json,.json" style="display:none" onchange="subjImportFile(this.files[0])">'
+      +'</div>');
 }
 function _esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 /// Teaches a subject from the current mask raster. `idx` -1 creates a new one (prompting for a
 /// name), otherwise it adds another reference to an existing subject.
+// ── Small client-side thumbnails for subjects/references ─────────────────────────────────────
+// subject.rs's Reference deliberately carries a prototype, not image bytes (subject.rs:153-159 —
+// "1KB per reference" is the whole point of keeping references separate). Storing a full image
+// per reference in the persisted subjects.json would work against that. Instead a small (48x48)
+// JPEG crop of the taught region is kept CLIENT-SIDE in localStorage, keyed by subject+reference
+// id — cheap (a few KB each), never round-trips through Rust, and is purely cosmetic: losing it
+// (a cleared localStorage, a different machine) never affects matching, only how the list looks.
+function _subjThumbKey(subjId,refId){return 'cs.subjThumb.'+subjId+'.'+refId;}
+function _subjThumbGet(subjId,refId){try{return localStorage.getItem(_subjThumbKey(subjId,refId));}catch(e){return null;}}
+function _subjThumbRemove(subjId,refId){try{localStorage.removeItem(_subjThumbKey(subjId,refId));}catch(e){}}
+function _subjSaveThumb(subjId,refId,m){
+  try{
+    const cv=FX&&FX.cv;if(!cv||!cv.width||!m||!m.px||!m.mtW||!m.mtH)return;
+    const bbox=_mskSubjectBBox(m);if(!bbox)return;
+    const fx0=bbox.x0/m.mtW,fy0=bbox.y0/m.mtH,fx1=(bbox.x1+1)/m.mtW,fy1=(bbox.y1+1)/m.mtH;
+    const sx=Math.floor(fx0*cv.width),sy=Math.floor(fy0*cv.height);
+    const sw=Math.max(1,Math.ceil((fx1-fx0)*cv.width)),sh=Math.max(1,Math.ceil((fy1-fy0)*cv.height));
+    const S=48,t=document.createElement('canvas');t.width=S;t.height=S;
+    const cx=t.getContext('2d');
+    cx.fillStyle='#222';cx.fillRect(0,0,S,S);
+    // Letterbox rather than stretch — a tall/narrow subject crop shouldn't be squashed into a square.
+    const scale=Math.min(S/sw,S/sh),dw=sw*scale,dh=sh*scale,dx=(S-dw)/2,dy=(S-dh)/2;
+    cx.drawImage(cv,sx,sy,sw,sh,dx,dy,dw,dh);
+    localStorage.setItem(_subjThumbKey(subjId,refId),t.toDataURL('image/jpeg',0.55));
+  }catch(e){/* cosmetic only — a failed thumbnail never blocks teaching */}
+}
 async function subjTeach(idx){
   const m=fxState.masks[mskSel];
   if(!m||!m.px||!m.px.length){toast('Select the subject first — scribble over it');return;}
@@ -9840,6 +9901,7 @@ async function subjTeach(idx){
     const item=(typeof curItem==='function')?curItem():null;
     const refId=(item&&(item.path||item.name))||('photo-'+Date.now());
     const refLabel=(item&&item.name)||refId;
+    _subjSaveThumb(id,refId,m);   // before the await — m.px/FX.cv are still this photo's
     const s=await _samFramedInvoke('subject_learn',{id,name,token,refId,refLabel},raster);
     await subjRefresh();
     const n=(s.refs||[]).length;
@@ -9930,7 +9992,7 @@ function _subjRefOutlierNotes(s){
 // Find. It also deliberately uses EdgeSAM only (skips the slower SAM2 background upgrade) — this
 // is a coarse "which photos are worth a look" pass, not a final answer; a real Find (SAM2-quality)
 // still happens per-photo once the user jumps there.
-let _subjScanBusy=false,_subjScanResults=null;
+let _subjScanBusy=false,_subjScanResults=null,_subjScanProgress=null,_subjScanCancel=false;
 function _samInputDimsFor(img){
   const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
   const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih));
@@ -9940,43 +10002,59 @@ async function subjFindAll(idx){
   if(_subjScanBusy)return;
   const s=(_subjects||[])[idx];if(!s)return;
   if(typeof fxImages==='undefined'||!fxImages||fxImages.length<2){toast('Load more than one photo to scan a batch');return;}
-  _subjScanBusy=true;_subjScanResults=null;mskRebuild();
+  _subjScanBusy=true;_subjScanCancel=false;_subjScanResults=null;
+  const todo=fxImages.map((_,i)=>i).filter(i=>i!==fxCurIdx);
+  _subjScanProgress={done:0,total:todo.length};
+  mskRebuild();
   const origIdx=fxCurIdx;
   const results=[];
-  for(let i=0;i<fxImages.length;i++){
-    if(i===origIdx)continue;   // the current photo already has a direct Find button
+  for(const i of todo){
+    if(_subjScanCancel)break;   // user hit Cancel — stop early, keep whatever was found so far
     const item=fxImages[i];
-    if(!item||!item.img)continue;
-    try{
-      const{w,h}=_samInputDimsFor(item.img);
-      const d=mskSourceData(w,h,item.img);
-      if(!d)continue;
-      const rgb=new Uint8Array(w*h*3);
-      for(let p=0,q=0;p<w*h;p++){rgb[q++]=d[p*4];rgb[q++]=d[p*4+1];rgb[q++]=d[p*4+2];}
-      const token='subj-scan-'+i+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-      await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
-      const buf=await window.__TAURI__.core.invoke('subject_locate',{token,id:s.id});
-      const dv=new DataView(buf);
-      const hlen=dv.getUint32(0,true);
-      const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-      results.push({idx:i,label:item.name||('Photo '+(i+1)),score:header.score});
-    }catch(e){/* skip a photo that fails to encode/locate rather than aborting the whole scan */}
+    if(item&&item.img){
+      try{
+        const{w,h}=_samInputDimsFor(item.img);
+        const d=mskSourceData(w,h,item.img);
+        if(d){
+          const rgb=new Uint8Array(w*h*3);
+          for(let p=0,q=0;p<w*h;p++){rgb[q++]=d[p*4];rgb[q++]=d[p*4+1];rgb[q++]=d[p*4+2];}
+          const token='subj-scan-'+i+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+          await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
+          const buf=await window.__TAURI__.core.invoke('subject_locate',{token,id:s.id});
+          const dv=new DataView(buf);
+          const hlen=dv.getUint32(0,true);
+          const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+          results.push({idx:i,label:item.name||('Photo '+(i+1)),score:header.score});
+        }
+      }catch(e){/* skip a photo that fails to encode/locate rather than aborting the whole scan */}
+    }
+    _subjScanProgress.done++;
+    // Rebuild every few photos rather than every single one — this scan can touch dozens of
+    // photos and the panel doesn't need to repaint at that rate to feel live.
+    if(_subjScanProgress.done%2===0||_subjScanProgress.done===_subjScanProgress.total)mskRebuild();
   }
   // The scan's own sam_encode calls evicted whatever the user's actual current photo had cached —
   // restore it so returning to normal editing doesn't hit a stale-token error on the next scribble.
   _samToken=null;_sam2Token=null;
   results.sort((a,b)=>b.score-a.score);
-  _subjScanResults={subjId:s.id,name:s.name,results};
-  _subjScanBusy=false;
+  _subjScanResults={subjId:s.id,name:s.name,results,partial:_subjScanCancel,checked:results.length&&_subjScanProgress?_subjScanProgress.done:todo.length};
+  _subjScanBusy=false;_subjScanProgress=null;
   samEnsureEncoded();
   mskRebuild();
 }
+function subjFindAllCancel(){_subjScanCancel=true;}
 function subjScanResultsHtml(){
+  if(_subjScanBusy&&_subjScanProgress){
+    const p=_subjScanProgress;
+    return '<div class="fx-sub" style="margin-top:6px">Scanning other photos…</div>'
+      +'<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label" style="order:1;flex:1">'+p.done+' / '+p.total+' checked</div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFindAllCancel()">Cancel</button></div>';
+  }
   const r=_subjScanResults;if(!r)return '';
   const rows=r.results.slice(0,20).map(o=>
     '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(o.label)+'</div>'
     +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="fxSelectImage('+o.idx+')" title="Jump to this photo and check it yourself — a scan score is not a confidence.">Go</button></div>').join('');
-  return '<div class="fx-sub" style="margin-top:6px">Scan of other loaded photos for '+_esc(r.name)+'</div>'
+  return '<div class="fx-sub" style="margin-top:6px">Scan of other loaded photos for '+_esc(r.name)+(r.partial?' (cancelled — '+r.checked+' checked)':'')+'</div>'
     +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No other photos to check.</div>')
     +'<div class="msk-hint">Sorted by raw similarity — not a confidence score. Open each and confirm by eye; nothing here was applied automatically.</div>';
 }
@@ -9987,6 +10065,14 @@ function subjScanResultsHtml(){
 // mask rather than overwriting the current one, so multiple instances end up independently
 // adjustable exactly like any other set of masks.
 let _subjMultiResults=null,_subjMultiBusy=false;
+// "Instance separation" controls locate_topk's min_cell_dist (Rust, main.rs) — how far apart (in
+// the 64x64 feature grid) two candidates must be to count as separate instances rather than the
+// same blob's own neighbouring cells. Close suits a litter of small, tightly-packed subjects;
+// Far suits two large subjects that could otherwise both claim cells inside the same margin.
+// Persisted across calls in this module (not per-subject) since it's a "how does this photo look"
+// setting, not a per-subject one.
+const SUBJ_SEP_PRESETS={close:3,normal:6,far:12};
+let _subjSep='normal',_subjMaxN=4;
 async function subjFindInstances(idx){
   if(_subjMultiBusy)return;
   const s=(_subjects||[])[idx];if(!s)return;
@@ -9995,7 +10081,7 @@ async function subjFindInstances(idx){
   if(!token){toast('This photo is not prepared yet — try again in a moment');return;}
   _subjMultiBusy=true;_subjMultiResults=null;mskRebuild();
   try{
-    const hits=await window.__TAURI__.core.invoke('subject_locate_multi',{token,id:s.id,maxN:4});
+    const hits=await window.__TAURI__.core.invoke('subject_locate_multi',{token,id:s.id,maxN:_subjMaxN,minCellDist:SUBJ_SEP_PRESETS[_subjSep]||6});
     _subjMultiResults={subjIdx:idx,name:s.name,hits:hits||[]};
     if(!hits||hits.length<2)toast(`${s.name}: only one distinct location found`,true);
   }catch(e){
@@ -10003,6 +10089,8 @@ async function subjFindInstances(idx){
     toast(/encoder-mismatch/.test(raw)?`${s.name} was taught with a different model — re-teach it on a photo`:'Could not scan for instances — '+raw);
   }finally{_subjMultiBusy=false;mskRebuild();}
 }
+function subjSetSep(v){_subjSep=v;if(_subjMultiResults)subjFindInstances(_subjMultiResults.subjIdx);else mskRebuild();}
+function subjSetMaxN(v){_subjMaxN=Math.max(2,Math.min(8,parseInt(v)||4));if(_subjMultiResults)subjFindInstances(_subjMultiResults.subjIdx);else mskRebuild();}
 /// Installs one candidate point as a brand-new AI mask (not overwriting the current selection),
 /// via the exact same accumulated-point path a manual scribble stroke uses.
 async function subjUseInstance(hitIdx){
@@ -10022,7 +10110,13 @@ function subjMultiResultsHtml(){
   const rows=r.hits.map((h,i)=>
     '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label">Candidate '+(i+1)+'</div>'
     +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjUseInstance('+i+')">Add as new mask</button></div>').join('');
+  const sepRow='<div class="fx-row" style="align-items:center;gap:6px" title="How far apart two candidates must be to count as separate instances rather than the same subject\'s own neighbouring cells. Tighten for a litter of small, closely-packed subjects; loosen for two large ones."><div class="fx-label" style="order:1">Separation</div>'
+    +'<div class="seg" style="order:2">'+['close','normal','far'].map(k=>'<button class="'+(_subjSep===k?'on':'')+'" onclick="subjSetSep(\''+k+'\')">'+k[0].toUpperCase()+k.slice(1)+'</button>').join('')+'</div></div>';
+  const maxRow='<div class="fx-row" style="align-items:center;gap:6px" title="Most instances to look for."><div class="fx-label" style="order:1">Max instances</div>'
+    +'<input class="fx-slider" style="order:2" type="range" min="2" max="8" step="1" value="'+_subjMaxN+'" oninput="this.nextElementSibling.textContent=this.value" onchange="subjSetMaxN(this.value)">'
+    +'<div class="fx-val" style="order:3">'+_subjMaxN+'</div></div>';
   return '<div class="fx-sub" style="margin-top:6px">Possible instances of '+_esc(r.name)+'</div>'
+    +sepRow+maxRow
     +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No additional distinct locations found.</div>')
     +'<div class="msk-hint">Each candidate becomes its own mask so you can check, adjust or delete it independently. Not a confidence ranking — check each on the photo.</div>';
 }
@@ -10030,7 +10124,7 @@ function subjMenu(idx,ev){
   const s=(_subjects||[])[idx];if(!s)return;
   ev&&ev.stopPropagation();
   const outlierNotes=_subjRefOutlierNotes(s);
-  const refs=(s.refs||[]).map((r,j)=>({label:'Remove reference: '+(r.label||r.id)+outlierNotes[j],fn:()=>subjRemoveRef(s.id,r.id)}));
+  const refItems=(s.refs||[]).map((r,j)=>({label:(r.label||r.id)+outlierNotes[j],fn:()=>subjRefMenu(s,r,idx,ev),img:_subjThumbGet(s.id,r.id)}));
   const items=[
     {label:'Rename…',fn:async()=>{
       const n=(await askTextModal('Rename subject','',s.name)||'').trim();if(!n)return;
@@ -10042,15 +10136,35 @@ function subjMenu(idx,ev){
       try{await window.__TAURI__.core.invoke('subject_rename',{id:s.id,name:n});await subjRefresh();mskRebuild();}
       catch(e){toast('Rename failed — '+(e&&e.message||e));}
     }},
-    ...refs,
+    {label:'References…',fn:()=>_subjPopup(refItems.length?refItems:[{label:'No references',fn:()=>{}}],ev)},
     // Covers "taught the same subject twice under two names" — subject_locate has no presence
     // signal (subject.rs), so noticing that only after a second "Remember" is the normal case,
     // not a mistake to avoid entirely. Only offered when there's something to merge into.
     ...((_subjects||[]).length>1?[{label:'Merge into…',fn:()=>{
       const others=(_subjects||[]).filter(o=>o.id!==s.id)
         .map(o=>({label:o.name,fn:async()=>{
+          // Preview before committing — a merge deletes `s` outright and there's no undo for it
+          // once the Rust side has rewritten subjects.json. Overlap is computed CLIENT-SIDE from
+          // data already in `_subjects`, not a guess: it's the same by-id de-dup merge_subjects
+          // itself does, just run here first to show the number instead of finding out after.
+          const sIds=new Set((s.refs||[]).map(r=>r.id)),oIds=new Set((o.refs||[]).map(r=>r.id));
+          const overlap=[...sIds].filter(id=>oIds.has(id)).length;
+          const totalAfter=oIds.size+sIds.size-overlap;
+          const msg=`Merge "${s.name}" into "${o.name}"?\n\n`
+            +`"${o.name}" will end up with ${totalAfter} reference${totalAfter===1?'':'s'} `
+            +`(${o.refs.length} + ${s.refs.length}${overlap?`, ${overlap} shared`:''}).\n\n`
+            +`"${s.name}" will be deleted. This can't be undone from the UI.`;
+          if(!(await confirmModal(msg,'Merge')))return;
           try{
             await window.__TAURI__.core.invoke('subject_merge',{keepId:o.id,otherId:s.id});
+            // Thumbnails are keyed by (subjId, refId) and never leave the client — a merge on the
+            // RUST side moves references from s.id to o.id in subjects.json, so without this the
+            // absorbed references' thumbnails would just orphan under a subject id nothing points
+            // to any more, and the merged list would show broken/missing thumbs for them.
+            (s.refs||[]).forEach(r=>{
+              const t=_subjThumbGet(s.id,r.id);
+              if(t){localStorage.setItem(_subjThumbKey(o.id,r.id),t);_subjThumbRemove(s.id,r.id);}
+            });
             await subjRefresh();mskRebuild();
             toast(`${s.name} merged into ${o.name}`,true);
           }catch(e){toast('Could not merge — '+(e&&e.message||e));}
@@ -10058,15 +10172,57 @@ function subjMenu(idx,ev){
       _subjPopup(others,ev);
     }}]:[]),
     {label:'Forget '+s.name,fn:async()=>{
-      try{await window.__TAURI__.core.invoke('subject_delete',{id:s.id});await subjRefresh();mskRebuild();toast('Forgot '+s.name,true);}
-      catch(e){toast('Could not forget — '+(e&&e.message||e));}
+      try{
+        await window.__TAURI__.core.invoke('subject_delete',{id:s.id});
+        (s.refs||[]).forEach(r=>_subjThumbRemove(s.id,r.id));
+        await subjRefresh();mskRebuild();toast('Forgot '+s.name,true);
+      }catch(e){toast('Could not forget — '+(e&&e.message||e));}
     }},
   ];
   _subjPopup(items,ev);
 }
+/// Sub-menu for ONE reference: rename its label, replace it with the current selection (same
+/// concept as re-teaching from that photo, but explicit — doesn't require the photo whose path
+/// originally produced this reference to still be the one open), or remove it.
+function subjRefMenu(s,r,idx,parentEv){
+  const items=[
+    {label:'Rename…',fn:async()=>{
+      const n=(await askTextModal('Rename reference',r.id,r.label||'')||'').trim();if(!n)return;
+      try{await window.__TAURI__.core.invoke('subject_rename_ref',{id:s.id,refId:r.id,label:n});await subjRefresh();mskRebuild();}
+      catch(e){toast('Rename failed — '+(e&&e.message||e));}
+    },img:_subjThumbGet(s.id,r.id)},
+    {label:'Replace with current selection',fn:()=>subjReplaceRef(idx,r.id),img:_subjThumbGet(s.id,r.id)},
+    {label:'Remove reference',fn:()=>subjRemoveRef(s.id,r.id)},
+  ];
+  _subjPopup(items,parentEv);
+}
+/// Re-teaches under the SAME reference id `r.id` rather than deriving one from the current photo
+/// — subject.rs's upsert_subject already replaces a reference in place when the id matches
+/// (`existing.refs.iter_mut().find(|r| r.id == reference.id)`), so this is a one-click "swap this
+/// specific bad reference for a better shot of the same subject" instead of the two-step
+/// remove-then-re-teach-and-hope-the-new-refId-doesn't-collide dance.
+async function subjReplaceRef(idx,refId){
+  const s=(_subjects||[])[idx];if(!s)return;
+  const m=fxState.masks[mskSel];
+  if(!m||!m.px||!m.px.length){toast('Select the replacement subject first — scribble over it');return;}
+  const token=subjToken();
+  if(!token){toast('This photo is not prepared yet — scribble once to run AI Select');return;}
+  const raster=new Uint8Array(m.px.length);raster.set(m.px);
+  _subjBusy=true;mskRebuild();
+  try{
+    const item=(typeof curItem==='function')?curItem():null;
+    const refLabel=(item&&item.name)||refId;
+    _subjThumbRemove(s.id,refId);_subjSaveThumb(s.id,refId,m);
+    await _samFramedInvoke('subject_learn',{id:s.id,name:s.name,token,refId,refLabel},raster);
+    await subjRefresh();mskRebuild();
+    toast(`Replaced reference for ${s.name}`,true);
+  }catch(e){toast('Could not replace — '+(e&&e.message||e));}
+  finally{_subjBusy=false;mskRebuild();}
+}
 async function subjRemoveRef(id,refId){
   try{
     const s=await window.__TAURI__.core.invoke('subject_remove_ref',{id,refId});
+    _subjThumbRemove(id,refId);
     await subjRefresh();mskRebuild();
     toast(s?`Removed — ${(s.refs||[]).length} reference${(s.refs||[]).length===1?'':'s'} left`:'That was its last reference — subject forgotten',true);
   }catch(e){toast('Could not remove — '+(e&&e.message||e));}
@@ -10078,8 +10234,11 @@ function _subjPopup(items,ev){
   pop.style.cssText='position:fixed;z-index:9999;background:var(--glass-bg,var(--sur2));backdrop-filter:blur(20px);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:200px;box-shadow:var(--lift-2)';
   items.forEach(it=>{
     const b=document.createElement('div');
-    b.textContent=it.label;
-    b.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    b.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px';
+    // Optional per-item thumbnail (a reference's saved crop, e.g.) — built as a real <img> element,
+    // never innerHTML, so it's safe alongside a label string that may contain a user-typed name.
+    if(it.img){const im=document.createElement('img');im.src=it.img;im.style.cssText='width:22px;height:22px;border-radius:4px;object-fit:cover;flex:0 0 auto';b.appendChild(im);}
+    const lb=document.createElement('span');lb.textContent=it.label;lb.style.cssText='overflow:hidden;text-overflow:ellipsis';b.appendChild(lb);
     b.onmouseenter=()=>b.style.background='var(--sur2)';
     b.onmouseleave=()=>b.style.background='';
     b.onclick=()=>{pop.remove();it.fn();};
@@ -10679,9 +10838,16 @@ function mskMoreMenu(ev){
   const item=(label,ic,fn,on,dis,danger)=>'<button class="msk-more-it'+(on?' on':'')+(danger?' danger':'')+'"'
     +(dis?' disabled':'')+' onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+fn+'">'
     +icon(ic,15)+'<span>'+label+'</span></button>';
+  const otherToneMasks=mskCaps(m).toneTool?fxState.masks.filter((o,i)=>i!==mskSel&&mskCaps(o).toneTool):[];
   const html=item('Move up','undo','mskMove(-1)',false,mskSel<1)
     +item('Move down','redo','mskMove(1)',false,mskSel>=fxState.masks.length-1)
     +item('Rename…','rename','mskRename()')
+    // Copies the BLEND settings (Strength/Depth/Warmth/Preserve/target/one-way) from another
+    // Skin or Coat mask on this SAME photo — e.g. a group shot with one Skin mask per person,
+    // where person B's mask should start from person A's already-dialed-in look. Deliberately
+    // does NOT copy the selection (crSamples/crOn) — each person's own picks/segmentation stays
+    // theirs; only the "where it should end up and how hard" settings transfer.
+    +(otherToneMasks.length?item('Copy tone settings from…','copy','mskCopyToneMenu(event)'):'')
     +item(m.muted?'Unmute':'Mute','eyeOff','mskToggleMute()',m.muted)
     +item(mskSolo===mskSel?'Stop soloing':'Solo','star','mskToggleSolo()',mskSolo===mskSel)
     +item(m.isExclude?'Stop using as eraser':'Use as eraser','eraser','mskToggleExclude()',m.isExclude)
@@ -10695,6 +10861,17 @@ function mskMoreMenu(ev){
   d.style.top=(r.bottom+4)+'px';
   d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
   setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+}
+const MSK_TONE_BLEND_KEYS=['crRange','crRangeC','uH','uS','uL','preserve','tgtMode','tgtHex','tanDepth','tanWarm','tanOneWay','tanOneWayAmt'];
+function mskCopyToneMenu(ev){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const others=fxState.masks.map((o,i)=>({o,i})).filter(({o,i})=>i!==mskSel&&mskCaps(o).toneTool)
+    .map(({o,i})=>({label:o.name||('Mask '+(i+1))+' ('+(o.origin==='coat'?'Coat':'Skin')+')',fn:()=>{
+      MSK_TONE_BLEND_KEYS.forEach(k=>{m[k]=o[k]});
+      mskSrcVDebounced();mskRebuild();fxUpdate();
+      toast('Tone settings copied',true);
+    }}));
+  _subjPopup(others,ev);
 }
 // ── Guided Skin Tone ─────────────────────────────────────────────────────────────────────────
 // Presentation only. skinUniformity() in the lut shader, colRangeWeight, mskSkinTarget and
@@ -10727,6 +10904,24 @@ const MSK_COAT_PRESETS={
   deepen:{label:'Deepen coat',uH:45,uS:45,uL:20,preserve:75,tanDepth:35,tanWarm:15,tanOneWay:true,tanOneWayAmt:100},
   warm:{label:'Warm undertone',uH:35,uS:30,uL:10,preserve:80,tanDepth:5,tanWarm:35,tanOneWay:false,tanOneWayAmt:0}
 };
+// The same origin-specific starting point mskAdd's 'skin'/'coat' branches set at creation —
+// factored out so "Reset" can return to it later without duplicating the two constants.
+function _mskToneBlendDefaults(origin){
+  return origin==='coat'
+    ? {uH:0,uS:0,uL:0,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0}
+    : {uH:0,uS:0,uL:0,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:true,tanOneWayAmt:100};
+}
+// Undoing a bad Strength/Depth/Warmth/Preserve/Only-darken combination used to mean zeroing five
+// sliders by hand. Deliberately leaves the SELECTION (crSamples/crOn/crRange/crRangeC) and the
+// TARGET (tgtMode/tgtHex) alone — those represent real work (picks, segmentation) the user almost
+// certainly still wants; only the "how hard and which way" blend settings reset.
+function mskToneReset(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  Object.assign(m,_mskToneBlendDefaults(m.origin));
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+  toast('Blend settings reset',true);
+}
 function mskSkinPreset(k){
   const m=fxState.masks[mskSel];if(!m)return;
   const p=(m.origin==='coat'?MSK_COAT_PRESETS:MSK_SKIN_PRESETS)[k];if(!p)return;
@@ -10765,7 +10960,13 @@ function mskSkinCoverage(m){
       sx=Math.floor(fx0*cv.width);sy=Math.floor(fy0*cv.height);
       sw=Math.max(1,Math.ceil((fx1-fx0)*cv.width));sh=Math.max(1,Math.ceil((fy1-fy0)*cv.height));
     }
-    const S=48,t=document.createElement('canvas');t.width=S;t.height=S;
+    // S used to be a flat 48 regardless of how much source area it was covering — now scoped to
+    // the bbox (above), a small tight selection gets plenty of resolution at 48, but a large one
+    // (a full-body Skin mask on a big photo) was still only sampled at 48x48 despite having far
+    // more source pixels available. Scale S with the crop's own size, capped so a huge selection
+    // doesn't blow the readback cost past what a UI number needs.
+    const S=Math.max(32,Math.min(96,Math.round(Math.max(sw,sh)/8)));
+    const t=document.createElement('canvas');t.width=S;t.height=S;
     const cx=t.getContext('2d',{willReadFrequently:true});
     cx.drawImage(cv,sx,sy,sw,sh,0,0,S,S);
     const d=cx.getImageData(0,0,S,S).data;
@@ -10914,19 +11115,30 @@ function _srcVFrameData(){
   return _srcVFrameCache;
 }
 function mskMeasureSrcV(m){
-  if(!m||!m.crOn||!m.crSamples||!m.crSamples.length||!FX.cv){if(m)m.srcV=null;return;}
+  if(!m||!m.crOn||!m.crSamples||!m.crSamples.length||!FX.cv){if(m){m.srcV=null;m.srcH=null;m.srcC=null;}return;}
   _fxEnsureNormalRender();
   const frame=_srcVFrameData();
-  if(!frame){m.srcV=null;return;}
+  if(!frame){m.srcV=null;m.srcH=null;m.srcC=null;return;}
   const d=frame.data;
   const R=(m.crRange!=null?m.crRange:35),RC=(m.crRangeC!=null?m.crRangeC:R);
-  let acc=0,wsum=0;
+  // srcH/srcC (weighted circular hue mean, weighted chroma mean) are NOT fed to the shader — only
+  // srcV is. They exist so the "Now" swatch (see mskRebuild's skin/coat branch) can show the mean
+  // of the ACTUAL gated pixels rather than crSampleMean's mean of just the picked/seeded samples,
+  // which is what Preserve modeling's srcV already anchors to — the two numbers used to be able to
+  // disagree visibly on a lopsided selection, since one measured the picks and the other measured
+  // the region the picks selected.
+  let acc=0,wsum=0,hx=0,hy=0,cacc=0;
   for(let i=0;i<d.length;i+=4){
     const[h,C,L]=rgb2oklch(d[i]/255,d[i+1]/255,d[i+2]/255);
     const w=crWeightJS(h,C,m.crSamples,R,RC);if(w<=0)continue;
     acc+=w*L;wsum+=w;   // srcV is Oklab L — the space the shader compares it against
+    const a=h*2*Math.PI;hx+=w*Math.cos(a);hy+=w*Math.sin(a);cacc+=w*C;
   }
   m.srcV=wsum>1e-6?acc/wsum:null;   // null => the shader falls back to the target's own value
+  if(wsum>1e-6){
+    let hh=Math.atan2(hy/wsum,hx/wsum)/(2*Math.PI);if(hh<0)hh+=1;
+    m.srcH=hh;m.srcC=cacc/wsum;
+  }else{m.srcH=null;m.srcC=null;}
 }
 let _mskSrcVT=null;
 function mskSrcVDebounced(){clearTimeout(_mskSrcVT);_mskSrcVT=setTimeout(()=>{
@@ -11107,11 +11319,32 @@ function mskCrEyedropperClick(e){
   if(!add)mskCrEyedropper(false);
   mskMeasureSrcV(m);
   mskRebuild();fxUpdate();
-  log(m.crSamples.length>1
-    ?`${m.crSamples.length} tones selected — shift-click to add more`
-    :'Tone targeted — SHIFT-click more patches of skin (shaded, paler, pinker) to cover all of it','ok');
+  // mskAutoSamples' k-means seeding already rejects candidate cluster centres below this SAME
+  // 0.016 chroma cut (§5b: it's what separates skin from near-neutral rock/sunglasses) before a
+  // sample is ever created. A manual eyedropper pick had no such check — a near-neutral click
+  // (shadowed sunglasses, an underexposed patch) silently produced a sample the shader's own
+  // smoothstep(0.010,0.016,...) floor then contributes almost nothing from, with no sign to the
+  // user of why that pick "didn't do anything".
+  if(s<0.016){
+    log(`Low colour purity (${s.toFixed(3)}) on that pick — it will barely widen the selection. Try a spot with more visible ${m.origin==='coat'?'coat':'skin'} tone, not a near-neutral area.`,'warn');
+  }else{
+    log(m.crSamples.length>1
+      ?`${m.crSamples.length} tones selected — shift-click to add more`
+      :'Tone targeted — SHIFT-click more patches of skin (shaded, paler, pinker) to cover all of it','ok');
+  }
   return true;
 }
+// Color purity range starts LINKED to Hue range (crRangeC null => the shader/JS both fall back to
+// crRange — see colRangeWeight/crWeightJS) so an untouched mask behaves exactly as it did with one
+// shared slider. Dragging the Color purity slider unlinks it (mskSlide just writes a real number).
+// Nothing else told the user the two were coupled, so moving Hue range on a mask where Color
+// purity had NOT been touched silently moved both — this makes the coupling visible and gives a
+// one-click way back to it after diverging them on purpose.
+function _mskCrLinkNote(m){
+  if(m.crRangeC==null)return '<div class="msk-hint" style="opacity:.75">Linked to Hue range — drag it to set an independent value.</div>';
+  return '<div class="msk-hint" style="opacity:.75">Independent of Hue range. <a href="javascript:void(0)" onclick="mskCrRelink()">Re-link</a></div>';
+}
+function mskCrRelink(){const m=fxState.masks[mskSel];if(!m)return;m.crRangeC=null;mskSrcVDebounced();mskRebuild();fxUpdate();}
 function mskCrToggle(el){
   const m=fxState.masks[mskSel];if(!m)return;
   m.crOn=!!el.checked;mskMeasureSrcV(m);mskRebuild();fxUpdate();
@@ -11144,7 +11377,23 @@ function mskTgtPicked(el){
 // OUTLIVES the photo it was measured on — it has to still be there when you open tomorrow's
 // frame. Per-mask state would be copied by the recipe paste path and then drift.
 const SKIN_REF_KEY='cs.skinRef.v1';
-function skinRefGet(){try{return localStorage.getItem(SKIN_REF_KEY)||'';}catch(e){return '';}}
+// ⚠️ Was ONE global key, unscoped — every shoot ever opened on this machine shared the exact same
+// saved reference tone. Set it once on a beach trip, and six months later an unrelated indoor
+// portrait session's "Use saved" would silently apply the beach tone with no indication it wasn't
+// from this shoot at all. Scope by the FOLDER of the currently open photo (available on desktop,
+// where this feature already lives — `item.path` is a real filesystem path there) so different
+// folders/shoots get their own saved reference automatically. A web/File-without-path photo has no
+// folder to scope by, so it falls back to the original unscoped key exactly as before — no
+// behaviour change for that case.
+function _skinRefScopeKey(){
+  try{
+    const item=(typeof curItem==='function')&&curItem();
+    const p=item&&item.path;
+    if(p){const dir=p.replace(/[\\/][^\\/]*$/,'');if(dir)return SKIN_REF_KEY+'.'+dir;}
+  }catch(e){}
+  return SKIN_REF_KEY;
+}
+function skinRefGet(){try{return localStorage.getItem(_skinRefScopeKey())||'';}catch(e){return '';}}
 function mskSetSkinRef(){
   const m=fxState.masks[mskSel];if(!m)return;
   if(!m.crSamples||!m.crSamples.length){toast('Sample the skin first');return;}
@@ -11153,7 +11402,7 @@ function mskSetSkinRef(){
   const mn=crSampleMean(m.crSamples);
   const[r,g,b]=oklch2rgb(mn.h,mn.s,mn.v);
   const hex='#'+[r,g,b].map(v=>Math.round(Math.min(1,Math.max(0,v))*255).toString(16).padStart(2,'0')).join('');
-  try{localStorage.setItem(SKIN_REF_KEY,hex);}catch(e){}
+  try{localStorage.setItem(_skinRefScopeKey(),hex);}catch(e){}
   m.tgtHex=hex;m.tgtMode='ref';mskRebuild();fxUpdate();
   toast('Saved as the reference skin for this shoot',true);
 }
@@ -11322,6 +11571,7 @@ function mskRebuild(){
           'How far around the picked hue counts as a match.')
         +_mskRow('Color purity range','crRangeC',m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35),0,100,1,false,
           'How far from the picked saturation/purity counts as a match — independent of hue range, so you can tighten this alone to exclude a same-hued but duller/more-vivid object (e.g. sand vs skin) without also narrowing valid hue variation.')
+        +_mskCrLinkNote(m)
         +'<div class="msk-hint">Color alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous. For a whole person or animal, <b>+ Skin</b>, <b>+ Coat</b> or <b>+ AI Select</b> segments the subject first, which sidesteps this entirely.</div>':'');
   }
   selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
@@ -11347,6 +11597,7 @@ function mskRebuild(){
       sk+=_mskRow('How similar','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
         +_mskRow('Color purity range','crRangeC',m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35),0,100,1,false,
           'Independent of "How similar" (hue) — narrow this alone to exclude a same-hued but duller/more-vivid object without also shrinking valid skin hue variation.')
+        +_mskCrLinkNote(m)
         +(cov!=null?'<div class="msk-cov"><b>'+CS.length+' sample'+(CS.length>1?'s':'')+'</b> · about <b>'+cov+'%</b> of the frame selected</div>':'')
         // The measured failure mode, stated where it can still be acted on. See CLAUDE.md 5b.
         // The specific "straddles the hue wrap point" claim is a SKIN measurement (§5b, __TM3390.jpg)
@@ -11380,20 +11631,26 @@ function mskRebuild(){
     }
     // Now -> Target swatch pair: a legible readout of what the guided flow is aiming for, instead
     // of making the user eyeball the graded photo to judge whether Preserve/Depth/Warmth are doing
-    // what they intend. "Now" is the mean of the picked/auto-seeded samples (crSampleMean, the same
-    // number Match-pick's target already uses) — a cheap, already-computed proxy for the gated
-    // region's colour, not a fresh per-render measurement.
+    // what they intend. "Now" prefers m.srcH/srcC/srcV — the weighted mean of the ACTUAL gated
+    // pixels (mskMeasureSrcV), the same region Preserve modeling's srcV anchor already measures —
+    // over crSampleMean's mean of just the picked/seeded samples. On a lopsided selection those two
+    // can disagree (a handful of picks skew toward whichever tone was easiest to click), and this
+    // swatch would then show a "Now" that doesn't match what actually converges. Falls back to
+    // crSampleMean only in the small window before the first debounced measurement lands.
     if(CS.length){
-      const curMean=crSampleMean(CS),tgtSw=mskSkinTarget(m);
+      const curMean=(m.srcH!=null&&m.srcC!=null&&m.srcV!=null)?{h:m.srcH,s:m.srcC,v:m.srcV}:crSampleMean(CS);
+      const tgtSw=mskSkinTarget(m);
       const[cr,cg,cb]=oklch2rgb(curMean.h,curMean.s,curMean.v);
       const[tr,tg,tb]=oklch2rgb(tgtSw.h,tgtSw.s,tgtSw.v);
       const toRgb=(r,g,b)=>'rgb('+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(1,v))*255)).join(',')+')';
-      sk+='<div class="fx-row" style="align-items:center;gap:6px" title="Measured mean of your picked '+subjWord+' samples, and the target Depth/Warmth resolve to. A guide, not a guarantee — per-pixel results also depend on Preserve and Strength."><div class="fx-label">Now → Target</div>'
+      sk+='<div class="fx-row" style="align-items:center;gap:6px" title="Measured mean of the '+subjWord+' actually selected (not just your picks), and the target Depth/Warmth resolve to. A guide, not a guarantee — per-pixel results also depend on Preserve and Strength."><div class="fx-label">Now → Target</div>'
         +'<span class="pc-chip" style="order:2;background:'+toRgb(cr,cg,cb)+';width:20px;height:20px;border-radius:5px"></span>'
         +'<span style="order:3;color:var(--mut);font-family:var(--sans)">&rarr;</span>'
         +'<span class="pc-chip" style="order:4;background:'+toRgb(tr,tg,tb)+';width:20px;height:20px;border-radius:5px"></span></div>';
     }
-    sk+='<div class="msk-step"><span class="msk-step-n">3</span>Blend</div>'
+    sk+='<div class="msk-step"><span class="msk-step-n">3</span>Blend'
+      +'<button class="btn bgh" style="margin-left:auto;padding:2px 8px;font-size:var(--fs-1)" onclick="mskToneReset()" title="Reset Strength/Depth/Warmth/Preserve/Only darken back to '+(isCoat?'Coat':'Skin')+'\'s defaults. Does not touch your selection (samples/range) or the target.">Reset</button>'
+      +'</div>'
       +'<div class="msk-chiprow msk-presets">'
       +Object.entries(isCoat?MSK_COAT_PRESETS:MSK_SKIN_PRESETS).map(([k,p])=>'<button class="btn bgh msk-preset" onclick="mskSkinPreset(\''+k+'\')">'+p.label+'</button>').join('')
       +'</div>'
@@ -13948,6 +14205,12 @@ function fxSelectImage(idx){
   // rather than trying to coordinate two independent async flows.
   if(window.chromasmithLibraryBusy)return;
   if(idx<0||idx>=fxImages.length||idx===fxCurIdx)return;
+  // Both are keyed to "the photo currently open" (scan results list OTHER photos to jump to;
+  // multi-instance results are candidate points IN the photo that was open when they were found).
+  // Neither was reset on a photo switch, so navigating away and back — or just clicking a
+  // filmstrip thumbnail — could leave the panel showing a stale scan/instance list for a subject
+  // or photo that isn't the one on screen any more.
+  _subjScanResults=null;_subjMultiResults=null;
   // Persist the OUTGOING photo's own masks (fxState.masks may have been reassigned to a new
   // array by mskAdd/mskDelete, not just mutated in place, so this can't be skipped as "already
   // the same reference") before swapping fxState.masks to the incoming photo's own array — see
@@ -16980,6 +17243,7 @@ const ICONS={
  flagRed:'<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" fill="none"/>',
  heart:'<path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z" fill="currentColor" stroke="none"/>',
  history:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+ copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
  // ── Added so no emoji or unicode glyph is left in the desktop chrome ──────────────────────────
  // The bar previously mixed three icon systems at once: these stroke SVGs, an EMOJI (🗂) for the
  // library, and five 24x24 unicode glyphs (○ ⇔ ▾ ⏱ ▦) set at 9px. Emoji render per-platform and
