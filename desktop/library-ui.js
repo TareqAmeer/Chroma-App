@@ -11,6 +11,7 @@
   // real DOM/CSS renders and can be screenshotted against the wireframes. Production is
   // untouched: the flag only exists via URL and the Tauri path never evaluates the mocks.
   const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
+  let ltAlbums = [];
   if (!window.__TAURI__ && !LIBTEST) return;
   const invoke = LIBTEST ? libtestInvoke : window.__TAURI__.core.invoke;
   // Virtual-copy state for the harness, so the version rows in the context menu are reachable
@@ -51,6 +52,27 @@
       case 'set_sidecar': return Promise.resolve();
       case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
       case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
+      case 'album_list': return Promise.resolve(ltAlbums);
+      case 'album_create': {
+        if (ltAlbums.some((a) => a.name.toLowerCase() === String(A.name).toLowerCase())) return Promise.reject(new Error('exists'));
+        const al = { id: 'alb' + (ltAlbums.length + 1), name: A.name, paths: [], updated: Date.now() / 1000 };
+        ltAlbums.push(al); return Promise.resolve(al);
+      }
+      case 'album_rename': { const a = ltAlbums.find((x) => x.id === A.id); if (a) a.name = A.name; return Promise.resolve(); }
+      case 'album_delete': { ltAlbums = ltAlbums.filter((x) => x.id !== A.id); return Promise.resolve(); }
+      case 'album_add': {
+        const a = ltAlbums.find((x) => x.id === A.id); if (!a) return Promise.reject(new Error('no album'));
+        const before = a.paths.length;
+        (A.paths || []).forEach((p) => { if (!a.paths.includes(p)) a.paths.push(p); });
+        return Promise.resolve(a.paths.length - before);
+      }
+      case 'album_remove': { const a = ltAlbums.find((x) => x.id === A.id); if (a) a.paths = a.paths.filter((p) => !(A.paths || []).includes(p)); return Promise.resolve(); }
+      case 'album_set_order': { const a = ltAlbums.find((x) => x.id === A.id); if (a) a.paths = (A.paths || []).filter((p) => a.paths.includes(p)); return Promise.resolve(); }
+      case 'list_album': {
+        const a = ltAlbums.find((x) => x.id === A.id); if (!a) return Promise.resolve([]);
+        return Promise.resolve(a.paths.map((p, i) => ({ path: p, name: p.split('/').pop(), is_dir: false, is_image: true,
+          kind: 'raw', mtime: 1700000000 + i, size: 1000 + i, missing: p.includes('ghost') })));
+      }
       case 'phash_batch': {
         // Fake hashes: make IMG_1001/1002 a duplicate pair (Hamming distance 1), everything
         // else spread out (distinct low bits per index), so the Duplicates cluster UI is
@@ -337,7 +359,7 @@
     .lib-coll-count{font-family:var(--mono);font-size:10px;color:var(--mut)}
     .lib-coll-row.on .lib-coll-count{color:var(--acc)}
     .lib-coll-sep{height:1px;background:var(--bdr);margin:8px 2px}
-    .lib-coll-heading{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:2px 8px 6px}
+    .lib-coll-heading{font-size:11px;font-weight:600;letter-spacing:0;color:var(--mut);padding:2px 8px 6px}
     #lib-main{overflow:auto;padding:16px}
     /* List mode's sticky header (#lib-list-head, top:0 below) vs #lib-main's own padding: a
        padded overflow:auto container only masks scrolled-behind content within its padding band
@@ -359,7 +381,9 @@
     .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
     .lib-tree-row:hover{background:var(--sur2)}
     .lib-tree-row.on{background:var(--bdr)}
-    .lib-tree-chev{width:14px;flex:0 0 14px;text-align:center;opacity:.6;font-size:10px}
+    .lib-tree-chev{width:14px;flex:0 0 14px;display:inline-flex;align-items:center;justify-content:center;opacity:.6;
+      transform:rotate(-90deg);transition:transform .12s ease}
+    .lib-tree-chev.open{transform:rotate(0)}
     .lib-tree-children{margin-left:14px}
     #lib-viewbar{display:flex;align-items:center;gap:8px;padding:0 12px 8px;flex-wrap:wrap}
     #lib-viewbar select,#lib-viewbar input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
@@ -400,8 +424,8 @@
     :root{--lib-list-cols:52px minmax(120px,1fr) 92px 92px 132px 56px 68px 60px 56px 70px 56px 60px}
     #lib-list-head{display:none;position:sticky;top:0;z-index:20;background:var(--bg);
       grid-template-columns:var(--lib-list-cols);gap:10px;padding:4px 8px 6px;
-      border-bottom:1px solid var(--bdr);font-size:10px;color:var(--mut);font-family:var(--mono);
-      text-transform:uppercase;letter-spacing:.04em}
+      border-bottom:1px solid var(--bdr);font-size:11px;color:var(--mut);font-family:var(--sans);
+      font-weight:600;letter-spacing:0}
     #lib-list-head.on{display:grid}
     .lib-lh-cell{cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
     /* Drag to resize the column; double-click resets it. Sits on the cell's right edge, just
@@ -420,10 +444,10 @@
     #lib-grid.list-view .lib-name{padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
     #lib-grid.list-view .lib-tagrow{padding:0;display:contents}
     #lib-grid.list-view .lib-edited-badge,#lib-grid.list-view .lib-raw-badge,#lib-grid.list-view .lib-video-badge{position:static;width:16px;height:16px}
-    #lib-grid.list-view .lib-col{font-size:10px;color:var(--mut);font-family:var(--mono);
+    #lib-grid.list-view .lib-col{font-size:11px;color:var(--mut);font-family:var(--sans);
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .lib-meta-strip{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);color:#fff;
-      font-size:9px;font-family:var(--mono);padding:3px 5px;line-height:1.3;
+      font-size:10px;font-family:var(--sans);padding:3px 5px;line-height:1.3;
       pointer-events:none;opacity:0}
     .lib-card:hover .lib-meta-strip.hover-mode,.lib-meta-strip.always-mode{opacity:1}
     .lib-thumb-wrap{position:relative}
@@ -446,7 +470,7 @@
        get_thumbnail resolves — .loaded is added by the thumb pool once the blob URL is set. */
     #lib-grid:not(.list-view) .lib-thumb-wrap img{opacity:0;transition:opacity .15s ease}
     #lib-grid:not(.list-view) .lib-thumb-wrap img.loaded{opacity:1}
-    .lib-card .lib-name{font-size:10px;font-family:var(--mono);color:var(--mut);
+    .lib-card .lib-name{font-size:11px;font-family:var(--sans);color:var(--mut);
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-tagrow{display:flex;align-items:center;gap:6px;padding:0 6px 6px}
     .lib-stars{display:inline-flex;gap:1px;line-height:1;user-select:none}
@@ -1014,11 +1038,18 @@
     recentMenu = document.createElement('div');
     recentMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
       'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:220px;max-width:320px;box-shadow:var(--lift-2)';
-    const item = (label, path) => {
+    // `ic` param replaces the emoji this menu used to prefix every label with (☁️/📌/📁) —
+    // CLAUDE.md §3b: "No emoji and no unicode glyphs in desktop chrome; they render per-platform
+    // and never match a stroke weight." Optional so the two plain "No recent folders yet" /
+    // Google/Lightroom rows below that pass no icon still render exactly as before.
+    const item = (label, path, icoName) => {
       const el = document.createElement('div');
-      el.textContent = label;
+      if (icoName) {
+        const escLabel = String(label).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        el.innerHTML = `<span style="display:inline-flex;vertical-align:-3px;margin-right:7px;color:var(--mut)">${ic(icoName, 14)}</span>${escLabel}`;
+      } else el.textContent = label;
       el.title = path;
-      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center';
       el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
       el.onmouseleave = () => { el.style.background = ''; };
       el.onclick = async (ev) => { ev.stopPropagation(); closeRecentMenu(); await openAsRoot(path); };
@@ -1034,18 +1065,18 @@
     // others. Pin/unpin the current folder from this same menu.
     const lDir = lDirEarly;
     const pins = getPinnedFolders().filter((p) => p !== gDir && p !== lDir);
-    if (gDir) item('☁️ Google Photos Download', gDir);
-    if (lDir) item('☁️ Lightroom Download', lDir);
+    if (gDir) item('Google Photos Download', gDir, 'cloud');
+    if (lDir) item('Lightroom Download', lDir, 'cloud');
     if (pins.length) {
       if (gDir) menuSep();
-      pins.forEach((p) => item('📌 ' + baseName(p), p));
+      pins.forEach((p) => item(baseName(p), p, 'pin'));
     }
     if (state.currentFolder) {
       menuSep();
       const isPinned = getPinnedFolders().includes(state.currentFolder);
       const pinEl = document.createElement('div');
-      pinEl.textContent = isPinned ? '✕ Unpin current folder' : '📌 Pin current folder';
-      pinEl.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;color:var(--mut)';
+      pinEl.innerHTML = `<span style="display:inline-flex;vertical-align:-3px;margin-right:7px">${ic(isPinned ? 'close' : 'pin', 14)}</span>${isPinned ? 'Unpin current folder' : 'Pin current folder'}`;
+      pinEl.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;color:var(--mut);display:flex;align-items:center';
       pinEl.onmouseenter = () => { pinEl.style.background = 'var(--bdr)'; };
       pinEl.onmouseleave = () => { pinEl.style.background = ''; };
       pinEl.onclick = (ev) => { ev.stopPropagation(); togglePinnedFolder(state.currentFolder); closeRecentMenu(); };
@@ -1054,7 +1085,7 @@
     const shownRecents = recents.filter((p) => !pins.includes(p));
     if (shownRecents.length) {
       menuSep();
-      shownRecents.forEach((p) => item('📁 ' + baseName(p), p));
+      shownRecents.forEach((p) => item(baseName(p), p, 'folder'));
     } else if (!gDir && !pins.length) {
       item('No recent folders yet', '');
     }
@@ -1064,44 +1095,6 @@
     const mr = recentMenu.getBoundingClientRect();
     recentMenu.style.left = Math.min(r.left, vw - mr.width - 8) + 'px';
     recentMenu.style.top = (r.bottom + 4) + 'px';
-  }
-
-  /// TWO-TIER thumbnail load (ROADMAP Library 15). Tier 1 is the preview the camera already
-  /// embedded in the file; tier 2 is the real 360px decode.
-  ///
-  /// ⚠️ Worth doing only because of which files are slow, and that is the opposite of the obvious
-  /// guess. Measured cold (`examples/thumb_timing.rs`): a 24MP JPEG costs **426-804ms** because
-  /// `image::open` decodes every pixel before downsizing, while an RW2 costs **97-175ms** because
-  /// the RAW path already reads the camera's embedded preview. So the tier that matters is for
-  /// JPEG/TIFF, and RAW is left exactly as it was — `get_thumbnail_fast` returns Err for it and
-  /// this falls straight through.
-  ///
-  /// The proxy is genuinely lower quality (256x171 on this camera vs a 360px target), so it is
-  /// never the final state: the full decode is queued on idle and replaces it. Measured 17.3ms vs
-  /// 426.5ms for the first paint.
-  function thumbTiered(job) {
-    const setSrc = (buf, isProxy) => {
-      if (!job.imgEl.isConnected) return;
-      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-      job.imgEl.src = url;
-      job.imgEl.classList.add('loaded');
-      if (isProxy) job.imgEl.dataset.proxy = '1'; else delete job.imgEl.dataset.proxy;
-      _thumbUrlsThisGen.push(url);
-    };
-    const full = () => invoke('get_thumbnail', { path: job.path }).then((b) => setSrc(b, false));
-    const gen = _thumbGen;
-    return invoke('get_thumbnail_fast', { path: job.path })
-      .then((buf) => {
-        // ⚠️ A generation check here as well as in the pump: the proxy resolves in ~1ms but the
-        // idle upgrade lands much later, and without this a folder switch mid-flight would paint
-        // the previous folder's thumbnail into a recycled card.
-        if (gen !== _thumbGen) return;
-        setSrc(buf, true);
-        const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300));
-        idle(() => { if (gen === _thumbGen && job.imgEl.isConnected) full().catch(() => {}); });
-      })
-      // No embedded preview (RAW, PNG, or a JPEG that lacks one) — go straight to the real decode.
-      .catch(() => full());
   }
 
   // Folder size at which the grid switches to windowed rendering. Chosen off the measurement in
@@ -1217,7 +1210,15 @@
               if (card && m.w && m.h) card.dataset.dims = m.w + 'x' + m.h;
             }
           })
-        : thumbTiered(job))
+        : invoke('get_thumbnail', { path: job.path })
+          .then((buf) => {
+            if (job.imgEl.isConnected) {
+              const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+              job.imgEl.src = url;
+              job.imgEl.classList.add('loaded');
+              _thumbUrlsThisGen.push(url);
+            }
+          }))
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
           _thumbFailCount++;
@@ -1372,7 +1373,17 @@
 
   /// Five stars, filled to `n`. Click sets that rating; clicking the current rating clears it,
   /// which is the Lightroom behaviour and the only way to get back to unrated with the mouse.
+  // ── Star ratings: BUILT, then switched off (user decision, 2026-08-16) ──────────────────────
+  // Kept in the code rather than deleted, because the decision was "I no longer need it" and not
+  // "it was wrong" — flip this to true and every surface comes back: the card overlay, the 0-5
+  // keyboard shortcuts, the rating filter, the Rating sort key and list column.
+  //
+  // ⚠️ Switched off at the SURFACES, never in setRating or the sidecar schema. Ratings already
+  // written to .xmp sidecars stay there and stay readable; turning the UI off must not silently
+  // start dropping data the user recorded, or turning it back on would show an empty history.
+  const STARS_ENABLED = false;
   function starsHtml(n) {
+    if (!STARS_ENABLED) return '';
     n = Math.max(0, Math.min(5, parseInt(n, 10) || 0));
     let out = '<span class="lib-stars">';
     for (let i = 1; i <= 5; i++) {
@@ -1772,7 +1783,11 @@
     const row = document.createElement('div');
     row.className = 'lib-tree-row' + (state.currentFolder === path ? ' on' : '');
     const isExpanded = state.expanded.has(path);
-    row.innerHTML = `<span class="lib-tree-chev">${isExpanded ? '▾' : '▸'}</span><span>📁 ${baseName(path) || path}</span>`;
+    // Chevron rotates rather than swapping ▾/▸ glyphs — same mechanism as the editor's
+    // .msk-group-chev, so a leaf's permanently-empty chevron slot doesn't need its own case.
+    row.innerHTML = `<span class="lib-tree-chev${isExpanded ? ' open' : ''}">${ic('chevron', 11)}</span>`
+      + `<span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)">${ic('folder', 13)}</span>`
+      + `<span>${baseName(path) || path}</span>`;
     row.onclick = async (e) => {
       e.stopPropagation();
       if (state.expanded.has(path)) state.expanded.delete(path); else state.expanded.add(path);
@@ -2940,7 +2955,7 @@
         <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
         <div class="lib-cmp-chrome">
           <div class="lib-flag" data-pane="${which}" data-flag="Green" title="Pick">${ic('flagGreen',15)}</div>
-          <div class="lib-flag" data-pane="${which}" data-flag="Red" title="Reject">✕</div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Red" title="Reject">${ic('close', 12)}</div>
           <div class="lib-flag" data-pane="${which}" data-flag="Favorite" title="Favorite">${ic('heart',15)}</div>
           <span style="margin-left:auto;color:var(--mut);font-size:10px" class="lib-cmp-name" data-pane="${which}"></span>
         </div>
@@ -3149,21 +3164,26 @@
     const views = loadViews();
     sel.innerHTML = '<option value="">Views…</option>'
       + views.map((v, i) => `<option value="${i}">${String(v.name).replace(/</g,'&lt;')}</option>`).join('')
-      + '<option value="__save">＋ Save current…</option>'
-      + (views.length ? '<option value="__del">✕ Delete a view…</option>' : '');
+      // <option> text is always plain text — no element can be injected here, so these two stay
+      // words rather than icons. U+FF0B FULLWIDTH PLUS -> a plain "+"; the ✕ was redundant next
+      // to "Delete" and is dropped rather than swapped for another glyph.
+      + '<option value="__save">+ Save current…</option>'
+      + (views.length ? '<option value="__del">Delete a view…</option>' : '');
     sel.value = '';
   }
-  function onViewsChange(e) {
+  async function onViewsChange(e) {
     const v = e.target.value;
     const views = loadViews();
+    // askTextModal, never window.prompt — same silent-no-op-under-WKWebView bug as the version
+    // rename above; found by grepping for the pattern after fixing that one.
     if (v === '__save') {
-      const name = prompt('Name this view (filters + sort, not the folder):', '');
+      const name = await window.askTextModal('Name this view', 'Filters + sort, not the folder', '');
       if (name && name.trim()) { views.push({ name: name.trim(), fields: captureView() }); saveViews(views); }
       renderViewsMenu();
       return;
     }
     if (v === '__del') {
-      const name = prompt('Delete which view?\n\n' + views.map((x) => '· ' + x.name).join('\n'), '');
+      const name = await window.askTextModal('Delete which view?', views.map((x) => '· ' + x.name).join('\n'), '');
       if (name) { saveViews(views.filter((x) => x.name !== name.trim())); }
       renderViewsMenu();
       return;
@@ -3334,7 +3354,7 @@
       // Ratings work here exactly as they do in the grid — that parity IS ROADMAP Library 14,
       // and compare is where a rating is most useful, since it is the mode built for choosing
       // between two frames.
-      if (e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const n = parseInt(e.key, 10);
         e.preventDefault(); if (target) setRating(target, n); return;
       }
@@ -3395,7 +3415,7 @@
     }
     // 0-5 set a rating on the same targets X/P/U flag — ROADMAP Library 2, which had been
     // recorded as shipped but never was.
-    if (e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const n = parseInt(e.key, 10);
       e.preventDefault(); kbTargets().forEach((p) => setRating(p, n)); return;
     }
@@ -3436,7 +3456,21 @@
   overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
-  overlay.querySelector('#lib-rating-filter').onchange = (e) => { state.ratingFilter = e.target.value; renderGrid(); };
+  if (!STARS_ENABLED) {
+    // Sort option and list column are the two surfaces that are pure markup rather than a
+    // starsHtml() call, so they need removing explicitly or the grid offers a sort by a value
+    // nothing displays.
+    const so = overlay.querySelector('#lib-sort option[value="rating"]');
+    if (so) so.remove();
+    if (state.sortBy === 'rating') { state.sortBy = 'name'; try { localStorage.setItem('chromasmith_lib_sort', 'name'); } catch {} }
+  }
+  const _rf = overlay.querySelector('#lib-rating-filter');
+  if (_rf) {
+    _rf.onchange = (e) => { state.ratingFilter = e.target.value; renderGrid(); };
+    // Hide the control AND its label row, not just the <select> — a stray "Rating" label above an
+    // invisible dropdown is worse than either.
+    if (!STARS_ENABLED) { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = 'none'; }
+  }
   // ── Filters popover: toggle button, active-filter chips, clear-all ──────────────────────
   const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-tag-filter', 'lib-rating-filter'];
   function syncFilterUI() {
@@ -3448,7 +3482,7 @@
     badgeEl.classList.toggle('on', active.length > 0);
     chipsEl.innerHTML = active.map((sel) => {
       const opt = sel.options[sel.selectedIndex];
-      return `<span class="lib-chip">${opt ? opt.textContent : sel.value}<span class="lib-chip-x" data-for="${sel.id}" title="Remove filter">✕</span></span>`;
+      return `<span class="lib-chip">${opt ? opt.textContent : sel.value}<span class="lib-chip-x" data-for="${sel.id}" title="Remove filter">${ic('close', 10)}</span></span>`;
     }).join('');
     chipsEl.querySelectorAll('.lib-chip-x').forEach((x) => {
       x.onclick = () => {
@@ -3629,6 +3663,9 @@
     await Promise.all(entries.filter((e) => !e.missing).map((e) => Promise.all([getSidecar(e.path), getMeta(e.path)])));
     await renderGrid();
     renderCollections();
+  // Albums load once at startup, then only after a mutation — the list is small and lives in one
+  // JSON file, so re-reading it on every grid render would be pure waste.
+  refreshAlbums();
   }
 
   // ── Darkroom-style sidebar: smart collections above the folder tree ─────────────────────
@@ -3743,7 +3780,7 @@
       `${files.length} files · ${fmtBytes(totalBytes)} · ${esc(span)}${dupes ? ` · <span style="color:var(--acc)">${dupes} already imported</span>` : ''}`;
 
     const row = (label, html, hint) => `<div style="margin-bottom:10px">
-        <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">${label}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--mut);margin-bottom:4px">${label}</div>
         ${html}${hint ? `<div style="font-size:11px;color:var(--mut);margin-top:3px">${hint}</div>` : ''}</div>`;
     const inputCss = 'width:100%;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 9px;font-size:12px;font-family:var(--sans)';
     document.getElementById('imp-body').innerHTML =
@@ -3761,7 +3798,7 @@
           <option value="{YYYY-MM-DD}_{n}">2026-08-15_0001</option></select>`)
       + row('Also copy to', `<div style="display:flex;gap:6px"><input id="imp-backup" style="${inputCss}" value="${esc(prefs.backup || '')}" placeholder="Optional second copy — another drive" readonly>
           <button id="imp-backup-pick" style="white-space:nowrap;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer">Choose…</button>
-          <button id="imp-backup-clear" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);border-radius:7px;padding:7px 9px;font-size:12px;cursor:pointer">✕</button></div>`,
+          <button id="imp-backup-clear" title="Clear" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);border-radius:7px;padding:7px 9px;cursor:pointer;display:inline-flex;align-items:center">${ic('close', 14)}</button></div>`,
         'Written in the same pass, before the card is reused — which is when a single copy is most fragile.')
       + `<label style="display:flex;align-items:center;gap:7px;font-size:12px;margin:12px 0 4px;cursor:pointer">
           <input type="checkbox" id="imp-skip" ${prefs.skip === false ? '' : 'checked'}> Skip files already imported${dupes ? ` (${dupes})` : ''}</label>
@@ -4118,6 +4155,124 @@
     }
   });
 
+  // ── Albums: user-made collections that LINK to photos rather than copying them ─────────────
+  // Every collection above this is DERIVED (edited/favorites/exported/rejected are each computed
+  // from a per-photo fact). An album is the missing manual one: "these 40 frames are the Geneva
+  // set", with no way to say that short of moving files on disk.
+  //
+  // ⚠️ It stores PATHS, never pixels (see library.rs's album_* commands). A photo can sit in any
+  // number of albums at full quality, and deleting an album cannot lose a photograph. The cost is
+  // that an album goes stale if a file is moved outside the app — handled by `missing` entries
+  // rather than by silently dropping them.
+  let _albums = [];
+  function albumsSectionHtml() {
+    const rows = _albums.map((a) => `
+      <div class="lib-coll-row${state.source === 'album:' + a.id ? ' on' : ''}" data-album="${a.id}" title="${esc2(a.name)} — ${a.paths.length} photo${a.paths.length === 1 ? '' : 's'}">
+        <span class="lib-coll-ic">${ALBUM_SVG}</span><span class="lib-coll-lb">${esc2(a.name)}</span>
+        <span class="lib-coll-count">${a.paths.length || ''}</span>
+      </div>`).join('');
+    return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Albums'
+      + `<span id="lib-album-new" title="New album" style="float:right;cursor:pointer;padding:0 4px">+</span>`
+      + '</div>' + (rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No albums yet</div>');
+  }
+  const ALBUM_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2"/></svg>';
+  async function refreshAlbums() {
+    _albums = await invoke('album_list').catch(() => []);
+    renderCollections();
+  }
+  function wireAlbumRows(host) {
+    const nb = host.querySelector('#lib-album-new');
+    if (nb) nb.onclick = async (e) => {
+      e.stopPropagation();
+      const name = await window.askTextModal('Album name', '', '');
+      if (!name) return;
+      try { await invoke('album_create', { name }); await refreshAlbums(); toast(`Album "${name}" created`, true); }
+      catch (err) { toast(String(err), false); }
+    };
+    host.querySelectorAll('.lib-coll-row[data-album]').forEach((row) => {
+      const id = row.dataset.album;
+      row.onclick = () => openAlbumView(id);
+      row.oncontextmenu = (e) => { e.preventDefault(); showAlbumMenu(e, id); };
+      // Same drag contract the Favorites/Flagged/Rejected rows use, so dropping onto an album is
+      // the same gesture with the same data — it just appends to a list instead of setting a flag.
+      row.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes('application/x-chromasmith-paths')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('lib-coll-dragover');
+      };
+      row.ondragleave = () => row.classList.remove('lib-coll-dragover');
+      row.ondrop = async (e) => {
+        e.preventDefault();
+        row.classList.remove('lib-coll-dragover');
+        let paths = [];
+        try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch { /* ignore */ }
+        if (!paths.length) return;
+        const added = await invoke('album_add', { id, paths }).catch((err) => { toast(String(err), false); return 0; });
+        await refreshAlbums();
+        // Says what actually happened: re-dragging photos already in an album is a common gesture
+        // and reporting "3 added" when nothing changed would be a lie.
+        const dup = paths.length - added;
+        toast(added
+          ? `${added} added${dup ? `, ${dup} already there` : ''}`
+          : `Already in this album`, true);
+      };
+    });
+  }
+  async function openAlbumView(id) {
+    state.source = 'album:' + id;
+    lrState.album = null;
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let entries;
+    try { entries = await invoke('list_album', { id }); }
+    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this album.</div>'; return; }
+    state.entries = entries;
+    await Promise.all(entries.filter((e) => !e.missing).map((e) => Promise.all([getSidecar(e.path), getMeta(e.path)])));
+    await renderGrid();
+    renderCollections();
+    const missing = entries.filter((e) => e.missing).length;
+    if (missing) toast(`${missing} photo${missing === 1 ? '' : 's'} in this album can't be found on disk`, false);
+  }
+  function showAlbumMenu(e, id) {
+    const a = _albums.find((x) => x.id === id);
+    if (!a) return;
+    const items = [
+      ['Rename…', async () => {
+        const name = await window.askTextModal('Rename album', '', a.name);
+        if (!name) return;
+        try { await invoke('album_rename', { id, name }); await refreshAlbums(); }
+        catch (err) { toast(String(err), false); }
+      }],
+      [`Delete "${a.name}"`, async () => {
+        // Deliberately blunt about what is and isn't destroyed — the whole point of an album is
+        // that throwing it away is safe, and the user should know that before confirming.
+        if (!confirm(`Delete the album "${a.name}"?\n\nThe ${a.paths.length} photo${a.paths.length === 1 ? '' : 's'} in it stay exactly where they are on disk — only the list is removed.`)) return;
+        await invoke('album_delete', { id }).catch((err) => toast(String(err), false));
+        if (state.source === 'album:' + id) { state.source = 'folder'; state.entries = []; renderGrid(); }
+        await refreshAlbums();
+      }],
+    ];
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:200;background:var(--sur2);border:1px solid var(--bdr);'
+      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
+    items.forEach(([label, fn]) => {
+      const it = document.createElement('div');
+      it.textContent = label;
+      it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      it.onmouseenter = () => { it.style.background = 'var(--bdr)'; };
+      it.onmouseleave = () => { it.style.background = ''; };
+      it.onclick = () => { menu.remove(); fn(); };
+      menu.appendChild(it);
+    });
+    document.body.appendChild(menu);
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+  }
+
   function renderCollections() {
     const host = document.getElementById('lib-collections');
     if (!host) return;
@@ -4125,7 +4280,8 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
-      </div>`).join('') + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
+      </div>`).join('') + albumsSectionHtml() + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
+    wireAlbumRows(host);
     host.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
       row.onclick = () => openImportPanel(row.dataset.card);
     });

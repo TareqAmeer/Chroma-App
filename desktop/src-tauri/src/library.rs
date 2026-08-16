@@ -1384,3 +1384,245 @@ mod version_tests {
         std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
     }
 }
+// ── Albums: user-made collections that LINK to photos rather than copying them ───────────────
+//
+// The gap this closes: every existing collection here is *derived* (edited, favorites, exported,
+// rejected — each computed from a per-photo fact). There was no way to say "these 40 frames are
+// the Geneva set" without moving files on disk, which is what a folder would mean.
+//
+// ⚠️ An album stores PATHS, never pixels. That is the whole point — a photo can be in any number
+// of albums, appears at full quality in each, and deleting an album cannot lose a photograph.
+// The cost of that choice is that an album can go stale when a file is moved or renamed outside
+// the app, which is why `list_album` marks missing entries (`DirEntry::missing`) rather than
+// dropping them: a photo you can see and fix is better than one that silently disappeared.
+//
+// Stored in Application Support, NOT Caches — an album is user work that cannot be regenerated
+// from anything on disk. Same reasoning as subject.rs's prototypes.
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct Album {
+    pub id: String,
+    pub name: String,
+    /// Absolute photo paths, in the order the user added them.
+    pub paths: Vec<String>,
+    /// Unix seconds, for "recently used" ordering in the sidebar.
+    pub updated: u64,
+}
+
+fn albums_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let dir = PathBuf::from(home).join("Library/Application Support/com.tareq.chromasmith");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("albums.json")
+}
+
+fn albums_read() -> Vec<Album> {
+    std::fs::read_to_string(albums_path())
+        .ok()
+        .and_then(|t| serde_json::from_str::<Vec<Album>>(&t).ok())
+        .unwrap_or_default()
+}
+
+fn albums_write(v: &[Album]) -> Result<(), String> {
+    let path = albums_path();
+    let text = serde_json::to_string_pretty(v).map_err(|e| format!("serialise albums: {e}"))?;
+    // Write-then-rename, so an interrupted write cannot truncate the file every album lives in.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, text).map_err(|e| format!("write albums: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("commit albums: {e}"))
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+#[tauri::command]
+pub fn album_list() -> Vec<Album> {
+    let mut v = albums_read();
+    v.sort_by(|a, b| b.updated.cmp(&a.updated));
+    v
+}
+
+#[tauri::command]
+pub fn album_create(name: String) -> Result<Album, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("an album needs a name".into());
+    }
+    let mut all = albums_read();
+    if all.iter().any(|a| a.name.eq_ignore_ascii_case(&name)) {
+        return Err(format!("an album called \"{name}\" already exists"));
+    }
+    let album = Album { id: format!("alb{}", now_secs()), name, paths: Vec::new(), updated: now_secs() };
+    all.push(album.clone());
+    albums_write(&all)?;
+    Ok(album)
+}
+
+#[tauri::command]
+pub fn album_rename(id: String, name: String) -> Result<(), String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("an album needs a name".into());
+    }
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    a.name = name;
+    a.updated = now_secs();
+    albums_write(&all)
+}
+
+#[tauri::command]
+pub fn album_delete(id: String) -> Result<(), String> {
+    let mut all = albums_read();
+    all.retain(|a| a.id != id);
+    // ⚠️ Deletes the LIST only. Nothing here touches a photo, which is what makes an album safe
+    // to throw away — the opposite of a folder.
+    albums_write(&all)
+}
+
+/// Adds photos to an album, skipping ones already in it. Returns how many were actually added so
+/// the UI can say "3 added, 2 already there" instead of a silent no-op on a re-drag.
+#[tauri::command]
+pub fn album_add(id: String, paths: Vec<String>) -> Result<usize, String> {
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    let before = a.paths.len();
+    for p in paths {
+        if !a.paths.iter().any(|q| q == &p) {
+            a.paths.push(p);
+        }
+    }
+    let added = a.paths.len() - before;
+    a.updated = now_secs();
+    albums_write(&all)?;
+    Ok(added)
+}
+
+#[tauri::command]
+pub fn album_remove(id: String, paths: Vec<String>) -> Result<(), String> {
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    a.paths.retain(|p| !paths.iter().any(|q| q == p));
+    a.updated = now_secs();
+    albums_write(&all)
+}
+
+/// Reorders one album's contents wholesale — the drag-to-reorder gesture. Paths not currently in
+/// the album are ignored rather than added, so a stale drag can't quietly grow it.
+#[tauri::command]
+pub fn album_set_order(id: String, paths: Vec<String>) -> Result<(), String> {
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    let existing: Vec<String> = a.paths.clone();
+    let mut next: Vec<String> = paths.into_iter().filter(|p| existing.contains(p)).collect();
+    // Anything the caller didn't mention keeps its old relative position at the end.
+    for p in existing {
+        if !next.contains(&p) {
+            next.push(p);
+        }
+    }
+    a.paths = next;
+    a.updated = now_secs();
+    albums_write(&all)
+}
+
+/// One album's photos as grid entries. Mirrors list_exported's stat-fresh/missing-tolerant
+/// mapping so an album renders through exactly the same grid path as a folder.
+#[tauri::command]
+pub fn list_album(id: String) -> Vec<DirEntry> {
+    let all = albums_read();
+    let Some(a) = all.into_iter().find(|a| a.id == id) else { return Vec::new() };
+    a.paths
+        .into_iter()
+        .map(|path| {
+            let p = Path::new(&path);
+            let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let ext = ext_lower(p);
+            let is_video = is_video_ext(&ext);
+            let kind = if is_video { "video" } else { kind_of(&ext) };
+            let edited_ts = edited_ts_of(&path);
+            match std::fs::metadata(&path) {
+                Ok(m) => {
+                    let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                    DirEntry { name: file_name, path, is_dir: false, is_image: !is_video, is_video, kind, mtime, size: m.len(), missing: false, edited_ts }
+                }
+                // Kept, and flagged. An album pointing at a moved file should show the gap, not
+                // pretend the photo was never added.
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: !is_video, is_video, kind, mtime: 0, size: 0, missing: true, edited_ts },
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod album_tests {
+    use super::*;
+
+    /// Albums are a real file on disk shared by every test in this module, so each test works on
+    /// its own HOME to stay independent of the developer's actual albums.
+    fn with_temp_home<T>(f: impl FnOnce() -> T) -> T {
+        let dir = std::env::temp_dir().join(format!("cs_alb_{}_{:?}", std::process::id(), std::thread::current().id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let prev = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &dir);
+        let out = f();
+        if let Some(p) = prev { std::env::set_var("HOME", p); }
+        std::fs::remove_dir_all(&dir).ok();
+        out
+    }
+
+    #[test]
+    fn albums_link_without_copying_and_survive_a_missing_file() {
+        with_temp_home(|| {
+            let photos = std::env::temp_dir().join(format!("cs_albphotos_{}", std::process::id()));
+            std::fs::create_dir_all(&photos).unwrap();
+            let a1 = photos.join("a.jpg");
+            let a2 = photos.join("b.jpg");
+            std::fs::write(&a1, vec![1u8; 64]).unwrap();
+            std::fs::write(&a2, vec![2u8; 64]).unwrap();
+
+            let al = album_create("Geneva".into()).expect("create");
+            assert_eq!(album_create("geneva".into()).is_err(), true, "names are case-insensitively unique");
+
+            let added = album_add(al.id.clone(), vec![
+                a1.to_string_lossy().into_owned(), a2.to_string_lossy().into_owned(),
+            ]).expect("add");
+            assert_eq!(added, 2);
+            // Re-adding the same photos is a no-op, not a duplicate.
+            assert_eq!(album_add(al.id.clone(), vec![a1.to_string_lossy().into_owned()]).unwrap(), 0);
+
+            let listed = list_album(al.id.clone());
+            assert_eq!(listed.len(), 2);
+            assert!(listed.iter().all(|e| !e.missing));
+            // ⚠️ The photos themselves must be untouched — an album is a list, not a copy.
+            assert!(a1.exists() && a2.exists(), "album operations must never move or copy a photo");
+
+            // A file moved outside the app: the entry stays, marked missing.
+            std::fs::remove_file(&a2).unwrap();
+            let listed = list_album(al.id.clone());
+            assert_eq!(listed.len(), 2, "a missing file stays listed so it can be seen and fixed");
+            assert_eq!(listed.iter().filter(|e| e.missing).count(), 1);
+
+            // Order is the user's, and set_order cannot smuggle in a path that isn't a member.
+            album_set_order(al.id.clone(), vec![
+                a2.to_string_lossy().into_owned(),
+                "/nowhere/ghost.jpg".into(),
+                a1.to_string_lossy().into_owned(),
+            ]).expect("reorder");
+            let listed = list_album(al.id.clone());
+            assert_eq!(listed.len(), 2, "a non-member path must not be added by a reorder");
+            assert_eq!(listed[0].name, "b.jpg");
+
+            album_remove(al.id.clone(), vec![a1.to_string_lossy().into_owned()]).expect("remove");
+            assert_eq!(list_album(al.id.clone()).len(), 1);
+            assert!(a1.exists(), "removing from an album must not delete the photo");
+
+            album_delete(al.id.clone()).expect("delete");
+            assert!(album_list().is_empty());
+            assert!(a1.exists(), "deleting an album must not delete photos");
+
+            std::fs::remove_dir_all(&photos).ok();
+        });
+    }
+}
