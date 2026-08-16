@@ -59,3 +59,20 @@ desktop/src-tauri/vendor/sam2/*.onnx
 # re-fetched from the darktable-ai release rather than committed, same rationale as sam2/ above.
 desktop/src-tauri/vendor/rawdenoise/*.onnx
 test/output/
+
+# Personal photo-editing sidecars from using Chromasmith on your own photos with the repo as
+# cwd — not app source, not meant for the public repo. (Doesn't untrack the handful of .xmp/
+# .rrdata files already committed; only stops new ones from showing as untracked clutter and
+# from being swept up by a broad `git add`.)
+*.xmp
+*.rrdata
+Best/
+Lucifer/
+geneva/
+IMG_5774_2x.PNG
+IMG_7522.jxl
+bloom-test-2x.png
+Firefly_remove\ background*
+calib/bloom_chart_geo.txt
+*.PRE-FIX.bak
+Chromasmith\ copy.app
