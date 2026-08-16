@@ -192,6 +192,18 @@ unsafe fn mean_level(img: *mut AnyObject) -> Result<f32, String> {
 
 /// How much HDR headroom a source carries, as expanded/unexpanded mean. 1.0 == none.
 /// Measured on a real ISO-gain-map HEIC: 0.4390 / 0.2520 = 1.74.
+/// Thin public wrapper over mean_level, for examples/raw_headroom_probe.rs only — measuring
+/// whether CIRAWFilter's extendedDynamicRangeAmount does anything real on this camera's RW2s is
+/// exactly the kind of one-off probe the rest of this file's callers never need.
+#[cfg(test)]
+pub fn mean_level_pub(img: *mut AnyObject) -> Result<f32, String> {
+    unsafe { mean_level(img) }
+}
+#[doc(hidden)]
+pub fn mean_level_pub_probe(img: *mut AnyObject) -> Result<f32, String> {
+    unsafe { mean_level(img) }
+}
+
 pub fn source_headroom(path: &str) -> Result<f32, String> {
     unsafe {
         let url = NSURL::fileURLWithPath(&NSString::from_str(path));
@@ -219,6 +231,142 @@ pub fn source_headroom(path: &str) -> Result<f32, String> {
 
 pub fn source_has_hdr(path: &str) -> Result<bool, String> {
     Ok(source_headroom(path)? > 1.02)
+}
+
+// ── HDR from RAW ──────────────────────────────────────────────────────────────────────────────
+//
+// source_headroom/write_gainmap_heic above only work when the SOURCE file already carries an
+// encoded HDR rendition — true for an iPhone HEIC (measured headroom 1.37-1.40), but NOT for a
+// RAW: CIRAWFilter's extendedDynamicRangeAmount property was probed directly against a real RW2
+// (examples/raw_headroom_probe.rs) and does nothing — the mean level at EDR=0 and EDR=1 came back
+// byte-for-byte identical (0.02173913 both times), and the filter's own inputKeys came back
+// empty, meaning this camera's files never enter CIRAWFilter's actual RAW path at all. So a RAW's
+// headroom cannot come from Core Image's RAW pipeline; it has to come from the DECODE this app
+// already does.
+//
+// The recoverable range IS there, already computed and already thrown away: CLAUDE.md §7 records
+// that the DCP LookTable is "TABLE-INDEX clamps only, values extended-range" — the trilinear-
+// sampled colour values inside applyDcpLUT (chromasmith-22.html) can genuinely exceed 1.0 before
+// the `Uint8ClampedArray` write clamps them to 255. That headroom is measured once, for free, in
+// the SAME per-pixel loop that already runs for every RAW load (see applyDcpLUT's `hrOut`
+// parameter) and threaded through geometry via the same `applyGeomTo` the photo itself uses, so
+// the two stay pixel-aligned by construction rather than by a second, hand-maintained transform.
+//
+// This function takes that headroom map (a grayscale PNG, one byte per pixel: 0 = no extra range,
+// 255 = the HR_MAX_STOPS cap) and the already-graded SDR export, and builds the HDR rendition as
+// graded * (1 + headroom_normalized * (2^HR_MAX_STOPS - 1)) via CIColorMatrix + the same
+// CIMultiplyCompositing `multiply()` helper write_gainmap_heic already uses — reusing that
+// function rather than a hand-rolled blend keeps the two HDR paths' actual compositing identical.
+///
+/// ⚠️ The headroom PNG's byte values are expected to be sRGB-GAMMA-ENCODED (the standard OETF),
+/// not linear-normalised, and this is load-bearing rather than a stylistic choice. Measured
+/// directly (`examples/gainmap_from_map_probe.rs`): loading an untagged 8-bit PNG via
+/// `imageWithData:` colour-matches it as sRGB and gamma-DECODES it before CIColorMatrix ever
+/// sees it, so a raw linear byte of 128/255 (intended multiplier 2.506 at 2 stops) measured back
+/// at only 1.647 in the written file — matching the sRGB EOTF almost exactly (128/255 decodes to
+/// ~0.216, and 1+0.216*3=1.648). Only the 0 and 255 endpoints matched by accident (gamma's two
+/// fixed points), which is what made this easy to miss testing only the extremes. The caller
+/// therefore gamma-ENCODES the intended linear headroom before writing the byte, cancelling the
+/// decode out — verified: norm 0/0.25/0.5/1.0 all land within 0.5% of their analytic target after
+/// the round trip. Trying to DISABLE colour management instead (`kCIImageColorSpace: NSNull`) was
+/// tried first and measured to change nothing, so this file does not attempt that.
+pub fn write_gainmap_heic_from_map(
+    headroom_png: &[u8],
+    graded_png: &[u8],
+    dest_path: &str,
+    quality: f64,
+    max_stops: f64,
+) -> Result<bool, String> {
+    unsafe {
+        let ci_class = class!(CIImage);
+        // ⚠️ Loaded via the ORDINARY imageWithData: (colour-managed), and the headroom byte was
+        // pre-encoded for exactly that — see the sRGB-OETF note on the caller side / JS's
+        // `hrByteForHeadroom`. Do not "fix" this by disabling colour management: that was tried
+        // (kCIImageColorSpace: NSNull) and measured to make no difference here, so pre-encoding
+        // the byte is the verified fix, not colour-space bypass.
+        let hr_data = NSData::with_bytes(headroom_png);
+        let hr_img: *mut AnyObject = msg_send![ci_class, imageWithData: &*hr_data];
+        if hr_img.is_null() {
+            return Err("could not read the headroom map bytes".into());
+        }
+        let graded_data = NSData::with_bytes(graded_png);
+        let graded: *mut AnyObject = msg_send![ci_class, imageWithData: &*graded_data];
+        if graded.is_null() {
+            return Err("could not read the graded image bytes".into());
+        }
+
+        let max_mult = 2f64.powf(max_stops.max(0.0));
+        let multiplier = color_matrix_headroom(hr_img, max_mult)?;
+        let hdr_out = multiply(graded, multiplier)?;
+
+        let ctx: *mut AnyObject = msg_send![class!(CIContext), context];
+        let dest_url = NSURL::fileURLWithPath(&NSString::from_str(dest_path));
+        let srgb = srgb_colorspace()?;
+        let hdr_key = NSString::from_str(K_REPRESENTATION_HDR_IMAGE);
+        let q_key = NSString::from_str("kCGImageDestinationLossyCompressionQuality");
+        let q_val = NSNumber::new_f64(quality.clamp(0.0, 1.0));
+        let wopts: Retained<NSDictionary<NSString, AnyObject>> = NSDictionary::from_slices(
+            &[&*hdr_key, &*q_key],
+            &[&*hdr_out, &*q_val as &AnyObject],
+        );
+        let mut err: *mut AnyObject = std::ptr::null_mut();
+        let ok: bool = msg_send![
+            ctx,
+            writeHEIFRepresentationOfImage: graded,
+            toURL: &*dest_url,
+            format: CI_FORMAT_RGBA8,
+            colorSpace: srgb,
+            options: &*wopts,
+            error: &mut err
+        ];
+        if !ok {
+            return Err(describe_error(err));
+        }
+        Ok(true)
+    }
+}
+
+
+
+/// out = headroom_img * (max_mult - 1) + 1, per channel — turns a 0..1 grayscale headroom map
+/// into a per-pixel multiplier image (1.0 where there's no extra range, max_mult where the cap
+/// was hit), via CIColorMatrix's affine per-channel transform. Alpha is forced to 1 (opaque)
+/// regardless of the headroom PNG's own alpha, since a multiplier image has no transparency of
+/// its own to speak of.
+unsafe fn color_matrix_headroom(img: *mut AnyObject, max_mult: f64) -> Result<*mut AnyObject, String> {
+    unsafe {
+        let m = max_mult - 1.0;
+        let vec4 = |x: f64, y: f64, z: f64, w: f64| -> *mut AnyObject {
+            msg_send![class!(CIVector), vectorWithX: x, Y: y, Z: z, W: w]
+        };
+        let r_vec = vec4(m, 0.0, 0.0, 0.0);
+        let g_vec = vec4(0.0, m, 0.0, 0.0);
+        let b_vec = vec4(0.0, 0.0, m, 0.0);
+        let a_vec = vec4(0.0, 0.0, 0.0, 0.0);
+        let bias_vec = vec4(1.0, 1.0, 1.0, 1.0);
+
+        let name = NSString::from_str("CIColorMatrix");
+        let k_img = NSString::from_str("inputImage");
+        let k_r = NSString::from_str("inputRVector");
+        let k_g = NSString::from_str("inputGVector");
+        let k_b = NSString::from_str("inputBVector");
+        let k_a = NSString::from_str("inputAVector");
+        let k_bias = NSString::from_str("inputBiasVector");
+        let params: Retained<NSDictionary<NSString, AnyObject>> = NSDictionary::from_slices(
+            &[&*k_img, &*k_r, &*k_g, &*k_b, &*k_a, &*k_bias],
+            &[&*img, &*r_vec as &AnyObject, &*g_vec, &*b_vec, &*a_vec, &*bias_vec],
+        );
+        let f: *mut AnyObject =
+            msg_send![class!(CIFilter), filterWithName: &*name, withInputParameters: &*params];
+        if f.is_null() {
+            return Err("CIColorMatrix unavailable".into());
+        }
+        let out: *mut AnyObject = msg_send![f, outputImage];
+        if out.is_null() {
+            return Err("CIColorMatrix produced no output".into());
+        }
+        Ok(out)
+    }
 }
 
 unsafe fn divide(a: *mut AnyObject, b: *mut AnyObject) -> Result<*mut AnyObject, String> {

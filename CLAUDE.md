@@ -790,6 +790,55 @@ One batched shader cycle (§3's reserved-word and compile-silence traps apply):
   Not wired into VIDEO export yet (`_videoComposeBorderMatte` precomputes its sizes once per
   clip, so it needs the frame folded into that computation rather than called per frame).
 
+### HDR from RAW (item 13's replacement, 2026-08-16)
+
+Gain-map HDR export (ISO 21496-1, §CLAUDE.md's "HDR (gain map)" section) worked on iPhone HEIC
+(measured headroom 1.37-1.40) but not on this camera's own RW2 files (measured 1.0000/1.0024),
+because `source_headroom`/`write_gainmap_heic` derive headroom from Core Image's own expand-to-HDR
+on the SOURCE FILE, and a RAW carries no encoded HDR rendition for Core Image to expand.
+
+⚠️ **`CIRAWFilter` does not fix this — measured directly, not assumed.**
+`desktop/src-tauri/examples/raw_headroom_probe.rs` probed `extendedDynamicRangeAmount` against a
+real RW2: the mean level at `EDR=0` and `EDR=1` came back byte-identical (0.02173913 both times),
+and the filter's own `inputKeys` came back empty — this camera's files never enter CIRAWFilter's
+real RAW path at all. So a RAW's headroom cannot come from Core Image's RAW pipeline.
+
+**It comes from OUR OWN decode instead, and is already computed and already thrown away.** The DCP
+LookTable is documented (§7) as "TABLE-INDEX clamps only, values extended-range" — the trilinear-
+sampled colour value inside `applyDcpLUT` can genuinely exceed 1.0 before the `Uint8ClampedArray`
+write clamps it to 255. `applyDcpLUT` now takes an optional `hrOut` byte array and records that
+overshoot, in the SAME per-pixel loop that already runs for every RAW load — free unless a caller
+actually supplies it, and verified byte-identical to the old signature otherwise
+(`test/probe_hdr_raw.mjs`: 0/3404 RGBA bytes differ across a synthetic extended-range LUT with 561
+of 851 pixels carrying real headroom).
+
+The headroom map is threaded through export via the SAME `applyGeomTo` the photo itself uses
+(`_hdrHeadroomPngFor`), so it stays pixel-aligned through crop/rotate/flip/straighten by
+construction rather than by a second, hand-maintained transform — verified with a known bright
+quadrant that lands correctly on the opposite corner after a 180° rotation.
+
+⚠️ **The headroom byte must be sRGB-gamma-ENCODED, and this is load-bearing, not stylistic.**
+Found by testing midpoints, not just endpoints: a first version wrote the byte as a raw linear
+fraction and measured a written file's headroom at 1.647x where 2.506x was intended (0 and 255
+matched by coincidence — gamma's two fixed points). Root cause: `imageWithData:` colour-matches an
+untagged 8-bit PNG as sRGB and gamma-DECODES it before `CIColorMatrix` ever sees it. Trying to
+disable colour management instead (`kCIImageColorSpace: NSNull`) was tried FIRST and measured to
+change nothing; pre-encoding the byte on the JS side to cancel the decode is the verified fix
+(`desktop/src-tauri/examples/gainmap_from_map_probe.rs`: norm 0/0.25/0.5/1.0 all land within 0.5%
+of their analytic target after the full write+read round trip).
+
+New Rust: `gainmap::write_gainmap_heic_from_map` (CIColorMatrix builds a per-pixel multiplier from
+the headroom map, then the SAME `CIMultiplyCompositing` `multiply()` helper the existing HEIC-
+source path already uses) and the `write_gainmap_heic_from_map` command, whose framed body is a
+4-byte little-endian length prefix + the headroom PNG + the graded PNG. `fxSaveGainMapHeic` and
+`fxSyncHdrOption` both now check `it.img._hdrHeadroom`/`_hdrHeadroomPresent` FIRST and fall back to
+the existing Core Image source-file path for non-RAW sources (iPhone HEIC etc.), unchanged.
+
+Verified: `cargo test` 41/41, 18/18 export goldens (identity-path SDR render untouched), 21/21
+mask, both Rust probes above. Not yet verified: a hands-on click-through in the built app (open a
+real RW2, toggle HDR, export, confirm the written HEIC shows extra range) — every LINK in the
+chain is independently verified, but the full user-facing round trip has not been driven by hand.
+
 ### Retouch: heal / clone (E1, 2026-08-15)
 
 Spot removal is unlike every other tool here: masks and sliders feed the shader, but a healed

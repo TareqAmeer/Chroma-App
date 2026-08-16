@@ -97,7 +97,7 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
 main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .panel{display:none}.panel.active{display:block}
 .card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:14px;box-shadow:var(--lift-1)}
-.ctitle{font-family:var(--sans);font-weight:600;font-size:var(--fs-1);letter-spacing:.1em;text-transform:uppercase;color:var(--txt);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.ctitle{font-family:var(--sans);font-weight:600;font-size:var(--fs-3);letter-spacing:0;color:var(--txt);margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .ctitle::after{content:'';flex:1;height:1px;background:var(--bdr)}
 .cver{font-family:var(--mono);font-size:11px;color:var(--acc);background:rgba(212,144,58,.12);border:1px solid rgba(212,144,58,.25);padding:2px 8px;border-radius:3px;margin-left:auto}
 .dg2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -131,7 +131,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .step-badge{background:rgba(212,144,58,.15);border:1px solid rgba(212,144,58,.3);color:var(--acc);padding:2px 8px;border-radius:3px;font-size:10px;font-family:var(--mono)}
 .step-body{padding:14px}
 .sum-box{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;margin-top:12px;box-shadow:var(--lift-1)}
-.sum-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
+.sum-title{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin-bottom:7px}
 .sum-list{list-style:none;display:flex;flex-direction:column;gap:4px}
 .sum-list li{font-size:12px;color:var(--txt);display:flex;align-items:baseline;gap:8px}
 .sum-list li::before{content:'→';color:var(--acc);flex-shrink:0;font-size:var(--fs-1)}
@@ -147,14 +147,14 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .sl-ph{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:28px 16px;text-align:center;color:var(--mut);font-size:12px;min-height:100px;display:flex;align-items:center;justify-content:center}
 .sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-top:8px}
 .si{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px 9px}
-.sk{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.sk{font-family:var(--sans);font-size:var(--fs-1);font-weight:500;letter-spacing:0;color:var(--mut)}
 .sv{font-family:var(--mono);font-size:var(--fs-3);font-variant-numeric:tabular-nums;color:var(--txt);margin-top:1px}
 .sv.pos{color:#7ec8a0}.sv.neg{color:#e08080}
 .hsl-t{width:100%;border-collapse:collapse;margin-top:7px;font-family:var(--mono);font-size:11px}
-.hsl-t th{text-align:left;color:var(--mut);font-weight:normal;padding:3px 7px;border-bottom:1px solid var(--bdr);font-size:9px;letter-spacing:.07em;text-transform:uppercase}
+.hsl-t th{text-align:left;color:var(--mut);font-weight:normal;padding:3px 7px;border-bottom:1px solid var(--bdr);font-size:var(--fs-1);letter-spacing:0}
 .hsl-t td{padding:3px 7px;border-bottom:1px solid rgba(37,37,48,.5)}
 .hsl-t tr:last-child td{border-bottom:none}
-.div-sep{display:flex;align-items:center;gap:9px;margin:16px 0 12px;font-family:var(--sans);font-size:var(--fs-1);font-weight:600;color:var(--mut);letter-spacing:.08em;text-transform:uppercase}
+.div-sep{display:flex;align-items:center;gap:9px;margin:16px 0 12px;font-family:var(--sans);font-size:var(--fs-2);font-weight:600;color:var(--mut);letter-spacing:0}
 .div-sep::before,.div-sep::after{content:'';flex:1;height:1px;background:var(--bdr)}
 .opt-dz{border-style:dashed;opacity:.7}
 /* FX TAB */
@@ -195,7 +195,7 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
 .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
 /* Sub-group heading INSIDE a panel (e.g. Skin Tone vs Local Adjustments in the mask panel) —
    lighter than .fx-ctrl-title, which is the panel's own header. */
-.fx-sub{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin:4px 0 4px;padding-top:6px;border-top:1px solid var(--bdr)}
+.fx-sub{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin:4px 0 4px;padding-top:6px;border-top:1px solid var(--bdr)}
 /* Two-line slider layout: label + value share a top row, the track spans full width below —
    DOM order (label, slider, val) is unchanged, `order` just re-flows them visually so the
    existing contenteditable tap-to-type value div needs no markup changes. */
@@ -227,9 +227,9 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
 .fx-slider::-moz-range-track{height:3px;border-radius:2px;
   background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
 .fx-slider::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;margin-top:-5px;
-  background:#e9e6df;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.5);cursor:grab}
+  background:var(--sl-thumb,#e9e6df);box-shadow:var(--sl-thumb-sh,inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.5));cursor:grab}
 .fx-slider::-moz-range-thumb{width:13px;height:13px;border-radius:50%;border:none;
-  background:#e9e6df;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.5);cursor:grab}
+  background:var(--sl-thumb,#e9e6df);box-shadow:var(--sl-thumb-sh,inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.5));cursor:grab}
 .fx-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.12)}
 /* A modified row drives its fill amber — the same signal .fx-mod already gives the label dot. */
 .fx-row.fx-mod .fx-slider{--sl-fill:var(--acc)}
@@ -292,7 +292,7 @@ body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center
 .msk-group:first-of-type{border-top:none;margin-top:0}
 .msk-group-hd{display:flex;align-items:center;gap:6px;width:100%;min-height:30px;padding:6px 0;background:none;border:none;
   cursor:pointer;color:var(--mut);font-family:var(--sans);font-size:var(--fs-1);font-weight:600;
-  letter-spacing:.1em;text-transform:uppercase;text-align:left}
+  letter-spacing:0;text-align:left}
 .msk-group-hd:hover{color:var(--txt)}
 .msk-group-chev{display:inline-flex;transform:rotate(-90deg);transition:transform var(--dur-1) var(--ease)}
 .msk-group.open .msk-group-chev{transform:rotate(0)}
@@ -319,6 +319,9 @@ body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center
 .msk-adv-hd{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;color:var(--mut);
   font-family:var(--sans);font-size:var(--fs-1);font-weight:600;padding:var(--sp-2) 0 var(--sp-1);min-height:28px}
 .msk-adv-hd:hover{color:var(--txt)}
+/* .msk-adv-hd reuses .msk-group-chev (rotate(-90deg) by default) outside a .msk-group.open
+   ancestor, so it needs its own open-state rule rather than inheriting _mskGroup's. */
+.msk-adv-hd .msk-group-chev.msk-adv-open{transform:rotate(0)}
 /* "..." menu */
 .msk-more-menu{position:fixed;z-index:5000;min-width:230px;background:var(--glass-bg);
   -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
@@ -398,7 +401,7 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
 .look-cell-err::after{content:"offline";position:absolute;inset:auto 0 18px 0;text-align:center;font-size:9px;color:var(--mut)}
 .look-cell canvas{display:block;width:100%;height:auto}
 .look-cell .look-nm{font-family:var(--mono);font-size:8px;color:var(--txt);padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(0,0,0,.45)}
-.look-cat-hdr{grid-column:1/-1;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);padding:6px 2px 2px;border-top:1px solid var(--bdr);margin-top:2px}
+.look-cat-hdr{grid-column:1/-1;font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:0;color:var(--mut);padding:6px 2px 2px;border-top:1px solid var(--bdr);margin-top:2px}
 .look-cat-hdr:first-child{border-top:none;margin-top:0;padding-top:0}
 body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile — filter chips do the grouping instead */
 /* crop overlay */
@@ -452,7 +455,7 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 .guide{max-width:880px;margin:0 auto;line-height:1.65;font-size:14px;color:var(--txt)}
 .guide h1{font-family:var(--serif,Georgia,serif);font-size:26px;font-weight:600;margin:0 0 6px}
 .guide .lede{color:var(--mut);font-size:14px;margin:0 0 26px}
-.guide h2{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin:34px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bdr)}
+.guide h2{font-family:var(--sans);font-size:var(--fs-4);font-weight:600;letter-spacing:0;color:var(--acc);margin:34px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bdr)}
 .guide h3{font-size:15px;font-weight:600;margin:20px 0 6px;color:var(--txt)}
 .guide p{margin:0 0 12px}
 .guide ul{margin:0 0 14px;padding-left:0;list-style:none}
@@ -473,6 +476,12 @@ body.log-on #log-area{display:block}
 #status-cap,#fx-actionbar,#fx-secnav{display:none}
 .fx-diag{display:none}
 body.diag-on .fx-diag{display:block}
+/* A diagnostics-only CONTROL, as opposed to .fx-diag above, which is card-scoped and is
+   additionally re-hidden under body.fx-single unless it happens to be the active section — so a
+   button carrying .fx-diag would be invisible in the desktop shell even with diag-on. Every user
+   of this is a .btn, hence display:flex rather than block. */
+.diag-only{display:none}
+body.diag-on .diag-only{display:flex}
 .ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
@@ -485,7 +494,7 @@ body.diag-on .fx-diag{display:block}
 .fx-exif-chip{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 2px;
   background:var(--sur2);font-family:var(--sans);font-size:11px;color:var(--txt);min-width:0}
 .fx-exif-chip+.fx-exif-chip{border-left:1px solid var(--bdr)}
-.fx-exif-chip-lb{font-size:var(--fs-0);color:var(--mut);letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.fx-exif-chip-lb{font-size:var(--fs-1);color:var(--mut);letter-spacing:0;line-height:1}
 .fx-exif-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
   padding:7px 0;border-top:1px solid var(--bdr);font-family:var(--sans);font-size:12px}
 .fx-exif-row:first-child{border-top:none}
@@ -641,9 +650,9 @@ body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
 /* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
 body.mobile-fx .tabs{display:none}
 body.mobile-fx .ni-hint{display:none}
-#fx-add-btn{display:block;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:36px;line-height:1;border:none;cursor:pointer;margin:18px auto 6px;box-shadow:0 4px 22px rgba(212,144,58,.45)}
+#fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:36px;line-height:1;border:none;cursor:pointer;margin:18px auto 6px;box-shadow:0 4px 22px rgba(212,144,58,.45)}
 #fx-add-btn:active{transform:scale(.94)}
-.ni-add-lb{font-family:var(--mono);font-size:11px;color:var(--acc);letter-spacing:.08em}
+.ni-add-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;color:var(--acc);letter-spacing:0}
 #fx-more-menu{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2500;display:flex;align-items:flex-end}
 #fx-more-menu .mm-sheet{background:var(--sur);width:100%;border-radius:14px 14px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
 #fx-more-menu .btn{width:100%;justify-content:center;min-height:44px}
@@ -879,14 +888,64 @@ body.deskx #fx-overflow{display:inline-flex}
   border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
 #fx-overflow-menu.on{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
-  color:var(--txt);cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;
   padding:9px 10px;text-align:left}
 .fx-ovf-item:hover{background:var(--sur2)}
 .fx-ovf-item.dim{color:var(--mut);cursor:default}
 .fx-ovf-sep{height:1px;background:var(--bdr);margin:4px 2px}
-/* ── LIGHT THEME ── */
-body.light{--bg:#f4f3ef;--sur:#ffffff;--sur2:#ecebe4;--bdr:#d9d6cc;--txt:#1d1d1a;--mut:#6f6c64}
+/* ── LIGHT THEME ──────────────────────────────────────────────────────────────────────────────
+   This used to be 3 lines overriding 6 tokens — --bg/--sur/--sur2/--bdr/--txt/--mut, the surface
+   greyscale only. Nothing here touched --acc/--acc2/--ok/--err or --lift-1/--lift-2, so toggling
+   light mode meant: every status colour kept its DARK-tuned value (measured: --ok #52c97a is
+   1.9:1 against the new light --bg — fails WCAG's 3:1 floor for non-text UI, let alone 4.5:1 for
+   the text it's actually used as, e.g. the amber "you changed this" dot); the elevation shadows
+   kept `inset 0 1px 0 rgba(255,255,255,.045)` — a white top-light meant to mimic a dark panel
+   catching ambient light from above, invisible-to-backwards on a white card; and the app's own
+   Library (desktop/library-ui.js, 0 light rules, 38 hardcoded hex) didn't light up at all — so
+   toggling theme in the desktop app produced a light editor next to a still-dark Library.
+   Each token below is overridden for a stated reason, not by search-and-replace. */
+body.light{
+  --bg:#f4f3ef;--sur:#ffffff;--sur2:#ecebe4;--bdr:#d9d6cc;--txt:#1d1d1a;--mut:#6f6c64;
+  /* Darkened, not just re-hued: each dark-mode accent measured below WCAG's 4.5:1 text floor
+     against the new #f4f3ef (--acc 2.4:1, --acc2 2.6:1, --ok 1.9:1, --err 3.4:1) — verified with
+     the same relative-luminance formula test/ui_audit.mjs's CONTRAST check uses. All four of
+     these clear 4.5:1; the existing rgba(212,144,58,…) chip/badge TINTS are untouched literals,
+     so a chip's translucent background stays the familiar warm amber while the text sitting on
+     it becomes legible — the same "container / on-container" pairing Material Design uses for
+     exactly this problem, arrived at independently by measuring rather than by copying it.
+     Only text/icon color changes; --acc still paints .bpri's button gradient and .fx-toggle.on's
+     track, both of which read FINE darker (only helps their contrast against black/white). */
+  --acc:#905e1f;--acc2:#1f68a0;--ok:#257740;--err:#a91f1f;
+  /* No white inset — on a light card it either vanishes (near-white on white) or, at any opacity
+     high enough to show, reads as a stray pale rim rather than a highlight. A plain, much softer
+     shadow is the whole treatment; light surfaces read as "raised" from the shadow alone. Alpha
+     is roughly a third of the dark values (.06/.10 vs .3/.35) because the same shadow strength
+     that disappears into a near-black background is heavy and muddy on near-white. */
+  --lift-1:0 1px 2px rgba(20,20,15,.06),0 6px 16px -6px rgba(20,20,15,.10);
+  --lift-2:0 2px 6px rgba(20,20,15,.08),0 16px 32px -10px rgba(20,20,15,.16);
+  /* The slider thumb's #e9e6df was a hardcoded literal, not a token — cream-on-white, close to
+     unreadable against a light track. Darkened, with a matching dark-shadow flip: the original's
+     `inset 0 1px 0 rgba(255,255,255,.9)` is a highlight meant for a DARK thumb; kept as-is here
+     it would paint a near-invisible near-white line on an already-light thumb. */
+  --sl-thumb:#3a3a35;
+  --sl-thumb-sh:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.25);
+}
 body.light #status-cap{background:#000}
+/* The Library (desktop/library-ui.js) never had a light rule at all — verified by grepping that
+   file for `body.light` before this line existed: zero matches, against 38 hardcoded hex
+   literals. It shares chromasmith-22.html's tokens for everything ELSE (--bg/--sur/--txt/etc
+   already apply because both files load into the same document), so this closes the specific
+   gap: library-ui.js's own literals, none of which were tokens to begin with. */
+body.light .lib-thumb-wrap{background:var(--sur2)}
+body.light .lib-flags,body.light .lib-edited-badge,body.light .lib-raw-badge,
+body.light .lib-video-badge,body.light .lib-dupe-badge,body.light .lib-synced-badge{
+  background:rgba(0,0,0,.55)} /* unchanged from dark — these sit ON the thumbnail image, not the panel bg, so they stay dark for contrast against a photo regardless of theme */
+body.light .lib-meta-strip{background:rgba(255,255,255,.82);color:#1d1d1a}
+body.light #lib-list-head{background:var(--bg)}
+body.light .lib-tree-row.on{background:var(--bdr)}
+body.light .lib-coll-row.on{background:var(--sur2)}
+body.light .lib-cmp-head select{background:var(--sur2)}
+body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 /* ── COLLAGE TAB ── */
 .cl-layout{display:grid;grid-template-columns:330px 1fr;gap:16px;align-items:start}
 .cl-controls{display:flex;flex-direction:column;gap:10px}
@@ -987,17 +1046,21 @@ setTimeout(()=>window.hideBootSplash(),6000);
 <div id="status-cap"></div>
 <header>
   <div class="logo"><span class="logo-glow">Chroma</span>smith <span class="sub">film simulation tool</span></div>
+  <!-- ⚠️ Product chrome only. This header used to carry a build stamp, a "● OFFLINE" badge and a
+       raw diagnostics-log toggle — a harness bolted to the front of a photo tool. All three moved
+       into About (csAbout), which is where a build ID and a diagnostics entry point belong; the
+       theme toggle stays because it is the one control here a photographer actually reaches for. -->
   <div class="hdr-right">
-    <span id="build-stamp" class="bstamp" onclick="document.body.classList.add('diag-on');applyFxLayout();" title="Tap to reveal diagnostics"></span>
     <button class="hdr-btn" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic hdr-ic"></span></button>
-    <button class="hdr-btn" onclick="toggleLog()" title="Show / hide diagnostics log"><span class="hdr-ic" id="hdr-log"></span></button>
-    <div class="badge">● OFFLINE</div>
+    <button class="hdr-btn" id="hdr-about" onclick="csAbout()" title="About Chromasmith"><span class="hdr-ic" id="hdr-info"></span></button>
   </div>
 </header>
-<div class="tabs">
+<!-- role/tabindex/aria-selected and arrow-key nav are applied by a11yEnhanceTabs() at boot,
+     rather than hand-written on all 5 — one place to get the roving-tabindex pattern right. -->
+<div class="tabs" role="tablist">
   <div class="tab active" onclick="switchTab('fx')">Effects &amp; Export</div>
   <div class="tab" onclick="switchTab('match')">Match &amp; Refine</div>
-  <div class="tab" onclick="switchTab('copy')">Colour Copy</div>
+  <div class="tab" onclick="switchTab('copy')">Color Copy</div>
   <div class="tab" onclick="switchTab('collage')">Collage</div>
   <div class="tab" onclick="switchTab('guide')">Guide</div>
 </div>
@@ -1009,19 +1072,19 @@ setTimeout(()=>window.hideBootSplash(),6000);
     <div class="dg2">
       <div class="dz" id="dz-before" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'before')">
         <input type="file" accept="image/*" onchange="fi(event,'before')">
-        <div class="dz-ic">◧</div><div class="dz-lb">Before / Original</div>
+        <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Before / Original</div>
         <div class="dz-sb">Ungraded flat image</div><div class="dz-fn" id="fn-before"></div>
       </div>
       <div class="dz" id="dz-target" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'target')">
         <input type="file" accept="image/*" onchange="fi(event,'target')">
-        <div class="dz-ic">◨</div><div class="dz-lb">After / Target</div>
+        <div class="dz-ic" data-ic="compare"></div><div class="dz-lb">After / Target</div>
         <div class="dz-sb">Graded Lightroom result</div><div class="dz-fn" id="fn-target"></div>
       </div>
     </div>
     <div class="div-sep">Optional starting point</div>
     <div class="dz opt-dz" id="dz-start" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'start')">
       <input type="file" accept=".cube,.xmp" onchange="fi(event,'start')">
-      <div class="dz-ic">⬡</div><div class="dz-lb">Starting LUT (.cube) or Preset (.xmp)</div>
+      <div class="dz-ic" data-ic="looks"></div><div class="dz-lb">Starting LUT (.cube) or Preset (.xmp)</div>
       <div class="dz-sb">Optional — helps bootstrap the look</div><div class="dz-fn" id="fn-start"></div>
     </div>
     <div class="vrow">
@@ -1038,16 +1101,16 @@ setTimeout(()=>window.hideBootSplash(),6000);
 <!-- COLOUR COPY -->
 <div class="panel" id="panel-copy">
   <div class="card">
-    <div class="ctitle">Colour Copy — match tones from a reference image</div>
+    <div class="ctitle">Color Copy — match tones from a reference image</div>
     <div class="dg2">
       <div class="dz" id="dz-cp-src" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'cp-src')">
         <input type="file" accept="image/*" onchange="fi(event,'cp-src')">
-        <div class="dz-ic">◧</div><div class="dz-lb">Source image</div>
+        <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Source image</div>
         <div class="dz-sb">Photo to apply the grade to</div><div class="dz-fn" id="fn-cp-src"></div>
       </div>
       <div class="dz" id="dz-cp-ref" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'cp-ref')">
         <input type="file" accept="image/*" onchange="fi(event,'cp-ref')">
-        <div class="dz-ic">◨</div><div class="dz-lb">Reference image</div>
+        <div class="dz-ic" data-ic="compare"></div><div class="dz-lb">Reference image</div>
         <div class="dz-sb">Photo with the look you want to copy</div><div class="dz-fn" id="fn-cp-ref"></div>
       </div>
     </div>
@@ -1105,7 +1168,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
           <input type="file" id="in-fx-img" accept="image/*,.tif,.tiff,.rw2,.raw" multiple onchange="fi(event,'fx-img')">
-          <div class="dz-ic">◧</div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
+          <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
           <select class="fx-select" id="sel-dcp" onchange="setRawProfile(this.value)"></select>
@@ -1118,14 +1181,18 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div id="fx-clip-info" style="display:none;margin-top:8px;font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.6"></div>
         <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-lut')">
           <input type="file" accept=".cube,image/*,.tif,.tiff" onchange="fi(event,'fx-lut')">
-          <div class="dz-ic">⬡</div><div class="dz-lb">Apply LUT (.cube or processed LUT chart)</div><div class="dz-fn" id="fn-fx-lut"></div>
+          <div class="dz-ic" data-ic="looks"></div><div class="dz-lb">Apply LUT (.cube or processed LUT chart)</div><div class="dz-fn" id="fn-fx-lut"></div>
         </div>
         <div class="btn-row" style="margin-top:8px">
-          <button class="btn bgh" onclick="loadTestPhoto()">Load Test Photo</button>
+          <!-- "Load Test Photo" (a 4800x6400 calibration chart) lived here, in the first panel of
+               the editor, as the second thing after the drop zone. It is a calibration fixture,
+               not a photo anyone edits — it now appears only under diag-on, with the rest of the
+               developer surface. loadTestPhoto() itself is unchanged and still reachable there. -->
+          <button class="btn bgh diag-only" onclick="loadTestPhoto()" title="Loads the built-in calibration chart">Load test chart</button>
           <button class="btn bgh" onclick="gpImportClick()" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)">Google Photos…</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
-          <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)">Save to library</button>
+          <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)">Save to library…</button>
           <button class="btn bgh" id="btn-lut-del" disabled onclick="deleteLUTFromLibrary()">Delete</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
@@ -1170,13 +1237,16 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
           <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
-          <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a colour-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
-          <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground colour is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-dehaze">0</div></div>
+          <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a color-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
+          <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground color is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-dehaze">0</div></div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
             <button class="btn bgh" onclick="autoEnhance()" title="One-click levels and white balance from the image histogram">Auto-enhance</button>
           </div>
-          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetAdjust()">Reset adjustments</button></div>
+          <!-- Bare "Reset" — the card's own "Basic Adjustments" title already says what it
+               resets, so the qualifier only restated it (see CLAUDE.md's note on 13
+               near-synonymous reset/clear verbs). -->
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetAdjust()">Reset</button></div>
         </div>
       </div>
       <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a
@@ -1184,13 +1254,26 @@ setTimeout(()=>window.hideBootSplash(),6000);
            enable toggle — it's driven by the sliders being >0, same as Lens). -->
       <div class="fx-ctrl" data-fxsec="nr">
         <div class="fx-ctrl-title">Noise Reduction</div>
-        <div class="fx-row" title="Desktop only. Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser — 25–90s at 24MP, never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect.">
+        <div class="fx-row" title="Desktop only. Native denoise before the tone curve; High also runs a neural pass.">
           <div class="fx-label">RAW Noise Reduction</div>
           <select class="fx-select" id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="flex:1"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High (neural)</option></select>
         </div>
-        <div class="fx-row" id="row-nr-high-strength" style="display:none" title="Blends the neural denoiser back toward the untouched decode. Real-photo review (5 ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands more than DxO does, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise now / re-applies at next export.">
+        <!-- Was a single 419-char title= — unreadable as a tooltip, and invisible on touch
+             entirely. Moved into a real .fx-hint (already used elsewhere for shorter cases);
+             the title above keeps just enough to place the control before you click into it. -->
+        <div class="fx-hint">Off: untouched decode. Fast (default): the native Rust-side shadow +
+          chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds,
+          applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser,
+          25–90s at 24MP — never automatic; press "Denoise now" below, or it runs once at export
+          if selected. Requires reopening this photo (or Denoise now) to take effect.</div>
+        <div class="fx-row" id="row-nr-high-strength" style="display:none" title="Blends the neural denoiser back toward the untouched decode.">
           <div class="fx-label">High Strength</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-nr-high-strength" oninput="fxRawNrHighStrengthChanged(this.value)"><div class="fx-val" id="vl-nr-high-strength">70</div>
         </div>
+        <div class="fx-hint" id="hint-nr-high-strength" style="display:none">Real-photo review (5
+          ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands
+          more than DxO does, even though flat-area noise removal is comparable or better —
+          lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise
+          now / re-applies at next export.</div>
         <div class="fx-row" id="row-nr-high" style="display:none">
           <button class="btn bgh" id="btn-denoise-now" onclick="fxDenoiseNowClicked()" style="flex:1">Denoise now</button>
           <button class="btn" id="btn-denoise-cancel" onclick="fxDenoiseCancelClicked()" style="display:none;margin-left:6px">Cancel</button>
@@ -1198,16 +1281,27 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div id="row-nr-high-progress" style="display:none;margin:2px 0 4px">
           <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width .15s"></div></div>
         </div>
-        <div class="fx-row" title="Desktop only: switches the RAW demosaic algorithm. Standard (default) is safest across all photos. Sparkle-optimized uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect.">
+        <div class="fx-row" title="Desktop only: switches the RAW demosaic algorithm. Standard is safest across all photos.">
           <div class="fx-label">Sparkle-optimized RAW</div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
         </div>
+        <div class="fx-hint">Uses AHD interpolation, which cleans up dense green/magenta
+          false-color speckle on sunlit water/specular highlights much further than Standard —
+          but it trades away some general chroma-noise headroom elsewhere in the frame, so it's
+          opt-in per photo rather than a global default. Requires reopening this photo to take
+          effect.</div>
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
         <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
-        <div class="fx-row nr-gated" id="row-nr-hldesat" title="Manual, off by default. Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes — this is a real limit of the current pipeline, not a slider you forgot to raise. Since real highlight colour is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real colour in bright areas too at high amounts. Per-photo only, so it never touches other images."><div class="fx-label">Highlight Desaturation</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
+        <div class="fx-row nr-gated" id="row-nr-hldesat" title="Manual, off by default — a real pipeline limit, not a slider you forgot to raise."><div class="fx-label">Highlight Desaturation</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
+        <div class="fx-hint nr-gated" id="hint-nr-hldesat">Bright specular highlights (sunlit water, glints)
+          sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR
+          fully removes. Since real highlight color is usually near-neutral anyway, this fades
+          Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to
+          cover where the fringing actually sits, so it WILL flatten real color in bright areas
+          too at high amounts. Per-photo only, so it never touches other images.</div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
-        <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()">Reset noise reduction</button></div>
+        <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()">Reset</button></div>
       </div>
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
@@ -1277,8 +1371,8 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <button class="btn bgh" onclick="mskAdd('linear')">+ Linear</button>
             <button class="btn bgh" onclick="mskAdd('brush')" title="Paint a mask by hand — e.g. lifting the shadow under an eye">+ Brush</button>
             <button class="btn bgh" onclick="mskAdd('sky')" title="Auto-detect the sky, then brush-refine if needed">+ Sky</button>
-            <button class="btn bgh" id="btn-msk-add-skin" onclick="mskAdd('skin')" title="Even out uneven skin (patchy tan, pale chest vs tanned face) and tan it consistently. Scribble over the subject to segment them, then refine skin vs lips/hair with colour samples. Desktop app only — needs the on-device segmentation model." style="display:none">+ Skin</button>
-            <button class="btn bgh" onclick="mskAdd('color')" title="Select by COLOUR alone, anywhere in the frame — no shape. Pick a colour, then shift-click to add more.">+ Colour Range</button>
+            <button class="btn bgh" id="btn-msk-add-skin" onclick="mskAdd('skin')" title="Even out uneven skin (patchy tan, pale chest vs tanned face) and tan it consistently. Scribble over the subject to segment them, then refine skin vs lips/hair with color samples. Desktop app only — needs the on-device segmentation model." style="display:none">+ Skin</button>
+            <button class="btn bgh" onclick="mskAdd('color')" title="Select by COLOR alone, anywhere in the frame — no shape. Pick a color, then shift-click to add more.">+ Color Range</button>
             <button class="btn bgh" onclick="mskAdd('lum')" title="Select by BRIGHTNESS alone, anywhere in the frame — no shape. Set the Lum floor/ceiling to pick a band (shadows, midtones, highlights).">+ Luminance Range</button>
             <button class="btn bgh" id="btn-msk-add-ai" onclick="mskAdd('ai')" title="Brush over an object on the photo to select it (EdgeSAM, on-device — desktop app only)" style="display:none">+ AI Select</button>
           </div>
@@ -1318,16 +1412,16 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-row" title="Same correction on the horizontal axis, for a wall or facade shot from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
         <div class="fx-row" title="Fine rotation, in tenths of a degree — for levelling a horizon without leaving the panel."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
         <div class="fx-row" title="Zooms in to hide the empty wedges a perspective correction leaves at the frame edge."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-scale">0</div></div>
-        <div class="fx-row" title="Removes purple/green colour fringes on high-contrast edges — the local fringing that survives the geometric CA correction above, or that a fast lens makes wide open. Gated on edges, so flat purple or green subjects are left alone."><div class="fx-label">Defringe</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-lens-defr" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-defr">0</div></div>
+        <div class="fx-row" title="Removes purple/green color fringes on high-contrast edges — the local fringing that survives the geometric CA correction above, or that a fast lens makes wide open. Gated on edges, so flat purple or green subjects are left alone."><div class="fx-label">Defringe</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-lens-defr" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-defr">0</div></div>
       </div>
       <!-- CROP & ROTATE -->
       <div class="fx-ctrl" data-fxsec="crop">
-        <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--mono)">Reset</div></div>
+        <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--sans)">Reset</div></div>
         <div class="btn-row" style="justify-content:center;gap:14px">
-          <button class="btn-icon" onclick="geomRotate(-90)" title="Rotate left">⟲</button>
-          <button class="btn-icon" onclick="geomRotate(90)" title="Rotate right">⟳</button>
-          <button class="btn-icon" onclick="geomFlip('h')" title="Flip horizontal">⇄</button>
-          <button class="btn-icon" onclick="geomFlip('v')" title="Flip vertical">⇅</button>
+          <button class="btn-icon" onclick="geomRotate(-90)" title="Rotate left" data-ic="rotateLeft"></button>
+          <button class="btn-icon" onclick="geomRotate(90)" title="Rotate right" data-ic="rotateRight"></button>
+          <button class="btn-icon" onclick="geomFlip('h')" title="Flip horizontal" data-ic="flipH"></button>
+          <button class="btn-icon" onclick="geomFlip('v')" title="Flip vertical" data-ic="flipV"></button>
         </div>
         <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
           <button class="btn bgh" id="btn-geom-apply-all" onclick="geomApplyToAll()" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
@@ -1346,7 +1440,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value)">
             <option value="shot">As shot</option>
             <option value="0">Free</option>
-            <option value="custom">Custom…</option>
+            <option value="custom">Custom</option>
             <option value="1">1:1 Square</option>
             <option value="1.5">3:2</option>
             <option value="1.3333">4:3</option>
@@ -1404,7 +1498,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-ctrl-title" title="Placement is seeded — export matches preview; Reshuffle re-rolls it">Film Artifacts <div class="fx-toggle" id="tg-art" onclick="toggleFX('art')"></div></div>
         <div class="fx-fields ff-off" id="ff-art">
           <div class="fx-row" title="Random dust specks and the odd hair — mostly light (dust on the negative prints white)."><div class="fx-label">Dust</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-art-du" oninput="fxUpdate()"><div class="fx-val" id="vl-art-du">30</div></div>
-          <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck colour — Both is the real-film mix (mostly light specks); Black/White forces one colour."></div>
+          <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck color — Both is the real-film mix (mostly light specks); Black/White forces one color."></div>
           <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" oninput="fxUpdate()"><div class="fx-val" id="vl-art-sc">20</div></div>
           <div class="fx-row" title="A warm light leak flooding in from one edge."><div class="fx-label">Light leak</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-art-lk" oninput="fxUpdate()"><div class="fx-val" id="vl-art-lk">0</div></div>
           <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="artReshuffle()" title="Re-roll the random dust/scratch/leak placement">Reshuffle</button></div>
@@ -1424,7 +1518,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       </div>
       <!-- BLOOM -->
       <div class="fx-ctrl" data-fxsec="bloom">
-        <div class="fx-ctrl-title" title="Colour derived from source light">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
+        <div class="fx-ctrl-title" title="Color derived from source light">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
         <div class="fx-fields ff-off" id="ff-bloom">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-bloom-a">40</div></div>
           <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="2" max="60" value="10" id="sl-bloom-th" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-th">10</div></div>
@@ -1444,10 +1538,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-fields ff-off" id="ff-borders">
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:8px">Inner border</div>
         <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
-        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Color</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Outer border</div>
         <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
-        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Color</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
         <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Film frame</div>
         <div class="fx-row"><div class="fx-label">Style</div>
           <select class="fx-select" id="sel-film-frame" onchange="filmFrameChanged(this.value)">
@@ -1470,7 +1564,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-ctrl-title">Retouch <div class="fx-toggle" id="tg-retouch" onclick="toggleFX('retouch')"></div></div>
         <div class="fx-fields ff-off" id="ff-retouch">
         <div class="fx-row"><div class="fx-label">Mode</div>
-          <select class="fx-select" id="sel-heal-mode"><option value="heal">Heal (blend colour)</option><option value="clone">Clone (copy exactly)</option></select>
+          <select class="fx-select" id="sel-heal-mode"><option value="heal">Heal (blend color)</option><option value="clone">Clone (copy exactly)</option></select>
         </div>
         <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-size">4%</div></div>
         <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-feather">50</div></div>
@@ -1629,9 +1723,12 @@ setTimeout(()=>window.hideBootSplash(),6000);
         </div>
         <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
           <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>
+          <!-- Was a button reading "Upload exports: Off" — the state was baked into its own
+               label rather than shown the way every other on/off control in the app is. Real
+               .fx-toggle switch instead, matching e.g. "Sparkle-optimized RAW". -->
+          <div class="fx-row" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><div class="fx-label">Upload exports to Google Photos</div><div class="fx-toggle" id="tg-gp-save" onclick="gpToggleSave()"></div></div>
           <div class="btn-row" style="margin-top:0">
             <button class="btn bgh" id="btn-gp-connect" onclick="gpConnectToggle()" title="Sign in to Google Photos (lasts ~1 hour)">Connect</button>
-            <button class="btn bgh" id="btn-gp-save" onclick="gpToggleSave()" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos">Upload exports: Off</button>
             <button class="btn bgh" onclick="gpAskClientId(true)" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px">ID…</button>
           </div>
         </div>
@@ -1653,9 +1750,11 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <div class="fx-no-img" id="fx-no-img">
           <div class="ni-logo"><span class="logo-glow">Chroma</span>smith</div>
           <div class="ni-sub">film simulation tool</div>
-          <div class="ni-build" id="ni-build" onclick="document.body.classList.add('diag-on');applyFxLayout();" style="cursor:pointer" title="Tap to reveal diagnostics"></div>
-          <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos">＋</button>
-          <div class="ni-add-lb">Add Photos</div>
+          <!-- The build stamp used to sit here too — under the wordmark, on the empty state, as
+               the third line a first-time user read. It is in About now. `＋` was U+FF0B FULLWIDTH
+               PLUS, a CJK-width glyph standing in for an icon while ICONS.plus already existed. -->
+          <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos" aria-label="Add photos"></button>
+          <div class="ni-add-lb">Add photos</div>
           <div class="ni-hint">Drop an image to start · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas" onclick="fxCanvasClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
@@ -1727,11 +1826,11 @@ setTimeout(()=>window.hideBootSplash(),6000);
            in/out — see the video branch in the global keydown handler. -->
       <div id="fx-transport" style="display:none;margin-top:8px;padding:8px;background:var(--sur2);border-radius:8px">
         <div class="fx-row" style="align-items:center;gap:8px">
-          <button class="btn-icon" onclick="fxVideoStep(-1)" title="Previous frame (←)">⏮</button>
-          <button class="btn-icon" id="btn-vid-play" onclick="fxVideoPlayToggle()" title="Play/pause (Space)">▶</button>
-          <button class="btn-icon" onclick="fxVideoStep(1)" title="Next frame (→)">⏭</button>
-          <button class="btn-icon" id="btn-vid-loop" onclick="fxVideoLoopToggle()" title="Loop playback within the trim range">⟲</button>
-          <button class="btn-icon" id="btn-vid-mute" onclick="fxVideoMuteToggle()" title="Mute (playback + export)">🔊</button>
+          <button class="btn-icon" onclick="fxVideoStep(-1)" title="Previous frame (←)" data-ic="stepBack"></button>
+          <button class="btn-icon" id="btn-vid-play" onclick="fxVideoPlayToggle()" title="Play/pause (Space)" data-ic="play"></button>
+          <button class="btn-icon" onclick="fxVideoStep(1)" title="Next frame (→)" data-ic="stepFwd"></button>
+          <button class="btn-icon" id="btn-vid-loop" onclick="fxVideoLoopToggle()" title="Loop playback within the trim range" data-ic="loop"></button>
+          <button class="btn-icon" id="btn-vid-mute" onclick="fxVideoMuteToggle()" title="Mute (playback + export)" data-ic="volume"></button>
           <span id="vid-time" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:78px">00:00:00:00</span>
           <input type="range" id="vid-scrub" min="0" max="0" value="0" step="1" style="flex:1"
             oninput="fxVideoScrubInput(this.value)" onchange="fxVideoScrubCommit(this.value)">
@@ -1815,7 +1914,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <button class="fx-act" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-act-ic">↪</span><span class="fx-act-lb">Redo</span></button>
         <button class="fx-act js-allfx" onclick="enableAll()" title="Toggle all FX"><span class="fx-act-ic">✨</span><span class="fx-act-lb">All FX</span></button>
         <button class="fx-act fx-act-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span><span class="fx-act-lb">Export</span></button>
-        <button class="fx-act" onclick="fxMoreMenu()" title="More tools (Match &amp; Refine, Colour Copy, Collage, Guide, Log)"><span class="fx-act-ic">⋯</span><span class="fx-act-lb">More</span></button>
+        <button class="fx-act" onclick="fxMoreMenu()" title="More tools (Match &amp; Refine, Color Copy, Collage, Guide, Log)"><span class="fx-act-ic">⋯</span><span class="fx-act-lb">More</span></button>
       </div>
       <!-- HORIZONTAL SECTION STRIP (mobile) -->
       <div id="fx-secnav"></div>
@@ -1832,14 +1931,14 @@ setTimeout(()=>window.hideBootSplash(),6000);
 <div class="panel" id="panel-guide">
   <div class="guide">
     <h1>Chromasmith — Guide</h1>
-    <p class="lede">A single-file film-emulation and colour-grading tool that runs entirely in your browser. Nothing is uploaded — every image, LUT and export is processed locally on your device.</p>
+    <p class="lede">A single-file film-emulation and color-grading tool that runs entirely in your browser. Nothing is uploaded — every image, LUT and export is processed locally on your device.</p>
 
     <div class="toc">
       <a href="#g-start">Getting started</a>
       <a href="#g-fx">Effects &amp; Export</a>
       <a href="#g-preview">Preview &amp; zoom</a>
       <a href="#g-match">Match &amp; Refine</a>
-      <a href="#g-copy">Colour Copy</a>
+      <a href="#g-copy">Color Copy</a>
       <a href="#g-faq">FAQ</a>
     </div>
 
@@ -1849,7 +1948,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <ul>
         <li><b>Effects &amp; Export</b> — load a photo, apply a film look (LUT preset), grain, halation, bloom and basic adjustments, then export.</li>
         <li><b>Match &amp; Refine</b> — feed it a before/after pair and it builds a <code>.cube</code> LUT that reproduces the look.</li>
-        <li><b>Colour Copy</b> — copy the colour/tone of any reference photo onto another.</li>
+        <li><b>Color Copy</b> — copy the color/tone of any reference photo onto another.</li>
       </ul>
       <p>Drop an image anywhere onto a drop-zone, or click it to browse. Supported inputs: JPEG, PNG, TIFF, and Panasonic <b>RW2 / RAW</b> (decoded locally — large RAWs can take 15–30&nbsp;s).</p>
       <div class="gnote">Everything runs offline. The <b>● OFFLINE</b> badge in the header is a feature, not an error — it confirms your photos never leave the device.</div>
@@ -1860,30 +1959,29 @@ setTimeout(()=>window.hideBootSplash(),6000);
     <h3>Image Input</h3>
     <ul>
       <li><b>Drop image</b> — load the photo you want to grade.</li>
-      <li><b>RAW profile</b> — for RW2 files, picks the in-camera colour profile (default <b>Camera Standard</b>) so colours match Lightroom.</li>
+      <li><b>RAW profile</b> — for RW2 files, picks the in-camera color profile (default <b>Camera Standard</b>) so colors match Lightroom.</li>
       <li><b>Apply LUT</b> — drop a <code>.cube</code> file or a processed LUT chart to apply a custom look.</li>
       <li><b>Input</b> — set to <b>V-Log (Lumix)</b> for V-Log stills/frame grabs: converts V-Log/V-Gamut to Rec.709 <i>before</i> the film look, so any normal Rec.709 <code>.cube</code> then applies correctly on top. Leave on Standard for normal photos.</li>
       <li><b>Preset</b> — pick one of the 11 built-in film looks (Velvia, Astia, Classic Neg, Provia, Reala Ace, the Beach preset, etc.).</li>
       <li><b>Save to library / Delete</b> — store the current LUT in this browser, or remove a saved one.</li>
-      <li><b>LUT chart</b> — downloads a reference chart of every colour. Apply your look to it in another app, drop the result back, and Chromasmith reverse-engineers it into a clean <code>.cube</code>.</li>
+      <li><b>LUT chart</b> — downloads a reference chart of every color. Apply your look to it in another app, drop the result back, and Chromasmith reverse-engineers it into a clean <code>.cube</code>.</li>
       <li><b>Download .cube</b> — exports the active LUT (already formatted for the Lumix&nbsp;Lab app).</li>
     </ul>
-    <div class="gnote"><b>Recommended way to turn any Lightroom preset or profile into a <code>.cube</code>:</b> use the <b>LUT&nbsp;chart</b>. Download it, apply your preset to the chart in Lightroom, export it (sRGB, full size), then drop that export back on the <b>Apply LUT</b> zone. Because it captures the <i>actual rendered look</i> empirically across the whole colour cube, it's more faithful and gap-free than reconstructing a look from slider values — and the resulting <code>.cube</code> is ready to <b>Download</b> (Lumix&nbsp;Lab-compatible) or save to your library. Reads patch means, so any grain/sharpening/noise reduction in the export cancels out. <i>Tip: a LUT only carries global colour &amp; tone — not local masks, sharpening or grain.</i></div>
+    <div class="gnote"><b>Recommended way to turn any Lightroom preset or profile into a <code>.cube</code>:</b> use the <b>LUT&nbsp;chart</b>. Download it, apply your preset to the chart in Lightroom, export it (sRGB, full size), then drop that export back on the <b>Apply LUT</b> zone. Because it captures the <i>actual rendered look</i> empirically across the whole color cube, it's more faithful and gap-free than reconstructing a look from slider values — and the resulting <code>.cube</code> is ready to <b>Download</b> (Lumix&nbsp;Lab-compatible) or save to your library. Reads patch means, so any grain/sharpening/noise reduction in the export cancels out. <i>Tip: a LUT only carries global color &amp; tone — not local masks, sharpening or grain.</i></div>
 
     <h3>Quick Actions &amp; One-tap Looks</h3>
     <ul>
       <li><b>Enable All FX</b> — turns on grain, halation, bloom and borders at once.</li>
-      <li><b>Load Test Photo</b> — loads a built-in calibration chart for trying effects.</li>
       <li><b>One-tap Looks</b> — live thumbnails of every preset; click one to apply it.</li>
     </ul>
 
     <h3>Basic Adjustments <span style="color:var(--mut);font-weight:400">(toggle)</span></h3>
-    <p>Exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, plus <b>Clarity</b> and <b>Sharpen</b>. <b>WB Eyedropper</b> sets white balance from a neutral grey/white you click. <b>Auto-enhance</b> sets levels and white balance automatically. <b>Reset adjustments</b> zeroes them.</p>
+    <p>Exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, plus <b>Clarity</b> and <b>Sharpen</b>. <b>WB Eyedropper</b> sets white balance from a neutral grey/white you click. <b>Auto-enhance</b> sets levels and white balance automatically. This card's <b>Reset</b> zeroes them.</p>
 
     <h3>Crop &amp; Rotate</h3>
     <ul>
       <li><b>⟲ / ⟳ 90°</b> rotate, <b>⇄ / ⇅ Flip</b> mirror, <b>Straighten</b> slider levels the horizon.</li>
-      <li><b>Crop</b> opens an interactive crop overlay with aspect presets; <b>Reset geometry</b> clears all of it.</li>
+      <li><b>Crop</b> opens an interactive crop overlay with aspect presets; the <b>Transform</b> card's <b>Reset</b> link clears all of it.</li>
     </ul>
     <div class="gnote">Geometry applies to <b>every</b> loaded image (for batch exports). <kbd>⌘Z</kbd>/<kbd>⌘Y</kbd> undo and redo it.</div>
 
@@ -1895,23 +1993,23 @@ setTimeout(()=>window.hideBootSplash(),6000);
 
     <h3>Color Mixer (HSL)</h3>
     <ul>
-      <li>Eight colour bands (Red → Magenta). Pick a band chip, then shift its <b>Hue</b>, <b>Saturation</b> and <b>Luminance</b> independently — e.g. tame orange skin, deepen a blue sky, mute distracting greens. Edited bands get a white ring.</li>
+      <li>Eight color bands (Red → Magenta). Pick a band chip, then shift its <b>Hue</b>, <b>Saturation</b> and <b>Luminance</b> independently — e.g. tame orange skin, deepen a blue sky, mute distracting greens. Edited bands get a white ring.</li>
     </ul>
 
     <h3>Masks</h3>
     <ul>
       <li>Up to 4 <b>Radial</b> (faces, subjects) or <b>Linear</b> (skies, foregrounds) masks. Position/size with the X/Y/Width sliders, soften with <b>Feather</b>, flip with <b>Invert</b>, and restrict to a tonal range with <b>Lum floor/ceiling</b> (e.g. brighten only the shadows inside the mask).</li>
       <li>Each mask carries its own Exposure, Contrast, Temp and Saturation. Masks are resolution-independent — exports and the 1:1 loupe match the preview exactly.</li>
-      <li>Set <b>Show on photo</b> to <b>Selection</b> to see the mask's <i>effective</i> selection in red — the shape combined with the Lum and Colour range gates. Overlay and Isolate draw the shape only. <kbd>O</kbd> cycles the modes.</li>
+      <li>Set <b>Show on photo</b> to <b>Selection</b> to see the mask's <i>effective</i> selection in red — the shape combined with the Lum and Color range gates. Overlay and Isolate draw the shape only. <kbd>O</kbd> cycles the modes.</li>
     </ul>
 
     <h3>Skin Tone (even out an uneven tan)</h3>
     <ul>
-      <li>Every other colour control here <i>shifts</i> tones by a fixed amount, which is why a patchy tan resists them: raising warmth moves a pale chest and an already-tanned face equally, so the face over-cooks while the chest still looks pale next to it. <b>Uniformity</b> works the other way — it pulls the selected tones <i>toward one target</i>, so areas far from it move a lot and areas already close barely move. Uneven skin evens out instead of the dark parts getting darker.</li>
-      <li>Add a <b>+ Skin</b> mask, then click a mid-tone patch of skin. Drag the shape on the photo so it covers the person you mean — it starts in the middle of the frame, and the colour range alone can't tell skin from anything sharing its hue, such as a pet, sand or bare wood. Use <b>+ Brush</b> or <b>− Subtract prev</b> for anything the ellipse can't isolate.</li>
-      <li>Switch <b>Show on photo</b> to <b>Selection</b>, then <b>shift-click</b> each different kind of skin — matte, shaded, paler, pinker — until it <i>all</i> reads red. One pick can't cover a body: skin sits on both sides of the red hue boundary, so a gate centred on a cheek can miss a sheeny chest almost entirely. This matters more than it looks: each pixel moves by weight × strength × distance-to-target, so a weakly-selected patch barely moves — and if it's the patch furthest from the target, the difference gets <i>worse</i> instead of better.</li>
-      <li>Keep <b>Feather</b> low-ish. It sets where the mask's fade <i>starts</i>, so a high value fades from the middle of the ellipse outward and makes position, rather than colour, decide how much each area moves. A low feather gives a flat centre and fades only near the edge, which is what lets the tones actually meet.</li>
-      <li><b>Target</b> is independent of what you picked, so you can aim at a tan that appears nowhere in the photo: <b>Match pick</b> just evens out the tone you clicked, <b>Swatch</b> offers the 10-shade Monk Skin Tone scale (4–6 is the useful span for tanning a light base), and <b>Custom</b> takes any colour. <b>Tan Depth/Warmth</b> then nudge the target — never the pixels — so pushing them deepens the whole selection evenly.</li>
+      <li>Every other color control here <i>shifts</i> tones by a fixed amount, which is why a patchy tan resists them: raising warmth moves a pale chest and an already-tanned face equally, so the face over-cooks while the chest still looks pale next to it. <b>Uniformity</b> works the other way — it pulls the selected tones <i>toward one target</i>, so areas far from it move a lot and areas already close barely move. Uneven skin evens out instead of the dark parts getting darker.</li>
+      <li>Add a <b>+ Skin</b> mask, then click a mid-tone patch of skin. Drag the shape on the photo so it covers the person you mean — it starts in the middle of the frame, and the color range alone can't tell skin from anything sharing its hue, such as a pet, sand or bare wood. Use <b>+ Brush</b> or <b>− Subtract prev</b> for anything the ellipse can't isolate.</li>
+      <li>Switch <b>Show on photo</b> to <b>Selection</b>, then <b>shift-click</b> each different kind of skin — matte, shaded, paler, pinker — until it <i>all</i> reads red. One pick can't cover a body: skin sits on both sides of the red hue boundary, so a gate centered on a cheek can miss a sheeny chest almost entirely. This matters more than it looks: each pixel moves by weight × strength × distance-to-target, so a weakly-selected patch barely moves — and if it's the patch furthest from the target, the difference gets <i>worse</i> instead of better.</li>
+      <li>Keep <b>Feather</b> low-ish. It sets where the mask's fade <i>starts</i>, so a high value fades from the middle of the ellipse outward and makes position, rather than color, decide how much each area moves. A low feather gives a flat center and fades only near the edge, which is what lets the tones actually meet.</li>
+      <li><b>Target</b> is independent of what you picked, so you can aim at a tan that appears nowhere in the photo: <b>Match pick</b> just evens out the tone you clicked, <b>Swatch</b> offers the 10-shade Monk Skin Tone scale (4–6 is the useful span for tanning a light base), and <b>Custom</b> takes any color. <b>Tan Depth/Warmth</b> then nudge the target — never the pixels — so pushing them deepens the whole selection evenly.</li>
       <li><b>Preserve modeling</b> only affects the Lightness slider. At 0 it collapses lightness onto the target, which evens out a hard tan <i>line</i> but flattens the shading that gives a body its form. At 100 it shifts the overall lightness level instead, leaving the shading intact. Start high.</li>
     </ul>
     <div class="gnote">Typefaces: <b>Inter</b> (Rasmus Andersson) and <b>Instrument Serif</b> (Rodrigo Fuenzalida / Instrument), both SIL Open Font License 1.1. Icons after <b>Lucide</b> (ISC). RAW decoding by <b>LibRaw</b>; MP4 handling by <b>Mediabunny</b> (MPL-2.0).</div>
@@ -1925,7 +2023,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <li><b>Bloom</b> — soft highlight glow. Amount, Threshold, Radius.</li>
       <li><b>Vignette</b> — darkens the corners.</li>
       <li><b>Borders</b> — two stackable coloured frames with adjustable thickness.</li>
-      <li><b>Canvas</b> — mats the photo (with its borders) onto an aspect-ratio canvas: pick a ratio (4:5 keeps Instagram from cropping a 2:3 photo), zoom the photo on the canvas, and choose a background colour or a blurred copy of the photo.</li>
+      <li><b>Canvas</b> — mats the photo (with its borders) onto an aspect-ratio canvas: pick a ratio (4:5 keeps Instagram from cropping a 2:3 photo), zoom the photo on the canvas, and choose a background color or a blurred copy of the photo.</li>
     </ul>
     <div class="gnote">The halation &amp; bloom are calibrated to match Dehancer's film-emulation reference. Every effect is a toggle — off by default, so a bare LUT export stays clean.</div>
 
@@ -1956,14 +2054,14 @@ setTimeout(()=>window.hideBootSplash(),6000);
         <li><b>After / Target</b> — the graded result you want to reproduce.</li>
         <li><b>Starting LUT / Preset</b> (optional) — a <code>.cube</code> or <code>.xmp</code> to bootstrap the fit.</li>
         <li><b>Name</b> auto-fills from the target filename.</li>
-        <li><b>Generate LUT &amp; XMP</b> — produces a downloadable <code>.cube</code> (plus an <code>.xmp</code>) and adds it to history with a per-colour summary of what changed.</li>
+        <li><b>Generate LUT &amp; XMP</b> — produces a downloadable <code>.cube</code> (plus an <code>.xmp</code>) and adds it to history with a per-color summary of what changed.</li>
       </ul>
-      <div class="gnote">A LUT captures <b>global colour &amp; tone only</b> — it can't reproduce sharpening, noise reduction, grain, or local masks. The output <code>.cube</code> is Lumix&nbsp;Lab-ready.</div>
+      <div class="gnote">A LUT captures <b>global color &amp; tone only</b> — it can't reproduce sharpening, noise reduction, grain, or local masks. The output <code>.cube</code> is Lumix&nbsp;Lab-ready.</div>
     </div>
 
-    <h2 id="g-copy">Colour Copy tab</h2>
+    <h2 id="g-copy">Color Copy tab</h2>
     <div class="gcard">
-      <p>Transfers the overall colour and tone of one photo onto another — no before/after pair needed.</p>
+      <p>Transfers the overall color and tone of one photo onto another — no before/after pair needed.</p>
       <ul>
         <li><b>Source image</b> — the photo to grade.</li>
         <li><b>Reference image</b> — the photo whose look you want.</li>
@@ -1993,17 +2091,17 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <div class="faq-q">Can I browse my Lightroom cloud photos?</div>
       <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → Add API → <b>Lightroom Services</b> → OAuth credential type <b>Native App</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. A Native App credential redirects through a custom URL scheme (not a plain localhost port like Google's), which is fixed per-project — if you create your own Adobe integration rather than using an existing one, the app's redirect URI constant needs updating to match yours. Once connected (Image Input → <b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the editor.</div>
 
-      <div class="faq-q">My RW2 / RAW colours don't match Lightroom.</div>
+      <div class="faq-q">My RW2 / RAW colors don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
 
       <div class="faq-q">A <code>.cube</code> looks wrong in the Lumix Lab app.</div>
-      <div class="faq-a">Lumix needs a <code>#LUMIXPHOTOSTYLE STD</code> tag; without it the camera assumes V-Log and the colours go off. Every <b>Download .cube</b> from Chromasmith already includes it.</div>
+      <div class="faq-a">Lumix needs a <code>#LUMIXPHOTOSTYLE STD</code> tag; without it the camera assumes V-Log and the colors go off. Every <b>Download .cube</b> from Chromasmith already includes it.</div>
 
       <div class="faq-q">Why is my grain bigger in the preview than the export?</div>
       <div class="faq-a">The normal preview is downscaled, so effects look larger relative to the image. Use the <b>1:1</b> button to see grain &amp; halation at true export scale.</div>
 
       <div class="faq-q">A preset looks broken on the LUT chart but fine on photos.</div>
-      <div class="faq-a">Some captured LUTs have garbage in fully-saturated corners that real photos rarely hit. Always sanity-check a captured preset on the <b>LUT chart</b>, which spans the whole colour cube.</div>
+      <div class="faq-a">Some captured LUTs have garbage in fully-saturated corners that real photos rarely hit. Always sanity-check a captured preset on the <b>LUT chart</b>, which spans the whole color cube.</div>
 
       <div class="faq-q">Will my settings persist?</div>
       <div class="faq-a">Use <b>Save session</b> to store slider settings in this browser. Saved LUTs live in the browser too — Safari may clear them after ~7 days of disuse, so keep a <code>.cube</code> copy of anything important.</div>
@@ -3972,7 +4070,30 @@ function whatsNewHtml(){
   return WHATSNEW.map(e=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);margin-bottom:4px">${e.date}</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.5">${e.items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`).join('');
 }
 window.chromasmithShowWhatsNew=function(){if(typeof _csModal==='function')_csModal("What's New",whatsNewHtml());};
-document.getElementById('build-stamp').textContent='build '+BUILD;
+// ── About: the new home for the build ID, the offline claim and the diagnostics entry points ──
+// All of these used to sit in the header or the ⋯ menu, where they were the first thing anyone
+// saw. They are real and worth keeping — "nothing leaves this machine" is the app's whole pitch,
+// and a build stamp is how you spot a stale Pages/Safari cache — they just aren't chrome.
+function csAbout(){
+  if(typeof _csModal!=='function')return;
+  _csModal('Chromasmith',
+    '<div style="font-size:13px;line-height:1.6">'
+    +'<p style="margin:0 0 12px">Film emulation and color grading, entirely on this device.</p>'
+    +'<p style="margin:0 0 14px;color:var(--mut)">Photos are never uploaded. Every LUT, grain and '
+    +'halation pass runs in your browser; the app works with the network switched off.</p>'
+    +`<div style="display:flex;gap:8px;align-items:center;color:var(--mut);font-size:var(--fs-1);margin-bottom:16px">`
+    +`<span>Build</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)">${BUILD}</span></div>`
+    +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Diagnostics</div>'
+    +'<p style="margin:0 0 10px;color:var(--mut);font-size:var(--fs-1)">Only useful when reporting a problem.</p>'
+    +'<div class="btn-row" style="margin-top:0">'
+    +'<button class="btn bgh" onclick="document.getElementById(\'cs-modal-ov\').remove();toggleLog()">Show log</button>'
+    +'<button class="btn bgh" onclick="document.getElementById(\'cs-modal-ov\').remove();document.body.classList.add(\'diag-on\');applyFxLayout()">Show diagnostics tools</button>'
+    +(window.chromasmithClearImageCache
+      ?'<button class="btn bgh" onclick="document.getElementById(\'cs-modal-ov\').remove();chromasmithClearImageCache()">Clear image cache</button>':'')
+    +'</div></div>');
+}
+window.csAbout=csAbout;
+{const bs=document.getElementById('build-stamp');if(bs)bs.textContent='build '+BUILD;}
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
 // deskx (Darkroom-style desktop layout): normally applied by the Tauri shell
@@ -4433,7 +4554,7 @@ function histMatch(srcPx,refPx,sN,rN){
 async function runColourCopy(type){
   if(!ST.cpSrcFile||!ST.cpRefFile)return;
   const btn=document.getElementById(type==='lut'?'btn-cp':'btn-cp-xmp');btn.disabled=true;
-  showPB('pb-cp');log('Running colour copy…','info');
+  showPB('pb-cp');log('Running color copy…','info');
   try{
     const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
     const{px:sPx,w:sw,h:sh}=getPx(sImg);const{px:rPx,w:rw,h:rh}=getPx(rImg);
@@ -6333,6 +6454,8 @@ function fxRawNrSyncUI(){
   if(rowHigh)rowHigh.style.display=isHigh?'':'none';
   const rowStrength=document.getElementById('row-nr-high-strength');
   if(rowStrength)rowStrength.style.display=isHigh?'':'none';
+  const hintStrength=document.getElementById('hint-nr-high-strength');
+  if(hintStrength)hintStrength.style.display=isHigh?'':'none';
   const slStrength=document.getElementById('sl-nr-high-strength'),vlStrength=document.getElementById('vl-nr-high-strength');
   if(slStrength)slStrength.value=window.chromasmithRawNrHighStrength;
   if(vlStrength)vlStrength.textContent=window.chromasmithRawNrHighStrength;
@@ -7016,12 +7139,12 @@ async function loadTiff(file){
   const icc=ifds[0].t34675?new Uint8Array(ifds[0].t34675):null;
   if(icc){
     const desc=iccProfileDescription(icc);
-    log(`${file.name}: source TIFF colour profile — ${desc||'(embedded, name unreadable)'}`,'info');
+    log(`${file.name}: source TIFF color profile — ${desc||'(embedded, name unreadable)'}`,'info');
     if(desc&&/prophoto/i.test(desc)){
       convertProPhotoRGBAtoSRGB(rgba);
       log(`Converted from ProPhoto RGB to sRGB (Lightroom's internal working space — this is expected for an "Edit In" handoff, not an error)`,'ok');
     }else if(desc&&!/srgb/i.test(desc)){
-      log(`⚠️ Not sRGB and not recognised as ProPhoto RGB — colours may look off vs. the original. Only sRGB and ProPhoto RGB sources are colour-converted; re-export with a recognised profile if possible.`,'warn');
+      log(`⚠️ Not sRGB and not recognised as ProPhoto RGB — colors may look off vs. the original. Only sRGB and ProPhoto RGB sources are color-converted; re-export with a recognised profile if possible.`,'warn');
     }
   }
   const c=document.createElement('canvas');c.width=ifds[0].width;c.height=ifds[0].height;
@@ -7423,7 +7546,7 @@ function _fxAudioStart(it,offsetSec){
 }
 function fxVideoMuteToggle(){
   fxVideoMuted=!fxVideoMuted;
-  const btn=document.getElementById('btn-vid-mute');if(btn)btn.textContent=fxVideoMuted?'🔇':'🔊';
+  const btn=document.getElementById('btn-vid-mute');if(btn)btn.innerHTML=icon(fxVideoMuted?'volumeOff':'volume',18);
   const it=curItem();
   if(_fxPlayRAF&&it&&it.kind==='video'){ // playing right now — apply immediately instead of waiting for the next play
     if(fxVideoMuted)_fxAudioStop();
@@ -7443,7 +7566,7 @@ function fxVideoPreviewQualityChanged(v){fxVideoPreviewQuality=+v||1;renderPrevi
 function fxVideoPlayToggle(){
   const it=curItem();if(!it||it.kind!=='video')return;
   if(_fxPlayRAF){fxVideoPause();return;}
-  const btn=document.getElementById('btn-vid-play');if(btn)btn.textContent='⏸';
+  const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('pause',18);
   _fxPlayStartMs=performance.now();
   _fxPlayStartFrame=+document.getElementById('vid-scrub').value||0;
   _fxPlayFrameTimes=[];
@@ -7454,7 +7577,7 @@ function fxVideoPause(){
   if(_fxPlayRAF)cancelAnimationFrame(_fxPlayRAF);
   _fxPlayRAF=null;
   _fxAudioStop();
-  const btn=document.getElementById('btn-vid-play');if(btn)btn.textContent='▶';
+  const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('play',18);
 }
 async function fxVideoPlayTick(nowMs){
   const it=curItem();
@@ -7942,19 +8065,43 @@ async function getDcpLUT(cameraPrefix,name,iso){
   const lut=await _cpuRun('bakeDcpLUT',[_dcpCache[cacheKey],dcpFit(iso,cameraPrefix)]);
   _dcpLutCache[key]=lut;return lut;
 }
-function applyDcpLUT(u16,w,h,lut){ // u16: interleaved RGB Uint16, linear camera space
+// HDR from RAW (ROADMAP 13/14's replacement — see gainmap.rs's own header): CIRAWFilter was
+// measured directly against a real RW2 and does nothing for this camera's files (its own
+// extendedDynamicRangeAmount reads back identical at 0 and 1), so the source of a RAW's HDR
+// headroom has to be OUR decode, not Core Image's RAW pipeline. It's already computed here and
+// already thrown away: CLAUDE.md §7 records the DCP LookTable as "TABLE-INDEX clamps only, values
+// extended-range" — the trilinear-sampled c00..c11 below can genuinely exceed 1.0 before the
+// `+0.5` write clamps it to 255. HR_MAX_STOPS caps how much of that gets carried into the export.
+const HR_MAX_STOPS=2; // 4x — beyond this a photo's own highlights are noise, not real detail
+// sRGB OETF (gamma ENCODE). Needed because Core Image gamma-DECODES an untagged 8-bit PNG on
+// load before any filter sees it — measured directly (desktop's gainmap_from_map_probe.rs): a
+// raw linear byte of 128/255 (intended 2.506x at 2 stops) wrote back reading only 1.647x, which
+// matches the sRGB EOTF almost exactly. Encoding here cancels that decode out on the Rust side.
+function _srgbEncode(v){return v<=0.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-0.055;}
+function hrByteForHeadroom(maxV){
+  if(maxV<=1)return 0;
+  const norm=Math.min(1,Math.log2(maxV)/HR_MAX_STOPS);
+  return Math.round(255*_srgbEncode(norm));
+}
+function applyDcpLUT(u16,w,h,lut,hrOut){ // u16: interleaved RGB Uint16, linear camera space
   const N=lut.n,L=lut.data,NM=N-1,rgba=new Uint8ClampedArray(w*h*4);
   const sc=NM/65535;
   for(let i=0,j=0;i<w*h;i++){
     const fr=u16[3*i]*sc,fg=u16[3*i+1]*sc,fb=u16[3*i+2]*sc;
     const r0=Math.min(fr|0,NM-1),g0=Math.min(fg|0,NM-1),b0=Math.min(fb|0,NM-1);
     const rf=fr-r0,gf=fg-g0,bf=fb-b0;
+    let maxV=0;
     for(let k=0;k<3;k++){
       const q=(rr,gg,bb)=>L[3*((bb*N+gg)*N+rr)+k]; // baked order: b outer, g, r inner
       const c00=q(r0,g0,b0)*(1-rf)+q(r0+1,g0,b0)*rf, c10=q(r0,g0+1,b0)*(1-rf)+q(r0+1,g0+1,b0)*rf,
             c01=q(r0,g0,b0+1)*(1-rf)+q(r0+1,g0,b0+1)*rf, c11=q(r0,g0+1,b0+1)*(1-rf)+q(r0+1,g0+1,b0+1)*rf;
-      rgba[j+k]=255*((c00*(1-gf)+c10*gf)*(1-bf)+(c01*(1-gf)+c11*gf)*bf)+0.5;
+      const v=(c00*(1-gf)+c10*gf)*(1-bf)+(c01*(1-gf)+c11*gf)*bf;
+      if(hrOut&&v>maxV)maxV=v;
+      rgba[j+k]=255*v+0.5;
     }
+    // ⚠️ Computed for free in the SAME loop that already runs for every RAW load, never a
+    // second pass — the headroom map costs nothing extra unless hrOut is actually supplied.
+    if(hrOut)hrOut[i]=hrByteForHeadroom(maxV);
     rgba[j+3]=255;j+=4;
   }
   return rgba;
@@ -8001,9 +8148,10 @@ async function loadRw2(file){
         rgb=lin;
       }
       const camPrefix=cameraDcpPrefix(m.make,m.model);
-      if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile.`);
+      if(!camPrefix)throw new Error(`No bundled color profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile.`);
       const lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
-      rgba=applyDcpLUT(rgb,w,h,lut);
+      const hrOut=new Uint8ClampedArray(w*h);
+      rgba=applyDcpLUT(rgb,w,h,lut,hrOut);
     }else{
       // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
       rgba=new Uint8ClampedArray(w*h*4);
@@ -8012,7 +8160,20 @@ async function loadRw2(file){
     dt=Math.round(performance.now()-t0);
     c=document.createElement('canvas');c.width=w;c.height=h;
     c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
-  }catch(e){throw new Error('RW2 colour processing failed: '+errStr(e))}
+    // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
+    // `img:c`, and this way the headroom data survives that indirection with zero extra
+    // plumbing (mirrors the `refine()` background-swap above, which matches back on `it.img===c`
+    // for the same reason). A cheap presence flag avoids scanning w*h bytes just to decide
+    // whether to show the HDR toggle.
+    if(typeof hrOut!=='undefined'){
+      // Full scan, not sparse sampling — a bright sky strip is a small fraction of the frame and
+      // a stride could miss it entirely, which would hide the HDR toggle on a photo that
+      // genuinely has headroom. A single pass over a Uint8ClampedArray is cheap regardless.
+      let any=false;for(let i=0;i<hrOut.length;i++){if(hrOut[i]>12){any=true;break;}}
+      c._hdrHeadroom={data:hrOut,w,h};
+      c._hdrHeadroomPresent=any;
+    }
+  }catch(e){throw new Error('RW2 color processing failed: '+errStr(e))}
   log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
   // Two-phase decode, phase 2: the decode above intentionally skipped false-color-suppression/
   // hue-defringe/native-NR to get a photo on screen fast (see desktop-native.js's
@@ -8337,7 +8498,7 @@ function resetNR(){
 // when both gate sliders are 0, so "moving the slider does nothing" is visible, not silent.
 function nrSyncGate(){
   const on=adjVal('sl-nr-lum')>0||adjVal('sl-nr-col')>0;
-  ['row-nr-det','row-nr-hldesat'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('gate-off',!on);});
+  ['row-nr-det','row-nr-hldesat','hint-nr-hldesat'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('gate-off',!on);});
   const hint=document.getElementById('nr-gate-hint');
   if(hint)hint.textContent=on?'Tames RAW sensor noise (esp. high ISO) before the film look.':
     'Detail & Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.';
@@ -8791,7 +8952,7 @@ document.addEventListener('keydown',e=>{
 function _cpCommands(){
   const cmds=[];
   const add=(group,label,run)=>cmds.push({group,label,run});
-  const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Colour Copy',collage:'Collage',guide:'Guide'};
+  const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'};
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
   const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',curves:'Tone Curves',
     hsl:'Color Mixer',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
@@ -8805,7 +8966,7 @@ function _cpCommands(){
   const printSel=document.getElementById('sel-print');
   if(printSel)Array.from(printSel.options).forEach(o=>{if(o.value)add('Print profile','Apply print: '+o.textContent,()=>{printSel.value=o.value;selectPrint(o.value);});});
   if(typeof mskAdd==='function'){
-    const MASKS={radial:'Radial',linear:'Linear',color:'Colour Range',lum:'Luminance Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin'};
+    const MASKS={radial:'Radial',linear:'Linear',color:'Color Range',lum:'Luminance Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin'};
     Object.entries(MASKS).forEach(([k,label])=>add('Mask','Add mask: '+label,()=>{switchTab('fx');fxSection('local');mskAdd(k);}));
   }
   add('Action','Export',()=>{if(typeof exportFX==='function')exportFX();});
@@ -8891,7 +9052,7 @@ function fxMoreMenu(){
   const old=document.getElementById('fx-more-menu');if(old){old.remove();return;}
   const m=document.createElement('div');m.id='fx-more-menu';
   const sh=document.createElement('div');sh.className='mm-sheet';
-  [['Match & Refine','match'],['Colour Copy','copy'],['Collage','collage'],['Guide','guide']].forEach(([lb,tab])=>{
+  [['Match & Refine','match'],['Color Copy','copy'],['Collage','collage'],['Guide','guide']].forEach(([lb,tab])=>{
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
     b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
   });
@@ -8975,7 +9136,9 @@ function diagLayout(){
     const vis=appH||vv||ih;
     const over=Math.max(sh-vis,snB-vis);
     const msg=`Layout ${BUILD}: vv=${vv} inner=${ih} app-h=${appH} padTop=${sat} scrollH=${sh} navBottom=${snB} → ${over>2?('OVERFLOW '+over+'px'):'FITS'}`;
-    if(msg!==_diagLast){_diagLast=msg;log(msg,over>2?'err':'info');}
+    // quiet: an overflowing layout is a signal for whoever is debugging the shell, not something
+    // the person editing a photo can act on — and it re-fires on every resize.
+    if(msg!==_diagLast){_diagLast=msg;log(msg,over>2?'err':'info',true);}
   }catch(e){}
 }
 (function(){
@@ -9320,9 +9483,9 @@ function mskAdd(type){
   if(type==='ai'){_samLastError=null;samEnsureEncoded();mskAiTapToggle(true);}
   if(type==='skin'){
     _samLastError=null;samEnsureEncoded();mskAiTapToggle(true);
-    log('Scribble over yourself on the photo to select you. The dog, the rocks and the background are then outside the mask entirely \u2014 the colour samples below only have to tell skin from lips and hair INSIDE you.','info');
+    log('Scribble over yourself on the photo to select you. The dog, the rocks and the background are then outside the mask entirely \u2014 the color samples below only have to tell skin from lips and hair INSIDE you.','info');
   }
-  if(type==='color'){mskCrEyedropper(true);log('Click the colour you want to select — this mask has no shape, the colour range IS the selection','info');}
+  if(type==='color'){mskCrEyedropper(true);log('Click the color you want to select — this mask has no shape, the color range IS the selection','info');}
   if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
 }
 
@@ -10622,7 +10785,7 @@ function mskCrEyedropperClick(e){
   // exception. Stays armed while adding so several picks are one gesture each.
   const add=!!(e.shiftKey||e.altKey);
   if(!add||!m.crSamples.length)m.crSamples=[];
-  if(m.crSamples.length>=CR_MAX_SAMPLES){log(`Maximum ${CR_MAX_SAMPLES} colour samples`,'warn');mskCrEyedropper(false);return true;}
+  if(m.crSamples.length>=CR_MAX_SAMPLES){log(`Maximum ${CR_MAX_SAMPLES} color samples`,'warn');mskCrEyedropper(false);return true;}
   m.crSamples.push({h,s,v,rgb:[Math.round(avg[0]),Math.round(avg[1]),Math.round(avg[2])]});
   m.crOn=true;
   if(!add)mskCrEyedropper(false);
@@ -10782,7 +10945,7 @@ function mskRebuild(){
   }else if(m.type==='none'){   // Colour Range / Luminance Range — no shape, the gates select
     shape+='<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px">'
       +'No shape — this mask selects the whole frame and lets the '
-      +(m.origin==='lum'?'<b>Lum floor/ceiling</b>':'<b>Colour range</b>')
+      +(m.origin==='lum'?'<b>Lum floor/ceiling</b>':'<b>Color range</b>')
       +' below do the selecting. <b>Invert</b> flips the range (everything <i>except</i> it). '
       +'Turn on the <b>Selection</b> preview above to see it.</div>';
   }else if(m.type==='linear'){
@@ -10831,12 +10994,12 @@ function mskRebuild(){
     // The colour gate is a way of choosing PIXELS, so on an ordinary mask it belongs here rather
     // than under a "Skin Tone" heading it has nothing to do with.
     selBody+='<div class="fx-row" title="Restricts this mask to pixels near the picked tones, so a rough shape can still land on one subject only. Combine with the shape to exclude same-coloured objects (pets, wood, sand).">'
-      +'<div class="fx-label">Colour range</div>'
+      +'<div class="fx-label">Color range</div>'
       +'<input type="checkbox" '+(m.crOn?'checked':'')+' onchange="mskCrToggle(this)">'
       +'<button class="btn bgh" id="btn-msk-cr-eye" onclick="mskPickSkin()" style="flex:0 0 auto">'+icon('eyedropper',14)+' Pick</button></div>'
       +chipRow()
       +(m.crOn?_mskRow('How similar','crRange',m.crRange!=null?m.crRange:35,0,100,1,false)
-        +'<div class="msk-hint">Colour alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous.</div>':'');
+        +'<div class="msk-hint">Color alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous.</div>':'');
   }
   selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
     +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
@@ -10864,7 +11027,7 @@ function mskRebuild(){
         +(CS.length<2?'<div class="msk-warn">One sample rarely covers a whole body — skin straddles the hue wrap point, so a single pick can leave the palest area barely selected and push its hue further away, not closer. Shift-click a couple more.</div>':'');
     }
     sk+='<div class="msk-step"><span class="msk-step-n">2</span>Choose the target</div>'
-      +'<div class="msk-hint">Where those tones should end up. It does not have to be a colour that appears in the photo.</div>'
+      +'<div class="msk-hint">Where those tones should end up. It does not have to be a color that appears in the photo.</div>'
       +'<div class="seg msk-seg">'
       +[['match','Even them out'],['ref','Match shoot'],['swatch','Pick a shade'],['custom','Custom']]
         .map(([v,lb])=>'<button class="'+(tgtMode===v?'on':'')+'" onclick="mskTgtMode(\''+v+'\')">'+lb+'</button>').join('')
@@ -10875,7 +11038,7 @@ function mskRebuild(){
           +(i>=3&&i<=5?' rec':'')+'" style="background:'+hx+'" title="Monk Skin Tone '+(i+1)+(i>=3&&i<=5?' — a good span for tanning a light base':'')+'" onclick="mskTgtSwatch(\''+hx+'\')"><span>'+(i+1)+'</span></button>').join('')
         +'</div><div class="msk-hint">Monk Skin Tone scale (CC BY 4.0) — 1 lightest to 10 darkest. 4–6 is the useful span for tanning a light base.</div>';
     }else if(tgtMode==='custom'){
-      sk+='<div class="fx-row"><div class="fx-label">Target colour</div>'
+      sk+='<div class="fx-row"><div class="fx-label">Target color</div>'
         +'<input type="color" value="'+tgtHex+'" oninput="mskTgtPicked(this)"></div>';
     }else if(tgtMode==='ref'){
       const ref=skinRefGet();
@@ -10896,12 +11059,15 @@ function mskRebuild(){
     // The two traps that are counterintuitive enough to be worth surfacing inline rather than
     // documenting somewhere the user will never look. Both are measured findings (CLAUDE.md 5b).
     if((m.feather||0)>0.4&&strength>0){
-      sk+='<div class="msk-warn">Feather is high, so the shape — not the colour gate — is deciding how much each pixel moves, and the tones will not converge. Lower Feather to about 25.</div>';
+      sk+='<div class="msk-warn">Feather is high, so the shape — not the color gate — is deciding how much each pixel moves, and the tones will not converge. Lower Feather to about 25.</div>';
     }
     // Routed through mskGroupToggle like every other group, so it PERSISTS — setting the flag
     // inline meant Advanced silently collapsed again on the next app launch.
     const adv=_mskGroupOpen.skinAdv===true;
-    sk+='<button class="msk-adv-hd" onclick="mskGroupToggle(\'skinAdv\')">'+(adv?'▾':'▸')+' Advanced</button>';
+    // Same rotating-SVG chevron as _mskGroup's own group headers (.msk-group-chev), not a second
+    // ▾/▸ text-glyph toggle with its own inverted sense (▾ meant open here, but ▸/▾ mean CLOSED/
+    // open in _mskGroup — two conventions for one shape was its own small inconsistency).
+    sk+='<button class="msk-adv-hd" onclick="mskGroupToggle(\'skinAdv\')"><span class="msk-group-chev'+(adv?' msk-adv-open':'')+'">'+icon('chevron',12)+'</span> Advanced</button>';
     if(adv){
       sk+='<div class="msk-hint">Strength above moves Hue and Saturation together. These are the individual axes.</div>'
         +_mskRow('Hue uniformity','uH',m.uH||0,0,100,1,false)
@@ -10926,18 +11092,18 @@ function mskRebuild(){
     // Texture: the local detail control masks never had. Negative softens — the standard portrait
     // move of calming skin texture while eyes and hair stay sharp.
     +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
-    +'<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or colour."><div class="fx-label">Texture</div>'
+    +'<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
     +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
     +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
     // Color paint: a Lightroom-style "tint the masked area toward this color" control — distinct
     // from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already there).
-    +'<div class="fx-row" title="Pick any colour to tint the masked area toward — the hue slider below fine-tunes it."><div class="fx-label">Colour</div>'
+    +'<div class="fx-row" title="Pick any color to tint the masked area toward — the hue slider below fine-tunes it."><div class="fx-label">Color</div>'
     +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
     +'<div class="fx-row"><div class="fx-label">Hue (fine-tune)</div>'
     +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
     +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
-    +_mskRow('Colour amount','colAmt',m.colAmt,0,100,0.01,false)
+    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false)
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
     +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false);
   h+=_mskGroup('adjust','Adjust',adjBody);
@@ -11003,9 +11169,9 @@ function mskToggleExclude(){
 }
 // The label shown on the list chip when the user hasn't named the mask themselves.
 function mskAutoLabel(m,i){
-  const t=m.origin==='skin'?(mskIsAI(m)?'Skin AI':'Skin'):m.origin==='color'?'Colour':m.origin==='lum'?'Lum'
+  const t=m.origin==='skin'?(mskIsAI(m)?'Skin AI':'Skin'):m.origin==='color'?'Color':m.origin==='lum'?'Lum'
     :m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
-    :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Colour':'Radial'):'Brush';
+    :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Color':'Radial'):'Brush';
   return t+' '+(i+1);
 }
 
@@ -11021,8 +11187,8 @@ function mskAutoLabel(m,i){
 let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
 const MSK_PREVMODE_HINT={
   overlay:'Showing the mask SHAPE only — for a Skin mask that is the raw AI subject, hair and glasses included. Not what gets adjusted.',
-  isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the colour range is not applied here.',
-  select:'Showing what is ACTUALLY adjusted — shape x colour range x Amount. This is the one to trust.',
+  isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the color range is not applied here.',
+  select:'Showing what is ACTUALLY adjusted — shape x color range x Amount. This is the one to trust.',
   off:''};
 function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
   const hint=document.getElementById('msk-prevmode-hint');
@@ -12133,8 +12299,8 @@ function styleListRefresh(){
     const n=s.name.replace(/'/g,"\\'");
     return `<div class="btn-row" style="margin:0;gap:4px">`
       +`<button class="btn bgh" style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="styleApply('${n}')" title="Apply this style">${s.name}</button>`
-      +`<button class="btn-icon" onclick="styleExport('${n}')" title="Export as .json">⇩</button>`
-      +`<button class="btn-icon" onclick="styleDelete('${n}')" title="Delete">✕</button>`
+      +`<button class="btn-icon" onclick="styleExport('${n}')" title="Export as .json">${icon('download',16)}</button>`
+      +`<button class="btn-icon" onclick="styleDelete('${n}')" title="Delete">${icon('close',16)}</button>`
       +`</div>`;
   }).join('');
 }
@@ -12366,7 +12532,7 @@ function _videoInfoRows(it){
     +row('Frame Rate',it.fps?it.fps.toFixed(2)+' fps':'')
     +row('Frames',it.frameCount||'')
     +row('Codec',it.codec?it.codec.toUpperCase():'')
-    +row('Colour',gamut)
+    +row('Color',gamut)
     +row('Dynamic Range',it.isHdr?'HDR — tone-mapped to SDR for grading':'SDR')
     +row('Rotation',it.rotation?it.rotation+'°':'')
     +row('Size',fmtSize(it.fileSize))
@@ -14532,6 +14698,10 @@ async function exportFX(){
         // than inferred from the output filename afterward, per the fxIdx lookup above.
         const fxIdx=fxImages.indexOf(it);
         const srcPath=fxIdx>=0?libPaths[fxIdx]:undefined;
+        // Stashed for fxSaveGainMapHeic's RAW-headroom path (_hdrHeadroomPngFor needs the
+        // FINAL export size to resize the headroom map to, after borders/matte/resample have
+        // already changed it from the graded frame's own dimensions).
+        it._exportW=ec.width;it._exportH=ec.height;
         results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime,srcIdx:idx,srcPath});
         ec.width=ec.height=0; // free big intermediates promptly
         setProg(idx+1,`Rendered ${idx+1}/${N}`);
@@ -14611,7 +14781,7 @@ async function exportFX(){
       if(fxHdrExportEnabled()&&results.length===1){
         const r0=results[0];
         const bytes=r0.content instanceof Uint8Array?r0.content:new Uint8Array(r0.content);
-        if(await fxSaveGainMapHeic(bytes,r0.fname)){
+        if(await fxSaveGainMapHeic(bytes,r0.fname,items[r0.srcIdx])){
           setExportPhotoStatus(r0.srcIdx,'saved');
           toast('Exported HDR ✓',true);
           if(results.length)fxVersion+=.1;
@@ -15205,7 +15375,7 @@ function mkRefCard(prevIdx){
   card.innerHTML=`<div class="ctitle">Refinement ${getCurVer()} → ${nv}<div class="cver">${nv}</div></div>
   <div class="dz" id="dz-dev-${prevIdx}" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'dev-${prevIdx}')">
     <input type="file" accept="image/*" onchange="fi(event,'dev-${prevIdx}')">
-    <div class="dz-ic">◧</div><div class="dz-lb">Rendered output for ${getCurVer()}</div>
+    <div class="dz-ic">${icon('image',16)}</div><div class="dz-lb">Rendered output for ${getCurVer()}</div>
     <div class="dz-sb">Lumix Lab (.cube) or Lightroom (.xmp) export with ${getCurVer()} applied</div><div class="dz-fn" id="fn-dev-${prevIdx}"></div>
   </div>
   <div class="btn-row"><button class="btn bpri" id="btn-ref-${prevIdx}" disabled onclick="processRef(${prevIdx})">Process → ${nv}</button></div>
@@ -15262,9 +15432,16 @@ async function fxSyncHdrOption(){
   const it=typeof curItem==='function'?curItem():null;
   // Photos only: a video's HDR story is HLG, not gain maps (they are a stills format).
   if(!capNative()||!path||!it||it.kind==='video'){row.style.display='none';if(note)note.style.display='none';fxHdrHeadroom=1.0;return;}
-  let has=false;
-  try{has=await window.__TAURI__.core.invoke('source_has_hdr',{path});}
-  catch(e){has=false;}   // older shell without the command — silently stay SDR
+  // RAW: headroom comes from OUR OWN decode (see applyDcpLUT's hrOut / hrByteForHeadroom),
+  // computed once at load and stashed on the canvas — no round trip needed. source_has_hdr
+  // (Core Image's RAW pipeline) was measured to find nothing for a RAW file, which is why this
+  // is a SEPARATE check rather than the only one.
+  const fromRaw=!!(it.img&&it.img._hdrHeadroomPresent);
+  let has=fromRaw;
+  if(!has){
+    try{has=await window.__TAURI__.core.invoke('source_has_hdr',{path});}
+    catch(e){has=false;}   // older shell without the command — silently stay SDR
+  }
   row.style.display=has?'':'none';
   if(note){
     note.style.display=has?'':'none';
@@ -15279,14 +15456,71 @@ function fxHdrExportEnabled(){
 // Writes ONE graded photo as a gain-map HEIC. Returns false when it could not (no headroom, older
 // shell, any failure), so the caller falls straight through to the normal SDR save rather than
 // losing the export.
-async function fxSaveGainMapHeic(pngBytes,fname){
+// Builds the headroom map for ONE export, pixel-aligned to the graded output. The headroom data
+// lives at RAW-DECODE resolution (see applyDcpLUT's hrOut); the graded export has been through
+// crop/rotate/flip/straighten and a final resize. Rather than re-deriving that transform chain
+// by hand — a second copy that could silently drift from the real one — this runs the headroom
+// map through the EXACT SAME `applyGeomTo` the photo itself uses, then a plain resize to the
+// export's own final size. Gain maps are inherently smooth/low-frequency, so exact-to-the-pixel
+// alignment through borders/matte/frame isn't needed the way it would be for the photo itself.
+function _hdrHeadroomPngFor(it,outW,outH){
+  const hr=it.img&&it.img._hdrHeadroom;
+  if(!hr)return null;
+  const src=document.createElement('canvas');src.width=hr.w;src.height=hr.h;
+  const sx=src.getContext('2d');
+  // Grayscale: replicate the single channel into R/G/B so it round-trips through a plain PNG,
+  // and CIColorMatrix (gainmap.rs) reads all three channels identically.
+  const id=sx.createImageData(hr.w,hr.h);
+  for(let i=0,j=0;i<hr.data.length;i++,j+=4){const v=hr.data[i];id.data[j]=v;id.data[j+1]=v;id.data[j+2]=v;id.data[j+3]=255;}
+  sx.putImageData(id,0,0);
+  const geomed=(typeof applyGeomTo==='function')?applyGeomTo(src,it.geom||defGeom()):src;
+  const out=document.createElement('canvas');out.width=outW;out.height=outH;
+  out.getContext('2d').drawImage(geomed,0,0,outW,outH);
+  if(geomed!==src)geomed.width=geomed.height=0;
+  src.width=src.height=0;
+  return out;
+}
+/// Writes ONE graded photo as a gain-map HEIC. `it` is the source fxImages[] entry the graded
+/// bytes came from — RAW headroom is per-photo (its own decode), so unlike everything else in
+/// exportFX this genuinely needs the item, not just the bytes. Returns false when it could not
+/// (no headroom, older shell, any failure), so the caller falls straight through to the normal
+/// SDR save rather than losing the export.
+async function fxSaveGainMapHeic(pngBytes,fname,it){
   const source=window.chromasmithSourcePath;
   if(!source)return false;
   const heicName=fname.replace(/\.[^.]+$/,'')+'.heic';
+  const q=(parseFloat((document.getElementById('sl-exp-q')||{}).value)||92)/100;
+  // RAW path: OUR OWN headroom, computed at decode time — see gainmap.rs's "HDR from RAW" note
+  // for why CIRAWFilter can't do this for this camera's files.
+  if(it&&it.img&&it.img._hdrHeadroom){
+    try{
+      const outW=(pngBytes&&it._exportW)||0,outH=(pngBytes&&it._exportH)||0;
+      // Dimensions come from the caller (set right before this call — see exportFX) rather than
+      // re-decoding pngBytes into an <img> just to read its size.
+      const hrCanvas=_hdrHeadroomPngFor(it,outW,outH);
+      if(!hrCanvas)return false;
+      const hrBlob=await new Promise(res=>hrCanvas.toBlob(res,'image/png'));
+      hrCanvas.width=hrCanvas.height=0;
+      const hrBytes=new Uint8Array(await hrBlob.arrayBuffer());
+      // Length-prefixed two-blob body: headroom PNG, then the graded PNG — see main.rs's
+      // write_gainmap_heic_from_map for the exact framing this must match.
+      const body=new Uint8Array(4+hrBytes.length+pngBytes.length);
+      new DataView(body.buffer).setUint32(0,hrBytes.length,true);
+      body.set(hrBytes,4);body.set(pngBytes,4+hrBytes.length);
+      const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic_from_map',body,{headers:{
+        'x-filename':_u8b64(new TextEncoder().encode(heicName)),
+        'x-quality':String(q),'x-max-stops':'2'}});
+      if(wrote){log(`Saved ${wrote} (HDR gain map, from RAW headroom)`,'ok');return true;}
+      log('No RAW headroom in this photo — exported as SDR','info');
+      return false;
+    }catch(e){
+      log('HDR-from-RAW export failed, falling back to SDR: '+(e&&e.message||e),'warn');
+      return false;
+    }
+  }
+  // Non-RAW path (iPhone HEIC etc.): unchanged — Core Image's own expand-to-HDR on the source
+  // file already works for these (measured headroom 1.37-1.40 on real iPhone photos).
   try{
-    const q=(parseFloat((document.getElementById('sl-exp-q')||{}).value)||92)/100;
-    // The command resolves the downloads folder and a unique name itself (same as
-    // save_export_file_raw) and returns the path it wrote, or null if there was no headroom.
     const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic',pngBytes,{headers:{
       'x-source':_u8b64(new TextEncoder().encode(source)),
       'x-filename':_u8b64(new TextEncoder().encode(heicName)),
@@ -15868,8 +16102,8 @@ async function gpUploadItems(items,onProg){ // items: [{content:Uint8Array,fname
 function gpUpdateUI(){
   const c=document.getElementById('btn-gp-connect');
   if(c){c.className='btn '+(gpConnected()?'bsec':'bgh');c.innerHTML=''+(gpConnected()?'Connected ✓':'Connect');}
-  const s=document.getElementById('btn-gp-save');
-  if(s){s.className='btn '+(gpSaveEnabled()?'bsec':'bgh');s.innerHTML='Upload exports: '+(gpSaveEnabled()?'On':'Off');}
+  const s=document.getElementById('tg-gp-save');
+  if(s)s.classList.toggle('on',gpSaveEnabled());
 }
 gpUpdateUI();
 
@@ -16260,7 +16494,13 @@ function yd(){return new Promise(r=>setTimeout(r,0))}
 function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Math.round(v)+'%'}
 function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
 function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
-function log(msg,type=''){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';
+// `quiet` records at error severity in the log WITHOUT raising a toast. It exists for the three
+// call sites that use 'err' to mean "a developer should look at this", not "your action failed":
+// the layout probe, and the two global error/unhandledrejection handlers. Those handlers are the
+// reason this option is not optional — they fire for every stray rejection in the app (an aborted
+// fetch, a cancelled decode), and a red pill for each would teach people to ignore the channel
+// within a session, taking the real failures down with it.
+function log(msg,type='',quiet){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';
   // msg routinely embeds user-controlled filenames (export progress, load errors, etc.) — escape
   // before building the span so a filename containing "<"/">" can't inject markup into the log.
   const escMsg=String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -16271,8 +16511,15 @@ function log(msg,type=''){const a=document.getElementById('log-area'),now=new Da
   // the explanation went into a drawer they had no reason to open. Errors now also surface as
   // a toast. Deliberately only 'err': 'warn' entries here really are diagnostics ("HDR probe
   // write failed"), and toasting them would train people to ignore the channel.
-  if(type==='err')toast(msg,'err');}
-function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['fx','match','copy','collage','guide'][i]===n));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();}
+  if(type==='err'&&!quiet)toast(msg,'err');}
+function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>{
+  const on=['fx','match','copy','collage','guide'][i]===n;
+  t.classList.toggle('active',on);
+  // aria-selected + roving tabindex, mirroring the .active class this already tracked visually
+  // — a screen reader had no way to know which tab was current, and Tab-key users had to step
+  // through all 5 to reach the panel instead of landing on the one that's actually open.
+  t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;
+});document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();}
 
 // ── FX editor: section model, mobile strip + desktop tool rail ────────────────
 function toggleLog(){document.body.classList.toggle('log-on');}
@@ -16282,17 +16529,17 @@ function toggleLog(){document.body.classList.toggle('log-on');}
 function ovfBuild(){
   const m=document.getElementById('fx-overflow-menu');if(!m)return;
   const active=(document.querySelector('.panel.active')||{}).id||'panel-fx';
-  const tabs=[['fx','Editor'],['match','Match & Refine'],['copy','Colour Copy'],['collage','Collage'],['guide','Guide']];
+  const tabs=[['fx','Editor'],['match','Match & Refine'],['copy','Color Copy'],['collage','Collage'],['guide','Guide']];
   let h='';
   tabs.forEach(([k,lb])=>{h+=`<button class="fx-ovf-item" onclick="ovfClose();switchTab('${k}')">${active==='panel-'+k?'✓ ':''}${lb}</button>`;});
   h+='<div class="fx-ovf-sep"></div>';
   if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Library (L)</button>';
-  if(window.chromasmithClearImageCache)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithClearImageCache()">Clear image cache</button>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();toggleTheme()">Light / dark theme</button>';
-  h+='<button class="fx-ovf-item" onclick="ovfClose();toggleLog()">Diagnostics log</button>';
-  h+='<button class="fx-ovf-item" onclick="ovfClose();document.body.classList.add(\'diag-on\');applyFxLayout()">Diagnostics section</button>';
   h+='<div class="fx-ovf-sep"></div>';
-  h+=`<div class="fx-ovf-item dim">build ${BUILD}</div>`;
+  // This is the desktop shell's ONLY menu (the web header and tabs are hidden under deskx), and
+  // four of its rows were developer utilities — Clear image cache, Diagnostics log, Diagnostics
+  // section, and a dim `build …` stamp. They all live in About now, one row instead of four.
+  h+='<button class="fx-ovf-item" onclick="ovfClose();csAbout()">About Chromasmith</button>';
   m.innerHTML=h;
 }
 function ovfClose(){const m=document.getElementById('fx-overflow-menu');if(m)m.classList.remove('on');}
@@ -16369,7 +16616,28 @@ const ICONS={
  // Used by the Library header (desktop/library-ui.js) — same stroke set, so the Library and the
  // editor read as one application rather than two.
  cloud:'<path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 11.2 3.9 3.9 0 0 0 6.5 19z"/>',
- video:'<rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="M15.5 10.5l6-3v9l-6-3z"/>'
+ video:'<rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="M15.5 10.5l6-3v9l-6-3z"/>',
+ // Added replacing text glyphs (⟲⟳⇄⇅▶⏮⏭🔊✕📁▲▼⚠) in on-screen controls — see CLAUDE.md §3b:
+ // "No emoji and no unicode glyphs in desktop chrome." Kept to the same stroke weight/viewBox
+ // as everything above rather than reusing a symbol font.
+ rotateLeft:'<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-6h6"/>',
+ rotateRight:'<path d="M21 12a9 9 0 1 0-3 6.7"/><path d="M21 21v-6h-6"/>',
+ flipH:'<path d="M12 3v18"/><path d="M18 8l3 4-3 4M6 8l-3 4 3 4"/>',
+ flipV:'<path d="M3 12h18"/><path d="M8 18l4 3 4-3M8 6l4-3 4 3"/>',
+ play:'<path d="M7 4.5v15l13-7.5z"/>',
+ pause:'<rect x="6" y="4.5" width="4.5" height="15"/><rect x="13.5" y="4.5" width="4.5" height="15"/>',
+ loop:'<path d="M3 11V8a2 2 0 0 1 2-2h13M17 4l2 2-2 2"/><path d="M21 13v3a2 2 0 0 1-2 2H6M7 20l-2-2 2-2"/>',
+ volume:'<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9a4.5 4.5 0 0 1 0 6"/>',
+ volumeOff:'<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 10l5 5M21 10l-5 5"/>',
+ close:'<path d="M5 5l14 14M19 5L5 19"/>',
+ download:'<path d="M12 3v12M7 11l5 5 5-5"/><path d="M5 21h14"/>',
+ folder:'<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
+ sortAsc:'<path d="M7 15V3M4 6l3-3 3 3"/><path d="M13 11h7M13 16h4M13 6h9"/>',
+ sortDesc:'<path d="M7 3v12M4 12l3 3 3-3"/><path d="M13 6h7M13 11h4M13 16h9"/>',
+ pin:'<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.4"/>',
+ alertTriangle:'<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17h.01"/>',
+ stepBack:'<path d="M19 4v16"/><path d="M15 12L5 5v14z"/>',
+ stepFwd:'<path d="M5 4v16"/><path d="M9 12l10-7v14z"/>'
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // Label per section, in rail / strip order.
@@ -16693,8 +16961,11 @@ window.addEventListener('orientationchange',()=>setTimeout(applyFxLayout,100));
 if(!FX.ok)log('FX renderer failed to initialise — check console for details','warn');
 // Surface otherwise-silent runtime failures (esp. on iOS, where a thrown error or rejected
 // promise during export just looks like the page "reloading") into the on-page log.
-window.addEventListener('error',e=>{try{log('JS error: '+(e.message||e.type)+(e.filename?` @${(e.lineno||'?')}`:''),'err')}catch(_){}});
-window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.reason||'promise rejection'),'err')}catch(_){}});
+// quiet on both: these are catch-alls, so they fire for benign rejections too. The specific
+// call sites that know what actually failed raise the toast; a generic "Unhandled: …" cannot
+// tell the user what to do and would drown the ones that can.
+window.addEventListener('error',e=>{try{log('JS error: '+(e.message||e.type)+(e.filename?` @${(e.lineno||'?')}`:''),'err',true)}catch(_){}});
+window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.reason||'promise rejection'),'err',true)}catch(_){}});
 (function(){ // device diagnostics — lets the user report what their iPhone actually does
   try{
     const gl=FX.ok&&FX.gl, maxTex=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):'?';
@@ -16806,13 +17077,78 @@ document.querySelectorAll('.fx-fields[id^="ff-"]').forEach(ff=>{
 });
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
- set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');set('hdr-log','log');
+ set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');
+ set('hdr-info','info'); // header About button (the old 'hdr-log' diagnostics button moved into it)
+ // Empty-state add button: ICONS.plus at 34px, replacing the U+FF0B FULLWIDTH PLUS glyph.
+ {const ab=document.getElementById('fx-add-btn');if(ab)ab.innerHTML=icon('plus',34);}
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
  set('db-lib-ic','library');set('db-more','more');set('ic-before','compare');set('ic-split','split');
  set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');
- set('ic-zoomout','zoomOut');set('ic-zoomin','zoomIn');}
+ set('ic-zoomout','zoomOut');set('ic-zoomin','zoomIn');
+ // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
+ // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
+ // above. One data-driven pass instead of one `set()` call per element because these sites are
+ // plain static markup (not JS-generated), so they have no natural boot-time hook of their own.
+ document.querySelectorAll('[data-ic]').forEach(el=>{el.innerHTML=icon(el.dataset.ic,el.classList.contains('dz-ic')?18:20);});}
 syncAllFxBtn();
+// ── Accessibility: make every custom clickable <div> keyboard-reachable ──────────────────────
+// 3 aria attributes and one :focus-visible rule existed in the whole app; primary navigation
+// (the 5 .tab divs) and every on/off control (.fx-toggle, ~20 instances) were mouse-only. Rather
+// than hand-editing role/tabindex/keydown onto each one, this single pass covers the two real
+// component families plus a generic fallback, and a MutationObserver keeps aria-checked in sync
+// with the SAME `.on` class every toggle call site already sets — so nothing about how toggles
+// flip state needed to change, including future ones.
+function a11yEnhanceToggles(){
+  document.querySelectorAll('.fx-toggle, .fx-toggle-lb').forEach(el=>{
+    if(el.hasAttribute('data-a11y'))return;
+    el.setAttribute('data-a11y','1');
+    const isSwitch=el.classList.contains('fx-toggle');
+    if(isSwitch){el.setAttribute('role','switch');el.setAttribute('aria-checked',String(el.classList.contains('on')));}
+    else el.setAttribute('role','button');
+    if(!el.hasAttribute('tabindex'))el.tabIndex=0;
+    el.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click();}
+    });
+    if(isSwitch){
+      new MutationObserver(()=>el.setAttribute('aria-checked',String(el.classList.contains('on'))))
+        .observe(el,{attributes:true,attributeFilter:['class']});
+    }
+  });
+}
+function a11yEnhanceTabs(){
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.setAttribute('role','tab');
+    t.setAttribute('aria-selected',String(t.classList.contains('active')));
+    t.tabIndex=t.classList.contains('active')?0:-1;
+  });
+  const order=['fx','match','copy','collage','guide'];
+  const tabsEl=document.querySelector('.tabs');
+  if(tabsEl&&!tabsEl.hasAttribute('data-a11y')){
+    tabsEl.setAttribute('data-a11y','1');
+    // Left/Right cycles focus AND activates, matching the native <select>/radio-group convention
+    // this is standing in for — a screen-reader or keyboard user expects arrow keys on a tablist
+    // to switch tabs directly, not just move an invisible cursor.
+    tabsEl.addEventListener('keydown',e=>{
+      if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
+      const cur=[...document.querySelectorAll('.tab')].findIndex(t=>t.classList.contains('active'));
+      const next=(cur+(e.key==='ArrowRight'?1:-1)+order.length)%order.length;
+      e.preventDefault();switchTab(order[next]);
+      document.querySelectorAll('.tab')[next].focus();
+    });
+  }
+}
+a11yEnhanceToggles();a11yEnhanceTabs();
+// Panels rebuild their own subtrees via innerHTML at runtime (mskRebuild, curve chips, the
+// Looks gallery, …) — a one-shot boot pass would miss every .fx-toggle those create afterward.
+// One body-level observer catches all of them at the source instead of re-running the enhancer
+// from every rebuild call site (there are dozens, and a missed one is invisible until someone
+// tries to Tab to that exact control).
+// MutationObserver callbacks already fire once per batched set of synchronous DOM changes (an
+// innerHTML rebuild is one batch), so this re-scans once per rebuild, not once per added node —
+// the guard inside a11yEnhanceToggles makes a re-scan with nothing new to do effectively free.
+new MutationObserver(()=>a11yEnhanceToggles())
+  .observe(document.body,{childList:true,subtree:true});
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key==='z'){e.preventDefault();fxUndo();}
   if((e.metaKey||e.ctrlKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();fxRedo();}
@@ -16996,7 +17332,7 @@ function clRenderTray(){
   const tray=document.getElementById('cl-tray');if(!tray)return;tray.innerHTML='';
   CL.photos.forEach((p,i)=>{
     const t=document.createElement('div');t.className='cl-thumb';t.draggable=true;
-    t.innerHTML=`<img src="${p.url}" alt=""><div class="cl-thumb-x" title="Remove">×</div>`;
+    t.innerHTML=`<img src="${p.url}" alt=""><div class="cl-thumb-x" title="Remove">${icon('close',12)}</div>`;
     t.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','photo:'+i);e.dataTransfer.effectAllowed='copy';});
     t.querySelector('.cl-thumb-x').onclick=e=>{e.stopPropagation();clRemovePhoto(i);};
     tray.appendChild(t);
@@ -17027,7 +17363,7 @@ function clRenderFrame(){
     const hasPhoto=pIdx!=null&&CL.photos[pIdx];
     let im=null;
     if(hasPhoto){im=document.createElement('img');im.alt='';im.src=CL.photos[pIdx].url;cell.appendChild(im);cell.classList.add('has-photo');}
-    else cell.innerHTML='<div class="cl-cell-empty">＋</div>';
+    else cell.innerHTML='<div class="cl-cell-empty">'+icon('plus',22)+'</div>';
     cell.dataset.i=i;cell.draggable=false; // assigned cells pan on drag; rearrange via the tray
     clWireCell(cell,i,r);frame.appendChild(cell);
     if(im){ // cell is now in the DOM (real size) — position the photo (cover-fit + clamped offset)

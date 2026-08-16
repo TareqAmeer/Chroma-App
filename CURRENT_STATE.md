@@ -30,10 +30,17 @@ against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
 
 ### ⏳ Not done
 
-- **16-bit precision.** Not a file-format job: `setImage` uploads `UNSIGNED_BYTE` and the RAW path
-  truncates to `Uint8ClampedArray` before the GPU, so the float intermediate measured **identical**
-  in all four cases and 16-bit export would store 8-bit steps in a wider container. The real work
-  is a >8-bit source upload. See ROADMAP item 13.
+- ~~**16-bit precision.**~~ Measured and superseded 2026-08-16: a full float RENDER pipeline buys
+  ≤1/255 (real sensor noise already dithers 8-bit quantisation) and turned out NOT to be what
+  gates HDR-from-RAW. Shipped the thing that actually mattered instead — see below.
+- ✅ **HDR from RAW** (2026-08-16). Gain-map HDR worked on iPhone HEIC (headroom 1.37-1.40) but
+  not this camera's RW2s (1.0000/1.0024), and `CIRAWFilter` was measured to do nothing for them.
+  Headroom now comes from the DCP LookTable's own extended-range values, already computed and
+  already thrown away by `applyDcpLUT`'s 8-bit clamp. See CLAUDE.md's "HDR from RAW" section —
+  the gamma-encoding bug it took two attempts to find is worth reading before touching this again.
+  ⚠️ Every LINK is independently verified (SDR-path byte-identical, headroom detection fires,
+  geometry alignment correct under rotation, Core Image math within 0.5% of analytic); the full
+  click-through in the built app has not been hand-driven.
 
 - ~~**Display-P3 export.**~~ Rejected 2026-08-15: the film looks are calibrated in sRGB, so a
   wide-gamut pipeline would change all 113 of them with nothing to verify against, and gain-map

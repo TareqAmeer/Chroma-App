@@ -17,14 +17,15 @@ button) still needs a hands-on check in the built app. Everything else below is 
 the export gate with the untouched goldens byte-identical, i.e. each is a true no-op at its
 defaults.
 
-**Still open — 5 items, each independent** (revised 2026-08-15; items 10 and 11's keystone half
-shipped, and 6's Clarity half shipped). Nothing here blocks anything else:
+**Still open — 4 items, each independent** (revised 2026-08-16; items 10 and 11's keystone half
+shipped, 6's Clarity half shipped, and 13 is now DONE in its real form — see below). Nothing here
+blocks anything else:
 
 | # | item | size | note |
 |---|---|---|---|
 | ~~6~~ | ~~Per-mask Sharpness / Noise~~ | — | ✅ **Substantively complete.** Texture is bipolar (negative softens, positive sharpens) and Clarity shipped, so these would be the same operator under new names. True edge-aware per-mask NR is a different, larger item |
 | ~~11~~ | ~~Auto-horizon~~ | — | ✅ **Done** — `autoHorizon`, a real Hough transform. 0.30° worst error on ground truth. ⚠️ Read the KNOWN LIMITATION in CLAUDE.md before touching it |
-| 13 | **16-bit source path** | M/L | ⚠️ Revised again — this is the prerequisite for **HDR from RAW**, not just precision. See the entry; measured |
+| ~~13~~ | ~~16-bit / HDR from RAW~~ | — | ✅ **Done, in its real form.** Measured on a real RW2: a full 16-bit RENDER pipeline buys ≤1/255 (sensor noise already dithers 8-bit quantisation) and is NOT what gates HDR. `CIRAWFilter` was measured to do nothing for this camera's RAWs (`raw_headroom_probe.rs`); headroom comes from the DCP LookTable's own extended-range values instead (`applyDcpLUT`'s `hrOut`, `write_gainmap_heic_from_map`). See CLAUDE.md's "HDR from RAW" section — including the gamma-encoding bug it took two attempts to find. |
 | ~~15~~ | ~~Auto-match a series to a reference~~ | — | ✅ **Done** — `matchSeriesToReference`. Solves exposure in stops + WB after brightness equalisation, per photo, into `adjustOverride`. See CLAUDE.md |
 
 ✅ **Shipped since this list was written:** 10 (spot removal / clone / heal — see CLAUDE.md's

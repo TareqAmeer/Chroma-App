@@ -803,6 +803,64 @@ fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<Option<String>
     Ok(if wrote { Some(dest) } else { None })
 }
 
+// Same shape as write_gainmap_heic, but for a RAW source: the headroom comes from OUR OWN
+// decode (see gainmap.rs's "HDR from RAW" section) rather than Core Image's RAW pipeline, which
+// was measured to do nothing for this camera's files. The body carries TWO blobs rather than
+// one — a 4-byte little-endian length prefix, then the headroom PNG, then the graded PNG — since
+// this is the one gainmap command that needs more than a single image.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn write_gainmap_heic_from_map(request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
+    use base64::Engine;
+    let hdr = |k: &str| -> Result<String, String> {
+        let v = request
+            .headers()
+            .get(k)
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| format!("missing {k} header"))?;
+        let b = base64::engine::general_purpose::STANDARD
+            .decode(v)
+            .map_err(|e| format!("decode {k}: {e}"))?;
+        String::from_utf8(b).map_err(|e| format!("{k} not utf8: {e}"))
+    };
+    let name = hdr("x-filename")?;
+    let safe_name = Path::new(&name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("empty filename")?;
+    let dir = export_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create '{}': {e}", dir.display()))?;
+    let dest_path = unique_dest(&dir, safe_name);
+    let dest = dest_path.to_string_lossy().to_string();
+    let quality: f64 = request
+        .headers()
+        .get("x-quality")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.92);
+    let max_stops: f64 = request
+        .headers()
+        .get("x-max-stops")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2.0);
+    let body = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b,
+        _ => return Err("expected raw request body (headroom PNG + graded PNG)".into()),
+    };
+    if body.len() < 4 {
+        return Err("request body too short for the length prefix".into());
+    }
+    let hr_len = u32::from_le_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    if body.len() < 4 + hr_len {
+        return Err("request body shorter than its own declared headroom-PNG length".into());
+    }
+    let headroom_png = &body[4..4 + hr_len];
+    let graded_png = &body[4 + hr_len..];
+    let wrote = gainmap::write_gainmap_heic_from_map(headroom_png, graded_png, &dest, quality, max_stops)?;
+    Ok(if wrote { Some(dest) } else { None })
+}
+
 // Reports whether a file carries HDR headroom, so the UI can offer the HDR option only when it
 // would actually do something.
 #[cfg(target_os = "macos")]
@@ -1384,6 +1442,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             #[cfg(target_os = "macos")]
             write_gainmap_heic,
+            write_gainmap_heic_from_map,
             #[cfg(target_os = "macos")]
             source_has_hdr,
             store_dcp_lut,
