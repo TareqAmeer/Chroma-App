@@ -196,6 +196,11 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
 /* Sub-group heading INSIDE a panel (e.g. Skin Tone vs Local Adjustments in the mask panel) —
    lighter than .fx-ctrl-title, which is the panel's own header. */
 .fx-sub{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin:4px 0 4px;padding-top:6px;border-top:1px solid var(--bdr)}
+/* Desktop only: separates the Image Input controls folded into the Looks card (see
+   fxDesktopFoldImageIntoLooks) from the preset gallery below them — without it the two groups
+   run together with no gap, since #fx-image-movable used to end its OWN card (with the card's
+   own bottom padding) instead of sitting mid-card. */
+#fx-image-movable.fx-folded{border-bottom:1px solid var(--bdr);padding-bottom:14px;margin-bottom:14px}
 /* Two-line slider layout: label + value share a top row, the track spans full width below —
    DOM order (label, slider, val) is unchanged, `order` just re-flows them visually so the
    existing contenteditable tap-to-type value div needs no markup changes. */
@@ -9780,7 +9785,11 @@ async function samRunPoints(m){
     // "+ Coat" is one button making two masks: the FIRST real segmentation of a coat mask spawns
     // its paired eye-brightness mask right alongside it. Only once — re-scribbling to refine the
     // coat selection later must not keep spawning new eye masks.
-    if(m.origin==='coat'&&!m._coatEyeAdded){m._coatEyeAdded=true;_mskAddCoatEyeMask(m);}
+    // _mskAddCoatEyeMask may SPLICE the eye mask in just before this one (see its own comment on
+    // why — cutting the eye's shape out of the coat's own effect via 'subtract previous'), which
+    // shifts this mask's array index. Re-find it so the panel stays on the coat mask the user was
+    // just actively scribbling, rather than silently jumping to the newly-inserted Eyes mask.
+    if(m.origin==='coat'&&!m._coatEyeAdded){m._coatEyeAdded=true;_mskAddCoatEyeMask(m);mskSel=fxState.masks.indexOf(m);}
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
   }catch(e){
@@ -11259,7 +11268,17 @@ function _mskAddCoatEyeMask(coatM){
   Object.assign(em,_mskSkinDefaults());
   em.name='Eyes';
   em.exp=0.45*0.35;em.sh=0.5*0.35;   // mskEyeBright's formula pre-applied at the default strength (35)
-  fxState.masks.push(em);
+  // ⚠️ The coat mask covers the WHOLE animal, eyes included — so its own darkening (Red depth)
+  // was ALSO landing on the eye pixels, fighting the eye mask's brightening on the exact same
+  // region. Measured on a real photo: at default strengths (35/35) the eye region's luminance came
+  // out flat-to-slightly-DARKER despite a positive exposure/shadow push, because coat's stronger
+  // negative exposure (-0.21 at 35) was winning. 'subtract previous mask' cuts the immediately-
+  // PRECEDING mask's shape out of this one's own — so inserting the eye mask right before the
+  // coat mask and flagging coat.subtract removes the coat effect from the eye area entirely,
+  // leaving the eye mask's own brightening as the only thing acting on it.
+  const coatIdx=fxState.masks.indexOf(coatM);
+  if(coatIdx<0){fxState.masks.push(em);}
+  else{fxState.masks.splice(coatIdx,0,em);coatM.subtract=true;}
   log('Added an eye-brightness mask over the detected eyes — nudge it if it is slightly off.','info');
 }
 // Each preset is just a set of the existing values — no new machinery, and every one of them can
@@ -18054,6 +18073,7 @@ function fxDesktopFoldImageIntoLooks(){
   const looksCard=document.querySelector('.fx-ctrl[data-fxsec="looks"]');
   if(!movable||!looksCard)return;
   const title=looksCard.querySelector('.fx-ctrl-title');
+  movable.classList.add('fx-folded');
   looksCard.insertBefore(movable,title?title.nextSibling:looksCard.firstChild); // right after the title
 }
 // ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
