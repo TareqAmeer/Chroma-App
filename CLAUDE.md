@@ -1129,6 +1129,16 @@ Learned the hard/expensive way:
    off-sections to dimmed-but-rendered immediately surfaced a control that had been unreadable
    for a long time (an 8px "BLR" text label in a 24px circle). Anything permanently hidden is
    permanently unaudited.
+14. **The Library (`desktop/library-ui.js`) is native-gated, so an ordinary browser page-load
+   check renders nothing — a layout bug there is invisible unless you specifically drive
+   `?libtest=1`** (mocks the Tauri commands + `window.lrCloud` so the real Library DOM/CSS
+   renders in a plain browser; `window.libtestLrConnect()` flips the mock Lightroom to
+   connected). Two consecutive builds shipped with the sidebar invisible before this was
+   caught — always screenshot-verify Library layout changes through `?libtest=1` before
+   rebuilding the app, not after. Relatedly: a UI redesign must **migrate persisted state, not
+   just change defaults** — stale `localStorage` (e.g. an old tree-collapsed flag) can silently
+   override a new default. Use a new storage key (and delete the legacy one) whenever a
+   persisted choice's meaning changes.
 
 ---
 

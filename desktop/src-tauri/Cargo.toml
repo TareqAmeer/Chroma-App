@@ -12,6 +12,10 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-deep-link = "2"
+# Window position/size/maximized-state persistence across launches — without it the window
+# always opens at tauri.conf.json's fixed 1440x900, forgetting wherever it was last resized or
+# moved. Officially maintained (tauri-apps org), same as the other tauri-plugin-* deps above.
+tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Manual asset server: Tauri's declarative app.security.headers config does not reliably

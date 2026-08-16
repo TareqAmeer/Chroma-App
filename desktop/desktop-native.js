@@ -348,6 +348,13 @@
   wire('menu-shortcuts', () => typeof window.chromasmithShowShortcuts === 'function' && window.chromasmithShowShortcuts());
   wire('menu-guide', () => typeof switchTab === 'function' && switchTab('guide'));
   wire('menu-whatsnew', () => typeof window.chromasmithShowWhatsNew === 'function' && window.chromasmithShowWhatsNew());
+  // Cmd+, / Chromasmith > Settings… — no dedicated preferences window exists yet, so this opens
+  // the same About panel the header info button does (build/diagnostics today; the natural home
+  // for real settings later). See main.rs's own comment on this menu item for why.
+  wire('menu-settings', () => typeof window.csAbout === 'function' && window.csAbout());
+  // File > Open Recent — handled directly in library-ui.js (next to its own menu-library
+  // listener), not here: it needs the SAME recents dropdown that file's Recent button builds,
+  // which is Library-internal state this file has no access to.
   // Surfaces download_url_native's (main.rs) byte-count/content-type/hex-header diagnostic
   // for Google Photos RAW downloads into the app's OWN log panel — it previously only went to
   // eprintln!, which is invisible in the packaged .app (no attached terminal), so a "DNG won't

@@ -24,3 +24,4 @@ ditto "$APP" /Applications/Chromasmith.app
 
 echo "Installed /Applications/Chromasmith.app (sole Launch Services registrant)."
 echo "Fully quit (⌘Q) any running Chromasmith before testing native changes."
+

@@ -14,7 +14,7 @@ Run: python calib/measure_grain.py
 """
 import json
 import numpy as np
-from grainmodel import (HUES, LUMA_STEPS, PROF, CHECKER, matrix_cell,
+from grainmodel import (HUES, LUMA_STEPS, PROF, CHECKER_RECT, matrix_cell,
                         profile_block, checker_block, noise_std,
                         autocorr_halfwidth, load)
 
@@ -71,7 +71,7 @@ def main():
     print(f"\n{'CHECKERBOARD/SPATIAL — diff-from-amount=0 σ luma (pattern-dominated; visual check too)':<70}")
     print(f"{'cell':<10}" + ''.join(f'{a:>14}' for a in AMOUNTS))
     base = load(BASE)
-    for size in CHECKER:
+    for size in CHECKER_RECT:
         rect = checker_block(size)
         x0, y0, x1, y1 = rect
         row = []

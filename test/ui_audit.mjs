@@ -366,6 +366,29 @@ function auditInPage({ minTap, minTapInline, inlineSel, minFont, minContrast }) 
       }
     });
 
+  // ── 6. FOCUS — every clickable custom element must be keyboard-reachable.
+  // Native <button>/<select>/<a href> are focusable for free; a plain `<div onclick>` is not,
+  // so a mouse-only click handler on one is invisible to Tab-key and screen-reader use. This is
+  // exactly the class of thing a11yEnhanceToggles/a11yEnhanceTabs (chromasmith-22.html) exist to
+  // fix — this check is what stops the NEXT one from shipping unnoticed the same way `retouch`
+  // shipped unreachable in the desktop shell (§ FRAGMENT's own history).
+  const NATIVE_FOCUSABLE = new Set(['BUTTON', 'A', 'SELECT', 'INPUT', 'TEXTAREA']);
+  // #fx-canvas's onclick (fxCanvasClick) is a pick-a-pixel gesture — the WB eyedropper, point
+  // color, click-to-add a mask sample. Same category as every professional app's own eyedropper:
+  // inherently pointer-driven, with no meaningful keyboard equivalent for "click at THIS spot in
+  // the photo". Giving it a tabindex would claim a keyboard affordance it doesn't actually have.
+  const POINTER_ONLY = new Set(['fx-canvas']);
+  document.querySelectorAll('[onclick]').forEach((el) => {
+    if (!vis(el)) return;                                   // hidden/off-screen controls aren't reachable by definition, but aren't a bug either
+    if (NATIVE_FOCUSABLE.has(el.tagName)) return;
+    if (POINTER_ONLY.has(el.id)) return;
+    const tabindex = el.getAttribute('tabindex');
+    if (tabindex !== null && Number(tabindex) >= 0) return;  // explicitly focusable
+    if (el.getAttribute('role') === 'presentation') return;
+    out.push({ kind: 'FOCUS', el: desc(el),
+      detail: `<${el.tagName.toLowerCase()} onclick> has no tabindex — unreachable by keyboard/screen reader` });
+  });
+
   return out;
 }
 
@@ -473,7 +496,7 @@ async function main() {
   // ── report ──
   const byKind = {};
   findings.forEach(f => { (byKind[f.kind] ||= []).push(f); });
-  const KINDS = ['TOKEN', 'FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'TAP', 'FONT', 'CONTRAST'];
+  const KINDS = ['TOKEN', 'FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'TAP', 'FONT', 'CONTRAST', 'FOCUS'];
   // The same defect is re-reported once per (section, viewport) it is visible in, so every count
   // — table, baseline and comparison alike — is over DISTINCT defects. Mixing raw and deduped
   // counts would make the "vs baseline" delta meaningless.

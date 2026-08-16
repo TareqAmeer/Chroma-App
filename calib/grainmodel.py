@@ -8,25 +8,60 @@ high-pass residual stddev per flat zone, per channel, per Dehancer amount.
 This is the same "sample flat interiors, not edges" discipline that the
 halation session learned the hard way.
 """
+import os
+import re
 import numpy as np
 from PIL import Image
 from scipy.ndimage import uniform_filter
 
-# ── chart geometry (must match gen_grain_chart.py constants) ─────────────────
+# ── chart geometry ─────────────────────────────────────────────────────────
+# Profile-block and checker-block rects are parsed at runtime from
+# grain_chart_geo.txt (written by gen_grain_chart.py) so they can never drift
+# out of sync with the generator again. Hardcoded B_Y0/E_Y0 offsets previously
+# went stale when the generator's layout shifted (matrix rows changed height),
+# silently sampling the chroma-ramp zone instead of the flat profile blocks.
 HUES = ['R', 'G', 'B', 'C', 'M', 'Y', 'SkinLt', 'SkinMid', 'SkinDk',
         'Gray18', 'Cine25', 'Cine75']
 LUMA_STEPS = [0.0, 0.10, 0.25, 0.40, 0.55, 0.70, 0.85, 1.00]
 A_X0, A_Y0 = 120, 120
 CELL_W, CELL_H, GAP = 520, 150, 8
 
-PROF = [('Shadow10', (26, 26, 26)), ('Gray18', (118, 118, 118)),
-        ('Gray50', (188, 188, 188)), ('SkinMid', (224, 172, 138)),
-        ('PureR', (255, 0, 0)), ('PureG', (0, 255, 0)), ('PureB', (0, 0, 255))]
-B_Y0, B_H = 2270, 230
-BW = (4800 - 240) // len(PROF)
+PROF_NAMES = ['Shadow10', 'Gray18', 'Gray50', 'SkinMid', 'PureR', 'PureG', 'PureB']
+CHECKER_SIZES = ['4px', '16px', '64px']
 
-CHECKER = {'4px': (120, 1640), '16px': (1700, 3220), '64px': (3280, 4680)}
-E_Y0, E_H = 3070, 280
+_GEO_PATH = os.path.join(os.path.dirname(__file__), 'grain_chart_geo.txt')
+
+
+def _load_geo(path=_GEO_PATH):
+    """Parse 'name x0 y0 x1 y1 [note]' rows from grain_chart_geo.txt into a dict
+    of (rect, note)."""
+    zones = {}
+    with open(path) as f:
+        for line in f:
+            if not line.strip() or line.startswith('#'):
+                continue
+            parts = re.split(r'\s+', line.strip(), maxsplit=5)
+            if len(parts) < 5:
+                continue
+            name, x0, y0, x1, y1 = parts[:5]
+            note = parts[5] if len(parts) > 5 else ''
+            zones[name] = ((int(x0), int(y0), int(x1), int(y1)), note)
+    return zones
+
+
+_GEO = _load_geo()
+PROF_RECT = {nm: _GEO[f'profile.{nm}'][0] for nm in PROF_NAMES if f'profile.{nm}' in _GEO}
+
+
+def _parse_rgb_note(note):
+    m = re.match(r'\((\d+),\s*(\d+),\s*(\d+)\)', note)
+    return tuple(int(v) for v in m.groups()) if m else None
+
+
+PROF_RGB = {nm: _parse_rgb_note(_GEO[f'profile.{nm}'][1])
+            for nm in PROF_NAMES if f'profile.{nm}' in _GEO}
+CHECKER_RECT = {sz: _GEO[f'checker.{sz}'][0] for sz in CHECKER_SIZES if f'checker.{sz}' in _GEO}
+PROF = [(nm, PROF_RGB[nm]) for nm in PROF_NAMES if nm in PROF_RECT]
 
 
 def matrix_cell(row_name, luma):
@@ -40,14 +75,13 @@ def matrix_cell(row_name, luma):
 
 
 def profile_block(name):
-    i = [n for n, _ in PROF].index(name)
-    x0 = 120 + i * BW
-    return (x0 + 30, B_Y0 + 30, x0 + BW - 30, B_Y0 + B_H - 30)
+    x0, y0, x1, y1 = PROF_RECT[name]
+    return (x0 + 30, y0 + 30, x1 - 30, y1 - 30)
 
 
 def checker_block(size):
-    x0, x1 = CHECKER[size]
-    return (x0 + 20, E_Y0 + 20, x1 - 20, E_Y0 + E_H - 20)
+    x0, y0, x1, y1 = CHECKER_RECT[size]
+    return (x0 + 20, y0 + 20, x1 - 20, y1 - 20)
 
 
 # ── statistical measurement (high-pass residual std == "grain strength") ─────
