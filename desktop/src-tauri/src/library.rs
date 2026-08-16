@@ -3,6 +3,7 @@
 // RAWs on disk before editing. Native-only (arbitrary filesystem folder browsing isn't a thing
 // in a sandboxed browser), so this lives entirely in the desktop shell, not chromasmith-22.html.
 use rawler::decoders::RawDecodeParams;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -570,6 +571,18 @@ pub fn get_meta(path: String) -> PhotoMeta {
     m
 }
 
+// Batched + parallelized: openFolder used to `Promise.all` one `get_meta`/`get_sidecar` IPC
+// round trip PER FILE, which is N Tauri IPC round trips on every folder open regardless of how
+// cheap any individual call is. One call carrying the whole path list cuts that to 1, and
+// rayon parallelizes the actual per-file work (real cost for a cold-cache get_meta, which reads
+// the whole RAW file for the lens fallback — negligible for get_sidecar's small XML read, but
+// harmless to parallelize either way). Order is preserved (rayon's into_par_iter().map().collect()
+// keeps input order), so the frontend can zip this 1:1 against its own `paths` array.
+#[tauri::command]
+pub fn get_meta_batch(paths: Vec<String>) -> Vec<PhotoMeta> {
+    paths.into_par_iter().map(get_meta).collect()
+}
+
 // ── XMP sidecar: rating + label + edited flag + edit recipe, in ONE read/write pair.
 // Standard fields (xmp:Rating 0-5/-1, xmp:Label) stay Lightroom/Bridge-compatible; the
 // Chromasmith-specific bits (edited flag, base64 edit recipe) live in their own namespace
@@ -652,6 +665,13 @@ pub fn get_sidecar(path: String) -> Sidecar {
         active: if active < versions.len() { active } else { 0 },
         versions,
     }
+}
+
+// See get_meta_batch's comment — same one-round-trip rationale, used by openFolder's initial
+// sidecar pass (the one it awaits before first paint).
+#[tauri::command]
+pub fn get_sidecar_batch(paths: Vec<String>) -> Vec<Sidecar> {
+    paths.into_par_iter().map(get_sidecar).collect()
 }
 
 /// Reads the sidecar, mutates it, writes it back — the shared spine for every version command, so
@@ -1038,15 +1058,22 @@ fn phash_for_path(path: &str) -> Result<u64, String> {
 /// to fail the whole batch over one bad file). Hash is serialized as a 16-char lowercase hex
 /// STRING, not a JSON number — a raw u64 can exceed JS's 2^53 safe-integer range and silently
 /// lose precision through the Tauri IPC JSON bridge, corrupting Hamming-distance clustering.
+// Parallelized with rayon: each path's hash is either read from its own on-disk cache file or
+// requires a full decode (get_thumbnail_inner) on a cold cache — the same per-file, no-shared-
+// state work get_thumbnail already runs concurrently from the frontend's 6-wide thumbnail pool.
+// A cold folder's worth of these run one-at-a-time before this change; on an N-core machine this
+// is roughly an N× wall-clock cut for the cold-cache case (the common one on first folder open).
 #[tauri::command]
 pub fn phash_batch(paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
-    let mut out = Vec::with_capacity(paths.len());
-    for path in paths {
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| phash_for_path(&path))) {
-            Ok(Ok(h)) => out.push((path, format!("{h:016x}"))),
-            _ => {}
-        }
-    }
+    let out: Vec<(String, String)> = paths
+        .into_par_iter()
+        .filter_map(|path| {
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| phash_for_path(&path))) {
+                Ok(Ok(h)) => Some((path, format!("{h:016x}"))),
+                _ => None,
+            }
+        })
+        .collect();
     Ok(out)
 }
 

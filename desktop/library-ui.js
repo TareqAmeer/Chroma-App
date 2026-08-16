@@ -47,6 +47,7 @@
       case 'get_thumbnail': return Promise.resolve(png.buffer);
       case 'read_file_bytes': return Promise.resolve(png.buffer);
       case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive });
+      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map(() => ({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive })));
       case 'sidecar_add_version': {
         if (!ltVersions.length) ltVersions.push({ name: 'Original', recipe: 'R0' });
         ltVersions.push({ name: A.name || 'Copy ' + ltVersions.length, recipe: 'R' + ltVersions.length });
@@ -61,6 +62,7 @@
       }
       case 'set_sidecar': return Promise.resolve();
       case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
+      case 'get_meta_batch': return Promise.resolve((A.paths || []).map(() => ({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' })));
       case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
       case 'album_list': return Promise.resolve(ltAlbums);
       case 'album_create': {
@@ -1801,6 +1803,34 @@
     state.meta.set(path, m);
     return m;
   }
+  // Batched IPC: openFolder used to fire one get_sidecar/get_meta invoke() PER FILE via
+  // Promise.all — N Tauri IPC round trips just to open a folder, regardless of how cheap any
+  // single call is. get_sidecar_batch/get_meta_batch (library.rs) take the whole path list in
+  // one call and run the per-file work in parallel on the Rust side. Falls back to the original
+  // per-path path (still cached individually) if the batch command itself fails, so one bad
+  // call can't lose the whole folder.
+  async function getSidecarsBatch(paths) {
+    const need = paths.filter((p) => !state.sidecars.has(p));
+    if (!need.length) return;
+    try {
+      const scs = await invoke('get_sidecar_batch', { paths: need });
+      need.forEach((p, i) => state.sidecars.set(p, scs[i] || { rating: 0, label: '', edited: false, recipe: '' }));
+    } catch (e) {
+      console.warn('get_sidecar_batch failed, falling back to per-file', e);
+      await Promise.all(need.map((p) => getSidecar(p)));
+    }
+  }
+  async function getMetaBatch(paths) {
+    const need = paths.filter((p) => !state.meta.has(p));
+    if (!need.length) return;
+    try {
+      const ms = await invoke('get_meta_batch', { paths: need });
+      need.forEach((p, i) => state.meta.set(p, ms[i] || { camera: null, lens: null, date: null, iso: null }));
+    } catch (e) {
+      console.warn('get_meta_batch failed, falling back to per-file', e);
+      await Promise.all(need.map((p) => getMeta(p).catch(() => ({}))));
+    }
+  }
 
   // ── C2: duplicate detection (perceptual-hash clustering) ─────────────────────────────
   // 64-bit dHashes come back as 16-char hex strings (see phash_batch's Rust doc comment — a
@@ -1957,7 +1987,7 @@
     // "Loading…" until the last file finished — a big folder took tens of seconds before
     // showing anything. Render immediately instead and let meta land in the background, then
     // refresh filters + grid once so sort-by-ISO/camera-filter pick it up.
-    await Promise.all(state.entries.map((e) => getSidecar(e.path)));
+    await getSidecarsBatch(state.entries.map((e) => e.path));
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     state.dupeClusters.clear(); state.dupeClusterSizes.clear();
     await renderGrid();
@@ -1969,7 +1999,7 @@
     runDupeDetection(state.entries.map((e) => e.path), openToken);
     loadSyncedForFolder(state.entries, openToken);
     markFolderSyncedIfGphotosDownloads(path, state.entries);
-    Promise.all(state.entries.map((e) => getMeta(e.path).catch(() => ({})))).then(() => {
+    getMetaBatch(state.entries.map((e) => e.path)).then(() => {
       // source check: without it, opening a folder then clicking a Lightroom album while this
       // background meta pass was still running clobbered the cloud grid seconds later.
       if (state._openToken !== openToken || state.currentFolder !== path || state.source !== 'folder') return; // user moved on
@@ -3611,7 +3641,10 @@
     try { entries = await invoke('list_collection', { name }); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this collection.</div>'; return; }
     state.entries = entries;
-    await Promise.all(entries.filter((e) => !e.missing).map((e) => Promise.all([getSidecar(e.path), getMeta(e.path)])));
+    {
+      const paths = entries.filter((e) => !e.missing).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
     await renderGrid();
     renderCollections(); // re-highlight the active row
   }
@@ -3624,7 +3657,10 @@
     try { entries = await invoke('list_exported'); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load exported photos.</div>'; return; }
     state.entries = entries;
-    await Promise.all(entries.filter((e) => !e.missing).map((e) => Promise.all([getSidecar(e.path), getMeta(e.path)])));
+    {
+      const paths = entries.filter((e) => !e.missing).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
     await renderGrid();
     renderCollections();
   // Albums load once at startup, then only after a mutation — the list is small and lives in one
@@ -4193,7 +4229,10 @@
     try { entries = await invoke('list_album', { id }); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this album.</div>'; return; }
     state.entries = entries;
-    await Promise.all(entries.filter((e) => !e.missing).map((e) => Promise.all([getSidecar(e.path), getMeta(e.path)])));
+    {
+      const paths = entries.filter((e) => !e.missing).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
     await renderGrid();
     renderCollections();
     const missing = entries.filter((e) => e.missing).length;
