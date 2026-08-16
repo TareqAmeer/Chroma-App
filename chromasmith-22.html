@@ -4057,7 +4057,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16b';
+const BUILD='2026-08-16c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -6302,8 +6302,8 @@ async function fxToggleHistoryPopover(){
       row.onmouseleave=()=>row.style.background='';
       const d=new Date(entry.ts*1000);
       row.innerHTML=`<span>v${entry.version}</span><span style="color:var(--mut)">${d.toLocaleDateString()} ${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
-      row.onclick=()=>{
-        try{const snap=JSON.parse(decodeURIComponent(escape(atob(entry.recipe))));applyUISnapshot(snap);fxUpdate();log(`Restored v${entry.version} recipe`,'info');}
+      row.onclick=async()=>{
+        try{const snap=JSON.parse(decodeURIComponent(escape(atob(entry.recipe))));await applyUISnapshot(snap);fxUpdate();log(`Restored v${entry.version} recipe`,'info');}
         catch(e){log('Failed to restore that version: '+(e&&e.message||e),'err');}
         pop.style.display='none';
       };
@@ -11814,6 +11814,10 @@ window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
     onConfirm(merged);
   };
 };
+// Returns the in-flight LUT-load promise (or undefined if the LUT selector didn't change) so
+// callers that need the restore to be VISUALLY complete (undo/redo/reset/timeline) can await
+// it. Stays otherwise synchronous start-to-finish — renderSnapshotTo's split-compare path
+// depends on that (see its own comment) and must not be made to await anything here.
 function applyUISnapshot(s){
   // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
   // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
@@ -11831,7 +11835,8 @@ function applyUISnapshot(s){
   }
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
-  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
+  let _lutPromise;
+  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')_lutPromise=selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
@@ -11874,6 +11879,7 @@ function applyUISnapshot(s){
   // without firing their input events, so the modified-from-default dots have to be refreshed here
   // rather than only on user interaction.
   if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
+  return _lutPromise;
 }
 // History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by
 // brush masks carrying full w*h pixel arrays in the snapshot: (1) the dedup check used to
@@ -11962,10 +11968,14 @@ function fxHistoryPush(){
 // Restores one history entry. applyUISnapshot rebuilds the mask objects from the raster-less
 // JSON, so the shared rasters have to be re-attached afterwards — and re-frozen, because the
 // entry still points at them.
-function _fxHistoryRestore(i){
+async function _fxHistoryRestore(i){
   const e=fxHistory[i];if(!e)return;
   _fxHistLocked=true;
-  applyUISnapshot(JSON.parse(e.j));
+  // Awaited: applyUISnapshot's LUT restore (selectLUT) loads bytes asynchronously (inline →
+  // IndexedDB → fetch). Firing it and moving on used to let fxUpdate()/renderPreview() below
+  // paint BEFORE the LUT swap landed, so a reset/undo/redo that changed the LUT stuck on the
+  // stale frame until something else (e.g. switching photos) forced a later re-render.
+  await applyUISnapshot(JSON.parse(e.j));
   fxState.masks.forEach((m,k)=>{
     const p=e.rasters[k];
     if(p){m.px=p;m._pxFrozen=true;}
@@ -11975,15 +11985,15 @@ function _fxHistoryRestore(i){
   fxUpdate();
   _fxHistLocked=false;
 }
-function fxUndo(){
+async function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}
-  fxHistIdx--;_fxHistoryRestore(fxHistIdx);
+  fxHistIdx--;await _fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Undo','info');
 }
-function fxRedo(){
+async function fxRedo(){
   if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
-  fxHistIdx++;_fxHistoryRestore(fxHistIdx);
+  fxHistIdx++;await _fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Redo','info');
 }
@@ -11991,7 +12001,7 @@ async function fxResetAll(){
   if(!fxHistory.length)return;
   if(!await confirmModal('Reset all edits on this photo? This cannot be undone.','Reset all'))return;
   if(typeof hapt==='function')hapt();
-  _fxHistoryRestore(0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
+  await _fxHistoryRestore(0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
   if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
   fxHistoryPush();
   fxUpdate();
@@ -12104,10 +12114,10 @@ document.addEventListener('click',e=>{
   if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-split-menu')wrap.style.display='none';
 });
 // ── B2: in-session edit-history timeline (separate from the export-version popover above) ─────
-function fxTimelineScrub(idx){
+async function fxTimelineScrub(idx){
   idx=Math.max(0,Math.min(fxHistory.length-1,idx|0));
   fxHistIdx=idx;
-  _fxHistoryRestore(idx);   // shared rasters must be re-attached — see fxHistoryPush
+  await _fxHistoryRestore(idx);   // shared rasters must be re-attached — see fxHistoryPush
 }
 function fxToggleTimelinePopover(){
   const pop=document.getElementById('fx-timeline-popover');
@@ -12605,9 +12615,9 @@ async function styleSaveCurrent(){
   stylesSave(list);styleListRefresh();
   toast(`Style "${name}" saved`,true);
 }
-function styleApply(name){
+async function styleApply(name){
   const s=stylesList().find(x=>x.name===name);if(!s)return;
-  try{applyUISnapshot(JSON.parse(JSON.stringify(s.recipe)));fxUpdate();log(`Style applied: ${name}`,'ok');}
+  try{await applyUISnapshot(JSON.parse(JSON.stringify(s.recipe)));fxUpdate();log(`Style applied: ${name}`,'ok');}
   catch(e){log('Could not apply style: '+e.message,'err');}
 }
 async function styleDelete(name){

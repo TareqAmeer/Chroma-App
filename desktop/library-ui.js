@@ -14,6 +14,16 @@
   let ltAlbums = [];
   if (!window.__TAURI__ && !LIBTEST) return;
   const invoke = LIBTEST ? libtestInvoke : window.__TAURI__.core.invoke;
+  // A Rust command's Result::Err reaches here as a bare String (sometimes a plain sentence like
+  // "no such album", sometimes an internal detail like an os-error from a failed write) — either
+  // way it was landing in a toast completely unframed, with no verb telling the user what had
+  // been ATTEMPTED. `what` says the attempted action; the raw reason still appears, so nothing
+  // about a real failure is hidden, but the first thing read is now "Couldn't rename the album",
+  // not the bare word an internal Result happened to carry.
+  function humanizeErr(what, err) {
+    const raw = String((err && err.message) || err || '').trim();
+    return `Couldn't ${what}${raw ? ` — ${raw}` : ''}`;
+  }
   // Virtual-copy state for the harness, so the version rows in the context menu are reachable
   // without a real sidecar on disk.
   let ltVersions = [], ltActive = 0;
@@ -144,7 +154,7 @@
   function friendlyRawError(msg) {
     const s = String(msg == null ? '' : (msg.message || msg));
     if (/^no decoder: /.test(s)) return 'No decoder available for this file type';
-    if (/LUT 'dcp:[^']*' not registered/.test(s)) return 'Camera colour profile not found';
+    if (/LUT 'dcp:[^']*' not registered/.test(s)) return 'Camera color profile not found';
     if (/framed body truncated/i.test(s)) return 'RAW file appears truncated or corrupted';
     if (/RangeError: Offset is outside the bounds of the DataView/i.test(s)) return 'Corrupt or truncated file data';
     if (/TypeError: Failed to fetch/i.test(s)) return 'Network error — couldn\'t load required file';
@@ -392,30 +402,10 @@
     #lib-viewbar .lib-seg button{background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer}
     #lib-viewbar .lib-seg button.on{background:var(--acc);color:#000}
     #lib-viewbar .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
-    /* Colour-label dots: small, only fully visible on hover or when set, so a grid of unlabelled
-       photos does not read as a grid of grey pips. The active one keeps its colour always. */
-    .lib-lbls{display:inline-flex;gap:1px;margin-left:6px;vertical-align:middle}
-    /* ⚠️ The DOT is 9px but the clickable box is 19px: padding plus background-clip:content-box
-       keeps the visual small (five of these sit in a thumbnail's flag strip) while giving the
-       pointer something it can actually hit. Sizing the element itself to 9px would be a target
-       under half the 18px floor the FX panels are held to — and the Library is not covered by
-       test/ui_audit.mjs, so nothing would have flagged it. */
-    .lib-lbl{width:9px;height:9px;padding:5px;background:var(--lbl);background-clip:content-box;
-      border-radius:50%;opacity:.18;cursor:pointer;transition:opacity .12s,transform .12s;
-      box-sizing:content-box}
-    .lib-card:hover .lib-lbl{opacity:.5}
-    .lib-lbl:hover{opacity:1}
-    .lib-lbl.on{opacity:1}
-    /* The active dot needs a ring drawn on the DOT, not the padded box — a box-shadow on the
-       element would trace the 19px hit area and read as a huge halo. */
-    .lib-lbl.on{background-image:radial-gradient(circle at center,transparent 55%,rgba(255,255,255,.75) 56%,rgba(255,255,255,.75) 72%,transparent 73%)}
-    /* A labelled card carries its colour on the frame — visible at any thumbnail size, unlike a
-       9px dot, which is the point of colour labels when culling a wall of photos. */
+    /* Reject/Pick still ride the sidecar's "label" field ("Red"/"Green") and get a frame
+       highlight on the thumbnail — this is the reject/pick indicator, not a colour-label system. */
     .lib-card.lbl-red .lib-thumb-wrap{box-shadow:0 0 0 2px #e05252}
-    .lib-card.lbl-yellow .lib-thumb-wrap{box-shadow:0 0 0 2px #e0c04a}
     .lib-card.lbl-green .lib-thumb-wrap{box-shadow:0 0 0 2px #5cb85c}
-    .lib-card.lbl-blue .lib-thumb-wrap{box-shadow:0 0 0 2px #4a90d9}
-    .lib-card.lbl-purple .lib-thumb-wrap{box-shadow:0 0 0 2px #9b6dd0}
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
     #lib-grid.lib-dragover{outline:2px dashed var(--acc2);outline-offset:-6px;border-radius:8px}
     .lib-coll-row.lib-coll-dragover{outline:2px dashed var(--acc2);outline-offset:-2px;background:var(--sur2)}
@@ -684,12 +674,6 @@
             <option value="all">All tags</option>
             <option value="red">Rejected (X)</option>
             <option value="green">Picked (flag)</option>
-            <option value="labelled">Any colour label</option>
-            <option value="lbl:Red">Label · Red</option>
-            <option value="lbl:Yellow">Label · Yellow</option>
-            <option value="lbl:Green">Label · Green</option>
-            <option value="lbl:Blue">Label · Blue</option>
-            <option value="lbl:Purple">Label · Purple</option>
             <option value="edited">Edited</option>
             <option value="noedited">Not edited</option>
             <option value="favorite">Favorites</option>
@@ -1210,7 +1194,22 @@
               if (card && m.w && m.h) card.dataset.dims = m.w + 'x' + m.h;
             }
           })
-        : invoke('get_thumbnail', { path: job.path })
+        // Tier 1 (get_thumbnail_fast): pulls the camera's own embedded JPEG preview straight out
+        // of the EXIF thumbnail IFD — no full-image decode, so it paints almost instantly. Falls
+        // back to Err for RAWs and anything without an embedded preview, or if the read fails for
+        // any reason; either way we fall through to the real tier-2 decode below, which also
+        // replaces whatever tier-1 painted so the final thumbnail is always the accurate one.
+        : invoke('get_thumbnail_fast', { path: job.path })
+          .catch(() => null)
+          .then((fastBuf) => {
+            if (fastBuf && job.imgEl.isConnected) {
+              const fastUrl = URL.createObjectURL(new Blob([fastBuf], { type: 'image/jpeg' }));
+              job.imgEl.src = fastUrl;
+              job.imgEl.classList.add('loaded');
+              _thumbUrlsThisGen.push(fastUrl);
+            }
+            return invoke('get_thumbnail', { path: job.path });
+          })
           .then((buf) => {
             if (job.imgEl.isConnected) {
               const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
@@ -1343,32 +1342,12 @@
   function libSkeletonHtml(n = 24) {
     return Array.from({ length: n }, () => '<div class="lib-card lib-skel"><div class="lib-thumb-wrap"></div></div>').join('');
   }
-  // Lightroom's five colour labels. Red and Green already existed as reject/pick and keep their
-  // flag glyphs and X/P shortcuts — the other three are additive, so an existing sidecar that
-  // says "Red" still means exactly what it did. The Rust side stores `label` as a free-form
-  // String, so nothing there had to change to support them.
-  //
-  // ⚠️ Numeric shortcuts follow Lightroom (6=Red, 7=Yellow, 8=Green, 9=Blue) rather than
-  // inventing a scheme, and Purple takes 0 — Lightroom leaves it unbound, but an unreachable
-  // label is a label nobody uses.
-  const LIB_LABELS = [
-    { name: 'Red',    key: '6', css: '#e05252' },
-    { name: 'Yellow', key: '7', css: '#e0c04a' },
-    { name: 'Green',  key: '8', css: '#5cb85c' },
-    { name: 'Blue',   key: '9', css: '#4a90d9' },
-    { name: 'Purple', key: '0', css: '#9b6dd0' },
-  ];
-  const LIB_LABEL_BY_KEY = new Map(LIB_LABELS.map((l) => [l.key, l.name]));
-  const LIB_LABEL_CSS = new Map(LIB_LABELS.map((l) => [l.name, l.css]));
-  function labelDotsHtml(label) {
-    return LIB_LABELS.map((l) => `<span class="lib-lbl${label === l.name ? ' on' : ''}" data-label="${l.name}" `
-      + `style="--lbl:${l.css}" title="${l.name} (${l.key})"></span>`).join('');
-  }
+  // Reject/Pick/Favorite only — colour labels (Red/Yellow/Green/Blue/Purple dots) were removed.
+  // Reject/Pick still ride the sidecar's free-form `label` string ("Red"/"Green"), unchanged.
   function flagsHtml(label, favorite) {
     return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Reject (X)">${FLAG_SVG_RED}</span>` +
            `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Pick (flag)">${FLAG_SVG_GREEN}</span>` +
-           `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>` +
-           `<span class="lib-lbls">${labelDotsHtml(label)}</span>`;
+           `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>`;
   }
 
   /// Five stars, filled to `n`. Click sets that rating; clicking the current rating clears it,
@@ -2064,8 +2043,6 @@
     }
     if (state.tagFilter === 'red' && sc.label !== 'Red') return false;
     if (state.tagFilter === 'green' && sc.label !== 'Green') return false;
-    if (state.tagFilter === 'labelled' && !sc.label) return false;
-    if (state.tagFilter.startsWith('lbl:') && sc.label !== state.tagFilter.slice(4)) return false;
     if (state.tagFilter === 'edited' && !sc.edited) return false;
     if (state.tagFilter === 'noedited' && sc.edited) return false;
     if (state.tagFilter === 'favorite' && !sc.favorite) return false;
@@ -2090,10 +2067,7 @@
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
       .catch((e) => sidecarWriteFailed(path, cur, e));
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) {
-      card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite);
-      LIB_LABELS.forEach((l) => card.classList.toggle('lbl-' + l.name.toLowerCase(), label === l.name));
-    }
+    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite);
     if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
   }
   // Mirrors setLabel() above but for the favorite heart — same optimistic-update +
@@ -2442,12 +2416,16 @@
       setExportScope(n > 1 ? 'all' : 'current');
       await exportFX();
     });
-    const resetItem = item('Reset edit', () => {
+    const resetItem = item('Reset edit', async () => {
       // Irreversible (no undo history survives closing the photo) — confirm, matching the
       // in-editor "Reset all" (fxResetAll) which already does. This context-menu path could
       // silently wipe edits on several selected photos at once with a single misclick.
+      // confirmModal, never window.confirm — see its own comment in chromasmith-22.html: an
+      // unimplemented WKUIDelegate confirm panel makes window.confirm() return false with NO
+      // dialog shown, so this ALWAYS took the early return in the packaged desktop app — "Reset
+      // edit" from the Library context menu silently did nothing, every time.
       const label = n > 1 ? `${n} photos` : 'this photo';
-      if (!window.confirm(`Reset edit${n > 1 ? 's' : ''} on ${label}? This cannot be undone.`)) return;
+      if (!await window.confirmModal(`Reset edit${n > 1 ? 's' : ''} on ${label}? This cannot be undone.`, 'Reset')) return;
       return Promise.all(paths.map(async (p) => {
       const cur = await getSidecar(p);
       const updated = { ...cur, edited: false, recipe: '' };
@@ -2468,7 +2446,7 @@
       const vcPath = paths[0];
       const vsc = state.sidecars.get(vcPath) || {};
       const vers = vsc.versions || [];
-      item(vers.length ? `New virtual copy (${vers.length} versions)` : 'New virtual copy', async () => {
+      item(vers.length ? `New virtual copy… (${vers.length} versions)` : 'New virtual copy…', async () => {
         // askTextModal (a global from chromasmith-22.html), never window.prompt: prompt() is a
         // silent no-op under the Tauri/WKWebView shell — and this file ONLY runs there, so the
         // row appeared to do nothing at all. Fall back to prompt() only if the host page somehow
@@ -2499,7 +2477,8 @@
         });
         row.oncontextmenu = async (ev) => {
           ev.preventDefault(); ev.stopPropagation();
-          if (!window.confirm(`Delete version "${v.name}"? This cannot be undone.`)) return;
+          // confirmModal, never window.confirm — see the "Reset edit" comment above.
+          if (!await window.confirmModal(`Delete version "${v.name}"? This cannot be undone.`, 'Delete')) return;
           try {
             const sc = await invoke('sidecar_delete_version', { path: vcPath, index: i });
             state.sidecars.set(vcPath, sc);
@@ -2543,9 +2522,15 @@
       for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
       if (state.currentFolder) await openFolder(state.currentFolder);
     });
-    item(`🗑️ Delete ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
+    // Was prefixed with a 🗑️ emoji — every other row in this same menu (Reject, Pick, Edit,
+    // Duplicate) is plain text, and CLAUDE.md §3b is explicit: no emoji in desktop chrome, they
+    // render per-platform and never match this menu's own stroke-icon language.
+    item(`Delete ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
       const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
-      if (!window.confirm(`Move ${label} to the Trash?`)) return;
+      // confirmModal, never window.confirm — see the "Reset edit" comment above. This one is the
+      // sharpest case: it silently returning false meant "Move to Trash" from the Library
+      // context menu did not just fail to ask — it never moved a single photo, ever.
+      if (!await window.confirmModal(`Move ${label} to the Trash?`, 'Move to Trash')) return;
       for (const p of paths) {
         try { await invoke('trash_file', { path: p }); state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p); }
         catch (e) { console.error('trash_file', p, e); toast('Could not delete ' + baseName(p)); }
@@ -2680,7 +2665,8 @@
           <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
           <div class="lib-col">${sc.edited ? 'Yes' : ''}</div>`;
       } else {
-        const stripFlag = sc.label ? `<span class="lib-strip-flag" style="background:${LIB_LABEL_CSS.get(sc.label) || '#888'}"></span>` : '';
+        const stripFlag = sc.label === 'Red' ? `<span class="lib-strip-flag" style="background:#e05252"></span>`
+          : sc.label === 'Green' ? `<span class="lib-strip-flag" style="background:#5cb85c"></span>` : '';
         const escName = String(entry.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
         const stripInfo = `<div class="lib-strip-info"><span class="lib-strip-name">${escName}</span>${stripFlag}</div>`;
         card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}
@@ -2728,14 +2714,6 @@
         e.dataTransfer.setData('application/x-chromasmith-paths', JSON.stringify(paths));
         e.dataTransfer.effectAllowed = 'copy';
       };
-      card.querySelectorAll('.lib-lbl').forEach((dot) => {
-        dot.onclick = (e) => {
-          e.stopPropagation();
-          const want = dot.dataset.label;
-          const cur = state.sidecars.get(entry.path) || { label: '' };
-          setLabel(entry.path, cur.label === want ? '' : want); // click the active dot to clear
-        };
-      });
       card.querySelectorAll('.lib-flag').forEach((flag) => {
         flag.onclick = (e) => {
           e.stopPropagation();
@@ -2820,20 +2798,20 @@
     const paths = () => Array.from(state.selected);
     bar.innerHTML = `<span style="font-size:11px;color:var(--mut)">${n} selected</span>`
       + `<span style="width:1px;height:16px;background:var(--bdr)"></span>`
-      + LIB_LABELS.map((l) => `<span class="lib-lbl" data-batch="${l.name}" style="--lbl:${l.css};opacity:.6" title="Label ${l.name}"></span>`).join('')
-      + `<button class="lib-btn" data-act="clear-label">No label</button>`
+      + `<button class="lib-btn" data-act="reject">Reject</button>`
+      + `<button class="lib-btn" data-act="pick">Pick</button>`
+      + `<button class="lib-btn" data-act="clear-label">Clear flag</button>`
       + `<button class="lib-btn" data-act="fav">Favorite</button>`
       + `<button class="lib-btn" data-act="deselect">Deselect</button>`;
-    bar.querySelectorAll('.lib-lbl[data-batch]').forEach((d) => {
-      d.onclick = () => { paths().forEach((p) => setLabel(p, d.dataset.batch)); };
-    });
+    bar.querySelector('[data-act="reject"]').onclick = () => paths().forEach((p) => setLabel(p, 'Red'));
+    bar.querySelector('[data-act="pick"]').onclick = () => paths().forEach((p) => setLabel(p, 'Green'));
     bar.querySelector('[data-act="clear-label"]').onclick = () => paths().forEach((p) => setLabel(p, ''));
     bar.querySelector('[data-act="fav"]').onclick = () => paths().forEach((p) => setFavorite(p, true));
     bar.querySelector('[data-act="deselect"]').onclick = () => { state.selected.clear(); renderGrid(); };
   }
 
   /// A real status bar rather than two loose spans: what the current filter is actually showing,
-  /// how it breaks down by colour label, and what the selection weighs. The label tallies are
+  /// how it breaks down by Reject/Pick/Favorite, and what the selection weighs. The tallies are
   /// the point — when culling, "how many did I flag" is the question the grid cannot answer at a
   /// glance once a folder is bigger than a screen.
   function renderStatusBar(shown) {
@@ -2841,17 +2819,21 @@
     const sizeEl = document.getElementById('lib-status-size');
     const selEl = document.getElementById('lib-status-sel');
     if (!lblEl) return;
-    const counts = new Map();
-    let bytes = 0;
+    let rejected = 0, picked = 0, favorited = 0, bytes = 0;
     for (const e of shown) {
       bytes += e.size || 0;
-      const l = (state.sidecars.get(e.path) || {}).label;
-      if (l) counts.set(l, (counts.get(l) || 0) + 1);
+      const sc = state.sidecars.get(e.path);
+      if (!sc) continue;
+      if (sc.label === 'Red') rejected++;
+      else if (sc.label === 'Green') picked++;
+      if (sc.favorite) favorited++;
     }
-    lblEl.innerHTML = LIB_LABELS.filter((l) => counts.get(l.name))
-      .map((l) => `<span style="display:inline-flex;align-items:center;gap:3px">`
-        + `<span style="width:8px;height:8px;border-radius:50%;background:${l.css};display:inline-block"></span>`
-        + `${counts.get(l.name)}</span>`).join('');
+    const dot = (css) => `<span style="width:8px;height:8px;border-radius:50%;background:${css};display:inline-block"></span>`;
+    lblEl.innerHTML = [
+      rejected ? `<span style="display:inline-flex;align-items:center;gap:3px">${dot('#e05252')}${rejected}</span>` : '',
+      picked ? `<span style="display:inline-flex;align-items:center;gap:3px">${dot('#5cb85c')}${picked}</span>` : '',
+      favorited ? `<span style="display:inline-flex;align-items:center;gap:3px">${dot('#e0c04a')}${favorited}</span>` : '',
+    ].filter(Boolean).join('');
     const fmt = (b) => b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b > 1e6 ? Math.round(b / 1e6) + ' MB' : Math.round(b / 1e3) + ' KB';
     sizeEl.textContent = shown.length ? fmt(bytes) : '';
     if (state.selected.size) {
@@ -2962,7 +2944,7 @@
       </div>`;
     host.innerHTML = `
       <div id="lib-compare-bar">
-        <span>Compare — ←/→ cycles the right pane · ⏎ promotes it · X/P/U and colour keys flag · Tab swaps pane · Esc exits</span>
+        <span>Compare — ←/→ cycles the right pane · ⏎ promotes it · X/P/U and color keys flag · Tab swaps pane · Esc exits</span>
       </div>
       <div id="lib-compare-panes">${paneHtml('A')}${paneHtml('B')}</div>`;
     host.querySelectorAll('.lib-cmp-photo-sel').forEach((sel) => {
@@ -3361,13 +3343,6 @@
       if (e.key === 'x' || e.key === 'X') { e.preventDefault(); compareApplyLabel(target, 'Red'); return; }
       if (e.key === 'p' || e.key === 'P') { e.preventDefault(); compareApplyLabel(target, 'Green'); return; }
       if (e.key === 'u' || e.key === 'U') { e.preventDefault(); compareApplyLabel(target, ''); return; }
-      if (LIB_LABEL_BY_KEY.has(e.key)) {
-        e.preventDefault();
-        const want = LIB_LABEL_BY_KEY.get(e.key);
-        const cur = (state.sidecars.get(target) || {}).label || '';
-        compareApplyLabel(target, cur === want ? '' : want);   // same toggle-off as the grid
-        return;
-      }
       // Tab swaps which pane the above applies to — without it, B's rating is reachable and A's
       // is not, which is exactly the asymmetry this item was filed about.
       if (e.key === 'Tab') { e.preventDefault(); compareState.focus = compareState.focus === 'A' ? 'B' : 'A'; compareSyncFocus(); return; }
@@ -3421,17 +3396,6 @@
     }
     if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
     if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
-    if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
-    if (LIB_LABEL_BY_KEY.has(e.key)) {
-      const want = LIB_LABEL_BY_KEY.get(e.key);
-      // Pressing the key a photo already carries clears it, matching how the dots behave and how
-      // Lightroom toggles — otherwise there is no keyboard route back to "no label".
-      kbTargets().forEach((p) => {
-        const cur = (state.sidecars.get(p) || { label: '' }).label;
-        setLabel(p, cur === want ? '' : want);
-      });
-      return;
-    }
     if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
@@ -4187,7 +4151,7 @@
       const name = await window.askTextModal('Album name', '', '');
       if (!name) return;
       try { await invoke('album_create', { name }); await refreshAlbums(); toast(`Album "${name}" created`, true); }
-      catch (err) { toast(String(err), false); }
+      catch (err) { toast(humanizeErr('create the album', err), 'err'); }
     };
     host.querySelectorAll('.lib-coll-row[data-album]').forEach((row) => {
       const id = row.dataset.album;
@@ -4208,7 +4172,7 @@
         let paths = [];
         try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch { /* ignore */ }
         if (!paths.length) return;
-        const added = await invoke('album_add', { id, paths }).catch((err) => { toast(String(err), false); return 0; });
+        const added = await invoke('album_add', { id, paths }).catch((err) => { toast(humanizeErr('add to the album', err), 'err'); return 0; });
         await refreshAlbums();
         // Says what actually happened: re-dragging photos already in an album is a common gesture
         // and reporting "3 added" when nothing changed would be a lie.
@@ -4243,13 +4207,14 @@
         const name = await window.askTextModal('Rename album', '', a.name);
         if (!name) return;
         try { await invoke('album_rename', { id, name }); await refreshAlbums(); }
-        catch (err) { toast(String(err), false); }
+        catch (err) { toast(humanizeErr('rename the album', err), 'err'); }
       }],
       [`Delete "${a.name}"`, async () => {
         // Deliberately blunt about what is and isn't destroyed — the whole point of an album is
         // that throwing it away is safe, and the user should know that before confirming.
-        if (!confirm(`Delete the album "${a.name}"?\n\nThe ${a.paths.length} photo${a.paths.length === 1 ? '' : 's'} in it stay exactly where they are on disk — only the list is removed.`)) return;
-        await invoke('album_delete', { id }).catch((err) => toast(String(err), false));
+        // confirmModal, never window.confirm — see the "Reset edit" comment above.
+        if (!await window.confirmModal(`Delete the album "${a.name}"?\n\nThe ${a.paths.length} photo${a.paths.length === 1 ? '' : 's'} in it stay exactly where they are on disk — only the list is removed.`, 'Delete')) return;
+        await invoke('album_delete', { id }).catch((err) => toast(humanizeErr('delete the album', err), 'err'));
         if (state.source === 'album:' + id) { state.source = 'folder'; state.entries = []; renderGrid(); }
         await refreshAlbums();
       }],
@@ -4418,6 +4383,15 @@
   window.chromasmithToggleLibrary = toggleLibrary; // called from the header button in desktop-native.js
 
   window.__TAURI__.event.listen('menu-library', toggleLibrary);
+  // File > Open Recent (main.rs) — surfaces the SAME recents dropdown the header's own Recent
+  // button (#lib-recent) already builds from getRecentFolders(), rather than keeping a second,
+  // Rust-side mirror of that list in sync. toggleRecentMenu positions itself off #lib-recent's
+  // own bounding rect, which is only meaningful once the Library panel is actually open — so
+  // open it first (a no-op if it already is) before showing the popover.
+  window.__TAURI__.event.listen('menu-open-recent', async () => {
+    if (!state.open) await toggleLibrary();
+    toggleRecentMenu({ stopPropagation() {} });
+  });
 
   // Card detection. macOS emits no mount notification that reaches a Tauri webview, so this
   // polls /Volumes — cheap (one readdir plus a statfs per volume) and only while the Library is
