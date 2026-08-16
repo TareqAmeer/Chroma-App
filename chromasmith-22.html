@@ -769,7 +769,7 @@ body.deskx .fx-zoom-ctrl{position:static;background:transparent;border:none;padd
 body.deskx .fx-zoom-ctrl button:not(.flag-btn){height:28px;min-width:28px;font-size:var(--fs-1);font-weight:500;padding:0 9px;white-space:nowrap;flex:0 0 auto}
 body.deskx .fx-zoom-ctrl .flag-btn{width:32px;height:32px;min-width:32px;padding:0}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
-body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:66px;align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
+body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:calc(var(--deskbar-h, 58px) + 16px);align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
 .fx-rail-btn{display:flex;align-items:center;gap:10px;width:120px;background:none;border:none;border-radius:var(--r-sm);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:9px 10px;text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
 .fx-rail-btn:hover{background:var(--sur2);color:var(--txt)}
 .fx-rail-btn.on{background:rgba(212,144,58,.12);color:var(--acc)}
@@ -862,7 +862,7 @@ body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;columns:i
   overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
   background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03),-6px 0 16px -8px rgba(0,0,0,.4)}
 body.deskx #fx-toolrail{grid-column:4;order:3;position:static;top:auto;align-self:stretch;width:72px;box-sizing:border-box;
-  border:none;border-left:1px solid var(--bdr);border-radius:0;padding:4px 4px;overflow-y:auto;overflow-x:hidden;
+  border:none;border-left:1px solid var(--bdr);border-radius:0;padding:10px 4px 4px;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:2px;background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03)}
 /* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only.
    Widened 64 -> 72px so the label can sit at 10px instead of 9px (the smallest text anywhere in
@@ -4071,7 +4071,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16i';
+const BUILD='2026-08-16j';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -9161,6 +9161,19 @@ function appHSync(){
   if(document.body.classList.contains('mobile-fx')&&(window.scrollX||window.scrollY))window.scrollTo(0,0);
   if(typeof diagLayout==='function')diagLayout();
 }
+// #fx-toolrail's sticky offset (body.fx-deskb #fx-toolrail{top:...}) has to clear #fx-deskbar,
+// which is ALSO sticky and sits on top of it (z-index 20 vs the rail's auto). A hardcoded px
+// guess drifts stale the moment the deskbar wraps to two rows (narrow window) or its content
+// grows, and when it's short by even a few px the deskbar paints over the rail's top button —
+// exactly the "Looks button hidden under Export" symptom. Measure the real height instead.
+(function(){
+  const bar=document.getElementById('fx-deskbar');
+  if(!bar)return;
+  const sync=()=>{if(bar.offsetHeight)document.documentElement.style.setProperty('--deskbar-h',bar.offsetHeight+'px');};
+  new ResizeObserver(sync).observe(bar);
+  window.addEventListener('resize',sync);
+  sync();
+})();
 // Log one measurement line (visible in More→Log) so on-device layout bugs are diagnosed from
 // data instead of screenshots: every number that decides whether the layout fits, + verdict.
 let _diagLast='';
