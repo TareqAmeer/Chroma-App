@@ -1244,9 +1244,9 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Basic Adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
         </div>
         <div class="fx-fields ff-off" id="ff-adjust">
+          <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
           <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
           <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
-          <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
           <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
           <div class="fx-row"><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-hi" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hi">0</div></div>
           <div class="fx-row"><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sh">0</div></div>
@@ -1264,7 +1264,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <!-- Bare "Reset" — the card's own "Basic Adjustments" title already says what it
                resets, so the qualifier only restated it (see CLAUDE.md's note on 13
                near-synonymous reset/clear verbs). -->
-          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetAdjust()">Reset</button></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" id="btn-adj-reset" onclick="resetAdjust()">Reset</button></div>
         </div>
       </div>
       <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a
@@ -1458,7 +1458,11 @@ setTimeout(()=>window.hideBootSplash(),6000);
           </select>
         </div>
         <div class="fx-row"><div class="fx-label">Aspect</div>
-          <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value)">
+          <!-- A list of tap chips, not a dropdown — same convention as the Input/Print profile
+               chips above (selectToChips) and the Canvas ratio chips (cvBuildChips): the <select>
+               stays the one source of truth (still dispatches its own onchange, still restorable
+               from a session/snapshot) and is just visually replaced. -->
+          <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value)" style="display:none">
             <option value="shot">As shot</option>
             <option value="0">Free</option>
             <option value="custom">Custom</option>
@@ -1471,6 +1475,11 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <option value="0.7071">1.414:1 ISO A4</option>
             <option value="1.2941">11:8.5 US Letter</option>
           </select>
+        </div>
+        <div class="btn-row chip-tap" id="crop-ar-chips" style="margin-bottom:2px"></div>
+        <div class="fx-row" title="Swap the picked aspect ratio between portrait and landscape (e.g. 3:2 ↔ 2:3) — the chip list above only lists one orientation each.">
+          <div class="fx-label">Orientation</div>
+          <button class="btn bgh" id="btn-crop-orient" onclick="cropSwapOrientation()">Swap portrait/landscape</button>
         </div>
         <div class="fx-row" id="crop-custom-row" style="display:none">
           <div class="fx-label">Custom</div>
@@ -1570,6 +1579,8 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <option value="sprocket35">35mm sprockets</option>
             <option value="sprocket35-wide">35mm sprocket bleed</option>
             <option value="rollfilm">120 roll film</option>
+            <option value="halfframe35">Half-frame 35mm</option>
+            <option value="instantborder">Instant border</option>
             <option value="carrier">Ragged carrier</option>
             <option value="custom">Load frame…</option>
           </select>
@@ -1925,8 +1936,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
           </div>
         </div>
       </div>
+      <!-- "Apply crop" used to be a second button here, duplicating the panel's own "Crop"
+           button (which becomes "Apply crop" itself once crop mode is active — see cropToggle).
+           One less button doing the same thing; Cancel still needs its own control. -->
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
-        <button class="btn bpri" onclick="cropApply()">Apply crop</button>
         <button class="btn bgh" onclick="cropCancel()">Cancel</button>
       </div>
       <!-- PERSISTENT ACTION BAR (mobile) -->
@@ -3926,71 +3939,71 @@ const LUT_META={
   "trix_400_polymax_grade_3":"B&W",
   "kodak_5222_polymax_grade_2":"B&W",
   "kodak_5222_2302_dev_5":"B&W",
-  "adox_color_implosion_100":"Dehancer",
-  "agfa_agfacolor_100":"Dehancer",
-  "agfa_agfacolor_portrait_xps_160":"Dehancer",
-  "agfa_agfacolor_xrs_200_exp_1991":"Dehancer",
-  "agfa_chrome_rsx_ii_200_exp_2006":"Dehancer",
+  "adox_color_implosion_100":"Film",
+  "agfa_agfacolor_100":"Film",
+  "agfa_agfacolor_portrait_xps_160":"Film",
+  "agfa_agfacolor_xrs_200_exp_1991":"Film",
+  "agfa_chrome_rsx_ii_200_exp_2006":"Film",
   "agfa_scala_200x":"B&W",
-  "ambrotype_by_anatolee_green":"Dehancer",
-  "astrum_color_negative_125":"Dehancer",
-  "cinestill_50d":"Dehancer",
-  "cinestill_800t":"Dehancer",
-  "fuji_eterna_vivid_500_exp_2013":"Dehancer",
-  "fuji_reala_500d_exp_2013":"Dehancer",
-  "fujichrome_cdu_ii_cross":"Dehancer",
-  "fujichrome_provia_100f":"Dehancer",
-  "fujichrome_velvia_100":"Dehancer",
-  "fujichrome_velvia_50":"Dehancer",
-  "fujicolor_100":"Dehancer",
-  "fujicolor_c200":"Dehancer",
-  "fujicolor_natura_1600":"Dehancer",
-  "fujicolor_print_industrial_100":"Dehancer",
-  "fujicolor_print_industrial_400":"Dehancer",
-  "fujicolor_pro_400h":"Dehancer",
-  "fujicolor_superia_1600":"Dehancer",
-  "fujicolor_superia_200":"Dehancer",
-  "fujifilm_fp_100c":"Dehancer",
-  "fujifilm_fp_100c_digital_intermediate":"Dehancer",
-  "fujifilm_instax":"Dehancer",
-  "fujifilm_instax_digital_intermediate":"Dehancer",
+  "ambrotype_by_anatolee_green":"Film",
+  "astrum_color_negative_125":"Film",
+  "cinestill_50d":"Film",
+  "cinestill_800t":"Film",
+  "fuji_eterna_vivid_500_exp_2013":"Film",
+  "fuji_reala_500d_exp_2013":"Film",
+  "fujichrome_cdu_ii_cross":"Film",
+  "fujichrome_provia_100f":"Film",
+  "fujichrome_velvia_100":"Film",
+  "fujichrome_velvia_50":"Film",
+  "fujicolor_100":"Film",
+  "fujicolor_c200":"Film",
+  "fujicolor_natura_1600":"Film",
+  "fujicolor_print_industrial_100":"Film",
+  "fujicolor_print_industrial_400":"Film",
+  "fujicolor_pro_400h":"Film",
+  "fujicolor_superia_1600":"Film",
+  "fujicolor_superia_200":"Film",
+  "fujifilm_fp_100c":"Film",
+  "fujifilm_fp_100c_digital_intermediate":"Film",
+  "fujifilm_instax":"Film",
+  "fujifilm_instax_digital_intermediate":"Film",
   "fujifilm_neopan_acros_100":"B&W",
   "ilford_hp5_plus_400":"B&W",
-  "ilford_hp5_plus_400_push_2":"Dehancer",
+  "ilford_hp5_plus_400_push_2":"Film",
   "ilford_xp2_super_400":"B&W",
-  "kodak_aerocolor_iv_125":"Dehancer",
-  "kodak_color_plus_200":"Dehancer",
+  "kodak_aerocolor_iv_125":"Film",
+  "kodak_color_plus_200":"Film",
   "kodak_eastman_double_x_5222":"B&W",
-  "kodak_ektachrome_e100_2017":"Dehancer",
-  "kodak_ektar_100":"Dehancer",
-  "kodak_ektar_25_exp_1996":"Dehancer",
-  "kodak_gold_200":"Dehancer",
-  "kodak_kodachrome_64_experimental":"Dehancer",
+  "kodak_ektachrome_e100_2017":"Film",
+  "kodak_ektar_100":"Film",
+  "kodak_ektar_25_exp_1996":"Film",
+  "kodak_gold_200":"Film",
+  "kodak_kodachrome_64_experimental":"Film",
   "kodak_plus_x_pan_125_exp_1979":"B&W",
-  "kodak_portra_160":"Dehancer",
-  "kodak_portra_160nc":"Dehancer",
-  "kodak_portra_160vc":"Dehancer",
-  "kodak_portra_400":"Dehancer",
-  "kodak_portra_800":"Dehancer",
-  "kodak_pro_image_100":"Dehancer",
-  "kodak_supra_100":"Dehancer",
-  "kodak_ultramax_400":"Dehancer",
-  "kodak_vision3_200t":"Dehancer",
-  "kodak_vision3_250d":"Dehancer",
-  "kodak_vision3_500t":"Dehancer",
-  "kodak_vision3_50d":"Dehancer",
-  "konica_centuria_100_dnp":"Dehancer",
-  "konica_impresa_50_exp_2006":"Dehancer",
-  "konica_minolta_vx400_super":"Dehancer",
-  "lomochrome_metropolis_xr_100_400":"Dehancer",
-  "lomochrome_purple_xr_100_400_iso100":"Dehancer",
-  "lomochrome_purple_xr_100_400_iso200":"Dehancer",
-  "lomochrome_purple_xr_100_400_iso400":"Dehancer",
-  "orwo_chrom_ut21_daylight_exp_1992":"Dehancer",
-  "polaroid_polachrome_35_mm_exp_1986":"Dehancer",
-  "polaroid_type_100_sepia_exp_2009":"Dehancer",
-  "prokudin_gorskiy_1906_experimental":"Dehancer",
-  "rollei_cn200":"Dehancer",
+  "kodak_portra_160":"Film",
+  "kodak_portra_160nc":"Film",
+  "kodak_portra_160vc":"Film",
+  "kodak_portra_400":"Film",
+  "kodak_portra_800":"Film",
+  "kodak_pro_image_100":"Film",
+  "kodak_supra_100":"Film",
+  "kodak_ultramax_400":"Film",
+  "kodak_vision3_200t":"Film",
+  "kodak_vision3_250d":"Film",
+  "kodak_vision3_500t":"Film",
+  "kodak_vision3_50d":"Film",
+  "konica_centuria_100_dnp":"Film",
+  "konica_impresa_50_exp_2006":"Film",
+  "konica_minolta_vx400_super":"Film",
+  "lomochrome_metropolis_xr_100_400":"Film",
+  "lomochrome_purple_xr_100_400_iso100":"Film",
+  "lomochrome_purple_xr_100_400_iso200":"Film",
+  "lomochrome_purple_xr_100_400_iso400":"Film",
+  "orwo_chrom_ut21_daylight_exp_1992":"Film",
+  "polaroid_polachrome_35_mm_exp_1986":"Film",
+  "polaroid_type_100_sepia_exp_2009":"Film",
+  "prokudin_gorskiy_1906_experimental":"Film",
+  "rollei_cn200":"Film",
   "rollei_ortho_25":"B&W",
   "svema_type_42_exp_1991":"B&W"
 };
@@ -4071,7 +4084,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-16j';
+const BUILD='2026-08-17a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -6958,7 +6971,7 @@ let lastUploadedLUT=null; // {name,lut} — most recent .cube upload, candidate 
 function prettyLUT(k){return k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());}
 // Built-in LUT category order for grouped UI (dropdown optgroups + Looks gallery sections).
 // LUT_META maps key -> category string; keys missing from LUT_META fall into "Other".
-const LUT_CATEGORY_ORDER=['User Looks','C41 Still','Cinema','Reversal','Instant','Niche','B&W','Dehancer','Other'];
+const LUT_CATEGORY_ORDER=['User Looks','C41 Still','Cinema','Reversal','Instant','Niche','B&W','Film','Other'];
 // ⚠️ Iterates LUT_META, NOT LUT_PRESETS: since the split (calib/split_lut_presets.py) only the
 // core looks are still inline, so LUT_PRESETS is no longer the list of built-in presets — it is
 // the list of presets that happen not to need a fetch. LUT_META is the authoritative key list.
@@ -8470,6 +8483,7 @@ function fxUpdate(){
   clearTimeout(_fxHistPushTimer);_fxHistPushTimer=setTimeout(fxHistoryPush,400);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // grading changed → coarse full-res underlay is stale
   fxScheduleRender();
+  if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
 }
 // ── Live preview feedback while a control is moving ──────────────────────────────────────────
 // This used to be a bare `setTimeout(renderPreview,400)`, which meant that dragging a slider
@@ -8496,10 +8510,19 @@ function fxScheduleRender(){
     renderPreview();
   },180);
 }
+const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin'];
 function resetAdjust(){
-  ['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin']
-    .forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
   fxUpdate();log('Adjustments reset','info');
+}
+// Disabled once every Basic Adjustments slider is already at its default (0) — clicking Reset
+// on an already-default photo did nothing visible, which reads as broken rather than a no-op.
+// Checked every fxUpdate() (every slider tick, debounced by nothing here since it's cheap) so
+// the button's state never lags the sliders it controls.
+function syncAdjResetBtn(){
+  const btn=document.getElementById('btn-adj-reset');if(!btn)return;
+  const allDefault=ADJ_RESET_FIELDS.every(id=>{const sl=document.getElementById('sl-'+id);return !sl||parseFloat(sl.value)===0;});
+  btn.disabled=allDefault;
 }
 // Basic Adjustments default to shared-across-the-batch (like every other FX section), but
 // sometimes only ONE photo needs a nudge (e.g. exposure) without dragging the rest of the batch
@@ -8891,6 +8914,56 @@ function pcResetAll(){fxState.pointColors=[];pcSel=-1;pcRebuild();pcSyncUI();bak
 // ══ FILM ARTIFACTS ═════════════════════════════════════════════════════════════
 function artReshuffle(){fxState.artSeed=Math.random()*100;fxUpdate();log('Artifacts reshuffled','info');}
 
+// ── Editor workspace background colour, via right-click on the empty area AROUND the photo ──
+// (not the photo itself — #fx-wrap's own background, not the Canvas-matte export colour, which
+// already has its own picker under Canvas). Persisted so it survives reload; defaults to the
+// original hardcoded #000 (.fx-canvas-wrap{background:#000}), so a user who never touches this
+// sees no change at all.
+const LS_EDITOR_BG='chromasmith_editor_bg';
+function editorBgApply(hex){
+  const wrap=document.getElementById('fx-wrap');if(wrap)wrap.style.background=hex||'';
+}
+function editorBgInit(){
+  try{const saved=localStorage.getItem(LS_EDITOR_BG);if(saved)editorBgApply(saved);}catch(e){}
+}
+function editorBgSet(hex){
+  try{localStorage.setItem(LS_EDITOR_BG,hex);}catch(e){}
+  editorBgApply(hex);
+}
+function editorBgReset(){
+  try{localStorage.removeItem(LS_EDITOR_BG);}catch(e){}
+  editorBgApply('');
+}
+(function(){
+  const wrap=document.getElementById('fx-wrap');
+  if(!wrap)return;
+  wrap.addEventListener('contextmenu',(e)=>{
+    // Only the empty background, not the photo/canvas/masks/etc — those are children of #fx-wrap,
+    // so a click that lands on any of them has e.target !== wrap. (The Library's own right-click
+    // photo-edit menu, desktop/library-ui.js, defers to this same check for the same reason.)
+    if(e.target!==wrap)return;
+    e.preventDefault();
+    document.querySelectorAll('.fx-bgmenu').forEach(m=>m.remove());
+    const menu=document.createElement('div');
+    menu.className='fx-bgmenu';
+    menu.style.cssText='position:fixed;z-index:9999;background:var(--glass-bg,#222);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr,#444);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:12px;color:var(--txt,#eee);box-shadow:var(--lift-2,0 8px 24px rgba(0,0,0,.4));display:flex;align-items:center;gap:8px';
+    menu.innerHTML=`<span>Editor background</span><input type="color" id="fx-bgmenu-color" style="width:28px;height:24px;padding:0;border:1px solid var(--bdr,#444);border-radius:4px;background:none;cursor:pointer">`
+      +`<button class="btn bgh" id="fx-bgmenu-reset" style="padding:4px 8px;font-size:11px">Reset</button>`;
+    document.body.appendChild(menu);
+    const {innerWidth:vw,innerHeight:vh}=window;
+    const r=menu.getBoundingClientRect();
+    menu.style.left=Math.min(e.clientX,vw-r.width-8)+'px';
+    menu.style.top=Math.min(e.clientY,vh-r.height-8)+'px';
+    const cur=(document.getElementById('fx-wrap').style.background||'').trim();
+    const inp=menu.querySelector('#fx-bgmenu-color');
+    if(/^#[0-9a-fA-F]{6}$/.test(cur))inp.value=cur;
+    inp.oninput=()=>editorBgSet(inp.value);
+    menu.querySelector('#fx-bgmenu-reset').onclick=()=>{editorBgReset();menu.remove()};
+    const closeOnOutside=(ev)=>{if(!menu.contains(ev.target)){menu.remove();document.removeEventListener('mousedown',closeOnOutside)}};
+    setTimeout(()=>document.addEventListener('mousedown',closeOnOutside),0);
+  });
+  editorBgInit();
+})();
 // ══ APP-LIKE UX — toasts, haptics, picker, more-menu, slider polish, gestures ══
 // User-facing feedback pill (the log stays for diagnostics).
 // ⚠️ The old one-liner wrote straight into the live pill, so consecutive calls OVERWROTE each
@@ -9566,7 +9639,7 @@ function mskAdd(type){
     // "Red depth" defaults ON (not 0) — the whole point raised was that the effect should be
     // visibly there right away, not just wired infrastructure waiting to be discovered. 35/100
     // is the same non-zero starting strength the auto-added eye mask uses.
-    m.coatDepth=35;m.exp=-0.6*0.35;m.sat=0.55*0.35;
+    m.coatDepth=35;m.exp=-0.6*0.35;m.sat=0.55*0.35;m.lumHi=0.80;   // see mskCoatDepth's own comment on the highlight-protect ceiling
   }
   if(type==='color'){m.crOn=true;m.crRange=40;}
   if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
@@ -11029,7 +11102,14 @@ function mskPaintAt(m,nx,ny){
 //
 // ⚠️ The colour-range gate is a SELECTION tool and lives in Selection for ordinary masks. On a
 // Skin mask it is step 1 of the guided flow instead, so it appears exactly once either way.
-let _mskGroupOpen={selection:true,adjust:true,skin:true};
+// coattone is DELIBERATELY separate from skin (not shared state) and defaults CLOSED — see the
+// panel-simplification note where it's used: a Coat mask showing both the new one-slider "Red
+// depth" AND the full old guided tone-matching flow open at once (steps, presets, a coverage
+// readout) read as two competing tools fighting for attention, not a single simple one. Red
+// depth/Eye brightness stay the obvious, open-by-default thing; the older flow is still there,
+// one click under Advanced, for anyone who wants the Capture One-style convergence tool instead.
+// Skin masks are UNCHANGED — that flow is still the primary, open-by-default tool there.
+let _mskGroupOpen={selection:true,adjust:true,skin:true,coattone:false};
 try{const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
 function mskGroupToggle(k){
   _mskGroupOpen[k]=!_mskGroupOpen[k];
@@ -11154,6 +11234,18 @@ function mskCoatDepth(v){
   m.coatDepth=v;
   m.exp=-0.6*(v/100);   // up to -0.6 stops, darker
   m.sat=0.55*(v/100);   // up to +0.55 saturation, more vivid red
+  // ⚠️ Ease off the darkening on already-bright/overexposed fur — but ease off, don't exempt it.
+  // First attempt (lumHi=0.72) protected brights almost completely (measured 97% less darkening
+  // than midtones) — that traded one glaring mismatch for another: an almost-untouched bright
+  // patch sitting next to a much-darker treated coat reads as its OWN harsh seam, just inverted.
+  // Measured on a real backlit photo (geneva/__TM3938.jpg's sun-catching ear) at a few lumHi
+  // values and picked the one where bright fur still visibly deepens, just less than midtones —
+  // 0.80 measures 54% LESS darkening on the brightest fur (dropped 0.047 vs midtones' 0.071 at
+  // the same strength), a difference of degree rather than an on/off boundary. mskD's lum-CEILING
+  // gate (already wired into every mask's own selection weight, smoothstep-feathered not a hard
+  // cutoff — see mskShapeWeight) is what does this, fading the mask's effect out gradually as a
+  // pixel's own pre-existing luminance climbs.
+  m.lumHi=v>0?0.80:1;
   const lb=document.getElementById('msk-coatdepth-val');if(lb)lb.textContent=Math.round(v);
   fxUpdate();
 }
@@ -11925,9 +12017,25 @@ function mskRebuild(){
   const caps=mskCaps(m);
   let shape='';
   if(m.type==='radial'){
-    shape+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
-      +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false)
-      +_mskRow('Feather','feather',m.feather,0,100,0.005,false);
+    // The Eyes mask is small and meant to be nudged by dragging its handles on the photo, same as
+    // any radial mask — X/Y/Width/Height are a precision-editing affordance nobody reaches for
+    // FIRST on a "drag this onto the eye" mask, and were exactly the kind of "why are there four
+    // number fields under a mask called Eyes" clutter the panel-simplification pass targeted.
+    // Still available (not removed), just under Advanced position — every other radial mask is
+    // unaffected.
+    if(caps.eyeBright){
+      shape+=_mskRow('Feather','feather',m.feather,0,100,0.005,false);
+      const posOpen=_mskGroupOpen.eyepos===true;
+      shape+='<button class="msk-adv-hd" onclick="mskGroupToggle(\'eyepos\')"><span class="msk-group-chev'+(posOpen?' msk-adv-open':'')+'">'+icon('chevron',12)+'</span> Advanced position</button>';
+      if(posOpen){
+        shape+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
+          +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false);
+      }
+    }else{
+      shape+=_mskRow('X','cx',m.cx,0,100,0.01,false)+_mskRow('Y','cy',m.cy,0,100,0.01,true)
+        +_mskRow('Width','rx',m.rx,1,100,0.0075,false)+_mskRow('Height','ry',m.ry,1,100,0.0075,false)
+        +_mskRow('Feather','feather',m.feather,0,100,0.005,false);
+    }
   }else if(m.type==='none'){   // Colour Range / Luminance Range — no shape, the gates select
     shape+='<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px">'
       +'No shape — this mask selects the whole frame and lets the '
@@ -11987,7 +12095,13 @@ function mskRebuild(){
 
   let selBody=shape
     +_mskRow('Amount','amount',m.amount!=null?m.amount:100,0,100,1,false);
-  if(!isSkin){
+  // Color range and the Lum floor/ceiling gate are generic mask tools for when SHAPE alone can't
+  // isolate a color — genuinely useful on an ordinary Radial/Linear/Brush mask, but rarely
+  // relevant on a Coat mask (its selection already comes from real segmentation) or its paired
+  // Eyes mask (a small ellipse you drag), and they were exactly the kind of "what does this even
+  // do" clutter the panel-simplification pass was about. Hidden here, not removed — still fully
+  // there on every other mask type.
+  if(!isSkin&&!caps.eyeBright){
     // The colour gate is a way of choosing PIXELS, so on an ordinary mask it belongs here rather
     // than under a "Skin Tone" heading it has nothing to do with.
     selBody+='<div class="fx-row" title="Restricts this mask to pixels near the picked tones, so a rough shape can still land on one subject only. Combine with the shape to exclude same-coloured objects (pets, wood, sand).">'
@@ -12002,14 +12116,15 @@ function mskRebuild(){
         +_mskCrLinkNote(m)
         +'<div class="msk-hint">Color alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous. For a whole person or animal, <b>+ Skin</b>, <b>+ Coat</b> or <b>+ AI Select</b> segments the subject first, which sidesteps this entirely.</div>':'');
   }
-  selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
-    +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
-  h+=_mskGroup('selection','Selection',selBody);
+  if(!caps.coatDepth&&!caps.eyeBright){
+    selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
+      +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
+  }
 
   // ── "+ Coat"'s two direct one-slider controls ─────────────────────────────────────────────
   // Plain directional pushes (see mskCoatDepth/mskEyeBright's own doc comment), not the
-  // convergence-toward-a-target Uniformity flow below — this is the obvious, first thing shown
-  // on either half of the pair, not something buried under "Advanced".
+  // convergence-toward-a-target Uniformity flow below — rendered BEFORE Selection so it's the
+  // very first thing under Shape, not something you have to scroll past Selection to find.
   if(caps.coatDepth){
     const cd=m.coatDepth!=null?m.coatDepth:35;
     h+=_mskGroup('coatdepth','Red depth',
@@ -12026,6 +12141,7 @@ function mskRebuild(){
       +'<div class="fx-val" id="msk-eyebright-val">'+Math.round(eb)+'</div></div>'
       +'<div class="msk-hint">Auto-placed as a starting guess near the top of the coat selection — it is an ordinary Radial mask, so drag/resize it directly on the photo to land on the eye(s).</div>');
   }
+  h+=_mskGroup('selection','Selection',selBody);
 
   // ── UNIFORMITY on an ordinary Color-Range mask ────────────────────────────────────────────
   // skinUniformity() in the shader was never actually type-gated — uH/uS/uL/preserve default to
@@ -12171,7 +12287,7 @@ function mskRebuild(){
             :'Tanning only darkens. At 0 skin already darker than the target gets LIFTED toward it, washing out shadows and the edges of hair. At 100 it never lifts at all; in between allows a little lift instead of none.')
         +'<div class="msk-hint">Lightness is not expected to match across sunlit and shadowed '+subjWord+' — forcing that is what flattens a subject, and what Keep shading exists to prevent. Judge the result on lit '+subjWord+'.</div>';
     }
-    h+=_mskGroup('skin',isCoat?'Coat tone':'Skin tone',sk,isSkin&&strength>0?'on':'');
+    h+=_mskGroup(isCoat?'coattone':'skin',isCoat?'Advanced coat tone matching':'Skin tone',sk,isSkin&&strength>0?'on':'');
   }
 
   // ── ADJUST ───────────────────────────────────────────────────────────────────────────────────
@@ -12629,6 +12745,7 @@ function applyUISnapshot(s){
   // without firing their input events, so the modified-from-default dots have to be refreshed here
   // rather than only on user interaction.
   if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
+  if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
   return _lutPromise;
 }
 // History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by
@@ -13634,7 +13751,7 @@ function _videoInfoRows(it){
   const dur=secs?`${Math.floor(secs/60)}:${String(Math.round(secs%60)).padStart(2,'0')}`:'';
   const cs=it.colorSpace||{};
   const gamut=[cs.primaries,cs.transfer].filter(Boolean).join(' / ');
-  return row('File Name',it.name||'')
+  return row('File Name',it.name?(it.ext?`${it.name}.${it.ext}`:it.name):'')
     +row('Dimensions',(it.img&&it.img.width)?`${it.img.width}×${it.img.height}`:'')
     +row('Duration',dur)
     +row('Frame Rate',it.fps?it.fps.toFixed(2)+' fps':'')
@@ -13656,7 +13773,13 @@ function showExif(exif){
   if(!exif||!Object.keys(exif).filter(k=>exif[k]).length){el.innerHTML='';return;}
   const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const chip=(lb,val)=>val?`<div class="fx-exif-chip"><span class="fx-exif-chip-lb">${lb}</span><span>${esc(val)}</span></div>`:'';
-  const chips=[chip('ISO',exif.iso),chip('Aperture',exif.aperture),chip('Shutter',exif.shutter),chip('Focal',exif.focalLen)].filter(Boolean);
+  // exif.iso already carries its own "ISO " prefix (set wherever it's parsed, e.g. EXIF tag
+  // 0x8827) because other call sites show it standalone with no separate label. This chip strip
+  // ALSO has its own "ISO" label, so passing the prefixed string through printed "ISO ISO 400".
+  // Strip it here rather than at every producer, since those other bare-display call sites are
+  // exactly why the prefix belongs on the value in the first place.
+  const isoVal=exif.iso?String(exif.iso).replace(/^ISO\s*/i,''):'';
+  const chips=[chip('ISO',isoVal),chip('Aperture',exif.aperture),chip('Shutter',exif.shutter),chip('Focal',exif.focalLen)].filter(Boolean);
   const row=(label,val)=>val?`<div class="fx-exif-row"><span class="fx-exif-lb">${label}</span><span class="fx-exif-val">${esc(val)}</span></div>`:'';
   // Darkroom-style order: Date, Dimensions, [ISO ƒ ⏱ mm chip strip], File Name, Size, Format,
   // Lens, Camera Make, Camera Model. Extra fields (dims/fileName/fileSize/format/make) are
@@ -13672,7 +13795,7 @@ function showExif(exif){
   el.innerHTML=
     row('Date',fmtDate(exif.date))+row('Dimensions',dims)+
     (chips.length?`<div class="fx-exif-grid">${chips.join('')}</div>`:'')+
-    row('File Name',it.name||'')+row('Size',fmtSize(it.fileSize))+
+    row('File Name',it.name?(it.ext?`${it.name}.${it.ext}`:it.name):'')+row('Size',fmtSize(it.fileSize))+
     row('File Format',it.ext?it.ext.toUpperCase():'')+
     row('Lens Model',exif.lens)+row('Camera Make',make)+row('Camera Model',model);
 }
@@ -14306,8 +14429,9 @@ function initSliderErgonomics(){
     e.preventDefault();
     if(_fxSliderSet(sl,parseFloat(base[key])))_fxFireInput(sl);
   });
-  document.addEventListener('input',e=>{if(e.target&&e.target.type==='range')fxMarkModifiedSliders();},true);
+  document.addEventListener('input',e=>{if(e.target&&e.target.type==='range'){fxMarkModifiedSliders();if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();}},true);
   fxMarkModifiedSliders();
+  if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
 }
 
 // ══ EXPORT RESIZE + OUTPUT SHARPENING ════════════════════════════════════════════════════════
@@ -14447,6 +14571,8 @@ const FILM_FRAMES={
   sprocket35:{label:'35mm sprockets',kind:'proc',mode:'full'},
   'sprocket35-wide':{label:'35mm sprocket bleed',kind:'proc',mode:'bleed'},
   rollfilm:{label:'120 roll film',kind:'proc',mode:'roll'},
+  halfframe35:{label:'Half-frame 35mm',kind:'proc',mode:'half'},
+  instantborder:{label:'Instant border',kind:'proc',mode:'instant'},
   carrier:{label:'Ragged carrier',kind:'plate',src:'vendor/frames/carrier-ragged.png'},
   custom:{label:'Load frame…',kind:'plate',src:null},
 };
@@ -14471,15 +14597,19 @@ const FILM35={width:35.0,frameH:24.0,frameW:36.0,perfW:1.98,perfH:2.79,pitch:4.7
 /// ⚠️ Shared with filmFrameCompose rather than duplicated: a second copy of the rebate maths
 /// would drift, and the failure mode is a per-frame canvas one row too small — i.e. a clipped
 /// sprocket row on export and nowhere else.
+// ⚠️ Frames INSET within the photo's existing dimensions — they never grow the canvas. The first
+// version of 'full'/'roll' modes did (h+2*reb, exactly like the Border feature), which is right
+// for a literal print mount but wrong for what users actually wanted: a frame that reads as the
+// photo's own border, at the size they already cropped/exported to, the same way sprocket35-wide
+// ("bleed") always worked. filmFrameOutSize now always returns the INPUT size — callers that used
+// to pre-allocate a taller canvas (the video export path) need no special-casing any more.
 function filmFrameOutSize(w,h,FR){
-  if(!FR||!FR.style||FR.style==='none')return{w,h,reb:0};
-  const spec=FILM_FRAMES[FR.style];
-  if(!spec||spec.kind==='none')return{w,h,reb:0};
-  if(spec.kind==='plate')return{w,h,reb:0};          // plates composite over, they do not extend
-  const roll=spec.mode==='roll';
-  const rebFrac=roll?0.12:((FILM35.width-FILM35.frameH)/2)/FILM35.frameH;
-  const reb=Math.round(h*rebFrac);
-  return{w,h:h+2*reb,reb};
+  return{w,h,reb:0};
+}
+function _filmFrameRebFrac(mode){
+  if(mode==='roll')return 0.12;
+  if(mode==='half')return((FILM35.width-18.0)/2)/18.0;   // half-frame: 18×24mm image on the same 35mm stock
+  return((FILM35.width-FILM35.frameH)/2)/FILM35.frameH;  // full/bleed/instant: standard full-frame 35mm
 }
 /// Mounts `src` in a film frame. Returns a NEW canvas, or `src` untouched when the style is off
 /// or a plate has not decoded yet — never a half-drawn frame.
@@ -14503,24 +14633,50 @@ function filmFrameCompose(src,FR){
     x.drawImage(plate,(sw-pw)/2,(sh-ph)/2,pw,ph);
     return out;
   }
-  // ── procedural ──
+  // ── instant (Polaroid-style) border: pure procedural geometry, no licensed asset — thick
+  // bottom margin, even side/top margins, all INSET so the frame reads as the photo's own border
+  // rather than a mount added around it. Proportions are the well-known generic instant-print
+  // ratio (public geometry, not a copied texture/asset). ──
+  if(spec.mode==='instant'){
+    const side=Math.round(Math.min(sw,sh)*0.06),bot=Math.round(Math.min(sw,sh)*0.20),top=side;
+    const out=document.createElement('canvas');out.width=sw;out.height=sh;
+    const x=out.getContext('2d');
+    x.fillStyle=FR.color||'#f2ede2';
+    x.fillRect(0,0,sw,sh);
+    const iw=sw-2*side,ih=sh-top-bot;
+    // Crop-and-inset (never grow the canvas): the photo's own outer band is what the border
+    // replaces, same convention as the sprocket modes below.
+    x.drawImage(src,side,top,iw,ih,side,top,iw,ih);
+    if(FR.edgeText){
+      x.save();
+      x.fillStyle=FR.edgeColor||'rgba(30,26,20,0.7)';
+      x.font=`${Math.max(9,Math.round(bot*0.28))}px ui-monospace,Menlo,monospace`;
+      x.textAlign='center';x.textBaseline='middle';
+      x.fillText(FR.edgeText,sw/2,sh-bot/2);
+      x.restore();
+    }
+    return out;
+  }
+  // ── procedural (sprocketed) ──
   const M=FILM35;
   const roll=spec.mode==='roll';
   // Rebate depth as a fraction of the IMAGE height, straight from the standard: a 24mm frame on
   // 35mm stock leaves 5.5mm each side. Roll film has no perforations and a wider rebate.
-  const sz=filmFrameOutSize(sw,sh,FR);
-  const reb=sz.reb;
+  const reb=Math.round(sh*_filmFrameRebFrac(spec.mode));
   const bleed=spec.mode==='bleed';
-  const outW=sz.w,outH=sz.h;
+  const outW=sw,outH=sh;
   const out=document.createElement('canvas');out.width=outW;out.height=outH;
   const x=out.getContext('2d');
   // Rebate colour: unexposed processed film is not black — it is a dense near-neutral with a
   // slight warm cast from the base. Pure #000 is the tell of a fake border.
   x.fillStyle=FR.color||(roll?'#0a0908':'#0d0b0a');
   x.fillRect(0,0,outW,outH);
-  // "Sprocket bleed" is the scanner-wider-than-the-gate look, where the image spills across the
-  // perforations — so the photo is drawn FULL height and the holes punch through it.
-  x.drawImage(src,0,bleed?0:reb,sw,bleed?outH:sh);
+  // "Sprocket bleed" draws the photo at full canvas size and punches holes through it (the
+  // scanner-wider-than-the-gate look). Every other mode INSETS: the outer `reb` px of the photo
+  // are cropped away and the rebate/sprockets take their place, so the frame is the photo's own
+  // border rather than something added around it — the canvas never grows past sw×sh.
+  if(bleed)x.drawImage(src,0,0,sw,sh);
+  else x.drawImage(src,0,reb,sw,sh-2*reb,0,reb,sw,sh-2*reb);
   // Where edge printing may sit, in px from the top of the rebate. On perforated stock this is
   // the narrow band BETWEEN the perforation row and the image — printing across the holes is the
   // one mistake that instantly reads as fake, and the first version of this did exactly that.
@@ -15176,7 +15332,10 @@ function _healPointToSource(e){
 })();
 
 // ── interactive crop overlay ──
-function cropToggle(){if(typeof hapt==='function')hapt();cropMode?cropCancel():cropEnter();}
+// One button does both jobs: "Crop" enters crop mode, and the SAME button — now reading "Apply
+// crop" (see cropEnter/cropExit) — applies it. The floating toolbar's separate "Apply crop"
+// button was doing exactly this a second time; only "Cancel" still needs its own control.
+function cropToggle(){if(typeof hapt==='function')hapt();cropMode?cropApply():cropEnter();}
 function cropDefaultForAR(){
   const b=cropBase;if(!b)return{x:0,y:0,w:1,h:1};
   const W=b.naturalWidth||b.width,H=b.naturalHeight||b.height;
@@ -15200,7 +15359,7 @@ function cropEnter(){
   ov.classList.add('on');ov.onpointerdown=cropDown;
   document.getElementById('fx-crop-tools').style.display='flex';
   document.getElementById('fx-preview-tools').style.display='none';
-  document.getElementById('btn-crop').classList.add('bpri');
+  {const b=document.getElementById('btn-crop');b.classList.add('bpri');b.textContent='Apply crop';}
   document.getElementById('fx-info').textContent='Drag the corners to crop · pick an aspect ratio above';
   positionCropRect();
 }
@@ -15265,6 +15424,23 @@ function filmFrameChanged(v){
   };
   inp.click();
 }
+// Swaps the current aspect ratio between portrait and landscape (1/AR). "As shot"/"Free" have no
+// meaningful orientation to swap (the source photo's own AR, or none at all), so those no-op —
+// swapping them would either fight the source image or do literally nothing, both confusing.
+// "Custom" swaps its own W:H number fields instead of touching cropAR, so the chip stays in sync.
+function cropSwapOrientation(){
+  const sel=document.getElementById('sel-crop-ar');if(!sel)return;
+  if(sel.value==='custom'){
+    const wEl=document.getElementById('crop-custom-w'),hEl=document.getElementById('crop-custom-h');
+    if(wEl&&hEl){const w=wEl.value;wEl.value=hEl.value;hEl.value=w;cropCustomChanged();}
+    return;
+  }
+  if(sel.value==='shot'||sel.value==='0')return; // nothing meaningful to swap
+  const ar=parseFloat(sel.value);if(!ar)return;
+  cropAR=1/cropAR; // flips the ACTIVE ratio even if it started from a chip whose own value is the un-swapped number
+  if(cropMode){cropN=cropDefaultForAR();positionCropRect();}
+  if(typeof hapt==='function')hapt();
+}
 function cropSetAspect(v){
   const customRow=document.getElementById('crop-custom-row');
   if(customRow)customRow.style.display=(v==='custom')?'flex':'none';
@@ -15319,7 +15495,7 @@ function cropExit(){
   const ov=document.getElementById('fx-crop-overlay');ov.classList.remove('on');ov.innerHTML='';ov.onpointerdown=null;
   document.getElementById('fx-crop-tools').style.display='none';
   document.getElementById('fx-preview-tools').style.display=curItem()?'flex':'none';
-  document.getElementById('btn-crop').classList.remove('bpri');
+  {const b=document.getElementById('btn-crop');b.classList.remove('bpri');b.textContent='Crop';}
   const cc=document.getElementById('fx-canvas-crop');if(cc)cc.style.display='none';
 }
 
@@ -15743,10 +15919,18 @@ async function exportFX(){
           ctx.drawImage(proc,b1t+b2t,b1t+b2t);
           proc.width=proc.height=0;
         }
-        // CANVAS matte (aspect ratio + background) around the bordered image — same helper
-        // as the preview, so what you see is exactly what exports.
+        // Film frame around the bordered image, BEFORE the matte — same order the preview uses
+        // (renderPreview's stage 1b/2). ⚠️ This used to be nested inside the "canvas matte
+        // enabled" branch below, so a Film Frame with Canvas left off never rendered at export at
+        // all — silently correct in the live preview and silently dropped on export.
+        if(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none'){
+          const framed=filmFrameCompose(ec,P.filmFrame);
+          if(framed!==ec){ec.width=ec.height=0;ec=framed;}
+        }
+        // CANVAS matte (aspect ratio + background) around the bordered+framed image — same
+        // helper as the preview, so what you see is exactly what exports.
         if(P.canvas&&P.canvas.enabled&&P.canvas.ar){
-          const matted=canvasCompose(filmFrameCompose(ec,P.filmFrame),P.canvas);
+          const matted=canvasCompose(ec,P.canvas);
           if(matted!==ec){ec.width=ec.height=0;ec=matted;}
         }
         // Resize + output sharpening, LAST — after borders and the matte, so the target long edge
@@ -18184,6 +18368,7 @@ mskRebuild();        // local-adjustment mask list
 cvBuildChips();      // canvas ratio chips + background swatches
 selectToChips('sel-input','chips-input'); // input-profile tap chips
 selectToChips('sel-print','chips-print'); // print-profile tap chips
+selectToChips('sel-crop-ar','crop-ar-chips'); // crop aspect-ratio tap chips
 function dustModeBuildChips(){
   const row=document.getElementById('chips-dustmode');if(!row)return;row.innerHTML='';
   [['Both',0],['Black',1],['White',2]].forEach(([lb,val])=>{

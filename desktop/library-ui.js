@@ -213,10 +213,15 @@
   };
 
   const LS_ROOT = 'chromasmith_lib_root';
+  // Last-opened folder/photo, restored at the deskx startup path below — LS_ROOT only ever
+  // remembered the library ROOT, not which subfolder or photo the user actually had open, so a
+  // relaunch always landed back at the top of the tree with nothing open.
+  const LS_LAST_FOLDER = 'chromasmith_lib_last_folder';
+  const LS_LAST_PATH = 'chromasmith_lib_last_path';
   const state = {
     root: LIBTEST ? '/test/Photos' : (localStorage.getItem(LS_ROOT) || ''),
     expanded: new Set(),
-    currentFolder: '',
+    currentFolder: LIBTEST ? '' : (localStorage.getItem(LS_LAST_FOLDER) || ''),
     entries: [],           // image entries in the currently-viewed folder
     sidecars: new Map(),   // path -> {rating,label,edited,recipe} (cached client-side)
     meta: new Map(),       // path -> {camera,lens,date,iso}
@@ -1618,6 +1623,7 @@
         }
       }
       state.openedPath = path;
+      if (!LIBTEST) { try { localStorage.setItem(LS_LAST_PATH, path); } catch (e) {} }
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
       window.chromasmithSourcePath = path;
@@ -2008,6 +2014,7 @@
   async function openFolder(path) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
+    if (!LIBTEST) { try { localStorage.setItem(LS_LAST_FOLDER, path); } catch (e) {} }
     state.source = 'folder'; // leaving a collection/cloud view — clears their sidebar highlight below
     state.selected.clear();
     const grid = document.getElementById('lib-grid');
@@ -2095,6 +2102,11 @@
   }
 
   function passesFilters(entry) {
+    // A missing/unreadable file (deleted/moved since the last scan — real for the cross-folder
+    // "recents"/"edited"/"exported"/album views, which stat fresh and flag rather than error)
+    // has nothing to show: no thumbnail, no metadata, and opening it just toasts an error. Hide
+    // it from the grid/list entirely instead of rendering a broken placeholder card for it.
+    if (entry.missing) return false;
     const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
     const m = state.meta.get(entry.path) || {};
     if (state.typeFilter !== 'all' && entry.kind !== state.typeFilter) return false;
@@ -2362,13 +2374,20 @@
 
   // Shared read for a batch-open/export: reads every path, logs+returns any that failed
   // instead of just console.error-ing them so a shrunk batch is never silently swallowed.
+  // ⚠️ `files.okPaths` carries the paths that actually survived, in the SAME order as `files` —
+  // a batch export/edit zips fxImages[i] back against paths[i] to restore per-photo crop/masks
+  // (see the "Export N photos" context-menu item below); indexing the ORIGINAL `paths` array
+  // there instead desyncs the moment any one photo fails to read (a missing/locked file mid-
+  // selection), silently applying photo A's crop/masks to photo B's render — or, with several
+  // failures compounding, exporting nothing recognizable at all.
   async function readPathsAsFiles(paths) {
-    const files = []; const failed = [];
+    const files = []; const failed = []; const okPaths = [];
     for (const p of paths) {
-      try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); }
+      try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); okPaths.push(p); }
       catch (e) { console.error('read_file_bytes', p, e); failed.push(p); }
     }
     if (failed.length) toast(`Could not read ${failed.length} of ${paths.length} photo(s)`, false);
+    files.okPaths = okPaths;
     return files;
   }
   // Shared batch-open: reads paths, loads them into the editor, and registers each in Recents
@@ -2377,16 +2396,17 @@
   async function openPathsInEditor(paths) {
     const files = await readPathsAsFiles(paths);
     if (!files.length) return files;
+    const okPaths = files.okPaths || paths; // fallback keeps old behavior if a caller-supplied files array skipped readPathsAsFiles
     state.openedPath = '';
     window.chromasmithSourcePath = null;
-    state.openedPaths = paths;
+    state.openedPaths = okPaths;
     await loadFXImages(files);
     // Seed shared FX (LUT/grain/halation/curves/etc.) from the first photo's saved recipe —
     // same reasoning as the "Export N photos" path below: without this the shared sliders
     // stay at whatever stale state the app was in, and exporting straight from here (without
     // first touching any slider) would silently render every photo unedited.
     try {
-      const firstSc = await getSidecar(paths[0]);
+      const firstSc = await getSidecar(okPaths[0]);
       if (firstSc.recipe) {
         applyUISnapshot(snapshotFromB64(firstSc.recipe));
         if (typeof applyRawDefaults === 'function') applyRawDefaults();
@@ -2447,9 +2467,15 @@
     item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
       const files = await readPathsAsFiles(paths);
       if (!files.length) return;
+      // ⚠️ Use the paths that actually survived readPathsAsFiles, in the SAME order as `files`/
+      // `fxImages` below — indexing the original (pre-filter) `paths` desyncs the moment any one
+      // photo fails to read (a missing/locked file mid-selection), so photo A's saved crop/masks
+      // land on photo B's render, or a batch export comes out empty/wrong. See readPathsAsFiles'
+      // own comment.
+      const okPaths = files.okPaths || paths;
       state.openedPath = '';
     window.chromasmithSourcePath = null;
-      state.openedPaths = paths;
+      state.openedPaths = okPaths;
       await loadFXImages(files);
       // Seed the SHARED FX state (LUT/grain/halation/curves/HSL/adjustments — everything
       // getFXParams() reads off the DOM) from the first selected photo's own saved recipe.
@@ -2461,7 +2487,7 @@
       // FX silently overwrite every other photo's render (that's why the loop below stays
       // geom/masks/adjustOverride-only).
       try {
-        const firstSc = await getSidecar(paths[0]);
+        const firstSc = await getSidecar(okPaths[0]);
         if (firstSc.recipe) {
           applyUISnapshot(snapshotFromB64(firstSc.recipe));
           if (typeof applyRawDefaults === 'function') applyRawDefaults();
@@ -2470,8 +2496,8 @@
       // Restore each photo's own saved CROP/MASKS/independent-ADJUST before exporting (all
       // three are per-photo — see chromasmith-22.html's geomApplyToAll/mskCopyToAll/
       // adjToggleScope).
-      for (let i = 0; i < paths.length; i++) {
-        const sc = await getSidecar(paths[i]);
+      for (let i = 0; i < okPaths.length; i++) {
+        const sc = await getSidecar(okPaths[i]);
         if (!sc.recipe || !fxImages[i]) continue;
         try {
           const snap = snapshotFromB64(sc.recipe);
@@ -2622,8 +2648,12 @@
   {
     // This script is injected right before </body>, so the DOM is already parsed here.
     const wrap = document.getElementById('fx-wrap');
+    // e.target===wrap means the click landed on the empty background AROUND the photo, not the
+    // photo itself — chromasmith-22.html's own contextmenu handler on #fx-wrap owns that case now
+    // (a background-color picker), so defer to it instead of covering the background with this
+    // photo-edit menu too.
     if (wrap) wrap.addEventListener('contextmenu', (e) => {
-      if (!state.openedPath) return;
+      if (!state.openedPath || e.target === wrap) return;
       e.preventDefault();
       buildPathsMenu(e.clientX, e.clientY, [state.openedPath], { includeOpen: false });
     });
@@ -2724,7 +2754,7 @@
         const m = state.meta.get(entry.path) || {};
         const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
         card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt=""></div>
-          <div class="lib-name">${state.showTitle ? esc(entry.name) + (entry.missing ? ' (missing)' : '') : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}${videoBadge}${dupeBadge}${syncedBadge}</div>
+          <div class="lib-name">${esc(entry.name)}${entry.missing ? ' (missing)' : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}${videoBadge}${dupeBadge}${syncedBadge}</div>
           <div class="lib-col">${esc(m.date)}</div>
           <div class="lib-col">${esc(fmtEditedTs(entry.edited_ts))}</div>
           <div class="lib-col">${esc(m.camera)}</div>
@@ -3529,9 +3559,20 @@
   }
   const filtersBtn = overlay.querySelector('#lib-filters-btn');
   const filtersPop = overlay.querySelector('#lib-filters-pop');
-  filtersBtn.onclick = (e) => { e.stopPropagation(); filtersPop.classList.toggle('on'); };
+  // ⚠️ `filtersPop` picks up an inline `style="display:none"` before this ever runs (some earlier
+  // pass — layout measurement, a stale saved-view restore, or the initial no-flash render — sets
+  // it directly), and an inline style always wins over the `#lib-filters-pop.on{display:flex}`
+  // stylesheet rule no matter what class is toggled. That left the button visibly doing nothing:
+  // the class flipped to "on" every click, the popover just never painted. Clear the inline
+  // property explicitly instead of relying on the class alone to win the cascade.
+  filtersBtn.onclick = (e) => {
+    e.stopPropagation();
+    const willOpen = !filtersPop.classList.contains('on');
+    filtersPop.classList.toggle('on', willOpen);
+    filtersPop.style.display = willOpen ? '' : 'none';
+  };
   document.addEventListener('click', (e) => {
-    if (filtersPop.classList.contains('on') && !filtersPop.contains(e.target) && e.target !== filtersBtn) filtersPop.classList.remove('on');
+    if (filtersPop.classList.contains('on') && !filtersPop.contains(e.target) && e.target !== filtersBtn) { filtersPop.classList.remove('on'); filtersPop.style.display = 'none'; }
   });
   overlay.querySelector('#lib-filters-clear').onclick = () => clearAllLibFilters();
   let searchDebounce;
@@ -4489,8 +4530,14 @@
     // async open+expand actually landing — previously the user watched all of that happen
     // live. Hidden here, right after the Library has actually settled into its final
     // full-window state, not a moment earlier.
-    toggleLibrary().then(() => {
+    toggleLibrary().then(async () => {
       toggleExpandedView(true);
+      // Reopen whatever photo was open in the editor at last quit — LS_LAST_PATH is written by
+      // openInEditorInner every time a photo actually opens. A missing/moved file (deleted since
+      // last launch) fails read_file_bytes and just leaves the empty-state screen, same as any
+      // other unreadable path — no special-casing needed here.
+      const lastPath = !LIBTEST && localStorage.getItem(LS_LAST_PATH);
+      if (lastPath) { try { await openInEditor(lastPath); } catch (e) { console.error('reopen last photo', e); } }
       if (typeof window.hideBootSplash === 'function') window.hideBootSplash();
     });
   }
