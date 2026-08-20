@@ -4084,7 +4084,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-17a';
+const BUILD='2026-08-20a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -14231,11 +14231,15 @@ function renderPreview(){
   // export). Native iOS GPUs handle full-res live preview comfortably, so the Capacitor
   // shell raises the cap to 3x for a noticeably sharper preview; the browser/Pages build is
   // left untouched since we can't verify perf/memory headroom on arbitrary mobile Safari.
-  // deskx: CSS width can now reach ~1600+, so cap the backing store at 3200px wide (crisp on
-  // a 1440p window at dpr 2) instead of letting cw*dpr grow unbounded.
+  // deskx: CSS width can now reach ~1600+, so cap the backing store at 4800px wide (crisp on a
+  // 2400px-wide window at dpr 2, i.e. a maximized 5K/6K display) instead of letting cw*dpr grow
+  // unbounded. Raised from 3200 (was capped for a 1440p window) — GPU cost is one full-screen
+  // shader pass per render, not per-pixel-scaled work elsewhere, so 1.5x the linear dimension
+  // (2.25x the pixels) stays comfortably inside the existing drag_renders/frame budgets, which
+  // are keyed to render COUNT, not per-render duration (test/perf_bench.mjs).
   let dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
-  if(deskx&&cw>0)dpr=Math.min(dpr,3200/cw);
-  // Full-res preview at Fit: the dpr/3200px caps above exist to bound GPU cost for the DEFAULT
+  if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
+  // Full-res preview at Fit: the dpr/4800px caps above exist to bound GPU cost for the DEFAULT
   // preview; when the user has explicitly opted into Full res, honor that even at Fit by lifting
   // both caps (still clamped to the source's own resolution — no point exceeding iw×ih) instead
   // of silently falling back to the capped backing store. This is what was making the preview
