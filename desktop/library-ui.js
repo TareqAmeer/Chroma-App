@@ -577,8 +577,13 @@
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
     body.deskx #lib-overlay:not(.full) #lib-filters,body.deskx #lib-overlay:not(.full) #lib-side,
     body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar{display:none}
-    body.deskx #lib-overlay #lib-top{padding:8px 8px 6px;-webkit-app-region:no-drag} /* strip starts below the deskbar — no traffic-light clearance needed */
-    body.deskx #lib-overlay:not(.full) #lib-top{padding:8px 6px 6px;gap:4px;flex-wrap:wrap}
+    /* padding-top 22px (not the tighter horizontal 8px/6px): #lib-overlay already sits below the
+       fixed deskbar (top:44px above), so this is the ONLY breathing room between the deskbar and
+       the folder/cloud/history icons — 8px read as flush against the bar. Matches the same 22px
+       bump on body.deskx .fx-panel / #fx-toolrail in chromasmith-22.html for the tools panel and
+       right rail, so all three top-of-shell rows get equal clearance. */
+    body.deskx #lib-overlay #lib-top{padding:22px 8px 6px;-webkit-app-region:no-drag}
+    body.deskx #lib-overlay:not(.full) #lib-top{padding:22px 6px 6px;gap:4px;flex-wrap:wrap}
     body.deskx #lib-overlay:not(.full) #lib-top .lib-btn{padding:5px 7px}
     body.deskx #lib-overlay:not(.full) #lib-top .lib-title{display:none}
     /* The tree toggle only means anything in full mode (the filmstrip already force-hides

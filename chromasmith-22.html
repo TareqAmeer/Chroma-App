@@ -813,11 +813,17 @@ body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
    (the deskbar, doubling as the window drag strip), photo edge-to-edge on black filling all
    remaining space, 320px single-section tools panel, 48px icon rail on the FAR RIGHT.
    Clicking the active rail icon closes the panel entirely (body.panel-closed). ── */
+/* --deskx-topbar-h: the ONE place the 44px deskbar height is a literal — every rule below that
+   needs to sit below the bar (main's own offset, the layout's height calc, and the breathing-
+   room padding on the left library dock / tools panel / right rail, all added after the icons-
+   too-close-to-the-bar report) reads this var instead of repeating 44px, so a future deskbar
+   resize can't silently reopen the same overlap in only some of them. */
+body.deskx{--deskx-topbar-h:44px}
 body.deskx header,body.deskx .tabs,body.deskx #fx-filmstrip{display:none}
-body.deskx main{max-width:none;margin:0;padding:44px 0 0}
+body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
 body.deskx.fx-deskb main{overflow:hidden;height:100vh}
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 100px}
-body.deskx #fx-deskbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:3000;height:44px;
+body.deskx #fx-deskbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:3000;height:var(--deskx-topbar-h);
   margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr);border-radius:0;
   background:var(--glass-bg)}
 /* The deskbar is INSIDE #panel-fx; on other tabs that panel loses .active (display:none),
@@ -839,7 +845,7 @@ body.deskx .fx-db{padding:5px 10px}
    "library covers the editor" regressions, which all stemmed from a SEPARATE body.paddingLeft
    value computed in JS). A reserved grid track can never visually overlap a sibling track. */
 body.deskx .fx-layout{--dock-w:0px;--panel-w:320px;grid-template-columns:var(--dock-w) 1fr var(--panel-w) 72px;
-  gap:0;height:calc(100vh - 44px);align-items:stretch;transition:grid-template-columns .2s ease}
+  gap:0;height:calc(100vh - var(--deskx-topbar-h));align-items:stretch;transition:grid-template-columns .2s ease}
 body.deskx.lib-docked:not(.lib-full) .fx-layout{--dock-w:120px}
 body.deskx.panel-closed .fx-layout{--panel-w:0px}
 body.deskx.panel-closed .fx-panel{display:none}
@@ -858,11 +864,14 @@ body.deskx .fx-preview-col{grid-column:2;order:1;position:static;top:auto;align-
    columns, so this panel MUST stay outside the multicol formatting context. overflow-x:hidden
    is a belt-and-braces guard — if anything ever re-introduces horizontal overflow here, it must
    surface as a clipped element the audit gate catches, never as a silent sideways scroll. */
+/* padding-top 22px, not the 10px every other side gets: below the fixed deskbar, 10px read as
+   flush rather than spaced (the reported "BASIC ADJUSTMENTS too close to the top bar" bug) — see
+   the matching bump on #fx-toolrail below, and #lib-top in library-ui.js for the left dock. */
 body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;columns:initial;
-  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr);padding:10px;box-sizing:border-box;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr);padding:22px 10px 10px;box-sizing:border-box;
   background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03),-6px 0 16px -8px rgba(0,0,0,.4)}
 body.deskx #fx-toolrail{grid-column:4;order:3;position:static;top:auto;align-self:stretch;width:72px;box-sizing:border-box;
-  border:none;border-left:1px solid var(--bdr);border-radius:0;padding:10px 4px 4px;overflow-y:auto;overflow-x:hidden;
+  border:none;border-left:1px solid var(--bdr);border-radius:0;padding:22px 4px 4px;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:2px;background:var(--sur);box-shadow:inset 1px 0 0 rgba(255,255,255,.03)}
 /* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only.
    Widened 64 -> 72px so the label can sit at 10px instead of 9px (the smallest text anywhere in
