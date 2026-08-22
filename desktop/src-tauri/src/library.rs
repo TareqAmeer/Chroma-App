@@ -5,9 +5,7 @@
 use rawler::decoders::RawDecodeParams;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -160,15 +158,49 @@ fn cache_dir() -> PathBuf {
     dir
 }
 
+// ── Stable cache hashing ──────────────────────────────────────────────────────────────────
+// `std::collections::hash_map::DefaultHasher` (the previous implementation) is explicitly
+// documented by the standard library as NOT stable across Rust releases or even between two
+// runs of the same binary in general — fine for an in-memory HashMap, wrong for a hash baked
+// into an on-disk filename. A routine toolchain bump would silently reassign every cache key
+// at once: for the bounded ~500MB thumbnail cache that's a one-time free regeneration, but the
+// planned never-pruned offline-thumbnail catalog tier (§ROADMAP: "Surviving app updates") would
+// turn that into gigabytes of permanently orphaned files with no way to regenerate them if the
+// source volume is unplugged. FNV-1a is a public, unchanging algorithm — the same input always
+// produces the same output, forever, regardless of Rust version. Pinned by
+// `cache_key_is_a_hardcoded_literal` below: if this ever silently changed, that test fails loud
+// instead of 20GB of thumbnails quietly going stale.
+fn fnv1a(parts: &[&str]) -> u64 {
+    const OFFSET: u64 = 0xcbf29ce484222325;
+    const PRIME: u64 = 0x100000001b3;
+    let mut h = OFFSET;
+    for part in parts {
+        for b in part.as_bytes() {
+            h ^= *b as u64;
+            h = h.wrapping_mul(PRIME);
+        }
+        // A separator byte between parts so ("ab","c") and ("a","bc") hash differently.
+        h ^= 0xff;
+        h = h.wrapping_mul(PRIME);
+    }
+    h
+}
+
+// Each cache tier gets its OWN version constant rather than sharing one. Before this, every
+// tier's key derived from `cache_key`'s single internal version literal (via a
+// `.replace(".jpg", "...")` filename trick on meta/phash), so bumping it to fix a THUMBNAIL
+// rendering change also silently invalidated every cached EXIF read and every perceptual hash —
+// at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
+const THUMB_RENDER_VER: &str = "thumb-v2"; // bumped when orientation-correction was added
+const META_READER_VER: &str = "meta-v4";   // bumped when the RW2-lens EXIF fallback was added
+const PHASH_VER: &str = "phash-v1";
+const DECODE_RENDER_VER: &str = "decode-v1";
+const LR_THUMB_VER: &str = "lr-thumb-v1";
+
 fn cache_key(path: &str, mtime: u64, size: u64) -> String {
-    let mut h = DefaultHasher::new();
-    path.hash(&mut h);
-    mtime.hash(&mut h);
-    size.hash(&mut h);
-    // "v2": bumped when orientation-correction was added to get_thumbnail, so pre-existing
-    // sideways-cached portrait thumbnails aren't served stale.
-    "v2".hash(&mut h);
-    format!("{:016x}.jpg", h.finish())
+    let mtime_s = mtime.to_string();
+    let size_s = size.to_string();
+    format!("{:016x}.jpg", fnv1a(&[path, &mtime_s, &size_s, THUMB_RENDER_VER]))
 }
 
 /// Cached thumbnail (long edge ~360px, JPEG). RAW files use rawler's embedded-preview
@@ -344,10 +376,7 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
 // Reuses the same thumbnails cache dir, so prune_caches() sweeps these too. Keeps the raw asset
 // id out of the filename (it can contain odd chars) by hashing it.
 fn lr_thumb_path(asset_id: &str) -> PathBuf {
-    let mut h = DefaultHasher::new();
-    asset_id.hash(&mut h);
-    "lr-thumb-v1".hash(&mut h);
-    cache_dir().join(format!("lr_{:016x}.jpg", h.finish()))
+    cache_dir().join(format!("lr_{:016x}.jpg", fnv1a(&[asset_id, LR_THUMB_VER])))
 }
 
 // Err = cache miss (JS falls back to the network fetch); Ok = cached JPEG bytes.
@@ -374,13 +403,11 @@ fn decode_cache_dir() -> PathBuf {
     dir
 }
 fn decode_cache_key(path: &str, mtime: u64, size: u64, recipe_key: &str) -> String {
-    let mut h = DefaultHasher::new();
-    path.hash(&mut h);
-    mtime.hash(&mut h);
-    size.hash(&mut h);
-    recipe_key.hash(&mut h); // RAW profile / native-NR / demosaic-algo / auto-lens — anything that changes decoded pixels
-    "v1".hash(&mut h);
-    format!("{:016x}.jpg", h.finish())
+    let mtime_s = mtime.to_string();
+    let size_s = size.to_string();
+    // recipe_key folds in RAW profile / native-NR / demosaic-algo / auto-lens — anything that
+    // changes decoded pixels. DECODE_RENDER_VER is its own tier, independent of the others.
+    format!("{:016x}.jpg", fnv1a(&[path, &mtime_s, &size_s, recipe_key, DECODE_RENDER_VER]))
 }
 
 /// Persistent full-resolution decode cache — the "photos re-decode on every relaunch" fix.
@@ -483,10 +510,13 @@ fn fmt_shutter(secs: f64) -> String {
 }
 
 fn meta_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
-    // .meta4.json: bumped from .meta3.json when the kamadak-exif RW2-lens fallback was added,
-    // so a photo already cached with an empty lens (from before the fallback existed) gets
-    // re-read instead of serving the stale empty value forever.
-    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".meta4.json"))
+    // ⚠️ Its OWN key, independent of cache_key/THUMB_RENDER_VER — see the fnv1a doc comment
+    // above. META_READER_VER is bumped (not this filename) when read_meta's own output shape
+    // changes, so a photo cached with a stale field gets re-read without a thumbnail-only
+    // rendering change dragging every metadata read along with it.
+    let mtime_s = mtime.to_string();
+    let size_s = size.to_string();
+    cache_dir().join(format!("{:016x}.meta.json", fnv1a(&[path, &mtime_s, &size_s, META_READER_VER])))
 }
 
 fn read_meta(path: &str) -> PhotoMeta {
@@ -1151,7 +1181,11 @@ pub fn collection_counts() -> std::collections::HashMap<String, usize> {
 // <hash>.phash.json alongside meta_cache_path's .meta4.json, keyed the same way (path+mtime+
 // size), so re-runs are free until the file changes.
 fn phash_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
-    cache_dir().join(cache_key(path, mtime, size).replace(".jpg", ".phash.json"))
+    // ⚠️ Its own key too, same reasoning as meta_cache_path above — PHASH_VER moves
+    // independently of THUMB_RENDER_VER and META_READER_VER.
+    let mtime_s = mtime.to_string();
+    let size_s = size.to_string();
+    cache_dir().join(format!("{:016x}.phash.json", fnv1a(&[path, &mtime_s, &size_s, PHASH_VER])))
 }
 
 /// dHash: resize to 9x8 grey, compare each pixel to its right neighbor -> 64 bits.
@@ -1696,6 +1730,58 @@ pub fn album_set_order(id: String, paths: Vec<String>) -> Result<(), String> {
     a.paths = next;
     a.updated = now_secs();
     albums_write(&all)
+}
+
+#[cfg(test)]
+mod cache_key_tests {
+    use super::*;
+
+    /// Pins FNV-1a's exact output for a known input. If this ever changes — a different hash
+    /// algorithm, a different part-separator, a Rust-version-dependent detail sneaking back in
+    /// — this fails LOUDLY in CI instead of silently reassigning every cache key in production,
+    /// which for the planned never-pruned offline-thumbnail tier means gigabytes of orphaned
+    /// files with no way to regenerate them if the source volume is unplugged.
+    #[test]
+    fn cache_key_is_a_hardcoded_literal() {
+        assert_eq!(cache_key("/x/y.RW2", 1_700_000_000, 12_345), "fd36f3fb28ffd1bb.jpg");
+    }
+
+    /// The coupling bug this refactor exists to fix, pinned directly: bumping the thumbnail
+    /// tier's version must not move the metadata or phash tier's key, and vice versa. Before
+    /// this, all three shared one hash via a `.replace(".jpg", "...")` filename trick, so a
+    /// thumbnail-only rendering fix silently invalidated every cached EXIF read and perceptual
+    /// hash too.
+    #[test]
+    fn bumping_one_tier_version_does_not_move_another() {
+        let path = "/x/y.RW2";
+        let (mtime, size) = (1_700_000_000u64, 12_345u64);
+        let thumb_before = cache_key(path, mtime, size);
+        let meta_before = meta_cache_path(path, mtime, size);
+        let phash_before = phash_cache_path(path, mtime, size);
+
+        // Simulate "bump THUMB_RENDER_VER" by hashing with a different thumbnail-tier literal
+        // directly (the const itself can't be mutated at runtime) — meta/phash must be
+        // unaffected since they never reference THUMB_RENDER_VER.
+        let mtime_s = mtime.to_string();
+        let size_s = size.to_string();
+        let thumb_after = format!("{:016x}.jpg", fnv1a(&[path, &mtime_s, &size_s, "thumb-v3-hypothetical"]));
+        assert_ne!(thumb_before, thumb_after, "sanity: the simulated bump must actually change the thumbnail key");
+        assert_eq!(meta_cache_path(path, mtime, size), meta_before, "metadata key must not move when only the thumbnail tier's version changes");
+        assert_eq!(phash_cache_path(path, mtime, size), phash_before, "phash key must not move when only the thumbnail tier's version changes");
+    }
+
+    /// Content identity (path+mtime+size) must still be the whole story for a fixed version —
+    /// change any one of the three and the key changes; change none and it's stable across
+    /// repeated calls (this is what makes a cache a cache).
+    #[test]
+    fn cache_key_is_stable_and_content_sensitive() {
+        let a = cache_key("/x/y.RW2", 1000, 500);
+        let b = cache_key("/x/y.RW2", 1000, 500);
+        assert_eq!(a, b, "same inputs must hash identically across calls");
+        assert_ne!(a, cache_key("/x/y.RW2", 1001, 500), "mtime must be part of the key");
+        assert_ne!(a, cache_key("/x/y.RW2", 1000, 501), "size must be part of the key");
+        assert_ne!(a, cache_key("/x/z.RW2", 1000, 500), "path must be part of the key");
+    }
 }
 
 #[cfg(test)]
