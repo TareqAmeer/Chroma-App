@@ -37,6 +37,7 @@ mod gainmap;
 mod fastthumb;
 mod subject;
 mod ingest;
+mod catalog;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 fn percent_decode(s: &str) -> String {
@@ -1487,6 +1488,7 @@ fn main() {
     tauri::Builder::default()
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(PendingOAuth(Mutex::new(None)))
+        .manage(catalog::CatalogState::new())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -1574,6 +1576,14 @@ fn main() {
             ingest::scan_card,
             ingest::ingest_copy,
             ingest::eject_volume,
+            catalog::catalog_volumes,
+            catalog::catalog_add_root,
+            catalog::catalog_remove_root,
+            catalog::catalog_roots,
+            catalog::catalog_scan,
+            catalog::catalog_scan_cancel,
+            catalog::catalog_query,
+            catalog::catalog_counts,
             sam2_encode,
             sam2_points,
             faceparse_run,

@@ -71,6 +71,14 @@ libloading = "0.9"
 # dependency of tauri/rawler — this only makes the direct use explicit. Nothing else needs it,
 # and the alternative (shelling out to `df` and parsing it) would be worse.
 libc = "0.2"
+# Library catalog (catalog.rs): a whole-archive index of 100k+ photos needs indexed queries
+# and incremental upsert-by-key, which the app's existing flat-JSON-file persistence pattern
+# (albums.json, the registry_*.json files) does not scale to — those rewrite their entire file
+# on every write. `bundled` compiles the SQLite amalgamation (one C file) rather than linking a
+# system libsqlite3, avoiding macOS-version skew; the tree already needs a C toolchain for
+# ort-sys/objc2/libc, so this isn't a new build requirement, just a longer one (~1 min cold,
+# cached after).
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [profile.release]
 strip = true
