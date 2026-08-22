@@ -118,6 +118,7 @@
       }
       case 'ingest_copy': return new Promise((res) => setTimeout(() => res({ copied: 22, duplicates_skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
       case 'eject_volume': return Promise.resolve();
+      case 'trash_file': case 'duplicate_file': return Promise.resolve();
       case 'plugin:dialog|open': return Promise.resolve('/test/Pictures/2026');
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
       case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
@@ -131,6 +132,7 @@
       // offline card state in a plain browser.
       case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
+      case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
       case 'catalog_counts': {
         const N = /[?&]libcat=1/.test(location.search) ? Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10)) : 0;
         return Promise.resolve({ all: N });
@@ -2644,7 +2646,7 @@
     sep();
     item(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
       for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
-      if (state.currentFolder) await openFolder(state.currentFolder);
+      await refreshView();
     });
     // Was prefixed with a 🗑️ emoji — every other row in this same menu (Reject, Pick, Edit,
     // Duplicate) is plain text, and CLAUDE.md §3b is explicit: no emoji in desktop chrome, they
@@ -2655,12 +2657,21 @@
       // sharpest case: it silently returning false meant "Move to Trash" from the Library
       // context menu did not just fail to ask — it never moved a single photo, ever.
       if (!await window.confirmModal(`Move ${label} to the Trash?`, 'Move to Trash')) return;
+      const trashed = [];
       for (const p of paths) {
-        try { await invoke('trash_file', { path: p }); state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p); }
+        try {
+          await invoke('trash_file', { path: p });
+          state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p);
+          trashed.push(p);
+        }
         catch (e) { console.error('trash_file', p, e); toast('Could not delete ' + baseName(p)); }
       }
+      // Best-effort, and only for what actually made it to Trash — a catalog row lagging behind
+      // by one scan is harmless; trashing a file that's still shown as present is what actually
+      // confuses a user. Never blocks on this: the real, recoverable action already happened.
+      if (trashed.length) invoke('catalog_note_deleted', { paths: trashed }).catch((e) => console.error('catalog_note_deleted', e));
       state.selected.clear();
-      if (state.currentFolder) await openFolder(state.currentFolder);
+      await refreshView();
     });
     document.body.appendChild(ctxMenu);
     const { innerWidth: vw, innerHeight: vh } = window;
@@ -3846,6 +3857,19 @@
     await renderGrid();
     renderCollections();
   }
+
+  /// The one thing every post-mutation refresh (delete, duplicate, ...) should call instead of
+  /// reaching for `openFolder` directly. Before this existed, three call sites each hard-coded
+  /// `if (state.currentFolder) await openFolder(state.currentFolder)` — which is a silent no-op
+  /// in a catalog view (`state.currentFolder` is '' there), so deleting a photo from All Photos
+  /// would leave it sitting in the grid looking undeleted until something else forced a
+  /// re-render. This knows about every scope the grid can currently be showing.
+  function refreshView() {
+    if (state.source === 'catalog') return openCatalogView(state.catalogScope);
+    if (state.currentFolder) return openFolder(state.currentFolder);
+    return renderGrid();
+  }
+
   // Drop targets for the drag-a-selection-onto-a-collection gesture (card dragstart wiring is
   // in renderGrid, above) — each is just the existing per-photo mutation that collection is
   // itself derived from.

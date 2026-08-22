@@ -1105,6 +1105,67 @@ pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collecti
     Ok(m)
 }
 
+// ── Delete ───────────────────────────────────────────────────────────────────────────────────
+//
+// The mechanism (moving the file + its sidecar to ~/.Trash) already exists — library.rs's
+// `trash_file` — and already works from the Library context menu. What's missing is the catalog
+// side: a trashed photo must stop appearing in a catalog view IMMEDIATELY, not wait for the next
+// scan to notice it's gone. This is the same `UPDATE present = 0, never DELETE` rule scan phase
+// A already follows — a photo's rating/keywords must survive a delete exactly as they survive a
+// temporarily-moved file, since ~/.Trash is recoverable.
+
+/// Resolves an absolute path back to (photo_id, volume_id) by checking it against every known
+/// volume's current mount point, longest prefix first — the local volume's own prefix ("/") is
+/// a prefix of EVERY absolute path, so it has to be tried last or it would "match" everything
+/// before a real external-volume prefix ever gets a chance.
+fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
+    let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes").ok()?;
+    let mut volumes: Vec<(i64, String, bool)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0)))
+        .ok()?
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    drop(stmt);
+    volumes.sort_by_key(|(_, last_path, is_local)| std::cmp::Reverse(if *is_local { 1 } else { last_path.len() }));
+
+    for (vid, last_path, is_local) in &volumes {
+        let prefix = if *is_local { "/".to_string() } else { format!("{last_path}/") };
+        let Some(rel) = path.strip_prefix(&prefix) else { continue };
+        if let Ok(id) = conn.query_row(
+            "SELECT id FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
+            params![vid, rel],
+            |r| r.get(0),
+        ) {
+            return Some(id);
+        }
+    }
+    None
+}
+
+pub fn note_deleted_run(conn: &Connection, paths: &[String]) -> Result<usize, String> {
+    let mut updated = 0;
+    for p in paths {
+        if let Some(id) = find_photo_by_abs_path(conn, p) {
+            updated += conn
+                .execute("UPDATE photos SET present = 0 WHERE id = ?1", params![id])
+                .map_err(|e| e.to_string())?;
+        }
+        // A path not found in the catalog is not an error — it may be a photo the catalog never
+        // indexed (a folder never opened, or a scan that hasn't reached it yet). Nothing to do.
+    }
+    Ok(updated)
+}
+
+/// Called right after `trash_file` succeeds for a batch of paths — best-effort from the
+/// frontend's own delete flow, mirroring `note_sidecar`'s posture: the real, recoverable action
+/// (moving the file to Trash) has already happened by the time this runs, so a failure here
+/// only means a stale catalog row until the next scan, never a lost file.
+#[tauri::command]
+pub fn catalog_note_deleted(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    note_deleted_run(&conn, &paths)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1491,5 +1552,82 @@ mod tests {
 
         let sidecar_parsed_mtime: i64 = conn.query_row("SELECT sidecar_parsed_mtime FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert_eq!(sidecar_parsed_mtime, 0, "must stay unparsed so the row is retried once the volume returns");
+    }
+
+    /// The delete flow end to end: a photo is scanned in, deleted with `note_deleted_run`, and
+    /// must disappear from query results immediately — no rescan required.
+    #[test]
+    fn note_deleted_marks_present_zero_immediately() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("delete");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("b.jpg"), b"y").unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        conn.execute("UPDATE photos SET rating = 3 WHERE name = 'a.jpg'", []).unwrap();
+
+        // The path a real caller has is whatever catalog_query itself returned — always the
+        // CANONICAL form, since it's reconstructed purely from the volume's last_path + rel_path
+        // (both stored canonical by add_root_run). Deriving it the same way here, rather than
+        // rejoining the test's own pre-canonicalization `dir`, is what makes this test exercise
+        // the real call shape instead of a string form nothing in production ever produces.
+        let a_path = query_run(&conn, CatalogQuery::default())
+            .unwrap()
+            .entries
+            .iter()
+            .find(|e| e.name == "a.jpg")
+            .unwrap()
+            .path
+            .clone();
+
+        let updated = note_deleted_run(&conn, &[a_path]).unwrap();
+        assert_eq!(updated, 1);
+
+        let (present, rating): (i64, i64) = conn
+            .query_row("SELECT present, rating FROM photos WHERE name = 'a.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(present, 0, "must be marked absent immediately, no rescan needed");
+        assert_eq!(rating, 3, "deleting is a move to Trash, not a purge — the rating must survive it exactly like a temporarily-moved file does");
+
+        let page = query_run(&conn, CatalogQuery::default()).unwrap();
+        assert_eq!(page.entries.len(), 1, "the deleted photo must not appear in query results");
+        assert_eq!(page.entries[0].name, "b.jpg");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A path the catalog never indexed (never scanned, or a plain typo) must be a harmless
+    /// no-op, not an error — the file was really trashed either way; the catalog is a cache.
+    #[test]
+    fn note_deleted_on_an_unindexed_path_is_a_harmless_no_op() {
+        let conn = temp_db();
+        let updated = note_deleted_run(&conn, &["/nowhere/ghost.jpg".to_string()]).unwrap();
+        assert_eq!(updated, 0);
+    }
+
+    /// The prefix-matching order, pinned directly: an external volume's own path must win over
+    /// the trivially-matching local "/" prefix, or every external-volume delete would silently
+    /// resolve against the wrong (local) volume and match nothing.
+    #[test]
+    fn note_deleted_prefers_the_external_volume_prefix_over_local() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        conn.execute(
+            "INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('ext-1','Archive','/Volumes/Archive', 0, 0)",
+            [],
+        )
+        .unwrap();
+        let ext_id: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='ext-1'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+             VALUES (?1, 'a.jpg', '', 'a.jpg', 'a.jpg', 'jpg', 'jpeg', 10, 0, 0, 1)",
+            params![ext_id],
+        )
+        .unwrap();
+
+        let updated = note_deleted_run(&conn, &["/Volumes/Archive/a.jpg".to_string()]).unwrap();
+        assert_eq!(updated, 1, "must resolve against the external volume, not silently match nothing against local's trivial '/' prefix");
     }
 }
