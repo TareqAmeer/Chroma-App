@@ -3806,14 +3806,32 @@
     } catch (e) { console.error('list_volumes', e); }
   }
 
+  const FOLDER_PICK_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M12 11v6M9 14h6"/></svg>';
+
+  /// Lets a non-DCIM card reader or a plain external-drive folder reach the same import sheet a
+  /// detected card does. `refreshVolumes()` only surfaces volumes with a DCIM folder — this row
+  /// is the ONLY way anything else (a card that doesn't create DCIM, or importing from a folder
+  /// that isn't a card at all) can reach `openImportPanel`. Always shown, not gated on any
+  /// volume being detected, so it works even with nothing currently plugged in.
+  async function pickImportFolder() {
+    try {
+      const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
+      const path = Array.isArray(chosen) ? chosen[0] : chosen;
+      if (path) openImportPanel(path);
+    } catch (e) { console.error('pick import folder', e); }
+  }
+
   function devicesSectionHtml() {
-    if (!cardState.volumes.length) return '';
     const rows = cardState.volumes.map((v) => `
       <div class="lib-coll-row lib-card-row" data-card="${esc(v.path)}" title="${esc(v.path)} — click to import">
         <span class="lib-coll-ic">${CARD_SVG}</span><span class="lib-coll-lb">${esc(v.name)}</span>
         <span class="lib-coll-count">${v.total_bytes ? fmtBytes(v.total_bytes - v.free_bytes) : ''}</span>
       </div>`).join('');
-    return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Devices</div>' + rows;
+    const pickRow = `
+      <div class="lib-coll-row lib-card-row" data-card-pick="1" title="Import from any folder — a card reader without DCIM, or an existing external drive">
+        <span class="lib-coll-ic">${FOLDER_PICK_SVG}</span><span class="lib-coll-lb">Choose folder…</span>
+      </div>`;
+    return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Devices</div>' + rows + pickRow;
   }
 
   const IMPORT_PREFS_KEY = 'cs.import.prefs.v1';
@@ -3938,14 +3956,18 @@
           $('imp-bar').style.width = `${Math.round(frac * 100)}%`;
           $('imp-prog-txt').textContent = `${p.done} of ${p.total} · ${fmtBytes(p.bytes_done)} of ${fmtBytes(p.bytes_total)}${p.current ? ' · ' + p.current : ''}`;
         });
-        const res = await invoke('ingest_copy', { source: cardPath, options: opts });
+        // ingest_run re-verifies duplicate flags against the CURRENT destination itself
+        // (the user may have changed "Copy to" after the scan above), so it's safe to hand
+        // back exactly what scan_card returned rather than re-scanning the card here too.
+        const res = await invoke('ingest_copy', { files, options: opts });
         if (unlisten) unlisten();
         cardState.scanning = false;
         const failed = (res.failed || []).length;
+        const dupNote = res.duplicates_skipped ? ` · ${res.duplicates_skipped} already imported, skipped` : '';
         if (typeof toast === 'function') {
           toast(failed
-            ? `Imported ${res.copied} of ${res.copied + failed} — ${failed} failed`
-            : `Imported ${res.copied} file${res.copied === 1 ? '' : 's'} (${fmtBytes(res.bytes)})`, !failed);
+            ? `Imported ${res.copied} of ${res.copied + failed} — ${failed} failed${dupNote}`
+            : `Imported ${res.copied} file${res.copied === 1 ? '' : 's'} (${fmtBytes(res.bytes)})${dupNote}`, !failed);
         }
         // Per-file failures are listed, not summarised away: a card that dropped three files is
         // exactly when the user needs to know WHICH three before formatting it.
@@ -4374,6 +4396,9 @@
     wireAlbumRows(host);
     host.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
       row.onclick = () => openImportPanel(row.dataset.card);
+    });
+    host.querySelectorAll('.lib-card-row[data-card-pick]').forEach((row) => {
+      row.onclick = () => pickImportFolder();
     });
     host.querySelectorAll('.lib-coll-row[data-coll]').forEach((row) => {
       row.onclick = () => {

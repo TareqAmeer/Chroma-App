@@ -781,9 +781,11 @@ pub fn set_sidecar(
     Ok(())
 }
 
-/// The single writer. Everything that changes a sidecar goes through here so the serialisation
-/// lives in exactly one place.
-fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
+/// The plain-template fallback used when there is no existing sidecar to preserve, or when an
+/// existing one can't be safely attribute-merged (see `write_sidecar`). Byte-for-byte what the
+/// writer produced before third-party preservation existed, so a Chromasmith-only sidecar's
+/// bytes are unchanged.
+fn owned_attrs(sc: &Sidecar) -> String {
     let (rating, label, edited, favorite, recipe) =
         (sc.rating, sc.label.clone(), sc.edited, sc.favorite, sc.recipe.clone());
     let mut attrs = format!("xmp:Rating=\"{rating}\"");
@@ -807,15 +809,157 @@ fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
             attrs.push_str(&format!(" chromasmith:Versions=\"{b64}\" chromasmith:ActiveVersion=\"{}\"", sc.active));
         }
     }
-    let xmp = format!(
+    attrs
+}
+
+fn plain_template(sc: &Sidecar) -> String {
+    format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Chromasmith">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:chromasmith="http://chromasmith.app/ns/1.0/" {attrs}/>
  </rdf:RDF>
 </x:xmpmeta>
-"#
-    );
-    std::fs::write(sidecar_path(path), xmp).map_err(|e| format!("write sidecar: {e}"))?;
+"#,
+        attrs = owned_attrs(sc)
+    )
+}
+
+/// The byte span of the first `<rdf:Description ...>` tag's attribute list in `xmp`, as
+/// `(start, end, self_closing)` where `xmp[start..end]` is everything between the element name
+/// and the closing `/>` or `>`. A hand-rolled scan, not a parser: it tracks quote state so a
+/// `>` inside an attribute value doesn't end the tag early, which is the one thing that would
+/// make this unsafe to use on a real file.
+fn find_description_attrs(xmp: &str) -> Option<(usize, usize, bool)> {
+    let tag = "<rdf:Description";
+    let start = xmp.find(tag)? + tag.len();
+    let bytes = xmp.as_bytes();
+    let mut i = start;
+    let mut in_quote: Option<u8> = None;
+    while i < bytes.len() {
+        let b = bytes[i];
+        match in_quote {
+            Some(q) if b == q => in_quote = None,
+            Some(_) => {}
+            None => match b {
+                b'"' | b'\'' => in_quote = Some(b),
+                b'>' => {
+                    let self_closing = i > start && bytes[i - 1] == b'/';
+                    let end = if self_closing { i - 1 } else { i };
+                    return Some((start, end, self_closing));
+                }
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Replaces (or removes, or inserts) a single `name="value"` attribute inside an attribute-list
+/// string, preserving every other attribute's text and order exactly. `value: None` removes an
+/// existing occurrence and adds nothing; a name absent from `attrs` with `value: Some(_)` is
+/// appended. Values are written as given — every caller already produces XML-attribute-safe
+/// text (booleans, digits, or base64), so no escaping is done here.
+fn set_attr(attrs: &str, name: &str, value: Option<&str>) -> String {
+    let needle = format!("{name}=");
+    let mut search_from = 0;
+    while let Some(rel) = attrs[search_from..].find(&needle) {
+        let at = search_from + rel;
+        // Require a word boundary before the name so "xmp:Rating=" doesn't match inside some
+        // longer attribute name that happens to end the same way.
+        let boundary_ok = at == 0 || attrs.as_bytes()[at - 1].is_ascii_whitespace();
+        if !boundary_ok {
+            search_from = at + needle.len();
+            continue;
+        }
+        let after_eq = at + needle.len();
+        let bytes = attrs.as_bytes();
+        if after_eq >= bytes.len() || (bytes[after_eq] != b'"' && bytes[after_eq] != b'\'') {
+            search_from = at + needle.len();
+            continue;
+        }
+        let quote = bytes[after_eq];
+        let Some(close_rel) = attrs[after_eq + 1..].find(quote as char) else {
+            search_from = at + needle.len();
+            continue;
+        };
+        let val_end = after_eq + 1 + close_rel + 1; // include closing quote
+        // Also eat one leading space so a removal doesn't leave a double space behind.
+        let trim_start = if at > 0 && attrs.as_bytes()[at - 1] == b' ' { at - 1 } else { at };
+        return match value {
+            Some(v) => format!("{} {name}=\"{v}\"{}", &attrs[..trim_start], &attrs[val_end..]),
+            None => format!("{}{}", &attrs[..trim_start], &attrs[val_end..]),
+        };
+    }
+    match value {
+        // Not found: append. Always via a leading space, whether `attrs` was empty (the
+        // element had no attributes at all) or already ends with one of its own — this is
+        // what stops "<rdf:Descriptionxmlns:..." from a mismatched empty-attrs edge case.
+        Some(v) => format!("{attrs} {name}=\"{v}\""),
+        None => attrs.to_string(),
+    }
+}
+
+/// True when `attrs` already declares this exact `xmlns:*` name (any value) — used to avoid
+/// emitting a duplicate namespace declaration when a foreign tool already declared ours (it
+/// would if it round-tripped a Chromasmith-written file through its own writer).
+fn has_attr(attrs: &str, name: &str) -> bool {
+    let needle = format!("{name}=");
+    attrs
+        .find(&needle)
+        .map(|at| at == 0 || attrs.as_bytes()[at - 1].is_ascii_whitespace())
+        .unwrap_or(false)
+}
+
+/// The single writer. Everything that changes a sidecar goes through here so the serialisation
+/// lives in exactly one place.
+///
+/// ⚠️ Preserves every attribute and child element this app doesn't own. The original
+/// implementation rebuilt the file from scratch on every write, which is fine for a
+/// Chromasmith-only sidecar but silently destroys `crs:*` develop settings, IPTC, GPS and
+/// keywords the moment a Lightroom-exported sidecar is touched — exactly what an SSD migration
+/// walks straight into. Falls back to `plain_template` (byte-identical to the old behaviour)
+/// when there's no existing file, or its `<rdf:Description>` tag can't be located.
+fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
+    let sc_path = sidecar_path(path);
+    let existing = std::fs::read_to_string(&sc_path).ok();
+
+    let xmp = match existing.as_deref().and_then(|text| {
+        find_description_attrs(text).map(|(start, end, self_closing)| (text, start, end, self_closing))
+    }) {
+        Some((text, start, end, self_closing)) => {
+            let mut attrs = text[start..end].to_string();
+            if !has_attr(&attrs, "xmlns:xmp") {
+                attrs = set_attr(&attrs, "xmlns:xmp", Some("http://ns.adobe.com/xap/1.0/"));
+            }
+            if !has_attr(&attrs, "xmlns:chromasmith") {
+                attrs = set_attr(&attrs, "xmlns:chromasmith", Some("http://chromasmith.app/ns/1.0/"));
+            }
+            if !has_attr(&attrs, "rdf:about") {
+                attrs = set_attr(&attrs, "rdf:about", Some(""));
+            }
+            attrs = set_attr(&attrs, "xmp:Rating", Some(&sc.rating.to_string()));
+            attrs = set_attr(&attrs, "xmp:Label", if sc.label.is_empty() { None } else { Some(&sc.label) });
+            attrs = set_attr(&attrs, "chromasmith:Edited", if sc.edited { Some("True") } else { None });
+            attrs = set_attr(&attrs, "chromasmith:Favorite", if sc.favorite { Some("True") } else { None });
+            attrs = set_attr(&attrs, "chromasmith:Recipe", if sc.recipe.is_empty() { None } else { Some(&sc.recipe) });
+            let versions_b64 = (!sc.versions.is_empty())
+                .then(|| serde_json::to_vec(&sc.versions).ok())
+                .flatten()
+                .map(|json| {
+                    use base64::Engine;
+                    base64::engine::general_purpose::STANDARD.encode(json)
+                });
+            attrs = set_attr(&attrs, "chromasmith:Versions", versions_b64.as_deref());
+            let active_str = versions_b64.as_ref().map(|_| sc.active.to_string());
+            attrs = set_attr(&attrs, "chromasmith:ActiveVersion", active_str.as_deref());
+
+            let closer = if self_closing { "/>" } else { ">" };
+            format!("{}{attrs}{closer}{}", &text[..start], &text[if self_closing { end + 1 } else { end } + 1..])
+        }
+        None => plain_template(sc),
+    };
+    std::fs::write(sc_path, xmp).map_err(|e| format!("write sidecar: {e}"))?;
     Ok(())
 }
 
@@ -1552,6 +1696,126 @@ pub fn album_set_order(id: String, paths: Vec<String>) -> Result<(), String> {
     a.paths = next;
     a.updated = now_secs();
     albums_write(&all)
+}
+
+#[cfg(test)]
+mod sidecar_preservation_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> String {
+        let dir = std::env::temp_dir().join(format!("cs_sidecar_{}_{}", std::process::id(), tag));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("photo.jpg");
+        std::fs::write(&p, b"x").unwrap();
+        p.to_string_lossy().into_owned()
+    }
+
+    /// The single most important test in this module: a sidecar written by another tool
+    /// (Lightroom, Bridge) carries develop settings and IPTC fields Chromasmith doesn't
+    /// understand. Before this fix, `write_sidecar` rebuilt the file from scratch on every
+    /// write and silently discarded them. This asserts they survive a real rating change.
+    #[test]
+    fn write_sidecar_preserves_unknown_fields() {
+        let path = scratch("foreign");
+        let foreign = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" crs:Exposure2012="+0.35" crs:Contrast2012="+10">
+   <photoshop:City>Geneva</photoshop:City>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"#;
+        std::fs::write(sidecar_path(&path), foreign).unwrap();
+
+        set_sidecar(path.clone(), 4, "Green".into(), true, Some("RECIPE_X".into()), Some(true)).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains(r#"crs:Exposure2012="+0.35""#), "foreign attribute lost:\n{text}");
+        assert!(text.contains(r#"crs:Contrast2012="+10""#), "foreign attribute lost:\n{text}");
+        assert!(text.contains("<photoshop:City>Geneva</photoshop:City>"), "foreign child element lost:\n{text}");
+
+        // And our own fields actually landed.
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.rating, 4);
+        assert_eq!(sc.label, "Green");
+        assert!(sc.edited);
+        assert!(sc.favorite);
+        assert_eq!(sc.recipe, "RECIPE_X");
+    }
+
+    /// A Chromasmith-only sidecar (no foreign content) still round-trips correctly through the
+    /// merge path, not just the from-scratch fallback — the common case, exercised on a second
+    /// write so it goes through `find_description_attrs` rather than `plain_template`.
+    #[test]
+    fn a_chromasmith_only_sidecar_round_trips_on_a_second_write() {
+        let path = scratch("own");
+        set_sidecar(path.clone(), 2, "Red".into(), false, Some("A".into()), Some(false)).unwrap();
+        set_sidecar(path.clone(), 5, "".into(), true, Some("B".into()), Some(true)).unwrap();
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.rating, 5);
+        assert_eq!(sc.label, "", "label must be CLEARED, not left as the stale 'Red'");
+        assert!(sc.edited);
+        assert!(sc.favorite);
+        assert_eq!(sc.recipe, "B");
+    }
+
+    /// Clearing a field that was previously set must remove the attribute, not just fail to
+    /// add it — otherwise unsetting a rating/favorite/label after the fact would leave the old
+    /// value live in the file while the app believes it was cleared.
+    #[test]
+    fn clearing_a_field_removes_its_attribute_not_just_skips_it() {
+        let path = scratch("clear");
+        set_sidecar(path.clone(), 3, "Star".into(), true, Some("R".into()), Some(true)).unwrap();
+        set_sidecar(path.clone(), 0, "".into(), false, Some("".into()), Some(false)).unwrap();
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(!text.contains("xmp:Label="), "cleared label attribute must be removed:\n{text}");
+        assert!(!text.contains("chromasmith:Edited="), "cleared edited attribute must be removed:\n{text}");
+        assert!(!text.contains("chromasmith:Favorite="), "cleared favorite attribute must be removed:\n{text}");
+        assert!(!text.contains("chromasmith:Recipe="), "cleared recipe attribute must be removed:\n{text}");
+        let sc = get_sidecar(path);
+        assert_eq!(sc.rating, 0);
+        assert_eq!(sc.label, "");
+    }
+
+    /// No existing sidecar at all: must fall back to the plain template exactly as before —
+    /// this is the "no file" half of the fallback the preservation logic is built around.
+    #[test]
+    fn no_existing_sidecar_falls_back_to_the_plain_template() {
+        let path = scratch("none");
+        set_sidecar(path.clone(), 3, "".into(), false, None, None).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.rating, 3);
+    }
+
+    /// A sidecar that exists but doesn't contain a locatable `<rdf:Description>` tag (corrupt,
+    /// truncated, or some non-XMP text) must not panic or write garbage — it falls back to the
+    /// plain template rather than trying to surgically edit something it can't find.
+    #[test]
+    fn an_unparseable_existing_sidecar_falls_back_safely() {
+        let path = scratch("corrupt");
+        std::fs::write(sidecar_path(&path), b"not xml at all").unwrap();
+        let res = set_sidecar(path.clone(), 2, "".into(), false, None, None);
+        assert!(res.is_ok());
+        let sc = get_sidecar(path);
+        assert_eq!(sc.rating, 2);
+    }
+
+    /// Parses a real Lightroom-written sidecar if one exists in the repo (present at time of
+    /// writing: 20260731-__TM3682.xmp at the repo root), skipped cleanly otherwise. Guards the
+    /// no-XML-crate decision against an actual real-world file rather than only a hand-built one.
+    #[test]
+    fn xmp_bag_parses_a_real_sidecar_from_the_repo_root() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Some(sample) = std::fs::read_dir(&root).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| ext_lower(p) == "xmp")
+        }) else {
+            eprintln!("skipping: no .xmp at repo root");
+            return;
+        };
+        let text = std::fs::read_to_string(&sample).expect("read sample xmp");
+        let (start, end, _) = find_description_attrs(&text).expect("must locate rdf:Description in a real sidecar");
+        assert!(end > start || text[start..end].is_empty(), "attrs span must be well-formed");
+    }
 }
 
 /// One album's photos as grid entries. Mirrors list_exported's stat-fresh/missing-tolerant

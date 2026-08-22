@@ -38,19 +38,36 @@ pub struct Volume {
 }
 
 /// One importable file found on a card.
-#[derive(Serialize, Clone)]
+///
+/// ⚠️ Derives `Deserialize` (not just `Serialize`) because `ingest_run` now takes the
+/// already-scanned list back from the frontend instead of re-walking the card itself — see
+/// `ingest_run`'s doc comment. `kind` is `String` rather than `&'static str` for exactly that
+/// reason: a value coming back from JSON can't borrow a `'static` lifetime.
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CardFile {
     pub path: String,
     pub name: String,
     pub size: u64,
-    pub kind: &'static str,
+    pub kind: String,
     /// EXIF capture date as "YYYY-MM-DD", or None when the file carries no readable date.
     pub date: Option<String>,
     /// Already present at the destination (same name and size) — pre-unchecked in the UI.
+    /// Re-verified fresh in `ingest_run` against the destination chosen at import time, so a
+    /// stale flag from the initial scan (if the user changed "Copy to" afterward) can't cause
+    /// either a wrongly-skipped new photo or a wrongly-offered duplicate.
     pub duplicate: bool,
 }
 
+/// ⚠️ `rename_all = "camelCase"` is load-bearing, not cosmetic. Tauri v2's automatic
+/// camelCase→snake_case conversion applies to TOP-LEVEL command arguments only — `options`
+/// here arrives as an opaque JSON value that goes through plain serde, and the frontend sends
+/// camelCase keys (`destRoot`, `backupRoot`, ...) inside it. Without this attribute,
+/// `ingest_copy` rejects every call with "missing field `dest_root`" before `ingest_run` is
+/// ever entered — see `ingest_options_deserialize_from_the_exact_ui_json` below, which
+/// deserializes the literal JSON the UI sends rather than a hand-built struct, because a
+/// hand-built struct is exactly what let this ship broken the first time.
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IngestOptions {
     pub dest_root: String,
     /// Second copy written in the same pass; empty/None to skip.
@@ -82,7 +99,12 @@ pub struct IngestProgress {
 #[derive(Serialize)]
 pub struct IngestResult {
     pub copied: usize,
-    pub skipped: usize,
+    /// Files deliberately NOT copied because `skip_duplicates` was on and they matched the
+    /// destination. Distinct from `failed` on purpose — a skip is a decision, a failure is a
+    /// problem. (The old `skipped` field conflated the two: it was computed as
+    /// `total - copied`, so it silently reported FAILURE count while duplicates-skipped never
+    /// surfaced anywhere at all.)
+    pub duplicates_skipped: usize,
     /// Per-file failures, as "<name>: <reason>". The import continues past each one.
     pub failed: Vec<String>,
     pub dest_root: String,
@@ -236,7 +258,7 @@ pub fn scan_card(path: String, dest_root: Option<String>) -> Result<Vec<CardFile
             let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
             let ps = p.to_string_lossy().into_owned();
             let date = capture_date(&ps).or_else(|| mtime_date(&p));
-            files.push(CardFile { path: ps, name, size, kind, date, duplicate: false });
+            files.push(CardFile { path: ps, name, size, kind: kind.to_string(), date, duplicate: false });
         }
     }
     files.sort_by(|a, b| a.name.cmp(&b.name));
@@ -331,13 +353,21 @@ fn sidecars_for(src: &Path) -> Vec<PathBuf> {
 /// Copies the selected files into a date-organised tree, optionally to a second volume too,
 /// emitting `ingest-progress` events as it goes.
 ///
+/// ⚠️ Takes the frontend's own `scan_card` result rather than a source path to re-scan. Before
+/// this, `ingest_run` called `scan_card` internally — so every card file's EXIF got read AND
+/// the whole destination tree got walked TWICE per import: once for the modal's preview, once
+/// again here. The card-side EXIF read is the expensive half (a RAW's metadata read is real
+/// I/O); the destination-side duplicate check is re-run anyway, fresh, because it's cheap and
+/// because the user can change "Copy to" in the modal after the initial scan — trusting a
+/// stale `duplicate` flag from a different destination would be wrong, not just slow.
+///
 /// ⚠️ Every per-file failure is collected and the loop continues — the same lesson exportFX()'s
 /// per-photo try/catch encodes (CLAUDE.md §4): one bad file on a flaky card must not discard the
 /// hundreds that copied fine before it.
 #[tauri::command]
-pub fn ingest_copy(app: tauri::AppHandle, source: String, options: IngestOptions) -> Result<IngestResult, String> {
+pub fn ingest_copy(app: tauri::AppHandle, files: Vec<CardFile>, options: IngestOptions) -> Result<IngestResult, String> {
     use tauri::Emitter;
-    ingest_run(source, options, &mut |p| { let _ = app.emit("ingest-progress", p); })
+    ingest_run(files, options, &mut |p| { let _ = app.emit("ingest-progress", p); })
 }
 
 /// The whole import, minus the event emitting — split out for the same reason applyGeomTo was
@@ -345,7 +375,7 @@ pub fn ingest_copy(app: tauri::AppHandle, source: String, options: IngestOptions
 /// logic and a test, and file layout is exactly the part worth testing against real files rather
 /// than reasoning about.
 pub fn ingest_run(
-    source: String,
+    files: Vec<CardFile>,
     options: IngestOptions,
     progress: &mut dyn FnMut(IngestProgress),
 ) -> Result<IngestResult, String> {
@@ -355,10 +385,21 @@ pub fn ingest_run(
     }
     std::fs::create_dir_all(&dest_root).map_err(|e| format!("create destination: {e}"))?;
 
-    let all = scan_card(source, Some(options.dest_root.clone()))?;
-    let wanted: Vec<CardFile> = all
+    // Duplicate flags are re-verified against the destination NOW, not trusted from whatever
+    // scan produced `files` — see the doc comment above.
+    let existing = index_destination(&dest_root);
+    let mut all = files;
+    for f in all.iter_mut() {
+        f.duplicate = existing.get(&f.name).is_some_and(|&s| s == f.size);
+    }
+
+    let after_only: Vec<CardFile> = all
         .into_iter()
         .filter(|f| options.only.is_empty() || options.only.iter().any(|p| p == &f.path))
+        .collect();
+    let duplicates_skipped = after_only.iter().filter(|f| options.skip_duplicates && f.duplicate).count();
+    let wanted: Vec<CardFile> = after_only
+        .into_iter()
         .filter(|f| !(options.skip_duplicates && f.duplicate))
         .collect();
 
@@ -369,7 +410,7 @@ pub fn ingest_run(
 
     let mut result = IngestResult {
         copied: 0,
-        skipped: 0,
+        duplicates_skipped,
         failed: Vec::new(),
         dest_root: options.dest_root.clone(),
         bytes: 0,
@@ -435,7 +476,6 @@ pub fn ingest_run(
     }
 
     progress(IngestProgress { done: total, total, current: String::new(), bytes_done: result.bytes, bytes_total });
-    result.skipped = total.saturating_sub(result.copied);
     Ok(result)
 }
 
@@ -567,9 +607,11 @@ mod tests {
 
         let dest = root.join("dest");
         let backup = root.join("backup");
+        let card_path = root.join("card").to_string_lossy().into_owned();
+        let scanned = scan_card(card_path.clone(), None).expect("scan_card");
         let mut ticks = 0usize;
         let res = ingest_run(
-            root.join("card").to_string_lossy().into_owned(),
+            scanned,
             IngestOptions {
                 dest_root: dest.to_string_lossy().into_owned(),
                 backup_root: Some(backup.to_string_lossy().into_owned()),
@@ -599,9 +641,13 @@ mod tests {
         }
 
         // Re-importing the same card copies nothing: this is the "I put the card back in" case,
-        // and getting it wrong means 400 duplicates.
+        // and getting it wrong means 400 duplicates. Deliberately re-scans with dest_root=None
+        // (as the modal's very first scan does, before a destination is even chosen) — the
+        // duplicate flags must still come out right because ingest_run re-verifies them against
+        // the REAL destination itself now, not whatever the passed-in scan happened to compute.
+        let rescanned = scan_card(card_path, None).expect("rescan");
         let again = ingest_run(
-            root.join("card").to_string_lossy().into_owned(),
+            rescanned,
             IngestOptions {
                 dest_root: dest.to_string_lossy().into_owned(),
                 backup_root: None,
@@ -613,6 +659,71 @@ mod tests {
             &mut |_p| {},
         ).expect("re-import");
         assert_eq!(again.copied, 0, "a second import of the same card must copy nothing");
+        assert_eq!(again.duplicates_skipped, present, "every file should be reported as a skipped duplicate");
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The runtime break, pinned exactly: deserializes the LITERAL JSON `library-ui.js` sends
+    /// for `ingest_copy`'s `options` argument — camelCase keys, nested inside the command call —
+    /// rather than a hand-built `IngestOptions`. A hand-built struct is what let this ship broken
+    /// the first time: it bypasses serde's field-name matching entirely. Before
+    /// `#[serde(rename_all = "camelCase")]`, this failed with "missing field `dest_root`".
+    #[test]
+    fn ingest_options_deserialize_from_the_exact_ui_json() {
+        let json = r#"{
+            "destRoot": "/Volumes/Archive/Originals",
+            "backupRoot": "/Volumes/Backup",
+            "folderTemplate": "{YYYY}/{YYYY-MM-DD}",
+            "filenameTemplate": "",
+            "skipDuplicates": true,
+            "only": []
+        }"#;
+        let opts: IngestOptions = serde_json::from_str(json).expect("UI's exact camelCase JSON must deserialize");
+        assert_eq!(opts.dest_root, "/Volumes/Archive/Originals");
+        assert_eq!(opts.backup_root.as_deref(), Some("/Volumes/Backup"));
+        assert!(opts.skip_duplicates);
+
+        // And the minimal shape the modal sends when the optional fields are left at defaults —
+        // `#[serde(default)]` covers everything but dest_root, which the UI always sets.
+        let minimal = r#"{"destRoot": "/tmp/x"}"#;
+        let opts2: IngestOptions = serde_json::from_str(minimal).expect("minimal camelCase JSON must deserialize");
+        assert_eq!(opts2.dest_root, "/tmp/x");
+        assert!(opts2.backup_root.is_none());
+        assert!(!opts2.skip_duplicates);
+    }
+
+    /// `duplicates_skipped` must reflect files that were skipped BECAUSE they were duplicates —
+    /// not, as the old `total - copied` formula did, silently double as a failure count. A
+    /// failed file and a skipped duplicate must be distinguishable in the result.
+    #[test]
+    fn duplicates_skipped_is_not_a_failure_count() {
+        let root = std::env::temp_dir().join(format!("cs_dupcount_{}", std::process::id()));
+        let card = root.join("card");
+        let dest = root.join("dest/2026/2026-01-01");
+        std::fs::create_dir_all(&card).unwrap();
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(card.join("a.jpg"), vec![1u8; 10]).unwrap();
+        std::fs::write(card.join("b.jpg"), vec![2u8; 20]).unwrap();
+        std::fs::write(dest.join("a.jpg"), vec![1u8; 10]).unwrap(); // pre-existing duplicate of a.jpg
+
+        let scanned = scan_card(card.to_string_lossy().into_owned(), None).unwrap();
+        let res = ingest_run(
+            scanned,
+            IngestOptions {
+                dest_root: root.join("dest").to_string_lossy().into_owned(),
+                backup_root: None,
+                folder_template: None,
+                filename_template: None,
+                skip_duplicates: true,
+                only: Vec::new(),
+            },
+            &mut |_p| {},
+        ).expect("import");
+
+        assert_eq!(res.copied, 1, "only the new file should copy");
+        assert_eq!(res.duplicates_skipped, 1, "the pre-existing duplicate must be counted here, not folded into failures");
+        assert!(res.failed.is_empty(), "a skipped duplicate is not a failure");
 
         std::fs::remove_dir_all(&root).ok();
     }
