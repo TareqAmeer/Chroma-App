@@ -116,7 +116,7 @@
         out.push({ path: '/Volumes/LUMIX/PRIVATE/M4ROOT/C0001.MP4', name: 'C0001.MP4', size: 810e6, kind: 'video', date: '2026-08-14', duplicate: false });
         return Promise.resolve(out);
       }
-      case 'ingest_copy': return new Promise((res) => setTimeout(() => res({ copied: 22, skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
+      case 'ingest_copy': return new Promise((res) => setTimeout(() => res({ copied: 22, duplicates_skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
       case 'eject_volume': return Promise.resolve();
       case 'plugin:dialog|open': return Promise.resolve('/test/Pictures/2026');
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
@@ -125,6 +125,28 @@
       case 'save_lr_thumb': return Promise.resolve();
       case 'list_collection': case 'list_exported': return Promise.resolve([]);
       case 'get_export_history': return Promise.resolve([]);
+      // Catalog: `?libcat=1` synthesises N (from ?libn=N, default 18) catalog rows so "All
+      // Photos" is screenshot-verifiable without a real SQLite catalog behind it. Every 7th
+      // entry is marked offline, matching the plan's libtest convention for exercising the
+      // offline card state in a plain browser.
+      case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path });
+      case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
+      case 'catalog_counts': {
+        const N = /[?&]libcat=1/.test(location.search) ? Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10)) : 0;
+        return Promise.resolve({ all: N });
+      }
+      case 'catalog_query': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
+        const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+        const entries = [];
+        for (let i = 1; i <= N; i++) {
+          const offline = i % 7 === 0;
+          entries.push({ id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`,
+            is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
+            missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7' });
+        }
+        return Promise.resolve({ total: N, capped: false, entries });
+      }
       default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
     }
   }
@@ -2028,6 +2050,7 @@
     try {
       entries = await invoke('list_dir', { path });
       _treeListCache.set(path, entries); // opening a folder is the natural "refresh its listing" moment
+      catalogRegisterFolder(path); // fire-and-forget — see the function's own comment
     } catch (e) {
       grid.innerHTML = `<div id="lib-empty">Can't read this folder.</div>`;
       return;
@@ -3766,6 +3789,63 @@
     { name: 'gphotos', label: 'Synced', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 19a4 4 0 1 1 .4-7.98A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H6z"/></svg>' },
   ];
   let collectionCounts = {};
+
+  // ── Catalog: "All Photos" (library-catalog plan, phase 1) ────────────────────────────────
+  // Minimal wiring for now — a live count + a grid fed by catalog_query. No date browser,
+  // stacking, keywords or offline-thumbnail UI yet; those build on this once the backend
+  // supports them (see catalog.rs's own top-of-file scope comment).
+  let catalogCounts = { all: 0 };
+
+  function catalogSectionHtml() {
+    return `<div class="lib-coll-heading">Library</div>
+      <div class="lib-coll-row${state.source === 'catalog' ? ' on' : ''}" data-catalog="all">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
+        <span class="lib-coll-count">${catalogCounts.all || ''}</span>
+      </div><div class="lib-coll-sep"></div>`;
+  }
+
+  function refreshCatalogCounts() {
+    invoke('catalog_counts').then((counts) => { catalogCounts = counts; renderCollections(); }).catch(() => {});
+  }
+
+  /// Fire-and-forget: browsing a folder is what builds the catalog, with no separate "add to
+  /// catalog" step the user has to remember. Best-effort on purpose — a failure here (a folder
+  /// under a filesystem statfs can't resolve, e.g.) must never interrupt or slow down the
+  /// ordinary folder-open the user is actually waiting on.
+  function catalogRegisterFolder(path) {
+    if (LIBTEST) return; // no real catalog backend to hit in the harness
+    invoke('catalog_add_root', { path, kind: null })
+      .then((root) => invoke('catalog_scan', { volumeId: root.volume_id }))
+      .then(() => refreshCatalogCounts())
+      .catch((e) => console.error('catalog_add_root/scan', path, e));
+  }
+
+  async function openCatalogView(scope) {
+    state.source = 'catalog';
+    state.catalogScope = scope || 'all';
+    state.selected.clear();
+    const grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let page;
+    try {
+      page = await invoke('catalog_query', { q: { kind: null, text: null, includeOffline: true, limit: null } });
+    } catch (e) {
+      grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
+      return;
+    }
+    state.entries = page.entries;
+    if (!page.entries.length) {
+      grid.innerHTML = '<div id="lib-empty">Nothing indexed yet — open a folder in the Library and it\'ll appear here.</div>';
+      renderCollections();
+      return;
+    }
+    {
+      const paths = page.entries.filter((e) => !e.offline).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
+    await renderGrid();
+    renderCollections();
+  }
   // Drop targets for the drag-a-selection-onto-a-collection gesture (card dragstart wiring is
   // in renderGrid, above) — each is just the existing per-photo mutation that collection is
   // itself derived from.
@@ -4388,12 +4468,15 @@
   function renderCollections() {
     const host = document.getElementById('lib-collections');
     if (!host) return;
-    host.innerHTML = '<div class="lib-coll-heading">Collections</div>' + COLLECTIONS.map((c) => `
+    host.innerHTML = catalogSectionHtml() + '<div class="lib-coll-heading">Collections</div>' + COLLECTIONS.map((c) => `
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
       </div>`).join('') + albumsSectionHtml() + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
     wireAlbumRows(host);
+    host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
+      row.onclick = () => openCatalogView(row.dataset.catalog);
+    });
     host.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
       row.onclick = () => openImportPanel(row.dataset.card);
     });
@@ -4455,6 +4538,7 @@
   }
   renderCollections();
   renderCollectionCounts();
+  if (!LIBTEST) refreshCatalogCounts();
 
   // ── Marquee (drag-rectangle) multi-select over the grid. Works in both the folder grid
   // (selects by data-path into state.selected) and the cloud grid (data-lr-id into
