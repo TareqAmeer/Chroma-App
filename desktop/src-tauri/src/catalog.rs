@@ -11,6 +11,7 @@
 // scan that finds files and tracks which are still present. EXIF metadata (scan phase B),
 // sidecar contents (phase C), offline thumbnails (phase D), stacking, keywords and delete
 // integration are deliberately NOT here yet — they build on this foundation in later commits.
+use rayon::prelude::*;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -675,12 +676,186 @@ pub fn scan_run(
     Ok(result)
 }
 
+// ── Scan phase B: EXIF metadata ─────────────────────────────────────────────────────────────
+//
+// Deliberately calls `library::read_meta_public`, NOT `library::get_meta` — `get_meta` writes a
+// `.meta4.json` per photo into the THUMBNAIL cache directory, which `prune_caches()` walks and
+// evicts against its 500MB cap. At 100k photos that would fill the thumbnail cache's eviction
+// pool with metadata JSON files that have nothing to do with thumbnails. The catalog's own
+// `meta_mtime` column IS the cache for catalogued photos — no second on-disk cache needed.
+
+/// "YYYY:MM:DD HH:MM:SS" (EXIF's own format, as `PhotoMeta::date` carries it) → (unix_secs,
+/// year, month, day). Days-since-epoch via Howard Hinnant's `days_from_civil` — the exact
+/// inverse of `ingest.rs`'s own `civil_from_days`, written out for the same reason that one was:
+/// exact for every date this will ever see, no `chrono` dependency for one conversion.
+fn parse_exif_datetime(raw: &str) -> Option<(i64, i32, i32, i32)> {
+    let bytes = raw.as_bytes();
+    if bytes.len() < 19 {
+        return None;
+    }
+    let y: i64 = raw.get(0..4)?.parse().ok()?;
+    let mo: i64 = raw.get(5..7)?.parse().ok()?;
+    let d: i64 = raw.get(8..10)?.parse().ok()?;
+    let h: i64 = raw.get(11..13)?.parse().ok()?;
+    let mi: i64 = raw.get(14..16)?.parse().ok()?;
+    let s: i64 = raw.get(17..19)?.parse().ok()?;
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let y_adj = if mo <= 2 { y - 1 } else { y };
+    let era = if y_adj >= 0 { y_adj } else { y_adj - 399 } / 400;
+    let yoe = (y_adj - era * 400) as u64;
+    let mp = if mo > 2 { mo - 3 } else { mo + 9 } as u64;
+    let doy = (153 * mp + 2) / 5 + (d as u64) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe as i64 - 719_468;
+    let secs = days * 86_400 + h * 3600 + mi * 60 + s;
+    Some((secs, y as i32, mo as i32, d as i32))
+}
+
+/// Mirrors `sortKeyOf`'s exact JS transform (`library-ui.js`) so a future SQL `ORDER BY` on
+/// `shutter_sec` reproduces the same order the grid already sorts by — including the `1/250`
+/// → `-1/250` negation, which is what makes "1/8000" sort faster than "1/60" instead of the
+/// other way around under a naive numeric parse.
+fn shutter_to_sec(s: &str) -> Option<f64> {
+    if s.is_empty() {
+        return None;
+    }
+    if let Some(rest) = s.strip_prefix("1/") {
+        let denom: f64 = rest.parse().ok()?;
+        if denom == 0.0 {
+            return Some(0.0);
+        }
+        return Some(-1.0 / denom);
+    }
+    // JS parseFloat stops at the first non-numeric character ("2.5s" -> 2.5); Rust's f64::parse
+    // does not, so trim any trailing non-numeric suffix first.
+    let numeric: String = s.chars().take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
+    numeric.parse().ok()
+}
+
+fn leading_float(s: &str) -> Option<f64> {
+    let numeric: String = s.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
+    if numeric.is_empty() {
+        None
+    } else {
+        numeric.parse().ok()
+    }
+}
+
+#[derive(Default)]
+pub struct MetadataResult {
+    pub read: usize,
+}
+
+/// Chunks of 512, resumable via `meta_mtime`: a photo whose `meta_mtime` already equals its
+/// current `mtime` is skipped, so a cancelled or crashed pass picks up exactly where it left
+/// off, and re-running this after nothing has changed does zero EXIF reads.
+pub fn metadata_run(
+    conn: &Connection,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<MetadataResult, String> {
+    let mut result = MetadataResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND (p.meta_mtime IS NULL OR p.meta_mtime != p.mtime)
+                 LIMIT 512",
+            )
+            .map_err(|e| e.to_string())?;
+        // ⚠️ Volumes not currently mounted are filtered out HERE, in Rust — not in the SQL
+        // above — because "is this path currently a real directory" is a filesystem fact SQL
+        // can't express. Without this, a photo on an offline volume would never get its
+        // meta_mtime set (read_meta_public on a missing path just returns an empty PhotoMeta,
+        // and writing that as "done" would wrongly cache "no metadata" forever), so the SAME
+        // 512-row batch would be re-selected every loop iteration — an infinite loop the moment
+        // an offline volume's rows are the only ones left needing metadata.
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let mtime: i64 = r.get(2)?;
+                let last_path: String = r.get(3)?;
+                let is_local: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            // Either truly nothing left, or everything remaining is on an offline volume —
+            // either way, spinning on the same unprocessable rows forever is wrong. The next
+            // explicit scan (e.g. triggered by a volume remounting) picks these back up.
+            break;
+        }
+
+        progress(ScanProgress { phase: "metadata".into(), done: result.read, total: result.read + batch.len(), current: String::new() });
+
+        // The EXIF reads themselves are the expensive part (a RAW's metadata read is real I/O)
+        // — parallelize those, then commit as one transaction so the DB is never touched from
+        // more than one thread at a time.
+        let read: Vec<(i64, i64, crate::library::PhotoMeta)> = batch
+            .par_iter()
+            .map(|(id, abs, mtime)| (*id, *mtime, crate::library::read_meta_public(abs)))
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, mtime, meta) in &read {
+            let (captured, cap_y, cap_m, cap_d) = meta
+                .date
+                .as_deref()
+                .and_then(parse_exif_datetime)
+                .map(|(s, y, mo, d)| (Some(s), Some(y), Some(mo), Some(d)))
+                .unwrap_or((None, None, None, None));
+            let shutter_sec = meta.shutter.as_deref().and_then(shutter_to_sec);
+            let aperture_f = meta.aperture.as_deref().and_then(leading_float);
+            let focal_mm = meta.focal_len.as_deref().and_then(leading_float);
+            tx.execute(
+                "UPDATE photos SET
+                    camera = ?1, make = ?2, model = ?3, lens = ?4, iso = ?5,
+                    shutter = ?6, shutter_sec = ?7, aperture = ?8, aperture_f = ?9,
+                    focal = ?10, focal_mm = ?11,
+                    captured = ?12, cap_y = ?13, cap_m = ?14, cap_d = ?15,
+                    meta_mtime = ?16
+                 WHERE id = ?17",
+                params![
+                    meta.camera, meta.make, meta.model, meta.lens, meta.iso,
+                    meta.shutter, shutter_sec, meta.aperture, aperture_f,
+                    meta.focal_len, focal_mm,
+                    captured, cap_y, cap_m, cap_d,
+                    mtime, id,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.read += read.len();
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.read, total: result.read, current: String::new() });
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>, state: tauri::State<CatalogState>) -> Result<ScanResult, String> {
     use tauri::Emitter;
     state.cancel.store(false, Ordering::Relaxed);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    scan_run(&conn, volume_id, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
+    let result = scan_run(&conn, volume_id, &mut emit, &state.cancel)?;
+    // Phase B chained automatically: one catalog_scan call from the frontend (fired from
+    // openFolder's catalogRegisterFolder) gets a walked AND metadata-read catalog, with no
+    // second round trip needed from JS.
+    metadata_run(&conn, &mut emit, &state.cancel)?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1046,5 +1221,101 @@ mod tests {
         let conn = temp_db();
         let res = add_root_run(&conn, "/definitely/not/a/real/path/xyz", None);
         assert!(res.is_err());
+    }
+
+    /// `days_from_civil` (embedded in `parse_exif_datetime`) is the exact inverse of ingest.rs's
+    /// `civil_from_days` — cross-checked against the same known dates that test pins, including
+    /// the leap-day case an off-by-one in the era math lands on.
+    #[test]
+    fn parse_exif_datetime_is_exact() {
+        assert_eq!(parse_exif_datetime("1970:01:01 00:00:00").unwrap(), (0, 1970, 1, 1));
+        assert_eq!(parse_exif_datetime("2024:08:15 00:00:00").unwrap().0, 19_950 * 86_400);
+        assert_eq!(parse_exif_datetime("2026:08:15 00:00:00").unwrap().0, 20_680 * 86_400);
+        // A leap day, cross-checked the same way ingest.rs's own test is.
+        let (secs, y, m, d) = parse_exif_datetime("2024:02:29 12:30:45").unwrap();
+        assert_eq!((y, m, d), (2024, 2, 29));
+        assert_eq!(secs, 19_782 * 86_400 + 12 * 3600 + 30 * 60 + 45);
+        assert!(parse_exif_datetime("garbage").is_none());
+        assert!(parse_exif_datetime("2024:13:01 00:00:00").is_none(), "month 13 must be rejected, not silently wrapped");
+    }
+
+    /// Pins the exact transform `sortKeyOf` (library-ui.js) applies to a shutter string, so a
+    /// future SQL `ORDER BY shutter_sec` reproduces the same order the grid already sorts by —
+    /// whatever that order is, this only has to MATCH it, not judge it. Verified against the
+    /// formula directly: negating 1/N means a smaller N (a slower shutter, "1/60") produces a
+    /// more negative value than a larger N ("1/8000"), so slower shutters sort first ascending.
+    #[test]
+    fn shutter_to_sec_matches_the_frontend_sort_key() {
+        assert_eq!(shutter_to_sec("1/250"), Some(-1.0 / 250.0));
+        assert_eq!(shutter_to_sec("1/8000"), Some(-1.0 / 8000.0));
+        assert!(shutter_to_sec("1/60").unwrap() < shutter_to_sec("1/8000").unwrap(), "matches sortKeyOf's -1/N: a slower shutter (smaller N) is more negative, so it sorts first ascending");
+        assert_eq!(shutter_to_sec("2.5s"), Some(2.5));
+        assert_eq!(shutter_to_sec(""), None);
+    }
+
+    /// The end-to-end path against a REAL photo, if one exists in the checkout (skipped
+    /// cleanly otherwise) — the unit tests above each cover one helper; this is the one that
+    /// catches them composing wrongly. Also proves resumability: a second call with nothing
+    /// changed must read zero additional files.
+    #[test]
+    fn metadata_run_reads_real_exif_and_is_resumable() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&repo).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| matches!(p.extension().and_then(|e| e.to_str()), Some("jpg") | Some("JPG")))
+        }) else {
+            eprintln!("skipping: no geneva/ jpg present in this checkout");
+            return;
+        };
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("meta");
+        let dest = dir.join(sample.file_name().unwrap());
+        std::fs::copy(&sample, &dest).unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = metadata_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.read, 1);
+
+        let (camera, captured): (Option<String>, Option<i64>) = conn
+            .query_row("SELECT camera, captured FROM photos WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert!(camera.is_some(), "a real photo's EXIF camera must be read");
+        assert!(captured.is_some(), "a real photo's capture date must be parsed into `captured`");
+
+        let r2 = metadata_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.read, 0, "nothing changed — a second pass must not re-read anything");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The infinite-loop guard, proven directly: a photo whose volume is offline must not send
+    /// `metadata_run` into a spin re-selecting the same unprocessable row forever. If the guard
+    /// regressed, this test would hang rather than fail — which is exactly why it exists.
+    #[test]
+    fn metadata_run_terminates_when_only_offline_rows_remain() {
+        let conn = temp_db();
+        conn.execute(
+            "INSERT INTO volumes (uuid, label, last_path, is_local, last_seen)
+             VALUES ('ext-gone-meta', 'Old LaCie', '/Volumes/DoesNotExist98765', 0, 0)",
+            [],
+        )
+        .unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='ext-gone-meta'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+             VALUES (?1, 'p.jpg', '', 'p.jpg', 'p.jpg', 'jpg', 'jpeg', 10, 5, 0, 1)",
+            params![vid],
+        )
+        .unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let result = metadata_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.read, 0, "an offline volume's photo must be skipped, not processed with empty metadata");
+
+        let meta_mtime: Option<i64> = conn.query_row("SELECT meta_mtime FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert!(meta_mtime.is_none(), "meta_mtime must stay unset so the row is retried once the volume returns");
     }
 }
