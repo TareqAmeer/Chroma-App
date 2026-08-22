@@ -844,6 +844,81 @@ pub fn metadata_run(
     Ok(result)
 }
 
+// ── Scan phase C: sidecar contents ──────────────────────────────────────────────────────────
+//
+// ⚠️ The .xmp is the source of truth (this whole module's own top-of-file comment). This phase
+// exists purely to make what's already in the sidecar QUERYABLE — it reads FROM the file into
+// the catalog, never the other way. `set_sidecar` (library.rs) stays the only writer of XMP.
+
+#[derive(Default)]
+pub struct SidecarResult {
+    pub read: usize,
+}
+
+/// Same shape as `metadata_run`: chunked, resumable (via `sidecar_mtime != sidecar_parsed_mtime`
+/// — a photo whose sidecar hasn't changed since it was last parsed is skipped for free, and a
+/// sidecar that was deleted naturally resets rating/label/edited/favorite to their defaults,
+/// since `get_sidecar` on a missing file returns `Sidecar::default()`), and offline-safe for the
+/// same reason phase B is: a row on an unmounted volume must not be marked "parsed" with
+/// defaults it never actually read, or it would never be retried once the volume returns.
+pub fn sidecar_run(
+    conn: &Connection,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<SidecarResult, String> {
+    let mut result = SidecarResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, p.sidecar_mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.sidecar_mtime != p.sidecar_parsed_mtime
+                 LIMIT 512",
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let sidecar_mtime: i64 = r.get(2)?;
+                let last_path: String = r.get(3)?;
+                let is_local: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, sidecar_mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, sm)| abs.map(|a| (id, a, sm))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "sidecar".into(), done: result.read, total: result.read + batch.len(), current: String::new() });
+
+        let read: Vec<(i64, i64, crate::library::Sidecar)> = batch
+            .par_iter()
+            .map(|(id, abs, sidecar_mtime)| (*id, *sidecar_mtime, crate::library::get_sidecar(abs.clone())))
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, sidecar_mtime, sc) in &read {
+            tx.execute(
+                "UPDATE photos SET rating = ?1, label = ?2, edited = ?3, favorite = ?4, sidecar_parsed_mtime = ?5 WHERE id = ?6",
+                params![sc.rating, sc.label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.read += read.len();
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.read, total: result.read, current: String::new() });
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>, state: tauri::State<CatalogState>) -> Result<ScanResult, String> {
     use tauri::Emitter;
@@ -851,10 +926,11 @@ pub fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>, state: tauri:
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
     let result = scan_run(&conn, volume_id, &mut emit, &state.cancel)?;
-    // Phase B chained automatically: one catalog_scan call from the frontend (fired from
-    // openFolder's catalogRegisterFolder) gets a walked AND metadata-read catalog, with no
-    // second round trip needed from JS.
+    // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
+    // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
+    // catalog, with no extra round trips from JS.
     metadata_run(&conn, &mut emit, &state.cancel)?;
+    sidecar_run(&conn, &mut emit, &state.cancel)?;
     Ok(result)
 }
 
@@ -1317,5 +1393,103 @@ mod tests {
 
         let meta_mtime: Option<i64> = conn.query_row("SELECT meta_mtime FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert!(meta_mtime.is_none(), "meta_mtime must stay unset so the row is retried once the volume returns");
+    }
+
+    /// The real end-to-end path: `set_sidecar` (library.rs, the app's ONE sidecar writer)
+    /// writes a real .xmp, and `sidecar_run` must read it back into the catalog row correctly.
+    #[test]
+    fn sidecar_run_syncs_rating_label_edited_favorite() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("sidecar");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        let photo_path = dir.join("a.jpg").to_string_lossy().into_owned();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        crate::library::set_sidecar(photo_path.clone(), 4, "Green".into(), true, None, Some(true)).unwrap();
+        // The sidecar now exists on disk with a real mtime, but the DB row's own sidecar_mtime
+        // is still whatever the scan above saw (0, since the sidecar didn't exist yet) — a
+        // rescan is what notices the sidecar appeared, exactly like a real edit-then-reopen.
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.read, 1);
+
+        let (rating, label, edited, favorite): (i64, String, i64, i64) = conn
+            .query_row("SELECT rating, label, edited, favorite FROM photos WHERE name = 'a.jpg'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })
+            .unwrap();
+        assert_eq!(rating, 4);
+        assert_eq!(label, "Green");
+        assert_eq!(edited, 1);
+        assert_eq!(favorite, 1);
+
+        let r2 = sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.read, 0, "nothing changed — a second pass must not re-read the sidecar");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A deleted sidecar must reset the catalog's mirror of it, not leave a stale rating behind
+    /// forever — `get_sidecar` on a missing file returns defaults, and this proves that
+    /// actually reaches the DB row.
+    #[test]
+    fn sidecar_run_resets_when_the_sidecar_is_deleted() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("sidecar_reset");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        let photo_path = dir.join("a.jpg").to_string_lossy().into_owned();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        crate::library::set_sidecar(photo_path.clone(), 5, "Red".into(), false, None, None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let rating: i64 = conn.query_row("SELECT rating FROM photos WHERE name = 'a.jpg'", [], |r| r.get(0)).unwrap();
+        assert_eq!(rating, 5);
+
+        std::fs::remove_file(dir.join("a.xmp")).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let r = sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r.read, 1, "the sidecar's disappearance must itself be detected as a change");
+
+        let (rating, label): (i64, String) = conn
+            .query_row("SELECT rating, label FROM photos WHERE name = 'a.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(rating, 0, "rating must reset once the sidecar is gone");
+        assert_eq!(label, "");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Same infinite-loop guard as metadata_run's, proven the same way: a photo on an offline
+    /// volume must not make sidecar_run spin forever re-selecting the same row.
+    #[test]
+    fn sidecar_run_terminates_when_only_offline_rows_remain() {
+        let conn = temp_db();
+        conn.execute(
+            "INSERT INTO volumes (uuid, label, last_path, is_local, last_seen)
+             VALUES ('ext-gone-sc', 'Old LaCie', '/Volumes/DoesNotExist24680', 0, 0)",
+            [],
+        )
+        .unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='ext-gone-sc'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, sidecar_mtime)
+             VALUES (?1, 'p.jpg', '', 'p.jpg', 'p.jpg', 'jpg', 'jpeg', 10, 5, 0, 1, 999)",
+            params![vid],
+        )
+        .unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let result = sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.read, 0, "an offline volume's photo must be skipped, not processed with default sidecar values");
+
+        let sidecar_parsed_mtime: i64 = conn.query_row("SELECT sidecar_parsed_mtime FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(sidecar_parsed_mtime, 0, "must stay unparsed so the row is retried once the volume returns");
     }
 }
