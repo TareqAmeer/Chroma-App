@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -221,6 +221,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             sharpness   REAL,
             blurry      INTEGER NOT NULL DEFAULT 0,
             focus_at    INTEGER,
+            reviewed    INTEGER NOT NULL DEFAULT 0,
 
             present     INTEGER NOT NULL DEFAULT 1,
             scan_gen    INTEGER NOT NULL DEFAULT 0,
@@ -276,6 +277,18 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             conn.execute("ALTER TABLE photos ADD COLUMN focus_at INTEGER", [])?;
         }
         conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_blurry ON photos(blurry)", [])?;
+    }
+
+    // v2 -> v3: a "Not blurry" dismiss action for the Needs-review surface (photos.blurry alone
+    // gave no way to say "I looked, it's fine" — every focus rescore would just re-flag it).
+    if version < 3 {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("reviewed")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0", [])?;
+        }
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -1671,7 +1684,10 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
         // March" cross-year view in this design), so they're only applied once year is set.
         if q.blurry_only {
-            where_parts.push("p.blurry = 1".to_string());
+            // Excludes anything the user already dismissed via catalog_dismiss_review — a
+            // "Not blurry" click that still shows the photo on the very next visit would read
+            // as broken, not as a review surface.
+            where_parts.push("p.blurry = 1 AND p.reviewed = 0".to_string());
         }
         for kw in &q.keywords {
             // Same substr-prefix check as `keywords_run` (not the ASCII-range shorthand — see
@@ -2154,7 +2170,15 @@ pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), canc
         for (id, mtime, score) in &scored {
             let Some(v) = score else { continue }; // undecodable right now — leave focus_at unset, retried next pass
             let blurry = if *v < FOCUS_BLUR_THRESHOLD { 1 } else { 0 };
-            tx.execute("UPDATE photos SET sharpness = ?1, blurry = ?2, focus_at = ?3 WHERE id = ?4", params![v, blurry, mtime, id])
+            // A fresh score (this row's mtime moved since it was last scored — the only reason
+            // focus_run ever revisits a row) clears any prior dismissal: the content actually
+            // changed, so whatever the user reviewed no longer necessarily applies. A row whose
+            // mtime hasn't moved is never touched here at all, so an ordinary dismissal (no
+            // re-edit) survives indefinitely, which is the whole point of the feature.
+            tx.execute(
+                "UPDATE photos SET sharpness = ?1, blurry = ?2, focus_at = ?3, reviewed = 0 WHERE id = ?4",
+                params![v, blurry, mtime, id],
+            )
                 .map_err(|e| e.to_string())?;
             result.scored += 1;
             if blurry == 1 {
@@ -2493,6 +2517,25 @@ fn promote_stack_leader(conn: &Connection, old_leader_id: i64) -> Result<(), Str
 pub fn catalog_note_deleted(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     note_deleted_run(&conn, &paths)
+}
+
+/// "Not blurry" — the dismiss action for the Needs-review surface. `reviewed = 1` survives
+/// indefinitely UNLESS focus_run rescoring the photo (its mtime moved — see that function's own
+/// comment) resets it, on the theory that a genuinely re-edited file may need a fresh look.
+pub fn dismiss_review_run(conn: &Connection, paths: &[String]) -> Result<usize, String> {
+    let mut updated = 0;
+    for p in paths {
+        if let Some(id) = find_photo_by_abs_path(conn, p) {
+            updated += conn.execute("UPDATE photos SET reviewed = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(updated)
+}
+
+#[tauri::command]
+pub fn catalog_dismiss_review(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    dismiss_review_run(&conn, &paths)
 }
 
 // ── Keyword tree ─────────────────────────────────────────────────────────────────────────────
@@ -4041,5 +4084,75 @@ mod tests {
         assert_eq!(dir_size_recursive(&dir.join("nonexistent")), 0, "a missing directory must read as empty, not error");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── Needs-review dismiss ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn dismissing_a_blurry_photo_removes_it_from_blurry_only_and_survives_a_requery() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, blurry, sharpness)
+             VALUES (?1, 'a.jpg', '', 'a.jpg', 'a.jpg', 'jpg', 'jpeg', 10, 0, 0, 1, 1, 10.0)",
+            params![vid],
+        )
+        .unwrap();
+
+        let before = query_run(&conn, CatalogQuery { blurry_only: true, ..Default::default() }).unwrap();
+        assert_eq!(before.entries.len(), 1, "must show up in Needs review before being dismissed");
+
+        let n = dismiss_review_run(&conn, &["/a.jpg".to_string()]).unwrap();
+        assert_eq!(n, 1);
+
+        let after = query_run(&conn, CatalogQuery { blurry_only: true, ..Default::default() }).unwrap();
+        assert_eq!(after.entries.len(), 0, "a dismissed photo must disappear from Needs review immediately");
+
+        let (blurry, reviewed): (i64, i64) = conn.query_row("SELECT blurry, reviewed FROM photos WHERE name = 'a.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(blurry, 1, "dismissing must NOT un-flag it — blurry stays a fact about the photo, reviewed is a separate fact about the USER");
+        assert_eq!(reviewed, 1);
+    }
+
+    /// The other half of the design: a genuine re-edit (mtime moves, so focus_run rescans it)
+    /// must clear a stale dismissal — the content is different now, so whatever was reviewed
+    /// no longer necessarily applies. An UNCHANGED photo's dismissal must never be touched.
+    #[test]
+    fn focus_run_clears_a_dismissal_only_when_it_actually_rescans_the_photo() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&repo).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| matches!(p.extension().and_then(|e| e.to_str()), Some("jpg") | Some("JPG")))
+        }) else {
+            eprintln!("skipping: no geneva/ jpg present in this checkout");
+            return;
+        };
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("dismiss_rescan");
+        let dest = dir.join(sample.file_name().unwrap());
+        std::fs::copy(&sample, &dest).unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        focus_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        conn.execute("UPDATE photos SET reviewed = 1 WHERE id = 1", []).unwrap();
+
+        // Re-running focus_run with NOTHING changed must not touch the dismissal — focus_run's
+        // own WHERE clause (focus_at != mtime) means it won't even look at this row again.
+        focus_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let still_reviewed: i64 = conn.query_row("SELECT reviewed FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(still_reviewed, 1, "an unchanged photo's dismissal must survive a no-op rescan pass");
+
+        // Force a rescore by moving focus_at back — simulating "this photo's mtime changed
+        // since it was last scored", the only real-world trigger for focus_run to revisit it.
+        conn.execute("UPDATE photos SET focus_at = -1 WHERE id = 1", []).unwrap();
+        focus_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let reviewed_after_rescore: i64 = conn.query_row("SELECT reviewed FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(reviewed_after_rescore, 0, "a genuine rescore must clear a stale dismissal");
+
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_file(offline_thumb_path(1)).ok();
     }
 }

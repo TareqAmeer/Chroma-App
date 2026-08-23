@@ -133,6 +133,7 @@
       case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
+      case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
       // harmless no-op mock, matching every other pure-Rust-side mutation's mock in this file.
       case 'trash_file': return Promise.resolve();
@@ -2621,6 +2622,18 @@
     item('Reject (X)', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))));
     item('Pick (flag)', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))));
     item('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))));
+    // Only offered while actually looking at Needs review — elsewhere it's a confusing no-op
+    // (dismissing a photo that was never flagged does nothing visible), and "blurry" itself
+    // stays true either way; this only ever hides it from THIS specific review list.
+    if (state.source === 'catalog' && state.catalogScope === 'blurry') {
+      item(`Not blurry — dismiss${n > 1 ? ` (${n})` : ''}`, async () => {
+        try {
+          await invoke('catalog_dismiss_review', { paths });
+          toast(`Dismissed ${n} photo${n > 1 ? 's' : ''} from Needs review`);
+          refreshView();
+        } catch (e) { toast(humanizeErr('dismiss from review', e), 'err'); }
+      });
+    }
     sep();
     item('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
     sep();
