@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -218,6 +218,10 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             stack_role  TEXT,
             export_of   INTEGER,
 
+            sharpness   REAL,
+            blurry      INTEGER NOT NULL DEFAULT 0,
+            focus_at    INTEGER,
+
             present     INTEGER NOT NULL DEFAULT 1,
             scan_gen    INTEGER NOT NULL DEFAULT 0,
             added       INTEGER NOT NULL,
@@ -233,6 +237,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS ix_photos_name     ON photos(name_lc);
         CREATE INDEX IF NOT EXISTS ix_photos_present  ON photos(present, volume_id);
         CREATE INDEX IF NOT EXISTS ix_photos_phash    ON photos(phash);
+        CREATE INDEX IF NOT EXISTS ix_photos_blurry   ON photos(blurry);
 
         CREATE TABLE IF NOT EXISTS keywords (
             id        INTEGER PRIMARY KEY,
@@ -251,6 +256,28 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS ix_pk_kw ON photo_keywords(keyword_id, photo_id);
         ",
     )?;
+
+    // v1 -> v2: focus/sharpness columns, additive. `photos` may already exist from a v1
+    // catalog (this dev machine's own), so CREATE TABLE's IF NOT EXISTS above won't have added
+    // them — ALTER TABLE ADD COLUMN errors if the column is already there, so this is guarded
+    // by checking PRAGMA table_info first, which is what keeps re-running migrate() idempotent.
+    if version < 2 {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("sharpness")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN sharpness REAL", [])?;
+        }
+        if !has_col("blurry")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN blurry INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !has_col("focus_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN focus_at INTEGER", [])?;
+        }
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_blurry ON photos(blurry)", [])?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -1476,6 +1503,8 @@ pub struct CatalogEntry {
     pub id: i64,
     pub offline: bool,
     pub volume: String,
+    pub sharpness: Option<f64>,
+    pub blurry: bool,
 }
 
 #[derive(Serialize, Default)]
@@ -1508,6 +1537,11 @@ pub struct CatalogQuery {
     /// first below.
     #[serde(default)]
     pub no_date: bool,
+    /// Focus-review scope: only rows already scored below `FOCUS_BLUR_THRESHOLD`. Never applied
+    /// automatically — this is what feeds the explicit "Review blurry photos" surface, same
+    /// posture as phash duplicate clustering: flag for the user, never auto-act.
+    #[serde(default)]
+    pub blurry_only: bool,
 }
 fn default_true() -> bool {
     true
@@ -1521,7 +1555,7 @@ fn default_true() -> bool {
 // every entry silently filtered as if it were offline.
 impl Default for CatalogQuery {
     fn default() -> Self {
-        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false }
+        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false, blurry_only: false }
     }
 }
 
@@ -1562,6 +1596,9 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
     }
     // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
     // March" cross-year view in this design), so they're only applied once year is set.
+    if q.blurry_only {
+        where_parts.push("p.blurry = 1".to_string());
+    }
     if q.no_date {
         where_parts.push("(p.cap_y IS NULL OR p.cap_m IS NULL OR p.cap_d IS NULL)".to_string());
     } else if let Some(y) = q.year {
@@ -1592,7 +1629,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
     // rather than a nonexistent column.
     let sql = format!(
         "SELECT p.id, p.name, p.rel_path, p.kind, p.mtime, p.size, 0,
-                v.last_path, v.is_local, v.label
+                v.last_path, v.is_local, v.label, p.sharpness, p.blurry
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {where_clause}
          ORDER BY p.captured DESC, p.mtime DESC
@@ -1611,6 +1648,8 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let last_path: String = r.get(7)?;
             let is_local: i64 = r.get(8)?;
             let label: String = r.get(9)?;
+            let sharpness: Option<f64> = r.get(10)?;
+            let blurry: i64 = r.get(11)?;
             let online = is_local != 0 || Path::new(&last_path).is_dir();
             Ok(CatalogEntry {
                 name,
@@ -1626,6 +1665,8 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 id,
                 offline: !online,
                 volume: label,
+                sharpness,
+                blurry: blurry != 0,
             })
         })
         .map_err(|e| e.to_string())?
@@ -1650,6 +1691,8 @@ pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collecti
     let mut m = std::collections::HashMap::new();
     let all: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("all".to_string(), all as u64);
+    let blurry: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND blurry = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("blurry".to_string(), blurry as u64);
     Ok(m)
 }
 
@@ -1822,6 +1865,131 @@ pub fn catalog_thumbnails(app: tauri::AppHandle, state: tauri::State<CatalogStat
     state.cancel.store(false, Ordering::Relaxed);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     thumbnail_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+
+// ── Focus / sharpness (out-of-focus review) ─────────────────────────────────────────────────
+//
+// Lightroom's own version of this is the thing the user explicitly said is "excessively slow" —
+// it works from a full-resolution render per photo. This scores the SAME small JPEG bytes
+// `thumbnail_run` already produced (offline_thumb_path / thumbnail_bytes_for) with a second,
+// separate scan phase: no RAW decode, no extra file read off the (possibly external) volume,
+// just one more cheap in-memory JPEG decode of a handful of KB plus a 3x3 convolution over a
+// few hundred pixels. That is the entire "fast" design — reuse decoded work, don't add a decode.
+//
+// Score = variance of the Laplacian of the greyscale thumbnail (the standard, well-known
+// blur-detection metric: a sharp image has a lot of high-frequency edge energy, so the second
+// derivative varies a lot from pixel to pixel; a blurred image is locally smooth, so it doesn't).
+// Never used to auto-delete or auto-reject anything — same posture as phash duplicate
+// clustering (CLAUDE.md trap 7): flag `blurry` for a review surface, require the user to act.
+//
+// ⚠️ The score is only comparable at a fixed input resolution — variance-of-Laplacian scales
+// with image size, so mixing thumbnail sizes would make the one FOCUS_BLUR_THRESHOLD constant
+// meaningless. `thumbnail_bytes_for` always returns the same long-edge size for a given photo
+// kind, so this holds without this module needing to know or care what that size is.
+
+const FOCUS_BLUR_THRESHOLD: f64 = 60.0;
+
+/// `None` when the bytes don't decode as an image, or the decoded image is too small to say
+/// anything meaningful about (a 160x120 embedded RAW preview, say) — callers leave `focus_at`
+/// unset in that case so the row is retried on a later pass rather than permanently scored 0.
+fn laplacian_variance_from_jpeg(bytes: &[u8]) -> Option<f64> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let gray = img.to_luma8();
+    let (w, h) = gray.dimensions();
+    if w < 9 || h < 9 {
+        return None;
+    }
+    let px = |x: i32, y: i32| -> f64 {
+        let cx = x.clamp(0, w as i32 - 1) as u32;
+        let cy = y.clamp(0, h as i32 - 1) as u32;
+        gray.get_pixel(cx, cy)[0] as f64
+    };
+    let mut sum = 0.0f64;
+    let mut sum_sq = 0.0f64;
+    let n = (w as f64) * (h as f64);
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let lap = -4.0 * px(x, y) + px(x - 1, y) + px(x + 1, y) + px(x, y - 1) + px(x, y + 1);
+            sum += lap;
+            sum_sq += lap * lap;
+        }
+    }
+    let mean = sum / n;
+    Some(sum_sq / n - mean * mean)
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct FocusResult {
+    pub scored: usize,
+    pub flagged: usize,
+}
+
+/// Same chunked/resumable/cancellable shape as `thumbnail_run`. Video is excluded (no still to
+/// score) and any photo the scan hasn't yet decoded a thumbnail for is skipped this pass — it
+/// will have one by the time this loop next runs, since thumbnail_run always runs first in the
+/// pipeline (see main.rs's chained-scan ordering).
+pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<FocusResult, String> {
+    let mut result = FocusResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.thumb = 1
+                   AND (p.focus_at IS NULL OR p.focus_at != p.mtime)
+                 LIMIT 64",
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let last_path: String = r.get(2)?;
+                let is_local: i64 = r.get(3)?;
+                let mtime: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mt)| abs.map(|a| (id, a, mt))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "focus".into(), done: result.scored, total: result.scored + batch.len(), current: String::new() });
+
+        let scored: Vec<(i64, i64, Option<f64>)> =
+            batch.par_iter().map(|(id, abs, mtime)| (*id, *mtime, thumbnail_bytes_for(abs).ok().and_then(|b| laplacian_variance_from_jpeg(&b)))).collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, mtime, score) in &scored {
+            let Some(v) = score else { continue }; // undecodable right now — leave focus_at unset, retried next pass
+            let blurry = if *v < FOCUS_BLUR_THRESHOLD { 1 } else { 0 };
+            tx.execute("UPDATE photos SET sharpness = ?1, blurry = ?2, focus_at = ?3 WHERE id = ?4", params![v, blurry, mtime, id])
+                .map_err(|e| e.to_string())?;
+            result.scored += 1;
+            if blurry == 1 {
+                result.flagged += 1;
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.scored, total: result.scored, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_focus(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<FocusResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    focus_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
 }
 
 /// The serving half — called from `library::get_thumbnail` as a fallback when the direct file
@@ -3001,5 +3169,122 @@ mod tests {
         assert_eq!(result.generated, 0);
         let thumb: i64 = conn.query_row("SELECT thumb FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert_eq!(thumb, 0, "must stay unattempted so it's retried once the volume returns");
+    }
+
+    // ── Focus / sharpness ───────────────────────────────────────────────────────────────────
+
+    fn encode_gray_jpeg(w: u32, h: u32, px: impl Fn(u32, u32) -> u8) -> Vec<u8> {
+        let mut img = image::GrayImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                img.put_pixel(x, y, image::Luma([px(x, y)]));
+            }
+        }
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageLuma8(img).write_to(&mut out, image::ImageFormat::Jpeg).unwrap();
+        out.into_inner()
+    }
+
+    /// The core claim the whole feature rests on: a genuinely sharp image (a high-frequency
+    /// checkerboard) must score meaningfully higher than a genuinely blurred one (a flat field
+    /// plus a single soft gradient) at the SAME resolution. Not a threshold test — a relative
+    /// one, which is what the metric is actually for.
+    #[test]
+    fn laplacian_variance_separates_sharp_from_blurred() {
+        let sharp = encode_gray_jpeg(64, 64, |x, y| if (x + y) % 2 == 0 { 255 } else { 0 });
+        let blurred = encode_gray_jpeg(64, 64, |x, _y| 128u8.saturating_add((x / 8) as u8));
+
+        let vs = laplacian_variance_from_jpeg(&sharp).unwrap();
+        let vb = laplacian_variance_from_jpeg(&blurred).unwrap();
+        assert!(vs > vb * 10.0, "checkerboard ({vs}) must score far higher than a smooth gradient ({vb})");
+        assert!(vb < FOCUS_BLUR_THRESHOLD, "the smooth field is exactly the case the threshold exists to catch");
+        assert!(vs > FOCUS_BLUR_THRESHOLD, "the checkerboard must not be flagged as blurry");
+    }
+
+    #[test]
+    fn laplacian_variance_declines_undersized_images() {
+        let tiny = encode_gray_jpeg(4, 4, |_, _| 100);
+        assert!(laplacian_variance_from_jpeg(&tiny).is_none(), "too small to say anything meaningful — must decline, not fabricate a score");
+    }
+
+    /// End-to-end against a real photo (skipped cleanly if geneva/ isn't present, same posture
+    /// as the other real-file tests in this module): focus_run only scores photos that already
+    /// have an offline thumbnail, marks `blurry` from the threshold, and is resumable exactly
+    /// like every other scan phase.
+    #[test]
+    fn focus_run_scores_a_real_photo_and_is_resumable() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&repo).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| matches!(p.extension().and_then(|e| e.to_str()), Some("jpg") | Some("JPG")))
+        }) else {
+            eprintln!("skipping: no geneva/ jpg present in this checkout");
+            return;
+        };
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("focus");
+        let dest = dir.join(sample.file_name().unwrap());
+        std::fs::copy(&sample, &dest).unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        let r1 = focus_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.scored, 1);
+
+        let (sharpness, focus_at, mtime): (Option<f64>, Option<i64>, i64) =
+            conn.query_row("SELECT sharpness, focus_at, mtime FROM photos WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert!(sharpness.is_some(), "a real, decodable photo must get a real score");
+        assert_eq!(focus_at, Some(mtime), "focus_at is the resumability marker — it must match the row's own mtime");
+
+        let r2 = focus_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.scored, 0, "nothing changed — a second pass must not rescore an already-scored photo");
+
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_file(offline_thumb_path(1)).ok();
+    }
+
+    /// A photo with no offline thumbnail yet has nothing for focus_run to decode without a
+    /// second, separate decode path — it must be left for a later pass (once thumbnail_run has
+    /// reached it) rather than attempted and quietly mis-scored from something else.
+    #[test]
+    fn focus_run_skips_photos_without_a_thumbnail_yet() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, thumb)
+             VALUES (?1, 'a.jpg', '', 'a.jpg', 'a.jpg', 'jpg', 'jpeg', 10, 0, 0, 1, 0)",
+            params![vid],
+        )
+        .unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let result = focus_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.scored, 0, "must wait for thumbnail_run, not attempt a second decode path");
+    }
+
+    /// `blurry_only` is the query the review surface is built on — pins that it returns exactly
+    /// the flagged rows and none of the sharp ones.
+    #[test]
+    fn blurry_only_query_returns_exactly_the_flagged_rows() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
+        for (name, blurry) in [("sharp.jpg", 0), ("soft.jpg", 1)] {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, blurry, sharpness)
+                 VALUES (?1, ?2, '', ?2, ?2, 'jpg', 'jpeg', 10, 0, 0, 1, ?3, ?4)",
+                params![vid, name, blurry, if blurry == 1 { 10.0 } else { 900.0 }],
+            )
+            .unwrap();
+        }
+
+        let page = query_run(&conn, CatalogQuery { blurry_only: true, ..Default::default() }).unwrap();
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].name, "soft.jpg");
+        assert!(page.entries[0].blurry);
     }
 }
