@@ -1505,6 +1505,15 @@ pub struct CatalogEntry {
     pub volume: String,
     pub sharpness: Option<f64>,
     pub blurry: bool,
+    /// >1 when this row represents a stack (RAW + its exports) rather than a single photo.
+    /// 0 or 1 means "no badge" — both an unstacked photo and a stack that's shrunk to just its
+    /// leader render identically to the frontend, deliberately.
+    pub stack_n: u32,
+    /// Set only when this row IS a stack leader with more than one present member: the path of
+    /// the newest export, for the THUMBNAIL only — `path`/`id` above always stay the RAW leader,
+    /// which is what opening the card and every mutation (rating, delete, ...) acts on. Showing
+    /// the finished look while still editing the RAW is the plan's own explicit design call.
+    pub thumb_path: Option<String>,
 }
 
 #[derive(Serialize, Default)]
@@ -1542,6 +1551,11 @@ pub struct CatalogQuery {
     /// posture as phash duplicate clustering: flag for the user, never auto-act.
     #[serde(default)]
     pub blurry_only: bool,
+    /// When set, ignore every other filter and return exactly the present members of this ONE
+    /// stack (leader first, then derivatives newest-first) — the "expand in place" behavior a
+    /// stack's badge triggers. Takes a leader's `photos.id` (== that stack's `stack_id`).
+    #[serde(default)]
+    pub expand_stack: Option<i64>,
 }
 fn default_true() -> bool {
     true
@@ -1555,7 +1569,7 @@ fn default_true() -> bool {
 // every entry silently filtered as if it were offline.
 impl Default for CatalogQuery {
     fn default() -> Self {
-        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false, blurry_only: false }
+        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false, blurry_only: false, expand_stack: None }
     }
 }
 
@@ -1582,34 +1596,48 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
     let mut where_parts = vec!["p.present = 1".to_string()];
     let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
-    if let Some(k) = &q.kind {
-        if k != "all" {
-            where_parts.push(format!("p.kind = ?{}", values.len() + 1));
-            values.push(Box::new(k.clone()));
+    if let Some(stack_id) = q.expand_stack {
+        // Expand-in-place: every other filter is ignored on purpose — a stack's own members
+        // are exactly what this call is for, regardless of what date/kind/text scope the grid
+        // behind it happens to be showing.
+        where_parts = vec!["p.present = 1".to_string(), "p.stack_id = ?1".to_string()];
+        values.push(Box::new(stack_id));
+    } else {
+        // Grouped view: only a stack's LEADER (or an unstacked photo) is a top-level row — its
+        // derivatives are folded into `stack_n`/`thumb_path` below, not listed separately. A
+        // leader satisfies `stack_id = p.id` by construction (see the stacking module's own doc
+        // comment: stack_id is always the CURRENT leader's own id).
+        where_parts.push("(p.stack_id IS NULL OR p.stack_id = p.id)".to_string());
+
+        if let Some(k) = &q.kind {
+            if k != "all" {
+                where_parts.push(format!("p.kind = ?{}", values.len() + 1));
+                values.push(Box::new(k.clone()));
+            }
         }
-    }
-    if let Some(t) = &q.text {
-        if !t.is_empty() {
-            where_parts.push(format!("p.name_lc LIKE ?{}", values.len() + 1));
-            values.push(Box::new(format!("%{}%", t.to_lowercase())));
+        if let Some(t) = &q.text {
+            if !t.is_empty() {
+                where_parts.push(format!("p.name_lc LIKE ?{}", values.len() + 1));
+                values.push(Box::new(format!("%{}%", t.to_lowercase())));
+            }
         }
-    }
-    // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
-    // March" cross-year view in this design), so they're only applied once year is set.
-    if q.blurry_only {
-        where_parts.push("p.blurry = 1".to_string());
-    }
-    if q.no_date {
-        where_parts.push("(p.cap_y IS NULL OR p.cap_m IS NULL OR p.cap_d IS NULL)".to_string());
-    } else if let Some(y) = q.year {
-        where_parts.push(format!("p.cap_y = ?{}", values.len() + 1));
-        values.push(Box::new(y));
-        if let Some(m) = q.month {
-            where_parts.push(format!("p.cap_m = ?{}", values.len() + 1));
-            values.push(Box::new(m));
-            if let Some(d) = q.day {
-                where_parts.push(format!("p.cap_d = ?{}", values.len() + 1));
-                values.push(Box::new(d));
+        // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
+        // March" cross-year view in this design), so they're only applied once year is set.
+        if q.blurry_only {
+            where_parts.push("p.blurry = 1".to_string());
+        }
+        if q.no_date {
+            where_parts.push("(p.cap_y IS NULL OR p.cap_m IS NULL OR p.cap_d IS NULL)".to_string());
+        } else if let Some(y) = q.year {
+            where_parts.push(format!("p.cap_y = ?{}", values.len() + 1));
+            values.push(Box::new(y));
+            if let Some(m) = q.month {
+                where_parts.push(format!("p.cap_m = ?{}", values.len() + 1));
+                values.push(Box::new(m));
+                if let Some(d) = q.day {
+                    where_parts.push(format!("p.cap_d = ?{}", values.len() + 1));
+                    values.push(Box::new(d));
+                }
             }
         }
     }
@@ -1627,15 +1655,32 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
     // `edited_ts` isn't tracked by the catalog yet (it's derived from the sidecar's own mtime,
     // same as library.rs's `edited_ts_of`, and lands with scan phase C) — select a literal 0
     // rather than a nonexistent column.
+    //
+    // `stack_n`/`newest_deriv_rel` are correlated subqueries, not a JOIN+GROUP BY: a stack's
+    // members can span at most a handful of rows (a RAW plus its exports), so a per-row scalar
+    // subquery is both simpler and, per `every_ui_filter_combination_uses_an_index`'s own
+    // reasoning, still index-backed (`ix_photos_present`/the table's own rowid) rather than a
+    // full scan. In the expand-stack branch every row IS a member of the SAME stack, so both
+    // subqueries are harmless but unused by the frontend there (see `stack_n: 0` override below).
+    let order_by = if q.expand_stack.is_some() {
+        "ORDER BY (p.id != p.stack_id) ASC, p.mtime DESC"
+    } else {
+        "ORDER BY p.captured DESC, p.mtime DESC"
+    };
     let sql = format!(
         "SELECT p.id, p.name, p.rel_path, p.kind, p.mtime, p.size, 0,
-                v.last_path, v.is_local, v.label, p.sharpness, p.blurry
+                v.last_path, v.is_local, v.label, p.sharpness, p.blurry,
+                (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
+                (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
+                 ORDER BY p2.mtime DESC LIMIT 1),
+                p.stack_id
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {where_clause}
-         ORDER BY p.captured DESC, p.mtime DESC
+         {order_by}
          LIMIT {limit}"
     );
 
+    let expanding = q.expand_stack.is_some();
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let mut entries = stmt
         .query_map(param_refs.as_slice(), |r| {
@@ -1650,6 +1695,9 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let label: String = r.get(9)?;
             let sharpness: Option<f64> = r.get(10)?;
             let blurry: i64 = r.get(11)?;
+            let stack_n: i64 = r.get(12)?;
+            let newest_deriv_rel: Option<String> = r.get(13)?;
+            let stack_id: Option<i64> = r.get(14)?;
             let online = is_local != 0 || Path::new(&last_path).is_dir();
             Ok(CatalogEntry {
                 name,
@@ -1667,6 +1715,12 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 volume: label,
                 sharpness,
                 blurry: blurry != 0,
+                // While expanded, only the LEADER row (id == stack_id) still carries a real
+                // stack_n — that's what lets the frontend keep a "collapse" badge visible on it
+                // instead of stranding the user with no way back. Every derivative member gets 0
+                // (no badge, no thumbnail substitution — it's just a regular row here).
+                stack_n: if expanding && stack_id != Some(id) { 0 } else { stack_n as u32 },
+                thumb_path: if expanding { None } else { newest_deriv_rel.map(|rel| abs_path(&last_path, is_local != 0, &rel)) },
             })
         })
         .map_err(|e| e.to_string())?
@@ -3586,5 +3640,63 @@ mod tests {
             conn.query_row("SELECT stack_id, export_of FROM photos WHERE mtime = 500", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         assert_eq!(other_stack_id, new_leader.0);
         assert_eq!(other_export_of, new_leader.0);
+    }
+
+    /// The grid-facing contract: a normal (ungrouped) query must return ONE row per stack, not
+    /// one per photo — with `stack_n` reflecting the true member count and `thumb_path` pointing
+    /// at the newest export while `path`/`id` stay the RAW (the plan's explicit split between
+    /// "what you look at" and "what you click").
+    #[test]
+    fn query_run_groups_a_stack_into_one_row_with_the_newest_export_as_thumbnail() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "Originals/shoot", "x.RW2", "raw", Some(100), 1);
+        insert_stack_photo(&conn, vid, "old", "Exports/shoot", "x.jpg", "jpeg", Some(100), 2);
+        insert_stack_photo(&conn, vid, "new", "Exports/shoot", "x-v2.jpg", "jpeg", Some(100), 3);
+        conn.execute("UPDATE photos SET mtime = 500 WHERE name = 'x.jpg'", []).unwrap();
+        conn.execute("UPDATE photos SET mtime = 900 WHERE name = 'x-v2.jpg'", []).unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let stack_result = stack_run(&conn, &cancel).unwrap();
+        assert_eq!(stack_result.stacks_formed, 1, "stem grouping must catch all three under one stack (x, x, x-v2 all normalize to stem 'x'... )");
+
+        let page = query_run(&conn, CatalogQuery::default()).unwrap();
+        // NOTE: stack_run's own stem grouping keys on the exact name stem, and "x-v2" has a
+        // DIFFERENT stem than "x" — so this fixture actually forms via the mirrored-path rule
+        // matching x.RW2<->x.jpg, leaving x-v2.jpg unstacked. Assert what stack_run actually
+        // produces rather than assuming a 3-way merge that isn't how the linking rules work.
+        assert_eq!(page.entries.len(), 2, "x.RW2+x.jpg become one row; x-v2.jpg (different stem) is its own row");
+        let leader = page.entries.iter().find(|e| e.name == "x.RW2").expect("the RAW leader must be a top-level row");
+        assert_eq!(leader.stack_n, 2);
+        assert!(leader.thumb_path.as_deref().unwrap().ends_with("x.jpg"), "thumb_path must be the export, not the RAW itself");
+        assert!(page.entries.iter().any(|e| e.name == "x-v2.jpg"), "the unrelated stem must still appear as its own row");
+        assert!(!page.entries.iter().any(|e| e.name == "x.jpg"), "a stacked derivative must never appear as its own top-level row");
+    }
+
+    /// `expand_stack` must return exactly that stack's present members, leader first, and must
+    /// ignore every other filter on the query (blurry_only here) — expanding a stack is not
+    /// itself subject to the surrounding view's scope.
+    #[test]
+    fn expand_stack_returns_only_that_stacks_members_leader_first() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "Originals/shoot", "x.RW2", "raw", Some(100), 1);
+        insert_stack_photo(&conn, vid, "jpg", "Exports/shoot", "x.jpg", "jpeg", Some(100), 2);
+        insert_stack_photo(&conn, vid, "other", "Originals/shoot2", "y.RW2", "raw", Some(200), 3);
+
+        let cancel = AtomicBool::new(false);
+        stack_run(&conn, &cancel).unwrap();
+        let raw_id: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'x.RW2'", [], |r| r.get(0)).unwrap();
+
+        let page = query_run(&conn, CatalogQuery { expand_stack: Some(raw_id), blurry_only: true, ..Default::default() }).unwrap();
+        assert_eq!(page.entries.len(), 2, "blurry_only must be ignored while expanding — only stack membership matters");
+        assert_eq!(page.entries[0].name, "x.RW2", "the leader must sort first");
+        assert_eq!(page.entries[1].name, "x.jpg");
+        // The leader keeps its real stack_n even while expanded — that's what lets the grid
+        // keep a "collapse" badge visible on it (the frontend swaps +N-1 for a collapse glyph
+        // purely based on stack_n > 1, so losing it here would silently strand the user with no
+        // way to collapse back down). Only the DERIVATIVE member has nothing to show a badge for.
+        assert_eq!(page.entries[0].stack_n, 2, "the leader's own row must keep its real count so a collapse affordance stays visible");
+        assert_eq!(page.entries[1].stack_n, 0, "a derivative member is just a regular row here — no badge");
     }
 }

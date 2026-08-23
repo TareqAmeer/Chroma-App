@@ -163,6 +163,22 @@
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
         const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
         const q = A.q || {};
+        // Expand-in-place mock: item 1 (see the stack_n below) is a synthetic 3-member stack —
+        // returns its members directly, ignoring every other filter, matching the real
+        // command's own "expand_stack overrides everything else" contract.
+        if (q.expandStack) {
+          return Promise.resolve({ total: 3, capped: false, entries: [
+            { id: 1, name: 'IMG_1001.RW2', path: '/test/AllPhotos/IMG_1001.RW2', is_dir: false, is_image: true, is_video: false,
+              kind: 'raw', mtime: 1700000001, size: 1001, missing: false, edited_ts: 0, offline: false, volume: 'Archive T7',
+              sharpness: 400, blurry: false, stack_n: 3, thumb_path: null },
+            { id: 101, name: 'IMG_1001.jpg', path: '/test/AllPhotos/Exports/IMG_1001.jpg', is_dir: false, is_image: true, is_video: false,
+              kind: 'jpeg', mtime: 1700000101, size: 500, missing: false, edited_ts: 0, offline: false, volume: 'Archive T7',
+              sharpness: 400, blurry: false, stack_n: 0, thumb_path: null },
+            { id: 102, name: 'IMG_1001-v2.jpg', path: '/test/AllPhotos/Exports/IMG_1001-v2.jpg', is_dir: false, is_image: true, is_video: false,
+              kind: 'jpeg', mtime: 1700000102, size: 500, missing: false, edited_ts: 0, offline: false, volume: 'Archive T7',
+              sharpness: 400, blurry: false, stack_n: 0, thumb_path: null },
+          ] });
+        }
         // Scoped mock: a date filter returns a visibly SMALLER slice than the full N, sized
         // from the same fixed day counts catalog_date_counts's mock uses above, so clicking
         // through the tree provably changes the grid rather than silently re-showing everything
@@ -182,10 +198,14 @@
         for (let i = 1; i <= n; i++) {
           const offline = i % 7 === 0;
           const blurry = q.blurryOnly ? true : i % 5 === 0;
+          // Item 1 is a synthetic 3-member stack (see the expandStack branch above) — only in
+          // the plain "all" view, so scoped/filtered views stay uncluttered by it.
+          const isStackLeader = i === 1 && !q.blurryOnly && !q.noDate && q.year == null;
           entries.push({ id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`,
             is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
             missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7',
-            sharpness: blurry ? 20 : 400, blurry });
+            sharpness: blurry ? 20 : 400, blurry,
+            stack_n: isStackLeader ? 3 : 0, thumb_path: isStackLeader ? '/test/AllPhotos/Exports/IMG_1001-v2.jpg' : null });
         }
         return Promise.resolve({ total: n, capped: false, entries });
       }
@@ -291,6 +311,7 @@
     meta: new Map(),       // path -> {camera,lens,date,iso}
     dupeClusters: new Map(), // path -> clusterId (only present for clusters of size > 1)
     dupeClusterSizes: new Map(), // clusterId -> size
+    _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
     syncedPaths: new Set(),  // paths known-synced to Google Photos (gphotos registry, folder-local cache)
     typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff'
     cameraFilter: 'all',
@@ -587,6 +608,11 @@
     .lib-raw-badge{position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:5px;
       background:rgba(0,0,0,.55);color:#cfcfd6;font-size:9px;font-weight:700;letter-spacing:.02em;
       display:flex;align-items:center;justify-content:center;z-index:2}
+    /* Stack badge reuses the RAW badge's own corner slot (see the JS comment at its markup) —
+       widens for a 2-digit count and gets a pointer cursor since, unlike every other corner
+       badge, it's clickable (expand/collapse in place). */
+    .lib-stack-badge{min-width:18px;width:auto;padding:0 4px;cursor:pointer;background:rgba(0,0,0,.7)}
+    .lib-stack-badge:hover{background:rgba(0,0,0,.85)}
     /* Video: same corner-badge slot the RAW "R" chip uses (mutually exclusive — a file is one
        kind or the other) plus a dark placeholder fill + centered play glyph in the thumbnail
        itself, since get_thumbnail has no still-frame decoder for video (see library.rs). */
@@ -2848,7 +2874,14 @@
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
         (sc.label ? ' lbl-' + sc.label.toLowerCase() : '') + (entry.missing ? ' lib-missing' : '');
       card.dataset.path = entry.path;
-      const rawBadge = entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
+      // Stack badge takes over the RAW badge's own top-left corner when this card represents
+      // a stack (per the plan: "the grid draws a +2 badge in the existing .lib-raw-badge corner
+      // slot") — a stack's leader is virtually always the RAW, so showing both would be
+      // redundant, and there is no other free corner (Edited/Dupe/Synced already own the rest).
+      const isExpandedStackForRaw = entry.stack_n > 1 && state._expandedStacks.has(entry.id);
+      const rawBadge = entry.stack_n > 1
+        ? `<div class="lib-raw-badge lib-stack-badge" data-stack-toggle="${entry.id}" title="${entry.stack_n} in this stack — click to ${isExpandedStackForRaw ? 'collapse' : 'expand'}">${isExpandedStackForRaw ? '⌃' : '+' + (entry.stack_n - 1)}</div>`
+        : entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
       // No thumbnail decoder for video (get_thumbnail errors cleanly for it — see library.rs) —
       // a badge + CSS placeholder icon instead of a broken <img>, same idea as the RAW badge.
       const videoBadge = entry.is_video ? `<div class="lib-video-badge" title="Video clip">${ic('video',10)}</div>` : '';
@@ -2898,9 +2931,14 @@
       const img = card.querySelector('img');
       // Video now gets a real poster too — decoded in the webview rather than by get_thumbnail,
       // which still has no MP4 still-frame decoder (see videoPosterAndMeta).
-      loadThumb(entry.path, img, entry.is_video);
+      // A stack card shows its newest EXPORT (thumb_path) even though `entry.path`/click target
+      // stay the RAW leader — the plan's explicit split between "what you look at" and "what
+      // opening/editing/rating acts on".
+      loadThumb(entry.thumb_path || entry.path, img, entry.is_video);
       card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
+      const stackBadgeEl = card.querySelector('.lib-stack-badge');
+      if (stackBadgeEl) stackBadgeEl.onclick = (e) => { e.stopPropagation(); toggleStackExpanded(entry.id); };
       const starRow = card.querySelector('.lib-stars');
       if (starRow) starRow.onclick = (e) => {
         const st = e.target.closest('.lib-star');
@@ -4151,18 +4189,47 @@
       grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
       return;
     }
-    state.entries = page.entries;
-    if (!page.entries.length) {
+    // Splice in any stack the user has expanded — the grouped query above always returns ONE
+    // row per stack, so an expansion the user asked for (badge click, tracked in
+    // state._expandedStacks by the stack's leader id) has to be fetched separately and spliced
+    // back into place. Best-effort: if the expansion fetch fails, the row just stays collapsed
+    // rather than blocking the whole view.
+    let entries = page.entries;
+    if (state._expandedStacks.size) {
+      const spliced = [];
+      for (const entry of entries) {
+        if (entry.stack_n > 1 && state._expandedStacks.has(entry.id)) {
+          try {
+            const sub = await invoke('catalog_query', { q: { expandStack: entry.id } });
+            spliced.push(...sub.entries);
+            continue;
+          } catch (e) { /* fall through — show the collapsed row instead */ }
+        }
+        spliced.push(entry);
+      }
+      entries = spliced;
+    }
+    state.entries = entries;
+    if (!entries.length) {
       grid.innerHTML = '<div id="lib-empty">Nothing here — open a folder in the Library and it\'ll appear here.</div>';
       renderCollections();
       return;
     }
     {
-      const paths = page.entries.filter((e) => !e.offline).map((e) => e.path);
+      const paths = entries.filter((e) => !e.offline).map((e) => e.path);
       await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
     }
     await renderGrid();
     renderCollections();
+  }
+
+  /// Toggles a stack's expanded/collapsed state (the badge's click handler) and re-renders via
+  /// the same path a filter change uses, so the splice-in logic above is the only place that
+  /// needs to know about expansion at all.
+  function toggleStackExpanded(leaderId) {
+    if (state._expandedStacks.has(leaderId)) state._expandedStacks.delete(leaderId);
+    else state._expandedStacks.add(leaderId);
+    refreshView();
   }
 
   /// The one thing every post-mutation refresh (delete, duplicate, ...) should call instead of
