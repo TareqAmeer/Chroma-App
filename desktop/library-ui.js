@@ -4249,8 +4249,27 @@
   }
 
   let cacheUsage = null; // {offline_thumbs_bytes, decode_cache_bytes, working_thumbs_bytes, budget_bytes}
+  // Backlog item 4/15, v1 (warn-only): the offline-thumbnail tier is documented as never
+  // auto-cleared, so a single big shoot can fill the whole 20GB budget with no automatic relief
+  // and no warning before it's full — the user only ever finds out reactively via "Free up
+  // space…". This adds a one-time-per-session proactive nudge once usage crosses 90%, so the
+  // budget doesn't fill silently. Full LRU eviction (with the "don't evict an offline thumbnail
+  // for a currently-unplugged volume" guard) is a deliberate fast-follow, not done here — that's
+  // the riskier half of this item and warrants its own pass.
+  const CACHE_WARN_PCT = 90;
+  let _cacheWarnShown = false;
   function refreshCacheUsage() {
-    invoke('cache_usage').then((u) => { cacheUsage = u; renderCollections(); }).catch(() => {});
+    invoke('cache_usage').then((u) => {
+      cacheUsage = u;
+      renderCollections();
+      if (!_cacheWarnShown && u.budget_bytes > 0) {
+        const pct = Math.round(((u.offline_thumbs_bytes + u.decode_cache_bytes) / u.budget_bytes) * 100);
+        if (pct >= CACHE_WARN_PCT) {
+          _cacheWarnShown = true;
+          if (typeof toast === 'function') toast(`Approaching your ${fmtGB(u.budget_bytes)}GB cache budget (${pct}% used) — free up space in Drives`, false);
+        }
+      }
+    }).catch(() => {});
   }
   function fmtGB(bytes) { return (bytes / (1024 * 1024 * 1024)).toFixed(1); }
 
@@ -4263,12 +4282,13 @@
     if (!cacheUsage) return '';
     const used = cacheUsage.offline_thumbs_bytes + cacheUsage.decode_cache_bytes;
     const pct = Math.min(100, Math.round((used / cacheUsage.budget_bytes) * 100));
+    const nearFull = pct >= CACHE_WARN_PCT; // persistent visual cue alongside the one-shot toast
     return `<div class="lib-coll-row" style="cursor:default" title="Offline thumbnails: ${fmtGB(cacheUsage.offline_thumbs_bytes)} GB (never auto-cleared) · Decode cache: ${fmtGB(cacheUsage.decode_cache_bytes)} GB (auto-managed)">
         <span class="lib-coll-ic">${ic('drive', 13)}</span>
-        <span class="lib-coll-lb" style="color:var(--mut)">Using ${fmtGB(used)} of ${fmtGB(cacheUsage.budget_bytes)} GB</span>
+        <span class="lib-coll-lb" style="color:${nearFull ? 'var(--err,#e05454)' : 'var(--mut)'}">Using ${fmtGB(used)} of ${fmtGB(cacheUsage.budget_bytes)} GB${nearFull ? ' — approaching budget' : ''}</span>
       </div>
       <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:var(--acc)"></div>
+        <div style="height:100%;width:${pct}%;background:${nearFull ? 'var(--err,#e05454)' : 'var(--acc)'}"></div>
       </div></div>
       <div class="lib-coll-row" data-cache-free="1" style="cursor:pointer">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
