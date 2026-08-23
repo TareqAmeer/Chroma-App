@@ -1595,6 +1595,8 @@ fn main() {
             catalog::catalog_focus,
             catalog::catalog_stack,
             catalog::catalog_keywords,
+            catalog::cache_usage,
+            catalog::clear_cache_tier,
             sam2_encode,
             sam2_points,
             faceparse_run,

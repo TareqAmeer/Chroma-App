@@ -1884,7 +1884,7 @@ pub fn date_counts_run(conn: &Connection) -> Result<DateCounts, String> {
 // existing #[tauri::command] function directly (not duplicating its logic) is what guarantees
 // an offline thumbnail looks exactly like the one the app would have shown online.
 
-fn thumb_dir() -> PathBuf {
+pub(crate) fn thumb_dir() -> PathBuf {
     let dir = catalog_dir().join("thumbs");
     let _ = std::fs::create_dir_all(&dir);
     dir
@@ -1895,6 +1895,74 @@ fn offline_thumb_path(id: i64) -> PathBuf {
     let dir = thumb_dir().join(shard);
     let _ = std::fs::create_dir_all(&dir);
     dir.join(format!("{id}.jpg"))
+}
+
+// ── Cache budget ─────────────────────────────────────────────────────────────────────────────
+//
+// The three tiers (§CLAUDE.md-style plan doc "Local cache: 20GB, three tiers") all work
+// correctly today but report nothing anywhere — this is the read side (usage) and the one
+// user-facing lever (clear a tier), surfaced in the Drives section as "using X of 20GB".
+
+fn dir_size_recursive(dir: &Path) -> u64 {
+    let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+    rd.flatten()
+        .map(|e| match e.metadata() {
+            Ok(m) if m.is_dir() => dir_size_recursive(&e.path()),
+            Ok(m) => m.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+#[derive(Serialize)]
+pub struct CacheUsage {
+    /// Never-pruned tier — an unplugged drive's whole reason to be browsable offline, so this
+    /// number is the one worth watching; it only ever grows until the user clears it by hand.
+    pub offline_thumbs_bytes: u64,
+    /// 14GB LRU (full-size decoded renders of recently-edited photos) — self-managing, shown
+    /// for visibility only.
+    pub decode_cache_bytes: u64,
+    /// 500MB LRU (grid thumbnails for whatever folder is currently open) — self-managing, shown
+    /// for visibility only.
+    pub working_thumbs_bytes: u64,
+    /// The plan's own stated total (offline thumbs + decode cache combine toward this; working
+    /// thumbnails are a separate, much smaller LRU tier and aren't counted against it).
+    pub budget_bytes: u64,
+}
+
+#[tauri::command]
+pub fn cache_usage() -> CacheUsage {
+    CacheUsage {
+        offline_thumbs_bytes: dir_size_recursive(&thumb_dir()),
+        decode_cache_bytes: dir_size_recursive(&crate::library::decode_cache_dir()),
+        working_thumbs_bytes: dir_size_recursive(&crate::library::cache_dir()),
+        budget_bytes: 20 * 1024 * 1024 * 1024,
+    }
+}
+
+/// Wipes one cache tier entirely (not per-root yet — the plan's original per-root
+/// `roots.keep_thumbs` refinement is deferred; this is the global "Free up space" v1). Clearing
+/// `offline_thumbs` also resets every `photos.thumb` marker to 0, or the DB would keep claiming
+/// a thumbnail exists for a file that's just been deleted — `offline_thumb_bytes` degrades
+/// gracefully either way (a missing file just reads as no thumbnail), but leaving the marker set
+/// would mean nothing ever regenerates it on a later `catalog_thumbnails` pass.
+#[tauri::command]
+pub fn clear_cache_tier(tier: String, state: tauri::State<CatalogState>) -> Result<u64, String> {
+    let dir = match tier.as_str() {
+        "offline_thumbs" => thumb_dir(),
+        "decode" => crate::library::decode_cache_dir(),
+        "working_thumbs" => crate::library::cache_dir(),
+        other => return Err(format!("unknown cache tier: {other}")),
+    };
+    let freed = dir_size_recursive(&dir);
+    std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if tier == "offline_thumbs" {
+        if let Ok(conn) = state.conn.lock() {
+            let _ = conn.execute("UPDATE photos SET thumb = 0", []);
+        }
+    }
+    Ok(freed)
 }
 
 /// Extracts the raw bytes from a `library::get_thumbnail` response — that command returns a
@@ -3949,5 +4017,29 @@ mod tests {
         let mut names: Vec<String> = page.entries.iter().map(|e| e.name.clone()).collect();
         names.sort();
         assert_eq!(names, vec!["a.jpg".to_string(), "b.jpg".to_string()], "Travel must include the Iceland descendant, not just the direct tag");
+    }
+
+    // ── Cache budget ─────────────────────────────────────────────────────────────────────────
+    //
+    // `cache_usage`/`clear_cache_tier` themselves aren't unit-tested here: `library::cache_dir`/
+    // `decode_cache_dir` are hardcoded to the real `~/Library/Caches/...` path with no test-time
+    // override (unlike `catalog_dir`, which added `CS_CATALOG_DIR` specifically for this) — a
+    // test exercising them would read/depend on whatever's really on this dev machine's disk,
+    // which is exactly the kind of non-deterministic, environment-coupled test this project
+    // avoids elsewhere (`prune_caches`, which walks the same real directories, has no direct
+    // test either). `dir_size_recursive` is the one piece that's pure and worth pinning.
+
+    #[test]
+    fn dir_size_recursive_sums_nested_files() {
+        let dir = std::env::temp_dir().join(format!("cs_dirsize_{}_{}", std::process::id(), gen_id()));
+        std::fs::create_dir_all(dir.join("a/b")).unwrap();
+        std::fs::write(dir.join("top.bin"), vec![0u8; 100]).unwrap();
+        std::fs::write(dir.join("a/mid.bin"), vec![0u8; 200]).unwrap();
+        std::fs::write(dir.join("a/b/deep.bin"), vec![0u8; 300]).unwrap();
+
+        assert_eq!(dir_size_recursive(&dir), 600, "must sum files at every nesting depth, not just the top level");
+        assert_eq!(dir_size_recursive(&dir.join("nonexistent")), 0, "a missing directory must read as empty, not error");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

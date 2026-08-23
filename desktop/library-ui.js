@@ -159,6 +159,16 @@
           no_date: 1,
         });
       }
+      case 'cache_usage': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ offline_thumbs_bytes: 0, decode_cache_bytes: 0, working_thumbs_bytes: 0, budget_bytes: 20 * 1024 * 1024 * 1024 });
+        return Promise.resolve({
+          offline_thumbs_bytes: 3.2 * 1024 * 1024 * 1024,
+          decode_cache_bytes: 5.1 * 1024 * 1024 * 1024,
+          working_thumbs_bytes: 120 * 1024 * 1024,
+          budget_bytes: 20 * 1024 * 1024 * 1024,
+        });
+      }
+      case 'clear_cache_tier': return Promise.resolve(0);
       case 'catalog_keywords': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
         // Two-level tree: Travel > Iceland, plus a standalone Portrait leaf — enough to verify
@@ -4003,21 +4013,51 @@
     invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
     invoke('catalog_keywords').then((nodes) => { keywordTree = nodes || []; renderCollections(); }).catch(() => {});
+    refreshCacheUsage();
+  }
+
+  let cacheUsage = null; // {offline_thumbs_bytes, decode_cache_bytes, working_thumbs_bytes, budget_bytes}
+  function refreshCacheUsage() {
+    invoke('cache_usage').then((u) => { cacheUsage = u; renderCollections(); }).catch(() => {});
+  }
+  function fmtGB(bytes) { return (bytes / (1024 * 1024 * 1024)).toFixed(1); }
+
+  /// "using X of 20GB" (the plan's own wireframe wording) — local cache usage, not a per-volume
+  /// fact, so it renders even with zero external volumes catalogued (a purely-local-photos user
+  /// still has an offline-thumbnail tier and a decode cache). Placed inside Drives because the
+  /// budget IS what makes offline browsing of an unplugged drive possible — this is where a user
+  /// looking for "why is this taking up space" would look first.
+  function cacheUsageRowHtml() {
+    if (!cacheUsage) return '';
+    const used = cacheUsage.offline_thumbs_bytes + cacheUsage.decode_cache_bytes;
+    const pct = Math.min(100, Math.round((used / cacheUsage.budget_bytes) * 100));
+    return `<div class="lib-coll-row" style="cursor:default" title="Offline thumbnails: ${fmtGB(cacheUsage.offline_thumbs_bytes)} GB (never auto-cleared) · Decode cache: ${fmtGB(cacheUsage.decode_cache_bytes)} GB (auto-managed)">
+        <span class="lib-coll-ic">${ic('drive', 13)}</span>
+        <span class="lib-coll-lb" style="color:var(--mut)">Using ${fmtGB(used)} of ${fmtGB(cacheUsage.budget_bytes)} GB</span>
+      </div>
+      <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--acc)"></div>
+      </div></div>
+      <div class="lib-coll-row" data-cache-free="1" style="cursor:pointer">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
+      </div>`;
   }
 
   function drivesSectionHtml() {
     // "This Mac" itself is always online and isn't the thing this section exists to show —
     // only external volumes (an SSD that may or may not currently be plugged in) are worth a
-    // row here.
+    // row here. The cache-usage row below is unrelated to any specific volume and renders
+    // regardless.
     const external = catalogVolumes.filter((v) => !v.is_local);
-    if (!external.length) return '';
     const rows = external.map((v) => `
       <div class="lib-coll-row${v.online ? '' : ' offline'}" title="${esc(v.last_path)}${v.online ? '' : ' — not connected'}">
         <span class="lib-coll-ic" style="${v.online ? '' : 'opacity:.5'}">${ic('drive', 13)}</span>
         <span class="lib-coll-lb"${v.online ? '' : ' style="color:var(--mut)"'}>${esc(v.label)}</span>
         <span class="lib-coll-count">${v.online ? '' : '·'}</span>
       </div>`).join('');
-    return `<div class="lib-coll-heading">Drives</div>${rows}<div class="lib-coll-sep"></div>`;
+    const cacheRow = cacheUsageRowHtml();
+    if (!rows && !cacheRow) return '';
+    return `<div class="lib-coll-heading">Drives</div>${rows}${cacheRow}<div class="lib-coll-sep"></div>`;
   }
 
   /// Nests the flat (y,m,d,n) rows catalog_date_counts returns into a Year › Month › Day tree
@@ -4985,6 +5025,41 @@
     setTimeout(() => document.addEventListener('mousedown', close), 0);
   }
 
+  function showCacheMenu(e) {
+    if (!cacheUsage) return;
+    const items = [
+      [`Clear offline thumbnails (${fmtGB(cacheUsage.offline_thumbs_bytes)} GB)`, async () => {
+        // confirmModal, never window.confirm — matches the album-delete confirm above. Worth
+        // spelling out what's actually lost: nothing on the drive, just the never-pruned
+        // never-changes-on-its-own cache that makes an UNPLUGGED drive browsable.
+        if (!await window.confirmModal('Clear offline thumbnails?\n\nThey regenerate automatically next time each drive is scanned while connected — but until then, browsing while unplugged shows blank cards instead of thumbnails.', 'Clear')) return;
+        try { await invoke('clear_cache_tier', { tier: 'offline_thumbs' }); toast('Offline thumbnails cleared'); refreshCacheUsage(); }
+        catch (err) { toast(humanizeErr('clear offline thumbnails', err), 'err'); }
+      }],
+      [`Clear decode cache (${fmtGB(cacheUsage.decode_cache_bytes)} GB)`, async () => {
+        try { await invoke('clear_cache_tier', { tier: 'decode' }); toast('Decode cache cleared'); refreshCacheUsage(); }
+        catch (err) { toast(humanizeErr('clear the decode cache', err), 'err'); }
+      }],
+    ];
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:200;background:var(--sur2);border:1px solid var(--bdr);'
+      + 'border-radius:7px;padding:4px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
+    items.forEach(([label, fn]) => {
+      const it = document.createElement('div');
+      it.textContent = label;
+      it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      it.onmouseenter = () => { it.style.background = 'var(--bdr)'; };
+      it.onmouseleave = () => { it.style.background = ''; };
+      it.onclick = () => { menu.remove(); fn(); };
+      menu.appendChild(it);
+    });
+    document.body.appendChild(menu);
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 240) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+  }
+
   function renderCollections() {
     const host = document.getElementById('lib-collections');
     if (!host) return;
@@ -4997,6 +5072,8 @@
     host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
     });
+    const freeUpRow = host.querySelector('[data-cache-free]');
+    if (freeUpRow) freeUpRow.onclick = (e) => showCacheMenu(e);
     // "By Date" root row: toggles the whole tree open/closed, same gesture the real folder
     // tree's own root uses, but never navigates on its own (a bare "By Date" click isn't a
     // filterable scope — unlike every row inside it).

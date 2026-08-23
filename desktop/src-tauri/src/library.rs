@@ -151,7 +151,7 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     Ok(out)
 }
 
-fn cache_dir() -> PathBuf {
+pub(crate) fn cache_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     let dir = PathBuf::from(home).join("Library/Caches/com.tareq.chromasmith/thumbnails");
     let _ = std::fs::create_dir_all(&dir);
@@ -420,7 +420,7 @@ pub fn save_lr_thumb(asset_id: String, data_b64: String) -> Result<(), String> {
     std::fs::write(lr_thumb_path(&asset_id), &bytes).map_err(|e| format!("write lr thumb: {e}"))
 }
 
-fn decode_cache_dir() -> PathBuf {
+pub(crate) fn decode_cache_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     let dir = PathBuf::from(home).join("Library/Caches/com.tareq.chromasmith/decode");
     let _ = std::fs::create_dir_all(&dir);
