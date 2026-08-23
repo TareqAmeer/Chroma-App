@@ -4014,7 +4014,8 @@
   function catalogRunBackgroundPhases() {
     if (LIBTEST || _catalogBgRunning) return;
     _catalogBgRunning = true;
-    invoke('catalog_thumbnails')
+    invoke('catalog_stack')
+      .then(() => invoke('catalog_thumbnails'))
       .then(() => invoke('catalog_focus'))
       .catch((e) => console.error('catalog background phases', e))
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });

@@ -2082,6 +2082,150 @@ pub fn rebuild_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), ca
 /// volume's current mount point, longest prefix first — the local volume's own prefix ("/") is
 /// a prefix of EVERY absolute path, so it has to be tried last or it would "match" everything
 /// before a real external-volume prefix ever gets a chance.
+// ── Stacking ─────────────────────────────────────────────────────────────────────────────────
+//
+// Catalog-only, per the plan's own rule (prior art, PhotoPrism): never moves, renames, or
+// writes anything to a file. `stack_id` is always the CURRENT leader's own `photos.id` (never a
+// separate stack-id counter — see the schema's own doc comment on the column), which is what
+// makes leader promotion on delete a matter of re-pointing every member's `stack_id`, not
+// maintaining a second table.
+//
+// Two of the plan's three link rules are implemented here (both purely catalog-internal, no
+// dependency on the export flow): the mirrored `Originals/<rel>` <-> `Exports/<rel>` path, and
+// same-folder stem + capture-date agreement (a RAW+JPEG pair straight off a camera, no
+// Exports/ split at all). The third — the export's own recorded destination, threaded through
+// `append_export_history` — needs a library.rs change to `ExportHistoryEntry` and isn't done
+// yet; see the plan doc.
+//
+// ⚠️ An ambiguous match (captured dates disagree, or missing on either side) is left UNSTACKED
+// rather than guessed — two different photos sharing a stem is a real, documented collision
+// (camera counter rollover; CLAUDE.md's own duplicate-detection trap), and silently merging
+// them would hide one from the grid entirely.
+
+fn stem_of(name_lc: &str) -> &str {
+    match name_lc.rfind('.') {
+        Some(i) => &name_lc[..i],
+        None => name_lc,
+    }
+}
+
+/// Strips exactly one leading `originals/` or `exports/` path segment (case-insensitive) so a
+/// photo at `Originals/2026/2026-08-03/x.RW2` and its export at `Exports/2026/2026-08-03/x.jpg`
+/// normalize to the same key — the layout §"SSD layout, exports, and stacking" establishes.
+/// A photo with neither prefix (no Exports/ split — a plain RAW+JPEG pair in one folder) is
+/// returned unchanged, which is exactly rule B: it still groups with its same-folder sibling.
+fn normalized_stack_dir(rel_dir: &str) -> String {
+    let lower = rel_dir.to_ascii_lowercase();
+    for prefix in ["originals/", "exports/"] {
+        if lower.starts_with(prefix) {
+            // ASCII lowercasing never changes byte length, so this slice on the ORIGINAL
+            // string (preserving its real casing) lines up with the lowercase match above.
+            return rel_dir[prefix.len()..].to_string();
+        }
+    }
+    if lower == "originals" || lower == "exports" {
+        return String::new();
+    }
+    rel_dir.to_string()
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct StackResult {
+    pub stacks_formed: usize,
+    pub photos_linked: usize,
+}
+
+struct StackCandidate {
+    id: i64,
+    volume_id: i64,
+    rel_dir: String,
+    name_lc: String,
+    kind: String,
+    captured: Option<i64>,
+    added: i64,
+}
+
+/// Not chunked/resumable like the other phases (a single pass over unlinked rows, sorted and
+/// grouped in memory) — grouping candidates for a stack needs to see the whole unlinked set at
+/// once, unlike a per-row metadata read. Still cheap: only rows with `stack_id IS NULL` are
+/// even considered, so a fully-stacked archive costs one empty query on every later run.
+pub fn stack_run(conn: &Connection, cancel: &AtomicBool) -> Result<StackResult, String> {
+    let mut result = StackResult::default();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, volume_id, rel_dir, name_lc, kind, captured, added
+             FROM photos WHERE present = 1 AND stack_id IS NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let candidates: Vec<StackCandidate> = stmt
+        .query_map([], |r| {
+            Ok(StackCandidate {
+                id: r.get(0)?,
+                volume_id: r.get(1)?,
+                rel_dir: r.get(2)?,
+                name_lc: r.get(3)?,
+                kind: r.get(4)?,
+                captured: r.get(5)?,
+                added: r.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let mut groups: std::collections::HashMap<(i64, String, String), Vec<&StackCandidate>> = std::collections::HashMap::new();
+    for c in &candidates {
+        let key = (c.volume_id, normalized_stack_dir(&c.rel_dir), stem_of(&c.name_lc).to_string());
+        groups.entry(key).or_default().push(c);
+    }
+
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for members in groups.values() {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if members.len() < 2 {
+            continue;
+        }
+        // Ambiguous unless every member agrees on a non-null capture date — see the module
+        // doc comment above for why this is a hard requirement, not a best-effort one.
+        let first_captured = members[0].captured;
+        let all_agree = first_captured.is_some() && members.iter().all(|m| m.captured == first_captured);
+        if !all_agree {
+            continue;
+        }
+        let raws: Vec<&&StackCandidate> = members.iter().filter(|m| m.kind == "raw").collect();
+        let leader: &StackCandidate = if raws.len() == 1 {
+            raws[0]
+        } else {
+            // No single RAW to anchor on (none, or more than one — e.g. two raw formats from
+            // the same body) — fall back to the oldest-added row, so something deterministic
+            // always wins rather than leaving an otherwise-clean group unstacked.
+            members.iter().min_by_key(|m| m.added).unwrap()
+        };
+        tx.execute("UPDATE photos SET stack_id = ?1, stack_role = 'leader' WHERE id = ?1", params![leader.id]).map_err(|e| e.to_string())?;
+        result.stacks_formed += 1;
+        result.photos_linked += 1;
+        for m in members.iter().filter(|m| m.id != leader.id) {
+            tx.execute(
+                "UPDATE photos SET stack_id = ?1, stack_role = 'derivative', export_of = ?1 WHERE id = ?2",
+                params![leader.id, m.id],
+            )
+            .map_err(|e| e.to_string())?;
+            result.photos_linked += 1;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_stack(state: tauri::State<CatalogState>) -> Result<StackResult, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    stack_run(&conn, &state.cancel)
+}
+
 fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
     let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes").ok()?;
     let mut volumes: Vec<(i64, String, bool)> = stmt
@@ -2110,14 +2254,52 @@ pub fn note_deleted_run(conn: &Connection, paths: &[String]) -> Result<usize, St
     let mut updated = 0;
     for p in paths {
         if let Some(id) = find_photo_by_abs_path(conn, p) {
+            let role: Option<String> =
+                conn.query_row("SELECT stack_role FROM photos WHERE id = ?1", params![id], |r| r.get(0)).ok();
             updated += conn
                 .execute("UPDATE photos SET present = 0 WHERE id = ?1", params![id])
                 .map_err(|e| e.to_string())?;
+            if role.as_deref() == Some("leader") {
+                promote_stack_leader(conn, id)?;
+            }
         }
         // A path not found in the catalog is not an error — it may be a photo the catalog never
         // indexed (a folder never opened, or a scan that hasn't reached it yet). Nothing to do.
     }
     Ok(updated)
+}
+
+/// `stack_id` is always the CURRENT leader's own id (see the stacking module doc comment above),
+/// so promoting a derivative to leader means re-pointing every surviving member's `stack_id` to
+/// the NEW leader — there is no separate stack-id counter to leave alone. Called right after the
+/// old leader is marked `present = 0`; a no-op when nothing present remains in the stack (the
+/// whole stack was deleted together) or when the deleted row wasn't actually a leader.
+fn promote_stack_leader(conn: &Connection, old_leader_id: i64) -> Result<(), String> {
+    // Newest remaining member by file mtime (NOT capture date — every member of a real stack
+    // typically shares one capture date, so that would tie; mtime is what actually tells apart
+    // "the original export" from "a later re-export") becomes the new leader — the finished
+    // export is what you'd want looking at, same reasoning the plan gives for why a stack's
+    // THUMBNAIL is the newest export even though the RAW stays the click target while intact.
+    let new_leader: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM photos WHERE stack_id = ?1 AND present = 1 AND id != ?1
+             ORDER BY mtime DESC LIMIT 1",
+            params![old_leader_id],
+            |r| r.get(0),
+        )
+        .ok();
+    let Some(new_leader_id) = new_leader else { return Ok(()) }; // nothing left to promote — stack is gone
+    conn.execute(
+        "UPDATE photos SET stack_id = ?1, stack_role = 'leader', export_of = NULL WHERE id = ?1",
+        params![new_leader_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE photos SET stack_id = ?1, export_of = ?1 WHERE stack_id = ?2 AND present = 1 AND id != ?1",
+        params![new_leader_id, old_leader_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Called right after `trash_file` succeeds for a batch of paths — best-effort from the
@@ -3286,5 +3468,123 @@ mod tests {
         assert_eq!(page.entries.len(), 1);
         assert_eq!(page.entries[0].name, "soft.jpg");
         assert!(page.entries[0].blurry);
+    }
+
+    // ── Stacking ─────────────────────────────────────────────────────────────────────────────
+
+    fn insert_stack_photo(conn: &Connection, vid: i64, id_hint: &str, rel_dir: &str, name: &str, kind: &str, captured: Option<i64>, added: i64) {
+        let rel_path = if rel_dir.is_empty() { name.to_string() } else { format!("{rel_dir}/{name}") };
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, captured)
+             VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, 10, ?7, ?7, 1, ?8)",
+            params![vid, rel_path, rel_dir, name, name.rsplit('.').next().unwrap_or(""), kind, added, captured],
+        )
+        .unwrap_or_else(|e| panic!("insert {id_hint}: {e}"));
+    }
+
+    fn local_volume(conn: &Connection) -> i64 {
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap()
+    }
+
+    /// Rule: `Originals/<rel>` <-> `Exports/<rel>`, same stem, agreeing capture date — the
+    /// layout the SSD import/export flow actually produces.
+    #[test]
+    fn stack_run_links_mirrored_originals_and_exports_paths() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "Originals/2026/2026-08-03", "__TM4202.RW2", "raw", Some(1000), 1);
+        insert_stack_photo(&conn, vid, "jpg", "Exports/2026/2026-08-03", "__TM4202.jpg", "jpeg", Some(1000), 2);
+
+        let cancel = AtomicBool::new(false);
+        let result = stack_run(&conn, &cancel).unwrap();
+        assert_eq!(result.stacks_formed, 1);
+        assert_eq!(result.photos_linked, 2);
+
+        let (raw_id, raw_role): (i64, String) =
+            conn.query_row("SELECT id, stack_role FROM photos WHERE name='__TM4202.RW2'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        let (stack_id, role, export_of): (i64, String, i64) =
+            conn.query_row("SELECT stack_id, stack_role, export_of FROM photos WHERE name='__TM4202.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert_eq!(raw_role, "leader");
+        assert_eq!(stack_id, raw_id, "the RAW must be the leader — stack_id is always the leader's own id");
+        assert_eq!(role, "derivative");
+        assert_eq!(export_of, raw_id);
+    }
+
+    /// Rule: same folder, same stem, no Exports/ split at all — a plain camera RAW+JPEG pair.
+    #[test]
+    fn stack_run_links_same_folder_raw_and_jpeg_by_stem() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "2026/shoot", "IMG_0001.RW2", "raw", Some(500), 1);
+        insert_stack_photo(&conn, vid, "jpg", "2026/shoot", "IMG_0001.JPG", "jpeg", Some(500), 2);
+
+        let cancel = AtomicBool::new(false);
+        stack_run(&conn, &cancel).unwrap();
+        let (a, b): (Option<i64>, Option<i64>) = conn
+            .query_row("SELECT (SELECT stack_id FROM photos WHERE name='IMG_0001.RW2'), (SELECT stack_id FROM photos WHERE name='IMG_0001.JPG')", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert!(a.is_some() && a == b, "both members must share the same stack_id");
+    }
+
+    /// Two different photos that happen to share a filename stem (camera counter rollover) but
+    /// were shot on different days must NOT be merged — this is the exact collision CLAUDE.md's
+    /// own duplicate-detection trap warns about, and the plan is explicit that an ambiguous
+    /// match stays unstacked rather than guessed.
+    #[test]
+    fn stack_run_leaves_mismatched_capture_dates_unstacked() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "a", "2026/shoot-a", "DSC_0001.RW2", "raw", Some(100), 1);
+        insert_stack_photo(&conn, vid, "b", "2026/shoot-b", "DSC_0001.RW2", "raw", Some(200), 2);
+
+        let cancel = AtomicBool::new(false);
+        let result = stack_run(&conn, &cancel).unwrap();
+        assert_eq!(result.stacks_formed, 0, "different capture dates on a shared stem must not be treated as a match");
+        let both_null: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE stack_id IS NULL", [], |r| r.get(0)).unwrap();
+        assert_eq!(both_null, 2);
+    }
+
+    /// The end-to-end case the plan calls out by name: deleting the leader (the RAW) of a
+    /// 3-member stack must promote the newest surviving derivative to leader, not orphan the
+    /// stack into loose unstacked rows.
+    #[test]
+    fn deleting_a_stack_leader_promotes_its_newest_derivative() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "Originals/shoot", "x.RW2", "raw", Some(100), 1);
+        insert_stack_photo(&conn, vid, "jpg1", "Exports/shoot", "x.jpg", "jpeg", Some(100), 2);
+        insert_stack_photo(&conn, vid, "jpg2", "Exports/shoot", "x-v2.jpg", "jpeg", Some(100), 3);
+        // Give the two derivatives different mtimes so "newest" is unambiguous — x-v2 is newer.
+        conn.execute("UPDATE photos SET mtime = 500 WHERE name = 'x.jpg'", []).unwrap();
+        conn.execute("UPDATE photos SET mtime = 900 WHERE name = 'x-v2.jpg'", []).unwrap();
+        // Stack by mtime tie-break requires stems to match though — rename to match RAW's stem
+        // exactly for this test's own linking pass instead of relying on the stem grouping.
+        conn.execute("UPDATE photos SET name = 'x.jpg', name_lc = 'x.jpg' WHERE name = 'x-v2.jpg'", []).ok();
+
+        // Build the stack directly (bypassing stack_run's stem grouping, which cannot hold two
+        // same-named derivatives in one folder) — this test is about promotion, not linking.
+        let raw_id: i64 = conn.query_row("SELECT id FROM photos WHERE name='x.RW2'", [], |r| r.get(0)).unwrap();
+        conn.execute("UPDATE photos SET stack_id = ?1, stack_role = 'leader' WHERE id = ?1", params![raw_id]).unwrap();
+        conn.execute("UPDATE photos SET stack_id = ?1, stack_role = 'derivative', export_of = ?1 WHERE volume_id = ?2 AND kind = 'jpeg'", params![raw_id, vid]).unwrap();
+
+        note_deleted_run(&conn, &["/Originals/shoot/x.RW2".to_string()]).unwrap();
+
+        let (present, role): (i64, String) = conn.query_row("SELECT present, stack_role FROM photos WHERE id = ?1", params![raw_id], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(present, 0);
+        assert_eq!(role, "leader", "the old leader's own row is untouched by promotion, just marked absent");
+
+        // The newer derivative (mtime 900) must now be the leader, and the older derivative
+        // must point at IT, not at the deleted row.
+        let new_leader: (i64, String, Option<i64>) = conn
+            .query_row("SELECT id, stack_role, export_of FROM photos WHERE mtime = 900", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        assert_eq!(new_leader.1, "leader");
+        assert_eq!(new_leader.2, None);
+
+        let (other_stack_id, other_export_of): (i64, i64) =
+            conn.query_row("SELECT stack_id, export_of FROM photos WHERE mtime = 500", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(other_stack_id, new_leader.0);
+        assert_eq!(other_export_of, new_leader.0);
     }
 }

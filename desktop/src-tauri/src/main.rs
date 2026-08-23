@@ -1592,6 +1592,7 @@ fn main() {
             catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
             catalog::catalog_focus,
+            catalog::catalog_stack,
             sam2_encode,
             sam2_points,
             faceparse_run,
