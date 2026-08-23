@@ -133,6 +133,10 @@
       case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
+      // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
+      // harmless no-op mock, matching every other pure-Rust-side mutation's mock in this file.
+      case 'trash_file': return Promise.resolve();
+      case 'duplicate_file': return Promise.resolve(A.path ? A.path.replace(/(\.[^.]+)$/, ' copy$1') : '');
       case 'catalog_volumes': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
         // One online, one offline — CLAUDE.md's own stated convention for this exact case, so
