@@ -198,6 +198,17 @@
         ]);
       }
       case 'set_keywords': return Promise.resolve();
+      case 'catalog_people': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        return Promise.resolve([
+          { id: 1, name: 'Person 1', cover_face_id: 1, face_count: 5 },
+          { id: 2, name: 'Alice', cover_face_id: 2, face_count: 2 },
+        ]);
+      }
+      case 'catalog_faces_scan': return Promise.resolve({ scanned: 0, faces_found: 0 });
+      case 'catalog_embed_faces': return Promise.resolve({ embedded: 0 });
+      case 'catalog_cluster_faces': return Promise.resolve({ people: 0, clustered_faces: 0, unclustered_faces: 0 });
+      case 'catalog_rename_person': case 'catalog_merge_people': case 'catalog_delete_person': return Promise.resolve();
       case 'catalog_query': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
         const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
@@ -4130,12 +4141,36 @@
   let keywordTree = []; // flat KeywordNode list from catalog_keywords — nested client-side, same as dateCounts
   const kwExpanded = new Set(); // keyed by keyword id (a stable primary key, unlike a path a rename would change)
 
+  // AI stack Phase C — People sidebar. Flat, not a tree like Keywords: `people` has no hierarchy.
+  let peopleList = []; // PersonNode[] from catalog_people
+  function refreshPeople() {
+    return invoke('catalog_people').then((nodes) => { peopleList = nodes || []; renderCollections(); }).catch(() => {});
+  }
+
   function refreshCatalogCounts() {
     invoke('catalog_counts').then((counts) => { catalogCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
     invoke('catalog_keywords').then((nodes) => { keywordTree = nodes || []; renderCollections(); }).catch(() => {});
+    refreshPeople();
     refreshCacheUsage();
+  }
+
+  /// Manual, on-demand — same posture as "Verify library…": face detection + embedding is a real
+  /// per-photo decode+inference cost (unlike thumb/focus/hash, which are cheap enough to
+  /// auto-chain in catalogRunBackgroundPhases), so it only runs when explicitly asked for, not on
+  /// every folder open. Chains all three AI-stack scan phases, then a fresh clustering pass —
+  /// re-clustering is cheap (pure math over already-embedded vectors) so it's safe to always
+  /// re-run after a scan turns up anything new.
+  async function runFindFaces() {
+    toast('Finding faces…');
+    try {
+      await invoke('catalog_faces_scan');
+      await invoke('catalog_embed_faces');
+      const r = await invoke('catalog_cluster_faces');
+      await refreshPeople();
+      toast(r.people ? `Found ${r.people} ${r.people === 1 ? 'person' : 'people'}` : 'No new people found', true);
+    } catch (e) { toast(humanizeErr('scan for faces', e), 'err'); }
   }
 
   let cacheUsage = null; // {offline_thumbs_bytes, decode_cache_bytes, working_thumbs_bytes, budget_bytes}
@@ -4308,6 +4343,87 @@
       </div><div class="lib-coll-sep"></div>`;
   }
 
+  /// Flat list, sorted by descending face count (the people you actually have the most photos
+  /// of surface first) — no hierarchy the way Keywords has, so no tree/expand machinery needed.
+  /// Rows with zero faces (a named person a re-cluster emptied — see cluster_run's own doc
+  /// comment) still show, so the user can see and clean up a name they chose rather than it
+  /// silently vanishing.
+  function peopleSectionHtml() {
+    if (!peopleList.length) {
+      return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People`
+        + `<span id="lib-people-scan" title="Find faces" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>`
+        + `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`;
+    }
+    const sorted = peopleList.slice().sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
+    const rows = sorted.map((p) => {
+      const scope = `person:${p.id}`;
+      return `<div class="lib-coll-row${state.catalogScope === scope && state.source === 'catalog' ? ' on' : ''}" data-person="${p.id}">
+        <span class="lib-coll-ic">${ic('user', 14)}</span><span class="lib-coll-lb">${esc(p.name)}</span>
+        <span class="lib-coll-count">${p.face_count || ''}</span>
+      </div>`;
+    }).join('');
+    return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People`
+      + `<span id="lib-people-scan" title="Find faces" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>` + rows;
+  }
+  function wirePeopleRows(host) {
+    const scanBtn = host.querySelector('#lib-people-scan');
+    if (scanBtn) scanBtn.onclick = (e) => { e.stopPropagation(); runFindFaces(); };
+    host.querySelectorAll('.lib-coll-row[data-person]').forEach((row) => {
+      const id = parseInt(row.dataset.person, 10);
+      row.onclick = () => openCatalogView(`person:${id}`);
+      row.oncontextmenu = (e) => { e.preventDefault(); showPersonMenu(e, id); };
+    });
+  }
+  function showPersonMenu(e, id) {
+    const p = peopleList.find((x) => x.id === id);
+    if (!p) return;
+    const items = [
+      ['Rename…', async () => {
+        const name = await window.askTextModal('Rename person', '', p.name);
+        if (!name) return;
+        try { await invoke('catalog_rename_person', { personId: id, name }); await refreshPeople(); }
+        catch (err) { toast(humanizeErr('rename this person', err), 'err'); }
+      }],
+      ['Merge into…', async () => {
+        const others = peopleList.filter((x) => x.id !== id);
+        if (!others.length) { toast('No other people to merge into'); return; }
+        const name = await window.askTextModal('Merge into which person?', others.map((x) => '· ' + x.name).join('\n'), '');
+        if (!name) return;
+        const target = others.find((x) => x.name.toLowerCase() === name.toLowerCase());
+        if (!target) { toast('No person with that name', 'err'); return; }
+        try {
+          await invoke('catalog_merge_people', { fromId: id, intoId: target.id });
+          if (state.catalogScope === `person:${id}`) await openCatalogView(`person:${target.id}`);
+          await refreshPeople();
+          toast(`Merged "${p.name}" into "${target.name}"`, true);
+        } catch (err) { toast(humanizeErr('merge these people', err), 'err'); }
+      }],
+      [`Delete "${p.name}"`, async () => {
+        if (!await window.confirmModal(`Delete "${p.name}"?\n\nTheir photos stay exactly where they are — only this person's grouping is removed. A future face scan may re-group them.`, 'Delete')) return;
+        await invoke('catalog_delete_person', { personId: id }).catch((err) => toast(humanizeErr('delete this person', err), 'err'));
+        if (state.catalogScope === `person:${id}`) { state.source = 'folder'; state.entries = []; renderGrid(); }
+        await refreshPeople();
+      }],
+    ];
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:200;background:var(--sur2);border:1px solid var(--bdr);'
+      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
+    items.forEach(([label, fn]) => {
+      const it = document.createElement('div');
+      it.textContent = label;
+      it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      it.onmouseenter = () => { it.style.background = 'var(--bdr)'; };
+      it.onmouseleave = () => { it.style.background = ''; };
+      it.onclick = () => { menu.remove(); fn(); };
+      menu.appendChild(it);
+    });
+    document.body.appendChild(menu);
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+  }
+
   function catalogSectionHtml() {
     // "Needs review" only appears once something is actually flagged — an empty row promising
     // a feature with nothing behind it reads as broken, not reassuring. Never auto-hides once a
@@ -4377,8 +4493,8 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying' };
-  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify'];
+  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces' };
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
 
@@ -4500,9 +4616,10 @@
       // the same shape a saved view or a URL could carry.
       const dateParts = scope && scope.startsWith('date:') ? scope.slice(5).split(':').map(Number) : null;
       const kwPath = scope && scope.startsWith('kw:') ? scope.slice(3) : null;
+      const personId = scope && scope.startsWith('person:') ? parseInt(scope.slice(7), 10) : null;
       const q = { kind: null, text: null, includeOffline: true, limit: null,
         year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
-        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [] };
+        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [], personId };
       page = await invoke('catalog_query', { q });
     } catch (e) {
       grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
@@ -5248,8 +5365,9 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
-      </div>`).join('') + albumsSectionHtml() + keywordsSectionHtml() + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
+      </div>`).join('') + albumsSectionHtml() + keywordsSectionHtml() + peopleSectionHtml() + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
     wireAlbumRows(host);
+    wirePeopleRows(host);
     host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
     });

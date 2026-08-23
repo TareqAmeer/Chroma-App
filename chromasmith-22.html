@@ -4093,7 +4093,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-23a';
+const BUILD='2026-08-23b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -18004,7 +18004,11 @@ const ICONS={
  stepFwd:'<path d="M5 4v16"/><path d="M9 12l10-7v14z"/>',
  // + Mask menu (mskAddMenu): 'linearGrad' for the Linear mask entry, 'sky' for Sky.
  linearGrad:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18" opacity=".5"/>',
- sky:'<path d="M3 17a9 4.5 0 0 0 18 0"/><circle cx="12" cy="9" r="4"/>'
+ sky:'<path d="M3 17a9 4.5 0 0 0 18 0"/><circle cx="12" cy="9" r="4"/>',
+ // AI stack Phase C's People sidebar (library-ui.js) — one row per detected/clustered person,
+ // plus a "Find faces" trigger icon on the section header.
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/>'
 };
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // Label per section, in rail / strip order.

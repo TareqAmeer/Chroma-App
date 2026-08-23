@@ -12,14 +12,14 @@
 // sidecar contents (phase C), offline thumbnails (phase D), stacking, keywords and delete
 // integration are deliberately NOT here yet — they build on this foundation in later commits.
 use rayon::prelude::*;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -349,6 +349,21 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             conn.execute("ALTER TABLE photo_faces ADD COLUMN person_id INTEGER REFERENCES people(id) ON DELETE SET NULL", [])?;
         }
         conn.execute("CREATE INDEX IF NOT EXISTS ix_faces_person ON photo_faces(person_id)", [])?;
+    }
+
+    // v5 -> v6: AI stack Phase C — `people.auto` distinguishes a machine-generated "Person N"
+    // group from one the user has actually touched (renamed or merged into). `cluster_run` used
+    // to wipe and rebuild every person on every run, which would have silently thrown away a
+    // rename the moment the user re-clustered — this flag is what lets it reconcile instead (see
+    // `cluster_run`'s own doc comment).
+    if version < 6 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("people", "auto")? {
+            conn.execute("ALTER TABLE people ADD COLUMN auto INTEGER NOT NULL DEFAULT 1", [])?;
+        }
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -1749,12 +1764,58 @@ pub fn catalog_embed_faces(app: tauri::AppHandle, state: tauri::State<CatalogSta
     embed_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
 }
 
-// ── Clustering (AI stack Phase B, part 2) — DBSCAN over every embedded face into unnamed
-// "Person N" groups. Deliberately wholesale: Phase B has no naming/merge UI yet (that's Phase
-// C), so each run clears and rebuilds every `people` row and `photo_faces.person_id` from
-// scratch rather than trying to reconcile with a prior clustering. Embeddings are L2-normalized
-// (see arcface::embed), so plain Euclidean distance is monotonic with cosine distance and
-// linfa-clustering's default L2 metric needs no customization.
+// ── Clustering (AI stack Phase B, part 2 / Phase C reconciliation) — DBSCAN over every embedded
+// face into "Person N" groups. Embeddings are L2-normalized (see arcface::embed), so plain
+// Euclidean distance is monotonic with cosine distance and linfa-clustering's default L2 metric
+// needs no customization.
+//
+// ⚠️ Phase B's first version wiped and rebuilt EVERY `people` row on every run — fine when there
+// was no naming UI to lose anything, but Phase C adds one, and a rename the very next re-cluster
+// silently discards is a real defect, not a rough edge. `people.auto` (0 = the user has renamed
+// this person or merged another into it) is what makes reconciliation possible: a machine-
+// generated ("auto") person is always fair game to delete and regenerate, but a NAMED person is
+// preserved by majority vote — if most of a new DBSCAN cluster's faces previously belonged to
+// the same named person, that cluster is folded back into it (id and name kept, cover_face_id
+// untouched) rather than becoming a fresh "Person N". A named person with no faces left after a
+// re-cluster is NOT deleted — it just sits empty, visible for the user to clean up manually
+// (`catalog_delete_person`) rather than the tool silently discarding a name they chose.
+fn reconcile_person_for_cluster(
+    tx: &rusqlite::Transaction,
+    cluster_face_ids: &[i64],
+    old_person_of: &std::collections::HashMap<i64, i64>,
+    named_people: &std::collections::HashMap<i64, bool>, // person_id -> auto
+    next_auto_num: &mut usize,
+    now: i64
+) -> Result<i64, String> {
+    let mut votes: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    for fid in cluster_face_ids {
+        if let Some(&pid) = old_person_of.get(fid) {
+            if named_people.get(&pid) == Some(&false) {
+                // false == NOT auto, i.e. a user-named/touched person
+                *votes.entry(pid).or_insert(0) += 1;
+            }
+        }
+    }
+    if let Some((&best_pid, &count)) = votes.iter().max_by_key(|(_, c)| **c) {
+        if count * 2 > cluster_face_ids.len() {
+            return Ok(best_pid);
+        }
+    }
+    // No majority-named match — a fresh auto person. Skip any name already taken (a named person
+    // could legitimately be called "Person 3").
+    loop {
+        let name = format!("Person {}", *next_auto_num);
+        *next_auto_num += 1;
+        let exists: bool =
+            tx.query_row("SELECT 1 FROM people WHERE name = ?1", params![name], |_| Ok(true)).optional().map_err(|e| e.to_string())?.unwrap_or(false);
+        if exists {
+            continue;
+        }
+        tx.execute("INSERT INTO people (name, cover_face_id, created, auto) VALUES (?1, ?2, ?3, 1)", params![name, cluster_face_ids[0], now])
+            .map_err(|e| e.to_string())?;
+        return Ok(tx.last_insert_rowid());
+    }
+}
 
 #[derive(Serialize, Clone, Default)]
 pub struct ClusterResult {
@@ -1772,26 +1833,42 @@ pub struct ClusterResult {
 /// DBSCAN's whole value here is refusing to force outliers into groups.
 pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<ClusterResult, String> {
     let mut stmt = conn
-        .prepare("SELECT id, embedding FROM photo_faces WHERE embedding IS NOT NULL")
+        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL")
         .map_err(|e| e.to_string())?;
-    let rows: Vec<(i64, Vec<f32>)> = stmt
+    let rows: Vec<(i64, Vec<f32>, Option<i64>)> = stmt
         .query_map([], |r| {
             let id: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
-            Ok((id, blob))
+            let person_id: Option<i64> = r.get(2)?;
+            Ok((id, blob, person_id))
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|(id, blob)| (id, blob_to_f32_vec(&blob)))
+        .map(|(id, blob, pid)| (id, blob_to_f32_vec(&blob), pid))
         .collect();
     drop(stmt);
+
+    let old_person_of: std::collections::HashMap<i64, i64> =
+        rows.iter().filter_map(|(fid, _, pid)| pid.map(|p| (*fid, p))).collect();
+
+    let mut pstmt = conn.prepare("SELECT id, auto FROM people").map_err(|e| e.to_string())?;
+    let named_people: std::collections::HashMap<i64, bool> = pstmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)? != 0)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .collect();
+    drop(pstmt);
 
     let mut result = ClusterResult::default();
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     tx.execute("UPDATE photo_faces SET person_id = NULL", []).map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM people", []).map_err(|e| e.to_string())?;
+    // Only AUTO people are cleared wholesale — a named (user-renamed/merged-into) person survives
+    // even if this run assigns it zero faces, so a rename is never silently lost.
+    tx.execute("DELETE FROM people WHERE auto = 1", []).map_err(|e| e.to_string())?;
 
     if rows.is_empty() {
         tx.commit().map_err(|e| e.to_string())?;
@@ -1801,7 +1878,7 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     let n = rows.len();
     let dim = rows[0].1.len();
     let mut data = ndarray::Array2::<f64>::zeros((n, dim));
-    for (i, (_, emb)) in rows.iter().enumerate() {
+    for (i, (_, emb, _)) in rows.iter().enumerate() {
         for (j, v) in emb.iter().enumerate() {
             data[[i, j]] = *v as f64;
         }
@@ -1811,31 +1888,66 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     let labels = linfa_clustering::Dbscan::params(min_points).tolerance(eps).transform(&data).map_err(|e| e.to_string())?;
 
     let now = now_secs() as i64;
-    let mut cluster_to_person: std::collections::HashMap<usize, i64> = std::collections::HashMap::new();
-    for (i, (face_id, _)) in rows.iter().enumerate() {
+    let mut cluster_faces: std::collections::HashMap<usize, Vec<i64>> = std::collections::HashMap::new();
+    for (i, (face_id, _, _)) in rows.iter().enumerate() {
         match labels[i] {
-            None => {
-                result.unclustered_faces += 1;
-            }
-            Some(cluster_idx) => {
-                let person_id = if let Some(&id) = cluster_to_person.get(&cluster_idx) {
-                    id
-                } else {
-                    let name = format!("Person {}", cluster_to_person.len() + 1);
-                    tx.execute("INSERT INTO people (name, cover_face_id, created) VALUES (?1, ?2, ?3)", params![name, face_id, now])
-                        .expect("insert person");
-                    let id = tx.last_insert_rowid();
-                    cluster_to_person.insert(cluster_idx, id);
-                    id
-                };
-                tx.execute("UPDATE photo_faces SET person_id = ?1 WHERE id = ?2", params![person_id, face_id]).map_err(|e| e.to_string())?;
-                result.clustered_faces += 1;
-            }
+            None => result.unclustered_faces += 1,
+            Some(cluster_idx) => cluster_faces.entry(cluster_idx).or_default().push(*face_id),
         }
     }
-    result.people = cluster_to_person.len();
+
+    let mut next_auto_num = 1usize;
+    let mut people_seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
+    for (_, face_ids) in cluster_faces.iter() {
+        let person_id = reconcile_person_for_cluster(&tx, face_ids, &old_person_of, &named_people, &mut next_auto_num, now)?;
+        people_seen.insert(person_id);
+        for fid in face_ids {
+            tx.execute("UPDATE photo_faces SET person_id = ?1 WHERE id = ?2", params![person_id, fid]).map_err(|e| e.to_string())?;
+            result.clustered_faces += 1;
+        }
+    }
+    result.people = people_seen.len();
     tx.commit().map_err(|e| e.to_string())?;
     Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_rename_person(state: tauri::State<CatalogState>, person_id: i64, name: String) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Renaming is exactly the "the user has touched this" signal that protects a person from
+    // `cluster_run`'s wholesale auto-person cleanup (see its own doc comment).
+    conn.execute("UPDATE people SET name = ?1, auto = 0 WHERE id = ?2", params![name, person_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Folds `from_id` entirely into `into_id`: every face reassigned, `from_id` deleted, `into_id`
+/// marked named (a merge is exactly as deliberate a signal as a rename). The "inevitable cluster-
+/// merge UI" the AI-stack plan flagged from the start — clustering never lands perfectly.
+#[tauri::command]
+pub fn catalog_merge_people(state: tauri::State<CatalogState>, from_id: i64, into_id: i64) -> Result<(), String> {
+    if from_id == into_id {
+        return Err("cannot merge a person into themselves".into());
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("UPDATE photo_faces SET person_id = ?1 WHERE person_id = ?2", params![into_id, from_id]).map_err(|e| e.to_string())?;
+    tx.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![into_id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM people WHERE id = ?1", params![from_id]).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Deletes a person outright (e.g. a junk/misclustered group) — their faces are unassigned
+/// (`person_id = NULL`), never deleted or re-clustered automatically; a future `cluster_run`
+/// will freely re-group them since an unassigned face carries no "named" protection.
+#[tauri::command]
+pub fn catalog_delete_person(state: tauri::State<CatalogState>, person_id: i64) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("UPDATE photo_faces SET person_id = NULL WHERE person_id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM people WHERE id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2051,6 +2163,13 @@ pub struct CatalogQuery {
     /// descendant (clicking "Travel" in the tag tree must also show "Travel|Iceland" photos).
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// AI stack Phase C: filter to photos with at least one detected face assigned to this
+    /// `people.id` — the People sidebar's equivalent of a keyword scope. Single value, not a
+    /// Vec like `keywords`: unlike keywords (which can legitimately co-occur, "Travel" AND
+    /// "Portrait"), the People sidebar is a one-at-a-time "photos of this person" view, same as
+    /// clicking one date-browser row.
+    #[serde(default)]
+    pub person_id: Option<i64>,
 }
 fn default_true() -> bool {
     true
@@ -2064,7 +2183,10 @@ fn default_true() -> bool {
 // every entry silently filtered as if it were offline.
 impl Default for CatalogQuery {
     fn default() -> Self {
-        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new() }
+        CatalogQuery {
+            kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None,
+            no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None
+        }
     }
 }
 
@@ -2137,6 +2259,19 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             values.push(Box::new(kw.clone()));
             values.push(Box::new(kw.clone()));
             values.push(Box::new(kw.clone()));
+        }
+        if let Some(person_id) = q.person_id {
+            // A face's `photo_id` is the ORIGINAL (possibly-derivative) photo it was detected
+            // on, but this WHERE runs against `p` after the stack-leader filter above — so match
+            // through EITHER the leader itself or any of its stacked derivatives, same reasoning
+            // the keyword filter doesn't need (keywords are read from the leader's own XMP,
+            // faces are detected per concrete file).
+            where_parts.push(format!(
+                "EXISTS (SELECT 1 FROM photo_faces f JOIN photos fp ON fp.id = f.photo_id \
+                 WHERE f.person_id = ?{a} AND (fp.id = p.id OR fp.stack_id = p.id))",
+                a = values.len() + 1,
+            ));
+            values.push(Box::new(person_id));
         }
         if q.no_date {
             where_parts.push("(p.cap_y IS NULL OR p.cap_m IS NULL OR p.cap_d IS NULL)".to_string());
@@ -4055,6 +4190,53 @@ mod tests {
         assert_eq!(r2.people, 2, "a re-run must reproduce the same clustering, not double it");
         let people_count: i64 = conn.query_row("SELECT COUNT(*) FROM people", [], |r| r.get(0)).unwrap();
         assert_eq!(people_count, 2);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The reason `people.auto` exists at all: a rename must survive the next `cluster_run`, not
+    /// get silently discarded by the wholesale-rebuild Phase B originally shipped with.
+    #[test]
+    fn renaming_a_person_survives_a_recluster() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("cluster_rename");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let photo_id: i64 = conn.query_row("SELECT id FROM photos LIMIT 1", [], |r| r.get(0)).unwrap();
+
+        let unit = |mut v: Vec<f32>| -> Vec<f32> {
+            let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            for x in v.iter_mut() {
+                *x /= n;
+            }
+            v
+        };
+        let mut insert = |emb: &[f32]| {
+            let blob = f32_vec_to_blob(emb);
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, embedding) VALUES (?1,0,0,1,1,0.9,'[]',?2)",
+                params![photo_id, blob]
+            )
+            .unwrap();
+        };
+        let mut base = vec![0f32; 512];
+        base[0] = 1.0;
+        insert(&unit(base.clone()));
+        insert(&unit(base.clone()));
+
+        cluster_run(&conn, 0.1, 2).unwrap();
+        let person_id: i64 = conn.query_row("SELECT id FROM people LIMIT 1", [], |r| r.get(0)).unwrap();
+        conn.execute("UPDATE people SET name = ?1, auto = 0 WHERE id = ?2", params!["Alice", person_id]).unwrap();
+
+        // Re-cluster with the exact same data — the reconciliation must recognize the majority
+        // overlap and keep BOTH the id and the chosen name, not spawn a fresh "Person 1".
+        let r2 = cluster_run(&conn, 0.1, 2).unwrap();
+        assert_eq!(r2.people, 1);
+        let (id2, name2): (i64, String) = conn.query_row("SELECT id, name FROM people LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(id2, person_id, "the same person row must be reused, not recreated");
+        assert_eq!(name2, "Alice", "the rename must survive a re-cluster");
 
         std::fs::remove_dir_all(&dir).ok();
     }
