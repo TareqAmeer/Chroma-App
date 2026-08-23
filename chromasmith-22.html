@@ -1857,6 +1857,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
           </div>
           <button class="db-btn" id="btn-hist" onclick="toggleHist()" title="Toggle scope overlay"><span class="fx-db-ic" id="ic-scope"></span></button>
+          <button class="db-btn" id="btn-gamut-warn" onclick="toggleGamutWarn()" title="Gamut warning — zebra-stripes any pixel that would clip on any channel. Preview only, never affects export."><span class="fx-db-ic" id="ic-gamut"></span></button>
           <select id="sel-scope-mode" onchange="fxScopeModeChanged(this.value)" title="Scope type" style="display:none;font-size:10px">
             <option value="hist">Histogram</option><option value="wave">Waveform</option>
             <option value="parade">RGB Parade</option><option value="vector">Vectorscope</option>
@@ -5514,7 +5515,7 @@ precision highp sampler2D;
 in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
-uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2;
+uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2,gamutWarn;
 uniform float useDither,ditherSeed; // TPDF dither at final quantization — see the JS call site's comment
 uniform float dustA,scrA,leakA,fxSeed,artAsp,dustMode; // film artifacts (dust/scratches/light leak) + stable seed + image aspect; dustMode: 0=both,1=black,2=white
 uniform vec3 grK;     // per-channel grain gain (R,G,B)
@@ -5664,6 +5665,25 @@ void main(){
   if(useDither>0.5){
     float d=hash12(gl_FragCoord.xy+ditherSeed)+hash12(gl_FragCoord.xy*1.37+ditherSeed+7.0)-1.0;
     res+=d/255.0;
+  }
+  // GAMUT WARNING — preview-only diagnostic overlay (item 8), same "never in export" contract as
+  // the mask Selection view: only preview render() call sites ever pass gamutWarn=1 (see the JS
+  // opts.gamutWarn plumbing), so this branch is dead code on every export/render-tiled path by
+  // construction, not by a runtime check here. Flags any pixel about to clip on ANY channel at
+  // this, the FINAL display clamp, with a diagonal zebra stripe (the standard video-scope
+  // convention for "this would clip") — verified in isolation (a synthetic WebGL2 program fed a
+  // deliberately out-of-range vec3 through this exact branch) to actually zebra rather than emit
+  // the clamped colour.
+  // ⚠️ KNOWN SCOPE LIMIT: the "lut" FBO defaults to an 8-bit RGBA texture, so basicAdjust/curves/
+  // masks clipping (e.g. a big Exposure push) is already hard-clamped by the GPU texture write
+  // BEFORE this shader ever reads it — invisible to this check by construction, not a bug here.
+  // Only clipping that originates AFTER that point (grain's unclamped addition, print-LUT output,
+  // stacked effects) is genuinely catchable this way. A future pass could force hdrIntermediate
+  // (RGBA16F) whenever this toggle is on to extend coverage upstream; not done here to keep this
+  // the "small, scoped" version rather than a step toward full ICC soft-proofing.
+  if(gamutWarn>0.5&&(any(lessThan(res,vec3(0.0)))||any(greaterThan(res,vec3(1.0))))){
+    float stripe=mod(floor((gl_FragCoord.x+gl_FragCoord.y)/4.0),2.0);
+    o=vec4(vec3(stripe),1.0);return;
   }
   o=vec4(clamp(res,0.,1.),1.);
 }`);
@@ -6153,6 +6173,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1f(ul('seed'),seedForFrame);
     gl.uniform1f(ul('debug'),P.debug||0);
     gl.uniform1f(ul('vigAmt'),P.vignette||0);
+    gl.uniform1f(ul('gamutWarn'),(opts&&opts.gamutWarn)?1:0);
     // TPDF dither at final quantization — masks 8-bit banding from a hard S-curve/LUT on
     // low-bit-depth (4:2:0 video) source. Off by default (useDither=0 → the shader adds
     // nothing) so every still golden is untouched; keyed on the SAME per-frame seed as grain
@@ -13127,6 +13148,17 @@ function toggleHist(){
   if(fxHistOn)drawHistogram();
 }
 function fxScopeModeChanged(v){fxScopeMode=v;drawHistogram();}
+// ── Item 8: gamut warning — preview-only, mirrors mskShowSel's contract (opt-in per render()
+// call via opts.gamutWarn, never passed by any export/renderTiled call site, so it can never
+// appear in an exported file by construction). Scoped small on purpose: a per-pixel "this would
+// clip on any channel" zebra overlay, not a full ICC soft-proof simulation.
+let fxGamutWarn=false;
+function toggleGamutWarn(){
+  fxGamutWarn=!fxGamutWarn;
+  const btn=document.getElementById('btn-gamut-warn');
+  if(btn)btn.classList.toggle('on',fxGamutWarn);
+  renderPreview();
+}
 // One entry point dispatching to the 4 scope renderers below — all share the SAME downsampled
 // sample buffer (drawHistogram._tmp), so switching modes costs nothing extra per renderPreview
 // call. ffmpeg's vf_waveform/vf_vectorscope conventions (additive intensity, Rec.709 Cb/Cr
@@ -14100,7 +14132,7 @@ function renderLoupe(){
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),
+  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]}); // export-scale grain & glow
   FX.setImage(fxWork);                                              // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -14206,7 +14238,7 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),
+  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]});
   FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
@@ -14366,7 +14398,7 @@ function renderPreview(){
   // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
-  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),...seedOpt});
+  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,...seedOpt});
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
@@ -14374,7 +14406,7 @@ function renderPreview(){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),...seedOpt});      // re-render processed into FX.cv
+    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,...seedOpt});      // re-render processed into FX.cv
     _applySplitPos();
   } else {
     const orig=document.getElementById('fx-canvas-orig');
@@ -18003,6 +18035,8 @@ const ICONS={
  // Library catalog's Keywords tree (library-ui.js) — sidebar section + the info panel's tag chips.
  tag:'<path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24L3 3v6.59a2 2 0 0 0 .59 1.41l9.58 9.58a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/>',
  looks:'<path d="M5 3v4M3 5h4"/><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"/>',
+ // Item 8's gamut-warning preview toggle (fx-preview-tools, next to the histogram/scope button).
+ gamut:'<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.5v.01"/>',
  adjust:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
  nr:'<path d="M12 3c4 5 7 8.5 7 12a7 7 0 1 1-14 0c0-3.5 3-7 7-12z"/>',
  curves:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M6 18c6 0 6-12 12-12"/>',
@@ -18560,7 +18594,7 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
  set('db-lib-ic','library');set('db-more','more');set('ic-before','compare');set('ic-split','split');
- set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');
+ set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-gamut','gamut');
  set('ic-zoomout','zoomOut');set('ic-zoomin','zoomIn');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
  // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
