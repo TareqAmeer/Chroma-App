@@ -1386,7 +1386,13 @@ pub fn trash_file(path: String) -> Result<(), String> {
 /// first. Called once from main()'s setup on a background thread — never blocks startup.
 pub fn prune_caches() {
     const THUMB_CAP: u64 = 500 * 1024 * 1024; // 500MB
-    const DECODE_CAP: u64 = 2 * 1024 * 1024 * 1024; // 2GB
+    // Raised from 2GB to 14GB (library-catalog plan's cache-budget split: ~6GB never-pruned
+    // offline thumbnails + ~14GB LRU full-size decodes, out of a 20GB total). This tier already
+    // does exactly what "recent edits open instantly" needs — a full-resolution decoded JPEG
+    // keyed on path+mtime+size+recipe_key (decode_cache_key) — it just needed headroom to hold
+    // more than a couple hundred RAWs at once. LRU eviction policy is unchanged, still oldest-
+    // mtime-first; only the ceiling moved.
+    const DECODE_CAP: u64 = 14 * 1024 * 1024 * 1024; // 14GB
     for (dir, cap) in [(cache_dir(), THUMB_CAP), (decode_cache_dir(), DECODE_CAP)] {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = rd
