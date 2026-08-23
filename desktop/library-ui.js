@@ -173,6 +173,9 @@
         });
       }
       case 'clear_cache_tier': return Promise.resolve(0);
+      case 'catalog_hash': return Promise.resolve({ hashed: 0 });
+      // One synthetic corrupt entry so the report popover is screenshot-verifiable too.
+      case 'catalog_verify': return Promise.resolve({ checked: 20, ok: 19, changed: 0, corrupt: [{ id: 3, name: 'IMG_1003.RW2', path: '/test/AllPhotos/IMG_1003.RW2' }] });
       case 'catalog_keywords': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
         // Two-level tree: Travel > Iceland, plus a standalone Portrait leaf — enough to verify
@@ -4044,7 +4047,38 @@
       </div></div>
       <div class="lib-coll-row" data-cache-free="1" style="cursor:pointer">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
+      </div>
+      <div class="lib-coll-row" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify library…</span>
       </div>`;
+  }
+
+  /// Manual, on-demand — see the plan's own logged decision: hashing a NEW file is cheap and
+  /// already auto-chained (catalogRunBackgroundPhases), but re-verifying every ALREADY-hashed
+  /// photo is a full re-read of the whole archive, so it only runs when explicitly asked for.
+  async function runVerifyLibrary() {
+    toast('Verifying library…');
+    let result;
+    try { result = await invoke('catalog_verify'); }
+    catch (e) { toast(humanizeErr('verify the library', e), 'err'); return; }
+    if (!result.corrupt || !result.corrupt.length) {
+      toast(`Verified ${result.checked} photo${result.checked === 1 ? '' : 's'} — none corrupted` + (result.changed ? ` (${result.changed} edited since last check, re-baselined)` : ''));
+      return;
+    }
+    // A real finding — never bury this in a toast that auto-dismisses. Same popover shape the
+    // cache-tier menu uses, but a read-only report rather than clickable actions: this isn't a
+    // "pick one" decision, it's "here is what needs your attention."
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:200;left:50%;top:50%;transform:translate(-50%,-50%);'
+      + 'background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:14px;'
+      + 'min-width:320px;max-width:480px;max-height:60vh;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:12px';
+    const esc2 = (s2) => String(s2 || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    menu.innerHTML = `<div style="font-weight:600;margin-bottom:8px;color:#e5484d">${result.corrupt.length} photo${result.corrupt.length === 1 ? '' : 's'} may be corrupted</div>`
+      + `<div style="color:var(--mut);margin-bottom:10px">Content changed without the file's own modified date changing — the pattern real bit rot looks like, not an edit.</div>`
+      + result.corrupt.map((c) => `<div style="padding:4px 0;border-top:1px solid var(--bdr);word-break:break-all">${esc2(c.name)}</div>`).join('')
+      + `<div style="margin-top:10px;text-align:right"><button class="lib-btn" id="lib-verify-close">Close</button></div>`;
+    document.body.appendChild(menu);
+    document.getElementById('lib-verify-close').onclick = () => menu.remove();
   }
 
   function drivesSectionHtml() {
@@ -4212,6 +4246,11 @@
     invoke('catalog_stack')
       .then(() => invoke('catalog_thumbnails'))
       .then(() => invoke('catalog_focus'))
+      // Hashing a NEW file is a bounded one-time cost (hash_run only touches unhashed/changed-
+      // mtime rows), same shape as thumbnails/focus — safe to auto-chain. Re-verifying every
+      // ALREADY-hashed file (detecting drift) is unbounded and stays a manual "Verify library"
+      // action (showVerifyMenu) — see the plan's own logged decision on this split.
+      .then(() => invoke('catalog_hash'))
       .catch((e) => console.error('catalog background phases', e))
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }
@@ -4223,8 +4262,8 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Verifying', copy: 'Copying' };
-  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash'];
+  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying' };
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
 
@@ -5078,6 +5117,8 @@
     });
     const freeUpRow = host.querySelector('[data-cache-free]');
     if (freeUpRow) freeUpRow.onclick = (e) => showCacheMenu(e);
+    const verifyRow = host.querySelector('[data-verify-library]');
+    if (verifyRow) verifyRow.onclick = () => runVerifyLibrary();
     // "By Date" root row: toggles the whole tree open/closed, same gesture the real folder
     // tree's own root uses, but never navigates on its own (a bare "By Date" click isn't a
     // filterable scope — unlike every row inside it).
