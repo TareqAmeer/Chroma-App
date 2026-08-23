@@ -145,7 +145,7 @@
       }
       case 'catalog_counts': {
         const N = /[?&]libcat=1/.test(location.search) ? Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10)) : 0;
-        return Promise.resolve({ all: N });
+        return Promise.resolve({ all: N, blurry: N ? Math.max(1, Math.floor(N / 5)) : 0 });
       }
       case 'catalog_date_counts': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ days: [], no_date: 0 });
@@ -168,7 +168,8 @@
         // through the tree provably changes the grid rather than silently re-showing everything
         // — the structural thing this mock exists to let the harness catch.
         let scoped = N;
-        if (q.noDate) scoped = 1;
+        if (q.blurryOnly) scoped = Math.max(1, Math.floor(N / 5));
+        else if (q.noDate) scoped = 1;
         else if (q.year === 2026 && q.month === 8 && q.day === 22) scoped = 4;
         else if (q.year === 2026 && q.month === 8 && q.day === 15) scoped = 2;
         else if (q.year === 2026 && q.month === 8) scoped = 6;
@@ -180,9 +181,11 @@
         const entries = [];
         for (let i = 1; i <= n; i++) {
           const offline = i % 7 === 0;
+          const blurry = q.blurryOnly ? true : i % 5 === 0;
           entries.push({ id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`,
             is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
-            missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7' });
+            missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7',
+            sharpness: blurry ? 20 : 400, blurry });
         }
         return Promise.resolve({ total: n, capped: false, entries });
       }
@@ -3871,7 +3874,7 @@
   // Minimal wiring for now — a live count + a grid fed by catalog_query. No date browser,
   // stacking, keywords or offline-thumbnail UI yet; those build on this once the backend
   // supports them (see catalog.rs's own top-of-file scope comment).
-  let catalogCounts = { all: 0 };
+  let catalogCounts = { all: 0, blurry: 0 };
   let catalogVolumes = [];
 
   const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -3962,11 +3965,20 @@
   }
 
   function catalogSectionHtml() {
+    // "Needs review" only appears once something is actually flagged — an empty row promising
+    // a feature with nothing behind it reads as broken, not reassuring. Never auto-hides once a
+    // photo is fixed/deleted/dismissed from it though: it's driven by catalogCounts.blurry like
+    // every other row here, so it just goes away on its own once the count returns to 0.
+    const reviewRow = catalogCounts.blurry ? `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'blurry' ? ' on' : ''}" data-catalog="blurry" title="Photos flagged as possibly out of focus — review, never auto-deleted">
+        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs review</span>
+        <span class="lib-coll-count">${catalogCounts.blurry}</span>
+      </div>` : '';
     return `<div class="lib-coll-heading">Library</div>
       <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' ? ' on' : ''}" data-catalog="all">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
-      </div>
+      </div>${reviewRow}
       <div class="lib-tree-node" id="lib-date-tree">
         <div class="lib-tree-row" data-date-tree-toggle="1">
           <span class="lib-tree-chev${dateExpanded.has('__root__') ? ' open' : ''}">${ic('chevron', 11)}</span>
@@ -3986,8 +3998,26 @@
     if (LIBTEST) return; // no real catalog backend to hit in the harness
     invoke('catalog_add_root', { path, kind: null })
       .then((root) => invoke('catalog_scan', { volumeId: root.volume_id }))
-      .then(() => refreshCatalogCounts())
+      .then(() => { refreshCatalogCounts(); catalogRunBackgroundPhases(); })
       .catch((e) => console.error('catalog_add_root/scan', path, e));
+  }
+
+  /// Thumbnails (the offline-browsing tier) and focus scoring are deliberately NOT part of
+  /// catalog_scan's own chain on the Rust side — decoding every photo is far more expensive
+  /// than reading an EXIF header or a small XMP sidecar, so folding it into the scan that fires
+  /// on every ordinary folder-open would make routine browsing noticeably slower. Run here
+  /// instead, once, in the background, after the fast walk/metadata/sidecar sync has already
+  /// left the grid showing real data. `_catalogBgRunning` just skips overlap on rapid repeated
+  /// folder-opens — nothing is lost by skipping, since the rows a skipped run would have picked
+  /// up (thumb=0 / focus_at stale) are still exactly where the NEXT run will find them.
+  let _catalogBgRunning = false;
+  function catalogRunBackgroundPhases() {
+    if (LIBTEST || _catalogBgRunning) return;
+    _catalogBgRunning = true;
+    invoke('catalog_thumbnails')
+      .then(() => invoke('catalog_focus'))
+      .catch((e) => console.error('catalog background phases', e))
+      .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }
 
   // ── Activity indicator ────────────────────────────────────────────────────────────────────
@@ -3997,8 +4027,8 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', hash: 'Verifying', copy: 'Copying' };
-  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'hash'];
+  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Verifying', copy: 'Copying' };
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
 
@@ -4114,7 +4144,7 @@
       const dateParts = scope && scope.startsWith('date:') ? scope.slice(5).split(':').map(Number) : null;
       const q = { kind: null, text: null, includeOffline: true, limit: null,
         year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
-        noDate: scope === 'date-nodate' };
+        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry' };
       page = await invoke('catalog_query', { q });
     } catch (e) {
       grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
