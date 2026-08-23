@@ -4888,15 +4888,147 @@
     const dates = files.map((f) => f.date).filter(Boolean).sort();
     const totalBytes = files.reduce((a, f) => a + (f.size || 0), 0);
     const span = dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} → ${dates[dates.length - 1]}`) : 'no date';
-    document.getElementById('imp-sub').innerHTML =
-      `${files.length} files · ${fmtBytes(totalBytes)} · ${esc(span)}${dupes ? ` · <span style="color:var(--acc)">${dupes} already imported</span>` : ''}`;
+
+    // ── Item 2: day-grouped, thumbnail preview + subset select ──────────────────────────────
+    // Previously every file on the card was always imported — no way to preview what's actually
+    // there or pick a subset before copying. `scan_card` already returns a per-file capture DATE
+    // (EXIF DateTimeOriginal, not file mtime — see this file's own header comment) and `ingest_run`
+    // already accepts an `options.only` path allowlist (added for exactly this, never wired up
+    // from the UI until now) — so this is purely a frontend feature, no backend change needed.
+    // Selection defaults to "everything checked" (the common case is importing the whole card);
+    // unchecking is the exception, not the default.
+    const selected = new Set(files.map((f) => f.path));
+    // Calendar day, local time (grouping decision) — a shoot spanning midnight shows as two
+    // groups, matching how every calendar/date UI already works; no configurable day-start.
+    const dayGroups = new Map(); // 'YYYY-MM-DD' | '\0nodate' -> CardFile[]
+    for (const f of files) {
+      const k = f.date || '\0nodate';
+      if (!dayGroups.has(k)) dayGroups.set(k, []);
+      dayGroups.get(k).push(f);
+    }
+    const dayKeys = [...dayGroups.keys()].sort(); // '\0nodate' sorts before any real date; fine, it's rare
+    const flat = dayKeys.flatMap((k) => dayGroups.get(k)); // stable order for shift-click range select
+    const pathIdx = new Map(flat.map((f, i) => [f.path, i]));
+    let rangeAnchor = -1;
+    function dayLabel(k) {
+      if (k === '\0nodate') return 'No capture date';
+      const d = new Date(k + 'T00:00:00');
+      return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    function updateSelSummary() {
+      const selFiles = files.filter((f) => selected.has(f.path));
+      const selBytes = selFiles.reduce((a, f) => a + (f.size || 0), 0);
+      const el = document.getElementById('imp-sub');
+      if (el) el.innerHTML = `${selFiles.length} of ${files.length} selected · ${fmtBytes(selBytes)} · ${esc(span)}` +
+        (dupes ? ` · <span style="color:var(--acc)">${dupes} already imported</span>` : '');
+      const go = document.getElementById('imp-go');
+      if (go) go.disabled = selFiles.length === 0;
+      if (go) go.style.opacity = selFiles.length === 0 ? '.5' : '';
+    }
+    function tileEl(f) {
+      const path = f.path;
+      const el = document.createElement('div');
+      el.className = 'imp-tile';
+      el.dataset.path = path;
+      el.style.cssText = 'position:relative;width:64px;height:64px;border-radius:6px;overflow:hidden;background:var(--sur2);cursor:pointer;flex:0 0 auto';
+      el.innerHTML = `<div class="imp-tile-img" style="width:100%;height:100%;background:#000 center/cover no-repeat"></div>
+        <div class="imp-tile-check" style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:4px;background:rgba(0,0,0,.55);border:1.5px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center">
+          <svg class="imp-tile-mark" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#fff" stroke-width="3" style="display:${selected.has(path) ? '' : 'none'}"><path d="M4 12l5 5L20 6"/></svg>
+        </div>
+        ${f.duplicate ? '<div style="position:absolute;bottom:2px;right:3px;font-size:9px;color:#fff;background:rgba(0,0,0,.6);border-radius:3px;padding:0 3px">dup</div>' : ''}
+        <div style="position:absolute;bottom:2px;left:3px;right:${f.duplicate ? '22px' : '3px'};font-size:9px;color:#fff;text-shadow:0 1px 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</div>`;
+      el.classList.toggle('imp-tile-sel', selected.has(path));
+      el.onclick = (ev) => {
+        const idx = pathIdx.get(path);
+        if (ev.shiftKey && rangeAnchor >= 0) {
+          const [lo, hi] = [rangeAnchor, idx].sort((a, b) => a - b);
+          for (let i = lo; i <= hi; i++) selected.add(flat[i].path);
+        } else {
+          if (selected.has(path)) selected.delete(path); else selected.add(path);
+          rangeAnchor = idx;
+        }
+        renderTiles();
+        updateSelSummary();
+      };
+      return el;
+    }
+    // Lazy thumbnail load, same tiered fast(embedded-JPEG)/fallback(decode) invoke pattern the
+    // main Library grid already uses (get_thumbnail_fast -> get_thumbnail_or_offline) — proven
+    // to work for RAW/JPEG/HEIC alike, so reused as-is rather than a new thumbnail path.
+    const thumbUrls = [];
+    let thumbActive = 0;
+    const thumbQueue = [];
+    function pumpThumbs() {
+      while (thumbActive < 4 && thumbQueue.length) {
+        const job = thumbQueue.shift();
+        if (!job.el.isConnected) continue;
+        thumbActive++;
+        invoke('get_thumbnail_fast', { path: job.path }).catch(() => null)
+          .then((fastBuf) => {
+            if (fastBuf) return fastBuf;
+            return invoke('get_thumbnail_or_offline', { path: job.path }).catch(() => null);
+          })
+          .then((buf) => {
+            if (buf && job.el.isConnected) {
+              const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+              thumbUrls.push(url);
+              const img = job.el.querySelector('.imp-tile-img');
+              if (img) img.style.backgroundImage = `url(${url})`;
+            }
+          })
+          .catch(() => {})
+          .finally(() => { thumbActive--; pumpThumbs(); });
+      }
+    }
+    let tileIO = null;
+    function renderTiles() {
+      const host = document.getElementById('imp-days');
+      if (!host) return;
+      if (tileIO) tileIO.disconnect();
+      thumbQueue.length = 0;
+      host.innerHTML = '';
+      tileIO = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) {
+          const path = e.target.dataset.path;
+          thumbQueue.push({ path, el: e.target });
+          tileIO.unobserve(e.target);
+        }
+        pumpThumbs();
+      }, { root: host, rootMargin: '150px' });
+      for (const k of dayKeys) {
+        const dayFiles = dayGroups.get(k);
+        const dayAllSel = dayFiles.every((f) => selected.has(f.path));
+        const daySomeSel = dayFiles.some((f) => selected.has(f.path));
+        const dayBytes = dayFiles.reduce((a, f) => a + (f.size || 0), 0);
+        const head = document.createElement('div');
+        head.style.cssText = 'display:flex;align-items:center;gap:7px;padding:6px 2px;cursor:pointer;font-size:12px;font-weight:600;margin-top:6px';
+        head.innerHTML = `<input type="checkbox" ${dayAllSel ? 'checked' : ''} ${!dayAllSel && daySomeSel ? 'data-indeterminate="1"' : ''} style="width:15px;height:15px">
+          <span>${esc(dayLabel(k))}</span><span style="font-weight:400;color:var(--mut)">${dayFiles.length} · ${fmtBytes(dayBytes)}</span>`;
+        const headCb = head.querySelector('input');
+        if (!dayAllSel && daySomeSel) headCb.indeterminate = true;
+        const toggleDay = () => {
+          const willSelect = !dayAllSel;
+          for (const f of dayFiles) { if (willSelect) selected.add(f.path); else selected.delete(f.path); }
+          renderTiles(); updateSelSummary();
+        };
+        head.onclick = (ev) => { if (ev.target !== headCb) toggleDay(); };
+        headCb.onclick = (ev) => { ev.stopPropagation(); toggleDay(); };
+        host.appendChild(head);
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:2px 2px 4px';
+        for (const f of dayFiles) { const t = tileEl(f); grid.appendChild(t); tileIO.observe(t); }
+        host.appendChild(grid);
+      }
+    }
 
     const row = (label, html, hint) => `<div style="margin-bottom:10px">
         <div style="font-size:11px;font-weight:600;color:var(--mut);margin-bottom:4px">${label}</div>
         ${html}${hint ? `<div style="font-size:11px;color:var(--mut);margin-top:3px">${hint}</div>` : ''}</div>`;
     const inputCss = 'width:100%;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 9px;font-size:12px;font-family:var(--sans)';
     document.getElementById('imp-body').innerHTML =
-      row('Copy to', `<div style="display:flex;gap:6px"><input id="imp-dest" style="${inputCss}" value="${esc(prefs.dest || '')}" placeholder="Choose a destination folder…" readonly>
+      row('Photos', `<div id="imp-days" style="max-height:260px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;padding:4px 8px"></div>`,
+        'Click a day to select/deselect it, click a photo to toggle it, shift-click for a range.')
+      + row('Copy to', `<div style="display:flex;gap:6px"><input id="imp-dest" style="${inputCss}" value="${esc(prefs.dest || '')}" placeholder="Choose a destination folder…" readonly>
           <button id="imp-dest-pick" style="white-space:nowrap;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer">Choose…</button></div>`)
       + row('Organise into', `<select id="imp-folder" style="${inputCss}">
           <option value="{YYYY}/{YYYY-MM-DD}">2026 / 2026-08-15</option>
@@ -4925,6 +5057,8 @@
         </div>`;
 
     const $ = (id) => document.getElementById(id);
+    renderTiles();
+    updateSelSummary();
     if (prefs.folder) $('imp-folder').value = prefs.folder;
     if (prefs.name) $('imp-name').value = prefs.name;
     const pickFolder = async (target) => {
@@ -4941,13 +5075,14 @@
     $('imp-go').onclick = async () => {
       const dest = $('imp-dest').value.trim();
       if (!dest) { $('imp-dest').style.borderColor = 'var(--acc)'; return; }
+      if (selected.size === 0) return; // imp-go is disabled in this state too; belt and suspenders
       const opts = {
         destRoot: dest,
         backupRoot: $('imp-backup').value.trim() || null,
         folderTemplate: $('imp-folder').value,
         filenameTemplate: $('imp-name').value,
         skipDuplicates: $('imp-skip').checked,
-        only: [],
+        only: selected.size === files.length ? [] : [...selected], // [] means "everything" server-side; only send a real allowlist when it's a genuine subset
       };
       saveImportPrefs({ dest, backup: opts.backupRoot || '', folder: opts.folderTemplate, name: opts.filenameTemplate, skip: opts.skipDuplicates, eject: $('imp-eject').checked });
       cardState.scanning = true;
