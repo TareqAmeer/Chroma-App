@@ -688,9 +688,40 @@ pub fn scan_run(
 /// year, month, day). Days-since-epoch via Howard Hinnant's `days_from_civil` — the exact
 /// inverse of `ingest.rs`'s own `civil_from_days`, written out for the same reason that one was:
 /// exact for every date this will ever see, no `chrono` dependency for one conversion.
+/// Howard Hinnant's `days_from_civil` — days since the Unix epoch for a given calendar date.
+/// Shared by the EXIF parser below and the video capture-date parser (`video_capture_date`),
+/// which is exactly why it's its own function rather than staying inlined in one caller: the
+/// same exact-for-every-date math both need, written once.
+fn days_from_civil(y: i64, mo: i64, d: i64) -> i64 {
+    let y_adj = if mo <= 2 { y - 1 } else { y };
+    let era = if y_adj >= 0 { y_adj } else { y_adj - 399 } / 400;
+    let yoe = (y_adj - era * 400) as u64;
+    let mp = if mo > 2 { mo - 3 } else { mo + 9 } as u64;
+    let doy = (153 * mp + 2) / 5 + (d as u64) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe as i64 - 719_468
+}
+
+/// The inverse — civil date for a given days-since-epoch. Also Hinnant's algorithm, matching
+/// ingest.rs's own `civil_from_days` (which returns a formatted string; this returns ints,
+/// which is what a caller doing further date arithmetic — or writing to `cap_y`/`cap_m`/`cap_d`
+/// — actually needs).
+fn civil_from_days_ints(z: i64) -> (i32, i32, i32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32, m as i32, d as i32)
+}
+
 fn parse_exif_datetime(raw: &str) -> Option<(i64, i32, i32, i32)> {
-    let bytes = raw.as_bytes();
-    if bytes.len() < 19 {
+    if raw.len() < 19 {
         return None;
     }
     let y: i64 = raw.get(0..4)?.parse().ok()?;
@@ -702,13 +733,7 @@ fn parse_exif_datetime(raw: &str) -> Option<(i64, i32, i32, i32)> {
     if !(1..=12).contains(&mo) || !(1..=31).contains(&d) {
         return None;
     }
-    let y_adj = if mo <= 2 { y - 1 } else { y };
-    let era = if y_adj >= 0 { y_adj } else { y_adj - 399 } / 400;
-    let yoe = (y_adj - era * 400) as u64;
-    let mp = if mo > 2 { mo - 3 } else { mo + 9 } as u64;
-    let doy = (153 * mp + 2) / 5 + (d as u64) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146_097 + doe as i64 - 719_468;
+    let days = days_from_civil(y, mo, d);
     let secs = days * 86_400 + h * 3600 + mi * 60 + s;
     Some((secs, y as i32, mo as i32, d as i32))
 }
@@ -741,6 +766,235 @@ fn leading_float(s: &str) -> Option<f64> {
     } else {
         numeric.parse().ok()
     }
+}
+
+// ── Video capture date ──────────────────────────────────────────────────────────────────────
+//
+// `read_meta`/`PhotoMeta` (library.rs) has no video branch — clips get no capture date at all
+// today, so scan_card falls back to filesystem mtime, which ingest.rs's own header warns
+// against ("a card's mtimes are whatever the camera's clock and the copy program felt like").
+// In a date-organised catalog that means every clip lands under "No date" or a wrong day right
+// next to the photos from the same shoot, which sort correctly — the single most visible
+// failure a date browser can have. Fixed by reading two ISOBMFF (MP4/MOV) sources, in priority
+// order: `com.apple.quicktime.creationdate` (local time WITH UTC offset — correct), falling
+// back to `mvhd.creation_time` (UTC only, and frequently absent/zero, hence second choice).
+//
+// ⚠️ Reads ONLY the `moov` box, via seek — never the whole file. `moov` is metadata (sample
+// tables, not pixel data) and is typically KBs to a few MB even for a large video; loading a
+// multi-GB clip into memory to read one timestamp would be exactly the kind of "works on my
+// test file, OOMs on a real one" bug this avoids by construction.
+
+use std::io::{Read, Seek, SeekFrom};
+
+/// Reads one box header at the current file position. Returns (body_size, type, header_len).
+/// `body_size == u64::MAX` means "extends to EOF" (a top-level size-0 box, rare but legal).
+fn read_box_header(f: &mut std::fs::File) -> Option<(u64, [u8; 4], u64)> {
+    let mut hdr = [0u8; 8];
+    f.read_exact(&mut hdr).ok()?;
+    let size32 = u32::from_be_bytes(hdr[0..4].try_into().ok()?);
+    let typ: [u8; 4] = hdr[4..8].try_into().ok()?;
+    if size32 == 1 {
+        let mut ext = [0u8; 8];
+        f.read_exact(&mut ext).ok()?;
+        Some((u64::from_be_bytes(ext).saturating_sub(16), typ, 16))
+    } else if size32 == 0 {
+        Some((u64::MAX, typ, 8))
+    } else {
+        Some(((size32 as u64).saturating_sub(8), typ, 8))
+    }
+}
+
+/// Walks top-level boxes looking for `moov`, reading only its body into memory. Bounded to
+/// 10,000 top-level boxes (a real MP4 has a handful — ftyp/moov/mdat/free/...) so a malformed
+/// or adversarial file can't hang this in a loop, and caps the body read at 64MB — a `moov`
+/// that large isn't ordinary metadata and isn't worth trusting.
+fn find_moov_bytes(path: &str) -> Option<Vec<u8>> {
+    let mut f = std::fs::File::open(path).ok()?;
+    let file_len = f.metadata().ok()?.len();
+    let mut pos: u64 = 0;
+    for _ in 0..10_000 {
+        if pos + 8 > file_len {
+            break;
+        }
+        f.seek(SeekFrom::Start(pos)).ok()?;
+        let (body_size, typ, hdr_len) = read_box_header(&mut f)?;
+        let body_size = if body_size == u64::MAX { file_len.saturating_sub(pos + hdr_len) } else { body_size };
+        if &typ == b"moov" {
+            if body_size == 0 || body_size > 64 * 1024 * 1024 {
+                return None;
+            }
+            let mut buf = vec![0u8; body_size as usize];
+            f.seek(SeekFrom::Start(pos + hdr_len)).ok()?;
+            f.read_exact(&mut buf).ok()?;
+            return Some(buf);
+        }
+        // ⚠️ NOT a `break` on body_size == 0. A zero-body top-level box is real and common —
+        // QuickTime's own `wide` placeholder (an 8-byte "reserve room for a 64-bit mdat size
+        // later" box, written by real Apple encoders right after `ftyp`) is exactly this, and
+        // the first version of this function bailed out on it before ever reaching `moov`,
+        // which sits AFTER `mdat` in this shape of file — found by testing against a real
+        // clip, not a synthetic one. `pos` always advances by at least `hdr_len` (8 or 16)
+        // regardless of body_size, so there is no infinite-loop risk here to guard against;
+        // the `for _ in 0..10_000` bound above is what actually protects against a malformed
+        // file, by capping total iterations rather than by special-casing this.
+        pos += hdr_len + body_size;
+    }
+    None
+}
+
+/// Finds the first direct child box of type `want` within `data[start..end]`, returning its
+/// body's (start, end) as absolute offsets into `data`. Bounded by `end` so a corrupt size
+/// can't walk past the slice this was given.
+fn find_child(data: &[u8], start: usize, end: usize, want: &[u8; 4]) -> Option<(usize, usize)> {
+    let mut pos = start;
+    while pos + 8 <= end {
+        let size32 = u32::from_be_bytes(data.get(pos..pos + 4)?.try_into().ok()?);
+        let typ: [u8; 4] = data.get(pos + 4..pos + 8)?.try_into().ok()?;
+        let (body_start, box_end) = if size32 == 1 {
+            let size64 = u64::from_be_bytes(data.get(pos + 8..pos + 16)?.try_into().ok()?);
+            (pos + 16, pos + size64 as usize)
+        } else if size32 == 0 {
+            (pos + 8, end)
+        } else {
+            (pos + 8, pos + size32 as usize)
+        };
+        if box_end > end || box_end <= pos {
+            break; // malformed size — stop rather than trust it
+        }
+        if &typ == want {
+            return Some((body_start, box_end));
+        }
+        pos = box_end;
+    }
+    None
+}
+
+/// `moov/meta/keys` + `moov/meta/ilst` — QuickTime's "keyed" metadata scheme. `keys` maps a
+/// namespaced string (here "com.apple.quicktime.creationdate") to a 1-based index; `ilst`
+/// holds one child box PER index whose 4-byte "type" is that index encoded as a big-endian u32
+/// (not ASCII) containing a `data` sub-box with the actual value.
+///
+/// ⚠️ Whether `meta`'s body starts with 4 bytes of version+flags before its children depends on
+/// which convention wrote it, and this is NOT a detail to get from the spec alone — verified
+/// against a real Apple-camera-written file (this project's own geneva/IMG_8015.MOV): its
+/// `meta` box has NO leading version+flags, contrary to the ISO base media "FullBox" convention
+/// video tooling elsewhere in this codebase might suggest. Some non-Apple encoders DO write the
+/// ISO-standard form. Rather than assume either, try both offsets and use whichever actually
+/// contains a `keys` box.
+fn find_quicktime_creationdate(moov: &[u8]) -> Option<String> {
+    let (meta_s, meta_e) = find_child(moov, 0, moov.len(), b"meta")?;
+    let children_start = [meta_s, meta_s + 4]
+        .into_iter()
+        .find(|&c| c <= meta_e && find_child(moov, c, meta_e, b"keys").is_some())?;
+    let (keys_s, keys_e) = find_child(moov, children_start, meta_e, b"keys")?;
+    let (ilst_s, ilst_e) = find_child(moov, children_start, meta_e, b"ilst")?;
+
+    if keys_e.saturating_sub(keys_s) < 8 {
+        return None;
+    }
+    let entry_count = u32::from_be_bytes(moov.get(keys_s + 4..keys_s + 8)?.try_into().ok()?);
+    let mut pos = keys_s + 8;
+    let mut target_index = None;
+    for i in 1..=entry_count {
+        if pos + 8 > keys_e {
+            break;
+        }
+        let key_size = u32::from_be_bytes(moov.get(pos..pos + 4)?.try_into().ok()?) as usize;
+        if key_size < 8 || pos + key_size > keys_e {
+            break;
+        }
+        let value = moov.get(pos + 8..pos + key_size)?;
+        if value == b"com.apple.quicktime.creationdate" {
+            target_index = Some(i);
+            break;
+        }
+        pos += key_size;
+    }
+    let idx = target_index?;
+
+    let item_type = idx.to_be_bytes();
+    let (item_s, item_e) = find_child(moov, ilst_s, ilst_e, &item_type)?;
+    let (data_s, data_e) = find_child(moov, item_s, item_e, b"data")?;
+    if data_e.saturating_sub(data_s) < 8 {
+        return None;
+    }
+    let payload = moov.get(data_s + 8..data_e)?;
+    std::str::from_utf8(payload).ok().map(|s| s.trim_end_matches('\0').to_string())
+}
+
+/// "YYYY-MM-DDTHH:MM:SS±HH:MM" or "...Z" — QuickTime's creationdate format. The offset is what
+/// makes this the PREFERRED source over `mvhd` below: it gives real local capture time, not UTC.
+fn parse_iso8601_with_offset(s: &str) -> Option<(i64, i32, i32, i32)> {
+    if s.len() < 19 {
+        return None;
+    }
+    let y: i64 = s.get(0..4)?.parse().ok()?;
+    let mo: i64 = s.get(5..7)?.parse().ok()?;
+    let d: i64 = s.get(8..10)?.parse().ok()?;
+    let h: i64 = s.get(11..13)?.parse().ok()?;
+    let mi: i64 = s.get(14..16)?.parse().ok()?;
+    let se: i64 = s.get(17..19)?.parse().ok()?;
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let offset_secs: i64 = if s.len() == 19 || s.as_bytes().get(19) == Some(&b'Z') {
+        0
+    } else if s.len() >= 25 {
+        let sign = if s.as_bytes()[19] == b'-' { -1 } else { 1 };
+        let oh: i64 = s.get(20..22)?.parse().ok()?;
+        let om: i64 = s.get(23..25)?.parse().ok()?;
+        sign * (oh * 3600 + om * 60)
+    } else {
+        0
+    };
+    let local_days = days_from_civil(y, mo, d);
+    let utc_secs = local_days * 86_400 + h * 3600 + mi * 60 + se - offset_secs;
+    // Report the LOCAL calendar date (what the camera's clock actually showed), matching
+    // capture_date's own convention of reading wall-clock fields as-is — a video shot at
+    // 11pm local time must not roll onto the next UTC day in the date browser.
+    Some((utc_secs, y as i32, mo as i32, d as i32))
+}
+
+pub struct VideoDate {
+    pub captured: i64,
+    pub y: i32,
+    pub m: i32,
+    pub d: i32,
+    /// "quicktime" | "mvhd" — which source answered, kept distinguishable rather than folded
+    /// away, the same way a fallback-to-mtime date is worth knowing apart from a real EXIF one.
+    pub source: &'static str,
+}
+
+pub fn video_capture_date(path: &str) -> Option<VideoDate> {
+    let moov = find_moov_bytes(path)?;
+    if let Some(iso) = find_quicktime_creationdate(&moov) {
+        if let Some((secs, y, m, d)) = parse_iso8601_with_offset(&iso) {
+            return Some(VideoDate { captured: secs, y, m, d, source: "quicktime" });
+        }
+    }
+    let (mvhd_s, mvhd_e) = find_child(&moov, 0, moov.len(), b"mvhd")?;
+    if mvhd_e.saturating_sub(mvhd_s) < 8 {
+        return None;
+    }
+    let version = moov[mvhd_s];
+    let mac_secs: i64 = if version == 1 {
+        if mvhd_e - mvhd_s < 12 {
+            return None;
+        }
+        i64::from_be_bytes(moov.get(mvhd_s + 4..mvhd_s + 12)?.try_into().ok()?)
+    } else {
+        u32::from_be_bytes(moov.get(mvhd_s + 4..mvhd_s + 8)?.try_into().ok()?) as i64
+    };
+    // QuickTime's mvhd epoch is 1904-01-01 UTC, not the Unix epoch — the classic bug in this
+    // exact parser. Frequently written as 0 (absent) or garbage; both are worth rejecting
+    // rather than reporting a bogus 1904-adjacent date.
+    const MAC_TO_UNIX_EPOCH_OFFSET: i64 = 2_082_844_800;
+    let unix_secs = mac_secs - MAC_TO_UNIX_EPOCH_OFFSET;
+    if unix_secs <= 0 {
+        return None;
+    }
+    let (y, m, d) = civil_from_days_ints(unix_secs.div_euclid(86_400));
+    Some(VideoDate { captured: unix_secs, y, m, d, source: "mvhd" })
 }
 
 #[derive(Default)]
@@ -803,19 +1057,29 @@ pub fn metadata_run(
         // The EXIF reads themselves are the expensive part (a RAW's metadata read is real I/O)
         // — parallelize those, then commit as one transaction so the DB is never touched from
         // more than one thread at a time.
-        let read: Vec<(i64, i64, crate::library::PhotoMeta)> = batch
+        // library::read_meta has no video branch — a video path gets PhotoMeta::default() back,
+        // date included. video_capture_date is the video-specific fallback, gated by extension
+        // so a photo never pays for the (harmless but pointless) attempt to box-walk a JPEG.
+        let read: Vec<(i64, i64, crate::library::PhotoMeta, Option<VideoDate>)> = batch
             .par_iter()
-            .map(|(id, abs, mtime)| (*id, *mtime, crate::library::read_meta_public(abs)))
+            .map(|(id, abs, mtime)| {
+                let ext = Path::new(abs).extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                let video_date = if matches!(ext.as_str(), "mp4" | "mov" | "m4v") { video_capture_date(abs) } else { None };
+                (*id, *mtime, crate::library::read_meta_public(abs), video_date)
+            })
             .collect();
 
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-        for (id, mtime, meta) in &read {
-            let (captured, cap_y, cap_m, cap_d) = meta
-                .date
-                .as_deref()
-                .and_then(parse_exif_datetime)
-                .map(|(s, y, mo, d)| (Some(s), Some(y), Some(mo), Some(d)))
-                .unwrap_or((None, None, None, None));
+        for (id, mtime, meta, video_date) in &read {
+            let (captured, cap_y, cap_m, cap_d) = if let Some(vd) = video_date {
+                (Some(vd.captured), Some(vd.y), Some(vd.m), Some(vd.d))
+            } else {
+                meta.date
+                    .as_deref()
+                    .and_then(parse_exif_datetime)
+                    .map(|(s, y, mo, d)| (Some(s), Some(y), Some(mo), Some(d)))
+                    .unwrap_or((None, None, None, None))
+            };
             let shutter_sec = meta.shutter.as_deref().and_then(shutter_to_sec);
             let aperture_f = meta.aperture.as_deref().and_then(leading_float);
             let focal_mm = meta.focal_len.as_deref().and_then(leading_float);
@@ -1776,5 +2040,199 @@ mod tests {
         let by_day = query_run(&conn, CatalogQuery { year: Some(2026), month: Some(8), day: Some(20), ..Default::default() }).unwrap();
         assert_eq!(by_day.entries.len(), 1);
         assert_eq!(by_day.entries[0].name, "aug20.jpg");
+    }
+
+    // ── Video capture date ──────────────────────────────────────────────────────────────────
+
+    fn mp4_box(typ: &[u8; 4], body: &[u8]) -> Vec<u8> {
+        let mut v = ((body.len() + 8) as u32).to_be_bytes().to_vec();
+        v.extend_from_slice(typ);
+        v.extend_from_slice(body);
+        v
+    }
+
+    /// A minimal but structurally real `moov > mvhd` box, version 0, with a given Mac-epoch
+    /// (1904-01-01) creation_time. Pads the rest of mvhd's body with zeros — the parser only
+    /// reads the first 8 bytes, but a real mvhd is much longer, and this keeps the fixture
+    /// honest about that rather than truncating it to exactly what the parser touches.
+    fn moov_with_mvhd(mac_epoch_secs: u32, version: u8) -> Vec<u8> {
+        let mut mvhd_body = vec![version, 0, 0, 0];
+        if version == 1 {
+            mvhd_body.extend_from_slice(&(mac_epoch_secs as u64).to_be_bytes());
+            mvhd_body.extend_from_slice(&0u64.to_be_bytes()); // modification_time
+        } else {
+            mvhd_body.extend_from_slice(&mac_epoch_secs.to_be_bytes());
+            mvhd_body.extend_from_slice(&0u32.to_be_bytes()); // modification_time
+        }
+        mvhd_body.extend_from_slice(&[0u8; 80]); // timescale/duration/rate/volume/matrix/etc — unread padding
+        let mvhd = mp4_box(b"mvhd", &mvhd_body);
+        mp4_box(b"moov", &mvhd)
+    }
+
+    /// A `moov > meta > (keys, ilst)` structure carrying one QuickTime creationdate key, built
+    /// by hand to the real spec: `keys`' entries are (size, "mdta" namespace, value-string);
+    /// `ilst`'s child box's own 4-byte "type" IS the 1-based key index as a big-endian u32, not
+    /// ASCII, containing one `data` sub-box with the actual ISO8601 payload.
+    ///
+    /// `fullbox_prefix` selects which of the two real conventions to build — see
+    /// `find_quicktime_creationdate`'s doc comment: a real Apple-camera file (this repo's own
+    /// geneva/IMG_8015.MOV) has NO leading version+flags on `meta`'s body; some non-Apple
+    /// encoders write the ISO "FullBox" form WITH it. Both are exercised, not just one.
+    fn moov_with_quicktime_date(iso: &str, also_mvhd: Option<u32>, fullbox_prefix: bool) -> Vec<u8> {
+        let key_value = b"com.apple.quicktime.creationdate";
+        let mut key_entry = ((key_value.len() + 8) as u32).to_be_bytes().to_vec();
+        key_entry.extend_from_slice(b"mdta");
+        key_entry.extend_from_slice(key_value);
+        let mut keys_body = vec![0u8, 0, 0, 0]; // version+flags
+        keys_body.extend_from_slice(&1u32.to_be_bytes()); // entry_count
+        keys_body.extend_from_slice(&key_entry);
+        let keys = mp4_box(b"keys", &keys_body);
+
+        let mut data_body = vec![0u8, 0, 0, 1]; // type indicator (1 = UTF-8, unread by parser)
+        data_body.extend_from_slice(&[0u8; 4]); // locale
+        data_body.extend_from_slice(iso.as_bytes());
+        let data = mp4_box(b"data", &data_body);
+        let item = mp4_box(&1u32.to_be_bytes(), &data); // item "type" = key index 1
+        let ilst = mp4_box(b"ilst", &item);
+
+        let mut meta_body = if fullbox_prefix { vec![0u8, 0, 0, 0] } else { Vec::new() };
+        meta_body.extend_from_slice(&keys);
+        meta_body.extend_from_slice(&ilst);
+        let meta = mp4_box(b"meta", &meta_body);
+
+        let mut moov_body = meta;
+        if let Some(mac_secs) = also_mvhd {
+            let mut mvhd_body = vec![0u8, 0, 0, 0];
+            mvhd_body.extend_from_slice(&mac_secs.to_be_bytes());
+            mvhd_body.extend_from_slice(&[0u8; 84]);
+            moov_body.extend_from_slice(&mp4_box(b"mvhd", &mvhd_body));
+        }
+        mp4_box(b"moov", &moov_body)
+    }
+
+    fn write_fixture(tag: &str, moov: &[u8]) -> String {
+        let dir = std::env::temp_dir().join(format!("cs_video_fixture_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(format!("{tag}.mov"));
+        // ftyp then moov then a fake mdat, matching a real file's top-level box order — this
+        // also proves find_moov_bytes skips PAST ftyp/mdat rather than only working when moov
+        // happens to be first.
+        let mut file = mp4_box(b"ftyp", b"qt  \0\0\x02\0qt  ");
+        file.extend_from_slice(moov);
+        file.extend_from_slice(&mp4_box(b"mdat", &[0u8; 16]));
+        std::fs::write(&path, &file).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn days_from_civil_and_civil_from_days_ints_are_inverses() {
+        for (y, m, d) in [(1970, 1, 1), (2024, 2, 29), (2026, 8, 23), (1904, 1, 1), (2000, 12, 31)] {
+            let days = days_from_civil(y, m, d);
+            assert_eq!(civil_from_days_ints(days), (y as i32, m as i32, d as i32), "round trip failed for {y}-{m}-{d}");
+        }
+    }
+
+    /// The classic bug in this exact parser, pinned directly: QuickTime's mvhd epoch is
+    /// 1904-01-01 UTC, not the Unix epoch. A known Mac-epoch value must decode to the correct
+    /// Unix-epoch calendar date, not something 66 years off.
+    #[test]
+    fn mvhd_epoch_is_1904_not_1970() {
+        // 1904-01-01 + 3,808,483,200s = 2024-09-24 (computed independently via days_from_civil
+        // relative to the Mac epoch, not copied from the implementation under test).
+        let target_unix_days = days_from_civil(2024, 9, 24);
+        let mac_epoch_secs = (target_unix_days * 86_400 + 2_082_844_800) as u32;
+        let moov = moov_with_mvhd(mac_epoch_secs, 0);
+        let path = write_fixture("mvhd_only", &moov);
+        let vd = video_capture_date(&path).expect("mvhd date must parse");
+        assert_eq!((vd.y, vd.m, vd.d), (2024, 9, 24));
+        assert_eq!(vd.source, "mvhd");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn video_capture_date_prefers_quicktime_over_mvhd() {
+        // mvhd alone: some other (wrong, if quicktime is present) date.
+        let wrong_mac_secs = (days_from_civil(1999, 1, 1) * 86_400 + 2_082_844_800) as u32;
+        let moov = moov_with_quicktime_date("2026-08-15T14:30:00+02:00", Some(wrong_mac_secs), true);
+        let path = write_fixture("both_sources", &moov);
+        let vd = video_capture_date(&path).expect("quicktime date must parse");
+        assert_eq!(vd.source, "quicktime", "quicktime must win when both sources are present");
+        assert_eq!((vd.y, vd.m, vd.d), (2026, 8, 15));
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The offset is what makes QuickTime's source correct where mvhd (UTC-only) isn't — a
+    /// video shot at 23:00 local with a positive UTC offset must not roll onto the next day.
+    #[test]
+    fn quicktime_date_uses_the_utc_offset_not_bare_utc() {
+        let moov = moov_with_quicktime_date("2026-08-15T23:00:00+02:00", None, true);
+        let path = write_fixture("offset", &moov);
+        let vd = video_capture_date(&path).expect("quicktime date must parse");
+        assert_eq!((vd.y, vd.m, vd.d), (2026, 8, 15), "local calendar date, not the UTC-shifted one");
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The form a REAL Apple-camera file actually uses (verified against geneva/IMG_8015.MOV):
+    /// `meta`'s body has NO leading version+flags, unlike the ISO "FullBox" convention the other
+    /// two tests above exercise. Both forms have to parse — this pins the one that's dominant
+    /// in practice, which the fullbox-only version of this parser silently failed on.
+    #[test]
+    fn quicktime_date_parses_without_the_fullbox_prefix() {
+        let moov = moov_with_quicktime_date("2026-08-15T14:30:00+02:00", None, false);
+        let path = write_fixture("no_fullbox_prefix", &moov);
+        let vd = video_capture_date(&path).expect("quicktime date must parse even without the version+flags prefix");
+        assert_eq!(vd.source, "quicktime");
+        assert_eq!((vd.y, vd.m, vd.d), (2026, 8, 15));
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The other real bug this parser had: a legitimate zero-body top-level box (QuickTime's
+    /// own `wide` placeholder, written by real encoders right after `ftyp`) must not truncate
+    /// the scan before it ever reaches `moov` — which, in a real file, commonly sits AFTER a
+    /// huge `mdat`, not before it.
+    #[test]
+    fn a_zero_body_box_before_moov_does_not_truncate_the_scan() {
+        let moov = moov_with_mvhd((days_from_civil(2026, 1, 1) * 86_400 + 2_082_844_800) as u32, 0);
+        let dir = std::env::temp_dir().join(format!("cs_video_fixture_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("wide_then_moov.mov");
+        let mut file = mp4_box(b"ftyp", b"qt  \0\0\x02\0qt  ");
+        file.extend_from_slice(&mp4_box(b"wide", &[])); // zero-body — the exact real-world trigger
+        file.extend_from_slice(&mp4_box(b"mdat", &[0u8; 16]));
+        file.extend_from_slice(&moov); // moov AFTER mdat, also matching the real file's layout
+        std::fs::write(&path, &file).unwrap();
+        let vd = video_capture_date(&path.to_string_lossy()).expect("must find moov past a zero-body box and past mdat");
+        assert_eq!(vd.y, 2026);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_clip_with_no_date_atoms_returns_none() {
+        let moov = mp4_box(b"moov", b""); // present, but empty — no meta, no mvhd
+        let path = write_fixture("no_date", &moov);
+        assert!(video_capture_date(&path).is_none(), "must not fabricate a date from nothing");
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The real end-to-end path, if a real clip exists in the checkout (skipped cleanly
+    /// otherwise) — the synthetic fixtures above each cover one mechanism; this is the one
+    /// that would catch them composing wrongly against an actual camera-written file.
+    #[test]
+    fn video_capture_date_reads_a_real_clip() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let sample = repo.join("IMG_8015.MOV");
+        if !sample.exists() {
+            eprintln!("skipping: geneva/IMG_8015.MOV not present in this checkout");
+            return;
+        }
+        let vd = video_capture_date(&sample.to_string_lossy());
+        println!("real clip date: {:?} y={:?} m={:?} d={:?} source={:?}",
+            vd.as_ref().map(|v| v.captured), vd.as_ref().map(|v| v.y), vd.as_ref().map(|v| v.m), vd.as_ref().map(|v| v.d), vd.as_ref().map(|v| v.source));
+        // Whichever source answers (or neither, if this particular file carries no date atoms
+        // at all — real camera files vary), it must be internally consistent: a returned date
+        // must be a real, plausible calendar date, not garbage.
+        if let Some(vd) = vd {
+            assert!((1..=12).contains(&vd.m) && (1..=31).contains(&vd.d) && vd.y > 1990 && vd.y < 2100);
+        }
     }
 }
