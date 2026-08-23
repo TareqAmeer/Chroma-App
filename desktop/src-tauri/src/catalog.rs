@@ -67,16 +67,30 @@ pub struct CatalogState {
 }
 
 impl CatalogState {
+    /// ⚠️ Never panics, by construction — a catalog that fails to open must not fail the app.
+    /// Three-step fallback, each strictly less likely than the last: open the real file; if
+    /// that fails (corrupt), rename it aside and open a fresh one at the same path; if even
+    /// THAT fails (Application Support unwritable, disk full — the disk-backed path is
+    /// unusable for reasons a rename can't fix), fall back to an in-memory database, which
+    /// gives the app a working catalog for this session — All Photos, ratings, everything —
+    /// it just won't persist to the next launch. The original version's last resort was
+    /// `.expect(...)`, which is exactly the "never a startup failure" invariant this exists to
+    /// guarantee, undone in the one case actually worth guarding against.
     pub fn new() -> Self {
-        let conn = open_and_migrate(&catalog_db_path()).unwrap_or_else(|e| {
-            // A catalog that fails to open must not fail the app. It is a rebuildable cache —
-            // rename the bad file aside and start fresh rather than block startup or panic.
-            eprintln!("catalog: open failed ({e}), starting fresh");
-            let bad = catalog_db_path();
-            let aside = bad.with_extension(format!("corrupt-{}.db", now_secs()));
-            let _ = std::fs::rename(&bad, &aside);
-            open_and_migrate(&catalog_db_path()).expect("fresh catalog.db must open")
-        });
+        let conn = open_and_migrate(&catalog_db_path())
+            .or_else(|e| {
+                eprintln!("catalog: open failed ({e}), starting fresh");
+                let bad = catalog_db_path();
+                let aside = bad.with_extension(format!("corrupt-{}.db", now_secs()));
+                let _ = std::fs::rename(&bad, &aside);
+                open_and_migrate(&catalog_db_path())
+            })
+            .unwrap_or_else(|e| {
+                eprintln!("catalog: fresh file open also failed ({e}), falling back to an in-memory catalog for this session");
+                let conn = Connection::open_in_memory().expect("in-memory sqlite must open");
+                migrate(&conn).expect("migrate an in-memory sqlite must succeed");
+                conn
+            });
         CatalogState { conn: Mutex::new(conn), cancel: AtomicBool::new(false) }
     }
 }
@@ -1649,6 +1663,69 @@ pub fn date_counts_run(conn: &Connection) -> Result<DateCounts, String> {
     Ok(DateCounts { days, no_date: no_date as u64 })
 }
 
+// ── Rebuild ──────────────────────────────────────────────────────────────────────────────────
+//
+// The property that makes this whole SQLite dependency safe to have taken on: the catalog is a
+// derived index of disk + XMP, and a rebuild is a rescan away from being exactly right again —
+// never data loss the way a corrupt sidecar would be. This is the explicit, user-triggered
+// version of that guarantee (the automatic version lives in `CatalogState::new`, which already
+// renames a corrupt file aside and starts fresh); this one wipes everything on purpose and
+// proves ratings/labels/favorites survive because they were never really stored HERE, only
+// mirrored from the files that actually hold them.
+//
+// ⚠️ `photos.id` is NOT preserved across a rebuild — every row is genuinely new. That is fine
+// FOR THIS OPERATION SPECIFICALLY (a rare, explicit, user-initiated reset) and is exactly why
+// the "ids must never be reassigned" rule elsewhere in this file is scoped to ordinary
+// migrations, not this one: a migration runs silently and often, so an id change there would
+// orphan the offline-thumbnail tier without the user ever knowing; a rebuild is a deliberate
+// action whose whole point is starting over.
+
+#[tauri::command]
+pub fn catalog_rebuild(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<ScanResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    rebuild_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+pub fn rebuild_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ScanResult, String> {
+    // Capture every root's absolute path + kind BEFORE wiping (volumes/roots are about to be
+    // deleted too — this is what we re-derive from, since there is nothing else to derive it
+    // from once the tables are empty).
+    let mut stmt = conn
+        .prepare("SELECT v.last_path, v.is_local, r.rel_path, r.kind FROM roots r JOIN volumes v ON v.id = r.volume_id")
+        .map_err(|e| e.to_string())?;
+    let roots: Vec<(String, i64, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+    let root_abs_paths: Vec<(String, String)> = roots
+        .iter()
+        .map(|(last_path, is_local, rel_path, kind)| (abs_path(last_path, *is_local != 0, rel_path), kind.clone()))
+        .collect();
+
+    conn.execute_batch(
+        "DELETE FROM photo_keywords; DELETE FROM keywords; DELETE FROM photos; DELETE FROM roots; DELETE FROM volumes;",
+    )
+    .map_err(|e| e.to_string())?;
+
+    let mut result = ScanResult::default();
+    for (abs, kind) in root_abs_paths {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let Ok(root) = add_root_run(conn, &abs, Some(kind)) else { continue }; // a root that vanished since — skip, don't fail the whole rebuild
+        let r = scan_run(conn, Some(root.volume_id), progress, cancel)?;
+        result.scanned += r.scanned;
+        result.added += r.added;
+        metadata_run(conn, progress, cancel)?;
+        sidecar_run(conn, progress, cancel)?;
+    }
+    Ok(result)
+}
+
 // ── Delete ───────────────────────────────────────────────────────────────────────────────────
 //
 // The mechanism (moving the file + its sidecar to ~/.Trash) already exists — library.rs's
@@ -2572,5 +2649,75 @@ mod tests {
         assert_eq!(result.hashed, 0);
         let content_hash: Option<String> = conn.query_row("SELECT content_hash FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert!(content_hash.is_none(), "must stay unhashed so it's retried once the volume returns");
+    }
+
+    // ── Rebuild ──────────────────────────────────────────────────────────────────────────────
+
+    /// The property that makes SQLite safe to depend on here, proven directly: populate a
+    /// catalog with real ratings/labels/favorites (via the real set_sidecar writer, not a
+    /// hand-built row), wipe it down to nothing, rebuild, and confirm every one of them comes
+    /// back byte-for-byte — because they were never really stored in the catalog, only
+    /// mirrored from the .xmp files that actually hold them.
+    #[test]
+    fn rebuild_from_disk_reproduces_every_rating_and_label() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("rebuild");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("b.jpg"), b"y").unwrap();
+        let a_path = dir.join("a.jpg").to_string_lossy().into_owned();
+        let b_path = dir.join("b.jpg").to_string_lossy().into_owned();
+        crate::library::set_sidecar(a_path.clone(), 5, "Green".into(), true, None, Some(true)).unwrap();
+        crate::library::set_sidecar(b_path.clone(), 2, "Red".into(), false, None, None).unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        let before = query_run(&conn, CatalogQuery::default()).unwrap();
+        assert_eq!(before.entries.len(), 2);
+
+        rebuild_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        // Volume/root/photo ids are NOT expected to match — a rebuild starts over on purpose.
+        // What must match is the actual data, re-derived fresh from disk.
+        let (rating_a, label_a, edited_a, fav_a): (i64, String, i64, i64) = conn
+            .query_row("SELECT rating, label, edited, favorite FROM photos WHERE name='a.jpg'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })
+            .unwrap();
+        assert_eq!((rating_a, label_a.as_str(), edited_a, fav_a), (5, "Green", 1, 1));
+        let (rating_b, label_b): (i64, String) = conn
+            .query_row("SELECT rating, label FROM photos WHERE name='b.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!((rating_b, label_b.as_str()), (2, "Red"));
+
+        let after = query_run(&conn, CatalogQuery::default()).unwrap();
+        assert_eq!(after.entries.len(), 2, "both photos must reappear after rebuild");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `CatalogState::new` must never panic — the literal invariant "never a startup failure".
+    /// Points a catalog at a path with no writable parent (so even the fresh-file fallback
+    /// fails) and confirms it still produces a usable (in-memory) connection instead of
+    /// unwrapping into a crash.
+    #[test]
+    fn catalog_state_new_falls_back_to_in_memory_rather_than_panicking() {
+        // CS_CATALOG_DIR pointed at a path that cannot be created (a file, not a directory, as
+        // the "directory" component) — create_dir_all inside catalog_dir() will fail, and the
+        // subsequent Connection::open will fail too, exercising the real failure path rather
+        // than mocking it.
+        let blocker = std::env::temp_dir().join(format!("cs_catalog_blocker_{}", std::process::id()));
+        std::fs::write(&blocker, b"not a directory").unwrap();
+        std::env::set_var("CS_CATALOG_DIR", blocker.join("nested").to_string_lossy().to_string());
+
+        let state = CatalogState::new(); // must not panic
+        let conn = state.conn.lock().unwrap();
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, SCHEMA_VERSION, "the in-memory fallback must still be a fully migrated, usable catalog");
+
+        std::fs::remove_file(&blocker).ok();
+        std::env::remove_var("CS_CATALOG_DIR");
     }
 }

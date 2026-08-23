@@ -1588,6 +1588,7 @@ fn main() {
             catalog::catalog_note_deleted,
             catalog::catalog_hash,
             catalog::catalog_verify,
+            catalog::catalog_rebuild,
             sam2_encode,
             sam2_points,
             faceparse_run,
