@@ -1464,6 +1464,10 @@ setTimeout(()=>window.hideBootSplash(),6000);
         </div>
         <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraighten(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
         <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
+        <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
+          <button class="btn" id="btn-ah-roi" onclick="ahRoiArm()" style="flex:1">Set region…</button>
+          <button class="btn" id="btn-ah-roi-clear" onclick="ahRoiClear()" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"></span></button>
+        </div>
         <div class="fx-row"><div class="fx-label">Grid</div>
           <select class="fx-select" id="sel-crop-grid" onchange="cropSetGrid(this.value)">
             <option value="3x3">3×3 (Rule of thirds)</option>
@@ -1811,6 +1815,13 @@ setTimeout(()=>window.hideBootSplash(),6000);
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
                behind the transform (the "zooming moves the mask" bug). See mskOverlayBox(). -->
           <svg id="fx-mask-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
+          <!-- Auto-level's manual ROI box (item 7/16) — same "fractional 0..1 viewBox riding the
+               canvas's own CSS transform" trick fx-mask-overlay uses, for the same reason: no
+               per-event JS repositioning needed during zoom/pan. Preview-only, never rendered
+               into an export or the mask overlay itself. -->
+          <svg id="fx-ahroi-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none">
+            <rect id="fx-ahroi-rect" x="0" y="0" width="1" height="1" fill="rgba(255,180,60,.12)" stroke="rgba(255,180,60,.9)" stroke-width="0.004" vector-effect="non-scaling-stroke"/>
+          </svg>
           <canvas id="msk-paint-overlay"></canvas>
           <!-- Rule-of-thirds + SMPTE safe-area guides, toggled by fxVideoGuidesToggle(). Pure
                overlay — never rendered into a preview snapshot or an export. Lives inside
@@ -15005,6 +15016,7 @@ function fxSelectImage(idx){
   fxImg=it.img;updateWork();
   const ss=document.getElementById('sl-straighten');
   if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
+  if(typeof ahRoiSyncUI==='function'){_ahRoiArmed=false;_ahRoiDrag=null;ahRoiSyncUI();}
   // Basic Adjustments: show THIS photo's own values if it's been made independent
   // (adjToggleScope), else the shared batch-wide baseline.
   applyAdjustVals(it.adjustOverride||fxState.sharedAdjust||domAdjustVals());
@@ -15215,8 +15227,11 @@ const AH_DOWNSCALE=420;      // longest edge for the edge-detect pass; a horizon
                              // and finding it does not need pixels
 const AH_MAX_TILT=12;        // degrees either side of level to consider. Beyond this a "horizon"
                              // is a deliberate dutch angle and correcting it is vandalism.
-/// Sobel gradient magnitude + orientation on a downscaled greyscale copy.
-function _ahEdges(img){
+/// Sobel gradient magnitude + orientation on a downscaled greyscale copy. `roi`, if given, is
+/// {x0,y0,x1,y1} in 0..1 fractions of the FULL frame (item 7/16's manual constraint box) —
+/// pixels outside it never enter the accumulator, so a strong false line elsewhere in the frame
+/// (a wave, a shoreline fragment) can't outscore the real horizon inside the box.
+function _ahEdges(img,roi){
   const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height;
   const sc=Math.min(1,AH_DOWNSCALE/Math.max(w0,h0));
   const w=Math.max(8,Math.round(w0*sc)),h=Math.max(8,Math.round(h0*sc));
@@ -15227,8 +15242,11 @@ function _ahEdges(img){
   const g=new Float32Array(w*h);
   for(let i=0,p=0;i<w*h;i++,p+=4)g[i]=(0.2126*d[p]+0.7152*d[p+1]+0.0722*d[p+2])/255;
   const mag=new Float32Array(w*h),ang=new Float32Array(w*h);
+  const rx0=roi?Math.floor(roi.x0*w):0, rx1=roi?Math.ceil(roi.x1*w):w;
+  const ry0=roi?Math.floor(roi.y0*h):0, ry1=roi?Math.ceil(roi.y1*h):h;
   for(let y=1;y<h-1;y++)for(let xx=1;xx<w-1;xx++){
     const i=y*w+xx;
+    if(xx<rx0||xx>=rx1||y<ry0||y>=ry1)continue;   // outside the manual ROI: leave mag/ang at 0
     const gx=(g[i-w+1]+2*g[i+1]+g[i+w+1])-(g[i-w-1]+2*g[i-1]+g[i+w-1]);
     const gy=(g[i+w-1]+2*g[i+w]+g[i+w+1])-(g[i-w-1]+2*g[i-w]+g[i-w+1]);
     mag[i]=Math.hypot(gx,gy);
@@ -15248,8 +15266,8 @@ function _ahEdges(img){
 /// stair-stepping, so atan2(gy,gx) is noisy exactly where this feature has to be precise. Voting
 /// on POSITION instead means a straight line produces a sharp peak no matter how noisy any single
 /// pixel's gradient is.
-function _autoHorizonAngle(img){
-  const E=_ahEdges(img);
+function _autoHorizonAngle(img,roi){
+  const E=_ahEdges(img,roi);
   if(!E)return null;
   const{mag,w,h}=E;
   const nz=Array.from(mag).filter(v=>v>0);
@@ -15359,10 +15377,14 @@ function _autoHorizonAngle(img){
   return Math.abs(corr)<0.05?0:Math.round(corr*10)/10;
 }
 /// Button handler: detect, apply to the straighten slider, and say plainly when nothing was found.
+/// Analyzes geomCanvas(it) — the crop/rotate/flip-applied frame — rather than the raw it.img, so
+/// it matches what the user actually sees (and what the manual ROI box below is drawn against);
+/// analyzing the pristine, un-cropped source would silently search the wrong region once any
+/// geometry edit had been made.
 function autoHorizon(){
   const it=curItem();
   if(!it||!it.img){toast('Load a photo first');return;}
-  const a=_autoHorizonAngle(it.img);
+  const a=_autoHorizonAngle(geomCanvas(it),it._ahRoi);
   if(a===null){toast('No clear horizon found — straighten by hand',false);
     log('Auto horizon: no dominant line found (flat accumulator)','warn');return;}
   const sl=document.getElementById('sl-straighten');
@@ -15372,6 +15394,74 @@ function autoHorizon(){
   toast(a===0?'Already level':`Straightened ${a>0?'+':''}${a.toFixed(1)}°`,true);
   log(`Auto horizon: ${a.toFixed(1)}°`,'ok');
 }
+// ── Manual ROI box (item 7/16) — constrains WHERE Auto level searches, for the documented
+// ambiguous-scene failure (CLAUDE.md: a lake's far shoreline can genuinely outscore the true
+// horizon). Stored per-item (it._ahRoi), never persisted to session/XMP — this is a lightweight
+// aid for the current Auto level run, not an edit, so it deliberately doesn't touch
+// getUISnapshot/_SESS_SELECTS or any save format.
+let _ahRoiArmed=false,_ahRoiDrag=null;
+function ahRoiSyncUI(){
+  const it=curItem(),roi=it&&it._ahRoi;
+  const ov=document.getElementById('fx-ahroi-overlay'),rect=document.getElementById('fx-ahroi-rect');
+  const clearBtn=document.getElementById('btn-ah-roi-clear');
+  if(clearBtn)clearBtn.style.display=roi?'':'none';
+  if(ov)ov.style.display=roi?'':'none';
+  if(rect&&roi){rect.setAttribute('x',roi.x0);rect.setAttribute('y',roi.y0);
+    rect.setAttribute('width',Math.max(0.001,roi.x1-roi.x0));rect.setAttribute('height',Math.max(0.001,roi.y1-roi.y0));}
+}
+function ahRoiArm(){
+  const it=curItem();if(!it||!it.img){toast('Load a photo first');return;}
+  _ahRoiArmed=true;
+  const btn=document.getElementById('btn-ah-roi');if(btn)btn.classList.add('on');
+  const wrap=document.getElementById('fx-zoom-wrap');if(wrap)wrap.style.cursor='crosshair';
+  toast('Drag a box around the horizon on the photo',true);
+}
+function ahRoiClear(){
+  const it=curItem();if(it)it._ahRoi=null;
+  ahRoiSyncUI();
+}
+function _ahRoiFrac(e){
+  const pt=fxPointerToCanvasPx(e);if(!pt||!FX.cv.width||!FX.cv.height)return null;
+  return{x:Math.min(1,Math.max(0,pt.x/FX.cv.width)),y:Math.min(1,Math.max(0,pt.y/FX.cv.height))};
+}
+(function(){
+  const wrap=document.getElementById('fx-zoom-wrap');
+  if(!wrap)return;
+  wrap.addEventListener('pointerdown',(e)=>{
+    if(!_ahRoiArmed)return;
+    const p=_ahRoiFrac(e);if(!p)return;
+    e.preventDefault();
+    _ahRoiDrag={x0:p.x,y0:p.y,x1:p.x,y1:p.y};
+    const ov=document.getElementById('fx-ahroi-overlay');if(ov)ov.style.display='';
+    const rect=document.getElementById('fx-ahroi-rect');
+    if(rect){rect.setAttribute('x',p.x);rect.setAttribute('y',p.y);rect.setAttribute('width',0.001);rect.setAttribute('height',0.001);}
+  });
+  wrap.addEventListener('pointermove',(e)=>{
+    if(!_ahRoiDrag)return;
+    const p=_ahRoiFrac(e);if(!p)return;
+    _ahRoiDrag.x1=p.x;_ahRoiDrag.y1=p.y;
+    const rect=document.getElementById('fx-ahroi-rect');
+    if(rect){
+      const x0=Math.min(_ahRoiDrag.x0,_ahRoiDrag.x1),y0=Math.min(_ahRoiDrag.y0,_ahRoiDrag.y1);
+      const x1=Math.max(_ahRoiDrag.x0,_ahRoiDrag.x1),y1=Math.max(_ahRoiDrag.y0,_ahRoiDrag.y1);
+      rect.setAttribute('x',x0);rect.setAttribute('y',y0);
+      rect.setAttribute('width',Math.max(0.001,x1-x0));rect.setAttribute('height',Math.max(0.001,y1-y0));
+    }
+  });
+  window.addEventListener('pointerup',()=>{
+    if(!_ahRoiDrag)return;
+    const it=curItem();
+    const x0=Math.min(_ahRoiDrag.x0,_ahRoiDrag.x1),y0=Math.min(_ahRoiDrag.y0,_ahRoiDrag.y1);
+    const x1=Math.max(_ahRoiDrag.x0,_ahRoiDrag.x1),y1=Math.max(_ahRoiDrag.y0,_ahRoiDrag.y1);
+    const tooSmall=(x1-x0)<0.03||(y1-y0)<0.03;   // an accidental click/tiny drag clears rather than sets a useless sliver
+    if(it)it._ahRoi=tooSmall?null:{x0,y0,x1,y1};
+    _ahRoiDrag=null;_ahRoiArmed=false;
+    const btn=document.getElementById('btn-ah-roi');if(btn)btn.classList.remove('on');
+    wrap.style.cursor='';
+    ahRoiSyncUI();
+    if(!tooSmall)toast('Region set — Auto level will search only inside it',true);
+  });
+})();
 function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(1)+'°';g.crop=null;broadcastGeom();updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
 
@@ -18594,7 +18684,7 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
  set('db-lib-ic','library');set('db-more','more');set('ic-before','compare');set('ic-split','split');
- set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-gamut','gamut');
+ set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-gamut','gamut');set('ic-ah-clear','close');
  set('ic-zoomout','zoomOut');set('ic-zoomin','zoomIn');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
  // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
