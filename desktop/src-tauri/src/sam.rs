@@ -128,7 +128,7 @@ pub(crate) struct SamSession(pub(crate) *mut OrtSession);
 unsafe impl Send for SamSession {}
 unsafe impl Sync for SamSession {}
 
-fn create_session(bytes: &'static [u8]) -> Result<SamSession, String> {
+pub(crate) fn create_session(bytes: &'static [u8]) -> Result<SamSession, String> {
     let h = ort_handle()?;
     unsafe {
         let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();

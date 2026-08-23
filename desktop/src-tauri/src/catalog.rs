@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -289,6 +289,36 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         if !has_col("reviewed")? {
             conn.execute("ALTER TABLE photos ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0", [])?;
         }
+    }
+
+    // v3 -> v4: AI stack Phase A — face detection only (SCRFD), no embedding/clustering/naming
+    // yet (see CLAUDE.md's AI-stack briefing). `faces_scanned_at` follows the exact same
+    // resumability convention as `hashed_at`/`meta_mtime`: it stores the photo's `mtime` AT SCAN
+    // TIME, so `faces_scanned_at IS NULL OR faces_scanned_at != mtime` finds both never-scanned
+    // AND legitimately-changed photos in one predicate — see hash_run's own doc comment for why.
+    // Boxes are stored as fractions (0..1) of the DECODED image's width/height rather than
+    // absolute pixels: detection runs on a capped-resolution decode (decode_rgb8_capped), and a
+    // fraction is meaningful regardless of what resolution that happened to be, with no need to
+    // record it separately.
+    if version < 4 {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("faces_scanned_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN faces_scanned_at INTEGER", [])?;
+        }
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS photo_faces (
+                id       INTEGER PRIMARY KEY,
+                photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+                x0 REAL NOT NULL, y0 REAL NOT NULL, x1 REAL NOT NULL, y1 REAL NOT NULL,
+                score    REAL NOT NULL,
+                kps      TEXT NOT NULL -- JSON array of 5 [x,y] pairs, same 0..1 fraction convention
+            )",
+            []
+        )?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_faces_photo ON photo_faces(photo_id)", [])?;
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -1432,6 +1462,137 @@ pub fn catalog_hash(app: tauri::AppHandle, state: tauri::State<CatalogState>) ->
     state.cancel.store(false, Ordering::Relaxed);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     hash_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+// ── Face detection (AI stack Phase A) — see scrfd.rs for the model/decode and CLAUDE.md's
+// AI-stack briefing for the overall plan. Detect only: bounding boxes + landmarks, no embedding,
+// no clustering, no naming. Same resumable/chunked/cancellable shape as hash_run above, just a
+// smaller batch (32 vs hash's 64) — a decode + SCRFD inference per photo is heavier per-unit work
+// than a streamed file hash.
+
+#[derive(Serialize, Clone, Default)]
+pub struct FacesResult {
+    pub scanned: usize,
+    pub faces_found: usize,
+}
+
+/// Detection is run on a capped-resolution decode (`decode_rgb8_capped`, 1600px long edge — well
+/// above SCRFD's own 640px input, so nothing is lost to this cap that SCRFD could have used
+/// anyway) rather than a full-resolution demosaic, for the same reason `get_quicklook_preview`
+/// avoids one: a face-sized region only needs a few hundred pixels to detect, not 24 megapixels.
+pub fn faces_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<FacesResult, String> {
+    let mut result = FacesResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.kind != 'video'
+                   AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)
+                 LIMIT 32"
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let mtime: i64 = r.get(2)?;
+                let last_path: String = r.get(3)?;
+                let is_local: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "faces".into(), done: result.scanned, total: result.scanned + batch.len(), current: String::new() });
+
+        const DECODE_LONG_EDGE: u32 = 1600;
+        let detected: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = batch
+            .par_iter()
+            .map(|(id, abs, mtime)| {
+                let faces = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
+                    .ok()
+                    .and_then(|(rgb, w, h)| crate::scrfd::detect(&rgb, w, h).ok().map(|faces| (faces, w, h)))
+                    .map(|(faces, w, h)| {
+                        faces
+                            .into_iter()
+                            .map(|f| crate::scrfd::Face {
+                                x0: f.x0 / w as f32,
+                                y0: f.y0 / h as f32,
+                                x1: f.x1 / w as f32,
+                                y1: f.y1 / h as f32,
+                                score: f.score,
+                                kps: f.kps.map(|(x, y)| (x / w as f32, y / h as f32))
+                            })
+                            .collect()
+                    });
+                (*id, *mtime, faces)
+            })
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, mtime, faces) in &detected {
+            let Some(faces) = faces else { continue }; // unreadable right now — leave unscanned, retried next pass
+            tx.execute("DELETE FROM photo_faces WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+            for f in faces {
+                let kps_json = serde_json::to_string(&f.kps).map_err(|e| e.to_string())?;
+                tx.execute(
+                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![id, f.x0, f.y0, f.x1, f.y1, f.score, kps_json]
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            result.faces_found += faces.len();
+            tx.execute("UPDATE photos SET faces_scanned_at = ?1 WHERE id = ?2", params![mtime, id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.scanned += detected.iter().filter(|(_, _, f)| f.is_some()).count();
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_faces_scan(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<FacesResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    faces_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+/// Faces detected for one photo, in the same 0..1 fractional-of-decoded-image convention
+/// `faces_run` stores them in — the caller (a preview-sized `<img>`) can scale directly by its
+/// own displayed width/height with no extra lookup.
+#[derive(Serialize, Clone)]
+pub struct FaceBox {
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    pub score: f32,
+}
+
+#[tauri::command]
+pub fn catalog_photo_faces(state: tauri::State<CatalogState>, photo_id: i64) -> Result<Vec<FaceBox>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT x0, y0, x1, y1, score FROM photo_faces WHERE photo_id = ?1 ORDER BY score DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![photo_id], |r| Ok(FaceBox { x0: r.get(0)?, y0: r.get(1)?, x1: r.get(2)?, y1: r.get(3)?, score: r.get(4)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
 }
 
 #[derive(Serialize, Clone)]
@@ -3513,6 +3674,40 @@ mod tests {
 
         let r2 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r2.hashed, 0, "nothing changed — a second pass must not re-hash anything");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── Face detection scan phase (AI stack Phase A) ────────────────────────────────────────
+
+    /// Exercises the scan-phase machinery end to end (resumability, `photo_faces` writes,
+    /// `faces_scanned_at` baselining) — SCRFD's actual detection accuracy on a real face is
+    /// separately verified in `scrfd.rs`'s own tests and `vendor/scrfd/README.md`, so this test
+    /// deliberately uses a plain solid-colour JPEG (no face) and only asserts the phase runs
+    /// without error, marks the photo scanned, stores zero faces for a face-free image, and is
+    /// resumable exactly like `hash_run`.
+    #[test]
+    fn faces_run_scans_present_photos_and_is_resumable() {
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("faces");
+        let img = image::RgbImage::from_pixel(320, 240, image::Rgb([120, 110, 100]));
+        img.save(dir.join("plain.jpg")).unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = faces_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.scanned, 1);
+        assert_eq!(r1.faces_found, 0, "a solid-colour image should not detect any faces");
+
+        let scanned_at: Option<i64> = conn.query_row("SELECT faces_scanned_at FROM photos WHERE name='plain.jpg'", [], |r| r.get(0)).unwrap();
+        assert!(scanned_at.is_some(), "faces_scanned_at must be baselined after a scan");
+
+        let r2 = faces_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.scanned, 0, "nothing changed — a second pass must not rescan anything");
 
         std::fs::remove_dir_all(&dir).ok();
     }

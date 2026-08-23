@@ -572,6 +572,78 @@ pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, Strin
     Ok(tauri::ipc::Response::new(out.into_inner()))
 }
 
+/// Decodes `path` to RGB8 pixels capped at `long_edge` on the long side — the same three-tier
+/// priority `get_quicklook_preview` above uses (RAW embedded preview / ImageIO scaled decode on
+/// macOS / `image` crate fallback), just returning raw pixels instead of a re-encoded JPEG, for
+/// callers that feed a model rather than a UI. Used by the face-detection scan phase
+/// (`catalog::faces_run`) — detection doesn't need full-resolution pixels, and SCRFD's own input
+/// is capped at 640px regardless (see `scrfd.rs`), so a decode this size costs far less than a
+/// full RAW demosaic while losing nothing SCRFD could have used anyway.
+pub(crate) fn decode_rgb8_capped(path: &str, long_edge: u32) -> Result<(Vec<u8>, u32, u32), String> {
+    let ext = ext_lower(Path::new(path));
+    if is_raw_ext(&ext) {
+        let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default()).map_err(|e| format!("preview decode: {e}"))?;
+        let img = apply_orientation_dynamic(img, raw_orientation(path));
+        let (w, h) = (img.width(), img.height());
+        let scale = long_edge as f32 / w.max(h) as f32;
+        let thumb = if scale < 1.0 {
+            img.resize((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle)
+        } else {
+            img
+        };
+        let rgb = thumb.to_rgb8();
+        let (w, h) = rgb.dimensions();
+        return Ok((rgb.into_raw(), w, h));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(path, long_edge) {
+                let img = image::load_from_memory(&bytes).map_err(|e| format!("thumb decode: {e}"))?.to_rgb8();
+                let (w, h) = img.dimensions();
+                return Ok((img.into_raw(), w, h));
+            }
+        }
+        if is_heic_ext(&ext) {
+            let tmp = cache_dir().join(format!("facedet-{}.jpg", fnv1a(&[path])));
+            let ok = std::process::Command::new("/usr/bin/sips")
+                .args(["-s", "format", "jpeg", "-Z", &long_edge.to_string(), path, "--out"])
+                .arg(&tmp)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            let result = if ok {
+                std::fs::read(&tmp)
+                    .map_err(|e| format!("sips read: {e}"))
+                    .and_then(|bytes| image::load_from_memory(&bytes).map_err(|e| format!("heic decode: {e}")))
+                    .map(|img| {
+                        let rgb = img.to_rgb8();
+                        let (w, h) = rgb.dimensions();
+                        (rgb.into_raw(), w, h)
+                    })
+            } else {
+                Err("heic decode: sips could not decode this file".into())
+            };
+            let _ = std::fs::remove_file(&tmp);
+            return result;
+        }
+    }
+    if is_video_ext(&ext) {
+        return Err("no rgb8 decode for video".into());
+    }
+    let img = image::open(path).map_err(|e| format!("image open: {e}"))?;
+    let (w, h) = (img.width(), img.height());
+    let scale = long_edge as f32 / w.max(h) as f32;
+    let thumb = if scale < 1.0 {
+        img.resize((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let rgb = thumb.to_rgb8();
+    let (w, h) = rgb.dimensions();
+    Ok((rgb.into_raw(), w, h))
+}
+
 // ── Photo metadata (camera / lens / date / iso) for the library's filter dropdowns.
 // RAWs go through rawler's raw_metadata (no pixel decode); JPEG/TIFF through kamadak-exif;
 // PNG has no EXIF → nulls. Disk-cached exactly like thumbnails (path+mtime+size key). ──────
