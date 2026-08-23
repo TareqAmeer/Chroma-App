@@ -133,6 +133,16 @@
       case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
+      case 'catalog_volumes': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        // One online, one offline — CLAUDE.md's own stated convention for this exact case, so
+        // the Drives section's two states are both screenshot-verifiable in one page load.
+        return Promise.resolve([
+          { id: 1, uuid: 'local', label: 'This Mac', last_path: '/', is_local: true, total_bytes: 0, online: true },
+          { id: 2, uuid: 'ext-1', label: 'Archive T7', last_path: '/Volumes/Archive T7', is_local: false, total_bytes: 2e12, online: true },
+          { id: 3, uuid: 'ext-2', label: 'Old LaCie', last_path: '/Volumes/Old LaCie', is_local: false, total_bytes: 1e12, online: false },
+        ]);
+      }
       case 'catalog_counts': {
         const N = /[?&]libcat=1/.test(location.search) ? Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10)) : 0;
         return Promise.resolve({ all: N });
@@ -422,6 +432,8 @@
       font-size:12px;color:var(--txt)}
     .lib-coll-row:hover{background:var(--sur2)}
     .lib-coll-row.on{background:rgba(212,144,58,.14);color:var(--acc)}
+    .lib-coll-row.offline{cursor:default}
+    .lib-coll-row.offline:hover{background:transparent}
     .lib-coll-ic{display:inline-flex;flex-shrink:0;color:inherit}
     .lib-coll-lb{flex:1}
     .lib-coll-count{font-family:var(--mono);font-size:10px;color:var(--mut)}
@@ -3855,6 +3867,7 @@
   // stacking, keywords or offline-thumbnail UI yet; those build on this once the backend
   // supports them (see catalog.rs's own top-of-file scope comment).
   let catalogCounts = { all: 0 };
+  let catalogVolumes = [];
 
   const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   let dateCounts = { days: [], no_date: 0 };
@@ -3866,6 +3879,22 @@
   function refreshCatalogCounts() {
     invoke('catalog_counts').then((counts) => { catalogCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
+    invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
+  }
+
+  function drivesSectionHtml() {
+    // "This Mac" itself is always online and isn't the thing this section exists to show —
+    // only external volumes (an SSD that may or may not currently be plugged in) are worth a
+    // row here.
+    const external = catalogVolumes.filter((v) => !v.is_local);
+    if (!external.length) return '';
+    const rows = external.map((v) => `
+      <div class="lib-coll-row${v.online ? '' : ' offline'}" title="${esc(v.last_path)}${v.online ? '' : ' — not connected'}">
+        <span class="lib-coll-ic" style="${v.online ? '' : 'opacity:.5'}">${ic('drive', 13)}</span>
+        <span class="lib-coll-lb"${v.online ? '' : ' style="color:var(--mut)"'}>${esc(v.label)}</span>
+        <span class="lib-coll-count">${v.online ? '' : '·'}</span>
+      </div>`).join('');
+    return `<div class="lib-coll-heading">Drives</div>${rows}<div class="lib-coll-sep"></div>`;
   }
 
   /// Nests the flat (y,m,d,n) rows catalog_date_counts returns into a Year › Month › Day tree
@@ -3941,7 +3970,7 @@
         </div>
         ${dateExpanded.has('__root__') ? `<div class="lib-tree-children">${dateTreeHtml()}</div>` : ''}
       </div>
-      <div class="lib-coll-sep"></div>`;
+      <div class="lib-coll-sep"></div>${drivesSectionHtml()}`;
   }
 
   /// Fire-and-forget: browsing a folder is what builds the catalog, with no separate "add to
@@ -4936,7 +4965,15 @@
   // polls /Volumes — cheap (one readdir plus a statfs per volume) and only while the Library is
   // actually open, so a backgrounded app does no work.
   refreshVolumes();
-  setInterval(() => { const ov = document.getElementById('lib-overlay'); if (ov && ov.style.display !== 'none') refreshVolumes(); }, 4000);
+  setInterval(() => {
+    const ov = document.getElementById('lib-overlay');
+    if (!ov || ov.style.display === 'none') return;
+    refreshVolumes();
+    // Reuses this same poll for the Drives section's online/offline state, rather than a
+    // second timer — a catalogued external drive being plugged or unplugged is exactly the
+    // same kind of event refreshVolumes() already watches for.
+    if (!LIBTEST) invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
+  }, 4000);
 
   // ── deskx home screen: the app opens to the full-window Library, not the editor (matches
   // the approved Darkroom-style wireframe). desktop-native.js sets body.deskx synchronously
