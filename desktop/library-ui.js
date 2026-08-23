@@ -411,6 +411,7 @@
     sortDir: localStorage.getItem('chromasmith_lib_sortdir') || 'asc',    // 'asc' | 'desc'
     metaDisplay: localStorage.getItem('chromasmith_lib_metadisp') || 'off', // 'off'|'hover'|'always'
     showTitle: localStorage.getItem('chromasmith_lib_showtitle') !== '0',
+    gridAspect: localStorage.getItem('chromasmith_lib_gridaspect') === '1', // item 31: real aspect ratio vs square-crop thumbnails
   };
 
   // ── styles ──────────────────────────────────────────────────────────────────
@@ -551,6 +552,9 @@
     .lib-btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
       padding:5px 10px;font-size:12px;cursor:pointer}
     .lib-btn:hover{background:var(--bdr)}
+    .lib-btn.on{background:var(--acc);color:#000;border-color:var(--acc)}
+    .lib-btn.on.disabled-note{background:var(--sur2);color:var(--mut);border-color:var(--bdr)}
+    #lib-aspect-toggle{padding:5px 8px;margin-left:6px}
     /* Info panel keyword chips (renderInfoPanel) — the leaf name only, full path in the tooltip
        (a photo tagged "Travel|Iceland|Reykjavik" would otherwise overflow a 232px panel). */
     .lib-kw-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:9px;
@@ -656,6 +660,22 @@
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
     .lib-thumb-wrap{aspect-ratio:1;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    /* Item 31: "Aspect ratio" grid mode — real aspect, no crop, ragged-right rows (not edge-to-
+       edge justified: that needs a width-fitting layout pass, which is a bigger, riskier project
+       — see the code comment at the toggle handler for why this scope was chosen instead).
+       Pure CSS: flex-wrap rows of FIXED-HEIGHT cards; each image is "height:100%;width:auto", so
+       its own intrinsic aspect ratio sets the card's width — the browser does the row-fitting,
+       no JS layout math and nothing for virtualization's uniform-grid math to disagree with.
+       Only ever applied below VIRT_MIN (see renderGrid) — a virtualized grid's row/col windowing
+       assumes a uniform CSS grid, which this is not. */
+    #lib-grid.aspect-view{display:flex;flex-flow:row wrap;align-items:flex-start}
+    #lib-grid.aspect-view .lib-card{width:auto;flex:0 0 auto}
+    /* Before the real thumbnail loads there's no intrinsic image size to derive a width from —
+       hold a square placeholder (matching the normal grid's own look while loading) so cards
+       don't collapse to zero width, then let the real aspect ratio take over once img.loaded. */
+    #lib-grid.aspect-view .lib-thumb-wrap{aspect-ratio:auto;width:var(--lib-thumb,140px);height:var(--lib-thumb,140px)}
+    #lib-grid.aspect-view .lib-thumb-wrap:has(img.loaded){width:auto}
+    #lib-grid.aspect-view .lib-thumb-wrap img{width:auto;height:100%;object-fit:contain}
     /* Real thumbnails fade in over the skeleton/empty cell instead of popping in the instant
        get_thumbnail resolves — .loaded is added by the thumb pool once the blob URL is set. */
     #lib-grid:not(.list-view) .lib-thumb-wrap img{opacity:0;transition:opacity .15s ease}
@@ -900,6 +920,7 @@
         <button data-v="list" title="List view">${ic('log',15)}</button>
         <button data-v="compare" title="Compare two photos/looks side by side — C">⇹</button>
       </div>
+      <button class="lib-btn" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to).">${ic('image',15)}</button>
       <select id="lib-sort" title="Sort by">
         <option value="name">Name</option>
         <option value="mtime">Date modified</option>
@@ -2926,6 +2947,16 @@
     state._virtAll = shown;
     const virtOn = shown.length >= VIRT_MIN && !isList;
     state._virtOn = virtOn;
+    // Item 31: aspect-ratio thumbnails only below VIRT_MIN — virtualization's row/col windowing
+    // (virtMetrics) assumes a uniform CSS grid, which the flex-wrap ragged-right layout is not.
+    grid.classList.toggle('aspect-view', state.gridAspect && !isList && !virtOn);
+    const aspectBtn = document.getElementById('lib-aspect-toggle');
+    if (aspectBtn) {
+      aspectBtn.classList.toggle('on', state.gridAspect);
+      const tooLarge = state.gridAspect && virtOn && !isList;
+      aspectBtn.classList.toggle('disabled-note', tooLarge);
+      if (tooLarge) aspectBtn.title = `Real-aspect thumbnails are on, but this folder (${shown.length} photos) is over the 400-photo virtualized-grid threshold — showing square crops here instead.`;
+    }
     // Build every card into a detached DocumentFragment and append ONCE, instead of one
     // appendChild() per card — on a large folder that was one reflow per photo. Wiring
     // (thumbnail load, click/drag handlers) still has to happen in a SEPARATE pass after the
@@ -3957,6 +3988,12 @@
     if (filtersPop.classList.contains('on') && !filtersPop.contains(e.target) && e.target !== filtersBtn) { filtersPop.classList.remove('on'); filtersPop.style.display = 'none'; }
   });
   overlay.querySelector('#lib-filters-clear').onclick = () => clearAllLibFilters();
+  const aspectToggleBtn = overlay.querySelector('#lib-aspect-toggle');
+  if (aspectToggleBtn) aspectToggleBtn.onclick = () => {
+    state.gridAspect = !state.gridAspect;
+    try { localStorage.setItem('chromasmith_lib_gridaspect', state.gridAspect ? '1' : '0'); } catch {}
+    renderGrid();
+  };
   let searchDebounce;
   const searchInput = overlay.querySelector('#lib-search');
   searchInput.oninput = (e) => {
