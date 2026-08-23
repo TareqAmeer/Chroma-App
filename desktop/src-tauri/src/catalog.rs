@@ -58,11 +58,25 @@ fn catalog_db_path() -> PathBuf {
 
 // ── Connection + migrations ─────────────────────────────────────────────────────────────────
 
-/// Shared across every command via `.manage(CatalogState::new())`. One connection behind a
-/// mutex: scan workers compute into plain `Vec`s off-thread and a single thread commits, so the
-/// mutex is held only for the (fast) transaction itself, never for a slow walk or EXIF read.
+/// Shared across every command via `.manage(CatalogState::new())`.
+///
+/// ⚠️ TWO connections, not one. The scan phases (scan_run/metadata_run/sidecar_run/hash_run/
+/// thumbnail_run/verify_run/rebuild_run) each loop internally across many chunked
+/// transactions over what can be minutes of real work — for the FIRST scan of a real archive,
+/// the plan behind this catalog estimates ~5-7 minutes for metadata alone. A single
+/// `Mutex<Connection>` held by one of those commands for its whole duration would starve every
+/// OTHER catalog command (a user clicking "All Photos" mid-scan would just hang until the scan
+/// finished) — the exact "main thread blocking" failure class this app's own CLAUDE.md and this
+/// project's own research into other tools both call out as what makes users abandon a library
+/// tool. `conn` is the sole writer, used by every command that scans or mutates; `read_conn` is
+/// a second, independent connection to the SAME file, used only by the fast read-only commands
+/// (catalog_query/counts/date_counts/volumes/roots). WAL mode (already enabled below) is
+/// SPECIFICALLY designed for this — one writer and any number of concurrent readers, neither
+/// blocking the other — but only across genuinely separate connections, which is the part a
+/// single shared Mutex was quietly defeating.
 pub struct CatalogState {
     pub conn: Mutex<Connection>,
+    pub read_conn: Mutex<Connection>,
     pub cancel: AtomicBool,
 }
 
@@ -77,21 +91,48 @@ impl CatalogState {
     /// `.expect(...)`, which is exactly the "never a startup failure" invariant this exists to
     /// guarantee, undone in the one case actually worth guarding against.
     pub fn new() -> Self {
-        let conn = open_and_migrate(&catalog_db_path())
+        let path = catalog_db_path();
+        let conn = open_and_migrate(&path)
             .or_else(|e| {
                 eprintln!("catalog: open failed ({e}), starting fresh");
-                let bad = catalog_db_path();
-                let aside = bad.with_extension(format!("corrupt-{}.db", now_secs()));
-                let _ = std::fs::rename(&bad, &aside);
-                open_and_migrate(&catalog_db_path())
+                let aside = path.with_extension(format!("corrupt-{}.db", now_secs()));
+                let _ = std::fs::rename(&path, &aside);
+                open_and_migrate(&path)
             })
-            .unwrap_or_else(|e| {
-                eprintln!("catalog: fresh file open also failed ({e}), falling back to an in-memory catalog for this session");
-                let conn = Connection::open_in_memory().expect("in-memory sqlite must open");
-                migrate(&conn).expect("migrate an in-memory sqlite must succeed");
-                conn
-            });
-        CatalogState { conn: Mutex::new(conn), cancel: AtomicBool::new(false) }
+            .ok();
+
+        let (conn, read_conn) = match conn {
+            Some(conn) => {
+                // A genuinely separate connection to the same on-disk file — this is what
+                // actually gives reads their own lock, not a clone of the writer's.
+                let read_conn = open_and_migrate(&path).unwrap_or_else(|e| {
+                    // Vanishingly unlikely (the same path was just opened successfully above),
+                    // but if it happens, degrade to in-memory rather than fail startup — see
+                    // the in-memory branch below for why that's always safe.
+                    eprintln!("catalog: could not open a second (read) connection ({e}), read queries will share the writer's lock this session");
+                    let c = Connection::open_in_memory().expect("in-memory sqlite must open");
+                    migrate(&c).expect("migrate an in-memory sqlite must succeed");
+                    c
+                });
+                (conn, read_conn)
+            }
+            None => {
+                eprintln!("catalog: fresh file open also failed, falling back to an in-memory catalog for this session");
+                // ⚠️ Deliberately NOT two separate in-memory connections — `:memory:` databases
+                // are private per-connection, so a second `open_in_memory()` call here would be
+                // a DIFFERENT, empty database that never sees any write the first one makes.
+                // In this already-degraded fallback, reads sharing the writer's lock (via a
+                // second handle to the SAME file-less database) is the correct, safe choice —
+                // just without the concurrency benefit, which is an acceptable trade for a mode
+                // that only exists when the disk itself is unusable.
+                let c1 = Connection::open_in_memory().expect("in-memory sqlite must open");
+                migrate(&c1).expect("migrate an in-memory sqlite must succeed");
+                let c2 = Connection::open_in_memory().expect("in-memory sqlite must open");
+                migrate(&c2).expect("migrate an in-memory sqlite must succeed");
+                (c1, c2)
+            }
+        };
+        CatalogState { conn: Mutex::new(conn), read_conn: Mutex::new(read_conn), cancel: AtomicBool::new(false) }
     }
 }
 
@@ -366,7 +407,8 @@ fn abs_path(vol_last_path: &str, is_local: bool, rel_path: &str) -> String {
 
 #[tauri::command]
 pub fn catalog_volumes(state: tauri::State<CatalogState>) -> Result<Vec<VolumeRow>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     volumes_run(&conn)
 }
 
@@ -454,7 +496,8 @@ pub fn catalog_remove_root(id: i64, state: tauri::State<CatalogState>) -> Result
 
 #[tauri::command]
 pub fn catalog_roots(state: tauri::State<CatalogState>) -> Result<Vec<CatalogRoot>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
             "SELECT r.id, r.volume_id, r.rel_path, r.kind, v.last_path, v.is_local
@@ -1486,7 +1529,8 @@ const QUERY_LIMIT_CAP: u32 = 50_000;
 
 #[tauri::command]
 pub fn catalog_query(q: CatalogQuery, state: tauri::State<CatalogState>) -> Result<CatalogPage, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     query_run(&conn, q)
 }
 
@@ -1601,7 +1645,8 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
 
 #[tauri::command]
 pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collections::HashMap<String, u64>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut m = std::collections::HashMap::new();
     let all: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("all".to_string(), all as u64);
@@ -1632,7 +1677,8 @@ pub struct DateCounts {
 
 #[tauri::command]
 pub fn catalog_date_counts(state: tauri::State<CatalogState>) -> Result<DateCounts, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     date_counts_run(&conn)
 }
 
