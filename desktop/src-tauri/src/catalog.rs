@@ -1193,9 +1193,203 @@ pub fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>, state: tauri:
     // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
     // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
     // catalog, with no extra round trips from JS.
+    //
+    // ⚠️ Content hashing (phase E, below) is deliberately NOT chained here. Reading an EXIF
+    // header or a small XMP file is cheap; hashing a whole RAW or video is a full-file read —
+    // chaining it into the scan that fires on every ordinary folder-open would make routine
+    // browsing noticeably slower on a large archive. It runs as its own explicit/background
+    // pass (catalog_hash) instead.
     metadata_run(&conn, &mut emit, &state.cancel)?;
     sidecar_run(&conn, &mut emit, &state.cancel)?;
     Ok(result)
+}
+
+// ── Scan phase E: content-hash integrity ────────────────────────────────────────────────────
+//
+// The single most-requested photo-library feature that isn't duplicate/missing-file detection
+// (per this project's own research into what other tools' users actually ask for): silent
+// corruption — a file that is present and opens fine but has quietly bit-rotted. Lightroom
+// warns about missing photos but never about corrupted-but-present ones.
+//
+// `hashed_at` stores the file's `mtime` AT THE TIME the hash was computed — same convention as
+// `meta_mtime`/`sidecar_parsed_mtime` elsewhere in this schema — NOT a wall-clock timestamp
+// despite the name (kept for schema-compat with the original design; the semantics are the
+// resumability marker, exactly like its siblings). This is what lets `hash_run` double as
+// "hash it for the first time" AND "the file legitimately changed since we last hashed it, so
+// re-baseline" in one query, and what lets `verify_run` tell the two apart later.
+
+#[derive(Serialize, Clone, Default)]
+pub struct HashResult {
+    pub hashed: usize,
+}
+
+fn blake3_hex(path: &str) -> Option<String> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut hasher = blake3::Hasher::new();
+    hasher.update_reader(file).ok()?;
+    Some(hasher.finalize().to_hex().to_string())
+}
+
+/// Same chunked/resumable/offline-safe shape as metadata_run and sidecar_run. Resumable via
+/// `content_hash IS NULL OR hashed_at != mtime` — a photo hashed once and never modified since
+/// costs nothing on a re-run; one whose mtime changed (a legitimate edit) gets re-baselined
+/// rather than left pointing at a hash of its old content.
+pub fn hash_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<HashResult, String> {
+    let mut result = HashResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND (p.content_hash IS NULL OR p.hashed_at != p.mtime)
+                 LIMIT 64", // smaller batch than metadata/sidecar — each unit of work is a full-file read
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let mtime: i64 = r.get(2)?;
+                let last_path: String = r.get(3)?;
+                let is_local: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "hash".into(), done: result.hashed, total: result.hashed + batch.len(), current: String::new() });
+
+        let hashed: Vec<(i64, i64, Option<String>)> = batch
+            .par_iter()
+            .map(|(id, abs, mtime)| (*id, *mtime, blake3_hex(abs)))
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, mtime, hash) in &hashed {
+            let Some(hash) = hash else { continue }; // unreadable right now — leave unhashed, retried next pass
+            tx.execute("UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3", params![hash, mtime, id])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.hashed += hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.hashed, total: result.hashed, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_hash(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<HashResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    hash_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+#[derive(Serialize, Clone)]
+pub struct VerifyEntry {
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Serialize, Default)]
+pub struct VerifyResult {
+    pub checked: usize,
+    pub ok: usize,
+    /// Content changed AND mtime changed since the stored baseline — an ordinary edit
+    /// (re-export, overwrite), not corruption. Re-baselined automatically (same as hash_run).
+    pub changed: usize,
+    /// Content changed but mtime did NOT — the file was modified without its mtime updating,
+    /// which is the anomaly silent corruption actually looks like. THE list a user needs to see.
+    pub corrupt: Vec<VerifyEntry>,
+}
+
+/// Re-reads and re-hashes every already-hashed, present photo RIGHT NOW and compares against
+/// the stored baseline — this is the explicit "Verify" action, distinct from hash_run (which
+/// only establishes a baseline for photos that don't have one yet). The whole point of a
+/// verify sweep is doing the expensive re-read even when nothing else has asked for it.
+pub fn verify_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<VerifyResult, String> {
+    let mut result = VerifyResult::default();
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, p.rel_path, p.mtime, p.hashed_at, p.content_hash, v.last_path, v.is_local
+             FROM photos p JOIN volumes v ON v.id = p.volume_id
+             WHERE p.present = 1 AND p.content_hash IS NOT NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, String, String, i64, i64, String, String, bool)> = stmt
+        .query_map([], |r| {
+            let is_local: i64 = r.get(7)?;
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, is_local != 0))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let total = rows.len();
+    for (i, (id, name, rel_path, stored_mtime, hashed_at, stored_hash, last_path, is_local)) in rows.iter().enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if i % 32 == 0 {
+            progress(ScanProgress { phase: "verify".into(), done: i, total, current: name.clone() });
+        }
+        if !is_local && !Path::new(last_path).is_dir() {
+            continue; // offline — can't verify what isn't reachable, and mustn't report it as corrupt
+        }
+        let abs = abs_path(last_path, *is_local, rel_path);
+        let Ok(current_meta) = std::fs::metadata(&abs) else { continue }; // gone since present was set — a rescan will catch it
+        let current_mtime = current_meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(*stored_mtime);
+        let Some(fresh_hash) = blake3_hex(&abs) else { continue };
+
+        if &fresh_hash == stored_hash {
+            result.ok += 1;
+            continue;
+        }
+        if current_mtime == *hashed_at {
+            // Content differs, mtime does not — this is what corruption looks like.
+            result.corrupt.push(VerifyEntry { id: *id, name: name.clone(), path: abs });
+        } else {
+            // A legitimate edit hash_run hasn't caught up to yet — re-baseline now rather than
+            // waiting for the next scan, and don't report it as a problem.
+            let _ = conn.execute(
+                "UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3",
+                params![fresh_hash, current_mtime, id],
+            );
+            result.changed += 1;
+        }
+    }
+    result.checked = total;
+    let now = now_secs() as i64;
+    let _ = conn.execute(
+        "UPDATE photos SET verified_at = ?1 WHERE present = 1 AND content_hash IS NOT NULL",
+        params![now],
+    );
+    progress(ScanProgress { phase: "done".into(), done: total, total, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_verify(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<VerifyResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    verify_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
 }
 
 #[tauri::command]
@@ -1531,6 +1725,20 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// Sets a file's mtime directly — needed to simulate real bit rot (content changes, mtime
+    /// does not), which `std::fs::write` alone can't produce since writing always bumps mtime
+    /// to "now". `libc::utimes` rather than a new dependency: `libc` is already real here (see
+    /// this file's own statfs use, mirroring ingest.rs's).
+    fn set_mtime_for_test(path: &Path, unix_secs: i64) {
+        use std::ffi::CString;
+        let cpath = CString::new(path.to_str().unwrap()).unwrap();
+        let tv = libc::timeval { tv_sec: unix_secs as libc::time_t, tv_usec: 0 };
+        let times = [tv, tv];
+        unsafe {
+            libc::utimes(cpath.as_ptr(), times.as_ptr());
+        }
     }
 
     /// The frontend contract, mechanically enforced: every field `library::DirEntry` has, a
@@ -2234,5 +2442,135 @@ mod tests {
         if let Some(vd) = vd {
             assert!((1..=12).contains(&vd.m) && (1..=31).contains(&vd.d) && vd.y > 1990 && vd.y < 2100);
         }
+    }
+
+    // ── Content-hash integrity ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn hash_run_records_a_hash_for_every_present_photo_and_is_resumable() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("hash");
+        std::fs::write(dir.join("a.jpg"), b"hello world").unwrap();
+        std::fs::write(dir.join("b.jpg"), b"a different file").unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.hashed, 2);
+        let (hash_a, hashed_at_a, mtime_a): (String, i64, i64) = conn
+            .query_row("SELECT content_hash, hashed_at, mtime FROM photos WHERE name='a.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        assert_eq!(hash_a, blake3::hash(b"hello world").to_hex().to_string(), "must be a real BLAKE3 hash of the actual bytes");
+        assert_eq!(hashed_at_a, mtime_a, "hashed_at baselines to the mtime the hash corresponds to");
+
+        let r2 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.hashed, 0, "nothing changed — a second pass must not re-hash anything");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The entire point of this feature, proven directly: a byte flipped WITHOUT touching mtime
+    /// (exactly what real bit rot looks like — the filesystem has no idea the bits changed) must
+    /// be reported as corrupt. A normal edit (content AND mtime both change) must NOT be.
+    #[test]
+    fn corruption_is_distinguished_from_an_edit() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("corrupt");
+        let corrupt_path = dir.join("corrupt.jpg");
+        let edited_path = dir.join("edited.jpg");
+        std::fs::write(&corrupt_path, b"original bytes here").unwrap();
+        std::fs::write(&edited_path, b"original bytes here").unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        hash_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        let orig_mtime: i64 = conn.query_row("SELECT mtime FROM photos WHERE name='corrupt.jpg'", [], |r| r.get(0)).unwrap();
+
+        // Corruption: rewrite the bytes, then restore the ORIGINAL mtime — this is what real
+        // bit rot looks like (content changes, the filesystem's mtime does not). Uses libc's
+        // utimes directly (already a real dependency, via ingest.rs's statfs use) rather than
+        // adding a crate for one test.
+        std::fs::write(&corrupt_path, b"CORRUPTED byte here!").unwrap();
+        set_mtime_for_test(&corrupt_path, orig_mtime);
+
+        // An ordinary edit: rewrite AND let the mtime naturally update.
+        std::thread::sleep(std::time::Duration::from_millis(1100)); // ensure a distinct whole-second mtime
+        std::fs::write(&edited_path, b"a legitimately edited file").unwrap();
+
+        // Re-walk so the DB's own mtime column reflects disk (scan phase A always does this;
+        // verify itself also re-stats fresh, but the corrupted file's mtime was deliberately
+        // restored, so this walk must NOT be what changes its stored mtime).
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let result = verify_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.corrupt.len(), 1, "exactly the byte-flipped-with-restored-mtime file must be flagged");
+        assert_eq!(result.corrupt[0].name, "corrupt.jpg");
+        assert_eq!(result.changed, 1, "the legitimately edited file must be re-baselined, not flagged");
+        assert_eq!(result.ok, 0);
+
+        // And the edited file's baseline actually updated: on a SECOND verify it now matches
+        // its own (new) baseline and reports ok, while the corrupt file — never fixed, its
+        // stored hash never updated — is flagged again rather than silently forgotten.
+        let result2 = verify_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result2.ok, 1, "the edited file, now re-baselined, must verify clean against its OWN updated hash");
+        assert_eq!(result2.changed, 0, "nothing new changed between the two verify calls");
+        assert_eq!(result2.corrupt.len(), 1, "the corrupt file must be flagged again, not forgotten after one report");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The guard that a verifier that cries wolf is one nobody runs: a clean, untouched archive
+    /// must produce zero corrupt and zero changed — verify_run must be silent when there is
+    /// genuinely nothing to report.
+    #[test]
+    fn verify_is_a_no_op_on_an_untouched_archive() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("clean");
+        std::fs::write(dir.join("a.jpg"), b"never touched").unwrap();
+        std::fs::write(dir.join("b.jpg"), b"also never touched").unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        hash_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        let result = verify_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.checked, 2);
+        assert_eq!(result.ok, 2);
+        assert_eq!(result.changed, 0);
+        assert!(result.corrupt.is_empty());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// hash_run must skip a photo whose volume is offline rather than treating "the file isn't
+    /// reachable right now" as if it had no content — same class of guard as metadata_run's and
+    /// sidecar_run's own offline-termination tests.
+    #[test]
+    fn hash_run_terminates_when_only_offline_rows_remain() {
+        let conn = temp_db();
+        conn.execute(
+            "INSERT INTO volumes (uuid, label, last_path, is_local, last_seen)
+             VALUES ('ext-gone-hash', 'Old LaCie', '/Volumes/DoesNotExist13579', 0, 0)",
+            [],
+        )
+        .unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='ext-gone-hash'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+             VALUES (?1, 'p.jpg', '', 'p.jpg', 'p.jpg', 'jpg', 'jpeg', 10, 5, 0, 1)",
+            params![vid],
+        )
+        .unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let result = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.hashed, 0);
+        let content_hash: Option<String> = conn.query_row("SELECT content_hash FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert!(content_hash.is_none(), "must stay unhashed so it's retried once the volume returns");
     }
 }

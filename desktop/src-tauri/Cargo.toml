@@ -79,6 +79,13 @@ libc = "0.2"
 # ort-sys/objc2/libc, so this isn't a new build requirement, just a longer one (~1 min cold,
 # cached after).
 rusqlite = { version = "0.32", features = ["bundled"] }
+# Catalog integrity checking: content hashes to detect silent file corruption (a file present
+# and readable but bit-rotted — the single most-requested photo-library feature that isn't
+# duplicate/missing-file detection, per the library-catalog plan's own research). BLAKE3, not
+# the FNV-1a used for cache keys — this needs real collision resistance, cache keys don't and
+# have no adversary. Small, pure-Rust, ~GB/s, no C dependency to add to a tree already carrying
+# several.
+blake3 = "1"
 
 [profile.release]
 strip = true

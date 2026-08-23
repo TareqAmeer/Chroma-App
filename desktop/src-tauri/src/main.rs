@@ -1586,6 +1586,8 @@ fn main() {
             catalog::catalog_counts,
             catalog::catalog_date_counts,
             catalog::catalog_note_deleted,
+            catalog::catalog_hash,
+            catalog::catalog_verify,
             sam2_encode,
             sam2_points,
             faceparse_run,
