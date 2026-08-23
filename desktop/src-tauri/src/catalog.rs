@@ -1981,6 +1981,121 @@ pub fn clear_cache_tier(tier: String, state: tauri::State<CatalogState>) -> Resu
     Ok(freed)
 }
 
+// ── Per-root cache usage/clearing ───────────────────────────────────────────────────────────
+//
+// The global `cache_usage`/`clear_cache_tier` above cover the common case, but a user with
+// several catalogued roots (an old archive volume plus a current one, say) has no way to see
+// or clear just ONE root's share. Scoped to the offline-thumbnail tier only — it's the one
+// tier a photo's `id` cleanly attributes to a specific root (sharded `thumbs/<id%256>/<id>.jpg`,
+// stat'd per-file rather than walked, which is actually CHEAPER than the global version's
+// directory walk once a root is a small fraction of the whole tier). The decode cache and
+// working-thumbnail tier are NOT split per-root: both are keyed by opaque hashed cache keys
+// with no root column to filter on, and both are self-managing LRU caches anyway — global
+// clearing already covers the practical need for those two.
+
+#[derive(Serialize)]
+pub struct RootCacheUsage {
+    pub root_id: i64,
+    pub volume_label: String,
+    pub rel_path: String,
+    pub abs_path: String,
+    pub photo_count: u64,
+    pub offline_thumbs_bytes: u64,
+}
+
+/// Present, thumbnailed photo ids under a root — shared by the usage computation and the
+/// clear action below so they can never disagree about what "under this root" means.
+/// `rel_path = ""` (a root registered at a volume's own top level) matches every photo on that
+/// volume; otherwise a photo qualifies when its `rel_dir` IS the root or sits BENEATH it
+/// (`rel_dir LIKE root||'/%'`) — the same prefix convention `scan_run`'s own "mark absent on
+/// this subtree" query already uses.
+fn thumb_photo_ids_under_root(conn: &Connection, volume_id: i64, rel_path: &str) -> Result<Vec<i64>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id FROM photos
+             WHERE volume_id = ?1 AND present = 1 AND thumb = 1
+               AND (?2 = '' OR rel_dir = ?2 OR rel_dir LIKE ?2 || '/%')",
+        )
+        .map_err(|e| e.to_string())?;
+    let ids = stmt
+        .query_map(params![volume_id, rel_path], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<i64>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(ids)
+}
+
+pub fn cache_usage_by_root_run(conn: &Connection) -> Result<Vec<RootCacheUsage>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT r.id, v.label, r.rel_path, v.last_path, v.is_local, r.volume_id
+             FROM roots r JOIN volumes v ON v.id = r.volume_id
+             ORDER BY v.label, r.rel_path",
+        )
+        .map_err(|e| e.to_string())?;
+    let roots: Vec<(i64, String, String, String, i64, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let mut out = Vec::with_capacity(roots.len());
+    for (root_id, volume_label, rel_path, last_path, is_local, volume_id) in roots {
+        let ids = thumb_photo_ids_under_root(conn, volume_id, &rel_path)?;
+        let offline_thumbs_bytes: u64 = ids.iter().map(|id| std::fs::metadata(offline_thumb_path(*id)).map(|m| m.len()).unwrap_or(0)).sum();
+        out.push(RootCacheUsage {
+            root_id,
+            volume_label,
+            abs_path: abs_path(&last_path, is_local != 0, &rel_path),
+            rel_path,
+            photo_count: ids.len() as u64,
+            offline_thumbs_bytes,
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn catalog_root_cache_usage(state: tauri::State<CatalogState>) -> Result<Vec<RootCacheUsage>, String> {
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    cache_usage_by_root_run(&conn)
+}
+
+/// Clears just this root's share of the offline-thumbnail tier (see the module doc comment on
+/// why only that tier is root-scoped) and resets `thumb = 0` on exactly the rows it touched —
+/// same reasoning as the global `clear_cache_tier`, just narrowed to one root's ids instead of
+/// every present row.
+pub fn clear_root_cache_run(conn: &Connection, root_id: i64) -> Result<u64, String> {
+    let (volume_id, rel_path): (i64, String) = conn
+        .query_row("SELECT volume_id, rel_path FROM roots WHERE id = ?1", params![root_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?;
+    let ids = thumb_photo_ids_under_root(conn, volume_id, &rel_path)?;
+    let mut freed = 0u64;
+    for id in &ids {
+        let p = offline_thumb_path(*id);
+        if let Ok(meta) = std::fs::metadata(&p) {
+            freed += meta.len();
+        }
+        let _ = std::fs::remove_file(&p);
+    }
+    if !ids.is_empty() {
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for id in &ids {
+            tx.execute("UPDATE photos SET thumb = 0 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+    Ok(freed)
+}
+
+#[tauri::command]
+pub fn clear_root_cache(root_id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    clear_root_cache_run(&conn, root_id)
+}
+
 /// Extracts the raw bytes from a `library::get_thumbnail` response — that command returns a
 /// `tauri::ipc::Response` wrapping `InvokeResponseBody::Raw(Vec<u8>)` for a real photo, never
 /// `Json`, so the `Json` arm here is unreachable in practice; kept explicit rather than an
@@ -4313,5 +4428,50 @@ mod tests {
         assert_eq!(result.stacks_formed, 0, "no shared stem, no mirrored path, and no fake export history on this test machine — must stay unstacked");
         let stack_id: Option<i64> = conn.query_row("SELECT stack_id FROM photos WHERE id = ?1", params![raw_id], |r| r.get(0)).unwrap();
         assert_eq!(stack_id, None);
+    }
+
+    // ── Per-root cache usage/clearing ────────────────────────────────────────────────────────
+
+    #[test]
+    fn cache_usage_by_root_and_clear_are_scoped_correctly() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        conn.execute("INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, 'folderA', 'originals', 0)", params![vid]).unwrap();
+        conn.execute("INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, 'folderB', 'originals', 0)", params![vid]).unwrap();
+        let root_a: i64 = conn.query_row("SELECT id FROM roots WHERE rel_path = 'folderA'", [], |r| r.get(0)).unwrap();
+        let root_b: i64 = conn.query_row("SELECT id FROM roots WHERE rel_path = 'folderB'", [], |r| r.get(0)).unwrap();
+
+        insert_stack_photo(&conn, vid, "a1", "folderA", "a1.jpg", "jpeg", Some(1), 1);
+        insert_stack_photo(&conn, vid, "a2", "folderA/sub", "a2.jpg", "jpeg", Some(1), 2); // nested under folderA
+        insert_stack_photo(&conn, vid, "b1", "folderB", "b1.jpg", "jpeg", Some(1), 3);
+        let a1: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'a1.jpg'", [], |r| r.get(0)).unwrap();
+        let a2: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'a2.jpg'", [], |r| r.get(0)).unwrap();
+        let b1: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'b1.jpg'", [], |r| r.get(0)).unwrap();
+        for id in [a1, a2, b1] {
+            conn.execute("UPDATE photos SET thumb = 1 WHERE id = ?1", params![id]).unwrap();
+            std::fs::write(offline_thumb_path(id), vec![0u8; 100]).unwrap();
+        }
+
+        let usage = cache_usage_by_root_run(&conn).unwrap();
+        let usage_a = usage.iter().find(|u| u.root_id == root_a).unwrap();
+        let usage_b = usage.iter().find(|u| u.root_id == root_b).unwrap();
+        assert_eq!(usage_a.photo_count, 2, "folderA must include its nested folderA/sub photo, not just direct members");
+        assert_eq!(usage_a.offline_thumbs_bytes, 200);
+        assert_eq!(usage_b.photo_count, 1);
+        assert_eq!(usage_b.offline_thumbs_bytes, 100);
+
+        let freed = clear_root_cache_run(&conn, root_a).unwrap();
+        assert_eq!(freed, 200);
+
+        for id in [a1, a2] {
+            let thumb: i64 = conn.query_row("SELECT thumb FROM photos WHERE id = ?1", params![id], |r| r.get(0)).unwrap();
+            assert_eq!(thumb, 0, "cleared root's photos must have their thumb marker reset");
+            assert!(!offline_thumb_path(id).exists(), "cleared root's thumbnail files must actually be deleted");
+        }
+        let b1_thumb: i64 = conn.query_row("SELECT thumb FROM photos WHERE id = ?1", params![b1], |r| r.get(0)).unwrap();
+        assert_eq!(b1_thumb, 1, "an untouched root's photos must survive clearing a DIFFERENT root");
+        assert!(offline_thumb_path(b1).exists());
+
+        std::fs::remove_file(offline_thumb_path(b1)).ok();
     }
 }

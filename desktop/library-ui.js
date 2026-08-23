@@ -174,6 +174,15 @@
         });
       }
       case 'clear_cache_tier': return Promise.resolve(0);
+      case 'catalog_root_cache_usage': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        // Two roots on one volume so the per-root breakdown branch (>1 root) is exercised.
+        return Promise.resolve([
+          { root_id: 1, volume_label: 'Archive T7', rel_path: 'Originals/2025', abs_path: '/Volumes/Archive T7/Originals/2025', photo_count: 8, offline_thumbs_bytes: 1.1 * 1024 * 1024 * 1024 },
+          { root_id: 2, volume_label: 'Archive T7', rel_path: 'Originals/2026', abs_path: '/Volumes/Archive T7/Originals/2026', photo_count: 12, offline_thumbs_bytes: 2.1 * 1024 * 1024 * 1024 },
+        ]);
+      }
+      case 'clear_root_cache': return Promise.resolve(0);
       case 'catalog_hash': return Promise.resolve({ hashed: 0 });
       // One synthetic corrupt entry so the report popover is screenshot-verifiable too.
       case 'catalog_verify': return Promise.resolve({ checked: 20, ok: 19, changed: 0, corrupt: [{ id: 3, name: 'IMG_1003.RW2', path: '/test/AllPhotos/IMG_1003.RW2' }] });
@@ -5087,25 +5096,45 @@
     setTimeout(() => document.addEventListener('mousedown', close), 0);
   }
 
-  function showCacheMenu(e) {
+  /// Offline thumbnails split per-root once there's more than one root catalogued — a user
+  /// with an old archive volume plus a current one otherwise has no way to clear just one.
+  /// Decode cache stays global-only (opaque hashed cache keys, no root column to filter on —
+  /// see catalog_root_cache_usage's own doc comment) — one item, not one per root, for that.
+  async function showCacheMenu(e) {
     if (!cacheUsage) return;
-    const items = [
-      [`Clear offline thumbnails (${fmtGB(cacheUsage.offline_thumbs_bytes)} GB)`, async () => {
+    const x = Math.min(e.clientX, window.innerWidth - 260);
+    const y = Math.min(e.clientY, window.innerHeight - 90);
+    let rootUsage = [];
+    try { rootUsage = await invoke('catalog_root_cache_usage'); } catch (err) { /* fall back to the global-only view below */ }
+
+    const items = [];
+    if (rootUsage.length > 1) {
+      for (const r of rootUsage) {
+        const label = r.rel_path ? `${r.volume_label} / ${r.rel_path}` : `${r.volume_label} (whole volume)`;
+        items.push([`Clear ${label} thumbnails (${fmtGB(r.offline_thumbs_bytes)} GB)`, async () => {
+          if (!await window.confirmModal(`Clear offline thumbnails for ${label}?\n\nThey regenerate automatically next time this root is scanned while connected — but until then, browsing while unplugged shows blank cards instead of thumbnails.`, 'Clear')) return;
+          try { await invoke('clear_root_cache', { rootId: r.root_id }); toast(`Cleared ${label}`); refreshCacheUsage(); }
+          catch (err) { toast(humanizeErr('clear that root\'s thumbnails', err), 'err'); }
+        }]);
+      }
+    } else {
+      items.push([`Clear offline thumbnails (${fmtGB(cacheUsage.offline_thumbs_bytes)} GB)`, async () => {
         // confirmModal, never window.confirm — matches the album-delete confirm above. Worth
         // spelling out what's actually lost: nothing on the drive, just the never-pruned
         // never-changes-on-its-own cache that makes an UNPLUGGED drive browsable.
         if (!await window.confirmModal('Clear offline thumbnails?\n\nThey regenerate automatically next time each drive is scanned while connected — but until then, browsing while unplugged shows blank cards instead of thumbnails.', 'Clear')) return;
         try { await invoke('clear_cache_tier', { tier: 'offline_thumbs' }); toast('Offline thumbnails cleared'); refreshCacheUsage(); }
         catch (err) { toast(humanizeErr('clear offline thumbnails', err), 'err'); }
-      }],
-      [`Clear decode cache (${fmtGB(cacheUsage.decode_cache_bytes)} GB)`, async () => {
-        try { await invoke('clear_cache_tier', { tier: 'decode' }); toast('Decode cache cleared'); refreshCacheUsage(); }
-        catch (err) { toast(humanizeErr('clear the decode cache', err), 'err'); }
-      }],
-    ];
+      }]);
+    }
+    items.push([`Clear decode cache (${fmtGB(cacheUsage.decode_cache_bytes)} GB)`, async () => {
+      try { await invoke('clear_cache_tier', { tier: 'decode' }); toast('Decode cache cleared'); refreshCacheUsage(); }
+      catch (err) { toast(humanizeErr('clear the decode cache', err), 'err'); }
+    }]);
+
     const menu = document.createElement('div');
     menu.style.cssText = 'position:fixed;z-index:200;background:var(--sur2);border:1px solid var(--bdr);'
-      + 'border-radius:7px;padding:4px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
+      + 'border-radius:7px;padding:4px;min-width:220px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
       it.textContent = label;
@@ -5116,8 +5145,8 @@
       menu.appendChild(it);
     });
     document.body.appendChild(menu);
-    menu.style.left = Math.min(e.clientX, window.innerWidth - 240) + 'px';
-    menu.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
     const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
     setTimeout(() => document.addEventListener('mousedown', close), 0);
   }
