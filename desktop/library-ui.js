@@ -453,6 +453,27 @@
       transform:rotate(-90deg);transition:transform .12s ease}
     .lib-tree-chev.open{transform:rotate(0)}
     .lib-tree-children{margin-left:14px}
+    /* ── Activity indicator: one chained pipeline (walk -> metadata -> sidecar -> hash), not
+       silent subsystems. Collapsed pill in the status bar; click expands a small popover. ── */
+    .lib-act-pill{display:flex;align-items:center;gap:6px;background:var(--sur2);border:1px solid var(--bdr);
+      border-radius:999px;padding:3px 9px 3px 5px;cursor:pointer;font-size:11px;color:var(--txt)}
+    .lib-act-pill:hover{border-color:var(--acc)}
+    .lib-act-ring{width:13px;height:13px;border-radius:50%;flex:0 0 auto;
+      background:conic-gradient(var(--acc) var(--p,0%),var(--bdr) 0)}
+    .lib-act-ring::after{content:'';position:absolute}
+    .lib-act-pop{position:absolute;bottom:28px;right:0;background:var(--sur2);border:1px solid var(--bdr);
+      border-radius:10px;width:260px;box-shadow:var(--lift-2,0 12px 30px -12px rgba(0,0,0,.6));z-index:20;
+      font-family:var(--sans)}
+    .lib-act-pop-head{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;
+      border-bottom:1px solid var(--bdr);font-size:12px;font-weight:600}
+    .lib-act-pop-cancel{font-size:11px;color:var(--mut);cursor:pointer;font-weight:400}
+    .lib-act-pop-cancel:hover{color:var(--err,#e5484d)}
+    .lib-act-pop-body{padding:9px 11px;display:flex;flex-direction:column;gap:7px}
+    .lib-act-stage{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--mut)}
+    .lib-act-stage.active{color:var(--txt)}
+    .lib-act-stage-n{margin-left:auto;font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums}
+    .lib-act-bar{height:3px;background:var(--bdr);border-radius:2px;overflow:hidden;margin:1px 0 2px 17px}
+    .lib-act-bar > div{height:100%;background:var(--acc)}
     #lib-viewbar{display:flex;align-items:center;gap:8px;padding:0 12px 8px;flex-wrap:wrap}
     #lib-viewbar select,#lib-viewbar input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 7px;font-size:11px}
@@ -802,6 +823,7 @@
       <span style="font-size:11px;color:var(--mut)" id="lib-count"></span>
       <span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span>
       <span id="lib-status-labels" style="font-size:11px;color:var(--mut);display:flex;gap:8px;align-items:center"></span>
+      <span id="lib-activity"></span>
       <span style="flex:1"></span>
       <span style="font-size:11px;color:var(--mut)" id="lib-status-size"></span>
       <span style="font-size:11px;color:var(--mut)" id="lib-status-sel"></span>
@@ -3934,6 +3956,116 @@
       .catch((e) => console.error('catalog_add_root/scan', path, e));
   }
 
+  // ── Activity indicator ────────────────────────────────────────────────────────────────────
+  // One chained pipeline, not three silent subsystems — a copy/scan that's actually running
+  // has to be visible somewhere, or "why hasn't All Photos updated yet" has no answer. Backed
+  // by the SAME progress events the Rust side already emits for every scan phase
+  // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
+  // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
+  // gives those events somewhere to land.
+  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', hash: 'Verifying', copy: 'Copying' };
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'hash'];
+  let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
+  let _activityClearTimer = null;
+
+  function activityFrac() {
+    if (activity.kind === 'import' && activity.total) return activity.done / activity.total;
+    if (activity.total) return activity.done / activity.total;
+    return 0;
+  }
+
+  function renderActivity() {
+    const el = document.getElementById('lib-activity');
+    if (!el) return;
+    if (!activity.visible) { el.innerHTML = ''; return; }
+    const pct = Math.round(activityFrac() * 100);
+    const label = activity.stage === 'done'
+      ? (activity.kind === 'import' ? 'Imported' : 'Indexed') + (activity.total ? ` ${activity.total}` : '')
+      : (STAGE_LABELS[activity.stage] || 'Working') + '…';
+    let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative">
+      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>`;
+    if (activity.expanded) {
+      const stages = STAGE_ORDER.filter((s) => s === 'copy' ? activity.kind === 'import' : activity.kind === 'catalog');
+      const activeIdx = stages.indexOf(activity.stage);
+      html += `<div class="lib-act-pop" onclick="event.stopPropagation()">
+        <div class="lib-act-pop-head"><span>${activity.stage === 'done'
+            ? (activity.kind === 'import' ? 'Imported' : 'Indexed')
+            : (activity.kind === 'import' ? 'Importing' : 'Indexing library')}</span>
+          <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : 'Cancel'}</span></div>
+        <div class="lib-act-pop-body">`
+        + stages.map((s, i) => {
+          const cls = activity.stage === 'done' || i < activeIdx ? '' : i === activeIdx ? 'active' : '';
+          const icon = activity.stage === 'done' || i < activeIdx ? '✓' : i === activeIdx ? '›' : '·';
+          const n = i === activeIdx && activity.stage !== 'done' ? `${activity.done} of ${activity.total}` : (i < activeIdx || activity.stage === 'done' ? '' : 'queued');
+          const bar = i === activeIdx && activity.stage !== 'done' && activity.total
+            ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
+          return `<div class="lib-act-stage ${cls}"><span style="width:12px;display:inline-block;text-align:center">${icon}</span><span>${STAGE_LABELS[s]}</span><span class="lib-act-stage-n">${n}</span></div>${bar}`;
+        }).join('')
+        + `</div>`
+        + (activity.failed && activity.failed.length
+          ? `<div style="padding:8px 11px;border-top:1px solid var(--bdr);background:rgba(229,72,77,.08)">`
+            + activity.failed.slice(0, 8).map((f) => `<div style="font-size:10px;color:var(--mut);padding:1px 0">${esc(f)}</div>`).join('')
+            + (activity.failed.length > 8 ? `<div style="font-size:10px;color:var(--mut)">…and ${activity.failed.length - 8} more</div>` : '')
+            + `</div>`
+          : '')
+        + `</div>`;
+    }
+    html += `</span>`;
+    el.innerHTML = html;
+    const pill = document.getElementById('lib-act-pill');
+    if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
+    const cancelBtn = document.getElementById('lib-act-cancel');
+    if (cancelBtn) {
+      cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (activity.stage === 'done') { activity.visible = false; renderActivity(); return; }
+        if (activity.kind === 'catalog') invoke('catalog_scan_cancel').catch(() => {});
+        activity.expanded = false;
+        renderActivity();
+      };
+    }
+  }
+
+  function activityUpdate(kind, patch) {
+    if (_activityClearTimer) { clearTimeout(_activityClearTimer); _activityClearTimer = null; }
+    activity = { ...activity, kind, visible: true, ...patch };
+    renderActivity();
+    if (activity.stage === 'done') {
+      // Failures (a nonempty failure list on the import side) don't auto-clear — the whole
+      // point of surfacing this at all is so "3 files failed" isn't something only the console
+      // saw. A clean finish clears itself after a few seconds so it doesn't linger forever.
+      const hasFailures = kind === 'import' && activity.failed && activity.failed.length;
+      if (!hasFailures) {
+        _activityClearTimer = setTimeout(() => { activity.visible = false; renderActivity(); }, 8000);
+      }
+    }
+  }
+
+  if (LIBTEST) {
+    // No real backend under libtest to fire real catalog-scan/ingest-progress events — this is
+    // the same "manual debug trigger" pattern window.libtestLrConnect() already uses, so the
+    // indicator's in-progress/done/failed states are screenshot-verifiable without one.
+    window.libtestFireActivity = (state) => {
+      if (state === 'progress') activityUpdate('catalog', { stage: 'metadata', done: 40, total: 120 });
+      else if (state === 'done') activityUpdate('catalog', { stage: 'done', done: 120, total: 120 });
+      else if (state === 'import-failed') activityUpdate('import', { stage: 'done', done: 21, total: 24, failed: ['P1000512.RW2: read error', 'P1000513.RW2: read error', 'P1000889.RW2: disk full'] });
+    };
+  }
+
+  function wireActivityListeners() {
+    if (!window.__TAURI__ || !window.__TAURI__.event) return; // LIBTEST's mock listen() is a harmless no-op
+    window.__TAURI__.event.listen('catalog-scan', (ev) => {
+      const p = ev.payload || {};
+      activityUpdate('catalog', { stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
+      if (p.phase === 'done') refreshCatalogCounts();
+    }).catch(() => {});
+    window.__TAURI__.event.listen('ingest-progress', (ev) => {
+      const p = ev.payload || {};
+      const done = p.total && p.done >= p.total ? p.total : p.done;
+      activityUpdate('import', { stage: p.total && done >= p.total ? 'done' : 'copy', done, total: p.total || 0, current: p.current || '' });
+    }).catch(() => {});
+  }
+
   async function openCatalogView(scope) {
     state.source = 'catalog';
     state.catalogScope = scope || 'all';
@@ -4184,8 +4316,12 @@
             : `Imported ${res.copied} file${res.copied === 1 ? '' : 's'} (${fmtBytes(res.bytes)})${dupNote}`, !failed);
         }
         // Per-file failures are listed, not summarised away: a card that dropped three files is
-        // exactly when the user needs to know WHICH three before formatting it.
+        // exactly when the user needs to know WHICH three before formatting it. Surfaced in the
+        // activity popover too (not just the console) — that's the one place this stays visible
+        // after the import modal itself has been closed, and is why activityUpdate's own
+        // hasFailures check keys off this exact field instead of auto-clearing.
         if (failed) console.warn('import failures:', res.failed);
+        activityUpdate('import', { stage: 'done', done: res.copied, total: res.copied + failed, failed: res.failed || [] });
         if ($('imp-eject') && $('imp-eject').checked) {
           try { await invoke('eject_volume', { path: cardPath }); refreshVolumes(); }
           catch (e) { if (typeof toast === 'function') toast('Import finished, but the card would not eject', false); }
@@ -4702,6 +4838,12 @@
   // bug this comment replaced: the date tree rendered permanently empty under ?libtest=1&libcat=1
   // because this call never ran to populate dateCounts in the first place.
   refreshCatalogCounts();
+  wireActivityListeners();
+  // Click anywhere outside the popover collapses it — the same "click-away closes it" gesture
+  // every other popover/menu in this file already uses.
+  document.addEventListener('click', () => {
+    if (activity.expanded) { activity.expanded = false; renderActivity(); }
+  });
 
   // ── Marquee (drag-rectangle) multi-select over the grid. Works in both the folder grid
   // (selects by data-path into state.selected) and the cloud grid (data-lr-id into
