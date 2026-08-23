@@ -4432,6 +4432,19 @@ mod tests {
 
     // ── Per-root cache usage/clearing ────────────────────────────────────────────────────────
 
+    /// ⚠️ FLAKY under the full parallel suite (measured, not guessed — same posture as
+    /// CLAUDE.md's documented `export_harness`/`video_harness` flakes): this touches the real,
+    /// unisolated `~/Library/Application Support/.../thumbs/` tree (like several OTHER
+    /// pre-existing tests in this file — `thumbnail_run_generates_and_marks_thumb_and_is_resumable`,
+    /// `offline_thumb_bytes_serves_the_stored_tier_and_nothing_when_absent`, etc.), which has no
+    /// `CS_CATALOG_DIR`-style per-test sandbox the way `temp_db()` gives the SQLite side. Under
+    /// ~10+ parallel test threads all creating/writing/deleting inside that one shared directory
+    /// tree, occasional transient directory-creation races surface as a spurious write failure
+    /// or a file appearing briefly missing. Confirmed by running this test ALONE and with
+    /// `--test-threads=1` repeatedly: 100% pass rate every time — the logic itself is correct;
+    /// only the shared-disk concurrency is fragile. Explicit, far-from-any-other-test ids
+    /// (900001+) plus a write-retry below narrow the exposure but do not eliminate it, since the
+    /// race is at the shared PARENT directory level, not at collision between specific ids.
     #[test]
     fn cache_usage_by_root_and_clear_are_scoped_correctly() {
         let conn = temp_db();
@@ -4441,15 +4454,36 @@ mod tests {
         let root_a: i64 = conn.query_row("SELECT id FROM roots WHERE rel_path = 'folderA'", [], |r| r.get(0)).unwrap();
         let root_b: i64 = conn.query_row("SELECT id FROM roots WHERE rel_path = 'folderB'", [], |r| r.get(0)).unwrap();
 
-        insert_stack_photo(&conn, vid, "a1", "folderA", "a1.jpg", "jpeg", Some(1), 1);
-        insert_stack_photo(&conn, vid, "a2", "folderA/sub", "a2.jpg", "jpeg", Some(1), 2); // nested under folderA
-        insert_stack_photo(&conn, vid, "b1", "folderB", "b1.jpg", "jpeg", Some(1), 3);
-        let a1: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'a1.jpg'", [], |r| r.get(0)).unwrap();
-        let a2: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'a2.jpg'", [], |r| r.get(0)).unwrap();
-        let b1: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'b1.jpg'", [], |r| r.get(0)).unwrap();
+        // ⚠️ Explicit, deliberately huge ids — `offline_thumb_path(id)` resolves to a REAL
+        // filesystem path independent of this test's own isolated SQLite db (unlike temp_db()
+        // itself), so a small autoincrement id (1, 2, 3...) collides with whatever other test
+        // happens to be reading/writing/deleting the SAME shared `thumbs/<id%256>/<id>.jpg`
+        // path in a parallel thread. Measured: this test failed intermittently in the full
+        // parallel suite using ids 1-3 before this fix, passing every time run alone.
+        let (a1, a2, b1) = (900_001i64, 900_002i64, 900_003i64);
+        for (id, rel_dir, name) in [(a1, "folderA", "a1.jpg"), (a2, "folderA/sub", "a2.jpg"), (b1, "folderB", "b1.jpg")] {
+            conn.execute(
+                "INSERT INTO photos (id, volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, captured)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5, 'jpg', 'jpeg', 10, 1, 1, 1, 1)",
+                params![id, vid, format!("{rel_dir}/{name}"), rel_dir, name],
+            )
+            .unwrap();
+        }
         for id in [a1, a2, b1] {
             conn.execute("UPDATE photos SET thumb = 1 WHERE id = ?1", params![id]).unwrap();
-            std::fs::write(offline_thumb_path(id), vec![0u8; 100]).unwrap();
+            // `offline_thumb_path` silently swallows a `create_dir_all` failure (`let _ = ...`),
+            // and this file's OWN tests all share the real, unisolated
+            // `~/Library/Application Support/.../thumbs/` tree across many parallel test
+            // threads with no per-test filesystem sandbox (unlike `temp_db()`'s own SQLite
+            // isolation) — measured: an occasional transient directory-creation race under that
+            // concurrency, not a logic bug (this test passes reliably alone and sequentially).
+            // One retry, re-asserting the directory first, clears it without masking a REAL
+            // write failure (which would still fail the second attempt too).
+            let p = offline_thumb_path(id);
+            if std::fs::write(&p, vec![0u8; 100]).is_err() {
+                std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+                std::fs::write(&p, vec![0u8; 100]).unwrap();
+            }
         }
 
         let usage = cache_usage_by_root_run(&conn).unwrap();

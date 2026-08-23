@@ -500,6 +500,78 @@ pub fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(out.into_inner()))
 }
 
+/// The Library's full-screen Quick Look (Space bar): a fast, LARGE preview for rapid culling —
+/// Photo Mechanic's whole trick, judge sharpness/composition at speed without ever paying for a
+/// full RAW demosaic. Three sources, in the same priority order `get_thumbnail_inner` already
+/// established, just at a much bigger size than the 360px grid thumbnail:
+/// - RAW: the camera's own embedded preview (same `extract_preview_pixels` as `get_preview`
+///   above) — no demosaic, exactly what makes this fast.
+/// - Ordinary stills (JPEG/PNG/TIFF) on macOS: ImageIO's scaled decode (`fastthumb::thumbnail_jpeg`),
+///   which decodes at a reduced DCT scale rather than the `image` crate's full-then-downsize —
+///   see fastthumb.rs's own measured numbers for why this matters at 24MP.
+/// - HEIC: `sips`, same tool `get_thumbnail_inner` already shells out to, just a bigger `-Z`.
+///
+/// Not cached (same reasoning as `get_preview`: a one-shot provisional frame, not reused) and
+/// deliberately NEVER reached by opening a photo into the actual editor — that path keeps doing
+/// its normal full decode unchanged. This is a separate, non-destructive view: leaving Quick
+/// Look never triggers a decode, only actually opening the editor (an explicit action) does.
+#[tauri::command]
+pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, String> {
+    const QUICKLOOK_LONG_EDGE: u32 = 1600;
+    let ext = ext_lower(Path::new(&path));
+    if is_raw_ext(&ext) {
+        let img = rawler::analyze::extract_preview_pixels(&path, &RawDecodeParams::default())
+            .map_err(|e| format!("preview decode: {e}"))?;
+        let img = apply_orientation_dynamic(img, raw_orientation(&path));
+        let mut out = Cursor::new(Vec::new());
+        img.to_rgb8()
+            .write_to(&mut out, image::ImageFormat::Jpeg)
+            .map_err(|e| format!("jpeg encode: {e}"))?;
+        return Ok(tauri::ipc::Response::new(out.into_inner()));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(&path, QUICKLOOK_LONG_EDGE) {
+                return Ok(tauri::ipc::Response::new(bytes));
+            }
+        }
+        if is_heic_ext(&ext) {
+            let tmp = cache_dir().join(format!("quicklook-{}.jpg", fnv1a(&[&path])));
+            let ok = std::process::Command::new("/usr/bin/sips")
+                .args(["-s", "format", "jpeg", "-Z", &QUICKLOOK_LONG_EDGE.to_string(), &path, "--out"])
+                .arg(&tmp)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if ok {
+                if let Ok(bytes) = std::fs::read(&tmp) {
+                    let _ = std::fs::remove_file(&tmp);
+                    return Ok(tauri::ipc::Response::new(bytes));
+                }
+            }
+            let _ = std::fs::remove_file(&tmp);
+            return Err("heic quicklook: sips could not decode this file".into());
+        }
+    }
+    if is_video_ext(&ext) {
+        return Err("no quicklook preview for video".into());
+    }
+    // Non-macOS / anything ImageIO didn't take: the `image` crate, same resize shape
+    // `get_thumbnail_inner`'s own final fallback already uses, just at QUICKLOOK_LONG_EDGE.
+    let img = image::open(&path).map_err(|e| format!("image open: {e}"))?;
+    let (w, h) = (img.width(), img.height());
+    let scale = QUICKLOOK_LONG_EDGE as f32 / w.max(h) as f32;
+    let thumb = if scale < 1.0 {
+        img.resize((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let mut out = Cursor::new(Vec::new());
+    thumb.to_rgb8().write_to(&mut out, image::ImageFormat::Jpeg).map_err(|e| format!("jpeg encode: {e}"))?;
+    Ok(tauri::ipc::Response::new(out.into_inner()))
+}
+
 // ── Photo metadata (camera / lens / date / iso) for the library's filter dropdowns.
 // RAWs go through rawler's raw_metadata (no pixel decode); JPEG/TIFF through kamadak-exif;
 // PNG has no EXIF → nulls. Disk-cached exactly like thumbnails (path+mtime+size key). ──────
@@ -2326,5 +2398,61 @@ mod album_tests {
 
             std::fs::remove_dir_all(&photos).ok();
         });
+    }
+}
+
+#[cfg(test)]
+mod quicklook_tests {
+    use super::*;
+    use tauri::ipc::IpcResponse;
+
+    /// The whole point of Quick Look: a RAW must return the embedded preview (no demosaic),
+    /// same source `get_preview` already uses — this just pins that the two stay in sync and
+    /// that the result is a real, decodable JPEG at roughly the requested size.
+    #[test]
+    fn quicklook_preview_of_a_raw_is_a_real_jpeg_near_the_target_size() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&dir).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| is_raw_ext(&ext_lower(p)))
+        }) else {
+            eprintln!("skipping: no RAW present in geneva/");
+            return;
+        };
+        let resp = get_quicklook_preview(sample.to_string_lossy().into_owned()).expect("quicklook preview");
+        let bytes = match resp.body().unwrap() {
+            tauri::ipc::InvokeResponseBody::Raw(b) => b,
+            _ => panic!("expected raw bytes"),
+        };
+        assert!(bytes.len() > 1000, "suspiciously small preview: {} bytes", bytes.len());
+        let img = image::load_from_memory(&bytes).expect("must decode as a real JPEG");
+        assert!(img.width().max(img.height()) <= 1600, "must not exceed the requested long edge");
+    }
+
+    /// A non-RAW still (JPEG) must go through the large ImageIO decode path, not the RAW
+    /// embedded-preview path — and must actually come back BIGGER than the 360px grid thumbnail
+    /// tier, or this command is pointless (a culling preview that's the same size as the grid
+    /// thumbnail buys nothing).
+    #[test]
+    fn quicklook_preview_of_a_jpeg_is_larger_than_the_grid_thumbnail() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&dir).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| matches!(ext_lower(p).as_str(), "jpg" | "jpeg"))
+        }) else {
+            eprintln!("skipping: no JPEG present in geneva/");
+            return;
+        };
+        let resp = get_quicklook_preview(sample.to_string_lossy().into_owned()).expect("quicklook preview");
+        let bytes = match resp.body().unwrap() {
+            tauri::ipc::InvokeResponseBody::Raw(b) => b,
+            _ => panic!("expected raw bytes"),
+        };
+        let img = image::load_from_memory(&bytes).expect("must decode as a real JPEG");
+        assert!(img.width().max(img.height()) > 360, "quicklook must be larger than the 360px grid thumbnail, got {}x{}", img.width(), img.height());
+    }
+
+    #[test]
+    fn quicklook_preview_declines_video_cleanly() {
+        let err = get_quicklook_preview("/nonexistent/clip.mp4".to_string());
+        assert!(err.is_err(), "video must be refused, not attempted");
     }
 }

@@ -133,6 +133,7 @@
       case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
+      case 'get_quicklook_preview': return Promise.resolve(png);
       case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
       // harmless no-op mock, matching every other pure-Rust-side mutation's mock in this file.
@@ -526,6 +527,15 @@
       background:var(--sur2);border:1px solid var(--bdr);font-size:10px;color:var(--txt)}
     .lib-kw-chip-x{cursor:pointer;color:var(--mut);font-size:12px;line-height:1}
     .lib-kw-chip-x:hover{color:var(--txt)}
+    /* Quick Look (Space bar) — a full-viewport overlay, never part of the editor's own DOM,
+       so it stays trivially cheap to open/close: no shader, no canvas, just an <img>. */
+    #lib-quicklook{position:fixed;inset:0;z-index:500;background:rgba(10,10,10,.96);
+      display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+    #lib-quicklook.on{display:flex}
+    #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity .12s ease;
+      border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    #lib-ql-img.loaded{opacity:1}
+    #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
     .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
     .lib-tree-row:hover{background:var(--sur2)}
@@ -3661,10 +3671,87 @@
     const parts = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).filter(Boolean);
     return Math.max(1, parts.length);
   }
+  // ── Quick Look (Space) ──────────────────────────────────────────────────────────────────
+  // Photo Mechanic's core trick: flip through a folder at speed using only the fast embedded-
+  // JPEG preview (get_quicklook_preview — no RAW demosaic), so culling never pays for a full
+  // decode. Deliberately NEVER touches the real editor-open pipeline (openInEditorInner) —
+  // leaving Quick Look, however you leave it, triggers no decode at all; only pressing Enter to
+  // actually open the photo does, exactly like every other path into the editor already does.
+  const quicklook = { active: false, path: '', url: '' };
+  function quicklookEl() {
+    let el = document.getElementById('lib-quicklook');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'lib-quicklook';
+    el.innerHTML = `<img id="lib-ql-img" alt="">
+      <div id="lib-ql-caption"></div>`;
+    document.body.appendChild(el);
+    return el;
+  }
+  async function showQuickLook(path) {
+    if (!path) return;
+    quicklook.active = true;
+    quicklook.path = path;
+    const el = quicklookEl();
+    el.classList.add('on');
+    const img = document.getElementById('lib-ql-img');
+    const caption = document.getElementById('lib-ql-caption');
+    caption.textContent = baseName(path) + ' — loading…';
+    img.classList.remove('loaded');
+    try {
+      const buf = await invoke('get_quicklook_preview', { path });
+      if (quicklook.path !== path) return; // superseded by a newer Quick Look photo
+      if (quicklook.url) URL.revokeObjectURL(quicklook.url);
+      quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      img.src = quicklook.url;
+      img.classList.add('loaded');
+      caption.textContent = baseName(path);
+    } catch (e) {
+      caption.textContent = baseName(path) + ' — preview unavailable';
+    }
+  }
+  function hideQuickLook() {
+    quicklook.active = false;
+    quicklook.path = '';
+    const el = document.getElementById('lib-quicklook');
+    if (el) el.classList.remove('on');
+    if (quicklook.url) { URL.revokeObjectURL(quicklook.url); quicklook.url = ''; }
+  }
+
   document.addEventListener('keydown', (e) => {
     if (!state.open) return;
     const t = e.target;
     if (t && t.closest && t.closest('input,textarea,[contenteditable]')) return;
+    // Own early-return branch, same pattern as the Compare-mode branch below — Quick Look's
+    // arrows/space/escape/enter/rating-flag keys must never also fall through to the grid's
+    // OWN cursor-movement handling further down.
+    if (quicklook.active) {
+      const shownQl = sortEntries(state.entries.filter(passesFilters));
+      const idxQl = shownQl.findIndex((en) => en.path === quicklook.path);
+      const gotoQl = (delta) => {
+        if (!shownQl.length) return;
+        const next = Math.max(0, Math.min(shownQl.length - 1, (idxQl < 0 ? 0 : idxQl) + delta));
+        showQuickLook(shownQl[next].path);
+      };
+      if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); hideQuickLook(); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); gotoQl(1); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); gotoQl(-1); return; }
+      if (e.key === 'Enter') { e.preventDefault(); const p = quicklook.path; hideQuickLook(); openInEditor(p); return; }
+      if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault(); setRating(quicklook.path, parseInt(e.key, 10)); toast(`Rated ${e.key} star${e.key === '1' ? '' : 's'}`); return;
+      }
+      if (e.key === 'x' || e.key === 'X') { e.preventDefault(); setLabel(quicklook.path, 'Red'); toast('Rejected'); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setLabel(quicklook.path, 'Green'); toast('Picked'); return; }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); setLabel(quicklook.path, ''); toast('Flag cleared'); return; }
+      return;
+    }
+    // Space opens Quick Look for whatever's currently highlighted — same target resolution
+    // order kbTargets() below uses (cursor, then the open photo), so it's the photo you'd
+    // expect it to be regardless of whether you got here by mouse or keyboard.
+    if (e.key === ' ' && state.source !== 'lr' && state.viewMode !== 'compare') {
+      const target = state._kbCursor || state.openedPath || (state.selected.size === 1 ? [...state.selected][0] : '');
+      if (target) { e.preventDefault(); showQuickLook(target); return; }
+    }
     // ⌘A/Ctrl+A select-all, ahead of the generic modifier-key bailout below (every other
     // shortcut here is unmodified).
     if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && !e.altKey && state.source !== 'lr' && state.viewMode !== 'compare') {
@@ -4381,6 +4468,9 @@
     // state.open (the docked/deskx harness never goes through toggleLibrary(), so state.open
     // is never true here) — this is what makes the keyword-chip editor screenshot-verifiable.
     window.libtestShowInfoPanel = (path) => { state._kbCursor = path; state.showInfo = true; renderInfoPanel(); };
+    // Same reasoning: Quick Look's real trigger (Space) is gated on state.open, which the
+    // docked/deskx harness never sets.
+    window.libtestShowQuickLook = (path) => showQuickLook(path);
   }
 
   function wireActivityListeners() {

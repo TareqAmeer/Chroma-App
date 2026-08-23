@@ -1535,6 +1535,7 @@ fn main() {
             library::album_set_order,
             library::list_album,
             library::get_preview,
+            library::get_quicklook_preview,
             library::get_meta,
             library::get_meta_batch,
             library::get_sidecar,
