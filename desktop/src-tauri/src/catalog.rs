@@ -1209,6 +1209,39 @@ pub struct SidecarResult {
 /// since `get_sidecar` on a missing file returns `Sidecar::default()`), and offline-safe for the
 /// same reason phase B is: a row on an unmounted volume must not be marked "parsed" with
 /// defaults it never actually read, or it would never be retried once the volume returns.
+/// Ensures every ancestor segment of `full_path` (`"Travel|Iceland|Reykjavik"` → `Travel`,
+/// `Travel|Iceland`, `Travel|Iceland|Reykjavik`) exists as its own row in `keywords`, linked
+/// parent→child, and returns the LEAF's own id — the only one `photo_keywords` ever links to.
+/// Ancestor rows exist purely so the sidebar tag tree has something to render "Travel" as a
+/// node from, even before any photo is tagged with exactly that path (descendant lookups find
+/// photos through their own keyword's path prefix, not by walking a photo_keywords link on
+/// every ancestor — see `catalog_keywords`/`query_run`'s own keyword filter).
+fn upsert_keyword_path(conn: &Connection, full_path: &str) -> Result<i64, String> {
+    let mut parent_id: Option<i64> = None;
+    let mut acc = String::new();
+    let mut leaf_id = 0i64;
+    for seg in full_path.split('|') {
+        if seg.is_empty() {
+            continue; // a stray "||" or leading/trailing "|" in hand-edited XMP — skip, don't crash
+        }
+        if !acc.is_empty() {
+            acc.push('|');
+        }
+        acc.push_str(seg);
+        let existing: Option<i64> = conn.query_row("SELECT id FROM keywords WHERE path = ?1", params![acc], |r| r.get(0)).ok();
+        leaf_id = match existing {
+            Some(id) => id,
+            None => {
+                conn.execute("INSERT INTO keywords (path, leaf, parent_id) VALUES (?1, ?2, ?3)", params![acc, seg, parent_id])
+                    .map_err(|e| e.to_string())?;
+                conn.last_insert_rowid()
+            }
+        };
+        parent_id = Some(leaf_id);
+    }
+    Ok(leaf_id)
+}
+
 pub fn sidecar_run(
     conn: &Connection,
     progress: &mut dyn FnMut(ScanProgress),
@@ -1259,6 +1292,16 @@ pub fn sidecar_run(
                 params![sc.rating, sc.label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id],
             )
             .map_err(|e| e.to_string())?;
+            // Full re-link each pass rather than a diff — the sidecar is authoritative (see the
+            // module's own XMP-wins rule) and a photo carries at most a handful of keywords, so
+            // "delete then re-insert" is simpler than computing an add/remove set and costs
+            // nothing measurable at that size.
+            tx.execute("DELETE FROM photo_keywords WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+            for kw in &sc.keywords {
+                let kw_id = upsert_keyword_path(&tx, kw)?;
+                tx.execute("INSERT OR IGNORE INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![id, kw_id])
+                    .map_err(|e| e.to_string())?;
+            }
         }
         tx.commit().map_err(|e| e.to_string())?;
         result.read += read.len();
@@ -1556,6 +1599,10 @@ pub struct CatalogQuery {
     /// stack's badge triggers. Takes a leader's `photos.id` (== that stack's `stack_id`).
     #[serde(default)]
     pub expand_stack: Option<i64>,
+    /// Full keyword paths, AND-ed — each matches a photo tagged with that keyword OR any
+    /// descendant (clicking "Travel" in the tag tree must also show "Travel|Iceland" photos).
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 fn default_true() -> bool {
     true
@@ -1569,7 +1616,7 @@ fn default_true() -> bool {
 // every entry silently filtered as if it were offline.
 impl Default for CatalogQuery {
     fn default() -> Self {
-        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false, blurry_only: false, expand_stack: None }
+        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new() }
     }
 }
 
@@ -1625,6 +1672,20 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         // March" cross-year view in this design), so they're only applied once year is set.
         if q.blurry_only {
             where_parts.push("p.blurry = 1".to_string());
+        }
+        for kw in &q.keywords {
+            // Same substr-prefix check as `keywords_run` (not the ASCII-range shorthand — see
+            // its own doc comment for the false-positive that rules that out), applied per
+            // keyword and AND-ed, so tagging "Travel" AND "Portrait" narrows correctly.
+            where_parts.push(format!(
+                "EXISTS (SELECT 1 FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id                  WHERE pk.photo_id = p.id AND (k.path = ?{a} OR substr(k.path, 1, length(?{b}) + 1) = ?{c} || '|'))",
+                a = values.len() + 1,
+                b = values.len() + 2,
+                c = values.len() + 3,
+            ));
+            values.push(Box::new(kw.clone()));
+            values.push(Box::new(kw.clone()));
+            values.push(Box::new(kw.clone()));
         }
         if q.no_date {
             where_parts.push("(p.cap_y IS NULL OR p.cap_m IS NULL OR p.cap_d IS NULL)".to_string());
@@ -2364,6 +2425,52 @@ fn promote_stack_leader(conn: &Connection, old_leader_id: i64) -> Result<(), Str
 pub fn catalog_note_deleted(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     note_deleted_run(&conn, &paths)
+}
+
+// ── Keyword tree ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct KeywordNode {
+    pub id: i64,
+    pub path: String,
+    pub leaf: String,
+    pub parent_id: Option<i64>,
+    /// Present photos tagged with this keyword OR any descendant — a "|"-delimited prefix
+    /// check (`substr(path, 1, len+1) = path || '|'`), not the plan's originally-sketched ASCII
+    /// range trick (`path >= kw AND path < kw||'}'`): that range has a real false-positive
+    /// (a keyword literally named "Travel2" sorts inside "Travel".."Travel}" even though it is
+    /// not a child of "Travel"), caught by working through the byte ordering rather than
+    /// copying the plan's shorthand as-is. `keywords` is at most a few hundred rows for a real
+    /// personal archive, so the substr scan here costs nothing worth indexing around.
+    pub n: u64,
+}
+
+pub fn keywords_run(conn: &Connection) -> Result<Vec<KeywordNode>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT k.id, k.path, k.leaf, k.parent_id,
+                (SELECT COUNT(DISTINCT pk.photo_id)
+                 FROM photo_keywords pk JOIN keywords k2 ON k2.id = pk.keyword_id
+                 JOIN photos p ON p.id = pk.photo_id
+                 WHERE p.present = 1 AND (k2.path = k.path OR substr(k2.path, 1, length(k.path) + 1) = k.path || '|'))
+             FROM keywords k ORDER BY k.path",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(KeywordNode { id: r.get(0)?, path: r.get(1)?, leaf: r.get(2)?, parent_id: r.get(3)?, n: r.get::<_, i64>(4)? as u64 })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn catalog_keywords(state: tauri::State<CatalogState>) -> Result<Vec<KeywordNode>, String> {
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    keywords_run(&conn)
 }
 
 #[cfg(test)]
@@ -3698,5 +3805,149 @@ mod tests {
         // way to collapse back down). Only the DERIVATIVE member has nothing to show a badge for.
         assert_eq!(page.entries[0].stack_n, 2, "the leader's own row must keep its real count so a collapse affordance stays visible");
         assert_eq!(page.entries[1].stack_n, 0, "a derivative member is just a regular row here — no badge");
+    }
+
+    // ── Keyword catalog mirror ──────────────────────────────────────────────────────────────
+
+    /// End-to-end: tag a photo via the REAL library.rs write path, rescan, and confirm the
+    /// catalog's keywords/photo_keywords tables reflect it — including ancestor rows existing
+    /// even though only the full leaf path was ever assigned.
+    #[test]
+    fn sidecar_run_mirrors_keywords_into_the_catalog() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("sidecar_kw");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        let photo_path = dir.join("a.jpg").to_string_lossy().into_owned();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        crate::library::set_keywords(photo_path.clone(), vec!["Travel|Iceland".into()]).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        let paths: Vec<String> = conn
+            .prepare("SELECT path FROM keywords ORDER BY path")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(paths, vec!["Travel".to_string(), "Travel|Iceland".to_string()], "the ancestor row must exist too, for the tag tree");
+
+        let linked: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id WHERE k.path = 'Travel|Iceland'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(linked, 1, "the photo must be linked to the LEAF keyword");
+        let linked_ancestor: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id WHERE k.path = 'Travel'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(linked_ancestor, 0, "the ancestor is NOT directly linked — descendant lookups use the path prefix, not a link on every ancestor");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Removing a keyword must remove the stale link, not accumulate old ones — sidecar_run
+    /// does a full delete-then-reinsert per photo specifically to make this hold.
+    #[test]
+    fn sidecar_run_drops_stale_keyword_links_on_retag() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("sidecar_kw_retag");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        let photo_path = dir.join("a.jpg").to_string_lossy().into_owned();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        crate::library::set_keywords(photo_path.clone(), vec!["Old".into()]).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        // Force the sidecar's mtime forward — set_keywords runs fast enough that a real retag
+        // could otherwise land in the SAME second as the first write, and scan_run's own
+        // sidecar_mtime column (second resolution) would then look unchanged, so sidecar_run's
+        // `sidecar_mtime != sidecar_parsed_mtime` predicate would never re-trigger. A real edit
+        // a moment later doesn't have this problem; a test running in milliseconds does.
+        crate::library::set_keywords(photo_path.clone(), vec!["New".into()]).unwrap();
+        set_mtime_for_test(&Path::new(&photo_path).with_extension("xmp"), 2_000_000_000);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        let linked_paths: Vec<String> = conn
+            .prepare("SELECT k.path FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(linked_paths, vec!["New".to_string()], "the old link must be gone, not just the new one added");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `catalog_keywords`'s own count: matches self AND descendants, and must NOT count a
+    /// same-prefix sibling that isn't actually a child ("Travel2" is not under "Travel") — the
+    /// exact false positive the ASCII-range shorthand would have produced.
+    #[test]
+    fn keywords_run_counts_self_and_descendants_not_lookalike_siblings() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
+        for name in ["a.jpg", "b.jpg", "c.jpg"] {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+                 VALUES (?1, ?2, '', ?2, ?2, 'jpg', 'jpeg', 10, 0, 0, 1)",
+                params![vid, name],
+            )
+            .unwrap();
+        }
+        let ids: Vec<i64> = conn.prepare("SELECT id FROM photos ORDER BY name").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+
+        let travel = upsert_keyword_path(&conn, "Travel").unwrap();
+        let iceland = upsert_keyword_path(&conn, "Travel|Iceland").unwrap();
+        let travel2 = upsert_keyword_path(&conn, "Travel2").unwrap(); // NOT a child of "Travel"
+        conn.execute("INSERT INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![ids[0], travel]).unwrap();
+        conn.execute("INSERT INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![ids[1], iceland]).unwrap();
+        conn.execute("INSERT INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![ids[2], travel2]).unwrap();
+
+        let nodes = keywords_run(&conn).unwrap();
+        let travel_node = nodes.iter().find(|n| n.path == "Travel").unwrap();
+        assert_eq!(travel_node.n, 2, "must count the direct tag AND the Iceland descendant, but not the Travel2 lookalike");
+        let travel2_node = nodes.iter().find(|n| n.path == "Travel2").unwrap();
+        assert_eq!(travel2_node.n, 1);
+    }
+
+    /// `CatalogQuery.keywords` must be AND-ed and must include descendants, mirroring the
+    /// sidebar tag tree's own "click Travel, see Iceland photos too" behavior.
+    #[test]
+    fn query_run_filters_by_keyword_including_descendants() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        for (name, kw) in [("a.jpg", "Travel|Iceland"), ("b.jpg", "Travel"), ("c.jpg", "Portrait")] {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+                 VALUES (?1, ?2, '', ?2, ?2, 'jpg', 'jpeg', 10, 0, 0, 1)",
+                params![vid, name],
+            )
+            .unwrap();
+            let id: i64 = conn.query_row("SELECT id FROM photos WHERE name = ?1", params![name], |r| r.get(0)).unwrap();
+            let kw_id = upsert_keyword_path(&conn, kw).unwrap();
+            conn.execute("INSERT INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![id, kw_id]).unwrap();
+        }
+
+        let page = query_run(&conn, CatalogQuery { keywords: vec!["Travel".into()], ..Default::default() }).unwrap();
+        let mut names: Vec<String> = page.entries.iter().map(|e| e.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, vec!["a.jpg".to_string(), "b.jpg".to_string()], "Travel must include the Iceland descendant, not just the direct tag");
     }
 }
