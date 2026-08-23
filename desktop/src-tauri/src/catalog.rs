@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -319,6 +319,36 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             []
         )?;
         conn.execute("CREATE INDEX IF NOT EXISTS ix_faces_photo ON photo_faces(photo_id)", [])?;
+    }
+
+    // v4 -> v5: AI stack Phase B — face embedding (ArcFace) + DBSCAN clustering into unnamed
+    // "Person N" groups. `embedding` is a raw little-endian f32x512 BLOB (2048 bytes) rather than
+    // a JSON array like `kps` — it's numeric and read back in bulk for every clustering pass, so
+    // a BLOB avoids both the parse cost and ~3x the storage JSON would cost at this scale.
+    // `person_id` is nullable and reassigned wholesale by each `catalog_cluster_faces` run
+    // (Phase B has no naming/merge UI yet — that's Phase C, which will need to start persisting
+    // manual assignments instead of freely re-clustering everything).
+    if version < 5 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS people (
+                id         INTEGER PRIMARY KEY,
+                name       TEXT NOT NULL,
+                cover_face_id INTEGER,
+                created    INTEGER NOT NULL
+            )",
+            []
+        )?;
+        if !has_col("photo_faces", "embedding")? {
+            conn.execute("ALTER TABLE photo_faces ADD COLUMN embedding BLOB", [])?;
+        }
+        if !has_col("photo_faces", "person_id")? {
+            conn.execute("ALTER TABLE photo_faces ADD COLUMN person_id INTEGER REFERENCES people(id) ON DELETE SET NULL", [])?;
+        }
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_faces_person ON photo_faces(person_id)", [])?;
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -1589,6 +1619,250 @@ pub fn catalog_photo_faces(state: tauri::State<CatalogState>, photo_id: i64) -> 
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![photo_id], |r| Ok(FaceBox { x0: r.get(0)?, y0: r.get(1)?, x1: r.get(2)?, y1: r.get(3)?, score: r.get(4)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+// ── Face embedding (AI stack Phase B, part 1) — ArcFace, resumable via `photo_faces.embedding IS
+// NULL` (a freshly (re)inserted face row from `faces_run` always starts NULL, so a photo whose
+// faces changed on rescan gets its embeddings recomputed for free, same self-healing shape
+// `hash_run`'s mtime check gives file hashes). Batched by PHOTO, not by face row, so a photo with
+// several faces only pays one decode.
+
+fn f32_vec_to_blob(v: &[f32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(v.len() * 4);
+    for x in v {
+        out.extend_from_slice(&x.to_le_bytes());
+    }
+    out
+}
+
+fn blob_to_f32_vec(b: &[u8]) -> Vec<f32> {
+    b.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect()
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct EmbedResult {
+    pub embedded: usize,
+}
+
+pub fn embed_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<EmbedResult, String> {
+    let mut result = EmbedResult::default();
+    const DECODE_LONG_EDGE: u32 = 1600; // must match faces_run's — kps fractions were derived against this decode's own dimensions
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
+                 FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
+                 WHERE pf.embedding IS NULL AND p.present = 1
+                 LIMIT 16"
+            )
+            .map_err(|e| e.to_string())?;
+        let photo_batch: Vec<(i64, Option<String>)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let last_path: String = r.get(2)?;
+                let is_local: i64 = r.get(3)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let photo_batch: Vec<(i64, String)> = photo_batch.into_iter().filter_map(|(id, abs)| abs.map(|a| (id, a))).collect();
+        if photo_batch.is_empty() {
+            break;
+        }
+
+        // For each photo, the (face_id, kps fraction) rows still needing an embedding.
+        let mut face_rows: Vec<(i64, i64, String)> = Vec::new(); // (photo_id, face_id, kps json)
+        for (photo_id, _) in &photo_batch {
+            let mut fstmt = conn
+                .prepare("SELECT id, kps FROM photo_faces WHERE photo_id = ?1 AND embedding IS NULL")
+                .map_err(|e| e.to_string())?;
+            let rows: Vec<(i64, String)> = fstmt
+                .query_map(params![photo_id], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            for (fid, kps) in rows {
+                face_rows.push((*photo_id, fid, kps));
+            }
+        }
+
+        progress(ScanProgress { phase: "embed".into(), done: result.embedded, total: result.embedded + face_rows.len(), current: String::new() });
+
+        let embedded: Vec<(i64, Option<Vec<f32>>)> = photo_batch
+            .par_iter()
+            .flat_map(|(photo_id, abs)| {
+                let decoded = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok();
+                let my_faces: Vec<&(i64, i64, String)> = face_rows.iter().filter(|(pid, _, _)| pid == photo_id).collect();
+                my_faces
+                    .into_iter()
+                    .map(|(_, face_id, kps_json)| {
+                        let emb = decoded.as_ref().and_then(|(rgb, w, h)| {
+                            let kps_frac: Vec<(f32, f32)> = serde_json::from_str(kps_json).ok()?;
+                            if kps_frac.len() != 5 {
+                                return None;
+                            }
+                            let kps_px: [(f32, f32); 5] =
+                                std::array::from_fn(|i| (kps_frac[i].0 * *w as f32, kps_frac[i].1 * *h as f32));
+                            crate::arcface::embed(rgb, *w, *h, &kps_px).ok()
+                        });
+                        (*face_id, emb)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (face_id, emb) in &embedded {
+            let Some(emb) = emb else { continue }; // unreadable/failed right now — retried next pass
+            let blob = f32_vec_to_blob(emb);
+            tx.execute("UPDATE photo_faces SET embedding = ?1 WHERE id = ?2", params![blob, face_id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.embedded += embedded.iter().filter(|(_, e)| e.is_some()).count();
+
+        if embedded.iter().all(|(_, e)| e.is_none()) {
+            // Nothing in this batch could be embedded (e.g. every photo offline/unreadable) —
+            // avoid spinning forever re-selecting the same unembeddable rows.
+            break;
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.embedded, total: result.embedded, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_embed_faces(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<EmbedResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    embed_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+// ── Clustering (AI stack Phase B, part 2) — DBSCAN over every embedded face into unnamed
+// "Person N" groups. Deliberately wholesale: Phase B has no naming/merge UI yet (that's Phase
+// C), so each run clears and rebuilds every `people` row and `photo_faces.person_id` from
+// scratch rather than trying to reconcile with a prior clustering. Embeddings are L2-normalized
+// (see arcface::embed), so plain Euclidean distance is monotonic with cosine distance and
+// linfa-clustering's default L2 metric needs no customization.
+
+#[derive(Serialize, Clone, Default)]
+pub struct ClusterResult {
+    pub people: usize,
+    pub clustered_faces: usize,
+    pub unclustered_faces: usize,
+}
+
+/// `eps` is a EUCLIDEAN distance threshold on L2-normalized 512-dim embeddings — for reference,
+/// `eps=0.6` corresponds to a cosine similarity of about `1 - eps²/2 ≈ 0.82`, a reasonable
+/// starting point for ArcFace embeddings (published verification thresholds for this model
+/// family typically sit in the 0.3-0.4 cosine-distance range for same/different-person
+/// decisions). `min_points=2` means a person needs at least 2 photos to form a named group — a
+/// single face is left unclustered (noise) rather than becoming its own "Person" of one, since
+/// DBSCAN's whole value here is refusing to force outliers into groups.
+pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<ClusterResult, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, embedding FROM photo_faces WHERE embedding IS NOT NULL")
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, Vec<f32>)> = stmt
+        .query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let blob: Vec<u8> = r.get(1)?;
+            Ok((id, blob))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, blob)| (id, blob_to_f32_vec(&blob)))
+        .collect();
+    drop(stmt);
+
+    let mut result = ClusterResult::default();
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("UPDATE photo_faces SET person_id = NULL", []).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM people", []).map_err(|e| e.to_string())?;
+
+    if rows.is_empty() {
+        tx.commit().map_err(|e| e.to_string())?;
+        return Ok(result);
+    }
+
+    let n = rows.len();
+    let dim = rows[0].1.len();
+    let mut data = ndarray::Array2::<f64>::zeros((n, dim));
+    for (i, (_, emb)) in rows.iter().enumerate() {
+        for (j, v) in emb.iter().enumerate() {
+            data[[i, j]] = *v as f64;
+        }
+    }
+
+    use linfa::traits::Transformer;
+    let labels = linfa_clustering::Dbscan::params(min_points).tolerance(eps).transform(&data).map_err(|e| e.to_string())?;
+
+    let now = now_secs() as i64;
+    let mut cluster_to_person: std::collections::HashMap<usize, i64> = std::collections::HashMap::new();
+    for (i, (face_id, _)) in rows.iter().enumerate() {
+        match labels[i] {
+            None => {
+                result.unclustered_faces += 1;
+            }
+            Some(cluster_idx) => {
+                let person_id = if let Some(&id) = cluster_to_person.get(&cluster_idx) {
+                    id
+                } else {
+                    let name = format!("Person {}", cluster_to_person.len() + 1);
+                    tx.execute("INSERT INTO people (name, cover_face_id, created) VALUES (?1, ?2, ?3)", params![name, face_id, now])
+                        .expect("insert person");
+                    let id = tx.last_insert_rowid();
+                    cluster_to_person.insert(cluster_idx, id);
+                    id
+                };
+                tx.execute("UPDATE photo_faces SET person_id = ?1 WHERE id = ?2", params![person_id, face_id]).map_err(|e| e.to_string())?;
+                result.clustered_faces += 1;
+            }
+        }
+    }
+    result.people = cluster_to_person.len();
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_cluster_faces(state: tauri::State<CatalogState>, eps: Option<f64>, min_points: Option<usize>) -> Result<ClusterResult, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    cluster_run(&conn, eps.unwrap_or(0.6), min_points.unwrap_or(2))
+}
+
+#[derive(Serialize, Clone)]
+pub struct PersonNode {
+    pub id: i64,
+    pub name: String,
+    pub cover_face_id: Option<i64>,
+    pub face_count: i64,
+}
+
+#[tauri::command]
+pub fn catalog_people(state: tauri::State<CatalogState>) -> Result<Vec<PersonNode>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, p.cover_face_id, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id)
+             FROM people p ORDER BY p.name"
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok(PersonNode { id: r.get(0)?, name: r.get(1)?, cover_face_id: r.get(2)?, face_count: r.get(3)? }))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -3674,6 +3948,113 @@ mod tests {
 
         let r2 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r2.hashed, 0, "nothing changed — a second pass must not re-hash anything");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── Face embedding scan phase (AI stack Phase B, part 1) ────────────────────────────────
+
+    /// End-to-end through the real ArcFace model (needs `vendor/arcface/w600k_r50.onnx`, present
+    /// in this checkout): a photo with a stored (synthetic — no real face) detection gets an
+    /// embedding written, `embedding IS NULL` correctly selects it beforehand and excludes it
+    /// after, and a second pass embeds nothing new.
+    #[test]
+    fn embed_run_embeds_detected_faces_and_is_resumable() {
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::arcface::set_model_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/arcface/w600k_r50.onnx"));
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("embed");
+        let img = image::RgbImage::from_pixel(320, 240, image::Rgb([120, 110, 100]));
+        img.save(dir.join("plain.jpg")).unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let photo_id: i64 = conn.query_row("SELECT id FROM photos LIMIT 1", [], |r| r.get(0)).unwrap();
+
+        let kps_json = serde_json::to_string(&[(0.3f32, 0.3), (0.5, 0.3), (0.4, 0.45), (0.32, 0.6), (0.48, 0.6)]).unwrap();
+        conn.execute(
+            "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps) VALUES (?1, 0.2,0.2,0.6,0.7, 0.9, ?2)",
+            params![photo_id, kps_json]
+        )
+        .unwrap();
+
+        let r1 = embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.embedded, 1);
+        let blob: Vec<u8> = conn.query_row("SELECT embedding FROM photo_faces LIMIT 1", [], |r| r.get(0)).unwrap();
+        let emb = blob_to_f32_vec(&blob);
+        assert_eq!(emb.len(), 512);
+        let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-3, "stored embedding should be L2-normalized, norm={norm}");
+
+        let r2 = embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.embedded, 0, "nothing new to embed on a second pass");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── Face clustering (AI stack Phase B, part 2) ──────────────────────────────────────────
+
+    /// Exercises `cluster_run` directly against synthetic embeddings (no model/decode needed —
+    /// clustering correctness is independent of where the vectors came from), covering the
+    /// property that actually matters: two tight groups of near-identical vectors become two
+    /// named "Person N" clusters, a lone outlier stays unclustered (DBSCAN's whole reason for
+    /// being preferred over k-means here — see the AI-stack plan), and a re-run wholly replaces
+    /// the previous clustering rather than accumulating stale `people` rows.
+    #[test]
+    fn cluster_run_groups_tight_clusters_and_leaves_an_outlier_unclustered() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("cluster");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let photo_id: i64 = conn.query_row("SELECT id FROM photos LIMIT 1", [], |r| r.get(0)).unwrap();
+
+        // Two tight clusters of 3 near-identical unit vectors each (real embeddings are
+        // L2-normalized — see arcface::embed), plus one far-away singleton.
+        let unit = |mut v: Vec<f32>| -> Vec<f32> {
+            let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            for x in v.iter_mut() {
+                *x /= n;
+            }
+            v
+        };
+        let mut base_a = vec![0f32; 512];
+        base_a[0] = 1.0;
+        let mut base_b = vec![0f32; 512];
+        base_b[1] = 1.0;
+        let mut base_c = vec![0f32; 512];
+        base_c[2] = 1.0;
+
+        let mut insert = |emb: &[f32]| {
+            let blob = f32_vec_to_blob(emb);
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, embedding) VALUES (?1,0,0,1,1,0.9,'[]',?2)",
+                params![photo_id, blob]
+            )
+            .unwrap();
+        };
+        for _ in 0..3 {
+            insert(&unit(base_a.clone()));
+            insert(&unit(base_b.clone()));
+        }
+        insert(&unit(base_c.clone())); // lone singleton — min_points=2 must leave this unclustered
+
+        let r = cluster_run(&conn, 0.1, 2).unwrap();
+        assert_eq!(r.people, 2, "expected exactly 2 person clusters, got {}", r.people);
+        assert_eq!(r.clustered_faces, 6);
+        assert_eq!(r.unclustered_faces, 1, "the singleton must stay unclustered, not become its own person");
+
+        let names: Vec<String> =
+            conn.prepare("SELECT name FROM people ORDER BY name").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+        assert_eq!(names, vec!["Person 1".to_string(), "Person 2".to_string()]);
+
+        // Re-running must wholly replace the previous clustering, not accumulate rows.
+        let r2 = cluster_run(&conn, 0.1, 2).unwrap();
+        assert_eq!(r2.people, 2, "a re-run must reproduce the same clustering, not double it");
+        let people_count: i64 = conn.query_row("SELECT COUNT(*) FROM people", [], |r| r.get(0)).unwrap();
+        assert_eq!(people_count, 2);
 
         std::fs::remove_dir_all(&dir).ok();
     }

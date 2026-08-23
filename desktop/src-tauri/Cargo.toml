@@ -86,6 +86,13 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # have no adversary. Small, pure-Rust, ~GB/s, no C dependency to add to a tree already carrying
 # several.
 blake3 = "1"
+# AI stack Phase B: DBSCAN clustering of face embeddings into unnamed "Person N" groups. DBSCAN
+# specifically (not k-means) because it handles noise/outliers natively — a blurry/partial face
+# crop's embedding gets marked unclustered instead of dragged into a wrong person's group, which
+# k-means structurally cannot do (every point is forced into some cluster). MIT/Apache-2.0.
+linfa = "0.8"
+linfa-clustering = "0.8"
+ndarray = "0.16"
 
 [profile.release]
 strip = true

@@ -27,6 +27,7 @@ fn dist_dir() -> PathBuf {
 mod lens_correct;
 mod library;
 mod raw_decode;
+mod arcface;
 mod faceparse;
 mod scrfd;
 mod sam;
@@ -1616,6 +1617,9 @@ fn main() {
             catalog::catalog_verify,
             catalog::catalog_faces_scan,
             catalog::catalog_photo_faces,
+            catalog::catalog_embed_faces,
+            catalog::catalog_cluster_faces,
+            catalog::catalog_people,
             catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
             catalog::catalog_focus,
@@ -1917,6 +1921,11 @@ fn main() {
             // Face-feature auto-exclusion (ROADMAP item 16) — same bundled-resource-with-
             // dev-fallback pattern as the SAM2 models above.
             faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
+
+            // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-
+            // resource-with-dev-fallback pattern; too large for include_bytes! like SAM2/
+            // faceparse/rawdenoise above.
+            arcface::set_model_path(resolve_vendor("vendor/arcface/w600k_r50.onnx"));
 
             // High-tier RAW denoiser (rawdenoise.rs) — same bundled-resource-with-dev-fallback
             // pattern; ~30MB each, so file-path CreateSession like SAM2/faceparse, not
