@@ -665,6 +665,11 @@ pub struct Sidecar {
     pub versions: Vec<Version>,
     #[serde(default)]
     pub active: usize,
+    /// Full hierarchical paths, e.g. `"Travel|Iceland|Reykjavik"` — populated from
+    /// `lr:hierarchicalSubject`, falling back to `dc:subject` promoted to single-segment paths
+    /// when only a flat tag list exists (a sidecar never written by this app or Lightroom).
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 /// One virtual copy: a name and its own full recipe. No pixels are duplicated — a virtual copy is
@@ -673,6 +678,88 @@ pub struct Sidecar {
 pub struct Version {
     pub name: String,
     pub recipe: String,
+}
+
+// ── Keywords (hierarchical, Lightroom-compatible) ──────────────────────────────────────────
+//
+// `xmp_get` above handles attribute and single-element form only, which cannot parse an
+// `rdf:Bag` — a keyword list is `<dc:subject><rdf:Bag><rdf:li>Iceland</rdf:li>...`. Extending
+// the hand-rolled parser rather than adding an XML crate: the app writes and reads this file in
+// one known shape (see `write_sidecar`'s own doc comment on the same tradeoff for attributes),
+// and the whole risk surface is prefix variance and entity escaping — `xml_unescape` and the
+// LOCAL-name match below cover both. `xmp_bag_parses_a_real_sidecar_from_the_repo_root` and
+// `hierarchical_keywords_round_trip_through_xmp` are what settle whether that tradeoff holds.
+
+fn xml_unescape(s: &str) -> String {
+    s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&")
+}
+
+fn xml_escape(s: &str) -> String {
+    // &amp; FIRST — escaping the other four would double-escape their own ampersands otherwise.
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;").replace('\'', "&apos;")
+}
+
+/// Every `<rdf:li>` inside the first element whose LOCAL name is `local_name` (matches on the
+/// local name, not the prefix — `dc:` is conventional but not guaranteed, and a sidecar written
+/// by another tool may bind the Dublin Core / Lightroom namespaces to any prefix it likes).
+/// Returns entries in document order, XML-unescaped. Empty (never panics) on anything malformed
+/// or absent.
+fn xmp_bag(xmp: &str, local_name: &str) -> Vec<String> {
+    let open_needle = format!(":{local_name}>");
+    let Some(tag_end) = xmp.find(&open_needle).map(|i| i + open_needle.len()) else { return Vec::new() };
+    // Find the matching close tag by re-deriving the actual prefix used, so `</dc:subject>`
+    // (not some other element's close tag) is what bounds the search.
+    let tag_start = xmp[..tag_end - open_needle.len()].rfind('<').map(|i| i + 1).unwrap_or(0);
+    let prefix_and_name = &xmp[tag_start..tag_end - 1]; // e.g. "dc:subject"
+    let close_needle = format!("</{prefix_and_name}>");
+    let Some(close_at) = xmp[tag_end..].find(&close_needle).map(|i| tag_end + i) else { return Vec::new() };
+    let body = &xmp[tag_end..close_at];
+    let mut out = Vec::new();
+    let mut rest = body;
+    while let Some(li_start) = rest.find("<rdf:li>") {
+        let after = li_start + "<rdf:li>".len();
+        let Some(li_end) = rest[after..].find("</rdf:li>") else { break };
+        out.push(xml_unescape(rest[after..after + li_end].trim()));
+        rest = &rest[after + li_end + "</rdf:li>".len()..];
+    }
+    out
+}
+
+/// Builds the two Lightroom-compatible keyword bags as XML text (no surrounding whitespace/
+/// indentation guarantees — this is generated markup, not hand-formatted). `keywords` are
+/// full hierarchical paths (`"Travel|Iceland|Reykjavik"`); `dc:subject` gets each keyword's own
+/// LEAF only (matching real Lightroom output, which is a flat tag list there), while
+/// `lr:hierarchicalSubject` gets every keyword's full path AND every ancestor path, deduplicated
+/// — so a photo tagged only with the leaf "Reykjavik" still shows "Travel" and "Travel|Iceland"
+/// as tag-tree ancestors, the way Lightroom itself expects to find them.
+fn keyword_bags_xml(keywords: &[String]) -> String {
+    if keywords.is_empty() {
+        return String::new();
+    }
+    let mut leaves: Vec<String> = Vec::new();
+    let mut hier: Vec<String> = Vec::new();
+    for kw in keywords {
+        let leaf = kw.rsplit('|').next().unwrap_or(kw).to_string();
+        if !leaves.contains(&leaf) {
+            leaves.push(leaf);
+        }
+        let mut acc = String::new();
+        for seg in kw.split('|') {
+            if !acc.is_empty() {
+                acc.push('|');
+            }
+            acc.push_str(seg);
+            if !hier.contains(&acc) {
+                hier.push(acc.clone());
+            }
+        }
+    }
+    let li = |items: &[String]| items.iter().map(|s| format!("<rdf:li>{}</rdf:li>", xml_escape(s))).collect::<String>();
+    format!(
+        "<dc:subject><rdf:Bag>{}</rdf:Bag></dc:subject><lr:hierarchicalSubject><rdf:Bag>{}</rdf:Bag></lr:hierarchicalSubject>",
+        li(&leaves),
+        li(&hier)
+    )
 }
 
 /// Pull one XML attribute value out of the sidecar text (attribute or element form).
@@ -718,6 +805,25 @@ pub fn get_sidecar(path: String) -> Sidecar {
         // bounds, and silently falling back to the first version is the safe read.
         active: if active < versions.len() { active } else { 0 },
         versions,
+        keywords: {
+            let hier = xmp_bag(&text, "hierarchicalSubject");
+            if !hier.is_empty() {
+                // hierarchicalSubject carries every ANCESTOR path too (that's what lets a tag
+                // tree render "Travel" and "Travel|Iceland" as nodes) — a keyword's own value
+                // is only the MAXIMAL paths, i.e. ones that aren't themselves a "|"-bounded
+                // prefix of some other entry in the same list.
+                hier.iter()
+                    .filter(|h| {
+                        !hier.iter().any(|other| {
+                            other != *h && other.starts_with(h.as_str()) && other.as_bytes().get(h.len()) == Some(&b'|')
+                        })
+                    })
+                    .cloned()
+                    .collect()
+            } else {
+                xmp_bag(&text, "subject")
+            }
+        },
     }
 }
 
@@ -826,7 +932,7 @@ pub fn set_sidecar(
     if let Some(v) = versions.get_mut(existing.active) {
         v.recipe = recipe.clone();
     }
-    let sc = Sidecar { rating, label: label.clone(), edited, recipe, favorite, versions, active: existing.active };
+    let sc = Sidecar { rating, label: label.clone(), edited, recipe, favorite, versions, active: existing.active, keywords: existing.keywords };
     write_sidecar(&path, &sc)?;
     registry_set("edited", &path, edited);
     registry_set("favorites", &path, favorite);
@@ -965,6 +1071,67 @@ fn has_attr(attrs: &str, name: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Removes the first element (any prefix) whose local name is `local_name` from `text`, if
+/// present — used to clear a stale keyword bag before writing a fresh one, so re-tagging a photo
+/// can never leave two competing `<dc:subject>` blocks in the same file. A self-closing match
+/// (`<dc:subject/>`, no children — not a shape this app or Lightroom ever writes) is left alone
+/// rather than mishandled; harmless, since a fresh bag is inserted separately either way.
+fn strip_element(text: &str, local_name: &str) -> String {
+    let open_needle = format!(":{local_name}>");
+    let Some(tag_end) = text.find(&open_needle).map(|i| i + open_needle.len()) else { return text.to_string() };
+    let tag_start = text[..tag_end - open_needle.len()].rfind('<').map(|i| i + 1).unwrap_or(0);
+    let prefix_and_name = text[tag_start..tag_end - 1].to_string();
+    let close_needle = format!("</{prefix_and_name}>");
+    let Some(close_at) = text[tag_end..].find(&close_needle).map(|i| tag_end + i + close_needle.len()) else { return text.to_string() };
+    format!("{}{}", &text[..tag_start - 1], &text[close_at..])
+}
+
+/// Post-processes an already attrs-merged sidecar string to reflect `keywords` — a second pass
+/// after `write_sidecar`'s own attribute merge, because a keyword bag is CHILD markup
+/// (`<dc:subject><rdf:Bag>...`), not an attribute, and needs its own insertion/removal logic.
+/// Always strips any existing bags first (matching `set_attr`'s own "clear stale value" rule),
+/// then inserts a fresh pair only when `keywords` is non-empty — so clearing every keyword from
+/// a photo actually removes the element rather than leaving an empty bag behind.
+fn apply_keywords_to_xmp(xmp: String, keywords: &[String]) -> String {
+    // xmlns:dc/xmlns:lr are only added when actually needed, so a photo with no keywords never
+    // set produces a byte-identical sidecar to before this feature existed.
+    let xmp = if !keywords.is_empty() {
+        match find_description_attrs(&xmp) {
+            Some((start, end, _)) => {
+                let mut attrs = xmp[start..end].to_string();
+                if !has_attr(&attrs, "xmlns:dc") {
+                    attrs = set_attr(&attrs, "xmlns:dc", Some("http://purl.org/dc/elements/1.1/"));
+                }
+                if !has_attr(&attrs, "xmlns:lr") {
+                    attrs = set_attr(&attrs, "xmlns:lr", Some("http://ns.adobe.com/lightroom/1.0/"));
+                }
+                format!("{}{attrs}{}", &xmp[..start], &xmp[end..])
+            }
+            None => xmp,
+        }
+    } else {
+        xmp
+    };
+
+    let mut text = strip_element(&xmp, "subject");
+    text = strip_element(&text, "hierarchicalSubject");
+    if keywords.is_empty() {
+        return text;
+    }
+    let bags = keyword_bags_xml(keywords);
+    let Some((start, end, self_closing)) = find_description_attrs(&text) else { return text };
+    if self_closing {
+        // `text[start..end]` is the attrs WITHOUT the trailing "/>" — convert to a real open
+        // tag with the bags as its only children.
+        format!("{}{}>{}</rdf:Description>{}", &text[..start], &text[start..end], bags, &text[end + 2..])
+    } else {
+        match text[end + 1..].find("</rdf:Description>").map(|i| end + 1 + i) {
+            Some(close_at) => format!("{}{}{}", &text[..close_at], bags, &text[close_at..]),
+            None => text, // malformed (no closing tag) — leave untouched rather than corrupt it
+        }
+    }
+}
+
 /// The single writer. Everything that changes a sidecar goes through here so the serialisation
 /// lives in exactly one place.
 ///
@@ -1013,8 +1180,20 @@ fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
         }
         None => plain_template(sc),
     };
+    let xmp = apply_keywords_to_xmp(xmp, &sc.keywords);
     std::fs::write(sc_path, xmp).map_err(|e| format!("write sidecar: {e}"))?;
     Ok(())
+}
+
+/// Dedicated entry point (mirroring `set_sidecar`'s own shape) rather than folding keywords
+/// into `set_sidecar`'s parameter list — keywords are edited from a completely different UI
+/// surface (a tag tree/autocomplete, not the rating/flag controls) and don't need to travel
+/// alongside every rating click.
+#[tauri::command]
+pub fn set_keywords(path: String, keywords: Vec<String>) -> Result<(), String> {
+    let mut sc = get_sidecar(path.clone());
+    sc.keywords = keywords;
+    write_sidecar(&path, &sc)
 }
 
 // ── Cross-folder smart collections (Edited/Favorites/Flagged/Rejected) ───────────────────
@@ -1931,6 +2110,115 @@ mod sidecar_preservation_tests {
         let text = std::fs::read_to_string(&sample).expect("read sample xmp");
         let (start, end, _) = find_description_attrs(&text).expect("must locate rdf:Description in a real sidecar");
         assert!(end > start || text[start..end].is_empty(), "attrs span must be well-formed");
+    }
+
+    // ── Keywords ─────────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn hierarchical_keywords_round_trip_through_xmp() {
+        let path = scratch("keywords");
+        set_keywords(path.clone(), vec!["Travel|Iceland|Reykjavik".into(), "Portrait".into()]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains("xmlns:dc="), "the dc namespace must be declared once keywords are written");
+        assert!(text.contains("xmlns:lr="), "the lr namespace must be declared once keywords are written");
+
+        // dc:subject carries LEAVES only, matching real Lightroom output.
+        let subjects = xmp_bag(&text, "subject");
+        assert_eq!(subjects, vec!["Reykjavik".to_string(), "Portrait".to_string()]);
+
+        // lr:hierarchicalSubject carries every full path AND every ancestor, so the tag tree
+        // has something to build "Travel" and "Travel|Iceland" nodes from.
+        let hier = xmp_bag(&text, "hierarchicalSubject");
+        assert_eq!(hier, vec!["Travel".to_string(), "Travel|Iceland".to_string(), "Travel|Iceland|Reykjavik".to_string(), "Portrait".to_string()]);
+
+        // And the round trip back through get_sidecar must reproduce the exact input paths —
+        // not the exploded ancestor list, which is a lr:hierarchicalSubject writing detail, not
+        // what the caller asked to be tagged.
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Travel|Iceland|Reykjavik".to_string(), "Portrait".to_string()]);
+    }
+
+    /// A photo tagged only via a flat `dc:subject` list (no hierarchicalSubject at all — a
+    /// sidecar from a tool that doesn't do hierarchy) must still read back as single-segment
+    /// keyword paths, per the plan's own documented fallback.
+    #[test]
+    fn flat_subject_falls_back_to_single_segment_keywords() {
+        let path = scratch("flat-subject");
+        let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Other Tool">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+   <dc:subject><rdf:Bag><rdf:li>Wildlife</rdf:li><rdf:li>Kenya</rdf:li></rdf:Bag></dc:subject>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"#;
+        std::fs::write(sidecar_path(&path), xmp).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Wildlife".to_string(), "Kenya".to_string()]);
+    }
+
+    /// Clearing every keyword must remove the elements entirely, not leave an empty bag —
+    /// otherwise a re-tag after a full clear would see stale (empty) markup and could confuse a
+    /// hand-inspection of the file.
+    #[test]
+    fn clearing_all_keywords_removes_the_elements() {
+        let path = scratch("clear-keywords");
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+        set_keywords(path.clone(), vec![]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(!text.contains("dc:subject"), "an empty keyword list must remove the element, not leave it empty");
+        assert!(!text.contains("hierarchicalSubject"));
+        let sc = get_sidecar(path);
+        assert!(sc.keywords.is_empty());
+    }
+
+    /// Setting keywords must not disturb third-party fields already in the file — the same
+    /// preservation guarantee `write_sidecar_preserves_unknown_fields` pins for attributes, now
+    /// exercised through the keyword-writing path specifically since it does its own separate
+    /// pass over the file's children.
+    #[test]
+    fn setting_keywords_preserves_foreign_attributes_and_children() {
+        let path = scratch("keywords-foreign");
+        let foreign = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" crs:Exposure2012="+0.35">
+   <photoshop:City>Geneva</photoshop:City>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"#;
+        std::fs::write(sidecar_path(&path), foreign).unwrap();
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains("crs:Exposure2012=\"+0.35\""), "foreign attributes must survive a keyword write");
+        assert!(text.contains("<photoshop:City>Geneva</photoshop:City>"), "foreign child elements must survive a keyword write");
+        assert!(text.contains("dc:subject"));
+    }
+
+    /// A keyword containing XML-significant characters must round-trip exactly — the escape/
+    /// unescape pair is the entire correctness surface of the hand-rolled parser (see the
+    /// module doc comment on `xmp_bag`), and this is what proves it holds both directions.
+    #[test]
+    fn a_keyword_with_special_characters_round_trips() {
+        let path = scratch("keywords-escape");
+        set_keywords(path.clone(), vec!["Rock & Roll|Q&A <live>".into()]).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Rock & Roll|Q&A <live>".to_string()]);
+    }
+
+    /// A rating/label click through `set_sidecar` must never drop existing keywords — the
+    /// exact class of bug phase 0a fixed for foreign XMP fields, now guarded for this app's OWN
+    /// keyword feature too.
+    #[test]
+    fn set_sidecar_preserves_existing_keywords() {
+        let path = scratch("keywords-survive-rating");
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+        set_sidecar(path.clone(), 3, "Green".into(), false, None, None).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Travel".to_string()]);
     }
 }
 
