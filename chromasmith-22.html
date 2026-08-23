@@ -16044,6 +16044,10 @@ async function exportFX(){
     // window.chromasmithEditInPath is a single path (one photo) OR an array (a multi-select
     // Edit-In) — normalize to an array and zip it against `results` in the same order items
     // were rendered (both ultimately come from the same paths array the handoff opened).
+    // Declared here (not `const` inside the branch below) so it stays in scope for the export-
+    // history dest lookup after this if/else-if chain — undefined when the Lightroom branch (or
+    // any non-desktop path) runs instead, which the dest lookup below already treats as "no dest".
+    let sr;
     if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath&&results.length){
       const editInPaths=Array.isArray(window.chromasmithEditInPath)?window.chromasmithEditInPath:[window.chromasmithEditInPath];
       setProg(N,editInPaths.length>1?`Saving ${results.length} to Lightroom…`:'Saving to Lightroom…');
@@ -16102,7 +16106,7 @@ async function exportFX(){
           return;
         }
       }
-      const sr=await saveFiles(results);
+      sr=await saveFiles(results);
       if(Array.isArray(sr)){
         // Native desktop save: every file has a real per-item result, so report SAVES rather
         // than renders — a file that never reached disk must not show (or be counted) as saved.
@@ -16124,8 +16128,12 @@ async function exportFX(){
     // Recipe-only export history (Library-only — see chromasmithRecordExport in library-ui.js).
     // Only tracks the single currently-open Library photo (state.openedPath); a multi-photo
     // batch export doesn't map each rendered frame back to its own on-disk path here.
+    // `sr` (from saveFiles, native desktop only) carries the REAL destination path per item —
+    // only meaningful/passed for a genuine single-photo export, matching
+    // chromasmithRecordExport's own single-photo-only acceptance of it (see its comment).
     if(results.length&&typeof window.chromasmithRecordExport==='function'){
-      try{await window.chromasmithRecordExport(fxVersion.toFixed(1),getUISnapshot());}catch(e){}
+      const dest=(results.length===1&&Array.isArray(sr)&&sr[0]&&sr[0].ok)?sr[0].path:null;
+      try{await window.chromasmithRecordExport(fxVersion.toFixed(1),getUISnapshot(),dest);}catch(e){}
     }
     // ── Phase 3 (optional): mirror the exports to Google Photos. Failures here must never
     // read as an export failure — the files above are already saved locally.

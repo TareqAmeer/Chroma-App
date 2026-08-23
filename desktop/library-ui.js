@@ -2424,7 +2424,7 @@
   // Recipe-only export/version history (see library.rs's get_export_history/
   // append_export_history) — a persisted, coarser-grained log distinct from the in-session
   // fxHistory undo stack: it only grows on a successful export and survives relaunches.
-  window.chromasmithRecordExport = async (version, snap) => {
+  window.chromasmithRecordExport = async (version, snap, dest) => {
     // A multi-photo batch (Open N photos / Export N photos / cmd-dbl-click) clears openedPath
     // to '' (see the three call sites that set it) since there's no single "current" photo to
     // auto-persist to — but that previously ALSO made every export from a batch record nothing
@@ -2437,7 +2437,13 @@
     const paths = path ? [path] : (state.openedPaths || []);
     if (!paths.length) return;
     const recipe = snapshotToB64(snap);
-    await Promise.all(paths.map((p) => invoke('append_export_history', { path: p, version, recipe }).catch((e) => console.error('append_export_history', p, e))));
+    // `dest` (the real on-disk path the export was written to, when the native save path can
+    // report it — see saveFilesNative's own per-item {ok,path} result) is only meaningful for
+    // the single-photo case. A batch has no reliable 1:1 mapping available at this call site
+    // between `paths` (Library paths) and the render results (indexed by fxImages position) —
+    // recording it against the wrong photo would silently mislink an unrelated stack, which is
+    // worse than recording nothing (stack rule 1 in catalog.rs just skips a dest-less entry).
+    await Promise.all(paths.map((p) => invoke('append_export_history', { path: p, version, recipe, dest: paths.length === 1 ? (dest || null) : null }).catch((e) => console.error('append_export_history', p, e))));
     renderCollectionCounts(); // these photos may be newly counted in the "Exported" collection
   };
   // C3: lets chromasmith-22.html's export loop (which only has fxImages indices, not library

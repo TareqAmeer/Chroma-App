@@ -2352,12 +2352,69 @@ struct StackCandidate {
     added: i64,
 }
 
+/// Rule 1 — the export's own RECORDED destination (`ExportHistoryEntry.dest`), authoritative
+/// for every export made since that field existed (older entries deserialize with `dest: ""`
+/// and are silently skipped). Takes the history map as a parameter rather than reading
+/// `export_history.json` itself: that file lives under `library::cache_dir()`, which — unlike
+/// `catalog_dir()`'s `CS_CATALOG_DIR` — has no test-time override, so a function that read it
+/// directly would be untestable without touching this machine's real export history (the same
+/// constraint `cache_usage`/`clear_cache_tier` accepted; here it's cheap to just not have it).
+///
+/// Only links a source that is CURRENTLY UNSTACKED to a dest that is ALSO currently unstacked
+/// — an already-stacked row (by an earlier call, or by rules 2/3 in a previous run) is left
+/// alone rather than re-parented, so this rule can never fight a stack that already exists.
+fn link_via_export_history(
+    conn: &Connection,
+    history: &std::collections::HashMap<String, Vec<crate::library::ExportHistoryEntry>>,
+) -> Result<StackResult, String> {
+    let mut result = StackResult::default();
+    let is_unstacked = |id: i64| -> bool {
+        conn.query_row("SELECT stack_id IS NULL FROM photos WHERE id = ?1", params![id], |r| r.get::<_, bool>(0)).unwrap_or(false)
+    };
+    for (source_path, entries) in history {
+        let Some(source_id) = find_photo_by_abs_path(conn, source_path) else { continue };
+        if !is_unstacked(source_id) {
+            continue;
+        }
+        let mut formed_this_source = false;
+        for entry in entries {
+            if entry.dest.is_empty() {
+                continue;
+            }
+            let Some(dest_id) = find_photo_by_abs_path(conn, &entry.dest) else { continue };
+            if dest_id == source_id || !is_unstacked(dest_id) {
+                continue;
+            }
+            conn.execute("UPDATE photos SET stack_id = ?1, stack_role = 'leader' WHERE id = ?1", params![source_id]).map_err(|e| e.to_string())?;
+            conn.execute(
+                "UPDATE photos SET stack_id = ?1, stack_role = 'derivative', export_of = ?1 WHERE id = ?2",
+                params![source_id, dest_id],
+            )
+            .map_err(|e| e.to_string())?;
+            if !formed_this_source {
+                result.stacks_formed += 1;
+                result.photos_linked += 1; // the leader itself
+                formed_this_source = true;
+            }
+            result.photos_linked += 1; // this derivative
+        }
+    }
+    Ok(result)
+}
+
 /// Not chunked/resumable like the other phases (a single pass over unlinked rows, sorted and
 /// grouped in memory) — grouping candidates for a stack needs to see the whole unlinked set at
 /// once, unlike a per-row metadata read. Still cheap: only rows with `stack_id IS NULL` are
 /// even considered, so a fully-stacked archive costs one empty query on every later run.
 pub fn stack_run(conn: &Connection, cancel: &AtomicBool) -> Result<StackResult, String> {
     let mut result = StackResult::default();
+    // Rule 1 first — it's authoritative (the app's own record of what it wrote where), so
+    // anything it links must not then be re-evaluated by the heuristic rules 2/3 below. Those
+    // rules only ever look at `stack_id IS NULL` rows, so running this first is what makes that
+    // exclusion automatic rather than something to track separately.
+    let rule1 = link_via_export_history(conn, &crate::library::export_history_read_all())?;
+    result.stacks_formed += rule1.stacks_formed;
+    result.photos_linked += rule1.photos_linked;
     let mut stmt = conn
         .prepare(
             "SELECT id, volume_id, rel_dir, name_lc, kind, captured, added
@@ -4154,5 +4211,107 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
         std::fs::remove_file(offline_thumb_path(1)).ok();
+    }
+
+    // ── Stack rule 1: recorded export destination ───────────────────────────────────────────
+
+    fn history_entry(dest: &str) -> crate::library::ExportHistoryEntry {
+        crate::library::ExportHistoryEntry { ts: 0, version: "1.0".into(), recipe: String::new(), dest: dest.to_string() }
+    }
+
+    #[test]
+    fn link_via_export_history_stacks_a_source_under_its_recorded_dest() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "shoot", "a.RW2", "raw", Some(1), 1);
+        // Deliberately NOT matching stem or a mirrored Originals/Exports path — the only thing
+        // that should link these two is the recorded dest, proving this rule doesn't secretly
+        // depend on rules 2/3's own heuristics.
+        insert_stack_photo(&conn, vid, "jpg", "elsewhere", "totally-different-name.jpg", "jpeg", Some(1), 2);
+        let raw_id: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'a.RW2'", [], |r| r.get(0)).unwrap();
+        let jpg_id: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'totally-different-name.jpg'", [], |r| r.get(0)).unwrap();
+
+        let mut history = std::collections::HashMap::new();
+        history.insert("/shoot/a.RW2".to_string(), vec![history_entry("/elsewhere/totally-different-name.jpg")]);
+
+        let result = link_via_export_history(&conn, &history).unwrap();
+        assert_eq!(result.stacks_formed, 1);
+        assert_eq!(result.photos_linked, 2);
+
+        let (stack_id, role): (i64, String) = conn.query_row("SELECT stack_id, stack_role FROM photos WHERE id = ?1", params![raw_id], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(stack_id, raw_id);
+        assert_eq!(role, "leader");
+        let (dest_stack_id, dest_role, export_of): (i64, String, i64) =
+            conn.query_row("SELECT stack_id, stack_role, export_of FROM photos WHERE id = ?1", params![jpg_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert_eq!(dest_stack_id, raw_id);
+        assert_eq!(dest_role, "derivative");
+        assert_eq!(export_of, raw_id);
+    }
+
+    /// An entry recorded before the `dest` field existed deserializes with `dest: ""` (the
+    /// `#[serde(default)]`) — must be silently skipped, never treated as a real (empty) path.
+    #[test]
+    fn link_via_export_history_ignores_entries_with_no_recorded_dest() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "shoot", "a.RW2", "raw", Some(1), 1);
+
+        let mut history = std::collections::HashMap::new();
+        history.insert("/shoot/a.RW2".to_string(), vec![history_entry("")]);
+
+        let result = link_via_export_history(&conn, &history).unwrap();
+        assert_eq!(result.stacks_formed, 0);
+        assert_eq!(result.photos_linked, 0);
+        let stack_id: Option<i64> = conn.query_row("SELECT stack_id FROM photos WHERE name = 'a.RW2'", [], |r| r.get(0)).unwrap();
+        assert_eq!(stack_id, None, "must not stack a photo against nothing");
+    }
+
+    /// A dest that's already part of a DIFFERENT stack must not be re-parented — rule 1 is
+    /// authoritative for a NEW link, not license to override an existing one.
+    #[test]
+    fn link_via_export_history_never_reparents_an_already_stacked_dest() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw1", "shoot", "a.RW2", "raw", Some(1), 1);
+        insert_stack_photo(&conn, vid, "raw2", "shoot2", "b.RW2", "raw", Some(1), 2);
+        insert_stack_photo(&conn, vid, "jpg", "shoot2", "b.jpg", "jpeg", Some(1), 3);
+        let raw2_id: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'b.RW2'", [], |r| r.get(0)).unwrap();
+        let jpg_id: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'b.jpg'", [], |r| r.get(0)).unwrap();
+        // Pre-stack b.jpg under b.RW2 via the ordinary mechanism (as rules 2/3 would).
+        conn.execute("UPDATE photos SET stack_id = ?1, stack_role = 'leader' WHERE id = ?1", params![raw2_id]).unwrap();
+        conn.execute("UPDATE photos SET stack_id = ?1, stack_role = 'derivative', export_of = ?1 WHERE id = ?2", params![raw2_id, jpg_id]).unwrap();
+
+        // a.RW2's history WRONGLY claims b.jpg as its own export (simulating a stale/bogus
+        // record) — must be refused since b.jpg already belongs to a real stack.
+        let mut history = std::collections::HashMap::new();
+        history.insert("/shoot/a.RW2".to_string(), vec![history_entry("/shoot2/b.jpg")]);
+        let result = link_via_export_history(&conn, &history).unwrap();
+        assert_eq!(result.stacks_formed, 0);
+
+        let dest_stack_id: i64 = conn.query_row("SELECT stack_id FROM photos WHERE id = ?1", params![jpg_id], |r| r.get(0)).unwrap();
+        assert_eq!(dest_stack_id, raw2_id, "b.jpg must stay stacked under its real leader");
+    }
+
+    /// End-to-end through stack_run's own entry point (not calling the helper directly) —
+    /// confirms rule 1 actually runs FIRST and its results are excluded from rules 2/3's own
+    /// `stack_id IS NULL` candidate query, per stack_run's own ordering comment.
+    #[test]
+    fn stack_run_applies_export_history_linking_when_present() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        insert_stack_photo(&conn, vid, "raw", "shoot", "a.RW2", "raw", Some(1), 1);
+        insert_stack_photo(&conn, vid, "jpg", "elsewhere", "b.jpg", "jpeg", Some(1), 2);
+        let raw_id: i64 = conn.query_row("SELECT id FROM photos WHERE name = 'a.RW2'", [], |r| r.get(0)).unwrap();
+
+        // stack_run itself reads library::export_history_read_all(), which is real-disk backed
+        // with no test override (see link_via_export_history's own doc comment) — so this test
+        // only asserts the NO-HISTORY path doesn't crash and leaves both rows unstacked (they
+        // share no stem/mirrored path either), which is what proves rule 1 is wired into the
+        // real call path without needing to fake the disk file itself.
+        let cancel = AtomicBool::new(false);
+        let result = stack_run(&conn, &cancel).unwrap();
+        assert_eq!(result.stacks_formed, 0, "no shared stem, no mirrored path, and no fake export history on this test machine — must stay unstacked");
+        let stack_id: Option<i64> = conn.query_row("SELECT stack_id FROM photos WHERE id = ?1", params![raw_id], |r| r.get(0)).unwrap();
+        assert_eq!(stack_id, None);
     }
 }

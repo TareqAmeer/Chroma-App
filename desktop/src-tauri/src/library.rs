@@ -1259,11 +1259,18 @@ pub struct ExportHistoryEntry {
     pub ts: u64,
     pub version: String,
     pub recipe: String,
+    /// The real on-disk path this export was written to — absent (`""`) on any entry recorded
+    /// before this field existed. `#[serde(default)]` so the existing on-disk
+    /// export_history.json (already real user data on this machine) still deserializes.
+    /// This is what catalog.rs's stack-linking rule 1 uses to link a RAW to its export
+    /// authoritatively, instead of guessing from folder layout or filename stem.
+    #[serde(default)]
+    pub dest: String,
 }
 fn export_history_store_path() -> PathBuf {
     cache_dir().join("export_history.json")
 }
-fn export_history_read_all() -> HashMap<String, Vec<ExportHistoryEntry>> {
+pub(crate) fn export_history_read_all() -> HashMap<String, Vec<ExportHistoryEntry>> {
     std::fs::read_to_string(export_history_store_path())
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
@@ -1283,14 +1290,14 @@ pub fn get_export_history(path: String) -> Vec<ExportHistoryEntry> {
 /// Capped at 30 entries per photo (newest last) — plenty of undo depth without the store
 /// growing unbounded for a photo re-exported hundreds of times.
 #[tauri::command]
-pub fn append_export_history(path: String, version: String, recipe: String) -> Result<(), String> {
+pub fn append_export_history(path: String, version: String, recipe: String, dest: Option<String>) -> Result<(), String> {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let mut all = export_history_read_all();
     let list = all.entry(path).or_default();
-    list.push(ExportHistoryEntry { ts, version, recipe });
+    list.push(ExportHistoryEntry { ts, version, recipe, dest: dest.unwrap_or_default() });
     if list.len() > 30 {
         let drop = list.len() - 30;
         list.drain(0..drop);
