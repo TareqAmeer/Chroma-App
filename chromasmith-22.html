@@ -637,20 +637,26 @@ canvas,img{-webkit-user-drag:none}
      · --toast-b, so the offset follows the layout instead of being hardcoded to 98px — that
        number is the height of the MOBILE action bar, and on desktop it left the pill floating
        in the middle of the photo with nothing to sit above. */
-#fx-toast{position:fixed;left:50%;bottom:calc(var(--toast-b,24px) + env(safe-area-inset-bottom));
-  transform:translateX(-50%) translateY(8px);display:flex;align-items:center;gap:9px;
+/* Desktop: bottom-RIGHT, so it never sits over the Library grid's bottom row of thumbnails
+   (it used to be bottom-center, which the screenshot review caught landing directly on top of
+   them). Mobile keeps bottom-center — there's no thumbnail grid under it there, and centered
+   reads better above the mobile action bar it's already offset for via --toast-b. */
+#fx-toast{position:fixed;right:24px;bottom:calc(var(--toast-b,24px) + env(safe-area-inset-bottom));
+  transform:translateY(8px);display:flex;align-items:center;gap:9px;
   background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
   border:1px solid var(--bdr);color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);
   letter-spacing:0;line-height:1.4;padding:10px 15px;border-radius:10px;opacity:0;pointer-events:none;
   transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:3000;
   max-width:min(82vw,420px);text-align:left;box-shadow:var(--lift-2)}
 #fx-toast::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--mut);flex:0 0 auto}
-#fx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#fx-toast.show{opacity:1;transform:translateY(0)}
 #fx-toast.ok::before{background:var(--ok)}
 #fx-toast.err::before{background:var(--err)}
 #fx-toast.err{border-color:rgba(224,84,84,.45)}
 /* Clears the mobile action bar; every other layout wants it near the bottom edge. */
 body.mobile-fx{--toast-b:98px}
+body.mobile-fx #fx-toast{left:50%;right:auto;transform:translateX(-50%) translateY(8px)}
+body.mobile-fx #fx-toast.show{transform:translateX(-50%) translateY(0)}
 /* slider polish: bigger touch targets + a value bubble above the thumb while dragging */
 #fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:3000}
 body.mobile-fx .fx-slider{min-height:34px}
@@ -1838,6 +1844,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
           <button id="btn-favorite" class="flag-btn flag-btn-fav" onclick="fxToggleFavorite()" title="Favorite (Library)" style="display:none"></button>
         </div>
         <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
+          <button class="db-btn" id="btn-editor-bg" onclick="const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)" title="Editor background colour (also right-click the empty area around the photo)" style="padding:0;min-width:28px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center"><span style="display:block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#000 50%,#fff 50%);border:1px solid var(--bdr)"></span></button>
           <button class="db-btn" id="btn-before" title="Press and hold to see the original"><span class="fx-db-ic" id="ic-before"></span></button>
           <button class="db-btn" id="btn-split" onclick="toggleSplit()" title="Split before/after view"><span class="fx-db-ic" id="ic-split"></span></button>
           <div style="position:relative;display:inline-flex">
@@ -4093,7 +4100,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-23b';
+const BUILD='2026-08-24a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -8923,17 +8930,24 @@ function pcResetAll(){fxState.pointColors=[];pcSel=-1;pcRebuild();pcSyncUI();bak
 // ══ FILM ARTIFACTS ═════════════════════════════════════════════════════════════
 function artReshuffle(){fxState.artSeed=Math.random()*100;fxUpdate();log('Artifacts reshuffled','info');}
 
-// ── Editor workspace background colour, via right-click on the empty area AROUND the photo ──
+// ── Editor workspace background colour, via right-click on the empty area AROUND the photo, OR
+// the small swatch button in the preview-tools row (added because right-click-on-empty-space had
+// no discoverability hint anywhere in the UI — a user would never stumble onto it) ──
 // (not the photo itself — #fx-wrap's own background, not the Canvas-matte export colour, which
-// already has its own picker under Canvas). Persisted so it survives reload; defaults to the
-// original hardcoded #000 (.fx-canvas-wrap{background:#000}), so a user who never touches this
-// sees no change at all.
+// already has its own picker under Canvas). Persisted so it survives reload.
+// ⚠️ Default is NEUTRAL GRAY (#3a3a3a), not black: a pure-black surround skews perceived
+// shadow/tone via simultaneous contrast, which matters for a colour-grading tool. A user who
+// never touches this now sees the neutral default rather than the old hardcoded #000
+// (.fx-canvas-wrap{background:#000} is overridden by this default at init, not left in place).
 const LS_EDITOR_BG='chromasmith_editor_bg';
+const EDITOR_BG_DEFAULT='#3a3a3a';
 function editorBgApply(hex){
   const wrap=document.getElementById('fx-wrap');if(wrap)wrap.style.background=hex||'';
 }
 function editorBgInit(){
-  try{const saved=localStorage.getItem(LS_EDITOR_BG);if(saved)editorBgApply(saved);}catch(e){}
+  let saved=null;
+  try{saved=localStorage.getItem(LS_EDITOR_BG);}catch(e){}
+  editorBgApply(saved||EDITOR_BG_DEFAULT);
 }
 function editorBgSet(hex){
   try{localStorage.setItem(LS_EDITOR_BG,hex);}catch(e){}
@@ -8941,7 +8955,27 @@ function editorBgSet(hex){
 }
 function editorBgReset(){
   try{localStorage.removeItem(LS_EDITOR_BG);}catch(e){}
-  editorBgApply('');
+  editorBgApply(EDITOR_BG_DEFAULT);
+}
+function editorBgOpenMenu(x,y){
+  document.querySelectorAll('.fx-bgmenu').forEach(m=>m.remove());
+  const menu=document.createElement('div');
+  menu.className='fx-bgmenu';
+  menu.style.cssText='position:fixed;z-index:9999;background:var(--glass-bg,#222);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr,#444);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:12px;color:var(--txt,#eee);box-shadow:var(--lift-2,0 8px 24px rgba(0,0,0,.4));display:flex;align-items:center;gap:8px';
+  menu.innerHTML=`<span>Editor background</span><input type="color" id="fx-bgmenu-color" style="width:28px;height:24px;padding:0;border:1px solid var(--bdr,#444);border-radius:4px;background:none;cursor:pointer">`
+    +`<button class="btn bgh" id="fx-bgmenu-reset" style="padding:4px 8px;font-size:11px">Reset</button>`;
+  document.body.appendChild(menu);
+  const {innerWidth:vw,innerHeight:vh}=window;
+  const r=menu.getBoundingClientRect();
+  menu.style.left=Math.min(x,vw-r.width-8)+'px';
+  menu.style.top=Math.min(y,vh-r.height-8)+'px';
+  const cur=(document.getElementById('fx-wrap').style.background||'').trim();
+  const inp=menu.querySelector('#fx-bgmenu-color');
+  if(/^#[0-9a-fA-F]{6}$/.test(cur))inp.value=cur;
+  inp.oninput=()=>editorBgSet(inp.value);
+  menu.querySelector('#fx-bgmenu-reset').onclick=()=>{editorBgReset();menu.remove()};
+  const closeOnOutside=(ev)=>{if(!menu.contains(ev.target)){menu.remove();document.removeEventListener('mousedown',closeOnOutside)}};
+  setTimeout(()=>document.addEventListener('mousedown',closeOnOutside),0);
 }
 (function(){
   const wrap=document.getElementById('fx-wrap');
@@ -8952,24 +8986,7 @@ function editorBgReset(){
     // photo-edit menu, desktop/library-ui.js, defers to this same check for the same reason.)
     if(e.target!==wrap)return;
     e.preventDefault();
-    document.querySelectorAll('.fx-bgmenu').forEach(m=>m.remove());
-    const menu=document.createElement('div');
-    menu.className='fx-bgmenu';
-    menu.style.cssText='position:fixed;z-index:9999;background:var(--glass-bg,#222);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr,#444);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:12px;color:var(--txt,#eee);box-shadow:var(--lift-2,0 8px 24px rgba(0,0,0,.4));display:flex;align-items:center;gap:8px';
-    menu.innerHTML=`<span>Editor background</span><input type="color" id="fx-bgmenu-color" style="width:28px;height:24px;padding:0;border:1px solid var(--bdr,#444);border-radius:4px;background:none;cursor:pointer">`
-      +`<button class="btn bgh" id="fx-bgmenu-reset" style="padding:4px 8px;font-size:11px">Reset</button>`;
-    document.body.appendChild(menu);
-    const {innerWidth:vw,innerHeight:vh}=window;
-    const r=menu.getBoundingClientRect();
-    menu.style.left=Math.min(e.clientX,vw-r.width-8)+'px';
-    menu.style.top=Math.min(e.clientY,vh-r.height-8)+'px';
-    const cur=(document.getElementById('fx-wrap').style.background||'').trim();
-    const inp=menu.querySelector('#fx-bgmenu-color');
-    if(/^#[0-9a-fA-F]{6}$/.test(cur))inp.value=cur;
-    inp.oninput=()=>editorBgSet(inp.value);
-    menu.querySelector('#fx-bgmenu-reset').onclick=()=>{editorBgReset();menu.remove()};
-    const closeOnOutside=(ev)=>{if(!menu.contains(ev.target)){menu.remove();document.removeEventListener('mousedown',closeOnOutside)}};
-    setTimeout(()=>document.addEventListener('mousedown',closeOnOutside),0);
+    editorBgOpenMenu(e.clientX,e.clientY);
   });
   editorBgInit();
 })();

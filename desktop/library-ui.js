@@ -4509,8 +4509,7 @@
         <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs review</span>
         <span class="lib-coll-count">${catalogCounts.blurry}</span>
       </div>` : '';
-    return `<div class="lib-coll-heading">Library</div>
-      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' ? ' on' : ''}" data-catalog="all">
+    return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' ? ' on' : ''}" data-catalog="all">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
       </div>${reviewRow}
