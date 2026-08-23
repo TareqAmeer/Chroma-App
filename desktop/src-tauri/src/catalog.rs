@@ -1663,6 +1663,135 @@ pub fn date_counts_run(conn: &Connection) -> Result<DateCounts, String> {
     Ok(DateCounts { days, no_date: no_date as u64 })
 }
 
+// ── Scan phase D: offline thumbnails ────────────────────────────────────────────────────────
+//
+// The blocker this exists to fix: the app's ordinary thumbnail cache (library.rs's cache_dir())
+// is capped at 500MB and evicted oldest-mtime-first at every launch — at ~60KB/thumb that's
+// ~8,000 photos, nowhere near enough for offline browsing of a real archive. This is a SECOND,
+// separate, never-pruned tier in Application Support (not Caches — an offline thumbnail of an
+// unplugged drive is not regenerable, which by this app's own Caches-vs-Application-Support
+// split makes it user data, not a cache). Keyed on `photos.id`, not the FNV-1a cache_key — a
+// stable integer that never changes, unlike a hash whose *inputs* (path+mtime+size) go stale
+// the moment a file moves.
+//
+// ⚠️ Deliberately calls `library::get_thumbnail` — the SAME calibrated decode pipeline every
+// other thumbnail in the app goes through (RAW embedded-preview extraction, orientation
+// correction, HEIC via ImageIO, the works) — rather than reimplementing any of it. Reusing the
+// existing #[tauri::command] function directly (not duplicating its logic) is what guarantees
+// an offline thumbnail looks exactly like the one the app would have shown online.
+
+fn thumb_dir() -> PathBuf {
+    let dir = catalog_dir().join("thumbs");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn offline_thumb_path(id: i64) -> PathBuf {
+    let shard = (id.rem_euclid(256)).to_string();
+    let dir = thumb_dir().join(shard);
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(format!("{id}.jpg"))
+}
+
+/// Extracts the raw bytes from a `library::get_thumbnail` response — that command returns a
+/// `tauri::ipc::Response` wrapping `InvokeResponseBody::Raw(Vec<u8>)` for a real photo, never
+/// `Json`, so the `Json` arm here is unreachable in practice; kept explicit rather than an
+/// `unwrap` so a future change to that function's response shape fails loudly instead of
+/// panicking a background scan thread.
+fn thumbnail_bytes_for(path: &str) -> Result<Vec<u8>, String> {
+    use tauri::ipc::{InvokeResponseBody, IpcResponse};
+    let resp = crate::library::get_thumbnail(path.to_string())?;
+    match resp.body().map_err(|e| e.to_string())? {
+        InvokeResponseBody::Raw(bytes) => Ok(bytes),
+        InvokeResponseBody::Json(_) => Err("unexpected JSON thumbnail response".to_string()),
+    }
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct ThumbResult {
+    pub generated: usize,
+}
+
+/// Same chunked/resumable/offline-safe shape as the other phases. Video is excluded from the
+/// candidate set entirely (not just skipped on failure) — there is no still-frame decoder for
+/// it here at all (CLAUDE.md's own note: the `image` crate can't read MP4, and a real video
+/// thumbnail needs the WebView's own mediabunny pipeline), so attempting it every scan would be
+/// pure waste rather than a retryable transient failure.
+pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ThumbResult, String> {
+    let mut result = ThumbResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.thumb = 0 AND p.kind != 'video'
+                 LIMIT 32", // smaller batch — each unit of work is a real decode, not a header read
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let last_path: String = r.get(2)?;
+                let is_local: i64 = r.get(3)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String)> = batch.into_iter().filter_map(|(id, abs)| abs.map(|a| (id, a))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "thumb".into(), done: result.generated, total: result.generated + batch.len(), current: String::new() });
+
+        // Decoding is parallelized (same posture as metadata/hash), but the actual JPEG-write
+        // to disk happens sequentially below — cheap relative to the decode, and keeps this
+        // simple rather than juggling concurrent file writes into sharded directories.
+        let generated: Vec<(i64, Option<Vec<u8>>)> = batch.par_iter().map(|(id, abs)| (*id, thumbnail_bytes_for(abs).ok())).collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, bytes) in &generated {
+            let Some(bytes) = bytes else { continue }; // undecodable right now — leave thumb=0, retried next pass
+            if std::fs::write(offline_thumb_path(*id), bytes).is_err() {
+                continue;
+            }
+            tx.execute("UPDATE photos SET thumb = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.generated += generated.iter().filter(|(_, b)| b.is_some()).count();
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.generated, total: result.generated, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_thumbnails(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<ThumbResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    thumbnail_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+/// The serving half — called from `library::get_thumbnail` as a fallback when the direct file
+/// read fails (the common case being: the volume is unplugged, so the path `catalog_query`
+/// handed the frontend doesn't currently resolve to anything). Reuses `find_photo_by_abs_path`'s
+/// exact prefix-matching, since this is the same "resolve an absolute path back to a catalog
+/// row" problem `note_deleted_run` already solves.
+pub fn offline_thumb_bytes(conn: &Connection, path: &str) -> Option<Vec<u8>> {
+    let id = find_photo_by_abs_path(conn, path)?;
+    let has_thumb: bool = conn.query_row("SELECT thumb FROM photos WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)).ok()? != 0;
+    if !has_thumb {
+        return None;
+    }
+    std::fs::read(offline_thumb_path(id)).ok()
+}
+
 // ── Rebuild ──────────────────────────────────────────────────────────────────────────────────
 //
 // The property that makes this whole SQLite dependency safe to have taken on: the catalog is a
@@ -2719,5 +2848,112 @@ mod tests {
 
         std::fs::remove_file(&blocker).ok();
         std::env::remove_var("CS_CATALOG_DIR");
+    }
+
+    // ── Offline thumbnails ──────────────────────────────────────────────────────────────────
+
+    /// The end-to-end path against a REAL photo (skipped cleanly if geneva/ isn't present) —
+    /// `thumbnail_bytes_for` calls the app's actual decode pipeline (library::get_thumbnail),
+    /// which needs a real, valid image; a hand-written byte string won't decode. Also proves
+    /// resumability, matching every other phase's own test shape.
+    #[test]
+    fn thumbnail_run_generates_and_marks_thumb_and_is_resumable() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&repo).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| matches!(p.extension().and_then(|e| e.to_str()), Some("jpg") | Some("JPG")))
+        }) else {
+            eprintln!("skipping: no geneva/ jpg present in this checkout");
+            return;
+        };
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("thumb");
+        let dest = dir.join(sample.file_name().unwrap());
+        std::fs::copy(&sample, &dest).unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.generated, 1);
+
+        let (id, thumb): (i64, i64) = conn.query_row("SELECT id, thumb FROM photos WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(thumb, 1);
+        let thumb_path = offline_thumb_path(id);
+        assert!(thumb_path.is_file(), "the offline thumbnail JPEG must actually exist on disk at {thumb_path:?}");
+        assert!(std::fs::metadata(&thumb_path).unwrap().len() > 0);
+
+        let r2 = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.generated, 0, "nothing changed — a second pass must not regenerate an existing thumbnail");
+
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_file(&thumb_path).ok();
+    }
+
+    /// Video must never even be ATTEMPTED here (not just skipped on failure) — there is no
+    /// still-frame decoder in this path at all, so a video row must stay `thumb = 0` forever
+    /// without thumbnail_run wasting a pass on it every single scan.
+    #[test]
+    fn thumbnail_run_excludes_video_from_candidates() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+             VALUES (?1, 'clip.mov', '', 'clip.mov', 'clip.mov', 'mov', 'video', 10, 0, 0, 1)",
+            params![vid],
+        )
+        .unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let result = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.generated, 0, "video must be excluded from the candidate set, not attempted and failed");
+    }
+
+    #[test]
+    fn offline_thumb_bytes_serves_the_stored_tier_and_nothing_when_absent() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('ext-t','Archive','/Volumes/Archive', 0, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='ext-t'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, thumb)
+             VALUES (?1, 'a.jpg', '', 'a.jpg', 'a.jpg', 'jpg', 'jpeg', 10, 0, 0, 1, 1)",
+            params![vid],
+        )
+        .unwrap();
+        let id: i64 = conn.query_row("SELECT id FROM photos WHERE name='a.jpg'", [], |r| r.get(0)).unwrap();
+        std::fs::write(offline_thumb_path(id), b"fake jpeg bytes").unwrap();
+
+        let bytes = offline_thumb_bytes(&conn, "/Volumes/Archive/a.jpg");
+        assert_eq!(bytes.as_deref(), Some(&b"fake jpeg bytes"[..]));
+
+        assert!(offline_thumb_bytes(&conn, "/Volumes/Archive/nonexistent.jpg").is_none(), "an unknown path must return nothing, not panic");
+
+        std::fs::remove_file(offline_thumb_path(id)).ok();
+    }
+
+    #[test]
+    fn thumbnail_run_terminates_when_only_offline_rows_remain() {
+        let conn = temp_db();
+        conn.execute(
+            "INSERT INTO volumes (uuid, label, last_path, is_local, last_seen)
+             VALUES ('ext-gone-thumb', 'Old LaCie', '/Volumes/DoesNotExist11223', 0, 0)",
+            [],
+        )
+        .unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='ext-gone-thumb'", [], |r| r.get(0)).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+             VALUES (?1, 'p.jpg', '', 'p.jpg', 'p.jpg', 'jpg', 'jpeg', 10, 5, 0, 1)",
+            params![vid],
+        )
+        .unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let result = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(result.generated, 0);
+        let thumb: i64 = conn.query_row("SELECT thumb FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(thumb, 0, "must stay unattempted so it's retried once the volume returns");
     }
 }

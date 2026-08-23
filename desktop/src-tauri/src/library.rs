@@ -288,6 +288,30 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
         })
 }
 
+/// `get_thumbnail`, with a fallback to the catalog's never-pruned offline thumbnail tier when
+/// the direct decode fails — the common real-world trigger being the volume is unplugged, so
+/// `path` (which came from `catalog_query`'s own `abs_path` reconstruction) simply doesn't
+/// resolve to anything right now. This is a SEPARATE command rather than a change to
+/// `get_thumbnail` itself: a `tauri::State` parameter can only be filled in through the real
+/// Tauri IPC machinery, not a plain function call — and `catalog.rs`'s own offline-thumbnail
+/// GENERATION phase calls `get_thumbnail` directly (not through IPC) to reuse its decode
+/// pipeline, which a `State` parameter there would have broken.
+///
+/// ⚠️ The catalog lookup only runs as a FALLBACK, after a real decode attempt — a mounted
+/// volume's photo must always show its true, current thumbnail, never a possibly-stale cached
+/// one, even if the catalog happens to have an offline copy on file from before an edit.
+#[tauri::command]
+pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog::CatalogState>) -> Result<tauri::ipc::Response, String> {
+    if let Ok(resp) = get_thumbnail(path.clone()) {
+        return Ok(resp);
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    match crate::catalog::offline_thumb_bytes(&conn, &path) {
+        Some(bytes) => Ok(tauri::ipc::Response::new(bytes)),
+        None => Err(format!("no thumbnail available (online or offline) for {path}")),
+    }
+}
+
 fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);

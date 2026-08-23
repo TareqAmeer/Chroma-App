@@ -44,7 +44,7 @@
         out.push({ path: `${dir}/sub`, name: 'sub', is_dir: true, is_image: false, kind: '', ext: '', mtime: 0, size: 0 });
         return Promise.resolve(out);
       }
-      case 'get_thumbnail': return Promise.resolve(png.buffer);
+      case 'get_thumbnail': case 'get_thumbnail_or_offline': return Promise.resolve(png.buffer);
       case 'read_file_bytes': return Promise.resolve(png.buffer);
       case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive });
       case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map(() => ({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive })));
@@ -1344,7 +1344,12 @@
               job.imgEl.classList.add('loaded');
               _thumbUrlsThisGen.push(fastUrl);
             }
-            return invoke('get_thumbnail', { path: job.path });
+            // get_thumbnail_or_offline: falls back to the catalog's never-pruned offline
+            // thumbnail tier when a direct decode fails (the common trigger being the volume
+            // is unplugged) — a plain folder photo that decodes fine takes the exact same path
+            // it always did, this only changes behavior for a catalog entry whose file isn't
+            // currently reachable.
+            return invoke('get_thumbnail_or_offline', { path: job.path });
           })
           .then((buf) => {
             if (job.imgEl.isConnected) {
