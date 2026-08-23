@@ -159,6 +159,17 @@
           no_date: 1,
         });
       }
+      case 'catalog_keywords': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        // Two-level tree: Travel > Iceland, plus a standalone Portrait leaf — enough to verify
+        // nesting, counts, and the click-to-filter scope string all render correctly.
+        return Promise.resolve([
+          { id: 1, path: 'Travel', leaf: 'Travel', parent_id: null, n: 2 },
+          { id: 2, path: 'Travel|Iceland', leaf: 'Iceland', parent_id: 1, n: 1 },
+          { id: 3, path: 'Portrait', leaf: 'Portrait', parent_id: null, n: 1 },
+        ]);
+      }
+      case 'set_keywords': return Promise.resolve();
       case 'catalog_query': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
         const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
@@ -185,6 +196,7 @@
         // — the structural thing this mock exists to let the harness catch.
         let scoped = N;
         if (q.blurryOnly) scoped = Math.max(1, Math.floor(N / 5));
+        else if (q.keywords && q.keywords.length) scoped = 3;
         else if (q.noDate) scoped = 1;
         else if (q.year === 2026 && q.month === 8 && q.day === 22) scoped = 4;
         else if (q.year === 2026 && q.month === 8 && q.day === 15) scoped = 2;
@@ -481,6 +493,12 @@
     .lib-btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
       padding:5px 10px;font-size:12px;cursor:pointer}
     .lib-btn:hover{background:var(--bdr)}
+    /* Info panel keyword chips (renderInfoPanel) — the leaf name only, full path in the tooltip
+       (a photo tagged "Travel|Iceland|Reykjavik" would otherwise overflow a 232px panel). */
+    .lib-kw-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:9px;
+      background:var(--sur2);border:1px solid var(--bdr);font-size:10px;color:var(--txt)}
+    .lib-kw-chip-x{cursor:pointer;color:var(--mut);font-size:12px;line-height:1}
+    .lib-kw-chip-x:hover{color:var(--txt)}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
     .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
     .lib-tree-row:hover{background:var(--sur2)}
@@ -3014,14 +3032,69 @@
     if (!state.meta.has(path)) getMeta(path).then(() => { if (state.showInfo) renderInfoPanel(); }).catch(() => {});
     const fmt = (b) => !b ? '' : b > 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b > 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1e3) + ' KB';
     const row = (k, v) => v ? `<div style="display:flex;gap:8px"><span style="color:var(--mut);min-width:74px">${k}</span><span style="flex:1;word-break:break-word">${esc(String(v))}</span></div>` : '';
+    const kwChips = (sc.keywords || []).map((k) => {
+      const leaf = k.split('|').pop();
+      return `<span class="lib-kw-chip" data-kw="${esc(k)}" title="${esc(k)}">${esc(leaf)}<span class="lib-kw-chip-x" data-kw-remove="${esc(k)}">×</span></span>`;
+    }).join('');
+    // Autocomplete against every keyword path already known to the catalog — best-effort
+    // (keywordTree only refreshes on the same cadence as the rest of the catalog, i.e. on
+    // scan/folder-open, matching how ratings/labels already lag one scan behind a foreign
+    // edit elsewhere in this app; see the plan's own "Authority: the .xmp always wins" section).
+    const kwOptions = keywordTree.map((n) => `<option value="${esc(n.path)}">`).join('');
     el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;word-break:break-all">${esc(entry.name || baseName(path))}</div>`
       + row('Date', m.date) + row('Camera', m.camera) + row('Lens', m.lens)
       + row('ISO', m.iso) + row('Shutter', m.shutter) + row('Aperture', m.aperture)
       + row('Focal', m.focal_len) + row('Size', fmt(entry.size))
       + row('Label', sc.label) + row('Edited', sc.edited ? 'Yes' : '')
+      + `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Keywords</div>`
+      + `<div id="lib-info-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px">${kwChips}</div>`
+      + `<input id="lib-info-kw-add" list="lib-kw-datalist" placeholder="Add keyword…" `
+      + `style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;border-radius:5px;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt)">`
+      + `<datalist id="lib-kw-datalist">${kwOptions}</datalist></div>`
       + `<div style="margin-top:8px;text-align:right"><button class="lib-btn" id="lib-info-close">Close</button></div>`;
     const c = document.getElementById('lib-info-close');
     if (c) c.onclick = () => { state.showInfo = false; renderInfoPanel(); };
+    el.querySelectorAll('[data-kw-remove]').forEach((x) => {
+      x.onclick = (e) => { e.stopPropagation(); removeKeywordFromPhoto(path, x.dataset.kwRemove); };
+    });
+    const addInput = document.getElementById('lib-info-kw-add');
+    if (addInput) {
+      addInput.onkeydown = (e) => {
+        if (e.key !== 'Enter') return;
+        e.stopPropagation();
+        const v = addInput.value.trim();
+        if (v) addKeywordToPhoto(path, v);
+        addInput.value = '';
+      };
+      // A photo grid keydown handler (space/arrows/delete) lives above the panel and would
+      // otherwise steal every keystroke typed here — the star-rating / flag shortcuts firing
+      // while typing a tag name is exactly the kind of bug that's invisible until you hit it.
+      addInput.onkeyup = (e) => e.stopPropagation();
+    }
+  }
+
+  /// Full hierarchical paths this photo carries, tagged via the info panel or drag-to-tag. The
+  /// merge (existing + new, deduped) happens here rather than in the caller so both entry
+  /// points share one rule.
+  async function addKeywordToPhoto(path, keyword) {
+    const sc = state.sidecars.get(path) || { keywords: [] };
+    const current = sc.keywords || [];
+    if (current.includes(keyword)) return;
+    const next = [...current, keyword];
+    try {
+      await invoke('set_keywords', { path, keywords: next });
+      state.sidecars.set(path, { ...sc, keywords: next });
+      renderInfoPanel();
+    } catch (e) { toast(humanizeErr('tag the photo', e), 'err'); }
+  }
+  async function removeKeywordFromPhoto(path, keyword) {
+    const sc = state.sidecars.get(path) || { keywords: [] };
+    const next = (sc.keywords || []).filter((k) => k !== keyword);
+    try {
+      await invoke('set_keywords', { path, keywords: next });
+      state.sidecars.set(path, { ...sc, keywords: next });
+      renderInfoPanel();
+    } catch (e) { toast(humanizeErr('remove the tag', e), 'err'); }
   }
 
   /// Operations that only make sense on a multi-selection, surfaced as a bar rather than living
@@ -3922,10 +3995,14 @@
   // real folder tree's state.expanded does.
   const dateExpanded = new Set();
 
+  let keywordTree = []; // flat KeywordNode list from catalog_keywords — nested client-side, same as dateCounts
+  const kwExpanded = new Set(); // keyed by keyword id (a stable primary key, unlike a path a rename would change)
+
   function refreshCatalogCounts() {
     invoke('catalog_counts').then((counts) => { catalogCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
+    invoke('catalog_keywords').then((nodes) => { keywordTree = nodes || []; renderCollections(); }).catch(() => {});
   }
 
   function drivesSectionHtml() {
@@ -4000,6 +4077,42 @@
       html += row('date-nodate', '', 'No date', dateCounts.no_date, false, false);
     }
     return html;
+  }
+
+  /// Nests the flat KeywordNode list into a tree by parent_id and renders it with the same
+  /// .lib-tree-* markup dateTreeHtml uses. Own top-level section (per the plan's wireframe:
+  /// "[Collections] [Albums] [Keywords] [Devices] [Cloud] [Folders]") rather than folded into
+  /// the Library section the way By Date is — keywords are a user-built taxonomy, not a
+  /// built-in browse axis, and a photo can carry many of them at once instead of exactly one.
+  function keywordsSectionHtml() {
+    if (!keywordTree.length) return '';
+    const byParent = new Map();
+    for (const n of keywordTree) {
+      const key = n.parent_id == null ? '__root__' : n.parent_id;
+      if (!byParent.has(key)) byParent.set(key, []);
+      byParent.get(key).push(n);
+    }
+    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span>`;
+    const renderLevel = (parentKey) => {
+      const kids = (byParent.get(parentKey) || []).slice().sort((a, b) => a.leaf.localeCompare(b.leaf));
+      return kids.map((n) => {
+        const hasChildren = byParent.has(n.id);
+        const open = kwExpanded.has(n.id);
+        const scope = `kw:${n.path}`;
+        return `<div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-kw-scope="${scope}" data-kw-id="${n.id}" data-kw-toggle="${hasChildren ? n.id : ''}" data-kw-path="${esc(n.path)}">
+            ${hasChildren ? chev(open) : '<span class="lib-tree-chev"></span>'}
+            <span style="flex:1">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut)">${n.n || ''}</span>
+          </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
+      }).join('');
+    };
+    return `<div class="lib-tree-node" id="lib-keyword-tree">
+        <div class="lib-tree-row" data-kw-tree-toggle="1">
+          <span class="lib-tree-chev${kwExpanded.has('__root__') ? ' open' : ''}">${ic('chevron', 11)}</span>
+          <span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)">${ic('tag', 13)}</span>
+          <span>Keywords</span>
+        </div>
+        ${kwExpanded.has('__root__') ? `<div class="lib-tree-children">${renderLevel('__root__')}</div>` : ''}
+      </div><div class="lib-coll-sep"></div>`;
   }
 
   function catalogSectionHtml() {
@@ -4153,6 +4266,10 @@
       else if (state === 'done') activityUpdate('catalog', { stage: 'done', done: 120, total: 120 });
       else if (state === 'import-failed') activityUpdate('import', { stage: 'done', done: 21, total: 24, failed: ['P1000512.RW2: read error', 'P1000513.RW2: read error', 'P1000889.RW2: disk full'] });
     };
+    // Same reasoning: the info panel's own trigger is the 'i' keyboard shortcut, gated on
+    // state.open (the docked/deskx harness never goes through toggleLibrary(), so state.open
+    // is never true here) — this is what makes the keyword-chip editor screenshot-verifiable.
+    window.libtestShowInfoPanel = (path) => { state._kbCursor = path; state.showInfo = true; renderInfoPanel(); };
   }
 
   function wireActivityListeners() {
@@ -4181,9 +4298,10 @@
       // rather than passed as separate arguments so state.catalogScope stays one plain string,
       // the same shape a saved view or a URL could carry.
       const dateParts = scope && scope.startsWith('date:') ? scope.slice(5).split(':').map(Number) : null;
+      const kwPath = scope && scope.startsWith('kw:') ? scope.slice(3) : null;
       const q = { kind: null, text: null, includeOffline: true, limit: null,
         year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
-        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry' };
+        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [] };
       page = await invoke('catalog_query', { q });
     } catch (e) {
       grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
@@ -4874,7 +4992,7 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
-      </div>`).join('') + albumsSectionHtml() + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
+      </div>`).join('') + albumsSectionHtml() + keywordsSectionHtml() + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
     wireAlbumRows(host);
     host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
@@ -4900,6 +5018,44 @@
           if (dateExpanded.has(toggleKey)) dateExpanded.delete(toggleKey); else dateExpanded.add(toggleKey);
         }
         openCatalogView(row.dataset.dateScope);
+      };
+    });
+    // "Keywords" root row: same expand-only gesture as "By Date"'s own root.
+    const kwTreeRoot = host.querySelector('[data-kw-tree-toggle]');
+    if (kwTreeRoot) {
+      kwTreeRoot.onclick = () => {
+        if (kwExpanded.has('__root__')) kwExpanded.delete('__root__'); else kwExpanded.add('__root__');
+        renderCollections();
+      };
+    }
+    host.querySelectorAll('.lib-tree-row[data-kw-scope]').forEach((row) => {
+      row.onclick = (e) => {
+        e.stopPropagation();
+        const toggleKey = row.dataset.kwToggle;
+        if (toggleKey) {
+          const id = parseInt(toggleKey, 10);
+          if (kwExpanded.has(id)) kwExpanded.delete(id); else kwExpanded.add(id);
+        }
+        openCatalogView(row.dataset.kwScope);
+      };
+      // Drag-to-tag: same contract the album rows use (application/x-chromasmith-paths), just
+      // calling set_keywords per photo instead of album_add.
+      row.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes('application/x-chromasmith-paths')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('lib-coll-dragover');
+      };
+      row.ondragleave = () => row.classList.remove('lib-coll-dragover');
+      row.ondrop = async (e) => {
+        e.preventDefault();
+        row.classList.remove('lib-coll-dragover');
+        let paths = [];
+        try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch { /* ignore */ }
+        if (!paths.length) return;
+        const kwPath = row.dataset.kwPath;
+        await Promise.all(paths.map((p) => addKeywordToPhoto(p, kwPath)));
+        toast(`Tagged ${paths.length} photo${paths.length > 1 ? 's' : ''} "${kwPath.split('|').pop()}"`);
       };
     });
     host.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
