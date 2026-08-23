@@ -137,17 +137,44 @@
         const N = /[?&]libcat=1/.test(location.search) ? Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10)) : 0;
         return Promise.resolve({ all: N });
       }
+      case 'catalog_date_counts': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ days: [], no_date: 0 });
+        // A small fixed spread across two months so the tree has something to expand — the
+        // exact counts don't need to add up to ?libn's total, this is a layout/wiring check.
+        return Promise.resolve({
+          days: [
+            { y: 2026, m: 8, d: 22, n: 4 }, { y: 2026, m: 8, d: 15, n: 2 }, { y: 2026, m: 7, d: 3, n: 6 },
+            { y: 2025, m: 12, d: 25, n: 3 },
+          ],
+          no_date: 1,
+        });
+      }
       case 'catalog_query': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
         const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+        const q = A.q || {};
+        // Scoped mock: a date filter returns a visibly SMALLER slice than the full N, sized
+        // from the same fixed day counts catalog_date_counts's mock uses above, so clicking
+        // through the tree provably changes the grid rather than silently re-showing everything
+        // — the structural thing this mock exists to let the harness catch.
+        let scoped = N;
+        if (q.noDate) scoped = 1;
+        else if (q.year === 2026 && q.month === 8 && q.day === 22) scoped = 4;
+        else if (q.year === 2026 && q.month === 8 && q.day === 15) scoped = 2;
+        else if (q.year === 2026 && q.month === 8) scoped = 6;
+        else if (q.year === 2026 && q.month === 7 && q.day === 3) scoped = 6;
+        else if (q.year === 2026 && q.month === 7) scoped = 6;
+        else if (q.year === 2026) scoped = 12;
+        else if (q.year === 2025) scoped = 3;
+        const n = Math.min(N, scoped);
         const entries = [];
-        for (let i = 1; i <= N; i++) {
+        for (let i = 1; i <= n; i++) {
           const offline = i % 7 === 0;
           entries.push({ id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`,
             is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
             missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7' });
         }
-        return Promise.resolve({ total: N, capped: false, entries });
+        return Promise.resolve({ total: n, capped: false, entries });
       }
       default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
     }
@@ -3807,16 +3834,92 @@
   // supports them (see catalog.rs's own top-of-file scope comment).
   let catalogCounts = { all: 0 };
 
-  function catalogSectionHtml() {
-    return `<div class="lib-coll-heading">Library</div>
-      <div class="lib-coll-row${state.source === 'catalog' ? ' on' : ''}" data-catalog="all">
-        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
-        <span class="lib-coll-count">${catalogCounts.all || ''}</span>
-      </div><div class="lib-coll-sep"></div>`;
-  }
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  let dateCounts = { days: [], no_date: 0 };
+  // Own expansion Set, not state.expanded (that's keyed by folder path) — keyed by scope
+  // string ('2026', '2026:8') so it survives a renderCollections() re-render the same way the
+  // real folder tree's state.expanded does.
+  const dateExpanded = new Set();
 
   function refreshCatalogCounts() {
     invoke('catalog_counts').then((counts) => { catalogCounts = counts; renderCollections(); }).catch(() => {});
+    invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
+  }
+
+  /// Nests the flat (y,m,d,n) rows catalog_date_counts returns into a Year › Month › Day tree
+  /// and renders it with the exact same .lib-tree-* classes/chevron the real folder tree uses
+  /// (buildTreeNode, above) — one fetch already has every count at every level, so no lazy
+  /// per-node loading is needed even across many years.
+  function dateTreeHtml() {
+    const years = new Map();
+    for (const row of dateCounts.days) {
+      if (!years.has(row.y)) years.set(row.y, { n: 0, months: new Map() });
+      const y = years.get(row.y);
+      y.n += row.n;
+      if (!y.months.has(row.m)) y.months.set(row.m, { n: 0, days: [] });
+      const mo = y.months.get(row.m);
+      mo.n += row.n;
+      mo.days.push(row);
+    }
+    const sortedYears = Array.from(years.keys()).sort((a, b) => b - a);
+    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span>`;
+    // toggleKey is the BARE year or "year:month" string dateExpanded is actually keyed by
+    // (yOpen/mOpen below read dateExpanded.has(`${y}`) / has(`${y}:${m}`)) — deliberately NOT
+    // the same string as `scope` (which is the full "date:..." catalog_query scope): a row
+    // both expands AND navigates, and those are two different pieces of state that happened to
+    // look interchangeable until a year row's toggle silently used the wrong namespace and its
+    // chevron never rotated no matter how many times you clicked it.
+    const row = (scope, toggleKey, label, count, hasChildren, open) => `
+      <div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
+        ${hasChildren ? chev(open) : '<span class="lib-tree-chev"></span>'}
+        <span style="flex:1">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut)">${count}</span>
+      </div>`;
+    let html = '';
+    for (const y of sortedYears) {
+      const yOpen = dateExpanded.has(`${y}`);
+      const yData = years.get(y);
+      html += row(`date:${y}`, `${y}`, y, yData.n, true, yOpen);
+      if (yOpen) {
+        html += '<div class="lib-tree-children">';
+        const sortedMonths = Array.from(yData.months.keys()).sort((a, b) => b - a);
+        for (const m of sortedMonths) {
+          const mKey = `${y}:${m}`;
+          const mOpen = dateExpanded.has(mKey);
+          const mData = yData.months.get(m);
+          html += row(`date:${y}:${m}`, mKey, MONTH_NAMES[m - 1] || m, mData.n, true, mOpen);
+          if (mOpen) {
+            html += '<div class="lib-tree-children">';
+            const sortedDays = mData.days.slice().sort((a, b) => b.d - a.d);
+            for (const dRow of sortedDays) {
+              html += row(`date:${y}:${m}:${dRow.d}`, '', dRow.d, dRow.n, false, false);
+            }
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+      }
+    }
+    if (dateCounts.no_date) {
+      html += row('date-nodate', '', 'No date', dateCounts.no_date, false, false);
+    }
+    return html;
+  }
+
+  function catalogSectionHtml() {
+    return `<div class="lib-coll-heading">Library</div>
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' ? ' on' : ''}" data-catalog="all">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
+        <span class="lib-coll-count">${catalogCounts.all || ''}</span>
+      </div>
+      <div class="lib-tree-node" id="lib-date-tree">
+        <div class="lib-tree-row" data-date-tree-toggle="1">
+          <span class="lib-tree-chev${dateExpanded.has('__root__') ? ' open' : ''}">${ic('chevron', 11)}</span>
+          <span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)">${ic('calendar', 13)}</span>
+          <span>By Date</span>
+        </div>
+        ${dateExpanded.has('__root__') ? `<div class="lib-tree-children">${dateTreeHtml()}</div>` : ''}
+      </div>
+      <div class="lib-coll-sep"></div>`;
   }
 
   /// Fire-and-forget: browsing a folder is what builds the catalog, with no separate "add to
@@ -3839,14 +3942,21 @@
     grid.innerHTML = libSkeletonHtml();
     let page;
     try {
-      page = await invoke('catalog_query', { q: { kind: null, text: null, includeOffline: true, limit: null } });
+      // Scope encoding: 'all', or 'date:YYYY', 'date:YYYY:M', 'date:YYYY:M:D' — parsed here
+      // rather than passed as separate arguments so state.catalogScope stays one plain string,
+      // the same shape a saved view or a URL could carry.
+      const dateParts = scope && scope.startsWith('date:') ? scope.slice(5).split(':').map(Number) : null;
+      const q = { kind: null, text: null, includeOffline: true, limit: null,
+        year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
+        noDate: scope === 'date-nodate' };
+      page = await invoke('catalog_query', { q });
     } catch (e) {
       grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
       return;
     }
     state.entries = page.entries;
     if (!page.entries.length) {
-      grid.innerHTML = '<div id="lib-empty">Nothing indexed yet — open a folder in the Library and it\'ll appear here.</div>';
+      grid.innerHTML = '<div id="lib-empty">Nothing here — open a folder in the Library and it\'ll appear here.</div>';
       renderCollections();
       return;
     }
@@ -4501,6 +4611,29 @@
     host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
     });
+    // "By Date" root row: toggles the whole tree open/closed, same gesture the real folder
+    // tree's own root uses, but never navigates on its own (a bare "By Date" click isn't a
+    // filterable scope — unlike every row inside it).
+    const dateTreeRoot = host.querySelector('[data-date-tree-toggle]');
+    if (dateTreeRoot) {
+      dateTreeRoot.onclick = () => {
+        if (dateExpanded.has('__root__')) dateExpanded.delete('__root__'); else dateExpanded.add('__root__');
+        renderCollections();
+      };
+    }
+    host.querySelectorAll('.lib-tree-row[data-date-scope]').forEach((row) => {
+      row.onclick = (e) => {
+        e.stopPropagation();
+        const toggleKey = row.dataset.dateToggle;
+        // A year/month row both expands (to reveal its children) AND filters to that whole
+        // scope in the same click — identical to how the real folder tree's buildTreeNode
+        // handles a directory row (CLAUDE.md's own established pattern here, not a new one).
+        if (toggleKey) {
+          if (dateExpanded.has(toggleKey)) dateExpanded.delete(toggleKey); else dateExpanded.add(toggleKey);
+        }
+        openCatalogView(row.dataset.dateScope);
+      };
+    });
     host.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
       row.onclick = () => openImportPanel(row.dataset.card);
     });
@@ -4562,7 +4695,13 @@
   }
   renderCollections();
   renderCollectionCounts();
-  if (!LIBTEST) refreshCatalogCounts();
+  // ⚠️ NOT guarded on LIBTEST — unlike catalogRegisterFolder (which has no meaningful mock to
+  // run against), catalog_counts/catalog_date_counts ARE mocked, and gating this away from
+  // libtest would mean the date tree and sidebar counts are never exercised by the one harness
+  // that can screenshot-verify a sidebar layout bug (CLAUDE.md §10.14) — which is exactly the
+  // bug this comment replaced: the date tree rendered permanently empty under ?libtest=1&libcat=1
+  // because this call never ran to populate dateCounts in the first place.
+  refreshCatalogCounts();
 
   // ── Marquee (drag-rectangle) multi-select over the grid. Works in both the folder grid
   // (selects by data-path into state.selected) and the cloud grid (data-lr-id into

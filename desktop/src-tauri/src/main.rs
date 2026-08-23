@@ -1584,6 +1584,7 @@ fn main() {
             catalog::catalog_scan_cancel,
             catalog::catalog_query,
             catalog::catalog_counts,
+            catalog::catalog_date_counts,
             catalog::catalog_note_deleted,
             sam2_encode,
             sam2_points,

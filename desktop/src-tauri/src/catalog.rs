@@ -978,6 +978,21 @@ pub struct CatalogQuery {
     #[serde(default = "default_true")]
     pub include_offline: bool,
     pub limit: Option<u32>,
+    /// Date-browser scoping. `year` alone = that whole year; `year`+`month` = that month;
+    /// all three = one day. `month`/`day` without `year` are ignored (not a valid scope).
+    /// ⚠️ `#[serde(default)]` on all three: an older/simpler frontend payload (or a test) that
+    /// omits these keys entirely must still deserialize — `Option<T>` does NOT auto-default to
+    /// `None` for an absent JSON key, only for an explicit `null`, unless told to.
+    #[serde(default)]
+    pub year: Option<i32>,
+    #[serde(default)]
+    pub month: Option<i32>,
+    #[serde(default)]
+    pub day: Option<i32>,
+    /// The date browser's "No date" bucket — mutually exclusive with year/month/day, checked
+    /// first below.
+    #[serde(default)]
+    pub no_date: bool,
 }
 fn default_true() -> bool {
     true
@@ -991,7 +1006,7 @@ fn default_true() -> bool {
 // every entry silently filtered as if it were offline.
 impl Default for CatalogQuery {
     fn default() -> Self {
-        CatalogQuery { kind: None, text: None, include_offline: true, limit: None }
+        CatalogQuery { kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None, no_date: false }
     }
 }
 
@@ -1027,6 +1042,22 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         if !t.is_empty() {
             where_parts.push(format!("p.name_lc LIKE ?{}", values.len() + 1));
             values.push(Box::new(format!("%{}%", t.to_lowercase())));
+        }
+    }
+    // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
+    // March" cross-year view in this design), so they're only applied once year is set.
+    if q.no_date {
+        where_parts.push("(p.cap_y IS NULL OR p.cap_m IS NULL OR p.cap_d IS NULL)".to_string());
+    } else if let Some(y) = q.year {
+        where_parts.push(format!("p.cap_y = ?{}", values.len() + 1));
+        values.push(Box::new(y));
+        if let Some(m) = q.month {
+            where_parts.push(format!("p.cap_m = ?{}", values.len() + 1));
+            values.push(Box::new(m));
+            if let Some(d) = q.day {
+                where_parts.push(format!("p.cap_d = ?{}", values.len() + 1));
+                values.push(Box::new(d));
+            }
         }
     }
     let where_clause = where_parts.join(" AND ");
@@ -1103,6 +1134,61 @@ pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collecti
     let all: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("all".to_string(), all as u64);
     Ok(m)
+}
+
+// ── Date browser ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct DayCount {
+    pub y: i32,
+    pub m: i32,
+    pub d: i32,
+    pub n: u64,
+}
+
+#[derive(Serialize)]
+pub struct DateCounts {
+    /// Flat (year, month, day, count) rows — one per day that has at least one present photo.
+    /// The frontend nests these into a Year › Month › Day tree client-side; a flat list plus
+    /// one query is what lets the WHOLE tree fill in with counts at every level in a single
+    /// round trip, no lazy per-node loading needed even at 15 years of history.
+    pub days: Vec<DayCount>,
+    /// Photos with no readable capture date — its own bucket rather than folded into a wrong
+    /// day, matching the same "don't guess a date" rule `ingest.rs`'s own capture_date follows.
+    pub no_date: u64,
+}
+
+#[tauri::command]
+pub fn catalog_date_counts(state: tauri::State<CatalogState>) -> Result<DateCounts, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    date_counts_run(&conn)
+}
+
+pub fn date_counts_run(conn: &Connection) -> Result<DateCounts, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT cap_y, cap_m, cap_d, COUNT(*) FROM photos
+             WHERE present = 1 AND cap_y IS NOT NULL AND cap_m IS NOT NULL AND cap_d IS NOT NULL
+             GROUP BY cap_y, cap_m, cap_d
+             ORDER BY cap_y DESC, cap_m DESC, cap_d DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let days = stmt
+        .query_map([], |r| {
+            Ok(DayCount { y: r.get(0)?, m: r.get(1)?, d: r.get(2)?, n: r.get::<_, i64>(3)? as u64 })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+    let no_date: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND (cap_y IS NULL OR cap_m IS NULL OR cap_d IS NULL)",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(DateCounts { days, no_date: no_date as u64 })
 }
 
 // ── Delete ───────────────────────────────────────────────────────────────────────────────────
@@ -1629,5 +1715,66 @@ mod tests {
 
         let updated = note_deleted_run(&conn, &["/Volumes/Archive/a.jpg".to_string()]).unwrap();
         assert_eq!(updated, 1, "must resolve against the external volume, not silently match nothing against local's trivial '/' prefix");
+    }
+
+    fn insert_dated_photo(conn: &Connection, vid: i64, name: &str, y: i32, m: i32, d: i32) {
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, cap_y, cap_m, cap_d)
+             VALUES (?1, ?2, '', ?2, ?2, 'jpg', 'jpeg', 10, 0, 0, 1, ?3, ?4, ?5)",
+            params![vid, name, y, m, d],
+        )
+        .unwrap();
+    }
+
+    /// `catalog_date_counts` must produce one row per distinct day, correctly separate from a
+    /// "no date" bucket that a naive COUNT(*) grouped by (cap_y,cap_m,cap_d) would otherwise
+    /// fold NULLs into as their own (NULL,NULL,NULL) group instead of a named bucket.
+    #[test]
+    fn date_counts_groups_by_day_and_buckets_undated_separately() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
+        insert_dated_photo(&conn, vid, "a.jpg", 2026, 8, 20);
+        insert_dated_photo(&conn, vid, "b.jpg", 2026, 8, 20);
+        insert_dated_photo(&conn, vid, "c.jpg", 2026, 8, 21);
+        insert_dated_photo(&conn, vid, "d.jpg", 2025, 1, 1);
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+             VALUES (?1, 'e.jpg', '', 'e.jpg', 'e.jpg', 'jpg', 'jpeg', 10, 0, 0, 1)",
+            params![vid],
+        )
+        .unwrap();
+
+        let counts = date_counts_run(&conn).unwrap();
+        assert_eq!(counts.no_date, 1, "the undated photo must be its own bucket, not a (NULL,NULL,NULL) day");
+        assert_eq!(counts.days.len(), 3, "three distinct days");
+        let aug20 = counts.days.iter().find(|d| d.y == 2026 && d.m == 8 && d.d == 20).unwrap();
+        assert_eq!(aug20.n, 2);
+        // Newest first, matching the sidebar's expected order.
+        assert_eq!((counts.days[0].y, counts.days[0].m, counts.days[0].d), (2026, 8, 21));
+    }
+
+    /// The date-browser scope itself: year alone, year+month, and a full year/month/day must
+    /// each narrow correctly, and month/day are meaningless without year (there's no
+    /// cross-year "every March" view in this design).
+    #[test]
+    fn query_run_scopes_by_year_month_day() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
+        insert_dated_photo(&conn, vid, "aug20.jpg", 2026, 8, 20);
+        insert_dated_photo(&conn, vid, "aug21.jpg", 2026, 8, 21);
+        insert_dated_photo(&conn, vid, "jul.jpg", 2026, 7, 4);
+        insert_dated_photo(&conn, vid, "y2025.jpg", 2025, 8, 20);
+
+        let by_year = query_run(&conn, CatalogQuery { year: Some(2026), ..Default::default() }).unwrap();
+        assert_eq!(by_year.entries.len(), 3, "whole year: everything in 2026");
+
+        let by_month = query_run(&conn, CatalogQuery { year: Some(2026), month: Some(8), ..Default::default() }).unwrap();
+        assert_eq!(by_month.entries.len(), 2, "one month: just August 2026");
+
+        let by_day = query_run(&conn, CatalogQuery { year: Some(2026), month: Some(8), day: Some(20), ..Default::default() }).unwrap();
+        assert_eq!(by_day.entries.len(), 1);
+        assert_eq!(by_day.entries[0].name, "aug20.jpg");
     }
 }
