@@ -215,18 +215,32 @@ fn sam2_decoder() -> Result<&'static Mutex<SamSession>, String> {
 // and cloning all three on every scribble point made each mask query pay a pointless multi-MB
 // memcpy. ORT's CreateTensorWithDataAsOrtValue borrows the buffer only for the run, so a
 // borrow scoped to run_session is sufficient.
+// F32 is the whole AI stack's input dtype EXCEPT CLIP's text encoder (clip.rs), whose ONNX graph
+// declares `input_ids` as int64 (verified via onnx.load(), not assumed) — every tokenizer in
+// existence emits integer token ids, so this is not a one-off oddity, just the first model in
+// this codebase whose input isn't already-float pixels. `InputData` keeps `run_session` a single
+// shared code path for both dtypes rather than a second near-duplicate function.
+pub(crate) enum InputData<'a> {
+    F32(std::borrow::Cow<'a, [f32]>),
+    I64(std::borrow::Cow<'a, [i64]>)
+}
 pub(crate) struct NamedInput<'a> {
     name: CString,
-    data: std::borrow::Cow<'a, [f32]>,
+    data: InputData<'a>,
     shape: Vec<i64>
 }
 pub(crate) fn input(name: &str, data: Vec<f32>, shape: &[i64]) -> NamedInput<'static> {
-    NamedInput { name: CString::new(name).unwrap(), data: std::borrow::Cow::Owned(data), shape: shape.to_vec() }
+    NamedInput { name: CString::new(name).unwrap(), data: InputData::F32(std::borrow::Cow::Owned(data)), shape: shape.to_vec() }
 }
 
 /// Borrowing variant of `input` for large cached tensors (SAM embeddings) — no per-query copy.
 pub(crate) fn input_ref<'a>(name: &str, data: &'a [f32], shape: &[i64]) -> NamedInput<'a> {
-    NamedInput { name: CString::new(name).unwrap(), data: std::borrow::Cow::Borrowed(data), shape: shape.to_vec() }
+    NamedInput { name: CString::new(name).unwrap(), data: InputData::F32(std::borrow::Cow::Borrowed(data)), shape: shape.to_vec() }
+}
+
+/// Int64 variant — CLIP's text encoder's `input_ids` (see clip.rs).
+pub(crate) fn input_i64(name: &str, data: Vec<i64>, shape: &[i64]) -> NamedInput<'static> {
+    NamedInput { name: CString::new(name).unwrap(), data: InputData::I64(std::borrow::Cow::Owned(data)), shape: shape.to_vec() }
 }
 
 /// Runs a session with the given named f32 inputs, returning the named f32 outputs requested (in
@@ -256,18 +270,25 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
 
         for inp in inputs.iter() {
             let mut value: *mut OrtValue = std::ptr::null_mut();
-            let byte_len = inp.data.len() * std::mem::size_of::<f32>();
+            let (data_ptr, byte_len, elem_type) = match &inp.data {
+                InputData::F32(d) => {
+                    (d.as_ptr() as *mut std::ffi::c_void, d.len() * std::mem::size_of::<f32>(), ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT)
+                }
+                InputData::I64(d) => {
+                    (d.as_ptr() as *mut std::ffi::c_void, d.len() * std::mem::size_of::<i64>(), ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64)
+                }
+            };
             let res = check(
                 h.api,
                 ((*h.api).CreateTensorWithDataAsOrtValue)(
                     mem_info,
                     // ORT only READS inference inputs; the *mut is the C API's signature, not a
                     // real mutation — safe to hand it a pointer derived from a shared borrow.
-                    inp.data.as_ptr() as *mut _,
+                    data_ptr,
                     byte_len,
                     inp.shape.as_ptr(),
                     inp.shape.len(),
-                    ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+                    elem_type,
                     &mut value
                 ),
                 "CreateTensorWithDataAsOrtValue"

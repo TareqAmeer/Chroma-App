@@ -1,1 +1,2 @@
 desktop/src-tauri/vendor/arcface/*.onnx filter=lfs diff=lfs merge=lfs -text
+desktop/src-tauri/vendor/clip/*.onnx filter=lfs diff=lfs merge=lfs -text

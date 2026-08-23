@@ -209,6 +209,15 @@
       case 'catalog_embed_faces': return Promise.resolve({ embedded: 0 });
       case 'catalog_cluster_faces': return Promise.resolve({ people: 0, clustered_faces: 0, unclustered_faces: 0 });
       case 'catalog_rename_person': case 'catalog_merge_people': case 'catalog_delete_person': return Promise.resolve();
+      case 'catalog_clip_embed': return Promise.resolve({ embedded: 0 });
+      case 'catalog_clip_search': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        if (!A.text || !A.text.trim()) return Promise.resolve([]);
+        // Deterministic-but-query-dependent synthetic ranking so the harness can verify the
+        // grid actually reorders per query rather than always showing the same fixed set.
+        const seed = [...A.text].reduce((s, c) => s + c.charCodeAt(0), 0);
+        return Promise.resolve([3, 7, 1, 12, 5].map((id, i) => ({ id: ((id + seed) % 18) + 1, score: 0.9 - i * 0.1 })));
+      }
       case 'catalog_query': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
         const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
@@ -228,6 +237,16 @@
               kind: 'jpeg', mtime: 1700000102, size: 500, missing: false, edited_ts: 0, offline: false, volume: 'Archive T7',
               sharpness: 400, blurry: false, stack_n: 0, thumb_path: null },
           ] });
+        }
+        // AI stack Phase D mock: photoIds overrides everything, same contract as expandStack —
+        // returns exactly those synthetic ids (same per-i shape the plain view below builds).
+        if (q.photoIds) {
+          const entries = q.photoIds.filter((i) => i >= 1 && i <= N).map((i) => ({
+            id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`,
+            is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
+            missing: false, edited_ts: 0, offline: false, volume: 'Archive T7', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null
+          }));
+          return Promise.resolve({ total: entries.length, capped: false, entries });
         }
         // Scoped mock: a date filter returns a visibly SMALLER slice than the full N, sized
         // from the same fixed day counts catalog_date_counts's mock uses above, so clicking
@@ -826,7 +845,8 @@
       <button class="lib-btn lib-btn-icon" id="lib-expand" title="Full-window view — G">${ic('fit',17)}</button>
     </div>
     <div id="lib-filters">
-      <input id="lib-search" placeholder="Search filename…" />
+      <input id="lib-search" placeholder="Search filename… (Enter for AI search)" />
+      <button class="lib-btn lib-btn-icon" id="lib-clip-search" title="Search photos by description, e.g. \"a dog on a beach\" — press Enter in the search box, or click this">${ic('search', 15)}</button>
       <select id="lib-source" title="Photo source">
         <option value="folder">This folder</option>
         <option value="edited">All Edited</option>
@@ -3938,10 +3958,19 @@
   });
   overlay.querySelector('#lib-filters-clear').onclick = () => clearAllLibFilters();
   let searchDebounce;
-  overlay.querySelector('#lib-search').oninput = (e) => {
+  const searchInput = overlay.querySelector('#lib-search');
+  searchInput.oninput = (e) => {
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); }, 150);
   };
+  // AI stack Phase D: Enter runs a semantic (CLIP) search over the whole catalog instead of the
+  // live filename filter oninput already does — a deliberately different gesture (type-to-filter
+  // vs press-Enter-to-search) so the common case (narrowing the current view by filename) stays
+  // instant with no round trip, and the AI search is opt-in per query, not a live-as-you-type
+  // model call on every keystroke.
+  searchInput.onkeydown = (e) => { if (e.key === 'Enter' && searchInput.value.trim()) runClipTextSearch(searchInput.value.trim()); };
+  const clipSearchBtn = overlay.querySelector('#lib-clip-search');
+  if (clipSearchBtn) clipSearchBtn.onclick = () => { if (searchInput.value.trim()) runClipTextSearch(searchInput.value.trim()); };
 
   // ── view options: view mode, sort, thumb size, metadata display, source ─────────────────
   const viewSeg = overlay.querySelector('#lib-viewmode-seg');
@@ -4156,21 +4185,67 @@
     refreshCacheUsage();
   }
 
-  /// Manual, on-demand — same posture as "Verify library…": face detection + embedding is a real
-  /// per-photo decode+inference cost (unlike thumb/focus/hash, which are cheap enough to
-  /// auto-chain in catalogRunBackgroundPhases), so it only runs when explicitly asked for, not on
-  /// every folder open. Chains all three AI-stack scan phases, then a fresh clustering pass —
-  /// re-clustering is cheap (pure math over already-embedded vectors) so it's safe to always
-  /// re-run after a scan turns up anything new.
+  /// Manual, on-demand — same posture as "Verify library…": face detection/embedding AND CLIP
+  /// embedding are each a real per-photo decode+inference cost (unlike thumb/focus/hash, which
+  /// are cheap enough to auto-chain in catalogRunBackgroundPhases), so this only runs when
+  /// explicitly asked for, not on every folder open. One trigger for both AI-stack features
+  /// (People AND search) rather than two separate buttons — a user who wants one almost always
+  /// wants the other, and both need the same expensive per-photo decode anyway. Chains detect →
+  /// face-embed → cluster, then CLIP-embed; re-clustering is cheap (pure math over already-
+  /// embedded vectors) so it's safe to always re-run after a scan turns up anything new.
   async function runFindFaces() {
-    toast('Finding faces…');
+    toast('Analyzing photos…');
     try {
       await invoke('catalog_faces_scan');
       await invoke('catalog_embed_faces');
       const r = await invoke('catalog_cluster_faces');
+      await invoke('catalog_clip_embed');
       await refreshPeople();
-      toast(r.people ? `Found ${r.people} ${r.people === 1 ? 'person' : 'people'}` : 'No new people found', true);
-    } catch (e) { toast(humanizeErr('scan for faces', e), 'err'); }
+      toast(r.people ? `Found ${r.people} ${r.people === 1 ? 'person' : 'people'}` : 'Photos analyzed — try searching by description', true);
+    } catch (e) { toast(humanizeErr('analyze photos', e), 'err'); }
+  }
+
+  /// AI stack Phase D: natural-language photo search. Two round trips, not one — `catalog_clip_search`
+  /// only returns `{id, score}` (it doesn't have full row data to hand back), so `catalog_query`'s
+  /// new `photoIds` override filter (mirrors `expandStack`'s own override shape) fetches the real
+  /// grid rows for those exact ids. SQL's `IN (...)` does not preserve input order, so the
+  /// returned entries are re-sorted here by the score list — the whole point of a ranked search.
+  async function runClipTextSearch(text) {
+    state.source = 'catalog';
+    state.catalogScope = `search:${text}`;
+    state.selected.clear();
+    // The AI query text lives in the SAME #lib-search box the live filename filter reads from
+    // (state.search) — clear it here or renderGrid() re-applies it as a substring filter on top
+    // of the CLIP results and (almost always) filters every single one back out.
+    state.search = '';
+    const grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let hits;
+    try { hits = await invoke('catalog_clip_search', { text, limit: 200 }); }
+    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not search photos.</div>'; return; }
+    if (!hits.length) {
+      grid.innerHTML = '<div id="lib-empty">No photos have been analyzed for search yet — click the search icon next to "People" in the sidebar first.</div>';
+      state.entries = [];
+      renderCollections();
+      return;
+    }
+    const order = new Map(hits.map((h, i) => [h.id, i]));
+    let page;
+    try { page = await invoke('catalog_query', { q: { photoIds: hits.map((h) => h.id) } }); }
+    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load search results.</div>'; return; }
+    const entries = page.entries.slice().sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9));
+    state.entries = entries;
+    if (!entries.length) {
+      grid.innerHTML = '<div id="lib-empty">No matching photos found.</div>';
+      renderCollections();
+      return;
+    }
+    {
+      const paths = entries.filter((e) => !e.offline).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
+    await renderGrid();
+    renderCollections();
   }
 
   let cacheUsage = null; // {offline_thumbs_bytes, decode_cache_bytes, working_thumbs_bytes, budget_bytes}
@@ -4351,7 +4426,7 @@
   function peopleSectionHtml() {
     if (!peopleList.length) {
       return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People`
-        + `<span id="lib-people-scan" title="Find faces" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>`
+        + `<span id="lib-people-scan" title="Analyze photos — find faces and enable AI search" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>`
         + `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`;
     }
     const sorted = peopleList.slice().sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
@@ -4363,7 +4438,7 @@
       </div>`;
     }).join('');
     return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People`
-      + `<span id="lib-people-scan" title="Find faces" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>` + rows;
+      + `<span id="lib-people-scan" title="Analyze photos — find faces and enable AI search" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>` + rows;
   }
   function wirePeopleRows(host) {
     const scanBtn = host.querySelector('#lib-people-scan');
@@ -4493,8 +4568,8 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces' };
-  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed'];
+  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed', 'clip'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
 

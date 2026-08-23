@@ -93,6 +93,12 @@ blake3 = "1"
 linfa = "0.8"
 linfa-clustering = "0.8"
 ndarray = "0.16"
+# AI stack Phase D: CLIP natural-language search. BPE tokenization for the CLIP text encoder
+# (clip.rs) — `default-features = false` drops `hf-hub`/`http`/`rustls-tls` (this app never
+# downloads a tokenizer at runtime, only reads the vendored `vendor/clip/tokenizer.json`) but
+# keeps `onig`, which CLIP's pretokenizer regex actually needs: its pattern uses lookahead
+# (`\s+(?!\S)`) that Rust's own `regex` crate cannot express, only a PCRE-like engine can.
+tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
 
 [profile.release]
 strip = true

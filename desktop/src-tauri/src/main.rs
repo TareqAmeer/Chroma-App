@@ -28,6 +28,7 @@ mod lens_correct;
 mod library;
 mod raw_decode;
 mod arcface;
+mod clip;
 mod faceparse;
 mod scrfd;
 mod sam;
@@ -1623,6 +1624,8 @@ fn main() {
             catalog::catalog_rename_person,
             catalog::catalog_merge_people,
             catalog::catalog_delete_person,
+            catalog::catalog_clip_embed,
+            catalog::catalog_clip_search,
             catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
             catalog::catalog_focus,
@@ -1929,6 +1932,15 @@ fn main() {
             // resource-with-dev-fallback pattern; too large for include_bytes! like SAM2/
             // faceparse/rawdenoise above.
             arcface::set_model_path(resolve_vendor("vendor/arcface/w600k_r50.onnx"));
+
+            // AI stack Phase D: CLIP natural-language search (vision + text encoders, ~350MB +
+            // ~254MB) — same bundled-resource-with-dev-fallback pattern; plus the BPE tokenizer,
+            // which is small but still resolved the same way so a packaged .app carries it too.
+            clip::set_model_paths(
+                resolve_vendor("vendor/clip/vision_model.onnx"),
+                resolve_vendor("vendor/clip/text_model.onnx"),
+                resolve_vendor("vendor/clip/tokenizer.json")
+            );
 
             // High-tier RAW denoiser (rawdenoise.rs) — same bundled-resource-with-dev-fallback
             // pattern; ~30MB each, so file-path CreateSession like SAM2/faceparse, not

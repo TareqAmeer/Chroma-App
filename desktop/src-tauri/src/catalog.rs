@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -363,6 +363,23 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         };
         if !has_col("people", "auto")? {
             conn.execute("ALTER TABLE people ADD COLUMN auto INTEGER NOT NULL DEFAULT 1", [])?;
+        }
+    }
+
+    // v6 -> v7: AI stack Phase D — CLIP natural-language search. `clip_scanned_at` follows the
+    // same `hashed_at`/`faces_scanned_at` resumability convention (stores the photo's `mtime` AT
+    // EMBED TIME). One embedding per PHOTO (not per-face like Phase B) — CLIP embeds a whole
+    // scene, not a detected region.
+    if version < 7 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "clip_embedding")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN clip_embedding BLOB", [])?;
+        }
+        if !has_col("photos", "clip_scanned_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN clip_scanned_at INTEGER", [])?;
         }
     }
 
@@ -1981,6 +1998,120 @@ pub fn catalog_people(state: tauri::State<CatalogState>) -> Result<Vec<PersonNod
     Ok(rows)
 }
 
+// ── Natural-language search (AI stack Phase D) — CLIP. Resumable via `clip_scanned_at IS NULL OR
+// clip_scanned_at != mtime`, same shape as `hash_run`/`faces_run`. One embedding per PHOTO (not
+// per stack-leader-only — a derivative export can have different content than its RAW leader, so
+// embedding only leaders would miss it, unlike keywords which genuinely live on the leader's own
+// XMP). Search itself is a linear scan over every embedded photo: SQLite has no native vector
+// index, and a dot product over a few hundred thousand 512-dim rows is a few hundred ms in Rust
+// — fine for an on-demand search action, not worth a real ANN index at this library size.
+
+#[derive(Serialize, Clone, Default)]
+pub struct ClipEmbedResult {
+    pub embedded: usize,
+}
+
+pub fn clip_embed_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ClipEmbedResult, String> {
+    let mut result = ClipEmbedResult::default();
+    const DECODE_LONG_EDGE: u32 = 384; // CLIP's own input is 224x224 (shortest-edge+crop) — well under this
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.kind != 'video'
+                   AND (p.clip_scanned_at IS NULL OR p.clip_scanned_at != p.mtime)
+                 LIMIT 32"
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let mtime: i64 = r.get(2)?;
+                let last_path: String = r.get(3)?;
+                let is_local: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "clip".into(), done: result.embedded, total: result.embedded + batch.len(), current: String::new() });
+
+        let embedded: Vec<(i64, i64, Option<Vec<f32>>)> = batch
+            .par_iter()
+            .map(|(id, abs, mtime)| {
+                let emb = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().and_then(|(rgb, w, h)| crate::clip::embed_image(&rgb, w, h).ok());
+                (*id, *mtime, emb)
+            })
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, mtime, emb) in &embedded {
+            let Some(emb) = emb else { continue }; // unreadable right now — retried next pass
+            let blob = f32_vec_to_blob(emb);
+            tx.execute("UPDATE photos SET clip_embedding = ?1, clip_scanned_at = ?2 WHERE id = ?3", params![blob, mtime, id])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.embedded += embedded.iter().filter(|(_, _, e)| e.is_some()).count();
+
+        if embedded.iter().all(|(_, _, e)| e.is_none()) {
+            break; // nothing in this batch could be embedded — avoid spinning on unreadable rows
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.embedded, total: result.embedded, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn catalog_clip_embed(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<ClipEmbedResult, String> {
+    use tauri::Emitter;
+    state.cancel.store(false, Ordering::Relaxed);
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    clip_embed_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+}
+
+#[derive(Serialize, Clone)]
+pub struct ClipSearchHit {
+    pub id: i64,
+    pub score: f32,
+}
+
+/// Embeds `text` and ranks every CLIP-embedded present photo by cosine similarity, highest
+/// first. A linear scan (see this section's own doc comment on why that's fine at this scale) —
+/// `limit` caps the RETURNED rows, not the work done, since ranking needs every score anyway.
+#[tauri::command]
+pub fn catalog_clip_search(state: tauri::State<CatalogState>, text: String, limit: Option<usize>) -> Result<Vec<ClipSearchHit>, String> {
+    let query_emb = crate::clip::embed_text(&text)?;
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, clip_embedding FROM photos WHERE present = 1 AND clip_embedding IS NOT NULL").map_err(|e| e.to_string())?;
+    let mut hits: Vec<ClipSearchHit> = stmt
+        .query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let blob: Vec<u8> = r.get(1)?;
+            Ok((id, blob))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, blob)| ClipSearchHit { id, score: crate::clip::cosine_sim(&query_emb, &blob_to_f32_vec(&blob)) })
+        .collect();
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    hits.truncate(limit.unwrap_or(200));
+    Ok(hits)
+}
+
 #[derive(Serialize, Clone)]
 pub struct VerifyEntry {
     pub id: i64,
@@ -2170,6 +2301,13 @@ pub struct CatalogQuery {
     /// clicking one date-browser row.
     #[serde(default)]
     pub person_id: Option<i64>,
+    /// AI stack Phase D: fetch exactly these photos (any that still exist/are present), ignoring
+    /// every other filter — same override shape as `expand_stack`. This is how a CLIP search's
+    /// ranked `{id, score}` list (from `catalog_clip_search`, which has no other row data) turns
+    /// into real grid rows: the frontend re-sorts the returned entries by the score list itself,
+    /// since SQL's `IN (...)` does not preserve input order.
+    #[serde(default)]
+    pub photo_ids: Option<Vec<i64>>,
 }
 fn default_true() -> bool {
     true
@@ -2185,7 +2323,7 @@ impl Default for CatalogQuery {
     fn default() -> Self {
         CatalogQuery {
             kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None,
-            no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None
+            no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None
         }
     }
 }
@@ -2219,6 +2357,18 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         // behind it happens to be showing.
         where_parts = vec!["p.present = 1".to_string(), "p.stack_id = ?1".to_string()];
         values.push(Box::new(stack_id));
+    } else if let Some(ids) = &q.photo_ids {
+        // Same override posture as expand_stack — a CLIP search result is exactly these rows,
+        // regardless of whatever scope the grid behind it was showing.
+        if ids.is_empty() {
+            where_parts = vec!["0".to_string()]; // no ids requested — return nothing, not everything
+        } else {
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            where_parts = vec!["p.present = 1".to_string(), format!("p.id IN ({})", placeholders.join(","))];
+            for id in ids {
+                values.push(Box::new(*id));
+            }
+        }
     } else {
         // Grouped view: only a stack's LEADER (or an unstacked photo) is a top-level row — its
         // derivatives are folded into `stack_n`/`thumb_path` below, not listed separately. A
@@ -4087,6 +4237,91 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    // ── CLIP search scan phase (AI stack Phase D) ───────────────────────────────────────────
+
+    /// End-to-end through the real CLIP models (needs `vendor/clip/*`, present in this
+    /// checkout): a photo gets embedded, `clip_scanned_at` correctly gates a second pass to
+    /// zero new work, and the stored embedding is a well-formed unit vector — the same shape
+    /// `embed_run_embeds_detected_faces_and_is_resumable` below already proves for ArcFace.
+    #[test]
+    fn clip_embed_run_embeds_present_photos_and_is_resumable() {
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::clip::set_model_paths(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/vision_model.onnx"),
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/text_model.onnx"),
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/tokenizer.json")
+        );
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("clip_embed");
+        let img = image::RgbImage::from_pixel(320, 240, image::Rgb([80, 140, 200]));
+        img.save(dir.join("plain.jpg")).unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = clip_embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.embedded, 1);
+        let blob: Vec<u8> = conn.query_row("SELECT clip_embedding FROM photos WHERE name='plain.jpg'", [], |r| r.get(0)).unwrap();
+        let emb = blob_to_f32_vec(&blob);
+        assert_eq!(emb.len(), 512);
+        let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-3, "stored embedding should be L2-normalized, norm={norm}");
+
+        let r2 = clip_embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.embedded, 0, "nothing new to embed on a second pass");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `catalog_clip_search`'s ranking logic in isolation (bypassing the Tauri command wrapper,
+    /// same pattern the other command-adjacent tests use): given two stored embeddings, a query
+    /// closer to one of them must rank it first. Uses real `embed_text` runs, not synthetic
+    /// vectors, so this also exercises the actual text encoder end to end.
+    #[test]
+    fn clip_search_ranks_the_closer_embedding_first() {
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::clip::set_model_paths(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/vision_model.onnx"),
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/text_model.onnx"),
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/tokenizer.json")
+        );
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("clip_search");
+        // Two visually distinct synthetic images — solid blue-ish vs solid red-ish — so their
+        // CLIP embeddings genuinely differ (unlike two identical solid-grey images, which would
+        // embed near-identically and make the ranking assertion meaningless).
+        image::RgbImage::from_pixel(320, 240, image::Rgb([40, 60, 200])).save(dir.join("blue.jpg")).unwrap();
+        image::RgbImage::from_pixel(320, 240, image::Rgb([200, 50, 40])).save(dir.join("red.jpg")).unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        clip_embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+
+        let (blue_id, blue_blob): (i64, Vec<u8>) =
+            conn.query_row("SELECT id, clip_embedding FROM photos WHERE name='blue.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        let (red_id, red_blob): (i64, Vec<u8>) =
+            conn.query_row("SELECT id, clip_embedding FROM photos WHERE name='red.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        let blue_emb = blob_to_f32_vec(&blue_blob);
+        let red_emb = blob_to_f32_vec(&red_blob);
+
+        // Real, falsifiable claim (not just self-consistent by construction): a "blue" query
+        // must score the blue photo higher than the red one, and vice versa for "red" — same
+        // math catalog_clip_search's query path runs.
+        let blue_query = crate::clip::embed_text("a solid blue color").unwrap();
+        let red_query = crate::clip::embed_text("a solid red color").unwrap();
+        let blue_vs_blue = crate::clip::cosine_sim(&blue_query, &blue_emb);
+        let blue_vs_red = crate::clip::cosine_sim(&blue_query, &red_emb);
+        let red_vs_red = crate::clip::cosine_sim(&red_query, &red_emb);
+        let red_vs_blue = crate::clip::cosine_sim(&red_query, &blue_emb);
+        assert!(blue_vs_blue > blue_vs_red, "'blue' query should favor the blue photo: {blue_vs_blue} vs {blue_vs_red}");
+        assert!(red_vs_red > red_vs_blue, "'red' query should favor the red photo: {red_vs_red} vs {red_vs_blue}");
+        let _ = (blue_id, red_id);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     // ── Face embedding scan phase (AI stack Phase B, part 1) ────────────────────────────────
 
     /// End-to-end through the real ArcFace model (needs `vendor/arcface/w600k_r50.onnx`, present
@@ -4990,6 +5225,41 @@ mod tests {
         let mut names: Vec<String> = page.entries.iter().map(|e| e.name.clone()).collect();
         names.sort();
         assert_eq!(names, vec!["a.jpg".to_string(), "b.jpg".to_string()], "Travel must include the Iceland descendant, not just the direct tag");
+    }
+
+    /// `photo_ids` (AI stack Phase D: turning a CLIP search's ranked id list into real grid rows)
+    /// must override every other filter, same posture as `expand_stack` — and an empty list must
+    /// return nothing, not silently fall through to "everything" (a search with zero matches must
+    /// show an empty grid, not the whole library).
+    #[test]
+    fn query_run_photo_ids_overrides_other_filters_and_empty_list_returns_nothing() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        for name in ["a.jpg", "b.jpg", "c.jpg"] {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+                 VALUES (?1, ?2, '', ?2, ?2, 'jpg', 'jpeg', 10, 0, 0, 1)",
+                params![vid, name],
+            )
+            .unwrap();
+        }
+        let ids: Vec<i64> = conn
+            .prepare("SELECT id FROM photos WHERE name IN ('a.jpg','c.jpg') ORDER BY name")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Combined with a keyword filter that would otherwise exclude everything — proves the
+        // override, not just that the filter works in isolation.
+        let page = query_run(&conn, CatalogQuery { photo_ids: Some(ids), keywords: vec!["Nonexistent".into()], ..Default::default() }).unwrap();
+        let mut names: Vec<String> = page.entries.iter().map(|e| e.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, vec!["a.jpg".to_string(), "c.jpg".to_string()]);
+
+        let empty_page = query_run(&conn, CatalogQuery { photo_ids: Some(vec![]), ..Default::default() }).unwrap();
+        assert!(empty_page.entries.is_empty(), "an empty id list must return nothing, not fall through to every photo");
     }
 
     // ── Cache budget ─────────────────────────────────────────────────────────────────────────
