@@ -1672,6 +1672,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
             <option value="auto">Auto (match source)</option>
             <option value="jpg">JPG</option>
             <option value="png">PNG (lossless)</option>
+            <option value="webp">WebP</option>
           </select>
         </div>
         <!-- Resize + output sharpening. These belong together: any downscale throws away the
@@ -6855,6 +6856,65 @@ function injectDPI(b,ext,dpi){
     if(b[2]===0xFF&&b[3]===0xE0&&b[6]===0x4A&&b[7]===0x46&&b[8]===0x49&&b[9]===0x46){const out=b.slice();out[13]=1;out[14]=(dpi>>8)&0xFF;out[15]=dpi&0xFF;out[16]=(dpi>>8)&0xFF;out[17]=dpi&0xFF;return out;}
     return b;
   }
+}
+// ── Recipe metadata (look/print profile) into the exported file, as an XMP packet ──────────────
+// Backlog item 1: exports previously carried NO record of which look/print profile produced them
+// — `canvas.toBlob` re-encodes from scratch and nothing wrote a look name in anywhere. XMP is the
+// natural fit since the app already treats XMP as the metadata source of truth elsewhere (sidecar
+// writes, session recipes). Deliberately just look name + print profile, not the full adjustment
+// recipe — those two answer "which look produced this" at a glance; sliders/masks already have a
+// much richer home in the .xmp sidecar / session file, and duplicating all of that into every
+// exported JPEG/PNG's XMP packet would bloat every file for marginal benefit.
+function _xmpEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function buildRecipeXmp(lookName,printProfile){
+  const look=_xmpEsc(lookName||'None');
+  const printTag=printProfile?`\n   <cs:PrintProfile>${_xmpEsc(printProfile)}</cs:PrintProfile>`:'';
+  const xml=`<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n`+
+    `<x:xmpmeta xmlns:x="adobe:ns:meta/">\n`+
+    ` <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n`+
+    `  <rdf:Description rdf:about="" xmlns:cs="http://chromasmith.app/xmp/1.0/">\n`+
+    `   <cs:Look>${look}</cs:Look>${printTag}\n`+
+    `   <cs:Software>Chromasmith ${typeof BUILD!=='undefined'?BUILD:''}</cs:Software>\n`+
+    `  </rdf:Description>\n`+
+    ` </rdf:RDF>\n`+
+    `</x:xmpmeta>\n`+
+    `<?xpacket end="w"?>`;
+  return xml;
+}
+// current look/print display names, read from the same <select>s the export UI already shows
+function _exportRecipeNames(){
+  const lutSel=document.getElementById('sel-lut'),printSel=document.getElementById('sel-print');
+  const lutOpt=lutSel&&lutSel.selectedOptions&&lutSel.selectedOptions[0];
+  const printOpt=printSel&&printSel.selectedOptions&&printSel.selectedOptions[0];
+  const look=(lutOpt&&lutOpt.value)?lutOpt.textContent.trim():'None';
+  const print=(printOpt&&printOpt.value)?printOpt.textContent.trim():'';
+  return {look,print};
+}
+function injectRecipeXmp(out,ext,lookName,printProfile){
+  try{
+    const xmp=new TextEncoder().encode(buildRecipeXmp(lookName,printProfile));
+    if(ext==='png'){
+      const kw=new TextEncoder().encode('XML:com.adobe.xmp');
+      const data=new Uint8Array(kw.length+1+2+2+xmp.length); // keyword\0 + comp(1) + method(1) + lang\0 + xkw\0 + text
+      let o=0;data.set(kw,o);o+=kw.length;data[o++]=0; // keyword, null
+      data[o++]=0;data[o++]=0; // compression flag=0, method=0
+      data[o++]=0; // empty language tag, null-terminated
+      data[o++]=0; // empty translated keyword, null-terminated
+      data.set(xmp,o);
+      const chunk=pngChunk('iTXt',data);
+      return pngSpliceAfterIHDR(out,chunk);
+    }else{ // JPEG: separate APP1 segment from Exif's, identified by its own signature
+      const sig=new TextEncoder().encode('http://ns.adobe.com/xap/1.0/\0');
+      const segLen=2+sig.length+xmp.length; // length field covers everything after the FF E1 marker
+      const seg=new Uint8Array(2+segLen);
+      seg[0]=0xFF;seg[1]=0xE1;seg[2]=(segLen>>8)&0xFF;seg[3]=segLen&0xFF;
+      seg.set(sig,4);seg.set(xmp,4+sig.length);
+      // insert right after SOI, before whatever metadata injectMetadata already spliced in
+      const res=new Uint8Array(out.length+seg.length);
+      res.set(out.subarray(0,2),0);res.set(seg,2);res.set(out.subarray(2),2+seg.length);
+      return res;
+    }
+  }catch(e){return out}
 }
 // ═══════════════════════════
 // LUT PRESETS + LIBRARY
@@ -15991,17 +16051,25 @@ async function exportFX(){
         }else{
           const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
           const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||RAW_FILE_EXT_RE.test('.'+it.ext)):fmt==='png'; // lossless source → lossless out
-          mime=isPng?'image/png':'image/jpeg';outExt=isPng?'png':'jpg';
+          const isWebp=fmt==='webp';
+          mime=isWebp?'image/webp':isPng?'image/png':'image/jpeg';outExt=isWebp?'webp':isPng?'png':'jpg';
           let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
           // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
           // fails to save the result to Photos — cap at 0.99 on touch devices.
           if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
-          const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q));
+          const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q)); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
           if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;continue;}
           out=new Uint8Array(await blob.arrayBuffer());
-          if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
-          out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
-          out=injectDPI(out,outExt,it.dpi);
+          if(!isWebp){ // metadata splicing below is JPEG/PNG-specific; WebP ships with no embedded metadata for now
+            if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
+            out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
+            out=injectDPI(out,outExt,it.dpi);
+            // Item 1: record which look/print profile produced this export, since nothing else
+            // in the exported file says so and export_history.json's own recipe record never
+            // made it INTO the file itself.
+            const {look,print}=_exportRecipeNames();
+            out=injectRecipeXmp(out,outExt,look,print);
+          }
         }
         // Filename pattern: the rename field now applies to BATCH exports too (it used to be
         // single-export only — batch files were always forced to the source name + _vN.N).
