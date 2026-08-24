@@ -232,46 +232,73 @@ fn civil_from_days(z: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+#[derive(Serialize, Clone)]
+pub struct ScanProgress {
+    pub scanned: usize,
+    pub current: String,
+}
+
 /// Recursively finds importable media. Walks the whole volume rather than only DCIM/ so a card
 /// with a non-standard layout (or a plain folder of files) still works.
+///
+/// ⚠️ Per-file EXIF reads (`capture_date`) on a real card of thousands of RAWs make this
+/// genuinely slow — measured hanging the entire UI for minutes on a real SD card with no
+/// feedback, because a plain sync `#[tauri::command]` was being invoked in a way that blocked the
+/// WKWebView's own main thread rather than running off it (confirmed via `sample`: the OS main
+/// thread's own stack was inside this walk, not idle). Async + `spawn_blocking` moves the walk
+/// onto Tauri's async runtime's blocking pool instead, and periodic `scan-progress` events (same
+/// pattern as `ingest-progress` below) give the UI something to show instead of a frozen dialog.
 #[tauri::command]
-pub fn scan_card(path: String, dest_root: Option<String>) -> Result<Vec<CardFile>, String> {
-    let root = PathBuf::from(&path);
-    if !root.is_dir() {
-        return Err(format!("not a folder: {path}"));
-    }
-    let mut files = Vec::new();
-    let mut stack = vec![root];
-    while let Some(dir) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        for entry in rd.flatten() {
-            let p = entry.path();
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
-                continue; // .Spotlight-V100, ._AppleDouble stubs, etc
-            }
-            if p.is_dir() {
-                stack.push(p);
-                continue;
-            }
-            let Some(kind) = media_kind(&ext_lower(&p)) else { continue };
-            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            let ps = p.to_string_lossy().into_owned();
-            let date = capture_date(&ps).or_else(|| mtime_date(&p));
-            files.push(CardFile { path: ps, name, size, kind: kind.to_string(), date, duplicate: false });
+pub async fn scan_card(app: tauri::AppHandle, path: String, dest_root: Option<String>) -> Result<Vec<CardFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Emitter;
+        let root = PathBuf::from(&path);
+        if !root.is_dir() {
+            return Err(format!("not a folder: {path}"));
         }
-    }
-    files.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut files = Vec::new();
+        let mut stack = vec![root];
+        let mut scanned = 0usize;
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for entry in rd.flatten() {
+                let p = entry.path();
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.starts_with('.') {
+                    continue; // .Spotlight-V100, ._AppleDouble stubs, etc
+                }
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                let Some(kind) = media_kind(&ext_lower(&p)) else { continue };
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                let ps = p.to_string_lossy().into_owned();
+                let date = capture_date(&ps).or_else(|| mtime_date(&p));
+                files.push(CardFile { path: ps, name: name.clone(), size, kind: kind.to_string(), date, duplicate: false });
+                scanned += 1;
+                // Every 20 files, not every file — this loop is already the bottleneck, so the
+                // event-emit overhead itself shouldn't compete with it for a fast local folder.
+                if scanned % 20 == 0 {
+                    let _ = app.emit("scan-progress", ScanProgress { scanned, current: name });
+                }
+            }
+        }
+        files.sort_by(|a, b| a.name.cmp(&b.name));
 
-    // Mark files already imported. Matching on name+size (not a content hash) is the same
-    // trade-off every importer makes: a hash of 400 RAWs would take longer than the import.
-    if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
-        let existing = index_destination(Path::new(&dest));
-        for f in files.iter_mut() {
-            f.duplicate = existing.get(&f.name).is_some_and(|&s| s == f.size);
+        // Mark files already imported. Matching on name+size (not a content hash) is the same
+        // trade-off every importer makes: a hash of 400 RAWs would take longer than the import.
+        if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
+            let existing = index_destination(Path::new(&dest));
+            for f in files.iter_mut() {
+                f.duplicate = existing.get(&f.name).is_some_and(|&s| s == f.size);
+            }
         }
-    }
-    Ok(files)
+        let _ = app.emit("scan-progress", ScanProgress { scanned, current: String::new() });
+        Ok(files)
+    })
+    .await
+    .map_err(|e| format!("scan_card task panicked: {e}"))?
 }
 
 /// name -> size for every media file under `dest`, used for duplicate detection. Walks once and

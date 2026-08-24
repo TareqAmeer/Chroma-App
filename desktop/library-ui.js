@@ -4909,11 +4909,25 @@
     back.onclick = (ev) => { if (ev.target === back && !cardState.scanning) { cancelled = true; cleanup(); } };
 
     let files = [];
+    // scan_card now runs off the main thread and emits progress as it walks — a real card with
+    // thousands of RAWs (each needing an EXIF read for its capture date) can take a while, and
+    // the static "Scanning card..." label used to be the ONLY thing on screen for that whole time
+    // with zero feedback, indistinguishable from a hang. See ingest.rs's ScanProgress.
+    let scanUnlisten = null;
+    if (window.__TAURI__?.event) {
+      scanUnlisten = await window.__TAURI__.event.listen('scan-progress', (ev) => {
+        const p = ev.payload || {};
+        const sub = document.getElementById('imp-sub');
+        if (sub) sub.textContent = `Scanning card... ${p.scanned || 0} files found` + (p.current ? ` (${p.current})` : '');
+      });
+    }
     try {
       files = await invoke('scan_card', { path: cardPath, destRoot: prefs.dest || null });
     } catch (e) {
       document.getElementById('imp-sub').textContent = 'Could not read this card: ' + String(e.message || e);
       return;
+    } finally {
+      if (scanUnlisten) scanUnlisten();
     }
     if (cancelled) return;
     if (!files.length) {
