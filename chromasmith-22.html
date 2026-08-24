@@ -6364,6 +6364,29 @@ function fxUpdateHistoryBtn(){
   if(!b)return;
   b.style.display=(typeof window.chromasmithGetExportHistory==='function')?'':'none';
 }
+// Shared viewport clamp for the toolbar popovers below (history/split/timeline) — each is
+// anchored via a fixed CSS corner (left:0 or right:0) sized to its OWN button, not to where that
+// button actually sits in the window. That's fine when the trigger is reliably near the edge the
+// popover extends AWAY from (per #lib-filters-pop's own comment in library-ui.js), but these
+// three don't have that guarantee at every window width/dock state — reported live for the
+// Library's activity pill (library-ui.js's .lib-act-pop, fixed separately) and the same fixed-
+// corner-CSS pattern applies here too. Called AFTER the popover's content is populated, since its
+// width/height depend on that content.
+function fxClampPopoverToViewport(pop){
+  if(!pop||pop.style.display==='none')return;
+  const margin=8;
+  const r=pop.getBoundingClientRect();
+  let dx=0,dy=0;
+  if(r.left<margin)dx=margin-r.left;
+  else if(r.right>window.innerWidth-margin)dx=(window.innerWidth-margin)-r.right;
+  if(r.top<margin)dy=margin-r.top;
+  else if(r.bottom>window.innerHeight-margin)dy=(window.innerHeight-margin)-r.bottom;
+  if(dx||dy){
+    // Read any pre-existing transform-based offset (none of these three set one) rather than
+    // clobbering it, so this stays additive if a future popover ever combines the two.
+    pop.style.transform=(pop.style.transform||'').replace(/translate\([^)]*\)/,'')+` translate(${dx}px,${dy}px)`;
+  }
+}
 async function fxToggleHistoryPopover(){
   const pop=document.getElementById('fx-history-popover');
   if(!pop)return;
@@ -6390,6 +6413,7 @@ async function fxToggleHistoryPopover(){
     });
   }
   pop.style.display='block';
+  fxClampPopoverToViewport(pop);
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('db-history-wrap');
@@ -13093,6 +13117,7 @@ async function fxToggleSplitMenu(e){
     }catch(err){/* desktop-only feature — silently skip if it errors */}
   }
   pop.style.display='block';
+  fxClampPopoverToViewport(pop);
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-split-popover');
@@ -13129,6 +13154,7 @@ function fxToggleTimelinePopover(){
   });
   pop.appendChild(list);
   pop.style.display='block';
+  fxClampPopoverToViewport(pop);
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-timeline-popover');

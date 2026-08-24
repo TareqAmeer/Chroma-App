@@ -4736,6 +4736,23 @@
     el.innerHTML = html;
     const pill = document.getElementById('lib-act-pill');
     if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
+    // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
+    // come before it), but .lib-act-pop's CSS was a plain right:0 — meaning "align the popover's
+    // right edge to the pill's right edge", i.e. extend LEFTWARD from a pill that's often close
+    // to x=0. A 260px-wide popover from a pill near the left edge runs straight off the left side
+    // of the window — reported live, not hypothetical. #lib-filters-pop's right:0 is safe because
+    // its own trigger button is anchored at the far right of its row; this pill has no such
+    // guarantee, so it needs a real viewport clamp instead of a fixed-corner CSS assumption.
+    const pop = pill && pill.querySelector('.lib-act-pop');
+    if (pop) {
+      const pr = pill.getBoundingClientRect();
+      const pw = pop.offsetWidth || 260;
+      const margin = 8;
+      let desiredLeft = pr.right - pw; // default: right-aligned to the pill, same as before
+      desiredLeft = Math.max(margin, Math.min(desiredLeft, window.innerWidth - pw - margin));
+      pop.style.left = (desiredLeft - pr.left) + 'px';
+      pop.style.right = 'auto';
+    }
     const cancelBtn = document.getElementById('lib-act-cancel');
     if (cancelBtn) {
       cancelBtn.onclick = (e) => {
