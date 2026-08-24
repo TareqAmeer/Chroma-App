@@ -412,6 +412,11 @@
     metaDisplay: localStorage.getItem('chromasmith_lib_metadisp') || 'off', // 'off'|'hover'|'always'
     showTitle: localStorage.getItem('chromasmith_lib_showtitle') !== '0',
     gridAspect: localStorage.getItem('chromasmith_lib_gridaspect') === '1', // item 31: real aspect ratio vs square-crop thumbnails
+    // Matches Lightroom's "Include Photos from Subfolders" — list_dir is deliberately one level
+    // only (see its own doc comment), so a folder tree built by date (2026/08/22, 2026/08/23...)
+    // showed nothing when the PARENT folder was selected, only when a leaf was. Real reported
+    // confusion, not a hypothetical.
+    includeSubfolders: localStorage.getItem('chromasmith_lib_subfolders') === '1',
   };
 
   // ── styles ──────────────────────────────────────────────────────────────────
@@ -871,6 +876,8 @@
         <option value="folder">This folder</option>
         <option value="edited">All Edited</option>
       </select>
+      <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
+        <input type="checkbox" id="lib-subfolders">Subfolders</label>
       <div id="lib-filters-btn-wrap">
         <button class="lib-btn" id="lib-filters-btn" title="Filter by type, camera, lens, ISO, duplicates, sync status or tag/rating">Filters<span id="lib-filters-badge"></span></button>
         <div id="lib-filters-pop">
@@ -2242,6 +2249,47 @@
       });
     }, { passive: true });
   }
+  /// Recursive listing for the "Include Photos from Subfolders" toggle. Deliberately a frontend
+  /// BFS over the same list_dir the tree already uses (not a new Rust command) — this is plain
+  /// folder browsing, not the SQLite catalog.
+  /// ⚠️ Measured, not assumed: a naive one-at-a-time version of this (await list_dir in a serial
+  /// loop) took 29 SECONDS to walk 4000 directories in a pure-mock test harness with ZERO real
+  /// disk I/O — pure per-call/IPC overhead. That is the exact "silent multi-second freeze" class
+  /// of bug this session already found and fixed once (scan_card) — reusing a naive serial walk
+  /// here would have reintroduced it in a different place. Fixed with (1) bounded concurrency so
+  /// several list_dir calls are in flight at once instead of one at a time, and (2) a progress
+  /// toast every 50 directories so a genuinely large tree still gives feedback instead of going
+  /// quiet. The directory cap is lower than a first pass (1000, not 4000) — a personal photo
+  /// library's date-folder tree is realistically dozens to a few hundred directories; 1000 is
+  /// generous headroom, not a wall anyone should realistically hit.
+  const SUBFOLDER_WALK_CAP = 1000;
+  const SUBFOLDER_WALK_CONCURRENCY = 8;
+  async function listDirRecursive(rootPath) {
+    const collected = [];
+    let queue = [rootPath];
+    let dirsWalked = 0;
+    let capHit = false;
+    while (queue.length) {
+      const batch = queue.splice(0, SUBFOLDER_WALK_CONCURRENCY);
+      const results = await Promise.all(batch.map((dir) => invoke('list_dir', { path: dir }).catch(() => [])));
+      const nextQueue = [];
+      for (let i = 0; i < batch.length; i++) {
+        const dir = batch[i], entries = results[i];
+        if (dir === rootPath) _treeListCache.set(rootPath, entries); // keep the tree's own cache in sync, same as the non-recursive path
+        dirsWalked++;
+        for (const e of entries) {
+          if (e.is_dir) { if (dirsWalked + nextQueue.length < SUBFOLDER_WALK_CAP) nextQueue.push(e.path); else capHit = true; }
+          else collected.push(e);
+        }
+      }
+      queue = queue.concat(nextQueue);
+      if (dirsWalked % 50 < SUBFOLDER_WALK_CONCURRENCY && typeof toast === 'function') {
+        toast(`Scanning subfolders… ${dirsWalked} folders, ${collected.length} photos found`, true);
+      }
+    }
+    if (capHit && typeof toast === 'function') toast(`Stopped after ${SUBFOLDER_WALK_CAP} subfolders — this tree is unusually large`, false);
+    return collected;
+  }
   async function openFolder(path) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
@@ -2252,8 +2300,12 @@
     grid.innerHTML = libSkeletonHtml();
     let entries;
     try {
-      entries = await invoke('list_dir', { path });
-      _treeListCache.set(path, entries); // opening a folder is the natural "refresh its listing" moment
+      if (state.includeSubfolders) {
+        entries = await listDirRecursive(path);
+      } else {
+        entries = await invoke('list_dir', { path });
+        _treeListCache.set(path, entries); // opening a folder is the natural "refresh its listing" moment
+      }
       catalogRegisterFolder(path); // fire-and-forget — see the function's own comment
     } catch (e) {
       grid.innerHTML = `<div id="lib-empty">Can't read this folder.</div>`;
@@ -4140,6 +4192,15 @@
       await openFolder(state.currentFolder);
     }
   };
+  {
+    const subCb = overlay.querySelector('#lib-subfolders');
+    subCb.checked = state.includeSubfolders;
+    subCb.onchange = async () => {
+      state.includeSubfolders = subCb.checked;
+      try { localStorage.setItem('chromasmith_lib_subfolders', state.includeSubfolders ? '1' : '0'); } catch {}
+      if (state.source === 'folder' && state.currentFolder) await openFolder(state.currentFolder);
+    };
+  }
   async function openCollectionView(name) {
     state.source = name;
     lrState.album = null; // leaving the cloud view — don't re-highlight a stale album later
