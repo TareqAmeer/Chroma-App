@@ -141,6 +141,14 @@ fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    // Belt-and-suspenders, not a fix for a live bug: the writer connection is already the only
+    // one ever used for writes, single-threaded via CatalogState's own Mutex<Connection>, so two
+    // writer-side transactions can never race each other for the write lock in the first place —
+    // and read_conn (see CatalogState's doc comment) never writes, so it never needs to upgrade a
+    // lock either. SQLite's own busy-timeout default is 0ms (fail instantly on ANY contention,
+    // e.g. a WAL checkpoint), which has no reason to fire given the above, but costs nothing to
+    // guard against anyway.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
     migrate(&conn)?;
     Ok(conn)
 }
