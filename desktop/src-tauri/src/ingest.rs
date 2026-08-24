@@ -193,19 +193,132 @@ fn statfs_bytes(path: &Path) -> (u64, u64) {
     }
 }
 
-/// EXIF capture date as "YYYY-MM-DD". library.rs's read_meta already covers both RAW (rawler) and
-/// JPEG/TIFF (kamadak-exif) and returns EXIF's "YYYY:MM:DD HH:MM:SS"; this just takes the date.
+/// EXIF capture date as "YYYY-MM-DD".
 ///
 /// ⚠️ Falls back to filesystem mtime ONLY when there is no EXIF date at all (video, mostly — this
 /// app has no MP4 metadata reader, and adding an ffmpeg dependency to learn a folder name would be
 /// absurd). A wrong-but-plausible date is worse than an obviously-missing one everywhere else.
+///
+/// RAW files go through `raw_exif_date_fast` below, NOT `library::read_meta_public` — measured on
+/// a real SD card: 800 files in 10 minutes (~750ms/file), traced with `sample` to
+/// `rawler::rawsource::RawSource::new`, which memory-maps the file with `.populate()` PLUS
+/// `Advice::WillNeed`/`Sequential` — that forces the OS to eagerly read the ENTIRE file (a 20-30MB
+/// RW2) off a slow USB card reader just to pull one EXIF date string. `read_meta_public` is still
+/// exactly right for the Library's own metadata panel (opened once per photo you're actually
+/// looking at, where the accuracy of every field — lens, maker notes — from having the full file
+/// is worth it); a bulk card scan of thousands of files is a completely different cost profile.
 fn capture_date(path: &str) -> Option<String> {
-    let meta = crate::library::read_meta_public(path);
-    if let Some(d) = meta.date.as_ref() {
-        let head: String = d.chars().take(10).collect();
-        if head.len() == 10 && head.chars().filter(|c| c.is_ascii_digit()).count() == 8 {
-            return Some(head.replace(':', "-"));
+    let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    // Both branches produce raw EXIF-format date STRINGS ("YYYY:MM:DD HH:MM:SS..."); this common
+    // tail normalizes either one to "YYYY-MM-DD" — kept in one place so the two paths can't drift
+    // into returning differently-shaped dates.
+    let raw = if matches!(ext.as_str(), "rw2" | "raw" | "dng" | "cr2" | "cr3" | "nef" | "arw" | "orf") {
+        raw_exif_date_fast(path)
+    } else {
+        crate::library::read_meta_public(path).date
+    };
+    let d = raw?;
+    let head: String = d.chars().take(10).collect();
+    if head.len() == 10 && head.chars().filter(|c| c.is_ascii_digit()).count() == 8 {
+        return Some(head.replace(':', "-"));
+    }
+    None
+}
+
+/// Reads a TIFF-based RAW's DateTimeOriginal via SEEK + small bounded reads on a plain
+/// `std::fs::File` — no mmap, no full-file read, regardless of where in the file the EXIF IFD
+/// actually lives. This is the same technique real fast card-import tools use (exiftool seeks
+/// straight to the IFD offsets it needs rather than reading a file sequentially; Photo Mechanic's
+/// documented speed comes from reading only the header, never the whole RAW — see this fix's
+/// commit message for sources). RW2/DNG/CR2/NEF/ARW/ORF are all TIFF-structured containers: byte
+/// order marker + IFD0 offset at a fixed location, then a normal IFD chain from there — reading
+/// this way costs a few hundred bytes total per file, independent of file size.
+///
+/// Deliberately conservative: any structural surprise (a tag pointing outside what a sane IFD
+/// entry could mean, an unreadable seek, a non-ASCII date) returns None rather than guessing —
+/// `capture_date` already falls back to file mtime, which is the existing, accepted behavior for
+/// "no readable EXIF date", not a new failure mode introduced here.
+fn raw_exif_date_fast(path: &str) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut hdr = [0u8; 8];
+    f.read_exact(&mut hdr).ok()?;
+    let le = match &hdr[0..2] {
+        b"II" => true,
+        b"MM" => false,
+        _ => return None, // not a TIFF-family container at all
+    };
+    let u16_at = |b: &[u8]| -> u16 { if le { u16::from_le_bytes([b[0], b[1]]) } else { u16::from_be_bytes([b[0], b[1]]) } };
+    let u32_at = |b: &[u8]| -> u32 { if le { u32::from_le_bytes([b[0], b[1], b[2], b[3]]) } else { u32::from_be_bytes([b[0], b[1], b[2], b[3]]) } };
+    let file_len = f.metadata().ok()?.len();
+    // Bytes 2-3 are a "magic" version field (42 for standard TIFF; Panasonic RW2 uses its own
+    // value here) — deliberately NOT checked, since the byte-order marker + IFD0 offset are what
+    // every TIFF-family reader (including RW2-aware ones) actually relies on structurally.
+    let ifd0_off = u32_at(&hdr[4..8]) as u64;
+
+    // Reads one IFD's IMAGE tags, returns (map of tag -> (type, count, value_or_offset_bytes),
+    // next_ifd_offset). Bounded: refuses to read an ridiculous entry count (a corrupt/foreign
+    // file might report garbage) rather than allocating unbounded memory for it.
+    let read_ifd = |f: &mut std::fs::File, offset: u64| -> Option<(Vec<(u16, u16, u32, [u8; 4])>, u64)> {
+        if offset + 2 > file_len { return None; }
+        f.seek(SeekFrom::Start(offset)).ok()?;
+        let mut cnt_b = [0u8; 2];
+        f.read_exact(&mut cnt_b).ok()?;
+        let count = u16_at(&cnt_b) as u64;
+        if count == 0 || count > 512 { return None; } // a real IFD0/ExifIFD has a few dozen entries at most
+        let entries_len = count * 12;
+        if offset + 2 + entries_len + 4 > file_len { return None; }
+        let mut buf = vec![0u8; entries_len as usize];
+        f.read_exact(&mut buf).ok()?;
+        let mut entries = Vec::with_capacity(count as usize);
+        for chunk in buf.chunks_exact(12) {
+            let tag = u16_at(&chunk[0..2]);
+            let typ = u16_at(&chunk[2..4]);
+            let cnt = u32_at(&chunk[4..8]);
+            let val = [chunk[8], chunk[9], chunk[10], chunk[11]];
+            entries.push((tag, typ, cnt, val));
         }
+        let mut next_b = [0u8; 4];
+        f.read_exact(&mut next_b).ok()?;
+        Some((entries, u32_at(&next_b) as u64))
+    };
+
+    let (ifd0, _next) = read_ifd(&mut f, ifd0_off)?;
+    const TAG_EXIF_IFD: u16 = 0x8769;
+    const TAG_DATE_TIME: u16 = 0x0132; // IFD0 fallback ("last modified", not ideal but better than mtime)
+    const TAG_DATE_TIME_ORIGINAL: u16 = 0x9003;
+    const TYPE_ASCII: u16 = 2;
+
+    let read_ascii_field = |f: &mut std::fs::File, typ: u16, count: u32, val: [u8; 4]| -> Option<String> {
+        if typ != TYPE_ASCII || count < 19 || count > 64 { return None; } // "YYYY:MM:DD HH:MM:SS\0" = 20
+        let data = if count <= 4 {
+            val[..count as usize].to_vec()
+        } else {
+            let off = u32_at(&val) as u64;
+            if off + count as u64 > file_len { return None; }
+            f.seek(SeekFrom::Start(off)).ok()?;
+            let mut s = vec![0u8; count as usize];
+            f.read_exact(&mut s).ok()?;
+            s
+        };
+        let s = String::from_utf8_lossy(&data);
+        let s = s.trim_end_matches('\0').trim();
+        if s.len() >= 19 { Some(s[..19].to_string()) } else { None }
+    };
+
+    // Prefer the real Exif SubIFD's DateTimeOriginal; fall back to IFD0's plain DateTime tag.
+    if let Some(&(_, _, cnt, val)) = ifd0.iter().find(|e| e.0 == TAG_EXIF_IFD) {
+        if cnt == 1 {
+            let exif_off = u32_at(&val) as u64;
+            if let Some((exif_ifd, _)) = read_ifd(&mut f, exif_off) {
+                if let Some(&(_, typ, cnt, val)) = exif_ifd.iter().find(|e| e.0 == TAG_DATE_TIME_ORIGINAL) {
+                    if let Some(d) = read_ascii_field(&mut f, typ, cnt, val) { return Some(d); }
+                }
+            }
+        }
+    }
+    if let Some(&(_, typ, cnt, val)) = ifd0.iter().find(|e| e.0 == TAG_DATE_TIME) {
+        if let Some(d) = read_ascii_field(&mut f, typ, cnt, val) { return Some(d); }
     }
     None
 }
@@ -252,53 +365,61 @@ pub struct ScanProgress {
 pub async fn scan_card(app: tauri::AppHandle, path: String, dest_root: Option<String>) -> Result<Vec<CardFile>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Emitter;
-        let root = PathBuf::from(&path);
-        if !root.is_dir() {
-            return Err(format!("not a folder: {path}"));
-        }
-        let mut files = Vec::new();
-        let mut stack = vec![root];
-        let mut scanned = 0usize;
-        while let Some(dir) = stack.pop() {
-            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-            for entry in rd.flatten() {
-                let p = entry.path();
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if name.starts_with('.') {
-                    continue; // .Spotlight-V100, ._AppleDouble stubs, etc
-                }
-                if p.is_dir() {
-                    stack.push(p);
-                    continue;
-                }
-                let Some(kind) = media_kind(&ext_lower(&p)) else { continue };
-                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                let ps = p.to_string_lossy().into_owned();
-                let date = capture_date(&ps).or_else(|| mtime_date(&p));
-                files.push(CardFile { path: ps, name: name.clone(), size, kind: kind.to_string(), date, duplicate: false });
-                scanned += 1;
-                // Every 20 files, not every file — this loop is already the bottleneck, so the
-                // event-emit overhead itself shouldn't compete with it for a fast local folder.
-                if scanned % 20 == 0 {
-                    let _ = app.emit("scan-progress", ScanProgress { scanned, current: name });
-                }
-            }
-        }
-        files.sort_by(|a, b| a.name.cmp(&b.name));
-
-        // Mark files already imported. Matching on name+size (not a content hash) is the same
-        // trade-off every importer makes: a hash of 400 RAWs would take longer than the import.
-        if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
-            let existing = index_destination(Path::new(&dest));
-            for f in files.iter_mut() {
-                f.duplicate = existing.get(&f.name).is_some_and(|&s| s == f.size);
-            }
-        }
-        let _ = app.emit("scan-progress", ScanProgress { scanned, current: String::new() });
-        Ok(files)
+        scan_card_run(path, dest_root, &mut |p| { let _ = app.emit("scan-progress", p); })
     })
     .await
     .map_err(|e| format!("scan_card task panicked: {e}"))?
+}
+
+/// The walk itself, minus the AppHandle — split out for the same reason `ingest_run` was split
+/// from `ingest_copy` (see that doc comment): the AppHandle is the only thing standing between
+/// this logic and a test, and a real SD card's file layout is exactly the part worth testing
+/// against real files rather than reasoning about.
+pub fn scan_card_run(path: String, dest_root: Option<String>, progress: &mut dyn FnMut(ScanProgress)) -> Result<Vec<CardFile>, String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err(format!("not a folder: {path}"));
+    }
+    let mut files = Vec::new();
+    let mut stack = vec![root];
+    let mut scanned = 0usize;
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for entry in rd.flatten() {
+            let p = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue; // .Spotlight-V100, ._AppleDouble stubs, etc
+            }
+            if p.is_dir() {
+                stack.push(p);
+                continue;
+            }
+            let Some(kind) = media_kind(&ext_lower(&p)) else { continue };
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            let ps = p.to_string_lossy().into_owned();
+            let date = capture_date(&ps).or_else(|| mtime_date(&p));
+            files.push(CardFile { path: ps, name: name.clone(), size, kind: kind.to_string(), date, duplicate: false });
+            scanned += 1;
+            // Every 20 files, not every file — this loop is already the bottleneck, so the
+            // event-emit overhead itself shouldn't compete with it for a fast local folder.
+            if scanned % 20 == 0 {
+                progress(ScanProgress { scanned, current: name });
+            }
+        }
+    }
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // Mark files already imported. Matching on name+size (not a content hash) is the same
+    // trade-off every importer makes: a hash of 400 RAWs would take longer than the import.
+    if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
+        let existing = index_destination(Path::new(&dest));
+        for f in files.iter_mut() {
+            f.duplicate = existing.get(&f.name).is_some_and(|&s| s == f.size);
+        }
+    }
+    progress(ScanProgress { scanned, current: String::new() });
+    Ok(files)
 }
 
 /// name -> size for every media file under `dest`, used for duplicate detection. Walks once and
@@ -534,6 +655,34 @@ mod tests {
         assert_eq!(expand_filename("shoot_{n}", "x", "2026-08-15", 7), "shoot_0007");
     }
 
+    /// `raw_exif_date_fast` (seek+read) must agree with `library::read_meta_public` (rawler's own,
+    /// ground-truth-correct, full-mmap parser) on real RW2 files — this is what actually validates
+    /// the hand-rolled TIFF/IFD walker, not just "it doesn't panic". Skips cleanly (not on the dev
+    /// machine's real captures, which aren't checked into the repo) rather than failing, same
+    /// pattern as `heic_exif_date_is_readable` in library.rs.
+    #[test]
+    fn fast_raw_date_matches_rawlers_own_parser_on_real_files() {
+        let dir = std::env::var_os("HOME").map(std::path::PathBuf::from).map(|h| h.join("Downloads"));
+        let Some(dir) = dir else { eprintln!("skipping: no $HOME"); return };
+        let Ok(rd) = std::fs::read_dir(&dir) else { eprintln!("skipping: no Downloads dir"); return };
+        let samples: Vec<_> = rd.flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("rw2")).unwrap_or(false))
+            .take(8)
+            .collect();
+        if samples.is_empty() { eprintln!("skipping: no .RW2 samples in ~/Downloads"); return; }
+        let mut compared = 0;
+        for path in &samples {
+            let ps = path.to_string_lossy().to_string();
+            let fast = raw_exif_date_fast(&ps);
+            let ground_truth = crate::library::read_meta_public(&ps).date
+                .map(|d| d.chars().take(19).collect::<String>());
+            assert_eq!(fast, ground_truth, "mismatch on {}", path.display());
+            compared += 1;
+        }
+        eprintln!("fast_raw_date_matches_rawlers_own_parser_on_real_files: {compared} real RW2(s) compared, all matched");
+    }
+
     #[test]
     fn civil_date_conversion_is_exact() {
         // Day numbers cross-checked against Python's datetime rather than worked out by hand —
@@ -578,9 +727,10 @@ mod tests {
         // Already imported, byte-for-byte.
         std::fs::write(dest.join("P1000001.RW2"), vec![1u8; 100]).unwrap();
 
-        let found = scan_card(
+        let found = scan_card_run(
             root.join("card").to_string_lossy().into_owned(),
             Some(root.join("dest").to_string_lossy().into_owned()),
+            &mut |_| {},
         ).unwrap();
 
         let names: Vec<&str> = found.iter().map(|f| f.name.as_str()).collect();
@@ -635,7 +785,7 @@ mod tests {
         let dest = root.join("dest");
         let backup = root.join("backup");
         let card_path = root.join("card").to_string_lossy().into_owned();
-        let scanned = scan_card(card_path.clone(), None).expect("scan_card");
+        let scanned = scan_card_run(card_path.clone(), None, &mut |_| {}).expect("scan_card");
         let mut ticks = 0usize;
         let res = ingest_run(
             scanned,
@@ -672,7 +822,7 @@ mod tests {
         // (as the modal's very first scan does, before a destination is even chosen) — the
         // duplicate flags must still come out right because ingest_run re-verifies them against
         // the REAL destination itself now, not whatever the passed-in scan happened to compute.
-        let rescanned = scan_card(card_path, None).expect("rescan");
+        let rescanned = scan_card_run(card_path, None, &mut |_| {}).expect("rescan");
         let again = ingest_run(
             rescanned,
             IngestOptions {
@@ -734,7 +884,7 @@ mod tests {
         std::fs::write(card.join("b.jpg"), vec![2u8; 20]).unwrap();
         std::fs::write(dest.join("a.jpg"), vec![1u8; 10]).unwrap(); // pre-existing duplicate of a.jpg
 
-        let scanned = scan_card(card.to_string_lossy().into_owned(), None).unwrap();
+        let scanned = scan_card_run(card.to_string_lossy().into_owned(), None, &mut |_| {}).unwrap();
         let res = ingest_run(
             scanned,
             IngestOptions {

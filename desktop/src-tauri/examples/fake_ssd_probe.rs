@@ -57,7 +57,7 @@ fn main() {
     std::env::set_var("CS_CATALOG_DIR", &catalog_dir);
 
     println!("=== 1. Card scan (ingest.rs::scan_card) ===");
-    let scanned = ingest::scan_card(card.to_string(), None).expect("scan_card");
+    let scanned = ingest::scan_card_run(card.to_string(), None, &mut |_| {}).expect("scan_card");
     println!("found {} media files on the fake card", scanned.len());
     for f in scanned.iter().take(3) {
         println!("  {} — kind={} date={:?}", f.name, f.kind, f.date);
