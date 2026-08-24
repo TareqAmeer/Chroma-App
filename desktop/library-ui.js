@@ -4957,10 +4957,21 @@
       if (!dayGroups.has(k)) dayGroups.set(k, []);
       dayGroups.get(k).push(f);
     }
-    const dayKeys = [...dayGroups.keys()].sort(); // '\0nodate' sorts before any real date; fine, it's rare
+    // Newest first, throughout: most recent shoot day at the top, and within a day the
+    // last-shot-of-the-day tile first too (files arrive from scan_card name-sorted ascending,
+    // i.e. capture order, so reversing each day's array is enough — no per-file timestamp to
+    // sort by, only a per-file DAY string). "No capture date" always sits last regardless of
+    // sort direction — it's the least reliable group, not "the newest".
+    const dayKeys = [...dayGroups.keys()].filter((k) => k !== '\0nodate').sort().reverse();
+    if (dayGroups.has('\0nodate')) dayKeys.push('\0nodate');
+    for (const k of dayKeys) dayGroups.get(k).reverse();
     const flat = dayKeys.flatMap((k) => dayGroups.get(k)); // stable order for shift-click range select
     const pathIdx = new Map(flat.map((f, i) => [f.path, i]));
     let rangeAnchor = -1;
+    // Item request: thumbnails hidden by default, per-day expand reveals them (and is what
+    // actually triggers the lazy thumbnail fetch below — a collapsed day's tiles are never even
+    // created, not just visually hidden, so its thumbnails are never requested until expanded).
+    const expandedDays = new Set();
     function dayLabel(k) {
       if (k === '\0nodate') return 'No capture date';
       const d = new Date(k + 'T00:00:00');
@@ -5051,24 +5062,35 @@
         const dayAllSel = dayFiles.every((f) => selected.has(f.path));
         const daySomeSel = dayFiles.some((f) => selected.has(f.path));
         const dayBytes = dayFiles.reduce((a, f) => a + (f.size || 0), 0);
+        const isOpen = expandedDays.has(k);
         const head = document.createElement('div');
         head.style.cssText = 'display:flex;align-items:center;gap:7px;padding:6px 2px;cursor:pointer;font-size:12px;font-weight:600;margin-top:6px';
-        head.innerHTML = `<input type="checkbox" ${dayAllSel ? 'checked' : ''} ${!dayAllSel && daySomeSel ? 'data-indeterminate="1"' : ''} style="width:15px;height:15px">
+        head.innerHTML = `<input type="checkbox" ${dayAllSel ? 'checked' : ''} style="width:15px;height:15px">
+          <span class="imp-day-chev" style="display:inline-flex;transition:transform .12s ease;transform:rotate(${isOpen ? '90' : '0'}deg)">${ic('chevron', 12)}</span>
           <span>${esc(dayLabel(k))}</span><span style="font-weight:400;color:var(--mut)">${dayFiles.length} · ${fmtBytes(dayBytes)}</span>`;
         const headCb = head.querySelector('input');
         if (!dayAllSel && daySomeSel) headCb.indeterminate = true;
-        const toggleDay = () => {
+        const toggleSelectDay = () => {
           const willSelect = !dayAllSel;
           for (const f of dayFiles) { if (willSelect) selected.add(f.path); else selected.delete(f.path); }
           renderTiles(); updateSelSummary();
         };
-        head.onclick = (ev) => { if (ev.target !== headCb) toggleDay(); };
-        headCb.onclick = (ev) => { ev.stopPropagation(); toggleDay(); };
+        const toggleExpandDay = () => {
+          if (expandedDays.has(k)) expandedDays.delete(k); else expandedDays.add(k);
+          renderTiles();
+        };
+        // Checkbox selects/deselects the day; clicking the rest of the row expands/collapses it
+        // (browsing and selecting are different intents — a day you don't want to open at all
+        // should still be selectable/deselectable in bulk without paying for its thumbnails).
+        headCb.onclick = (ev) => { ev.stopPropagation(); toggleSelectDay(); };
+        head.onclick = (ev) => { if (ev.target !== headCb) toggleExpandDay(); };
         host.appendChild(head);
-        const grid = document.createElement('div');
-        grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:2px 2px 4px';
-        for (const f of dayFiles) { const t = tileEl(f); grid.appendChild(t); tileIO.observe(t); }
-        host.appendChild(grid);
+        if (isOpen) {
+          const grid = document.createElement('div');
+          grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:2px 2px 4px';
+          for (const f of dayFiles) { const t = tileEl(f); grid.appendChild(t); tileIO.observe(t); }
+          host.appendChild(grid);
+        }
       }
     }
 
@@ -5077,8 +5099,12 @@
         ${html}${hint ? `<div style="font-size:11px;color:var(--mut);margin-top:3px">${hint}</div>` : ''}</div>`;
     const inputCss = 'width:100%;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 9px;font-size:12px;font-family:var(--sans)';
     document.getElementById('imp-body').innerHTML =
-      row('Photos', `<div id="imp-days" style="max-height:260px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;padding:4px 8px"></div>`,
-        'Click a day to select/deselect it, click a photo to toggle it, shift-click for a range.')
+      row('Photos', `<div style="display:flex;gap:6px;margin-bottom:6px">
+          <button id="imp-select-all" type="button" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">Select all</button>
+          <button id="imp-select-none" type="button" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">Deselect all</button>
+        </div>
+        <div id="imp-days" style="max-height:260px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;padding:4px 8px"></div>`,
+        'Click a day to expand it, its checkbox to select/deselect it, a photo to toggle it, shift-click for a range.')
       + row('Copy to', `<div style="display:flex;gap:6px"><input id="imp-dest" style="${inputCss}" value="${esc(prefs.dest || '')}" placeholder="Choose a destination folder…" readonly>
           <button id="imp-dest-pick" style="white-space:nowrap;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer">Choose…</button></div>`)
       + row('Organise into', `<select id="imp-folder" style="${inputCss}">
@@ -5108,6 +5134,8 @@
         </div>`;
 
     const $ = (id) => document.getElementById(id);
+    $('imp-select-all').onclick = () => { for (const f of files) selected.add(f.path); renderTiles(); updateSelSummary(); };
+    $('imp-select-none').onclick = () => { selected.clear(); renderTiles(); updateSelSummary(); };
     renderTiles();
     updateSelSummary();
     if (prefs.folder) $('imp-folder').value = prefs.folder;
