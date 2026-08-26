@@ -17,6 +17,9 @@ __pycache__/
 *.dng
 *.tif
 *.tiff
+*.ARW
+*.arw
+*.pp3
 *.JPG
 *.jpg
 *.jpeg
