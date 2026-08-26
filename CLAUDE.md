@@ -15,7 +15,23 @@ and the hard-won lessons from building it.
 ## 1. Repository layout
 
 ```
-index.html                  Redirect → the app
+index.html                  THE PRODUCT PAGE (GitHub Pages root) — hand-written, self-contained,
+                            reuses chromasmith-22.html's own :root tokens. NOT the app.
+app/index.html              Clean /app/ URL → redirects to chromasmith-22.html (the old root
+                            redirect, moved). The editor's own path never changed: both build
+                            scripts still copy chromasmith-22.html, and the COI service worker
+                            still registers at the site root.
+site/                       Landing-page assets + the three scripts that generate them
+                            (shoot-screenshots.mjs drives the REAL app in Playwright — the old
+                            hand-taken ui-review-screenshots/ folder was untracked and got lost;
+                            build-assets.mjs optimises photos from the gitignored photos-src/;
+                            build-page.mjs injects them between markers in index.html).
+                            See site/README.md. ⚠️ Output is WebP because .gitignore excludes
+                            *.jpg globally, and the encoder is Chromium because cwebp is absent
+                            and macOS sips refuses -s format webp (exit 13).
+LICENSES-MODELS.md          Every bundled ONNX model and its licence — written because two of
+                            them (EdgeSAM, face-parsing/SegFormer) are non-commercial/research
+                            and a public .dmg now ships them.
 chromasmith-22.html         THE ENTIRE APP — HTML + CSS + JS + GLSL shaders in one file
 coi-serviceworker.min.js    Cross-origin-isolation shim so the RAW decoder works on
                             GitHub Pages (gzuidhof, MIT)
@@ -29,7 +45,11 @@ vendor/
   luts/                     102 of the 113 built-in look presets, as RAW 33³ RGB bytes
                             (107,811 B each). Fetched + cached on demand — see §2's payload note
 ios/ + package.json + capacitor.config.json + build-ios.sh + patches/ + .github/workflows/
-                            Capacitor iOS shell → unsigned IPA built by CI (see §2)
+                            Capacitor iOS shell → unsigned IPA built by CI (see §2).
+                            .github/workflows/desktop-dmg.yml builds the macOS .dmg on a `v*` tag
+                            → GitHub Release. ⚠️ macos-13 (x86_64) is required by the Intel-only
+                            vendored libonnxruntime.dylib, and the dmg is packaged with hdiutil
+                            rather than by touching tauri.conf.json's deliberate targets:["app"].
 calib/                      Calibration & analysis tooling (Python). Not needed to RUN the
                             app — only to re-derive/verify the film-effect constants.
   *.py                      Models, optimizers, validators, chart generators

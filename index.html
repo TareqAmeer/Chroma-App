@@ -2,10 +2,597 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Chromasmith</title>
-<meta http-equiv="refresh" content="0;url=chromasmith-22.html">
-<script>location.replace('chromasmith-22.html');</script>
-<style>body{background:#0a0a0d;color:#f0ece2;font-family:-apple-system,sans-serif;display:grid;place-items:center;min-height:100vh}a{color:#d4903a}</style>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Chromasmith — film looks for your photos, entirely on your device</title>
+<meta name="description" content="A free, offline photo editor with 113 calibrated film looks, real grain and halation, RAW support and local adjustments. Runs in your browser — nothing is ever uploaded.">
+<meta property="og:title" content="Chromasmith">
+<meta property="og:description" content="Film looks for your photos. Runs in your browser, works offline, nothing uploaded.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="site/assets/og.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/icon-only.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+/* Tokens are lifted verbatim from chromasmith-22.html's :root so the site and the product it
+   sells are visibly the same object. Do not invent new colours here — change them there. */
+:root{
+  --bg:#17171b;--sur:#1f1f25;--sur2:#26262d;--bdr:#34343f;--acc:#d4903a;--acc2:#4a9ddc;
+  --txt:#f0ece2;--mut:#9a968f;--ok:#52c97a;--r:8px;--r-sm:6px;--hov:rgba(255,255,255,.07);
+  --sans:'Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --display:'Instrument Serif',ui-serif,'New York',Palatino,Georgia,serif;
+  --mono:ui-monospace,'SF Mono',Menlo,'Courier New',monospace;
+  --sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;
+  --ease:cubic-bezier(.2,.8,.3,1);
+  --lift-1:inset 0 1px 0 rgba(255,255,255,.045),0 1px 2px rgba(0,0,0,.3),0 6px 16px -4px rgba(0,0,0,.35);
+  --lift-2:inset 0 1px 0 rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.35),0 14px 32px -8px rgba(0,0,0,.5);
+  --wrap:1120px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:16px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;overflow-x:clip}
+img{max-width:100%;display:block}
+a{color:var(--acc);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--sp-5)}
+h1,h2,h3{margin:0;font-weight:500;letter-spacing:-.01em}
+.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin:0 0 var(--sp-3)}
+.serif{font-family:var(--display);font-weight:400;letter-spacing:0}
+section{padding:88px 0;border-top:1px solid var(--bdr)}
+section>.wrap>h2{font-size:34px;margin-bottom:var(--sp-3)}
+.lede{color:var(--mut);max-width:62ch;margin:0 0 40px}
+
+/* ── nav ─────────────────────────────────────────────────────────────────────────────── */
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);background:rgba(23,23,27,.82);
+  border-bottom:1px solid var(--bdr)}
+.nav .wrap{display:flex;align-items:center;gap:var(--sp-5);height:60px}
+.brand{font-family:var(--display);font-size:22px;color:var(--txt);letter-spacing:.01em}
+.brand em{color:var(--acc);font-style:italic}
+.nav nav{margin-left:auto;display:flex;gap:var(--sp-5);align-items:center}
+.nav nav a{color:var(--mut);font-size:14px}
+.nav nav a:hover{color:var(--txt);text-decoration:none}
+/* .nav nav a is more specific than .btn-acc, so without this the accent button inherits the
+   muted grey link colour and its label sits at ~2:1 against the orange. */
+.nav nav a.btn{color:var(--txt)}
+.nav nav a.btn-acc,.nav nav a.btn-acc:hover{color:#17140e}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:var(--r);
+  font-size:14px;font-weight:500;border:1px solid var(--bdr);color:var(--txt);
+  transition:transform var(--ease) .12s,background var(--ease) .12s}
+.btn:hover{background:var(--hov);text-decoration:none;transform:translateY(-1px)}
+.btn-acc{background:var(--acc);color:#17140e;border-color:var(--acc)}
+.btn-acc:hover{background:#e0a04a;color:#17140e}
+.btn-lg{padding:13px 26px;font-size:15px}
+
+/* ── hero ────────────────────────────────────────────────────────────────────────────── */
+.hero{position:relative;overflow:hidden;border-top:0}
+.hero-img{position:absolute;inset:0;background:#0f0f12 center/cover no-repeat}
+.hero-img::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(23,23,27,.55) 0%,rgba(23,23,27,.72) 45%,var(--bg) 100%)}
+.hero-in{position:relative;padding:120px 0 80px;text-align:center}
+.hero h1{font-family:var(--display);font-size:clamp(40px,6.6vw,72px);line-height:1.05;max-width:16ch;margin:0 auto var(--sp-5)}
+.hero h1 em{color:var(--acc);font-style:italic}
+.hero p.sub{font-size:19px;color:#d9d4c8;max-width:56ch;margin:0 auto 34px}
+.cta{display:flex;gap:var(--sp-3);justify-content:center;flex-wrap:wrap}
+.trust{margin-top:40px;font-size:13px;color:var(--mut);display:flex;gap:var(--sp-4);justify-content:center;flex-wrap:wrap}
+.trust span{white-space:nowrap}
+.trust i{color:var(--ok);font-style:normal}
+
+/* ── before/after ────────────────────────────────────────────────────────────────────── */
+.ba-grid{display:grid;gap:28px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.ba{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;box-shadow:var(--lift-1)}
+.ba-stage{position:relative;aspect-ratio:3/2;background:var(--sur2);overflow:hidden;touch-action:pan-y}
+.ba-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ba-stage .b{clip-path:inset(0 calc(100% - var(--x,50%)) 0 0)}
+.ba-handle{position:absolute;top:0;bottom:0;left:var(--x,50%);width:2px;background:rgba(255,255,255,.9);
+  transform:translateX(-1px);pointer-events:none}
+.ba-handle::after{content:'';position:absolute;top:50%;left:50%;width:38px;height:38px;margin:-19px 0 0 -19px;
+  border-radius:50%;background:rgba(23,23,27,.72);border:2px solid rgba(255,255,255,.9);
+  backdrop-filter:blur(4px)}
+.ba-tag{position:absolute;bottom:10px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  padding:4px 9px;border-radius:var(--r-sm);background:rgba(15,15,18,.72);color:#eee;pointer-events:none}
+.ba-tag.l{left:10px}.ba-tag.r{right:10px}
+.ba input[type=range]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
+.ba input[type=range]:focus-visible{opacity:1;outline:2px solid var(--acc);outline-offset:-2px}
+.ba figcaption{padding:14px var(--sp-4);font-size:14px;color:var(--mut);border-top:1px solid var(--bdr)}
+.ba figcaption b{color:var(--txt);font-weight:500}
+.placeholder{border:1px dashed var(--bdr);border-radius:12px;padding:44px var(--sp-5);text-align:center;color:var(--mut)}
+
+/* ── features ────────────────────────────────────────────────────────────────────────── */
+.feat{display:grid;gap:var(--sp-5);grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;
+  box-shadow:var(--lift-1);display:flex;flex-direction:column}
+.card .shot{margin:0;background:var(--sur2);border-bottom:1px solid var(--bdr);cursor:zoom-in;
+  aspect-ratio:16/10;overflow:hidden}
+.card .shot img{width:100%;height:100%;object-fit:cover;object-position:top right;
+  transition:transform var(--ease) .3s}
+/* A phone screenshot is portrait; cropping it to a 16:10 card shows a band of empty canvas.
+   Fit the whole device inside the card instead and let the card's own surface show through. */
+.card .shot.tall img{object-fit:contain;object-position:center}
+.card .shot:hover img{transform:scale(1.03)}
+.card .body{padding:var(--sp-5)}
+.card h3{font-size:17px;margin-bottom:6px}
+.card p{margin:0;color:var(--mut);font-size:15px}
+.card .how{margin-top:12px;padding-top:12px;border-top:1px solid var(--bdr);font-family:var(--mono);
+  font-size:12px;color:#7f7c76;line-height:1.5}
+
+/* ── platform tabs ───────────────────────────────────────────────────────────────────── */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:28px}
+.tab{padding:9px 18px;border-radius:var(--r);border:1px solid var(--bdr);background:none;color:var(--mut);
+  font:inherit;font-size:14px;cursor:pointer;transition:all var(--ease) .12s}
+.tab:hover{background:var(--hov);color:var(--txt)}
+.tab[aria-selected=true]{background:var(--sur2);color:var(--txt);border-color:#4a4a58}
+.pane[hidden]{display:none}
+.pane{display:grid;gap:32px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.pane h3{font-size:15px;margin-bottom:var(--sp-3);color:var(--txt)}
+.pane ol{margin:0;padding-left:22px;color:var(--mut)}
+.pane ol li{margin-bottom:10px}
+.pane ol li b{color:var(--txt);font-weight:500}
+.note{margin-top:var(--sp-4);padding:var(--sp-3) var(--sp-4);border-left:2px solid var(--acc);
+  background:var(--sur);border-radius:0 var(--r) var(--r) 0;font-size:14px;color:var(--mut)}
+code{font-family:var(--mono);font-size:.9em;background:var(--sur2);padding:2px 6px;border-radius:4px;color:#e8ddc9}
+
+/* ── what's new ──────────────────────────────────────────────────────────────────────── */
+.log{border-left:1px solid var(--bdr);padding-left:26px;max-width:76ch}
+.log li{list-style:none;position:relative;padding-bottom:26px}
+.log li::before{content:'';position:absolute;left:-31px;top:9px;width:9px;height:9px;border-radius:50%;
+  background:var(--sur2);border:1px solid #4a4a58}
+.log li.new::before{background:var(--acc);border-color:var(--acc)}
+.log time{display:block;font-family:var(--mono);font-size:12px;color:#7f7c76;margin-bottom:3px}
+.log b{font-weight:500;display:block}
+.log p{margin:2px 0 0;color:var(--mut);font-size:15px}
+.log ul{margin:0;padding:0}
+
+/* ── quotes ──────────────────────────────────────────────────────────────────────────── */
+.quotes{display:grid;gap:var(--sp-5);grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.quote{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:28px var(--sp-5);margin:0}
+.quote p{font-family:var(--display);font-size:24px;line-height:1.35;margin:0 0 var(--sp-3)}
+.quote footer{font-size:13px;color:var(--mut)}
+
+/* ── metrics ─────────────────────────────────────────────────────────────────────────── */
+.metrics{display:grid;gap:var(--sp-3);grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:40px}
+.metric{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:var(--sp-5)}
+.metric b{display:block;font-family:var(--display);font-size:32px;line-height:1.1;color:var(--acc)}
+.metric span{font-size:14px;color:var(--mut)}
+.under{display:grid;gap:var(--sp-5);grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  color:var(--mut);font-size:15px}
+.under h3{font-size:15px;color:var(--txt);margin-bottom:6px}
+
+/* ── footer ──────────────────────────────────────────────────────────────────────────── */
+footer.site{padding:56px 0 72px;border-top:1px solid var(--bdr);color:var(--mut);font-size:14px}
+footer.site .cols{display:grid;gap:var(--sp-5);grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-bottom:32px}
+footer.site h4{margin:0 0 10px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#7f7c76;font-weight:500}
+footer.site ul{margin:0;padding:0;list-style:none}
+footer.site li{margin-bottom:6px}
+.fine{border-top:1px solid var(--bdr);padding-top:24px;font-size:13px;color:#7f7c76}
+
+/* ── lightbox ────────────────────────────────────────────────────────────────────────── */
+dialog.lb{border:0;padding:0;background:none;max-width:96vw;max-height:94vh}
+dialog.lb::backdrop{background:rgba(10,10,13,.9)}
+dialog.lb img{border-radius:var(--r);box-shadow:var(--lift-2);max-height:94vh;width:auto}
+dialog.lb button{position:fixed;top:18px;right:18px;background:var(--sur);color:var(--txt);
+  border:1px solid var(--bdr);border-radius:var(--r);padding:8px 14px;font:inherit;font-size:14px;cursor:pointer}
+
+@media (max-width:760px){
+  section{padding:64px 0}
+  section>.wrap>h2{font-size:27px}
+  .nav nav a:not(.btn){display:none}
+  .hero-in{padding:84px 0 64px}
+  .card .shot img{object-position:top left}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+</style>
 </head>
-<body><p>Redirecting… <a href="chromasmith-22.html">open Chromasmith</a></p></body>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><em>Chroma</em>smith</a>
+    <nav>
+      <a href="#see">See it</a>
+      <a href="#features">Features</a>
+      <a href="#get">Get it</a>
+      <a href="#new">What&rsquo;s new</a>
+      <a class="btn btn-acc" href="chromasmith-22.html">Launch app</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <!-- HERO-IMG:START --><div class="hero-img" style="background-image:linear-gradient(140deg,#2a2118,#17171b 60%)"></div><!-- HERO-IMG:END -->
+  <div class="wrap hero-in">
+    <h1 class="serif">Film looks for your photos. <em>Nothing leaves your device.</em></h1>
+    <p class="sub">Chromasmith is a free photo editor with 113 real film emulations, authentic grain
+      and halation, RAW support and precise local adjustments. It runs entirely inside your browser
+      &mdash; no account, no upload, no waiting.</p>
+    <div class="cta">
+      <a class="btn btn-acc btn-lg" href="chromasmith-22.html">Try it now &mdash; no install</a>
+      <a class="btn btn-lg" href="#get">Downloads</a>
+    </div>
+    <div class="trust">
+      <span><i>&#10003;</i> Works offline</span>
+      <span><i>&#10003;</i> No account</span>
+      <span><i>&#10003;</i> Nothing uploaded</span>
+      <span><i>&#10003;</i> Free and open source</span>
+    </div>
+  </div>
+</section>
+
+<section id="see">
+  <div class="wrap">
+    <p class="eyebrow">See it</p>
+    <h2 class="serif">Drag to compare</h2>
+    <p class="lede">Every photo below is a straight camera file on one side and a Chromasmith export
+      on the other. Nothing else was used.</p>
+    <!-- GALLERY:START -->
+    <div class="placeholder">
+      <p style="margin:0 0 6px;color:var(--txt)">Sample photos are being added.</p>
+      <p style="margin:0;font-size:14px">In the meantime, the fastest way to see what it does is to
+        <a href="chromasmith-22.html">open the app</a> and drop one of your own in.</p>
+    </div>
+    <!-- GALLERY:END -->
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow">What it does</p>
+    <h2 class="serif">Everything you need, none of the subscription</h2>
+    <p class="lede">Click any screenshot to see it full size.</p>
+    <div class="feat">
+
+      <article class="card">
+        <figure class="shot"><img src="site/assets/ui/looks.webp" alt="The Presets and Looks panel, showing film look thumbnails" loading="lazy" width="1600" height="1000"></figure>
+        <div class="body">
+          <h3>113 film looks, one tap</h3>
+          <p>Pick a look, then dial it back until it feels right. Kodak, Fuji, cinema stocks,
+            instant film, black and white &mdash; and you can load any <code>.cube</code> you already own.</p>
+          <div class="how">Each look is a 33&#179; colour lookup table applied on the GPU, so a 24-megapixel photo previews instantly.</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <figure class="shot"><img src="site/assets/ui/film.webp" alt="Grain, halation and film artifact controls" loading="lazy" width="1600" height="1000"></figure>
+        <div class="body">
+          <h3>Grain and halation that look like film</h3>
+          <p>The warm glow around bright edges, the grain that gets coarser in the shadows, dust and
+            scratches if you want them. Sized per film format, from 8mm to 65mm.</p>
+          <div class="how">Halation is a calibrated per-channel light-scatter model measured against a reference emulation, not a blur filter. Grain is value noise fitted to real measurements.</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <figure class="shot"><img src="site/assets/ui/local.webp" alt="The local adjustments and masks panel" loading="lazy" width="1600" height="1000"></figure>
+        <div class="body">
+          <h3>Change one part of a photo</h3>
+          <p>Brighten a face, calm a sky, even out patchy skin tone. Up to eight masks per photo,
+            drawn by hand or selected for you.</p>
+          <div class="how">The skin tool is contractive &mdash; it pulls tones toward a target instead of adding a constant, which is what actually evens out an uneven tan.</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <figure class="shot"><img src="site/assets/ui/color.webp" alt="Tone curve and colour mixer controls" loading="lazy" width="1600" height="1000"></figure>
+        <div class="body">
+          <h3>Full manual control when you want it</h3>
+          <p>Tone curves, an eight-band colour mixer, white balance, print profiles, crop and
+            perspective, spot healing. Undo goes all the way back.</p>
+          <div class="how">Curves are monotone-cubic and sampled at texel centres, so a flat curve is byte-identical to no curve at all.</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <figure class="shot"><img src="site/assets/ui/library.webp" alt="The desktop photo library, with sidebar, filters and a thumbnail grid" loading="lazy" width="1600" height="1000"></figure>
+        <div class="body">
+          <h3>A photo library on the desktop</h3>
+          <p>Browse a whole archive, import straight off an SD card, find people by face, or just
+            type what you remember seeing. Runs on your machine, not in a cloud.</p>
+          <div class="how">Face detection, face recognition and natural-language search all run locally as ONNX models. Nothing is sent anywhere.</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <figure class="shot tall"><img src="site/assets/ui/mobile.webp" alt="Chromasmith running on a phone" loading="lazy" width="900" height="1948"></figure>
+        <div class="body">
+          <h3>The same app on your phone</h3>
+          <p>Not a cut-down version &mdash; the same looks and the same export, in a layout built for
+            a thumb. Add it to your home screen and it works with no signal.</p>
+          <div class="how">Under 700px the app switches shell entirely: the photo fills the screen and tools live in a bottom sheet.</div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section id="get">
+  <div class="wrap">
+    <p class="eyebrow">Get it</p>
+    <h2 class="serif">Pick your device</h2>
+    <p class="lede">The browser version needs nothing installed and is the fastest way to start.</p>
+
+    <div class="tabs" role="tablist" aria-label="Platform">
+      <button class="tab" role="tab" id="t-web" aria-controls="p-web" aria-selected="true">Browser</button>
+      <button class="tab" role="tab" id="t-mac" aria-controls="p-mac" aria-selected="false">Mac app</button>
+      <button class="tab" role="tab" id="t-ios" aria-controls="p-ios" aria-selected="false">iPhone &amp; iPad</button>
+      <button class="tab" role="tab" id="t-phone" aria-controls="p-phone" aria-selected="false">Android &amp; phone browsers</button>
+    </div>
+
+    <div class="pane" id="p-web" role="tabpanel" aria-labelledby="t-web">
+      <div>
+        <h3>Install</h3>
+        <ol>
+          <li>There is nothing to install. <b><a href="chromasmith-22.html">Open the app</a></b>.</li>
+          <li>The first visit downloads it once. After that it works with the internet switched off.</li>
+          <li>Works in Chrome, Edge, Safari and Firefox on any computer.</li>
+        </ol>
+        <div class="note">Your photos never leave the machine you are sitting at. There is no server
+          to send them to &mdash; the whole editor is one file that runs in the page.</div>
+      </div>
+      <div>
+        <h3>Your first edit, in about a minute</h3>
+        <ol>
+          <li><b>Drag a photo</b> onto the window, or press the big <b>+</b>.</li>
+          <li>Open <b>Looks</b> and tap a film stock. That is the whole look, done.</li>
+          <li>Open <b>Adjust</b> if it needs to be brighter or warmer.</li>
+          <li>Open <b>Film</b> to add grain and halation to taste.</li>
+          <li>Hit <b>Export</b>. You get the full-resolution file back, straight to your downloads.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="pane" id="p-mac" role="tabpanel" aria-labelledby="t-mac" hidden>
+      <div>
+        <h3>Install</h3>
+        <ol>
+          <li>Download the <b><a href="https://github.com/TareqAmeer/Chroma-App/releases/latest">latest Mac release</a></b> and open the <code>.dmg</code>.</li>
+          <li>Drag <b>Chromasmith</b> into your Applications folder.</li>
+          <li><b>Right-click</b> the app and choose <b>Open</b>, then <b>Open</b> again. macOS only asks this the first time.</li>
+        </ol>
+        <div class="note">The app is not signed with a paid Apple developer certificate, which is why
+          macOS asks. Right-click &rarr; Open is the standard way past it. On Apple Silicon macs
+          it runs under Rosetta &mdash; your Mac will offer to install that automatically.</div>
+      </div>
+      <div>
+        <h3>What the Mac app adds</h3>
+        <ol>
+          <li><b>The photo library</b> &mdash; browse a whole archive, not one photo at a time.</li>
+          <li><b>Card import</b> &mdash; copy a shoot off an SD card, organised into folders by date.</li>
+          <li><b>Faces and search</b> &mdash; find a person, or describe a photo in plain words.</li>
+          <li><b>Faster RAW</b> &mdash; decoded natively rather than in the browser.</li>
+          <li><b>Edit In from Lightroom</b> &mdash; round-trip a photo and get it straight back.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="pane" id="p-ios" role="tabpanel" aria-labelledby="t-ios" hidden>
+      <div>
+        <h3>The easy way</h3>
+        <ol>
+          <li>Open <b><a href="chromasmith-22.html">the app</a></b> in Safari.</li>
+          <li>Tap <b>Share</b>, then <b>Add to Home Screen</b>.</li>
+          <li>It now opens full screen like any other app, and works on a plane.</li>
+        </ol>
+        <div class="note">This is the recommended route, and it is what most people should do.</div>
+      </div>
+      <div>
+        <h3>The native app (sideload)</h3>
+        <ol>
+          <li>Go to the <b><a href="https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml">build page</a></b> and open the newest run.</li>
+          <li>Download the <b>Chromasmith-ipa</b> artifact and unzip it.</li>
+          <li>Install the <code>.ipa</code> with a sideloading tool such as Flarestore, AltStore or Sideloadly.</li>
+        </ol>
+        <div class="note">It is not on the App Store, so the build is unsigned and you sign it yourself.
+          You need a GitHub account to download the artifact, and builds are kept for 30 days.</div>
+      </div>
+    </div>
+
+    <div class="pane" id="p-phone" role="tabpanel" aria-labelledby="t-phone" hidden>
+      <div>
+        <h3>Install</h3>
+        <ol>
+          <li>Open <b><a href="chromasmith-22.html">the app</a></b> in Chrome.</li>
+          <li>Open the browser menu and choose <b>Add to Home screen</b>.</li>
+          <li>Launch it from the icon. It works offline from then on.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>On a phone it is built for one hand</h3>
+        <ol>
+          <li>The photo fills the screen; tools slide up from the bottom.</li>
+          <li><b>Swipe</b> left and right to move between photos.</li>
+          <li><b>Press and hold</b> the photo to see the original.</li>
+          <li><b>Double-tap</b> a slider to reset it.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="new">
+  <div class="wrap">
+    <p class="eyebrow">What&rsquo;s new</p>
+    <h2 class="serif">Recent updates</h2>
+    <p class="lede">Chromasmith is worked on continuously. These are the changes you would notice.</p>
+    <ul class="log">
+      <li class="new"><time>August 2026</time><b>Import straight from your camera card</b>
+        <p>Plug in an SD card and copy a shoot across, sorted into folders by the date each photo was
+          taken, with a second backup copy in the same pass. It never moves your files, only copies them.</p></li>
+      <li class="new"><time>August 2026</time><b>Find anyone in your library</b>
+        <p>Faces are detected, grouped and named, so you can pull up every photo of a person. Or just
+          type what you remember &mdash; &ldquo;red umbrella&rdquo; &mdash; and it finds the photo. All on your own machine.</p></li>
+      <li><time>August 2026</time><b>Spot removal that survives grading</b>
+        <p>Heal or clone a blemish and the repair takes the same film look, grain and halation as
+          everything around it, because it happens before the grade rather than after.</p></li>
+      <li><time>August 2026</time><b>Straighten a crooked horizon automatically</b>
+        <p>One button finds the dominant line in the frame and levels it &mdash; within a third of a degree
+          on test frames. You can also draw a box to tell it where to look.</p></li>
+      <li><time>August 2026</time><b>Match a whole set to one photo</b>
+        <p>When the light changed halfway through a shoot, pick the frame you like and the rest are
+          matched to it for exposure and white balance &mdash; and nothing else, so your look survives.</p></li>
+      <li><time>August 2026</time><b>Film frames and edge printing</b>
+        <p>Sprocket holes, rebate and frame numbers, drawn to real 35mm measurements so they adapt to
+          any crop instead of being stretched to fit.</p></li>
+      <li><time>August 2026</time><b>Video grading</b>
+        <p>Load a clip and give it the same look, grain and halation as your stills, then export it
+          with the audio untouched. Trim, scopes, safe-area guides and fades included.</p></li>
+      <li><time>August 2026</time><b>HDR export from RAW</b>
+        <p>Photos exported from a RAW file can now carry the extra highlight range your phone and
+          laptop screens can actually show.</p></li>
+    </ul>
+    <p style="margin-top:26px"><a href="https://github.com/TareqAmeer/Chroma-App/commits/main">Full change history on GitHub &rarr;</a></p>
+  </div>
+</section>
+
+<section id="said">
+  <div class="wrap">
+    <p class="eyebrow">From people using it</p>
+    <h2 class="serif">What testers said</h2>
+    <div class="quotes">
+      <figure class="quote">
+        <p>&ldquo;Worked perfectly. This is something very, very cool.&rdquo;</p>
+        <footer>Early tester</footer>
+      </figure>
+      <figure class="quote">
+        <p>&ldquo;Going to save me so much money.&rdquo;</p>
+        <footer>Early tester</footer>
+      </figure>
+      <figure class="quote">
+        <p>&ldquo;Everything I wanted.&rdquo;</p>
+        <footer>Early tester</footer>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="under">
+  <div class="wrap">
+    <p class="eyebrow">Under the hood</p>
+    <h2 class="serif">How it is built</h2>
+    <p class="lede">For anyone who wants the engineering rather than the pitch.</p>
+    <div class="metrics">
+      <div class="metric"><b>113</b><span>calibrated film looks</span></div>
+      <div class="metric"><b>0 bytes</b><span>leave your device</span></div>
+      <div class="metric"><b>18</b><span>byte-exact render tests in CI</span></div>
+      <div class="metric"><b>1 file</b><span>no build step, no server</span></div>
+    </div>
+    <div class="under">
+      <div>
+        <h3>A real-time colour pipeline</h3>
+        <p>Five WebGL2 shader programs: grading, emission, two-pass per-channel blur and compositing.
+          Exports are rendered in overlapping tiles with a halo wider than the blur radius, so a
+          100-megapixel file never exceeds a small GPU budget and the seams are mathematically invisible.</p>
+      </div>
+      <div>
+        <h3>Measured, not eyeballed</h3>
+        <p>The halation model was fitted numerically against a reference film emulation and is
+          re-checked by a pass/fail scorecard. The RAW colour path is an exact transcription of Adobe&rsquo;s
+          DNG camera-profile pipeline, verified against Lightroom renders.</p>
+      </div>
+      <div>
+        <h3>Tested like software, not like a demo</h3>
+        <p>Every shader change is re-rendered headlessly against 18 golden images and compared
+          byte-for-byte. Separate gates hold performance budgets, desktop layout invariants, mask
+          storage round-trips and library scaling to five thousand files.</p>
+      </div>
+      <div>
+        <h3>Offline by construction</h3>
+        <p>The web app is a single 3&nbsp;MB HTML file with the code, the interface and the shaders
+          inside it. The desktop app wraps that same file in a native shell and adds local RAW decoding
+          and on-device AI models. There is no backend anywhere in the project.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <h4>Chromasmith</h4>
+        <ul>
+          <li><a href="chromasmith-22.html">Launch the app</a></li>
+          <li><a href="https://github.com/TareqAmeer/Chroma-App">Source on GitHub</a></li>
+          <li><a href="https://github.com/TareqAmeer/Chroma-App/releases/latest">Mac download</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Built with</h4>
+        <ul>
+          <li>LibRaw (RAW decoding)</li>
+          <li>Mediabunny (video, MPL-2.0)</li>
+          <li>Inter &amp; Instrument Serif (SIL OFL)</li>
+          <li><a href="https://github.com/TareqAmeer/Chroma-App/blob/main/LICENSES-MODELS.md">On-device AI models</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Privacy</h4>
+        <ul>
+          <li>No account, no telemetry</li>
+          <li>No photo ever uploaded</li>
+          <li>Works with no connection</li>
+        </ul>
+      </div>
+    </div>
+    <div class="fine">
+      Chromasmith is free software under the GPL-3.0 licence. Built by Tareq Ameer.
+    </div>
+  </div>
+</footer>
+
+<dialog class="lb"><button type="button">Close</button><img alt=""></dialog>
+
+<script>
+// Before/after: one range input per figure drives a CSS custom property. Using a real range means
+// the control is keyboard-operable and screen-reader-labelled for free; the visible handle is
+// purely decorative and the input sits transparent on top of it.
+document.querySelectorAll('.ba').forEach(function (fig) {
+  var stage = fig.querySelector('.ba-stage');
+  var input = fig.querySelector('input[type=range]');
+  if (!stage || !input) return;
+  var paint = function () { stage.style.setProperty('--x', input.value + '%'); };
+  input.addEventListener('input', paint);
+  paint();
+});
+
+// Tabs. Panels are plain hidden/shown; the buttons carry the ARIA state so the markup stays valid
+// with JavaScript switched off (the first panel is the one that renders).
+var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+function select(tab) {
+  tabs.forEach(function (t) {
+    var on = t === tab;
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+    document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+  });
+}
+tabs.forEach(function (t) {
+  t.addEventListener('click', function () { select(t); });
+  t.addEventListener('keydown', function (e) {
+    var i = tabs.indexOf(t);
+    if (e.key === 'ArrowRight') { tabs[(i + 1) % tabs.length].focus(); tabs[(i + 1) % tabs.length].click(); }
+    if (e.key === 'ArrowLeft') { tabs[(i - 1 + tabs.length) % tabs.length].focus(); tabs[(i - 1 + tabs.length) % tabs.length].click(); }
+  });
+});
+
+// Lightbox for the feature screenshots.
+var lb = document.querySelector('dialog.lb');
+if (lb && lb.showModal) {
+  document.querySelectorAll('.card .shot').forEach(function (fig) {
+    fig.addEventListener('click', function () {
+      var img = fig.querySelector('img');
+      lb.querySelector('img').src = img.currentSrc || img.src;
+      lb.querySelector('img').alt = img.alt;
+      lb.showModal();
+    });
+  });
+  lb.querySelector('button').addEventListener('click', function () { lb.close(); });
+  lb.addEventListener('click', function (e) { if (e.target === lb) lb.close(); });
+}
+</script>
+</body>
 </html>

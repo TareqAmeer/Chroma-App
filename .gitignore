@@ -79,3 +79,16 @@ Firefly_remove\ background*
 calib/bloom_chart_geo.txt
 *.PRE-FIX.bak
 Chromasmith\ copy.app
+
+# ── Product page (site/) ────────────────────────────────────────────────────────────────────
+# Your full-size originals stay out of git; only the optimised WebP in site/assets/ is committed.
+site/photos-src/
+# *.jpg / *.jpeg / *.JPG are excluded globally above, which would silently drop a JPEG dropped
+# into the built assets. The pipeline emits WebP, but keep the exception explicit so a stray file
+# fails loudly (untracked-and-visible) rather than quietly.
+# ⚠️ Negate by EXTENSION, not `!site/assets/**` — gitignore is last-match-wins, so a blanket
+# negation here also un-ignores .DS_Store (line 8) inside site/assets/.
+!site/assets/**/*.webp
+!site/assets/**/*.png
+!site/assets/**/*.jpg
+!site/assets/manifest.json

@@ -1,0 +1,141 @@
+# Build the macOS app and publish it as a downloadable .dmg on a GitHub Release.
+#
+# Before this existed the only way to get the desktop app was to clone the repo, install Rust and
+# Node, fetch ~200MB of models by hand and run desktop/install-app.sh — so in practice nobody but
+# the author had it. Tag a version (`git tag v1.0.1 && git push --tags`) or run the workflow by
+# hand, and the .dmg appears under Releases.
+#
+# ⚠️ macos-13 is deliberate: it is the x86_64 runner. desktop/src-tauri/vendor/onnxruntime holds
+# an Intel-only libonnxruntime.dylib, pinned at v1.20.0 because Microsoft dropped Intel Mac
+# prebuilts after it (see that directory's README). Building on an arm64 runner would produce an
+# app whose Rust binary cannot load its own inference library. Apple Silicon users run this under
+# Rosetta, which is what the download page tells them.
+#
+# ⚠️ The .dmg is packaged here with hdiutil rather than by adding "dmg" to tauri.conf.json's
+# bundle.targets. That setting is ["app"] on purpose — desktop/install-app.sh records that stray
+# DMG bundle registrations broke the Adobe OAuth callback locally. Leave it alone.
+#
+# ⚠️ The app is UNSIGNED (no paid Apple developer certificate). The release notes tell users to
+# right-click → Open. Do not "fix" this by stripping the quarantine attribute in CI; quarantine is
+# applied by the downloading browser on the user's machine, not here.
+name: Build macOS app (.dmg)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true          # the CLIP/ArcFace/SCRFD/EdgeSAM/face-parse weights live in Git LFS
+      - run: git lfs checkout
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      # The two model sets that are NOT in git (too large even for the LFS budget to be worth it).
+      # URLs and rationale: desktop/src-tauri/vendor/{sam2,rawdenoise}/README.md.
+      - name: Cache fetched models
+        id: models
+        uses: actions/cache@v4
+        with:
+          key: models-sam2-2.1-tiny-rawnind-5.6.0
+          path: |
+            desktop/src-tauri/vendor/sam2/encoder.onnx
+            desktop/src-tauri/vendor/sam2/decoder.onnx
+            desktop/src-tauri/vendor/rawdenoise/model_linear.onnx
+            desktop/src-tauri/vendor/rawdenoise/model_bayer.onnx
+
+      - name: Fetch models
+        if: steps.models.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cd desktop/src-tauri/vendor/sam2
+          curl -fsSL "https://huggingface.co/SharpAI/sam2-hiera-tiny-onnx/resolve/main/encoder.onnx" -o encoder.onnx
+          curl -fsSL "https://huggingface.co/SharpAI/sam2-hiera-tiny-onnx/resolve/main/decoder.onnx" -o decoder.onnx
+          cd ../rawdenoise
+          curl -fsSL "https://github.com/darktable-org/darktable-ai/releases/download/release-5.6.0/rawdenoise-nind.dtmodel" -o rd.dtmodel
+          python3 -c "import zipfile; zipfile.ZipFile('rd.dtmodel').extractall('.')"
+          mv rawdenoise-nind/model_linear.onnx rawdenoise-nind/model_bayer.onnx .
+          rm -rf rd.dtmodel rawdenoise-nind
+
+      - name: Verify every bundled resource is present
+        # tauri.conf.json's bundle.resources lists these by path; a missing one fails the bundle
+        # late and confusingly, so check first and name the file that is absent.
+        run: |
+          set -euo pipefail
+          cd desktop/src-tauri
+          python3 - <<'PY'
+          import json, os, sys
+          cfg = json.load(open('tauri.conf.json'))
+          missing = [p for p in cfg['bundle']['resources'] if not os.path.exists(p)]
+          if missing:
+              sys.exit('missing bundle resources:\n  ' + '\n  '.join(missing))
+          print('all bundle resources present')
+          PY
+
+      - name: Stage the web app into desktop/dist
+        run: bash build-desktop.sh
+
+      - name: Build
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package the .dmg
+        id: pack
+        run: |
+          set -euo pipefail
+          APP=$(find desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -1)
+          [ -n "$APP" ] || { echo "no .app was produced"; exit 1; }
+          VERSION=$(python3 -c "import json;print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")
+          NAME="Chromasmith-${VERSION}-macos-x86_64.dmg"
+          STAGE=$(mktemp -d)
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "Chromasmith" -srcfolder "$STAGE" -ov -format UDZO "$NAME"
+          echo "dmg=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ls -lh "$NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Chromasmith-dmg
+          path: ${{ steps.pack.outputs.dmg }}
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.dmg }}
+          body: |
+            ## Chromasmith ${{ steps.pack.outputs.version }} for macOS
+
+            1. Download the `.dmg` below and open it.
+            2. Drag **Chromasmith** into your Applications folder.
+            3. **Right-click the app and choose Open**, then Open again.
+
+            macOS asks that once because the app is not signed with a paid Apple developer
+            certificate. After the first launch it opens normally.
+
+            **Intel build.** On an Apple Silicon Mac it runs under Rosetta 2 — macOS offers to
+            install that automatically the first time. This is because the bundled ONNX Runtime
+            has no Apple Silicon build at the pinned version.
+
+            Bundled on-device AI models keep their own licences, two of which are
+            non-commercial/research — see
+            [LICENSES-MODELS.md](https://github.com/TareqAmeer/Chroma-App/blob/main/LICENSES-MODELS.md).
