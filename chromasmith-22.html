@@ -41,8 +41,8 @@
      ⚠️ --mono is for NUMERALS, code and the build stamp. It is not a UI voice. It used to be:
      81 uses against 8 of --sans, with 23 `text-transform:uppercase` rules on top, which made
      almost every label uppercase letter-spaced monospace — the tell that reads as generated
-     "technical" UI rather than a photo tool. Lightroom, Capture One, Darkroom and Dehancer all
-     set labels in a neutral grotesque and reserve monospace for numbers. Uppercase now survives
+     "technical" UI rather than a photo tool. Mainstream photo/grading apps (LR, C1, DRK, Dehancer)
+     all set labels in a neutral grotesque and reserve monospace for numbers. Uppercase now survives
      in exactly ONE role (the panel/section eyebrow) so it still reads as a system.
      --serif is kept as an alias of --display purely so older rules keep resolving. */
   --sans:'Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI Variable Text',sans-serif;
@@ -493,7 +493,7 @@ body.diag-on .diag-only{display:flex}
 .ll{font-family:var(--mono);font-size:11px;padding:2px 0;display:flex;gap:9px}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
-/* Metadata panel (Darkroom-style): labeled rows + a 4-across icon chip strip. Top-level on
+/* Metadata panel (DRK-style): labeled rows + a 4-across icon chip strip. Top-level on
    purpose — these were briefly inside the max-width:700px media query and never applied on
    desktop, rendering the chips as bare stacked text. */
 @keyframes fxspin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -565,7 +565,7 @@ body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!impor
 body.mobile-fx .tab{padding-top:8px;padding-bottom:9px}
 body.mobile-fx #panel-fx.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%;max-width:100%}
 body.mobile-fx .fx-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%;max-width:100%}
-/* PREVIEW-FIRST layout (InShot-style): the photo fills all space between the tab row and
+/* PREVIEW-FIRST layout (INS-style): the photo fills all space between the tab row and
    the bottom toolbar; tapping a tool opens a BOTTOM SHEET (.sheet-open) and the photo
    shrinks to the remaining space. fxPreviewMaxH() measures the live wrap height, and a
    transitionend listener re-fits the render when the sheet finishes opening/closing. */
@@ -593,12 +593,12 @@ body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;col
    padding floor until something forces a paint (e.g. a screenshot) — disable transitions
    or force a frame before measuring sheet geometry in automated checks. */
 body.mobile-fx.sheet-open .fx-panel{height:34vh;max-height:min(360px,calc(var(--app-h,100svh)*.45));overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 10px max(30px,calc(var(--sab) + 10px))}
-/* InShot-style: get the chrome out of the way while a tool is actually being edited — the top
+/* INS-style: get the chrome out of the way while a tool is actually being edited — the top
    action bar shrinks (still fully usable, just less visually prominent) once a sheet is open. */
 body.mobile-fx.sheet-open #fx-actionbar{padding:4px 6px 2px}
 body.mobile-fx.sheet-open .fx-act{padding:4px 10px;min-height:38px}
 body.mobile-fx.sheet-open .fx-act-ic{font-size:19px}
-/* Per-section reset control (injected once at boot, see the bottom of the script) — InShot
+/* Per-section reset control (injected once at boot, see the bottom of the script) — INS
    shows an explicit discard (✕) per tool sub-panel; sliders here apply live with no separate
    confirm step by design, so this is the "discard just this section" half instead of a full
    commit/cancel pair. Hidden outside the mobile sheet — desktop already has fxResetAll(). */
@@ -609,7 +609,7 @@ body.mobile-fx.sheet-open .fx-ctrl-title-reset:active{background:var(--sur2);col
 #fx-sheet-handle{display:none}
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
-/* ── dynamic-feel polish (InShot/Darkroom-style) ── */
+/* ── dynamic-feel polish (INS/DRK-style) ── */
 /* tool-panel content slides up + fades as you switch tools in the open sheet */
 @keyframes fxSecIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 body.mobile-fx.sheet-open .fx-ctrl.sec-active{animation:fxSecIn .18s ease}
@@ -813,7 +813,7 @@ body.fx-deskb .fx-canvas-wrap{min-height:0}
 body.fx-deskb #fx-deskbar-tools #fx-zoom-ctrl{position:static;display:flex;background:none;border:none;padding:0;gap:2px}
 body.fx-deskb #fx-deskbar-tools #fx-preview-tools{position:static;display:flex;margin:0;gap:4px;flex-wrap:nowrap}
 body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
-/* ── DESKX — Darkroom-style desktop shell layout (body.deskx, layered ON TOP of fx-deskb).
+/* ── DESKX — DRK-style desktop shell layout (body.deskx, layered ON TOP of fx-deskb).
    Applied only by the Tauri shell (desktop-native.js) or "?deskx=1" for browser testing, so
    the web/Pages/iOS builds are bit-identical without it. Geometry: one fixed 44px top bar
    (the deskbar, doubling as the window drag strip), photo edge-to-edge on black filling all
@@ -895,7 +895,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px 10px;flex:0 
 /* Reverted: a border/frame drawn around the PHOTO itself looked like a matte applied to the
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
-   edge-to-edge, matching Darkroom; only the library/editor divider (library-ui.js) is thicker now. */
+   edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
 body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;border:none;border-radius:0;margin:0}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;
@@ -4113,7 +4113,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-24a';
+const BUILD='2026-08-26a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4159,7 +4159,7 @@ window.csAbout=csAbout;
 {const bs=document.getElementById('build-stamp');if(bs)bs.textContent='build '+BUILD;}
 {const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
-// deskx (Darkroom-style desktop layout): normally applied by the Tauri shell
+// deskx (DRK-style desktop layout): normally applied by the Tauri shell
 // (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
 try{if(new URLSearchParams(location.search).has('deskx'))document.body.classList.add('deskx');}catch(e){}
 // Also give a plain (non-Tauri) wide browser window the same grouped-rail, photo-left layout
@@ -4441,7 +4441,7 @@ function analyzeChanges(oldLUT,newLUT){
   const[or1,og1,ob1]=sampleLUT(oldLUT,1,1,1),[nr1,ng1,nb1]=sampleLUT(newLUT,1,1,1);const hl=(lum(nr1,ng1,nb1)-lum(or1,og1,ob1))*255;
   if(Math.abs(hl)>2)B.push(`Highlights ${hl<0?'pulled down':'boosted'} by ${Math.abs(hl).toFixed(0)} levels`);
   [[.15,.15,.15,'Shadows'],[.5,.5,.5,'Midtones']].forEach(([r,g,b,nm])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);const sw=((nr-nb)-(or-ob))*255;if(Math.abs(sw)>2)B.push(`${nm} ${sw>0?'warmed':'cooled'} by ${Math.abs(sw).toFixed(0)} levels`)});
-  // Per-color HSL (matching Lightroom's 8 HSL band names)
+  // Per-color HSL (matching LR's 8 HSL band names)
   [['Red',1,.30,.25],['Orange',1,.55,.20],['Yellow',.90,.90,.15],['Green',.20,.80,.20],
    ['Aqua',.10,.75,.75],['Blue',.15,.35,.85],['Purple',.55,.20,.80],['Magenta',.85,.20,.85]
   ].forEach(([nm,r,g,b])=>{
@@ -4881,7 +4881,7 @@ vec3 hueRotate(vec3 c,float deg){
     0.072-cs*0.072+sn*0.928, 0.072-cs*0.072-sn*0.283, 0.072+cs*0.928+sn*0.072);
   return clamp(m*c,0.0,1.0);
 }
-// Lightroom-style Color paint: mixes toward a FIXED target hue at the pixel's own luminance
+// LR-style Color paint: mixes toward a FIXED target hue at the pixel's own luminance
 // (not a rotation of whatever hue is already there, like TH.y/hueRotate above) — a genuine
 // tint-with-a-chosen-color control per mask, distinct from the existing Temp/Tint white-balance
 // sliders.
@@ -8826,7 +8826,7 @@ function bakeHsl(){
     const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
   if(FX.ok)FX.setHslLUT(d);
 }
-// Darkroom-style before/after split swatch: left half is the band's canonical hue, right half
+// DRK-style before/after split swatch: left half is the band's canonical hue, right half
 // is that same hue after the band's current hue/sat/lum shifts — so the chip itself previews
 // the edit instead of staying a flat reference color forever. Both halves are the SAME formula
 // (only the deltas differ) so at hue=sat=lum=0 they resolve to one flat color, not a two-tone
@@ -13936,7 +13936,7 @@ function showExif(exif){
   const isoVal=exif.iso?String(exif.iso).replace(/^ISO\s*/i,''):'';
   const chips=[chip('ISO',isoVal),chip('Aperture',exif.aperture),chip('Shutter',exif.shutter),chip('Focal',exif.focalLen)].filter(Boolean);
   const row=(label,val)=>val?`<div class="fx-exif-row"><span class="fx-exif-lb">${label}</span><span class="fx-exif-val">${esc(val)}</span></div>`:'';
-  // Darkroom-style order: Date, Dimensions, [ISO ƒ ⏱ mm chip strip], File Name, Size, Format,
+  // DRK-style order: Date, Dimensions, [ISO ƒ ⏱ mm chip strip], File Name, Size, Format,
   // Lens, Camera Make, Camera Model. Extra fields (dims/fileName/fileSize/format/make) are
   // attached by the loaders / library opener; missing ones simply don't render.
   const it=fxImages[fxCurIdx]||fxImages[0]||{};
@@ -14357,7 +14357,7 @@ function renderPreview(){
   const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
   const wrap=document.getElementById('fx-wrap');
   const deskx=document.body.classList.contains('deskx');
-  // deskx: no 900px cap — the photo fills the whole preview cell (Darkroom-style). The GPU
+  // deskx: no 900px cap — the photo fills the whole preview cell (DRK-style). The GPU
   // cost is bounded by the BACKING-STORE cap below, not the CSS size.
   const maxW=deskx?(wrap.clientWidth||900):Math.min(900,wrap.clientWidth||900);
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
@@ -14456,7 +14456,7 @@ function renderPreview(){
   if(fxHistOn)drawHistogram();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
 }
-// ── CANVAS matte (InShot-style): put the (bordered) image on an aspect-ratio canvas with a
+// ── CANVAS matte (INS-style): put the (bordered) image on an aspect-ratio canvas with a
 // solid-color or blurred-image background, so e.g. a 2:3 photo + border posts to Instagram's
 // 4:5/3:4 without cropping. ORDER: photo → borders (belong to the image) → canvas around
 // everything. Shared by preview AND export so they match by construction.
@@ -18290,7 +18290,7 @@ function _eachSection(cb){
     cb(key,lb);
   });
 }
-// deskx-only rail consolidation (Darkroom-style — shorter rail): several slider-only cards
+// deskx-only rail consolidation (DRK-style — shorter rail): several slider-only cards
 // share one rail button and stack in the panel under it. The underlying .fx-ctrl cards and
 // their internals are UNTOUCHED — fxSection just marks every member card sec-active together.
 // Not used outside deskx (buildSecNav/mobile and the older fx-deskb rail keep the full list).
@@ -18369,7 +18369,7 @@ function fxSection(name,noSheet){
   const isActive=cards.some(c=>c.classList.contains('sec-active'));
   // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
   if(mob&&!noSheet&&isActive&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}
-  // deskx (Darkroom-style): clicking the ACTIVE rail icon closes the whole tools panel —
+  // deskx (DRK-style): clicking the ACTIVE rail icon closes the whole tools panel —
   // the grid column collapses and the photo reflows wider. noSheet (programmatic re-selects
   // from applyFxLayout/buildToolRail) never toggles, so layout rebuilds can't flap the panel.
   if(dx&&!noSheet&&isActive&&!document.body.classList.contains('panel-closed')){
@@ -18408,7 +18408,7 @@ function fxSheetClose(){
 }
 // ── Live-fit: while the bottom sheet animates or is being dragged, rescale the EXISTING
 // preview canvas via cheap CSS width/height each frame (GPU composite scale — no WebGL
-// re-render) so the photo continuously tracks the moving sheet like InShot/Darkroom.
+// re-render) so the photo continuously tracks the moving sheet like INS/DRK.
 // The transitionend/drag-end renderPreview() then redraws it crisp at the final size.
 // Targets whichever canvas is actually visible (the borders/canvas-matte overlay
 // #fx-canvas-bd replaces #fx-canvas when active — see applyPreviewBorders).

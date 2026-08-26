@@ -527,7 +527,7 @@
     .lib-chip-x{cursor:pointer;opacity:.6;font-size:11px;line-height:1;padding:0 2px}
     .lib-chip-x:hover{opacity:1;color:var(--acc)}
     #lib-side{overflow:auto;padding:8px 12px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr)}
-    /* Darkroom-style smart collections, above the folder tree in the same #lib-side scroll box. */
+    /* DRK-style smart collections, above the folder tree in the same #lib-side scroll box. */
     .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;
       font-size:12px;color:var(--txt)}
     .lib-coll-row:hover{background:var(--sur2)}
@@ -710,7 +710,7 @@
     .lib-thumb-wrap img.thumb-error{opacity:0}
     .lib-thumb-wrap.thumb-broken::after{content:'⚠';position:absolute;top:50%;left:50%;
       transform:translate(-50%,-50%);color:var(--mut);font-size:16px}
-    /* Small corner icon badges, Darkroom-style — no text pills. Edited (orange pen) sits
+    /* Small corner icon badges, DRK-style — no text pills. Edited (orange pen) sits
        top-right; the RAW "R" badge sits top-left so the two never collide. */
     .lib-edited-badge{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;
       background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:2}
@@ -786,7 +786,7 @@
       object-fit:contain;pointer-events:none;z-index:50;display:none}
     #lib-provisional.on{display:block}
     body.lib-provisional-on #fx-canvas,body.lib-provisional-on #fx-canvas-orig{visibility:hidden}
-    /* deskx (Darkroom shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
+    /* deskx (DRK shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
     /* Definite height, not content-driven: #lib-overlay sits inside .fx-layout{align-items:start}
@@ -813,7 +813,7 @@
        #lib-side below) — its text label doesn't fit the 120px filmstrip's icon-only top bar. */
     body.deskx #lib-overlay:not(.full) #lib-tree-toggle{display:none}
     /* ROADMAP 11 — filmstrip affordances. The 120px strip is pure thumbnails, which means that
-       while culling in the Darkroom shell there was no way to see WHICH photo you were on or
+       while culling in the DRK shell there was no way to see WHICH photo you were on or
        whether you had already flagged it — the two things culling depends on. Both surface on
        hover (and on the current photo always), rather than permanently, so the strip stays a
        strip. Pointer-events off so they can never eat the click that selects the card. */
@@ -1212,7 +1212,7 @@
     await openFolder(path);
   }
 
-  // ── recent folders (MRU, capped) — a Darkroom-style quick-access list so re-opening a
+  // ── recent folders (MRU, capped) — a DRK-style quick-access list so re-opening a
   // folder you browsed earlier this session (or a prior one) doesn't need the OS picker
   // again. Kept separate from state.root/LS_ROOT (which only remembers the LAST folder). ────
   const LS_RECENTS = 'chromasmith_lib_recents';
@@ -4171,7 +4171,7 @@
   }
 
   // Virtual, cross-folder smart collections — see Rust's list_collection()/registry_set() and
-  // the Darkroom-style sidebar (renderCollections(), below the folder tree wiring). "edited"
+  // the DRK-style sidebar (renderCollections(), below the folder tree wiring). "edited"
   // stays reachable from the legacy #lib-source dropdown too (list_edited() is a thin alias),
   // kept for anyone used to that control; the sidebar is the primary, richer entry point.
   let backfillDone = false;
@@ -4238,7 +4238,7 @@
   refreshAlbums();
   }
 
-  // ── Darkroom-style sidebar: smart collections above the folder tree ─────────────────────
+  // ── DRK-style sidebar: smart collections above the folder tree ─────────────────────
   const COLLECTIONS = [
     { name: 'recents', label: 'Recents', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>' },
     { name: 'favorites', label: 'Favorites', icon: HEART_SVG },
@@ -5999,7 +5999,7 @@
   }, 4000);
 
   // ── deskx home screen: the app opens to the full-window Library, not the editor (matches
-  // the approved Darkroom-style wireframe). desktop-native.js sets body.deskx synchronously
+  // the approved DRK-style wireframe). desktop-native.js sets body.deskx synchronously
   // before this script runs (build-desktop.sh loads it first), so the class is already present
   // here. Runs once at startup only — afterward the user's own open/close/expand actions own
   // the state. ──

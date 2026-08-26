@@ -133,7 +133,7 @@ previous revision of this file listed them as open without verifying); 2 and 15 
    `clusterByHash`'s pairwise Hamming allocated two BigInts per comparison and counted bits one at
    a time — 12.5M times at n=5,000, and effectively the whole 41.9s. Guarded by
    `npm run lib:test`.
-6. **Full colour labels** — the Lightroom five, with 6-9/0 shortcuts.
+6. **Full colour labels** — the LR five, with 6-9/0 shortcuts.
 7. **Metadata / info panel** — EXIF inspector on `I`. (The *histogram* half of the original entry
    is not built; the panel is metadata only.)
 9. **A real empty state** — with card-import and choose-folder CTAs.
@@ -149,7 +149,7 @@ previous revision of this file listed them as open without verifying); 2 and 15 
 space: on `__TM3390.jpg`, with the gate centred on the cheek (h 0.044, s 0.373), the lower torso
 (222,169,185) gated only **0.32** and the shoulder (209,150,156) **0.31** — both sit on the
 magenta side of the hue wheel because of sheen. Widening Range to catch them also drags in
-non-skin. Fix: shift-click to add several samples (Lightroom's Color Range does exactly this),
+non-skin. Fix: shift-click to add several samples (LR's Color Range does exactly this),
 gate = `max` over samples, or fit a small covariance ellipse over the picks. This is the single
 biggest quality win available to the tool we just shipped.
 *Touches:* `colRangeWeight` (lut shader), `mskG` packing → an array of samples (UBO or a tiny
@@ -157,7 +157,7 @@ biggest quality win available to the tool we just shipped.
 
 ### 2. ✅ DONE — Per-mask **Amount** (opacity)
 Every per-mask slider is independent, so dialling a mask back means scaling eight sliders by
-hand. Capture One's own advice for over-strong uniformity is "turn the value down, or erase the
+hand. C1's own advice for over-strong uniformity is "turn the value down, or erase the
 mask with a low-opacity brush" — an Amount slider is the direct answer. Implementation is one
 multiply on `w` after the gates, before `skinUniformity`/`maskAdjust`.
 *Touches:* one slot in `mskB`/`mskE`, one line in the mask loop, one `_mskRow`.
@@ -244,12 +244,12 @@ at 4000px) so export tiles stay seamless.
 
 ---
 
-## Tier 2 — capability gaps against Lightroom / Capture One
+## Tier 2 — capability gaps against LR / C1
 
 ### 8. ✅ DONE — Colour Range and Luminance Range as first-class mask *types*
 We added a colour gate as a *modifier* on shape masks. Both range gates deserve to be masks in
 their own right (`+ Colour Range`, `+ Luminance Range`) with no shape at all — that is how users
-coming from Lightroom expect to find them, and the machinery is already written.
+coming from LR expect to find them, and the machinery is already written.
 *Touches:* `mskAdd`, `mskShapeWeight` (a "no shape → 1.0" type), `mskRebuild`.
 
 ### 9. ✅ DONE — Dehaze
@@ -297,7 +297,7 @@ different, larger piece of work; folded into item 13's territory rather than tra
 ### 13. The 16-bit SOURCE path — M/L  *(revised twice, 2026-08-15 — measured)*
 
 ⚠️ **This item's real value is HDR, not precision.** Gain-map HDR export already ships
-(`gainmap.rs`, ISO 21496-1 — the same thing Lightroom does), but it is only offered when the
+(`gainmap.rs`, ISO 21496-1 — the same thing LR does), but it is only offered when the
 SOURCE file carries headroom, and measured on this machine:
 
 | file | headroom | HDR export offered |
@@ -313,7 +313,7 @@ So HDR works on iPhone photos and **not on the user's own RAWs**. Core Image's
 an encoded HDR rendition — the highlight range above SDR white is there in the file and is thrown
 away by this app's own 8-bit truncation before anything can use it.
 
-Lightroom produces HDR from RAW precisely because it keeps that range. Doing the same here means
+LR produces HDR from RAW precisely because it keeps that range. Doing the same here means
 the source path below — which is why 16-bit, HDR-from-RAW and heavy-grade gradient quality are
 one piece of work rather than three.
 

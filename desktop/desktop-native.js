@@ -274,7 +274,7 @@
     if (token) invoke('cancel_denoise_high', { token }).catch((e) => console.error('cancel_denoise_high', e));
   };
 
-  // ── Darkroom-style shell layout: everything is chromasmith-22.html's `body.deskx` mode
+  // ── DRK-style shell layout: everything is chromasmith-22.html's `body.deskx` mode
   // (grid, icon rail right, panel toggle, ⋯ menu, 44px deskbar) — the shell only turns it on
   // and handles the two things a web page can't: the window drag region and traffic lights.
   // titleBarStyle:"Overlay" (tauri.conf.json) keeps the traffic-light buttons floating over

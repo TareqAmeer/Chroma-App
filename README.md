@@ -51,7 +51,7 @@ Step-by-step instructions for each platform, in plain English, are on the
 - Multi-photo batches with a filmstrip, shared edits, and **match a series to one reference**
 
 **Input and output**
-- **RAW** (RW2/RAW) decoded locally, with Adobe DCP camera profiles for Lightroom-like colour
+- **RAW** (RW2/RAW) decoded locally, with Adobe DCP camera profiles for LR-like colour
 - **V-Log** input transform for Lumix footage and stills
 - Full-resolution export to JPEG / PNG / WebP / TIFF, XMP sidecars, **HDR gain-map** HEIC from RAW
 - Build a `.cube` LUT from a before/after pair, or match colour from a reference image

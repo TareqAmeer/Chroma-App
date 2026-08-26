@@ -10,7 +10,7 @@ commits, trust `git log` over it.
 
 Full plan: `~/.claude/plans/identify-additional-performance-feature-elegant-boole.md`. It came out
 of an audit across the three surfaces (Tauri desktop, Pages web, Capacitor iOS) plus a comparison
-against Dehancer (the film lane) and RapidRAW/Lightroom (the editor lane).
+against Dehancer (the film lane) and RR/LR (the editor lane).
 
 ### ✅ Shipped
 

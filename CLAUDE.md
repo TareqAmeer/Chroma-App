@@ -594,7 +594,7 @@ a face that is now over-cooked.
 reference tone shrinks by `(1−u)`, so far-from-target pixels move a lot and near-target pixels
 barely move. **Tan** moves the TARGET (resolved on the CPU in `mskSkinTarget`), never the pixels,
 so pushing it deepens the whole selection instead of compounding on the dark parts. Modelled on
-Capture One's Skin Tone tool; Lightroom has no equivalent.
+C1's Skin Tone tool; LR has no equivalent.
 
 Three per-mask pieces, all reusing the existing mask machinery:
 - **`colRangeWeight()`** — gates the mask by hue/sat near up to 4 eyedropper picks (`mskG` holds
@@ -738,7 +738,7 @@ subject mask's own bounding box and turns the result into one eraser mask via th
 ### Card import, named subjects, and auto-seeded skin samples (Phase C, 2026-08-15)
 
 - **Card import** (`desktop/src-tauri/src/ingest.rs` + a "Devices" section in `library-ui.js`)
-  replaces the Lightroom trip: volume detection, date-organised copy with folder/filename
+  replaces the LR trip: volume detection, date-organised copy with folder/filename
   templates, an optional second copy in the same pass, size verification, duplicate skipping,
   progress and eject. Never moves, only copies. ⚠️ Dates come from EXIF **DateTimeOriginal**, not
   `DateTime` — for the repo's own test photos those differ by 2 and 5 days because an editor
