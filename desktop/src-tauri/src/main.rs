@@ -80,8 +80,22 @@ fn percent_decode(s: &str) -> String {
 //                 payload = the RW2 file bytes
 // decode_raw_v2 response: [u32 w][u32 h][u32 iso][RGBA8 | u16 RGB LE (linear16 mode)]
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 static DCP_LUTS: Mutex<Option<HashMap<String, std::sync::Arc<Vec<f32>>>>> = Mutex::new(None);
+
+// Single-slot cache for the EXPENSIVE half of decode_raw_v2 (demosaic — the multi-second cost;
+// see raw_decode.rs's own header comment) keyed by a hash of the raw bytes + every parameter that
+// actually changes the demosaic (nr/demosaic_algo/fast/autoLens/lensOverride). Switching only the
+// RAW profile ("RAW profile" dropdown → mode/lutKey) changes NONE of those, so it now hits this
+// cache and skips straight to the cheap LUT application — this is what makes a profile switch on
+// an already-open RAW near-instant instead of re-running PPGDemosaic from scratch, matching the
+// SAM_EMBED/Sam2EmbedCache "one photo edited at a time, newest wins" pattern already used above.
+struct RawDecodeCacheEntry {
+    key: u64,
+    decoded: std::sync::Arc<raw_decode::DecodedRaw>,
+}
+static RAW_DECODE_CACHE: Mutex<Option<RawDecodeCacheEntry>> = Mutex::new(None);
 
 fn parse_framed(body: &tauri::ipc::InvokeBody) -> Result<(serde_json::Value, &[u8]), String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = body else {
@@ -509,7 +523,37 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         (Some(l), Some(f)) if !l.is_empty() && f > 0.0 => Some((l, f as f32)),
         _ => None,
     };
-    let decoded = raw_decode::decode_rw2_bytes(payload, auto_lens, nr, demosaic_algo, fast, lens_override)?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    payload.hash(&mut hasher); // &[u8]'s Hash impl is a single bulk write, not per-byte — cheap even at 40MB+
+    format!("{nr:?}").hash(&mut hasher);
+    demosaic_algo.hash(&mut hasher);
+    fast.hash(&mut hasher);
+    auto_lens.hash(&mut hasher);
+    lens_override.map(|(l, f)| (l, f.to_bits())).hash(&mut hasher);
+    let decode_key = hasher.finish();
+    let decoded: std::sync::Arc<raw_decode::DecodedRaw> = {
+        let cached = RAW_DECODE_CACHE
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().filter(|e| e.key == decode_key).map(|e| e.decoded.clone()));
+        match cached {
+            Some(d) => d,
+            None => {
+                let d = std::sync::Arc::new(raw_decode::decode_rw2_bytes(
+                    payload,
+                    auto_lens,
+                    nr,
+                    demosaic_algo,
+                    fast,
+                    lens_override,
+                )?);
+                if let Ok(mut guard) = RAW_DECODE_CACHE.lock() {
+                    *guard = Some(RawDecodeCacheEntry { key: decode_key, decoded: d.clone() });
+                }
+                d
+            }
+        }
+    };
     // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files
     // for (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a
     // DIFFERENT sensor's data wouldn't error — it would just silently produce wrong colors (a

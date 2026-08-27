@@ -4113,7 +4113,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-26a';
+const BUILD='2026-08-27a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -7992,7 +7992,53 @@ function dcpFit(iso,cameraPrefix){
 const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
 const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
 function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?'Standard':v}
-function setRawProfile(v){localStorage.setItem('rawProfile',v);log('RAW profile: '+(v||'None (LibRaw sRGB)')+' — applies to the next RW2 load','info')}
+function setRawProfile(v){localStorage.setItem('rawProfile',v);reloadRawProfileForCurrentPhoto(v)}
+// Re-decodes the CURRENT photo under the newly-picked DCP profile instead of only remembering
+// the choice for the next RW2 load (the original behaviour — see the log string it used to emit).
+// Native shell: full path-based reopen (chromasmithReloadCurrentPhoto), same mechanism the
+// lens/NR toggles already use. Browser/wasm: rawFile (kept on the fxImages entry specifically
+// "for the Diagnostics DCP-option re-decode") lets loadRw2 re-run without a re-pick; its
+// returned canvas replaces it.img in place so undo history / masks / geometry on the item
+// survive untouched — only the pixels change.
+async function reloadRawProfileForCurrentPhoto(v){
+  const label=v||'None (LibRaw sRGB)';
+  const it=typeof curItem==='function'?curItem():null;
+  if(!it){log('RAW profile: '+label,'info');return}
+  // Visible "this is happening" signal: reuse the SAME deskbar spinner the initial RAW decode
+  // shows (fxDeskbarTitle), rather than inventing a second indicator — plus dim the dropdown
+  // itself so a second change can't race the first while a decode is in flight.
+  const sel=document.getElementById('sel-dcp');
+  if(sel)sel.disabled=true;
+  fxDeskbarTitle(it.name,'',true);
+  // Re-reads curItem() fresh rather than closing over `it` — the native path (chromasmithReloadCurrentPhoto)
+  // replaces fxImages wholesale, so restoring from the pre-reload `it` could paint a stale object.
+  const restoreTitle=()=>{
+    const cur=typeof curItem==='function'?curItem():null;
+    if(!cur)return;
+    fxDeskbarTitle(cur.name,typeof fxDimsFmt==='function'?fxDimsFmt(cur.name,cur.img,cur.ext):'',false);
+  };
+  try{
+    if(window.__TAURI__&&typeof window.chromasmithReloadCurrentPhoto==='function'){
+      log('RAW profile: '+label+' — reloading…','info');
+      await window.chromasmithReloadCurrentPhoto();
+      log('RAW profile applied: '+label,'ok');
+      return;
+    }
+    if(!it.rawFile){log('RAW profile: '+label+' — applies to the next RAW load','info');return}
+    log('RAW profile: '+label+' — reloading…','info');
+    const r=await loadRw2(it.rawFile);
+    it.img=r.canvas;
+    if(typeof updateWork==='function')updateWork();
+    if(typeof renderPreview==='function')renderPreview();
+    log('RAW profile applied: '+label,'ok');
+  }catch(e){
+    log('RAW profile reload failed: '+errStr(e),'warn');
+    if(typeof toast==='function')toast('RAW profile reload failed: '+errStr(e),false);
+  }finally{
+    if(sel)sel.disabled=false;
+    restoreTitle();
+  }
+}
 function initDcpSelect(){const s=document.getElementById('sel-dcp');if(!s)return;
   s.innerHTML='<option value="">None (LibRaw sRGB)</option>'+DCP_PROFILES.map(n=>'<option value="'+n+'">'+n+'</option>').join('');
   s.value=rawProfile();}
