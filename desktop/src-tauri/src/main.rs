@@ -38,6 +38,8 @@ mod tiff_meta;
 mod gainmap;
 #[cfg(target_os = "macos")]
 mod fastthumb;
+#[cfg(target_os = "macos")]
+mod videothumb;
 mod subject;
 mod ingest;
 mod catalog;

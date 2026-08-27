@@ -1194,6 +1194,108 @@ pub fn video_capture_date(path: &str) -> Option<VideoDate> {
     Some(VideoDate { captured: unix_secs, y, m, d, source: "mvhd" })
 }
 
+pub struct VideoTrackInfo {
+    /// 0.0 when the header carried nothing usable — callers treat that as "unknown" rather than
+    /// losing the dimensions alongside it.
+    pub duration_secs: f64,
+    /// Display dimensions, with the `tkhd` rotation matrix already applied. A portrait phone clip
+    /// is stored 1920x1080 plus a 90° matrix, so reporting the raw values would call every one of
+    /// them landscape.
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Duration and display dimensions for a video, read from the SAME bounded `moov` box
+/// `video_capture_date` already walks — so a clip's duration badge and Info panel cost one
+/// metadata read, never a decode and never a whole-file read.
+///
+/// ⚠️ Deliberately pure Rust rather than asking AVFoundation, even though `videothumb.rs` has an
+/// `AVURLAsset` open a moment later. `[AVAsset duration]` RETURNS a 24-byte `CMTime` by value,
+/// which on x86_64 goes through the `objc_msgSend_stret` hidden-pointer ABI — get that wrong and
+/// the failure mode is silently-wrong numbers, not a compile error, and this project's dev machine
+/// is Intel. Passing a `CMTime` as an ARGUMENT (what `videothumb.rs` does to seek) is ordinary C
+/// ABI and carries none of that risk. Reading the numbers here also means the duration badge still
+/// renders for a clip AVFoundation refuses to decode, and that this path is unit-testable against
+/// a committed fixture with no framework, window server or codec involved.
+pub fn video_track_info(path: &str) -> Option<VideoTrackInfo> {
+    let moov = find_moov_bytes(path)?;
+    let (mvhd_s, mvhd_e) = find_child(&moov, 0, moov.len(), b"mvhd")?;
+    let version = *moov.get(mvhd_s)?;
+    // After version+flags: v0 is creation(4) modification(4) timescale(4) duration(4); v1 widens
+    // both times to 8 and the duration to 8, moving every offset that follows.
+    let (ts_off, dur_off, dur_len) = if version == 1 { (20usize, 24usize, 8usize) } else { (12usize, 16usize, 4usize) };
+    let mut duration_secs = 0.0f64;
+    if mvhd_e.saturating_sub(mvhd_s) >= dur_off + dur_len {
+        let timescale = u32::from_be_bytes(moov.get(mvhd_s + ts_off..mvhd_s + ts_off + 4)?.try_into().ok()?);
+        let duration: u64 = if dur_len == 8 {
+            u64::from_be_bytes(moov.get(mvhd_s + dur_off..mvhd_s + dur_off + 8)?.try_into().ok()?)
+        } else {
+            u32::from_be_bytes(moov.get(mvhd_s + dur_off..mvhd_s + dur_off + 4)?.try_into().ok()?) as u64
+        };
+        // timescale 0 would divide by zero. A clip longer than a day is not something this app
+        // ingests and is far likelier to be a misparse than a real file, so report "unknown"
+        // rather than a badge reading 700:00.
+        if timescale != 0 {
+            let secs = duration as f64 / timescale as f64;
+            if secs.is_finite() && secs > 0.0 && secs <= 24.0 * 3600.0 {
+                duration_secs = secs;
+            }
+        }
+    }
+    let (width, height) = video_track_dims(&moov).unwrap_or((0, 0));
+    Some(VideoTrackInfo { duration_secs, width, height })
+}
+
+/// First `trak` whose `tkhd` carries non-zero dimensions. An audio track's `tkhd` stores 0x0,
+/// which separates it from the video track without having to descend into `hdlr`.
+///
+/// ⚠️ `find_child` is FLAT — it returns only the FIRST matching sibling — so walking several
+/// `trak` boxes means restarting the scan from the previous one's end, and reaching `tkhd` means
+/// chaining a second call scoped to that trak. Bounded at 64 traks so a malformed file can't spin.
+fn video_track_dims(moov: &[u8]) -> Option<(u32, u32)> {
+    let mut pos = 0usize;
+    for _ in 0..64 {
+        let (trak_s, trak_e) = find_child(moov, pos, moov.len(), b"trak")?;
+        if let Some((tk_s, tk_e)) = find_child(moov, trak_s, trak_e, b"tkhd") {
+            if let Some(dims) = tkhd_dims(moov, tk_s, tk_e) {
+                return Some(dims);
+            }
+        }
+        if trak_e <= pos {
+            break; // no forward progress — malformed, stop rather than loop
+        }
+        pos = trak_e;
+    }
+    None
+}
+
+/// `width`/`height` are the final 8 bytes of a `tkhd` body as 16.16 fixed point, preceded by the
+/// 36-byte display matrix. Indexing from the END rather than the front makes this version-agnostic
+/// (v0 and v1 differ only in the widths of the fields near the start).
+fn tkhd_dims(moov: &[u8], s: usize, e: usize) -> Option<(u32, u32)> {
+    if e.saturating_sub(s) < 8 + 36 {
+        return None;
+    }
+    let wh = e - 8;
+    let w = u32::from_be_bytes(moov.get(wh..wh + 4)?.try_into().ok()?) >> 16;
+    let h = u32::from_be_bytes(moov.get(wh + 4..wh + 8)?.try_into().ok()?) >> 16;
+    if w == 0 || h == 0 {
+        return None;
+    }
+    // Matrix order is a,b,u,c,d,v,x,y,w. A 90°/270° rotation zeroes the a/d diagonal and puts the
+    // non-zero terms on b/c — exactly the case where the stored width/height are transposed
+    // relative to how the clip is meant to be displayed. 0°/180° leave a/d non-zero.
+    let m = e - 8 - 36;
+    let a = i32::from_be_bytes(moov.get(m..m + 4)?.try_into().ok()?);
+    let b = i32::from_be_bytes(moov.get(m + 4..m + 8)?.try_into().ok()?);
+    let c = i32::from_be_bytes(moov.get(m + 12..m + 16)?.try_into().ok()?);
+    let d = i32::from_be_bytes(moov.get(m + 16..m + 20)?.try_into().ok()?);
+    if a == 0 && d == 0 && b != 0 && c != 0 {
+        return Some((h, w));
+    }
+    Some((w, h))
+}
+
 #[derive(Default)]
 pub struct MetadataResult {
     pub read: usize,
@@ -4216,6 +4318,107 @@ mod tests {
         if let Some(vd) = vd {
             assert!((1..=12).contains(&vd.m) && (1..=31).contains(&vd.d) && vd.y > 1990 && vd.y < 2100);
         }
+    }
+
+    // ── Video duration / dimensions (video_track_info) ──────────────────────────────────────
+    //
+    // These run FOR REAL on every `cargo test` — test/fixtures/video_tiny.mp4 is committed —
+    // which is the point of parsing the container in Rust rather than asking AVFoundation: no
+    // framework, no window server, no codec needed to prove the numbers are right.
+
+    fn tiny_fixture() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test/fixtures/video_tiny.mp4")
+    }
+
+    #[test]
+    fn video_track_info_reads_the_committed_tiny_fixture() {
+        let p = tiny_fixture();
+        assert!(p.exists(), "test/fixtures/video_tiny.mp4 is committed and must be present");
+        let info = video_track_info(&p.to_string_lossy()).expect("tiny fixture must parse");
+        // The fixture is documented in CLAUDE.md §12: 10 frames, 160x120, 10fps -> ~1s.
+        assert_eq!((info.width, info.height), (160, 120), "dimensions");
+        assert!(
+            (info.duration_secs - 1.0).abs() < 0.25,
+            "duration {} is not ~1s (10 frames @ 10fps)",
+            info.duration_secs
+        );
+    }
+
+    #[test]
+    fn video_track_info_declines_a_non_video_instead_of_panicking() {
+        let path = write_fixture("not_a_video", b"this is definitely not an mp4 container");
+        assert!(video_track_info(&path).is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn video_track_info_survives_a_moov_with_no_mvhd() {
+        let moov = mp4_box(b"moov", b"");
+        let path = write_fixture("no_mvhd", &moov);
+        assert!(video_track_info(&path).is_none(), "must not fabricate a duration from nothing");
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// A zero `timescale` is the division-by-zero trap in this parser. It must report "unknown"
+    /// (0.0), never panic and never emit inf/NaN into a duration badge.
+    #[test]
+    fn video_track_info_rejects_a_zero_timescale() {
+        // mvhd v0 body: version+flags(4) creation(4) modification(4) timescale(4) duration(4)
+        let mut body = vec![0u8; 20];
+        body[12..16].copy_from_slice(&0u32.to_be_bytes()); // timescale = 0
+        body[16..20].copy_from_slice(&600u32.to_be_bytes()); // a non-zero duration alongside it
+        let moov = mp4_box(b"moov", &mp4_box(b"mvhd", &body));
+        let path = write_fixture("zero_timescale", &moov);
+        let info = video_track_info(&path).expect("still parses, just without a duration");
+        assert_eq!(info.duration_secs, 0.0, "zero timescale must read as unknown");
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// A 90° display matrix must transpose the reported dimensions — otherwise every portrait
+    /// phone clip reports itself as landscape in the Info panel.
+    #[test]
+    fn tkhd_rotation_matrix_transposes_portrait_dimensions() {
+        // tkhd v0 body: version+flags(4) creation(4) modification(4) trackID(4) reserved(4)
+        // duration(4) reserved(8) layer(2) altgroup(2) volume(2) reserved(2) matrix(36) w(4) h(4)
+        let mut body = vec![0u8; 4 + 20 + 16 + 36 + 8];
+        let m = body.len() - 8 - 36;
+        // Matrix order a,b,u,c,d,v,x,y,w — a 90° rotation: a=0 b=1 c=-1 d=0 (16.16 fixed).
+        body[m..m + 4].copy_from_slice(&0i32.to_be_bytes()); // a
+        body[m + 4..m + 8].copy_from_slice(&0x0001_0000i32.to_be_bytes()); // b = 1.0
+        body[m + 12..m + 16].copy_from_slice(&(-0x0001_0000i32).to_be_bytes()); // c = -1.0
+        body[m + 16..m + 20].copy_from_slice(&0i32.to_be_bytes()); // d
+        let wh = body.len() - 8;
+        body[wh..wh + 4].copy_from_slice(&(1920u32 << 16).to_be_bytes());
+        body[wh + 4..wh + 8].copy_from_slice(&(1080u32 << 16).to_be_bytes());
+        let trak = mp4_box(b"trak", &mp4_box(b"tkhd", &body));
+        let moov_body = [mp4_box(b"mvhd", &vec![0u8; 20]), trak].concat();
+        let path = write_fixture("rot90", &mp4_box(b"moov", &moov_body));
+        let info = video_track_info(&path).expect("parses");
+        assert_eq!((info.width, info.height), (1080, 1920), "90° matrix must transpose w/h");
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The audio track's tkhd carries 0x0 — the video track must still be found past it.
+    #[test]
+    fn video_track_dims_skips_a_zero_sized_audio_trak() {
+        let zero_tkhd = mp4_box(b"tkhd", &vec![0u8; 4 + 20 + 16 + 36 + 8]);
+        let mut vid = vec![0u8; 4 + 20 + 16 + 36 + 8];
+        let m = vid.len() - 8 - 36;
+        vid[m..m + 4].copy_from_slice(&0x0001_0000i32.to_be_bytes()); // a = 1.0 (identity)
+        vid[m + 16..m + 20].copy_from_slice(&0x0001_0000i32.to_be_bytes()); // d = 1.0
+        let wh = vid.len() - 8;
+        vid[wh..wh + 4].copy_from_slice(&(640u32 << 16).to_be_bytes());
+        vid[wh + 4..wh + 8].copy_from_slice(&(480u32 << 16).to_be_bytes());
+        let moov_body = [
+            mp4_box(b"mvhd", &vec![0u8; 20]),
+            mp4_box(b"trak", &zero_tkhd),
+            mp4_box(b"trak", &mp4_box(b"tkhd", &vid)),
+        ]
+        .concat();
+        let path = write_fixture("audio_first", &mp4_box(b"moov", &moov_body));
+        let info = video_track_info(&path).expect("parses");
+        assert_eq!((info.width, info.height), (640, 480), "must skip the 0x0 audio trak");
+        std::fs::remove_file(&path).ok();
     }
 
     // ── Content-hash integrity ──────────────────────────────────────────────────────────────

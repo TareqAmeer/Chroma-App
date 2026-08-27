@@ -18,6 +18,8 @@
 // through the real UI path instead of this probe's.
 #[path = "../src/fastthumb.rs"]
 mod fastthumb;
+#[path = "../src/videothumb.rs"]
+mod videothumb;
 #[path = "../src/lens_correct.rs"]
 mod lens_correct;
 #[path = "../src/library.rs"]

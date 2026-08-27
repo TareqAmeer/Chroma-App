@@ -193,6 +193,9 @@ fn fnv1a(parts: &[&str]) -> u64 {
 // at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
 const THUMB_RENDER_VER: &str = "thumb-v2"; // bumped when orientation-correction was added
 const META_READER_VER: &str = "meta-v5";   // bumped when the RW2-lens EXIF garbage-value fix landed
+/// Videos get their OWN meta-cache version so adding duration/dimensions to PhotoMeta did not
+/// invalidate every photo's cached EXIF read. See meta_cache_path.
+const VIDEO_META_VER: &str = "vmeta-v1";
 const PHASH_VER: &str = "phash-v1";
 const DECODE_RENDER_VER: &str = "decode-v1";
 const LR_THUMB_VER: &str = "lr-thumb-v1";
@@ -318,7 +321,13 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
     let key = cache_key(&path, mtime, meta.len());
     let cache_path = cache_dir().join(&key);
     if let Ok(bytes) = std::fs::read(&cache_path) {
-        return Ok(tauri::ipc::Response::new(bytes));
+        // ⚠️ Length-checked: a truncated cache file (crash or full disk mid-write) would otherwise
+        // be served forever as a valid Ok, giving a permanently broken <img> that no amount of
+        // re-rendering clears — the same symptom class as the video-poster bug this path was
+        // rewritten to fix. Below the floor, fall through and regenerate.
+        if bytes.len() > 128 {
+            return Ok(tauri::ipc::Response::new(bytes));
+        }
     }
     // ImageIO first for non-RAW stills (ROADMAP 15). Measured cold, this is the difference
     // between ~800ms and a fraction of it on a 24MP JPEG, because the `image` crate decodes every
@@ -334,14 +343,26 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
                 return Ok(tauri::ipc::Response::new(bytes));
             }
         }
+        // Video posters come from AVFoundation — the OS's own decoder, the same one Finder and
+        // QuickLook use, reached by linking the framework rather than adding a dependency (see
+        // videothumb.rs). Sitting here means it inherits the disk cache above for free, which is
+        // what makes posters survive a restart; the front end used to decode clips in a hidden
+        // <video> and could never cache anything past the session.
+        if is_video_ext(&ext) {
+            let dur = crate::catalog::video_track_info(&path).map(|i| i.duration_secs).unwrap_or(0.0);
+            if let Some(bytes) = crate::videothumb::poster_jpeg(&path, 360, dur) {
+                let _ = std::fs::write(&cache_path, &bytes);
+                return Ok(tauri::ipc::Response::new(bytes));
+            }
+        }
     }
 
     let ext = ext_lower(Path::new(&path));
-    // No still-frame decoder for video here (the `image` crate can't read MP4, and pulling in
-    // ffmpeg just for a grid thumbnail is out of scope) — fail cleanly so the frontend falls
-    // back to its generic video-clip placeholder icon instead of a broken <img>.
+    // A clip AVFoundation declined (DRM, an exotic codec, a corrupt container) — or any video at
+    // all on a non-macOS build. Fail cleanly so the frontend keeps its video placeholder; never
+    // fall through to `image::open`, which cannot read a container of any kind.
     if is_video_ext(&ext) {
-        return Err("no thumbnail decoder for video".into());
+        return Err("video poster: no frame could be decoded from this clip".into());
     }
     // The `image` crate has no HEIC decoder, but macOS itself does — ImageIO, which is what
     // WKWebView already uses to display these in the editor. `sips` is the shell front end to it
@@ -663,6 +684,15 @@ pub struct PhotoMeta {
     pub shutter: Option<String>,
     pub aperture: Option<String>,
     pub focal_len: Option<String>,
+    /// Video only: clip length in seconds, and display dimensions. Read from the container header
+    /// (catalog::video_track_info), NOT from a decode — so the grid's duration badge still renders
+    /// for a clip AVFoundation cannot produce a poster frame for.
+    #[serde(default)]
+    pub dur: Option<f64>,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
 }
 
 /// Formats a rawler Rational exposure time the way the app's own EXIF reader does
@@ -684,7 +714,13 @@ fn meta_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
     // rendering change dragging every metadata read along with it.
     let mtime_s = mtime.to_string();
     let size_s = size.to_string();
-    cache_dir().join(format!("{:016x}.meta.json", fnv1a(&[path, &mtime_s, &size_s, META_READER_VER])))
+    // ⚠️ The version component is TYPE-DEPENDENT, one level finer than the per-tier constants
+    // above. Adding video duration/dimensions to PhotoMeta would otherwise have forced a
+    // META_READER_VER bump, re-reading EXIF for every photo in a 100k-photo catalog to deliver
+    // three numbers that only videos carry. Photo keys stay byte-identical; only videos (whose
+    // cached meta was PhotoMeta::default() anyway, since read_meta had no video branch) re-read.
+    let ver = if is_video_ext(&ext_lower(Path::new(path))) { VIDEO_META_VER } else { META_READER_VER };
+    cache_dir().join(format!("{:016x}.meta.json", fnv1a(&[path, &mtime_s, &size_s, ver])))
 }
 
 fn read_meta(path: &str) -> PhotoMeta {
@@ -711,6 +747,7 @@ fn read_meta(path: &str) -> PhotoMeta {
             shutter: md.exif.exposure_time.as_ref().map(|r| fmt_shutter(ratio(r))),
             aperture: md.exif.fnumber.as_ref().map(|r| format!("f/{:.1}", ratio(r))),
             focal_len: md.exif.focal_length.as_ref().map(|r| format!("{:.0}mm", ratio(r))),
+            ..PhotoMeta::default() // dur/width/height are video-only
         }
     } else if matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff" | "heic" | "heif") {
         let Ok(file) = std::fs::File::open(path) else { return PhotoMeta::default() };
@@ -740,6 +777,30 @@ fn read_meta(path: &str) -> PhotoMeta {
             shutter: s(exif::Tag::ExposureTime),
             aperture: s(exif::Tag::FNumber).map(|v| format!("f/{v}")),
             focal_len: s(exif::Tag::FocalLength),
+            ..PhotoMeta::default() // dur/width/height are video-only
+        }
+    } else if is_video_ext(&ext) {
+        // Container header only — one bounded `moov` read, never a decode and never a whole-file
+        // read (a clip here can be 1.3GB). This is what feeds the grid's duration badge, which is
+        // why it lives here rather than being lifted out of the poster decode: the badge must
+        // still be right when AVFoundation refuses the clip.
+        let info = crate::catalog::video_track_info(path);
+        let date = crate::catalog::video_capture_date(path).map(|d| {
+            // Match the "YYYY:MM:DD HH:MM:SS" shape EXIF DateTimeOriginal uses above, so every
+            // consumer of PhotoMeta.date keeps parsing one format.
+            let secs_of_day = d.captured.rem_euclid(86_400);
+            format!(
+                "{:04}:{:02}:{:02} {:02}:{:02}:{:02}",
+                d.y, d.m, d.d,
+                secs_of_day / 3600, (secs_of_day % 3600) / 60, secs_of_day % 60
+            )
+        });
+        PhotoMeta {
+            date,
+            dur: info.as_ref().map(|i| i.duration_secs).filter(|d| *d > 0.0),
+            width: info.as_ref().map(|i| i.width).filter(|w| *w > 0),
+            height: info.as_ref().map(|i| i.height).filter(|h| *h > 0),
+            ..PhotoMeta::default()
         }
     } else {
         PhotoMeta::default()
@@ -1562,6 +1623,16 @@ fn compute_dhash(bytes: &[u8]) -> Result<u64, String> {
 }
 
 fn phash_for_path(path: &str) -> Result<u64, String> {
+    // ⚠️ Videos are deliberately excluded from perceptual hashing, and this guard is load-bearing
+    // BECAUSE video thumbnails started working. This function reuses get_thumbnail_inner's cached
+    // JPEG, which used to Err for every clip — so clips fell out of duplicate detection silently
+    // and for free. Now that a poster exists, every clip would get a dHash and start clustering
+    // against other clips (and against stills) on the strength of one arbitrary frame. catalog.rs
+    // guards its own queries with `kind != 'video'`, but phash_batch is called from the frontend
+    // with every entry, so the guard belongs here where it covers all callers.
+    if is_video_ext(&ext_lower(Path::new(path))) {
+        return Err("perceptual hashing is not meaningful for video".into());
+    }
     let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let cp = phash_cache_path(path, mtime, meta.len());

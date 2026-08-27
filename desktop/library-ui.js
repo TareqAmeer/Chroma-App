@@ -27,6 +27,11 @@
   // Virtual-copy state for the harness, so the version rows in the context menu are reachable
   // without a real sidecar on disk.
   let ltVersions = [], ltActive = 0;
+  function ltMetaFor(p) {
+    return /\.(mp4|mov|m4v)$/i.test(String(p || ''))
+      ? { dur: 12.5, width: 3840, height: 2160, date: '2026-07-20' }
+      : { camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' };
+  }
   function libtestInvoke(cmd, args) {
     const A = args || {};
     const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
@@ -40,7 +45,17 @@
         // question about 500-5000 files and cannot be answered at 18 — see the virtualisation
         // budget in test/perf_bench.mjs.
         const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
-        for (let i = 1; i <= N; i++) out.push({ path: `${dir}/IMG_${1000 + i}.RW2`, name: `IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, kind: 'raw', ext: 'rw2', mtime: 1700000000 + i, size: 1000 + i });
+        // ⚠️ Every 6th entry is a VIDEO. This mock used to emit nothing but RW2s, which is exactly
+        // why a video-card defect (a revoked poster blob URL surviving in a JS cache, so every
+        // clip painted a permanent broken-image "?") could never be reproduced in the harness —
+        // CLAUDE.md §10.14's point about Library bugs being invisible without ?libtest=1 only
+        // holds if the mock actually emits the kinds of entry the grid has to render.
+        for (let i = 1; i <= N; i++) {
+          const isVid = i % 6 === 0;
+          out.push(isVid
+            ? { path: `${dir}/P_TM${6000 + i}.MP4`, name: `P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', ext: 'mp4', mtime: 1700000000 + i, size: 90000000 + i }
+            : { path: `${dir}/IMG_${1000 + i}.RW2`, name: `IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', ext: 'rw2', mtime: 1700000000 + i, size: 1000 + i });
+        }
         out.push({ path: `${dir}/sub`, name: 'sub', is_dir: true, is_image: false, kind: '', ext: '', mtime: 0, size: 0 });
         return Promise.resolve(out);
       }
@@ -61,8 +76,10 @@
         return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
       }
       case 'set_sidecar': return Promise.resolve();
-      case 'get_meta': return Promise.resolve({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' });
-      case 'get_meta_batch': return Promise.resolve((A.paths || []).map(() => ({ camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' })));
+      // A video's meta carries dur/width/height and no camera/lens, matching read_meta's real
+      // video branch — that is what the grid's duration badge reads.
+      case 'get_meta': return Promise.resolve(ltMetaFor(A.path));
+      case 'get_meta_batch': return Promise.resolve((A.paths || []).map(ltMetaFor));
       case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
       case 'album_list': return Promise.resolve(ltAlbums);
       case 'album_create': {
@@ -724,8 +741,8 @@
     .lib-stack-badge{min-width:18px;width:auto;padding:0 4px;cursor:pointer;background:rgba(0,0,0,.7)}
     .lib-stack-badge:hover{background:rgba(0,0,0,.85)}
     /* Video: same corner-badge slot the RAW "R" chip uses (mutually exclusive — a file is one
-       kind or the other) plus a dark placeholder fill + centered play glyph in the thumbnail
-       itself, since get_thumbnail has no still-frame decoder for video (see library.rs). */
+       kind or the other), carrying the clip icon plus its duration. The gradient fill behind the
+       thumbnail is the backdrop while the poster loads, and what stays visible if it can't. */
     .lib-video-badge{position:absolute;top:4px;left:4px;min-width:18px;height:18px;padding:0 5px;border-radius:5px;
       background:rgba(0,0,0,.6);color:#e6e6ea;font-size:10px;font-variant-numeric:tabular-nums;
       display:flex;align-items:center;justify-content:center;gap:3px;z-index:2}
@@ -733,8 +750,8 @@
     .lib-thumb-video{background:linear-gradient(135deg,var(--sur2),var(--sur))}
     .lib-thumb-video:not(:has(img.loaded))::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
       color:var(--mut);font-size:20px;opacity:.5;z-index:1}
-    /* A poster is decoded in the webview now, so show it; the gradient below is just the
-       backdrop while it loads, and remains visible if the decode fails. */
+    /* Posters are generated natively by AVFoundation and disk-cached like any photo thumbnail
+       (see videothumb.rs), so show them the same way. */
     .lib-thumb-video img{display:block}
     /* Dupe chip: bottom-left (RAW already owns top-left, Edited owns top-right). Synced badge:
        bottom-right, mirroring it. Both passive-only indicators, no click handler. */
@@ -1332,10 +1349,17 @@
     window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
   }
-  // How many rows of cards to keep mounted beyond the viewport in each direction. Two rows is
-  // enough that a normal scroll flick never exposes a gap, without mounting a screenful of cards
-  // nobody sees.
-  const VIRT_OVERSCAN_ROWS = 2;
+  // Rows kept mounted beyond the viewport in each direction. This used to be a flat 2, which is
+  // enough to avoid a visible GAP while scrolling but nowhere near enough to avoid the far more
+  // annoying problem: scroll down a little and back up, and every card you just passed had been
+  // unmounted and has to be fetched and decoded again, so the grid visibly re-loads photos you
+  // were already looking at. The window is now sized to the row budget instead — see
+  // virtOverscanRows() — so a small scroll stays entirely inside already-mounted rows.
+  // ⚠️ VIRT_MAX_CARDS is the binding constraint, not a guess: test/library_perf.mjs asserts the
+  // mounted `.lib-card` count stays <= 200 at n=5000 (and a 6,000-node total DOM budget, at ~18
+  // nodes per card). 180 leaves headroom under that guard.
+  const VIRT_MAX_CARDS = 180;
+  const VIRT_MIN_OVERSCAN_ROWS = 2;
   let _virtScrollBound = null;
 
   /// Measures the live grid's geometry from the DOM rather than recomputing it from CSS. The
@@ -1354,6 +1378,18 @@
     return { cols, rowH: Math.max(1, rowH), cardH: cards[0].offsetHeight };
   }
 
+  /// Spends the whole mounted-card budget on overscan rather than mounting a fixed two rows.
+  /// Derived from the LIVE metrics (cols/rowH), like everything else here, because both come from
+  /// `auto-fill` and change with thumbnail size, dock state and window width — at 5 columns this
+  /// gives ~36 mounted rows against the ~5 visible, so scrolling a screen or two in either
+  /// direction re-uses mounted cards instead of re-fetching them.
+  function virtOverscanRows(m, viewH) {
+    const visibleRows = Math.max(1, Math.ceil(viewH / m.rowH));
+    const budgetRows = Math.floor(VIRT_MAX_CARDS / Math.max(1, m.cols));
+    // Split whatever the budget leaves over the visible band evenly above and below.
+    return Math.max(VIRT_MIN_OVERSCAN_ROWS, Math.floor((budgetRows - visibleRows) / 2));
+  }
+
   /// Mounts only the rows near the viewport, with a spacer above and below holding the scroll
   /// height. Spacers span the full row (`grid-column:1/-1`) so the CSS grid's auto-fill column
   /// maths is untouched — the alternative, absolutely positioning cards, would mean
@@ -1369,8 +1405,9 @@
     const viewTop = Math.max(0, (scroller.scrollTop || 0) - gridEl.offsetTop);
     const viewH = scroller.clientHeight || window.innerHeight;
     const totalRows = Math.ceil(all.length / m.cols);
-    const firstRow = Math.max(0, Math.floor(viewTop / m.rowH) - VIRT_OVERSCAN_ROWS);
-    const lastRow = Math.min(totalRows - 1, Math.ceil((viewTop + viewH) / m.rowH) + VIRT_OVERSCAN_ROWS);
+    const over = virtOverscanRows(m, viewH);
+    const firstRow = Math.max(0, Math.floor(viewTop / m.rowH) - over);
+    const lastRow = Math.min(totalRows - 1, Math.ceil((viewTop + viewH) / m.rowH) + over);
     if (!force && state._virtRange && state._virtRange[0] === firstRow && state._virtRange[1] === lastRow) return;
     state._virtRange = [firstRow, lastRow];
     const from = firstRow * m.cols, to = Math.min(all.length, (lastRow + 1) * m.cols);
@@ -1425,25 +1462,69 @@
   // since the eager invoke IS the expensive part, not the <img> fetch). Cards report
   // visibility via an IntersectionObserver; visible cards jump the queue.
   const THUMB_POOL = 6;
-  // Videos get their own, much smaller cap within the shared pool. videoPosterAndMeta() reads
-  // the WHOLE file (read_file_bytes has no range support) and decodes it in a hidden <video>
-  // element with multi-second timeouts — at THUMB_POOL concurrency that was up to 6 full clips
-  // (real camera footage, often hundreds of MB+) being read and decoded at once, which starved
-  // the pool slots still-image thumbnails need and made an ordinary photo folder feel frozen the
-  // moment it contained a few videos. _pickNextIdx() below also strictly prefers any non-video
-  // job over a video job, so a mixed folder drains ALL images (JPEG tier-1/2, then RAW) before a
-  // single video decode starts.
+  // _pickNextIdx() below strictly prefers any non-video job over a video one, so a mixed folder
+  // paints ALL its photos (JPEG via the embedded-preview tier, then RAW) before the first clip is
+  // touched. That ordering is about COST, not about blocking: a cold video poster is an
+  // AVFoundation keyframe decode, roughly a RAW thumbnail's worth of work, and every one after
+  // that is a disk-cache hit.
+  // ⚠️ The separate, much smaller video cap this used to carry existed because posters were
+  // decoded in the WebView from a whole-file read with multi-second timeouts. That path is gone
+  // (see videothumb.rs), so the cap is the ordinary pool — kept as a named constant rather than
+  // deleted so it is a one-line change if cold 4K generation ever needs throttling again.
   let _thumbActiveVideo = 0;
-  const THUMB_POOL_VIDEO = 2;
+  const THUMB_POOL_VIDEO = THUMB_POOL;
   let _thumbQueue = []; // [{path, imgEl, visible}]
   let _thumbActive = 0;
   let _thumbGen = 0; // bumped per grid rebuild so stale queue entries from the previous folder are dropped
-  // Blob URLs from get_thumbnail are never revoked otherwise — the <img> elements holding them
-  // get discarded wholesale on every renderGrid() rebuild (grid.innerHTML=''), but the
-  // underlying blobs stay alive until revokeObjectURL is called explicitly, leaking memory a
-  // little more on every folder switch/re-render. Tracked per generation so a full sweep can
-  // run once the URLs' owning cards are guaranteed gone.
-  let _thumbUrlsThisGen = [];
+  // ── Decoded-thumbnail cache, keyed by path+mtime ────────────────────────────────────────────
+  // The windowed grid rebuilds its whole DOM (`grid.innerHTML=''`) every time the mounted row
+  // range changes, and each rebuilt card called loadThumb again. With no cache that meant a fresh
+  // Tauri IPC round trip, Blob and createObjectURL for every card in the window on every row
+  // boundary crossed — scroll down and back up and the grid visibly re-loaded photos already on
+  // screen a moment earlier. The Rust side caches to disk, so this was never a re-decode, but it
+  // was still a round trip and an <img> decode per card, which is exactly what the flicker was.
+  //
+  // ⚠️ The cache OWNS its URLs, and nothing else may revoke them. Getting this wrong is precisely
+  // what broke video posters: a cached URL was also pushed into a per-generation revoke list, so a
+  // grid rebuild revoked a URL the cache kept handing out, and every one of those cards became a
+  // permanent broken-image "?". Eviction below is the ONLY place a cached URL is revoked, and it
+  // only ever evicts entries that are no longer in the map.
+  //
+  // Keyed on mtime as well as path so a re-exported or re-edited file misses the cache rather than
+  // showing its old thumbnail forever.
+  const THUMB_CACHE_MAX = 1200; // ~360px JPEGs, so roughly 25-50MB retained at the cap
+  const _thumbCache = new Map(); // "path@mtime" -> objectURL (insertion-ordered = LRU order)
+  function thumbCacheGet(key) {
+    const url = _thumbCache.get(key);
+    if (url === undefined) return null;
+    // Re-insert so the Map's insertion order stays a true recency order for the eviction below.
+    _thumbCache.delete(key);
+    _thumbCache.set(key, url);
+    return url;
+  }
+  function thumbCachePut(key, url) {
+    const prev = _thumbCache.get(key);
+    if (prev && prev !== url) URL.revokeObjectURL(prev);
+    _thumbCache.delete(key);
+    _thumbCache.set(key, url);
+    while (_thumbCache.size > THUMB_CACHE_MAX) {
+      const oldest = _thumbCache.keys().next().value;
+      const dead = _thumbCache.get(oldest);
+      _thumbCache.delete(oldest);
+      if (dead) URL.revokeObjectURL(dead);
+    }
+  }
+  /// Drops a path's cached thumbnail across every mtime it was cached under — called after an
+  /// in-app edit writes a new render, so the grid picks the new pixels up.
+  function thumbCacheInvalidate(path) {
+    for (const key of Array.from(_thumbCache.keys())) {
+      if (key.slice(0, key.lastIndexOf('@')) === path) {
+        const dead = _thumbCache.get(key);
+        _thumbCache.delete(key);
+        if (dead) URL.revokeObjectURL(dead);
+      }
+    }
+  }
   // Per-generation failure tracking for a single summary toast once the batch settles, instead
   // of a silent CSS class per broken thumbnail (easy to miss on a large grid).
   let _thumbFailCount = 0;
@@ -1485,49 +1566,45 @@
       _thumbActive++;
       if (job.isVideo) _thumbActiveVideo++;
       updateThumbProgress();
-      (job.isVideo
-        ? videoPosterAndMeta(job.path).then((m) => {
-            if (!m || !m.url) throw new Error('no video poster');
-            if (job.imgEl.isConnected) {
-              job.imgEl.src = m.url;
-              job.imgEl.classList.add('loaded');
-              _thumbUrlsThisGen.push(m.url);
-              // Stamp the real duration/dimensions onto the card now that we know them.
-              const card = job.imgEl.closest('.lib-card');
-              const badge = card && card.querySelector('.lib-video-badge');
-              if (badge && m.dur) badge.textContent = fmtDuration(m.dur);
-              if (card && m.w && m.h) card.dataset.dims = m.w + 'x' + m.h;
-            }
-          })
-        // Tier 1 (get_thumbnail_fast): pulls the camera's own embedded JPEG preview straight out
-        // of the EXIF thumbnail IFD — no full-image decode, so it paints almost instantly. Falls
-        // back to Err for RAWs and anything without an embedded preview, or if the read fails for
-        // any reason; either way we fall through to the real tier-2 decode below, which also
-        // replaces whatever tier-1 painted so the final thumbnail is always the accurate one.
-        : invoke('get_thumbnail_fast', { path: job.path })
-          .catch(() => null)
-          .then((fastBuf) => {
-            if (fastBuf && job.imgEl.isConnected) {
-              const fastUrl = URL.createObjectURL(new Blob([fastBuf], { type: 'image/jpeg' }));
-              job.imgEl.src = fastUrl;
-              job.imgEl.classList.add('loaded');
-              _thumbUrlsThisGen.push(fastUrl);
-            }
-            // get_thumbnail_or_offline: falls back to the catalog's never-pruned offline
-            // thumbnail tier when a direct decode fails (the common trigger being the volume
-            // is unplugged) — a plain folder photo that decodes fine takes the exact same path
-            // it always did, this only changes behavior for a catalog entry whose file isn't
-            // currently reachable.
-            return invoke('get_thumbnail_or_offline', { path: job.path });
-          })
-          .then((buf) => {
-            if (job.imgEl.isConnected) {
-              const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-              job.imgEl.src = url;
-              job.imgEl.classList.add('loaded');
-              _thumbUrlsThisGen.push(url);
-            }
-          }))
+      // Tier 1 (get_thumbnail_fast): pulls the camera's own embedded JPEG preview straight out
+      // of the EXIF thumbnail IFD — no full-image decode, so it paints almost instantly. Falls
+      // back to Err for RAWs and anything without an embedded preview, or if the read fails for
+      // any reason; either way we fall through to the real tier-2 decode below, which also
+      // replaces whatever tier-1 painted so the final thumbnail is always the accurate one.
+      // ⚠️ Video takes this identical path — get_thumbnail_fast declines it on extension, so a
+      // clip simply skips tier 1 and lands on tier 2, where library.rs generates the poster with
+      // AVFoundation. There is deliberately no video branch here any more: the previous one
+      // decoded clips in a hidden <video> and cached the resulting blob URL while ALSO handing it
+      // to the per-generation revoke list below, so any grid rebuild revoked a URL the cache kept
+      // serving and every video card became a permanent broken-image "?".
+      invoke('get_thumbnail_fast', { path: job.path })
+        .catch(() => null)
+        .then((fastBuf) => {
+          if (fastBuf && job.imgEl.isConnected) {
+            // Tier 1 is deliberately NOT cached: tier 2 below replaces it a moment later with the
+            // accurate render, and caching the embedded preview would mean serving the rougher
+            // image from then on. Revoked as soon as tier 2 paints over it.
+            const fastUrl = URL.createObjectURL(new Blob([fastBuf], { type: 'image/jpeg' }));
+            job.imgEl.src = fastUrl;
+            job.imgEl.classList.add('loaded');
+            job._fastUrl = fastUrl;
+          }
+          // get_thumbnail_or_offline: falls back to the catalog's never-pruned offline
+          // thumbnail tier when a direct decode fails (the common trigger being the volume
+          // is unplugged) — a plain folder photo that decodes fine takes the exact same path
+          // it always did, this only changes behavior for a catalog entry whose file isn't
+          // currently reachable.
+          return invoke('get_thumbnail_or_offline', { path: job.path });
+        })
+        .then((buf) => {
+          const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+          thumbCachePut(job.key, url);
+          if (job.imgEl.isConnected) {
+            job.imgEl.src = url;
+            job.imgEl.classList.add('loaded');
+          }
+          if (job._fastUrl) { URL.revokeObjectURL(job._fastUrl); job._fastUrl = null; }
+        })
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
           _thumbFailCount++;
@@ -1562,90 +1639,22 @@
     if (_thumbDoneCount >= _thumbTotalCount || _thumbTotalCount < 8) { el.textContent = ''; return; }
     el.textContent = `Loading photos… ${_thumbDoneCount}/${_thumbTotalCount}`;
   }
-  // ── Video posters + metadata, decoded in the webview ─────────────────────────────────────────
-  // library.rs's get_thumbnail has no still-frame decoder for MP4 (the `image` crate cannot read
-  // one, and an ffmpeg dependency is not worth carrying for a grid thumbnail) — so video cards
-  // showed a dark placeholder. But WKWebView decodes H.264/HEVC natively, so a <video> element
-  // plus a canvas gets both the poster frame AND the real duration/dimensions in one pass. Cached
-  // per path so scrolling the grid does not re-decode.
-  const _videoMetaCache = new Map();   // path -> {url, w, h, dur} | {url:null, failed:true}
-  async function videoPosterAndMeta(path) {
-    if (_videoMetaCache.has(path)) return _videoMetaCache.get(path);
-    // Real camera clips here run 10MB-1.3GB (4K HEVC Main10). `read_file_bytes` used to load the
-    // WHOLE file into memory and hand it to <video> as a Blob URL — but a <video> only ever needs
-    // its container header (moov, often written at the END of the file for camera-recorded MP4/MOV
-    // that were never faststart-remuxed) plus a few frames' worth of data near the seek point. That
-    // full read is exactly what made big clips time out or show as failed: the entire multi-hundred-
-    // MB-to-GB file had to be read off disk and copied across the Tauri IPC boundary before the
-    // <video> element could even start parsing, let alone decode a frame — often blowing past the
-    // metadata/seek timeouts below on its own. This mirrors how Photos/Lightroom/Finder QuickLook
-    // generate video thumbnails: they never load a whole clip, they open it and read only the boxes/
-    // packets they need. Tauri's built-in asset protocol (convertFileSrc) serves local files over
-    // HTTP Range requests, so the webview's own <video> loader fetches only what it actually needs —
-    // a small head request, then wherever moov really lives, then a small chunk at the seek point —
-    // regardless of total file size.
-    const assetUrl = window.__TAURI__.core.convertFileSrc(path);
-    try {
-      const v = document.createElement('video');
-      // preload:'auto' (not 'metadata') so WebKit actually buffers frame data around the seek
-      // target, not just the moov header — with 'metadata' the seek below had nothing decoded to
-      // paint yet, so it either stalled to the 8s fallback or resolved onto whatever was still on
-      // screen (nothing), producing a plain black poster despite duration/dimensions parsing fine.
-      v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = assetUrl;
-      await new Promise((res, rej) => {
-        v.onloadedmetadata = res;
-        v.onerror = () => rej(new Error('video metadata failed'));
-        setTimeout(() => rej(new Error('video metadata timeout')), 12000);
-      });
-      // Seek a little way in: frame 0 of a real clip is very often black or a fade-in.
-      const t = Math.min(1, (v.duration || 2) * 0.1);
-      await new Promise((res, rej) => {
-        v.onseeked = res;
-        v.onerror = () => rej(new Error('video seek failed'));
-        setTimeout(res, 8000);            // resolve anyway — a poster is better than nothing
-        v.currentTime = t;
-      });
-      // ⚠️ WebKit's own well-documented gotcha: `seeked` fires once the seek TARGET is set, not
-      // once the frame is actually decoded and painted to the compositor — drawImage() called
-      // immediately after `seeked` reliably grabs a black/stale frame in Safari/WKWebView (this is
-      // what made every poster come back solid black even though metadata/duration loaded fine).
-      // requestVideoFrameCallback is the spec-correct signal for "a real decoded frame is now
-      // showing"; where it's unavailable, two rAF ticks is the standard workaround.
-      await new Promise((res) => {
-        if (typeof v.requestVideoFrameCallback === 'function') {
-          v.requestVideoFrameCallback(() => res());
-          setTimeout(res, 2000); // don't hang forever if the callback never fires
-        } else {
-          requestAnimationFrame(() => requestAnimationFrame(() => res()));
-        }
-      });
-      const W = 400, sc = Math.min(1, W / (v.videoWidth || W));
-      const c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round((v.videoWidth || W) * sc));
-      c.height = Math.max(1, Math.round((v.videoHeight || W) * sc));
-      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.82));
-      const meta = { url: blob ? URL.createObjectURL(blob) : null,
-                     w: v.videoWidth || 0, h: v.videoHeight || 0, dur: v.duration || 0 };
-      _videoMetaCache.set(path, meta);
-      return meta;
-    } catch (err) {
-      // Cache the failure too — without this, a clip the webview can't decode (or one that keeps
-      // timing out) got re-fetched and re-decoded from scratch on every scroll past it or grid
-      // re-render, which is a large part of what made a video-heavy folder feel like it never
-      // finished loading.
-      const neg = { url: null, w: 0, h: 0, dur: 0, failed: true };
-      _videoMetaCache.set(path, neg);
-      return neg;
-    }
-  }
   function fmtDuration(sec) {
     if (!sec || !isFinite(sec)) return '';
     const m = Math.floor(sec / 60), r = Math.round(sec % 60);
     return m + ':' + String(r).padStart(2, '0');
   }
-  function loadThumb(path, imgEl, isVideo) {
-    _thumbQueue.push({ path, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen });
+  function loadThumb(path, imgEl, isVideo, mtime) {
+    const key = path + '@' + (mtime || 0);
+    // Already decoded and still retained — paint it synchronously and skip the pool entirely.
+    // This is what stops a scroll that re-mounts a row from re-fetching every card in it.
+    const hit = thumbCacheGet(key);
+    if (hit) {
+      imgEl.src = hit;
+      imgEl.classList.add('loaded');
+      return;
+    }
+    _thumbQueue.push({ path, key, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen });
     _thumbTotalCount++;
     if (_thumbIO) _thumbIO.observe(imgEl);
     _thumbPump();
@@ -1655,10 +1664,12 @@
     if (_thumbIO) _thumbQueue.forEach((t) => _thumbIO.unobserve(t.imgEl));
     _thumbQueue = [];
     _thumbActive = 0; // defensive: never let a stale count strand future pumps
-    // The grid that owned these blob URLs is about to be torn down (renderGrid clears
-    // grid.innerHTML right after calling this) — revoke now rather than leaking.
-    _thumbUrlsThisGen.forEach((u) => URL.revokeObjectURL(u));
-    _thumbUrlsThisGen = [];
+    _thumbActiveVideo = 0;
+    // ⚠️ Deliberately does NOT touch _thumbCache. Its URLs are owned by the cache and are still
+    // valid for whatever the grid re-mounts a moment later — revoking them here is exactly the
+    // mistake that made cached video posters render as permanent broken images, and it would also
+    // reintroduce the full re-fetch on every sort/filter/search that this cache exists to remove.
+    // Retention is bounded by THUMB_CACHE_MAX's LRU eviction instead.
     _thumbFailCount = 0;
     _thumbTotalCount = 0;
     _thumbDoneCount = 0;
@@ -2028,6 +2039,9 @@
       thumbBlobUrls.set(path, url);
       img.src = url;
       if (prev) URL.revokeObjectURL(prev);
+      // Drop the loader's cached copy too, or the next time this card is re-mounted by a scroll
+      // the cache would paint the PRE-edit thumbnail straight back over this one.
+      thumbCacheInvalidate(path);
     }, 'image/jpeg', 0.85);
   }
 
@@ -3132,9 +3146,13 @@
       const rawBadge = entry.stack_n > 1
         ? `<div class="lib-raw-badge lib-stack-badge" data-stack-toggle="${entry.id}" title="${entry.stack_n} in this stack — click to ${isExpandedStackForRaw ? 'collapse' : 'expand'}">${isExpandedStackForRaw ? '⌃' : '+' + (entry.stack_n - 1)}</div>`
         : entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
-      // No thumbnail decoder for video (get_thumbnail errors cleanly for it — see library.rs) —
-      // a badge + CSS placeholder icon instead of a broken <img>, same idea as the RAW badge.
-      const videoBadge = entry.is_video ? `<div class="lib-video-badge" title="Video clip">${ic('video',10)}</div>` : '';
+      // The duration comes from state.meta (read_meta's container parse in Rust), NOT from
+      // decoding the clip — so the badge is right even for one AVFoundation can't produce a
+      // poster for, and it no longer has to wait on a decode to appear.
+      const videoDur = entry.is_video ? fmtDuration((state.meta.get(entry.path) || {}).dur) : '';
+      const videoBadge = entry.is_video
+        ? `<div class="lib-video-badge" title="Video clip">${ic('video',10)}${videoDur ? `<span>${videoDur}</span>` : ''}</div>`
+        : '';
       const dupeClusterId = state.dupeClusters.get(entry.path);
       const dupeSize = dupeClusterId ? state.dupeClusterSizes.get(dupeClusterId) : 0;
       const dupeBadge = dupeSize > 1
@@ -3179,12 +3197,13 @@
     // comment) sees it correctly instead of silently dropping the job.
     built.forEach(({ entry, card, idx }) => {
       const img = card.querySelector('img');
-      // Video now gets a real poster too — decoded in the webview rather than by get_thumbnail,
-      // which still has no MP4 still-frame decoder (see videoPosterAndMeta).
+      // Video is an ORDINARY thumbnail job now — get_thumbnail generates its poster natively via
+      // AVFoundation (see videothumb.rs), so it needs no special path here and gets the same disk
+      // cache every photo does.
       // A stack card shows its newest EXPORT (thumb_path) even though `entry.path`/click target
       // stay the RAW leader — the plan's explicit split between "what you look at" and "what
       // opening/editing/rating acts on".
-      loadThumb(entry.thumb_path || entry.path, img, entry.is_video);
+      loadThumb(entry.thumb_path || entry.path, img, entry.is_video, entry.mtime);
       card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
       const stackBadgeEl = card.querySelector('.lib-stack-badge');
@@ -4326,7 +4345,12 @@
   // Own expansion Set, not state.expanded (that's keyed by folder path) — keyed by scope
   // string ('2026', '2026:8') so it survives a renderCollections() re-render the same way the
   // real folder tree's state.expanded does.
-  const dateExpanded = new Set();
+  // Seeded OPEN at the root: this tree answers a year/month/day click with a single indexed
+  // catalog query — no directory walk, no per-file stat, no rescan — which is exactly what
+  // navigating a <root>/<year>/<month>/<day> archive wants. Collapsed by default it was easy to
+  // miss entirely below the filesystem folder tree, so the slow path got used for a job the fast
+  // one already did better. Still a plain toggle; closing it sticks for the session.
+  const dateExpanded = new Set(['__root__']);
 
   let keywordTree = []; // flat KeywordNode list from catalog_keywords — nested client-side, same as dateCounts
   const kwExpanded = new Set(); // keyed by keyword id (a stable primary key, unlike a path a rename would change)
@@ -4709,11 +4733,31 @@
   /// catalog" step the user has to remember. Best-effort on purpose — a failure here (a folder
   /// under a filesystem statfs can't resolve, e.g.) must never interrupt or slow down the
   /// ordinary folder-open the user is actually waiting on.
+  // ⚠️ Deduped two ways, because this used to fire a FULL catalog scan — plus the stacking,
+  // thumbnail, focus and hash phases behind it — on every single folder click. Browsing
+  // <root>/2026/08/23 therefore rescanned the whole volume once per level, and those scans ran
+  // against the same disk the grid was trying to read thumbnails from, which is what made every
+  // folder click feel like the library was reloading from scratch.
+  //   1. A path under an already-registered ancestor adds nothing — opening 2026/08/23 after
+  //      2026/08 is the same root — so it short-circuits before any IPC at all.
+  //   2. A volume is scanned at most ONCE per session, so the first folder opened builds the
+  //      index for everything beneath it and later folders just read it. The scan is already
+  //      incremental (mtime-keyed) on the Rust side; this stops the redundant tree walk.
+  const _catalogRegistered = new Set();
+  const _catalogScannedVolumes = new Set();
   function catalogRegisterFolder(path) {
     if (LIBTEST) return; // no real catalog backend to hit in the harness
+    for (const seen of _catalogRegistered) {
+      if (path === seen || path.startsWith(seen.endsWith('/') ? seen : seen + '/')) return;
+    }
+    _catalogRegistered.add(path);
     invoke('catalog_add_root', { path, kind: null })
-      .then((root) => invoke('catalog_scan', { volumeId: root.volume_id }))
-      .then(() => { refreshCatalogCounts(); catalogRunBackgroundPhases(); })
+      .then((root) => {
+        if (!root || _catalogScannedVolumes.has(root.volume_id)) return false;
+        _catalogScannedVolumes.add(root.volume_id);
+        return invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true);
+      })
+      .then((scanned) => { if (scanned) { refreshCatalogCounts(); catalogRunBackgroundPhases(); } })
       .catch((e) => console.error('catalog_add_root/scan', path, e));
   }
 
