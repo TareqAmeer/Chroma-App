@@ -192,7 +192,7 @@ fn fnv1a(parts: &[&str]) -> u64 {
 // rendering change also silently invalidated every cached EXIF read and every perceptual hash —
 // at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
 const THUMB_RENDER_VER: &str = "thumb-v2"; // bumped when orientation-correction was added
-const META_READER_VER: &str = "meta-v4";   // bumped when the RW2-lens EXIF fallback was added
+const META_READER_VER: &str = "meta-v5";   // bumped when the RW2-lens EXIF garbage-value fix landed
 const PHASH_VER: &str = "phash-v1";
 const DECODE_RENDER_VER: &str = "decode-v1";
 const LR_THUMB_VER: &str = "lr-thumb-v1";

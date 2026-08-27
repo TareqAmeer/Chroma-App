@@ -32,9 +32,21 @@ fn read_patched_rw2_exif(bytes: &[u8]) -> Option<exif::Exif> {
 
 pub fn exif_lens_model_fallback(bytes: &[u8]) -> Option<String> {
     let exif = read_patched_rw2_exif(bytes)?;
-    let v = exif.get_field(exif::Tag::LensModel, exif::In::PRIMARY)?.display_value().to_string();
-    let cleaned = v.trim().trim_matches('"').trim().to_string();
-    if cleaned.is_empty() { None } else { Some(cleaned) }
+    let field = exif.get_field(exif::Tag::LensModel, exif::In::PRIMARY)?;
+    // A TIFF ASCII field decodes as Value::Ascii(Vec<Vec<u8>>) — kamadak-exif splits it into
+    // multiple components on every embedded NUL. display_value().to_string() stringifies the
+    // WHOLE Vec (quoted, comma-joined), so a garbage/uninitialized fixed-length field on this
+    // camera (scattered NULs instead of one clean terminator) rendered as a repeating
+    // `"", "", "", ...`-shaped string instead of failing the emptiness check. Take just the
+    // first component's bytes directly and validate THAT.
+    let raw = match field.value {
+        exif::Value::Ascii(ref v) => v.first()?.as_slice(),
+        _ => return None,
+    };
+    let cleaned = String::from_utf8_lossy(raw)
+        .trim_matches(|c: char| c == '\0' || c.is_whitespace() || c == '"')
+        .to_string();
+    if cleaned.is_empty() || !cleaned.chars().any(|c| c.is_ascii_alphanumeric()) { None } else { Some(cleaned) }
 }
 
 // Same root cause as exif_lens_model_fallback above (rawler's structured EXIF comes back empty

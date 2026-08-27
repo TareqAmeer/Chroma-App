@@ -1425,6 +1425,16 @@
   // since the eager invoke IS the expensive part, not the <img> fetch). Cards report
   // visibility via an IntersectionObserver; visible cards jump the queue.
   const THUMB_POOL = 6;
+  // Videos get their own, much smaller cap within the shared pool. videoPosterAndMeta() reads
+  // the WHOLE file (read_file_bytes has no range support) and decodes it in a hidden <video>
+  // element with multi-second timeouts — at THUMB_POOL concurrency that was up to 6 full clips
+  // (real camera footage, often hundreds of MB+) being read and decoded at once, which starved
+  // the pool slots still-image thumbnails need and made an ordinary photo folder feel frozen the
+  // moment it contained a few videos. _pickNextIdx() below also strictly prefers any non-video
+  // job over a video job, so a mixed folder drains ALL images (JPEG tier-1/2, then RAW) before a
+  // single video decode starts.
+  let _thumbActiveVideo = 0;
+  const THUMB_POOL_VIDEO = 2;
   let _thumbQueue = []; // [{path, imgEl, visible}]
   let _thumbActive = 0;
   let _thumbGen = 0; // bumped per grid rebuild so stale queue entries from the previous folder are dropped
@@ -1447,10 +1457,25 @@
         }
       }, { rootMargin: '200px' })
     : null;
+  // Priority: visible non-video first, then any non-video (JPEG tier-1/2 and RAW share the same
+  // Rust get_thumbnail* path and are cheap either way), and only once no non-video job remains do
+  // videos get picked — capped separately at THUMB_POOL_VIDEO regardless of visibility, so a
+  // scrolled-into-view video can't blow past the small video concurrency budget.
+  function _pickNextIdx() {
+    let i = _thumbQueue.findIndex((t) => t.visible && !t.isVideo);
+    if (i >= 0) return i;
+    i = _thumbQueue.findIndex((t) => !t.isVideo);
+    if (i >= 0) return i;
+    if (_thumbActiveVideo >= THUMB_POOL_VIDEO) return -1;
+    i = _thumbQueue.findIndex((t) => t.visible);
+    if (i >= 0) return i;
+    return _thumbQueue.length ? 0 : -1;
+  }
   function _thumbPump() {
     while (_thumbActive < THUMB_POOL && _thumbQueue.length) {
-      const i = _thumbQueue.findIndex((t) => t.visible);
-      const job = _thumbQueue.splice(i >= 0 ? i : 0, 1)[0];
+      const i = _pickNextIdx();
+      if (i < 0) break; // only videos left and the video pool is already full — wait for a slot
+      const job = _thumbQueue.splice(i, 1)[0];
       // NOTE: job.imgEl.isConnected requires the card to already be in the DOM by the time
       // loadThumb() is called — renderGrid() must appendChild(card) BEFORE calling loadThumb(),
       // or every job is silently dropped here (this was the "thumbnails never load" bug: the
@@ -1458,6 +1483,7 @@
       // every single job and _thumbActive never even incremented).
       if (job.gen !== _thumbGen || !job.imgEl.isConnected) continue; // grid was rebuilt — skip
       _thumbActive++;
+      if (job.isVideo) _thumbActiveVideo++;
       updateThumbProgress();
       (job.isVideo
         ? videoPosterAndMeta(job.path).then((m) => {
@@ -1513,6 +1539,7 @@
         .finally(() => {
           if (_thumbIO) _thumbIO.unobserve(job.imgEl);
           _thumbActive--;
+          if (job.isVideo) _thumbActiveVideo--;
           _thumbDoneCount++;
           updateThumbProgress();
           _thumbPump();
@@ -1541,14 +1568,30 @@
   // showed a dark placeholder. But WKWebView decodes H.264/HEVC natively, so a <video> element
   // plus a canvas gets both the poster frame AND the real duration/dimensions in one pass. Cached
   // per path so scrolling the grid does not re-decode.
-  const _videoMetaCache = new Map();   // path -> {url, w, h, dur}
+  const _videoMetaCache = new Map();   // path -> {url, w, h, dur} | {url:null, failed:true}
   async function videoPosterAndMeta(path) {
     if (_videoMetaCache.has(path)) return _videoMetaCache.get(path);
-    const buf = await invoke('read_file_bytes', { path });
-    const srcUrl = URL.createObjectURL(new Blob([buf], { type: mimeFromName(path) || 'video/mp4' }));
+    // Real camera clips here run 10MB-1.3GB (4K HEVC Main10). `read_file_bytes` used to load the
+    // WHOLE file into memory and hand it to <video> as a Blob URL — but a <video> only ever needs
+    // its container header (moov, often written at the END of the file for camera-recorded MP4/MOV
+    // that were never faststart-remuxed) plus a few frames' worth of data near the seek point. That
+    // full read is exactly what made big clips time out or show as failed: the entire multi-hundred-
+    // MB-to-GB file had to be read off disk and copied across the Tauri IPC boundary before the
+    // <video> element could even start parsing, let alone decode a frame — often blowing past the
+    // metadata/seek timeouts below on its own. This mirrors how Photos/Lightroom/Finder QuickLook
+    // generate video thumbnails: they never load a whole clip, they open it and read only the boxes/
+    // packets they need. Tauri's built-in asset protocol (convertFileSrc) serves local files over
+    // HTTP Range requests, so the webview's own <video> loader fetches only what it actually needs —
+    // a small head request, then wherever moov really lives, then a small chunk at the seek point —
+    // regardless of total file size.
+    const assetUrl = window.__TAURI__.core.convertFileSrc(path);
     try {
       const v = document.createElement('video');
-      v.muted = true; v.playsInline = true; v.preload = 'metadata'; v.src = srcUrl;
+      // preload:'auto' (not 'metadata') so WebKit actually buffers frame data around the seek
+      // target, not just the moov header — with 'metadata' the seek below had nothing decoded to
+      // paint yet, so it either stalled to the 8s fallback or resolved onto whatever was still on
+      // screen (nothing), producing a plain black poster despite duration/dimensions parsing fine.
+      v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = assetUrl;
       await new Promise((res, rej) => {
         v.onloadedmetadata = res;
         v.onerror = () => rej(new Error('video metadata failed'));
@@ -1562,6 +1605,20 @@
         setTimeout(res, 8000);            // resolve anyway — a poster is better than nothing
         v.currentTime = t;
       });
+      // ⚠️ WebKit's own well-documented gotcha: `seeked` fires once the seek TARGET is set, not
+      // once the frame is actually decoded and painted to the compositor — drawImage() called
+      // immediately after `seeked` reliably grabs a black/stale frame in Safari/WKWebView (this is
+      // what made every poster come back solid black even though metadata/duration loaded fine).
+      // requestVideoFrameCallback is the spec-correct signal for "a real decoded frame is now
+      // showing"; where it's unavailable, two rAF ticks is the standard workaround.
+      await new Promise((res) => {
+        if (typeof v.requestVideoFrameCallback === 'function') {
+          v.requestVideoFrameCallback(() => res());
+          setTimeout(res, 2000); // don't hang forever if the callback never fires
+        } else {
+          requestAnimationFrame(() => requestAnimationFrame(() => res()));
+        }
+      });
       const W = 400, sc = Math.min(1, W / (v.videoWidth || W));
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.round((v.videoWidth || W) * sc));
@@ -1572,8 +1629,14 @@
                      w: v.videoWidth || 0, h: v.videoHeight || 0, dur: v.duration || 0 };
       _videoMetaCache.set(path, meta);
       return meta;
-    } finally {
-      URL.revokeObjectURL(srcUrl);        // the decoded poster is its own blob; this one is done
+    } catch (err) {
+      // Cache the failure too — without this, a clip the webview can't decode (or one that keeps
+      // timing out) got re-fetched and re-decoded from scratch on every scroll past it or grid
+      // re-render, which is a large part of what made a video-heavy folder feel like it never
+      // finished loading.
+      const neg = { url: null, w: 0, h: 0, dur: 0, failed: true };
+      _videoMetaCache.set(path, neg);
+      return neg;
     }
   }
   function fmtDuration(sec) {
