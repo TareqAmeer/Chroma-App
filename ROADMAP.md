@@ -453,3 +453,83 @@ nothing left to add there.
   model size proves acceptable.
 - **13 (16-bit)** is the one item that changes the pipeline's ceiling rather than its surface; it
   is also the easiest to defer indefinitely, so it needs a deliberate decision rather than drift.
+
+---
+
+## RapidRAW competitive review — backlog (added 2026-08-28)
+
+Source: a review of [CyberTimon/RapidRAW](https://github.com/CyberTimon/RapidRAW) (README, releases
+through v1.6.2 / 2026-08-21, their WGPU renderer blog post) against this codebase. Full working
+notes: `~/.claude/plans/can-you-review-rapidraw-virtual-glacier.md`. Nothing below is scheduled;
+work starts the week of 2026-09-01.
+
+### Findings worth keeping (these change how you'd approach the items)
+
+- **The stacks are nearly the same underneath.** Both are Rust + Tauri 2 + rawler + Lensfun + ONNX
+  — `desktop/src-tauri/Cargo.toml` already cites them for the native RAW decode. The divergence is
+  only (a) render surface and (b) pixel precision.
+- ⚠️ **Most of their "20fps → 120fps" win was NOT WGPU-vs-WebGL.** It was deleting a per-frame
+  JPEG-encode-over-the-Tauri-bridge round trip, which **we never had** — we render in-page. Our
+  starting architecture resembles their *new* one more than their old one. **Measure our real
+  slider latency (`npm run perf:test` already budgets renders-per-30-event drag) before assuming a
+  port is the fix**; stage caching (re-run only the tail of the chain on a slider drag) may be most
+  of the win.
+- **"Every other RAW editor is native" is weak evidence.** darktable (OpenCL), RawTherapee/ART
+  (CPU/SIMD), Lightroom/Capture One/DxO (Metal/DirectX) are all native — and all **desktop-only**,
+  so they never made a trade. Our WebGL2 choice is what buys web *and* iOS, which none of them have.
+- **How the apps that ship BOTH desktop and mobile do it: one kernel source, machine-translated.**
+  Dehancer publishes [`dehancer-gpulib-cpp`](https://github.com/dehancer/dehancer-gpulib-cpp), a C++
+  GPU SDK compiling one kernel set to Metal/CUDA/OpenCL by build flag. Lightroom shares a C++ core
+  with per-platform GPU backends. Darkroom sidesteps it entirely — Apple-only Swift+Metal, one
+  backend for iPhone/iPad/Mac. **Nobody hand-maintains two shader implementations**, and neither
+  should we.
+- **How they "calibrate" 2,500 cameras: they don't test them.** rawler/dnglab ships the per-camera
+  colour matrices camera vendors publish in the DNG spec — the same well Lightroom's Adobe Standard
+  draws from. Correct-*ish* colour per body, for free, from published data. Our S9 path (real DCPs
+  + LookTables + a fitted residual) is strictly better for that one body and doesn't generalise.
+- **Licensing.** RapidRAW is **AGPL-3.0** — ideas and published algorithms are fair game, source is
+  not. Spektrafilm profiles are **CC BY-SA 4.0** (attribution + share-alike on derivatives).
+- **Scene-referred, in plain terms:** display-referred means anything brighter than white is thrown
+  away *before* our film curve sees it. Film's signature is the highlight roll-off — with the
+  highlights already flat, the curve has nothing to roll off, so you get a white blob where film
+  gives a soft shoulder. Only pays when the source has headroom (RAW yes, 8-bit JPEG mostly no).
+
+### Rejected / excluded, with the reason
+
+- ❌ **A second, hand-written WGSL renderer for desktop only.** Two copies of the calibrated model
+  kept pixel-identical forever — the drift risk CLAUDE.md guards against for the DCP bake, except
+  across two languages where the `toString` generation trick doesn't apply. *Superseded by* the
+  Naga single-source item below, which is a different proposition.
+- ❌ **A full 16-bit render pipeline as the route to better highlights.** Already measured (ROADMAP
+  item 13): ≤1/255 on render. Bit depth was never the gap; **headroom** is. Don't refit this as a
+  precision problem.
+- ❌ **Chasing camera breadth by hand-calibrating bodies.** Use rawler's embedded matrices as the
+  fallback instead (item below).
+- ❌ **Lifting any RapidRAW source.** AGPL-3.0.
+
+### Items
+
+| # | item | size | note |
+|---|---|---|---|
+| R1 | **Scene-referred float pipeline** | L | The one architectural gap with a real image-quality consequence. Float FBOs through the lut→comp chain + a tone-map at the end. Hard constraint: all 18 `test/golden/` PNGs byte-exact at defaults |
+| R2 | **AgX (or filmic) as an optional input transform** | M | The cheap partial win — most of R1's *visible* benefit without the precision rebuild. Slots in beside `useVlog` |
+| R3 | **Spektrafilm profiles as presets — tier (a)** | S | Bake the 35 stocks × 11 papers to `.cube` into `vendor/luts/` + `LUT_META`. Purely additive, zero engine change, every Dehancer-matched look untouched. ⚠️ Bakes to display space — their colour, not their roll-off. CC BY-SA 4.0 → credit in `LICENSES-MODELS.md` |
+| R4 | **Spektrafilm live in-shader — tier (b)** | L | Real roll-off. **Depends on R1** — do not start first |
+| R5 | **Naga single-source shaders** (WGSL → WGPU desktop + generated GLSL ES 3.0 for web/iOS) | L | Author once, generate both; the same mechanism wgpu's own `webgl` feature uses. Generation at dev time, generated GLSL committed into `chromasmith-22.html`, so no build step for the user. ⚠️ **Spike first:** port only the `comp` pass and require all 18 goldens byte-exact from *each* backend. Our runtime template-literal assembly (`mskAnyTex`, `GLSL_OKLAB`) moves to a dev-time step |
+| R6 | **Deconvolution sharpening** | M | Models the lens/sensor PSF and inverts it — recovers real detail instead of unsharp-mask's faked edge contrast, halos and noise gain. More compute; rings if over-driven, so it needs a conservative cap |
+| R7 | **Depth mask + depth-driven lens blur / tilt-shift** | M | Depth Anything V2 as a fourth ONNX model, same pattern as `sam.rs`/`faceparse.rs`. Gives a distance-band mask *and* post-hoc shallow depth of field |
+| R8 | **rawler colour-matrix fallback for un-profiled bodies** | M | So a non-S9 RAW renders correctly-ish instead of uncalibrated. Keep the DCP path where profiles exist |
+| R9 | **Virtual copies** | M | A persisted second edit record against the same path, appearing in the grid as its own card with its own rating/flags/export. ⚠️ **Not** what Compare mode does (`compareState`, `desktop/library-ui.js:3471`) — Compare already shows one photo under two treatments (Live/Original/history step/Style) but is a transient viewer that persists nothing. Touches the sidecar format + `catalog.rs` |
+| R10 | **CLIP auto-tagging** | S | ⚠️ We already run CLIP ViT-B/32 (`clip.rs`, `catalog_clip_embed`/`catalog_clip_search`) for natural-language search. This is only surfacing those embeddings as visible, filterable per-photo keywords — a labelling + UI layer, **not** new inference |
+| R11 | **Dehaze, colour wheels (lift/gamma/gain), parametric curves** | S each | Conventional controls we simply don't have (we have point curves + 8-band HSL) |
+| R12 | **HDR merge (deghost + auto-align), focus stacking** | M–L | Native Rust, reusing `raw_decode.rs` |
+| R13 | **Astro stacking, panorama stitching, collage** | L | Lowest priority of the merge family |
+| R14 | **Camera tethering** (libgphoto2, live view + remote control) | L | macOS/Linux only — Windows has a driver conflict even for them |
+| R15 | **JXL / AVIF export; headless CLI export** | S each | `image` crate features + an export-format entry; the CLI is an argv path into Tauri commands that already exist |
+| R16 | **Draggable panel workspace + unified Library/Edit view** | M | Removes the mode switch between grid and editor; persists panel order |
+
+### Sequencing note
+
+R1 is the spine — R4 depends on it and R2 is its cheap stand-in. R3, R10 and R15 are the
+session-sized wins that need nothing else. R5 is the biggest single bet in the file and is gated
+on its own spike, so it can be evaluated cheaply before it becomes a commitment.
