@@ -1362,6 +1362,7 @@
     window.__libSelect = (p) => { state.selected.add(p); };
     window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
+    window.__libClusterByHash = (pairs) => clusterByHash(pairs);
   }
   // Rows kept mounted beyond the viewport in each direction. This used to be a flat 2, which is
   // enough to avoid a visible GAP while scrolling but nowhere near enough to avoid the far more
@@ -2236,6 +2237,18 @@
   // 32-bit ints, then compare with two XORs and two SWAR popcounts. Same clusters out, no
   // allocation in the loop. hammingHex is kept because the hex form is what phash_batch returns
   // and it remains the readable reference for what this is computing.
+  // ⚠️ EXACT, not approximate — banded/pigeonhole, not LSH-with-misses. Splitting the 64-bit
+  // hash into BANDS=8 non-overlapping 8-bit segments guarantees (pigeonhole principle: BANDS >
+  // DUPE_HAMMING_THRESHOLD=6) that any TRUE pair — Hamming distance <= threshold — must have AT
+  // LEAST ONE band with zero differing bits, i.e. an identical band value. So comparing only
+  // pairs that share a band value in common can never miss a real duplicate; it only skips pairs
+  // that share NO band, which are provably >6 bits apart and would have failed the exact check
+  // anyway. This was the plain O(n^2) nested loop over every pair — the same shape of bug this
+  // session already fixed once in Rust (registry_set_cmd) — measured at ~1.7s for a real ~30k-
+  // photo library's worth of pairs (444M comparisons). Banding turns the common case back toward
+  // O(n): for uniformly-distributed hashes each band bucket holds roughly n/256 items, so the
+  // total candidate-pair count collapses from n²/2 to roughly n²/256 per band. A `checked` Set
+  // dedupes a pair that happens to share more than one band, so it's never verified twice.
   function clusterByHash(pairs) {
     const parent = new Map();
     const find = (p) => { while (parent.get(p) !== p) { parent.set(p, parent.get(parent.get(p))); p = parent.get(p); } return p; };
@@ -2243,15 +2256,38 @@
     pairs.forEach(([p]) => parent.set(p, p));
     const n = pairs.length;
     const hi = new Int32Array(n), lo = new Int32Array(n);
+    const hex = new Array(n);
     for (let i = 0; i < n; i++) {
-      const h = pairs[i][1] || '';
+      const h = (pairs[i][1] || '').padStart(16, '0');
+      hex[i] = h;
       hi[i] = parseInt(h.slice(0, 8), 16) | 0;
       lo[i] = parseInt(h.slice(8, 16), 16) | 0;
     }
+    const BANDS = 8; // 8 bands * 8 bits = 64 bits; BANDS(8) > DUPE_HAMMING_THRESHOLD(6) is the pigeonhole requirement
+    const buckets = []; // one Map<bandValue, index[]> per band
+    for (let b = 0; b < BANDS; b++) buckets.push(new Map());
     for (let i = 0; i < n; i++) {
-      const ai = hi[i], bi = lo[i];
-      for (let j = i + 1; j < n; j++) {
-        if (popcount32(ai ^ hi[j]) + popcount32(bi ^ lo[j]) <= DUPE_HAMMING_THRESHOLD) union(pairs[i][0], pairs[j][0]);
+      for (let b = 0; b < BANDS; b++) {
+        const key = hex[i].slice(b * 2, b * 2 + 2);
+        let arr = buckets[b].get(key);
+        if (!arr) { arr = []; buckets[b].set(key, arr); }
+        arr.push(i);
+      }
+    }
+    const checked = new Set(); // "i,j" (i<j) — a pair sharing >1 band must still be verified only once
+    for (let b = 0; b < BANDS; b++) {
+      for (const arr of buckets[b].values()) {
+        if (arr.length < 2) continue;
+        for (let x = 0; x < arr.length; x++) {
+          const i = arr[x], ai = hi[i], bi = lo[i];
+          for (let y = x + 1; y < arr.length; y++) {
+            const j = arr[y];
+            const key = i + ',' + j; // arr is built in increasing index order, so i<j always here
+            if (checked.has(key)) continue;
+            checked.add(key);
+            if (popcount32(ai ^ hi[j]) + popcount32(bi ^ lo[j]) <= DUPE_HAMMING_THRESHOLD) union(pairs[i][0], pairs[j][0]);
+          }
+        }
       }
     }
     const groups = new Map(); // root -> [paths]

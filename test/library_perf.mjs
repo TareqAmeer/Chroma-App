@@ -70,6 +70,58 @@ for (const n of [200,1000,5000]) {
   if(r.mism)failures.push(`hamming popcount disagrees with the BigInt reference on ${r.mism} pairs`);
   await p.close();
 }
+// Correctness: clusterByHash was rewritten from a plain O(n^2) nested loop (444M comparisons at
+// n=~30,000, measured ~1.7s and — worse — main-thread-blocking on every folder open) into exact
+// pigeonhole/banded bucketing (8 bands of 8 bits; BANDS > DUPE_HAMMING_THRESHOLD=6 guarantees no
+// true match is ever missed). "Exact" is a claim worth checking, not trusting: a faster clusterer
+// that silently drops a real duplicate group would look identical to a correct one until a user
+// noticed their duplicates stopped being found. This calls the REAL clusterByHash (exposed as
+// window.__libClusterByHash under ?libtest=1, not a reimplementation) and diffs its grouping
+// against an independent brute-force O(n^2) BigInt reference on synthetic data engineered to
+// exercise the boundary: some fully random hashes, plus deliberate clusters at every Hamming
+// distance 0..8 (straddling the threshold=6 cutoff on both sides), plus duplicate/near-duplicate
+// hex strings and edge-case all-zero/all-f hashes.
+{
+  const p=await b.newPage();
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=20`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1200);
+  const r=await p.evaluate(()=>{
+    const THRESH=6;
+    const rnd=()=>Array.from({length:16},()=>'0123456789abcdef'[(Math.random()*16)|0]).join('');
+    const flipBits=(hex,k)=>{let v=BigInt('0x'+hex);for(let i=0;i<k;i++)v^=(1n<<BigInt((i*11+3)%64));return v.toString(16).padStart(16,'0');};
+    const hashes=[];
+    for(let i=0;i<300;i++)hashes.push(rnd());
+    // Deliberate clusters around several distinct base hashes, at every distance 0..8 — some
+    // strictly inside the threshold (must cluster), some strictly outside (must not).
+    const bases=['0f1e2d3c4b5a6978','ffffffffffffffff','0000000000000000','a1b2c3d4e5f60718'];
+    for(const base of bases){for(let d=0;d<=8;d++)hashes.push(flipBits(base,d));}
+    hashes.push('0000000000000000'); // exact duplicate of a base — distance 0
+    const pairs=hashes.map((h,i)=>[`p${i}`,h]);
+    // Independent brute-force reference, BigInt-based (no popcount32, no bands) — deliberately
+    // NOT sharing any code path with the implementation under test.
+    const ref=(a,b)=>{let x=BigInt('0x'+a)^BigInt('0x'+b);let n=0n;while(x){n+=x&1n;x>>=1n;}return Number(n);};
+    const parent=new Map();pairs.forEach(([p])=>parent.set(p,p));
+    const find=(x)=>{while(parent.get(x)!==x)x=parent.get(x);return x;};
+    const union=(a,b)=>{const ra=find(a),rb=find(b);if(ra!==rb)parent.set(ra,rb);};
+    for(let i=0;i<pairs.length;i++)for(let j=i+1;j<pairs.length;j++){
+      if(ref(pairs[i][1],pairs[j][1])<=THRESH)union(pairs[i][0],pairs[j][0]);
+    }
+    const refGroups=new Map();pairs.forEach(([p])=>{const r=find(p);if(!refGroups.has(r))refGroups.set(r,new Set());refGroups.get(r).add(p);});
+    const refSig=Array.from(refGroups.values()).map(s=>Array.from(s).sort().join(',')).filter(g=>g.includes(',')).sort();
+
+    const fastGroups=window.__libClusterByHash(pairs);
+    const fastSig=Array.from(fastGroups.values()).map(g=>g.slice().sort().join(',')).filter(g=>g.includes(',')).sort();
+    return {refSig,fastSig,n:pairs.length};
+  });
+  const same = JSON.stringify(r.refSig) === JSON.stringify(r.fastSig);
+  console.log(`clusterByHash exactness: n=${r.n}, ${r.refSig.length} real groups (brute-force)  ${same?'PASS':'FAIL'}`);
+  if(!same){
+    failures.push(`clusterByHash's banded implementation disagrees with the brute-force reference`);
+    console.error('  reference groups:', r.refSig);
+    console.error('  fast groups:     ', r.fastSig);
+  }
+  await p.close();
+}
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}

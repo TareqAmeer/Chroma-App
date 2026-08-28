@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -386,6 +386,27 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         if !has_col("photos", "clip_scanned_at")? {
             conn.execute("ALTER TABLE photos ADD COLUMN clip_scanned_at INTEGER", [])?;
         }
+    }
+
+    // v7 -> v8: per-directory mtime snapshot, so a `scan_run` on an unchanged tree can skip the
+    // expensive per-FILE walk entirely. Deliberately keyed on every directory in the tree, not
+    // just the root: a root directory's own mtime does NOT change when a file is added deep
+    // inside it (e.g. adding a photo to PHOTOS/2026/08/23 does not touch PHOTOS's mtime) — this
+    // library's own layout is exactly that nested year/month/day shape, so a root-only check
+    // would silently miss new photos. Directories are cheap to enumerate and stat (measured: 78
+    // directories for ~29,700 files, stat pass effectively free), unlike the files themselves
+    // (measured: ~9.2s for the same library's file count on this exFAT/fskit drive) — so this
+    // buys a real skip without giving up correctness.
+    if version < 8 {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS walked_dirs (
+                root_id  INTEGER NOT NULL REFERENCES roots(id) ON DELETE CASCADE,
+                rel_dir  TEXT    NOT NULL,
+                mtime    INTEGER NOT NULL,
+                PRIMARY KEY (root_id, rel_dir)
+            )",
+            [],
+        )?;
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -823,6 +844,90 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
     out
 }
 
+/// Enumerates every DIRECTORY under `root_rel` (mtime included) and every `.xmp` SIDECAR file
+/// (mtime included) — deliberately NOT the media files themselves — so a scan can detect "did
+/// anything change here" without the expensive per-photo stat walk_root does. Two things had to
+/// both be true for this to be a correct skip signal, not just a fast one, and both were checked
+/// empirically rather than assumed:
+///   1. Adding/removing/renaming a file bumps its PARENT DIRECTORY's mtime (verified on both
+///      APFS and this library's exFAT/fskit external drive) — so directories alone catch new,
+///      moved, and deleted photos.
+///   2. Rewriting an EXISTING file's content in place does NOT bump the parent directory's mtime
+///      (verified the same way) — and this app rates/labels photos by rewriting their `.xmp`
+///      sidecar in place, which is exactly the case (1) misses. Sidecars are cheap to include
+///      here because they're a small fraction of a real library (only rated/edited photos have
+///      one — zero exist on this library today) and `read_dir` already lists their names for
+///      free; only an actually-present sidecar costs an extra `stat`.
+/// Mirrors walk_root's own stack-based DFS and hidden-name skip so the two agree on "the tree".
+fn walk_dirs_and_sidecars_only(volume_mount: &Path, root_rel: &str) -> Vec<(String, u64)> {
+    let root_abs = volume_mount.join(root_rel);
+    let mut out = Vec::new();
+    let mut stack = vec![root_abs.clone()];
+    // ⚠️ Nanoseconds, not seconds — deliberately HIGHER precision than walk_root's own
+    // second-resolution `mtime`/`sidecar_mtime` columns elsewhere in this schema. Two operations
+    // landing in the same wall-clock SECOND is common (a scripted batch rating pass, or simply
+    // two `scan_run` calls close together, which is exactly what this repo's own
+    // `a_deleted_file_is_marked_absent_not_dropped` test does with no sleep between them) — at
+    // second resolution that collapses to "nothing changed" and the walk gets wrongly skipped.
+    // This tracking is a NEW, self-contained mechanism (the `walked_dirs` table), not read by
+    // anything that assumes second precision, so there's nothing else to keep in sync.
+    let stat_rel = |p: &Path, out: &mut Vec<(String, u64)>| {
+        let Ok(rel) = p.strip_prefix(volume_mount) else { return };
+        let Ok(meta) = std::fs::metadata(p) else { return };
+        let Some(mtime) = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64) else { return };
+        out.push((rel.to_string_lossy().into_owned(), mtime));
+    };
+    while let Some(dir) = stack.pop() {
+        stat_rel(&dir, &mut out);
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let p = entry.path();
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or_else(|_| p.is_dir()) {
+                stack.push(p);
+            } else if ext_lower(&p) == "xmp" {
+                stat_rel(&p, &mut out);
+            }
+        }
+    }
+    out
+}
+
+/// True if `walk_dirs_only`'s fresh result is IDENTICAL (same directories, same mtimes) to what
+/// was recorded on this root's last full walk — i.e. nothing that would change what walk_root
+/// finds has happened since. A brand-new root (no stored rows yet) always returns false, so the
+/// very first scan of any root always does the full walk, as it must.
+fn tree_unchanged_since_last_walk(conn: &Connection, root_id: i64, fresh: &[(String, u64)]) -> Result<bool, String> {
+    let stored: std::collections::HashMap<String, u64> = conn
+        .prepare("SELECT rel_dir, mtime FROM walked_dirs WHERE root_id = ?1") // "rel_dir" also holds tracked .xmp sidecar paths — see walk_dirs_and_sidecars_only
+        .map_err(|e| e.to_string())?
+        .query_map(params![root_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    if stored.is_empty() || stored.len() != fresh.len() {
+        return Ok(false);
+    }
+    Ok(fresh.iter().all(|(rel, mtime)| stored.get(rel) == Some(mtime)))
+}
+
+/// Persists `fresh` as the new baseline for this root — wholesale replace, since a directory
+/// that vanished between scans must not linger as a stale "unchanged" signal.
+fn save_walked_dirs(conn: &Connection, root_id: i64, fresh: &[(String, u64)]) -> Result<(), String> {
+    conn.execute("DELETE FROM walked_dirs WHERE root_id = ?1", params![root_id]).map_err(|e| e.to_string())?;
+    for (rel, mtime) in fresh {
+        conn.execute(
+            "INSERT INTO walked_dirs (root_id, rel_dir, mtime) VALUES (?1, ?2, ?3)",
+            params![root_id, rel, *mtime as i64],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[derive(Serialize, Clone, Default)]
 pub struct ScanProgress {
     pub phase: String,
@@ -877,7 +982,7 @@ pub fn scan_run(
     drop(roots_stmt);
 
     let mut result = ScanResult::default();
-    for (_root_id, volume_id, root_rel, mount_point) in &roots {
+    for (root_id, volume_id, root_rel, mount_point) in &roots {
         if cancel.load(Ordering::Relaxed) {
             break;
         }
@@ -885,6 +990,28 @@ pub fn scan_run(
         if !mount.is_dir() {
             continue; // volume not mounted — nothing to scan, not an error
         }
+
+        // Directory-mtime pre-check: cheap (measured near-zero for ~80 directories vs ~9s for
+        // ~30,000 files on a real external drive) and — unlike checking only the root's own
+        // mtime — CORRECT for a nested tree, since every directory that could have gained or
+        // lost a file is checked individually. If nothing changed, skip the expensive per-file
+        // walk AND the mark-absent sweep below entirely (that sweep keys off scan_gen, which
+        // only advances for rows the walk actually touches — running it without a walk would
+        // wrongly mark every photo under this root absent).
+        let fresh_dirs = walk_dirs_and_sidecars_only(&mount, root_rel);
+        if tree_unchanged_since_last_walk(conn, *root_id, &fresh_dirs)? {
+            let unchanged_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM photos WHERE volume_id = ?1 AND (rel_dir = ?2 OR rel_dir LIKE ?3) AND present = 1",
+                    params![volume_id, root_rel, format!("{root_rel}/%")],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            progress(ScanProgress { phase: "walk".into(), done: unchanged_count as usize, total: unchanged_count as usize, current: root_rel.clone() });
+            result.scanned += unchanged_count as usize;
+            continue;
+        }
+
         // Live count while the walk itself is still running (total unknown — see walk_root's
         // own comment) — this is the event that makes the activity pill appear within a second
         // or two of a scan starting, instead of only once the entire tree has been enumerated.
@@ -949,6 +1076,9 @@ pub fn scan_run(
             .map_err(|e| e.to_string())?;
         result.marked_absent += changed;
         tx.commit().map_err(|e| e.to_string())?;
+        // Only reached after a REAL walk — the unchanged-tree branch above never gets here,
+        // which is correct: its own stored baseline is still accurate since nothing changed.
+        save_walked_dirs(conn, *root_id, &fresh_dirs)?;
     }
     progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
     Ok(result)
@@ -3730,6 +3860,70 @@ mod tests {
         assert!(!is_ancestor_rel("PHOTOS", "PHOTOS2"), "must not match on a bare string prefix");
         assert!(!is_ancestor_rel("PHOTOS/2026", "PHOTOS"), "wrong direction");
         assert!(!is_ancestor_rel("PHOTOSA", "PHOTOSB"));
+    }
+
+    // ── scan_run's directory-mtime skip (walk_dirs_and_sidecars_only) ───────────────────────
+
+    fn touch_mtime_now(p: &std::path::Path) {
+        // Force a mtime change: some filesystems have 1s mtime resolution, so a bare rewrite
+        // immediately after creation can land on the SAME second and defeat the very thing being
+        // tested. Sleeping briefly is standard practice for this class of test.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        std::fs::write(p, b"changed").unwrap();
+    }
+
+    /// The critical correctness property for a NESTED tree (this app's own year/month/day
+    /// layout): a file added deep inside a subdirectory must still be detected as a change, even
+    /// though the ROOT directory's own mtime does not move. A root-only mtime check would fail
+    /// this test; walk_dirs_and_sidecars_only must not.
+    #[test]
+    fn scan_run_skip_still_detects_a_new_file_in_a_nested_subdirectory() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("skip_nested");
+        std::fs::create_dir_all(dir.join("2026/08/23")).unwrap();
+        std::fs::write(dir.join("2026/08/23/a.jpg"), b"x").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        let r1 = scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.added, 1, "first scan must do a real walk and find the seed file");
+
+        // A second scan of a GENUINELY unchanged tree should add nothing new (it may re-walk or
+        // skip — both are correct — but it must not lose or duplicate anything).
+        let r2 = scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.added, 0);
+
+        // Add a SECOND file three levels deep — the root directory ("dir" itself) never had this
+        // file added directly to it, only "2026/08/23" did.
+        touch_mtime_now(&dir.join("2026/08/23/b.jpg"));
+        let r3 = scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r3.added, 1, "a file added deep in a nested subdirectory must be detected even though the root directory's own mtime never changed");
+
+        let total: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE volume_id = ?1 AND present = 1", params![root.volume_id], |r| r.get(0)).unwrap();
+        assert_eq!(total, 2);
+    }
+
+    /// The critical correctness property this app specifically needs: rating a photo rewrites an
+    /// EXISTING `.xmp` file's content in place, which — verified empirically on both APFS and a
+    /// real exFAT/fskit external drive — does NOT change the parent directory's mtime. A skip
+    /// signal based on directory mtimes ALONE would silently leave `photos.sidecar_mtime` (and
+    /// therefore the rating sidecar_run would otherwise sync into `photos.rating`) stale forever.
+    #[test]
+    fn scan_run_skip_still_detects_an_in_place_sidecar_edit() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("skip_sidecar");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("a.xmp"), b"<xmp>rating=0</xmp>").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let sidecar_mtime_1: i64 = conn.query_row("SELECT sidecar_mtime FROM photos WHERE volume_id = ?1", params![root.volume_id], |r| r.get(0)).unwrap();
+        assert!(sidecar_mtime_1 > 0, "the first scan must have picked up the sidecar");
+
+        // Rewrite the SAME .xmp file in place — no new file, no rename, directory mtime untouched.
+        touch_mtime_now(&dir.join("a.xmp"));
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let sidecar_mtime_2: i64 = conn.query_row("SELECT sidecar_mtime FROM photos WHERE volume_id = ?1", params![root.volume_id], |r| r.get(0)).unwrap();
+        assert!(sidecar_mtime_2 > sidecar_mtime_1, "an in-place sidecar rewrite must still be detected and re-synced, even though it doesn't change the parent directory's mtime");
     }
 
     #[test]
