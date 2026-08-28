@@ -46,10 +46,7 @@ fn catalog_dir() -> PathBuf {
         let _ = std::fs::create_dir_all(&p);
         return p;
     }
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let dir = PathBuf::from(home).join("Library/Application Support/com.tareq.chromasmith");
-    let _ = std::fs::create_dir_all(&dir);
-    dir
+    crate::platform::data_root()
 }
 
 fn catalog_db_path() -> PathBuf {
@@ -408,32 +405,18 @@ pub struct VolumeRow {
     pub online: bool,
 }
 
+/// Mount point (and, where available, a volume-from-device hint) for `path`, via the platform
+/// layer. `macos.rs`'s comment on `is_boot_volume` explains the APFS split-volume-group reason
+/// the mount-point prefix check exists; `windows.rs`'s version compares against the system
+/// drive instead, which needs no such reasoning.
 fn statfs_mount_point(path: &Path) -> Option<(String, String)> {
-    use std::ffi::{CStr, CString};
-    let cstr = CString::new(path.to_str()?).ok()?;
-    // SAFETY: statfs writes into a zeroed, correctly-sized struct; only scalar/C-string fields
-    // are read back, and f_mntonname/f_mntfromname are fixed-size NUL-terminated char arrays.
-    unsafe {
-        let mut st: libc::statfs = std::mem::zeroed();
-        if libc::statfs(cstr.as_ptr(), &mut st) != 0 {
-            return None;
-        }
-        let onname = CStr::from_ptr(st.f_mntonname.as_ptr()).to_string_lossy().into_owned();
-        let fromname = CStr::from_ptr(st.f_mntfromname.as_ptr()).to_string_lossy().into_owned();
-        Some((onname, fromname))
-    }
+    let mount = crate::platform::mount_point(path)?;
+    let hint = crate::platform::volume_identity_hint(path).unwrap_or_else(|| mount.clone());
+    Some((mount, hint))
 }
 
-/// macOS's split System/Data APFS volume group means a perfectly ordinary path under `/Users`
-/// or a temp dir under `/var` (itself a symlink to `/private/var`) resolves via `statfs` to
-/// `/System/Volumes/Data`, NOT `/` — every one of the OS's own internal volumes (Data, Preboot,
-/// VM, Update, ...) lives under that prefix. A real external drive always shows up under
-/// `/Volumes/...` instead, so this prefix check is what actually distinguishes "this Mac" from
-/// "an attached drive" on modern macOS; checking only `mount_point == "/"` (the pre-APFS-
-/// volume-group assumption) treats the user's own Documents folder as an unmounted external
-/// disk, which silently walks nothing (see `volume_identity`'s canonicalize comment).
 fn is_boot_volume(mount_point: &str) -> bool {
-    mount_point == "/" || mount_point.starts_with("/System/Volumes/")
+    crate::platform::is_boot_volume(mount_point)
 }
 
 fn gen_id() -> String {
@@ -483,18 +466,7 @@ fn volume_identity(path: &Path) -> (String, String, bool) {
         return (id, mount_point, false);
     }
     // Read-only or unwritable volume: fingerprint instead of failing identity entirely.
-    let (total, _free) = {
-        let cstr = std::ffi::CString::new(mount_point.as_str()).ok();
-        cstr.and_then(|c| unsafe {
-            let mut st: libc::statfs = std::mem::zeroed();
-            if libc::statfs(c.as_ptr(), &mut st) == 0 {
-                Some((st.f_blocks as u64 * st.f_bsize as u64, st.f_bavail as u64 * st.f_bsize as u64))
-            } else {
-                None
-            }
-        })
-    }
-    .unwrap_or((0, 0));
+    let (total, _free) = crate::platform::disk_bytes(Path::new(&mount_point));
     let basename = Path::new(&mount_point).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     (format!("fp:{basename}:{total}"), mount_point, false)
 }
@@ -510,15 +482,7 @@ fn upsert_volume(conn: &Connection, path: &Path) -> rusqlite::Result<(i64, Strin
     } else {
         Path::new(&mount_point).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| mount_point.clone())
     };
-    let (total_bytes, _free) = {
-        let cstr = std::ffi::CString::new(mount_point.as_str()).ok();
-        cstr.and_then(|c| unsafe {
-            let mut st: libc::statfs = std::mem::zeroed();
-            if libc::statfs(c.as_ptr(), &mut st) == 0 { Some(st.f_blocks as u64 * st.f_bsize as u64) } else { None }
-        })
-    }
-    .map(|t| (t, 0u64))
-    .unwrap_or((0, 0));
+    let (total_bytes, _free) = crate::platform::disk_bytes(Path::new(&mount_point));
 
     conn.execute(
         "INSERT INTO volumes (uuid, label, last_path, total_bytes, is_local, last_seen)
@@ -3605,16 +3569,9 @@ mod tests {
 
     /// Sets a file's mtime directly — needed to simulate real bit rot (content changes, mtime
     /// does not), which `std::fs::write` alone can't produce since writing always bumps mtime
-    /// to "now". `libc::utimes` rather than a new dependency: `libc` is already real here (see
-    /// this file's own statfs use, mirroring ingest.rs's).
+    /// to "now". Delegates to `platform::set_file_mtime`, mirroring ingest.rs's/library.rs's use.
     fn set_mtime_for_test(path: &Path, unix_secs: i64) {
-        use std::ffi::CString;
-        let cpath = CString::new(path.to_str().unwrap()).unwrap();
-        let tv = libc::timeval { tv_sec: unix_secs as libc::time_t, tv_usec: 0 };
-        let times = [tv, tv];
-        unsafe {
-            libc::utimes(cpath.as_ptr(), times.as_ptr());
-        }
+        let _ = crate::platform::set_file_mtime(path, unix_secs);
     }
 
     /// The frontend contract, mechanically enforced: every field `library::DirEntry` has, a

@@ -24,6 +24,7 @@ fn dist_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dist"))
 }
 
+mod platform;
 mod lens_correct;
 mod library;
 mod raw_decode;
@@ -1163,8 +1164,7 @@ fn take_pending_oauth_callback(state: tauri::State<PendingOAuth>) -> Option<Stri
 }
 
 fn gphotos_downloads_path() -> Result<PathBuf, String> {
-    let home = std::env::var_os("HOME").ok_or("no HOME")?;
-    Ok(PathBuf::from(home).join("Documents").join("Google Photos Download"))
+    Ok(crate::platform::documents_dir()?.join("Google Photos Download"))
 }
 
 // Resolves (and creates) the local Google Photos cache folder so the Library's pinned
@@ -1226,8 +1226,7 @@ fn save_to_gphotos_downloads(filename: String, data_b64: String) -> Result<GpSav
 // ~/Documents/Lightroom Download/ so re-opening reads from disk (thumbnails, sidecar ratings
 // and the decode cache all work on it like any local photo) instead of re-downloading.
 fn lr_downloads_path() -> Result<PathBuf, String> {
-    let home = std::env::var_os("HOME").ok_or("no HOME")?;
-    Ok(PathBuf::from(home).join("Documents").join("Lightroom Download"))
+    Ok(crate::platform::documents_dir()?.join("Lightroom Download"))
 }
 
 #[tauri::command]
@@ -1296,8 +1295,7 @@ fn save_to_download_dir(dir: PathBuf, filename: String, data_b64: String) -> Res
 // report. Every export now goes through this command instead: one file per invoke, a real
 // Result per file, and the actual written path handed back so JS can log a concrete line.
 fn export_downloads_path() -> Result<PathBuf, String> {
-    let home = std::env::var_os("HOME").ok_or("no HOME")?;
-    Ok(PathBuf::from(home).join("Downloads"))
+    crate::platform::downloads_dir()
 }
 
 // Next free "name (2).ext" / "name (3).ext" in `dir`. Deliberately NOT shared with
@@ -1570,6 +1568,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             #[cfg(target_os = "macos")]
             write_gainmap_heic,
+            #[cfg(target_os = "macos")]
             write_gainmap_heic_from_map,
             #[cfg(target_os = "macos")]
             source_has_hdr,

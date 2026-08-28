@@ -139,32 +139,16 @@ fn media_kind(ext: &str) -> Option<&'static str> {
 /// which is user-renameable and localised.
 #[tauri::command]
 pub fn list_volumes() -> Result<Vec<Volume>, String> {
-    let root_dev = std::fs::metadata("/").ok().map(|m| {
-        use std::os::unix::fs::MetadataExt;
-        m.dev()
-    });
     let mut out = Vec::new();
-    let rd = match std::fs::read_dir("/Volumes") {
-        Ok(rd) => rd,
-        Err(e) => return Err(format!("read /Volumes: {e}")),
-    };
-    for entry in rd.flatten() {
-        let p = entry.path();
-        if !p.is_dir() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
+    for p in crate::platform::list_removable()? {
+        let name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| p.to_string_lossy().into_owned());
         if name.starts_with('.') {
             continue;
         }
-        // Skip the boot volume (which /Volumes symlinks to on modern macOS).
-        if let (Some(rd), Ok(md)) = (root_dev, std::fs::metadata(&p)) {
-            use std::os::unix::fs::MetadataExt;
-            if md.dev() == rd {
-                continue;
-            }
-        }
-        let (total_bytes, free_bytes) = statfs_bytes(&p);
+        let (total_bytes, free_bytes) = crate::platform::disk_bytes(&p);
         out.push(Volume {
             has_dcim: p.join("DCIM").is_dir(),
             name,
@@ -175,22 +159,6 @@ pub fn list_volumes() -> Result<Vec<Volume>, String> {
     }
     out.sort_by(|a, b| b.has_dcim.cmp(&a.has_dcim).then(a.name.cmp(&b.name)));
     Ok(out)
-}
-
-/// Total/free bytes for the filesystem containing `path`, via statfs(2). Best-effort: a card that
-/// won't stat still imports, it just can't show a capacity bar.
-fn statfs_bytes(path: &Path) -> (u64, u64) {
-    use std::ffi::CString;
-    let Some(cstr) = path.to_str().and_then(|s| CString::new(s).ok()) else { return (0, 0) };
-    // SAFETY: statfs writes into a zeroed, correctly-sized struct and we only read scalars back.
-    unsafe {
-        let mut st: libc::statfs = std::mem::zeroed();
-        if libc::statfs(cstr.as_ptr(), &mut st) != 0 {
-            return (0, 0);
-        }
-        let bs = st.f_bsize as u64;
-        (st.f_blocks * bs, st.f_bavail * bs)
-    }
 }
 
 /// EXIF capture date as "YYYY-MM-DD".
@@ -631,16 +599,7 @@ pub fn ingest_run(
 /// while files are still copying.
 #[tauri::command]
 pub fn eject_volume(path: String) -> Result<(), String> {
-    let out = std::process::Command::new("/usr/sbin/diskutil")
-        .arg("eject")
-        .arg(&path)
-        .output()
-        .map_err(|e| format!("run diskutil: {e}"))?;
-    if out.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
-    }
+    crate::platform::eject(Path::new(&path))
 }
 
 #[cfg(test)]
@@ -662,8 +621,7 @@ mod tests {
     /// pattern as `heic_exif_date_is_readable` in library.rs.
     #[test]
     fn fast_raw_date_matches_rawlers_own_parser_on_real_files() {
-        let dir = std::env::var_os("HOME").map(std::path::PathBuf::from).map(|h| h.join("Downloads"));
-        let Some(dir) = dir else { eprintln!("skipping: no $HOME"); return };
+        let Ok(dir) = crate::platform::downloads_dir() else { eprintln!("skipping: no home dir"); return };
         let Ok(rd) = std::fs::read_dir(&dir) else { eprintln!("skipping: no Downloads dir"); return };
         let samples: Vec<_> = rd.flatten()
             .map(|e| e.path())

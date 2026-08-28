@@ -172,15 +172,27 @@ pub fn set_sam2_model_paths(encoder_path: PathBuf, decoder_path: PathBuf) {
 
 pub(crate) fn create_session_from_path(path: &std::path::Path) -> Result<SamSession, String> {
     let h = ort_handle()?;
-    // ort_sys::os_char is c_char on macOS (only c_ushort/UTF-16 on Windows), so a plain CString
-    // is the right ABI here — confirmed by reading ort-sys's own os_char cfg rather than assumed.
+    // ort_sys::os_char is c_char on macOS/Linux but c_ushort (UTF-16) on Windows — confirmed by
+    // reading ort-sys's own os_char cfg rather than assumed. A plain CString's `*const c_char`
+    // is the right ABI on macOS; on Windows CreateSession instead wants a NUL-terminated UTF-16
+    // buffer, built via `encode_wide()` and cast to `*const ort_sys::os_char` (== `*const u16`).
+    #[cfg(not(windows))]
     let path_c = CString::new(path.to_str().ok_or_else(|| format!("non-UTF8 model path: {}", path.display()))?)
         .map_err(|e| format!("model path has embedded NUL: {e}"))?;
+    #[cfg(windows)]
+    let path_w: Vec<u16> = {
+        use std::os::windows::ffi::OsStrExt;
+        path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+    };
     unsafe {
         let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();
         check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
         let mut session: *mut OrtSession = std::ptr::null_mut();
-        let res = check(h.api, ((*h.api).CreateSession)(h.env, path_c.as_ptr(), opts, &mut session), "CreateSession");
+        #[cfg(not(windows))]
+        let model_path_ptr = path_c.as_ptr();
+        #[cfg(windows)]
+        let model_path_ptr = path_w.as_ptr();
+        let res = check(h.api, ((*h.api).CreateSession)(h.env, model_path_ptr, opts, &mut session), "CreateSession");
         ((*h.api).ReleaseSessionOptions)(opts);
         res?;
         Ok(SamSession(session))

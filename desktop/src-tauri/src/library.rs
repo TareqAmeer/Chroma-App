@@ -152,8 +152,7 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
 }
 
 pub(crate) fn cache_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let dir = PathBuf::from(home).join("Library/Caches/com.tareq.chromasmith/thumbnails");
+    let dir = crate::platform::cache_root().join("thumbnails");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -442,8 +441,7 @@ pub fn save_lr_thumb(asset_id: String, data_b64: String) -> Result<(), String> {
 }
 
 pub(crate) fn decode_cache_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let dir = PathBuf::from(home).join("Library/Caches/com.tareq.chromasmith/decode");
+    let dir = crate::platform::cache_root().join("decode");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -1781,10 +1779,11 @@ pub fn duplicate_file(path: String) -> Result<String, String> {
 /// recoverable the same way Finder's own Delete is. `~/.Trash` is normally on the same
 /// volume as the user's Documents/Pictures, so a plain rename works; falls back to
 /// copy+remove for the rare cross-volume case (e.g. an external drive).
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub fn trash_file(path: String) -> Result<(), String> {
     let src = Path::new(&path);
-    let trash_dir = dirs_trash().ok_or("could not resolve ~/.Trash")?;
+    let trash_dir = crate::platform::trash_dir().map_err(|_| "could not resolve ~/.Trash".to_string())?;
     std::fs::create_dir_all(&trash_dir).map_err(|e| format!("create trash dir: {e}"))?;
     let name = src.file_name().ok_or("no filename")?;
     let mut dest = trash_dir.join(name);
@@ -1801,6 +1800,22 @@ pub fn trash_file(path: String) -> Result<(), String> {
     if sidecar.exists() {
         let sc_name = sidecar.file_name().ok_or("no sidecar filename")?;
         let _ = move_or_copy(&sidecar, &trash_dir.join(sc_name));
+    }
+    Ok(())
+}
+
+/// Windows has a real Recycle Bin API (unlike the macOS "move a file into ~/.Trash" convention
+/// above), so this goes straight through `IFileOperation` instead of reimplementing rename-with-
+/// numeric-suffix. The sidecar is trashed as its own item for the same reason: `IFileOperation`
+/// already handles same-named collisions in the Recycle Bin itself.
+#[cfg(windows)]
+#[tauri::command]
+pub fn trash_file(path: String) -> Result<(), String> {
+    let src = Path::new(&path);
+    crate::platform::move_to_trash(src)?;
+    let sidecar = sidecar_path(&path);
+    if sidecar.exists() {
+        let _ = crate::platform::move_to_trash(&sidecar);
     }
     Ok(())
 }
@@ -1842,15 +1857,11 @@ pub fn prune_caches() {
     }
 }
 
-/// Reveal a file in Finder (macOS `open -R`) — standard file-browser context-menu expectation.
+/// Reveal a file in the OS file browser (Finder on macOS, Explorer on Windows) — standard
+/// file-browser context-menu expectation.
 #[tauri::command]
 pub fn reveal_in_finder(path: String) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg("-R")
-        .arg(&path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("open -R: {e}"))
+    crate::platform::reveal_in_file_manager(&path)
 }
 
 fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
@@ -1859,10 +1870,6 @@ fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
     }
     std::fs::copy(src, dest).map_err(|e| format!("copy {}: {e}", src.display()))?;
     std::fs::remove_file(src).map_err(|e| format!("remove {}: {e}", src.display()))
-}
-
-fn dirs_trash() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".Trash"))
 }
 
 #[cfg(test)]
@@ -2046,10 +2053,7 @@ pub struct Album {
 }
 
 fn albums_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let dir = PathBuf::from(home).join("Library/Application Support/com.tareq.chromasmith");
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join("albums.json")
+    crate::platform::data_root().join("albums.json")
 }
 
 fn albums_read() -> Vec<Album> {

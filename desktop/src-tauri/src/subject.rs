@@ -556,10 +556,7 @@ pub fn locate_and_segment(embed: &Embedding, prototype: &[f32]) -> Result<(Vec<u
 // dog in several photos) and cannot be. macOS is free to purge Caches at any time.
 
 fn subjects_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let dir = PathBuf::from(home).join("Library/Application Support/com.tareq.chromasmith");
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join("subjects.json")
+    crate::platform::data_root().join("subjects.json")
 }
 
 fn read_subjects_at(path: &Path) -> Vec<Subject> {

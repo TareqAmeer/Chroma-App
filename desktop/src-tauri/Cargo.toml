@@ -111,3 +111,19 @@ objc2-foundation = "0.3"
 # tree (jxl/image codecs etc.) made whole-program LTO builds take 10+ minutes, too slow while
 # iterating. Reinstate these once the native RAW pipeline is verified working, for a smaller
 # final binary.
+
+[target.'cfg(windows)'.dependencies]
+# Windows port of the platform/ module: volume enumeration, disk stats, trash (via
+# IFileOperation), Explorer reveal, shell-open, WIC thumbnail decode, Media Foundation video
+# posters. Official Microsoft bindings (MIT), same tier of dependency objc2 is on the macOS side.
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_System_Ole",
+    "Win32_Graphics_Imaging",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_LibraryLoader",
+] }

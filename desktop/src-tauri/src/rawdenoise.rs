@@ -60,8 +60,16 @@ pub fn set_model_paths(linear_path: PathBuf, bayer_path: PathBuf) {
 /// creation is untouched by this change.
 fn create_session_threaded(path: &std::path::Path, intra_op_threads: i32) -> Result<SamSession, String> {
     let h = sam::ort_handle()?;
+    // Same os_char split as sam::create_session_from_path: c_char/CString on macOS+Linux,
+    // NUL-terminated UTF-16 on Windows.
+    #[cfg(not(windows))]
     let path_c = std::ffi::CString::new(path.to_str().ok_or_else(|| format!("non-UTF8 model path: {}", path.display()))?)
         .map_err(|e| format!("model path has embedded NUL: {e}"))?;
+    #[cfg(windows)]
+    let path_w: Vec<u16> = {
+        use std::os::windows::ffi::OsStrExt;
+        path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+    };
     unsafe {
         let mut opts: *mut ort_sys::OrtSessionOptions = std::ptr::null_mut();
         sam::check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
@@ -70,7 +78,11 @@ fn create_session_threaded(path: &std::path::Path, intra_op_threads: i32) -> Res
             eprintln!("rawdenoise: SetIntraOpNumThreads failed (continuing with ORT default): {e}");
         }
         let mut session: *mut ort_sys::OrtSession = std::ptr::null_mut();
-        let res = sam::check(h.api, ((*h.api).CreateSession)(h.env, path_c.as_ptr(), opts, &mut session), "CreateSession");
+        #[cfg(not(windows))]
+        let model_path_ptr = path_c.as_ptr();
+        #[cfg(windows)]
+        let model_path_ptr = path_w.as_ptr();
+        let res = sam::check(h.api, ((*h.api).CreateSession)(h.env, model_path_ptr, opts, &mut session), "CreateSession");
         ((*h.api).ReleaseSessionOptions)(opts);
         res?;
         Ok(SamSession(session))
