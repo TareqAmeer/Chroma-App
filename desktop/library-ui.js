@@ -4978,9 +4978,26 @@
       renderCollections();
       return;
     }
+    // ⚠️ Meta is loaded in the BACKGROUND, same split openFolder already uses and for the exact
+    // same reason (its own comment: "get_meta cache miss reads the whole RAW file... awaiting it
+    // for EVERY file kept the grid on Loading... until the last file finished"). This scope can
+    // be a whole YEAR or "All Photos" across the entire library — unlike the album/exported/
+    // search views that share this general shape, catalog_query here has no natural size cap, so
+    // awaiting a full getMetaBatch before ANY render was a single, silent, potentially
+    // many-thousand-file IPC call with no progress signal at all: no activity pill (that's
+    // catalog_scan, a different command), no thumb-progress readout (nothing had been queued for
+    // thumbnails yet, since renderGrid hadn't run), nothing — exactly "taking forever with zero
+    // indication of what's happening." Sidecars stay awaited (small JSON reads, needed for
+    // flags/edited badges to be right on first paint); the openToken guard below is the same
+    // "user moved on" check openFolder's own background meta pass uses.
+    const openToken = (state._openToken = (state._openToken || 0) + 1);
     {
       const paths = entries.filter((e) => !e.offline).map((e) => e.path);
-      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+      await getSidecarsBatch(paths);
+      getMetaBatch(paths).then(() => {
+        if (state._openToken !== openToken || state.source !== 'catalog') return; // user moved on
+        renderGrid();
+      });
     }
     await renderGrid();
     renderCollections();
