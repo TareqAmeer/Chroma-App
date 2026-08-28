@@ -533,3 +533,60 @@ work starts the week of 2026-09-01.
 R1 is the spine — R4 depends on it and R2 is its cheap stand-in. R3, R10 and R15 are the
 session-sized wins that need nothing else. R5 is the biggest single bet in the file and is gated
 on its own spike, so it can be evaluated cheaply before it becomes a commitment.
+
+## Format widening — backlog (added 2026-08-28)
+
+Pass 1 shipped 2026-08-28 (commit `b193b38`): the RAW/still extension registry consolidated from
+8 duplicated lists into one (`chromasmith-22.html`'s `FMT_*` arrays ↔ `desktop/src-tauri/src/
+formats.rs`, enforced by `test/lint_formats.mjs` + `formats.rs`'s own tests), RAW support widened
+8 → 32 formats via `rawler`'s content sniffing, and a new desktop-only still path
+(`still_decode.rs` + `decode_image_v1`) added EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL. See CLAUDE.md and
+the commit message for the full account. What's below is what that session deliberately deferred
+— full design reasoning (resolution order, path-traversal handling, the ForwardMatrix survey,
+sequencing) lives in `/Users/tareqameer/.claude/plans/and-these-as-well-validated-wadler.md`;
+re-read it before starting F1/F2, since it has the load-bearing detail this table compresses away.
+
+### Findings worth keeping
+
+- **The Adobe camera-profile survey already answered the "is this worth building" question.**
+  Sampled 436 of 4352 `.dcp` files under `/Library/Application Support/Adobe/CameraRaw/
+  CameraProfiles`: 99.8% carry ForwardMatrix1, 0% missing LookTable. `Camera/*` profiles are
+  412/412 fine; `Adobe Standard/*` is missing ProfileToneCurve on 201/210 (`parseDCP` needs an
+  identity-curve tolerance for that bucket, not a hard fail). **Verified, not guessed** — see the
+  plan file's §4 table for the exact counts. This means F1 is low-risk, not exploratory.
+- **The Panasonic PhotoStyle table for auto-profile detection is now grounded in real files**
+  (verified against the user's own RW2s via ExifTool + Lightroom): tag `0x0089` value `1` →
+  `Standard` (covers "Custom" too — that's Standard + an in-camera Real-Time LUT this pipeline
+  doesn't reproduce), `3` → `Natural`, `17` → `VLog`, `22` → `Leica Monochrome`. No unresolved
+  values remain for the DC-S9. Other makes (Canon PictureStyle, Nikon PictureControl, Fuji
+  FilmMode, Sony CreativeStyle) need their own tables, each gated on having real files to verify
+  against — don't guess a mapping the way the DC-S9 one almost was.
+- **`rawler` does not expose makernotes** (`exif.rs:61`/`:165`, commented out) — F2 needs its own
+  small Panasonic-IFD read, not a rawler API.
+- **`bakeDcpLUT` is compiled into the pixel worker via `Function.prototype.toString`**
+  (CLAUDE.md §2) and `perf_bench.mjs` asserts worker/main-thread agreement to **max|Δ|=0**. Any
+  new parameter F2's sky-gate fix or F1's DCP selection touches inside that function must be a
+  plain argument threaded through `_cpuRun`, never a captured module-scope constant — this is the
+  single highest-risk edit in the backlog. Run `npm run perf:test` immediately after, in isolation.
+
+### Items
+
+| # | item | size | note |
+|---|---|---|---|
+| F1 | **Adobe camera-profile resolver** — read `Camera/<model>/*.dcp` and `Adobe Standard/*.dcp` in place (never copy — 855MB, and not ours to redistribute) | M | New `dcp_store.rs`: `list_dcp_profiles`/`read_dcp_file` commands, generalise `cameraDcpPrefix` (`chromasmith-22.html:~7920`) from a 2-entry table to a candidate list disk resolves, replace `main.rs`'s `KNOWN_DCP_MAKES` allowlist with a positive make/model assertion. ⚠️ **Path traversal**: prefix/style derive from EXIF Make/Model — untrusted bytes inside a photo. Reject `/ \ .. NUL`, canonicalize, assert still under root — do this FIRST, not as an afterthought |
+| F1a | **Sky-gate residual → DC-S9 only** | S | Bug fix riding along with F1, ship in its own commit: the hue/sat/value residual lift at the end of `bakeDcpLUT` applies unconditionally today even though `dcpFit` correctly gates itself to DC-S9. Changes Sony RX100M5 rendering — needs explicit sign-off since it's a visible behaviour change, not purely additive |
+| F1b | **`parseDCP` tolerate missing ProfileToneCurve** | S | 201/210 `Adobe Standard/*.dcp` lack tag 50940 and `parseDCP` currently throws on that — identity curve instead of a hard fail |
+| F2 | **Auto-detect RAW profile from EXIF (PhotoStyle) — V-Log first** | S then M | Read Panasonic makernote tag `0x0089` (rawler doesn't expose it — parse the IFD directly). Ship value-17→auto-enable-`useVlog` alone first (self-contained, unambiguous, high value: V-Log footage graded without it looks badly wrong). Full per-photo style table (`rawProfile()` → `it.rawProfile`, `getUISnapshot`/⌘Z wiring, `list_dcp_profiles`-gated) is the bigger follow-on — needs F1 shipped first, since "does this style exist for this camera" is F1's own lookup |
+| F3 | **Desktop file-dialog `add_filter` parity** | S | The plan flagged this as unverified: if `desktop/src-tauri` has a native open-dialog with its own extension filter (separate from the HTML `accept=`), it needs the same FMT_ALL widening or it'll silently exclude formats the app now opens |
+| F4 | **EXR/HDR real headroom instead of clamp** | M | `still_decode.rs`'s `hdr_to_srgb8` currently clamps >1.0 to white with a logged note — reuse the RAW path's existing `hrOut`/`HR_MAX_STOPS` headroom channel (already threaded through export, `chromasmith-22.html:~8300`) instead, so an EXR's actual dynamic range survives into the HDR gain-map export path |
+| F5 | **Linear/demosaiced-DNG passthrough** | S | `raw_decode.rs`'s photometric check now rejects linear DNG (iPhone ProRAW, Foveon→DNG conversions) with a named error instead of a crash — but it's a common real file, not an edge case. When `photometric` is RGB, skip demosaic and take the pixels directly |
+| F6 | **ICO/DDS frame picker** | S | `still_decode.rs` reports a frame count today but always takes the first/largest; a picker UI is a follow-on, not a blocker |
+| F7 | **Hands-on desktop verification pass** | S | Nothing in Pass 1 was click-tested in the built `.app` — no harness drives the new Tauri commands (`decode_image_v1`, widened `decode_raw_v2` inputs). Open one real file per newly-supported family (at minimum: a Fuji RAF, a Nikon NEF, a JXL, an EXR, a DDS) and confirm the Library thumbnail and the editor agree |
+| F8 | **Regenerate `desktop/dist/` and `ios/App/App/public/`** | S | Pass 1 didn't run `build-desktop.sh`/`build-ios.sh` — those build outputs are still the pre-widening HTML. Cheap, just wasn't done this session |
+
+### Sequencing note
+
+F1 unblocks F1a/F1b/F2's full form and is the biggest single item — but it's now low-risk per the
+ForwardMatrix survey, not exploratory. F2's V-Log-only half is independent and worth doing even if
+F1 slips. F3/F7/F8 are cheap and independent of everything else — good session-filler alongside a
+bigger item. F4/F5/F6 are each self-contained follow-ups with no ordering constraint between them.
