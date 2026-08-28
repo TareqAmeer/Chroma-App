@@ -36,7 +36,7 @@ fn raw_orientation(path: &str) -> u16 {
 
 /// Rotate/flip a decoded thumbnail/preview per EXIF orientation (1=as-is, 3=180°, 6=90° CW,
 /// 8=90° CCW — the only values cameras emit).
-fn apply_orientation_dynamic(img: image::DynamicImage, orientation: u16) -> image::DynamicImage {
+pub(crate) fn apply_orientation_dynamic(img: image::DynamicImage, orientation: u16) -> image::DynamicImage {
     match orientation {
         3 => img.rotate180(),
         6 => img.rotate90(),
@@ -45,19 +45,10 @@ fn apply_orientation_dynamic(img: image::DynamicImage, orientation: u16) -> imag
     }
 }
 
-/// Coarse file-type bucket for the library's type filter.
+/// Coarse file-type bucket for the library's type filter. Delegates to formats::media_kind —
+/// the one implementation, shared with ingest.rs and catalog.rs.
 fn kind_of(ext: &str) -> &'static str {
-    if is_raw_ext(ext) {
-        "raw"
-    } else {
-        match ext {
-            "jpg" | "jpeg" => "jpeg",
-            "png" => "png",
-            "tif" | "tiff" => "tiff",
-            "heic" | "heif" => "heic",
-            _ => "",
-        }
-    }
+    media_kind(ext)
 }
 
 #[derive(Serialize)]
@@ -374,7 +365,11 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
             .map_err(|e| format!("thumbnail decode: {e}"))?;
         apply_orientation_dynamic(img, raw_orientation(&path))
     } else {
-        image::open(&path).map_err(|e| format!("image open: {e}"))?
+        // still_decode::open_any_path (not a bare image::open) so a widened IMAGE_EXTS format
+        // — most importantly .jxl, which image::open() cannot read at all — renders identically
+        // here and in the editor. Falls through correctly for jpg/png/tif/etc too, since
+        // open_any_path's own sniffing covers those the same way image::open did.
+        crate::still_decode::open_any_path(Path::new(&path))?
     };
     const LONG_EDGE: u32 = 360;
     let (w, h) = (img.width(), img.height());
@@ -555,9 +550,9 @@ pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, Strin
     if is_video_ext(&ext) {
         return Err("no quicklook preview for video".into());
     }
-    // Non-macOS / anything ImageIO didn't take: the `image` crate, same resize shape
-    // `get_thumbnail_inner`'s own final fallback already uses, just at QUICKLOOK_LONG_EDGE.
-    let img = image::open(&path).map_err(|e| format!("image open: {e}"))?;
+    // Non-macOS / anything ImageIO didn't take: still_decode, same fallback
+    // `get_thumbnail_inner` uses, just at QUICKLOOK_LONG_EDGE.
+    let img = crate::still_decode::open_any_path(Path::new(&path))?;
     let (w, h) = (img.width(), img.height());
     let scale = QUICKLOOK_LONG_EDGE as f32 / w.max(h) as f32;
     let thumb = if scale < 1.0 {
@@ -629,7 +624,7 @@ pub(crate) fn decode_rgb8_capped(path: &str, long_edge: u32) -> Result<(Vec<u8>,
     if is_video_ext(&ext) {
         return Err("no rgb8 decode for video".into());
     }
-    let img = image::open(path).map_err(|e| format!("image open: {e}"))?;
+    let img = crate::still_decode::open_any_path(Path::new(path))?;
     let (w, h) = (img.width(), img.height());
     let scale = long_edge as f32 / w.max(h) as f32;
     let thumb = if scale < 1.0 {
@@ -1732,7 +1727,7 @@ pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
             let photo = p.with_extension(""); // best-effort; sidecar_path() is <photo>.xmp exactly
             // Try every image extension the sidecar could belong to (with_extension("") strips
             // the .xmp but the photo's real extension is unknown from the sidecar name alone).
-            for ext in IMAGE_EXTS {
+            for ext in crate::formats::all_image_exts() {
                 let candidate = photo.with_extension(ext);
                 if candidate.exists() {
                     let s = candidate.to_string_lossy().into_owned();

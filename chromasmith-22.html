@@ -1197,7 +1197,7 @@ setTimeout(()=>window.hideBootSplash(),6000);
       <div class="fx-ctrl" data-fxsec="image">
         <div class="ctitle" style="margin-bottom:10px">Image Input</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
-          <input type="file" id="in-fx-img" accept="image/*,.tif,.tiff,.rw2,.raw" multiple onchange="fi(event,'fx-img')">
+          <input type="file" id="in-fx-img" accept="image/*" multiple onchange="fi(event,'fx-img')">
           <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
         <div id="fx-image-movable">
@@ -4113,11 +4113,16 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-27a';
+const BUILD='2026-08-28a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
 const WHATSNEW=[
+  {date:'2026-08-28',items:[
+    'Desktop app now opens far more RAW formats (ARRIRAW, Canon CRW/CR2/CR3, Fuji RAF, Hasselblad 3FR/FFF, Kodak, Leaf/Phase One IIQ, Leica RWL, Mamiya MEF, Minolta MRW, Nikon NEF/NRW, Pentax PEF/PTX, Samsung SRW, Sigma X3F, Sony SRF/SR2, and more) alongside the existing Panasonic/Sony support.',
+    'Desktop app now also opens EXR, HDR, TGA, DDS, QOI, JPEG XL, and Netpbm (PBM/PGM/PPM/PAM) stills, in the editor and the Library.',
+    'Web/iOS build accepts the same wider RAW list where the browser’s decoder supports it, and now shows a clear "opens in the desktop app" message instead of silently ignoring a file it can’t open.',
+  ]},
   {date:'2026-07-26',items:[
     'Mac menu bar: new Photo, View and Help menus (culling flags, rotate/flip, copy/paste edit, zoom, split/histogram toggles, this shortcuts panel).',
     'Basic Adjustments can now be made independent per photo in a batch ("This photo only") instead of always applying to the whole batch.',
@@ -4395,6 +4400,21 @@ function loadImg(file){return new Promise((res,rej)=>{
   };
   i.src=url;
 })}
+// A bare "could not be decoded" is indistinguishable from a corrupt file and sends people
+// hunting for a bad photo — same reasoning as loadImg's HEIC branch above, extended to every
+// format only the desktop app's Rust decoders (still_decode.rs, RUST_ONLY_RE) or LibRaw's
+// missing ARRIRAW support can't reach from a browser. Name the format AND the surface that opens
+// it, never just "unsupported".
+function unsupportedFormatMessage(name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  if(RUST_ONLY_RE.test(name))
+    return `${name}: .${ext.toUpperCase()} opens in the Chromasmith desktop app — no browser can decode it.`;
+  if(!window.__TAURI__&&ext==='ari')
+    return `${name}: ARRIRAW (.ARI) opens in the Chromasmith desktop app — the web build's RAW decoder (LibRaw) doesn't support it.`;
+  if(HEIC_RE.test(name))
+    return `${name}: HEIC/HEIF is not supported by this browser. The Chromasmith desktop app and the iPhone app both open it — or convert to JPEG first.`;
+  return `${name}: not a photo or video format Chromasmith can open.`;
+}
 function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
 function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
 
@@ -7342,16 +7362,45 @@ async function loadTiff(file){
   const tiffMeta=safeTiffMetaFrom(ifds[0]); // basic EXIF subset for "Save to Lightroom" — see safeTiffMetaFrom's comment
   return{canvas:c,dpi,icc,tiffMeta};
 }
+// ═══ FORMAT REGISTRY — single source of truth ═══════════════════════════════════════════════
+// Mirrored byte-for-byte into desktop/src-tauri/src/formats.rs. test/lint_formats.mjs (npm test)
+// and formats.rs's own matches_html_registry() unit test both assert the two agree — if you
+// edit one, edit the other, or a gate fails. Do NOT add a THIRD copy of any of these lists
+// anywhere (every extension check in this file and in the desktop Rust code should go through
+// the regexes/functions built from these arrays).
+const FMT_RAW = ['3fr','ari','arw','bay','crw','cr2','cr3','dcr','dcs','dng','erf','fff',
+  'iiq','k25','kdc','mef','mos','mrw','nef','nrw','orf','pef','pro','ptx','raf','raw',
+  'rw2','rwl','sr2','srf','srw','x3f'];
+// Decodable by a plain <img> in at least one shipping surface (web, WKWebView, or both).
+// NEVER route these through the Rust still-decode path — the export goldens depend on
+// jpg/png/webp keeping the browser-native <img> path byte-exact.
+const FMT_STILL_NATIVE = ['png','jpg','jpeg','gif','webp','avif','bmp','ico','heic','heif'];
+// TIFF is its own path (UTIF → loadTiff) on every platform; listed separately so it is never
+// folded into either bucket above.
+const FMT_STILL_TIFF = ['tif','tiff'];
+// Desktop-only: no browser decodes these. The `image` crate + jxl-oxide do (still_decode.rs).
+const FMT_STILL_RUST = ['exr','hdr','tga','dds','qoi','ff','pnm','pbm','pgm','ppm','pam','jxl'];
+const FMT_ALL = [...FMT_RAW, ...FMT_STILL_NATIVE, ...FMT_STILL_TIFF, ...FMT_STILL_RUST];
+function _fmtExtRe(arr){return new RegExp('\\.('+arr.join('|')+')$','i')}
+
 // ── Panasonic RW2 (and other RAW) input via libraw-wasm (vendored) ──
 // LibRaw runs in a Web Worker. Its wasm uses SharedArrayBuffer → needs cross-origin
 // isolation, provided here by coi-serviceworker. NOTE: LibRaw's demosaic/white-balance/
 // colour rendering will NOT match Lightroom, and decode is CPU/RAM heavy (seconds).
 // Was RW2/RAW-only — silently dropped every other camera's RAW file at the loadFXImages
-// filter (chromasmith-22.html:5013), since browsers have no image/* MIME for most RAW
-// extensions. Native decode (raw_decode.rs) is format-agnostic (rawler + PPG demosaic work
-// for any Bayer sensor); only the bundled DCP colour profile is Panasonic-specific, and
-// main.rs now downgrades gracefully (falls back to linear16, logs a warning) for other makes.
-const RAW_FILE_EXT_RE=/\.(rw2|raw|dng|cr2|cr3|nef|arw|orf)$/i;
+// filter, since browsers have no image/* MIME for most RAW extensions. Native decode
+// (raw_decode.rs) is format-agnostic (rawler + PPG demosaic work for any Bayer sensor); only
+// the bundled DCP colour profile is Panasonic-specific, and main.rs downgrades gracefully
+// (falls back to linear16, logs a warning) for other makes.
+// LibRaw (this file's wasm decoder) has no ARRIRAW decoder, so the web/iOS build's accepted
+// RAW set excludes .ari — the desktop app's rawler-based decoder does support it.
+const FMT_RAW_WEB = FMT_RAW.filter(e=>e!=='ari');
+const RAW_FILE_EXT_RE=_fmtExtRe(window.__TAURI__?FMT_RAW:FMT_RAW_WEB);
+const IMG_EXT_RE=_fmtExtRe(FMT_STILL_NATIVE);
+// Desktop-only formats (decode_image_v1, see still_decode.rs) — never matched on web/iOS,
+// where loadFXImages instead shows unsupportedFormatMessage()'s named "opens in the desktop
+// app" text rather than silently dropping the file.
+const RUST_ONLY_RE=_fmtExtRe(FMT_STILL_RUST);
 function isRw2File(f){return RAW_FILE_EXT_RE.test(f.name)}
 // Content sniff for the "extension lies" case — confirmed via a Google Photos Picker import:
 // the Picker API can hand back a JPEG rendition under the original RAW filename (e.g.
@@ -7944,13 +7993,20 @@ async function fxVideoCaptureFrame(){
   await saveFile(blob,`${it.name}_frame${it.curFrame||0}.png`,'image/png');
   toast('Frame captured ✓',true);
 }
-// Widen the photo picker's accept attribute to include video ONLY when this browser can
-// actually grade it — never advertise a file type the drop/pick path will just reject.
+// Build the photo picker's accept list from the FORMAT REGISTRY (near loadTiff) rather than
+// hand-writing extensions in the HTML, which is exactly how the old accept="image/*,.tif,.tiff,
+// .rw2,.raw" went stale — it listed 2 of 8 RAW extensions the app already accepted, so the file
+// picker greyed out formats loadFXImages would happily open. RUST_ONLY_RE formats are listed on
+// EVERY platform, including web — better to accept-and-explain (unsupportedFormatMessage) than to
+// grey a file out, matching loadFXImages' own openable() policy. Video is appended separately,
+// only when this browser can actually grade it — never advertise a type the drop/pick path
+// would just reject.
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
-  if(videoSupported()){
-    const inp=document.getElementById('in-fx-img');
-    if(inp)inp.setAttribute('accept',inp.getAttribute('accept')+',video/*,.mp4,.mov,.m4v');
-  }
+  const inp=document.getElementById('in-fx-img');
+  if(!inp)return;
+  const exts=FMT_ALL.map(e=>'.'+e);
+  if(videoSupported())exts.push('video/*','.mp4','.mov','.m4v');
+  inp.setAttribute('accept',['image/*',...exts].join(','));
 });
 
 // ── DCP (Adobe DNG Camera Profile) rendering — match Lightroom's RAW color ──
@@ -8379,7 +8435,10 @@ async function loadRw2(file){
         rgb=lin;
       }
       const camPrefix=cameraDcpPrefix(m.make,m.model);
-      if(!camPrefix)throw new Error(`No bundled color profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile.`);
+      // Widening RAW_FILE_EXT_RE made this the COMMON case for any camera outside the 2 bundled
+      // here (Panasonic DC-S9, Sony DSC-RX100M5) — the web build only ever ships those two DCP
+      // sets. The desktop app additionally reads locally-installed Adobe camera profiles.
+      if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the Chromasmith desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
       const lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
       const hrOut=new Uint8ClampedArray(w*h);
       rgba=applyDcpLUT(rgb,w,h,lut,hrOut);
@@ -8531,14 +8590,28 @@ async function loadFXImages(fileList){
   // read_file_bytes and builds File objects with type:'' — a plain MIME check silently
   // dropped every PNG/JPEG opened from the library ("No images loaded"). Fall back to the
   // filename extension whenever the MIME is missing/unhelpful.
-  const IMG_EXT_RE=/\.(png|jpe?g|gif|webp|avif|heic|heif|bmp)$/i;
+  // IMG_EXT_RE/RUST_ONLY_RE come from the FORMAT REGISTRY near loadTiff — see that comment.
   // Video files are routed to their own decode path (loadFXVideoFile) below, alongside the
   // per-file try/catch loop images already use — a video mixed into `files` would hit loadImg()
   // and fail as "not a valid image". Gated on videoSupported() so a browser without WebCodecs
   // (or Capacitor/iOS) gets a clear per-file error instead of a silent no-op.
   const videoFiles=videoSupported()?[...fileList].filter(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name)):[];
-  const files=[...fileList].filter(f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f));
-  if(!files.length&&!videoFiles.length)return;
+  // RUST_ONLY_RE files (EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL) are ACCEPTED here on every platform —
+  // desktop decodes them via decode_image_v1; web/iOS instead throws unsupportedFormatMessage()
+  // from inside the decode loop below, which flows through the same per-file catch/_loadFailCount
+  // as every other decode failure, rather than being filtered out here and silently dropped.
+  const openable=f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f)||RUST_ONLY_RE.test(f.name);
+  const files=[...fileList].filter(openable);
+  const nonImageNonVideo=[...fileList].filter(f=>!openable(f)&&!videoFiles.includes(f)&&!(f.type.startsWith('video/')||VID_EXT_RE.test(f.name)));
+  // Declared here (not down by the decode loop, where it used to live) so the partition above
+  // can add to the same count — one "N file(s) failed" toast covers both unsupported-format
+  // rejections and genuine decode failures, instead of two separate toasts firing.
+  let _loadFailCount=0;
+  for(const f of nonImageNonVideo){log(unsupportedFormatMessage(f.name),'err');_loadFailCount++}
+  if(!files.length&&!videoFiles.length){
+    if(nonImageNonVideo.length&&typeof toast==='function')toast(`${nonImageNonVideo.length} file(s) couldn't be opened — see log`,false);
+    return;
+  }
   if(!videoSupported()&&[...fileList].some(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name))){
     log('Video grading needs a browser with WebCodecs support (desktop Chrome, or the desktop app) — not available here.','err');
   }
@@ -8553,7 +8626,6 @@ async function loadFXImages(fileList){
   const loadKey=[...files,...videoFiles].map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
   if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault);
   const entries=[];
-  let _loadFailCount=0;
   for(const file of videoFiles){
     try{
       entries.push(await loadFXVideoFile(file));
@@ -8585,6 +8657,18 @@ async function loadFXImages(fileList){
         entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
+      // EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL — desktop-only (still_decode.rs). RUST_ONLY_RE files are
+      // included in `files` on every platform (see the FORMAT REGISTRY / openable() above), so
+      // web/iOS reaches this branch too: without window.chromasmithDecodeStill it throws the same
+      // named message loadFXImages already shows for a format no surface can open at all, instead
+      // of a bare "could not be decoded".
+      if(RUST_ONLY_RE.test(file.name)){
+        if(typeof window.chromasmithDecodeStill!=='function')throw new Error(unsupportedFormatMessage(file.name));
+        const{canvas,dpi,note}=await window.chromasmithDecodeStill(bytes,ext);
+        if(note)log(`${file.name}: ${note}`,'warn');
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,fileSize:bytes.byteLength}); // bytes:null → no PNG/JPEG meta splice on export
+        continue;
+      }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
       const exif=(ext==='jpg'||ext==='jpeg')?readExifTags(bytes):{};
       const img=await loadImg(file);
@@ -8593,7 +8677,7 @@ async function loadFXImages(fileList){
       entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength});
     }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++} // keep loading the rest of the batch
   }
-  if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length} file(s) failed to load — see log`,false);
+  if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length+nonImageNonVideo.length} file(s) failed to load — see log`,false);
   if(!entries.length){log('No images loaded','err');return}
   // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
   // now) — was previously inline per-RW2-entry, before any render had happened; moving it
@@ -16244,7 +16328,12 @@ async function exportFX(){
           out=new Uint8Array(UTIF.encodeImage(rgba.buffer,w,h,meta));
         }else{
           const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
-          const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||RAW_FILE_EXT_RE.test('.'+it.ext)):fmt==='png'; // lossless source → lossless out
+          // Widened from just png/tif/RAW: RUST_ONLY_RE sources (EXR/HDR/DDS/QOI/PNM*/JXL/…) were
+          // falling through to isPng=false and auto-exporting as JPEG, silently degrading a
+          // lossless source — the same bug the RAW/TIFF branches were already guarded against.
+          // .bmp is deliberately left OUT: it's lossless too, but it already had a defined
+          // auto→JPEG behaviour before this change and isn't part of the format-widening work.
+          const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||it.ext==='tiff'||RAW_FILE_EXT_RE.test('.'+it.ext)||RUST_ONLY_RE.test('.'+it.ext)):fmt==='png'; // lossless source → lossless out
           const isWebp=fmt==='webp';
           mime=isWebp?'image/webp':isPng?'image/png':'image/jpeg';outExt=isWebp?'webp':isPng?'png':'jpg';
           let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;

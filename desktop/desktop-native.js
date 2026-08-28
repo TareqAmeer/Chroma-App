@@ -175,6 +175,22 @@
   }
   window.getLibRaw = async function () { return NativeLibRawShim; };
 
+  // ── Native still decode (EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL) ──────────────────────
+  // chromasmith-22.html's loadFXImages calls window.chromasmithDecodeStill for any
+  // RUST_ONLY_RE-matched file — see that file's FORMAT REGISTRY comment. Only defined here
+  // (native shell), so web/iOS correctly falls through to unsupportedFormatMessage() instead.
+  window.chromasmithDecodeStill = async function (bytes, ext) {
+    const buf = await framedInvoke('decode_image_v1', { ext }, bytes);
+    const dv = new DataView(buf);
+    const hlen = dv.getUint32(0, true);
+    const hdr = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hlen)));
+    const rgba = new Uint8ClampedArray(buf, 4 + hlen);
+    const c = document.createElement('canvas');
+    c.width = hdr.w; c.height = hdr.h;
+    c.getContext('2d').putImageData(new ImageData(rgba, hdr.w, hdr.h), 0, 0);
+    return { canvas: c, dpi: hdr.dpi, note: hdr.note };
+  };
+
   // ── High-tier (neural) RAW denoise — "Denoise now" button in the Noise Reduction panel.
   // Deliberately NOT a NativeLibRawShim method: that class's instances are open()-call-scoped
   // locals inside loadRw2() and aren't retained anywhere, so a button pressed long after the

@@ -11,13 +11,14 @@
     "export:golden": "node test/export_harness.mjs --golden",
     "video:test": "node test/video_harness.mjs",
     "lint:ai": "node test/lint_ai_origin.mjs",
+    "lint:formats": "node test/lint_formats.mjs",
     "mask:test": "node test/mask_raster.mjs",
     "ui:test": "node test/ui_audit.mjs",
     "ui:baseline": "node test/ui_audit.mjs --baseline",
     "perf:test": "node test/perf_bench.mjs",
     "perf:baseline": "node test/perf_bench.mjs --baseline",
     "scorecard": "if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 calib/export_scorecard.py; else python3 calib/export_scorecard.py; fi",
-    "test": "npm run lint:ai && npm run export:test && npm run scorecard && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test",
+    "test": "npm run lint:ai && npm run lint:formats && npm run export:test && npm run scorecard && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test",
     "lib:test": "node test/library_perf.mjs"
   },
   "dependencies": {

@@ -27,6 +27,7 @@ fn dist_dir() -> PathBuf {
 mod platform;
 mod lens_correct;
 mod formats;
+mod still_decode;
 mod library;
 mod raw_decode;
 mod arcface;
@@ -47,6 +48,24 @@ mod ingest;
 mod catalog;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
+// The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files for
+// (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a DIFFERENT
+// sensor's data wouldn't error — it would just silently produce wrong colors (a much worse
+// failure mode than not opening at all). JS already picks the file by detected camera
+// (peek_raw_camera + getDcpLUT's cameraPrefix), so this is a defense-in-depth backstop, not the
+// primary gate. Downgrade an unsupported "lut" request to the plain linear16 body instead.
+// Used identically by decode_raw_v2 and denoise_raw_high — was two copy-pasted blocks, which is
+// exactly the kind of security-relevant gate that should have one definition, not two that can
+// silently drift apart.
+const KNOWN_DCP_MAKES: &[&str] = &["panasonic", "sony"];
+fn effective_dcp_mode<'a>(mode: &'a str, make: &str) -> (&'a str, u32) {
+    let make_lower = make.to_lowercase();
+    let has_dcp_support = KNOWN_DCP_MAKES.iter().any(|m| make_lower.contains(m));
+    let effective_mode = if mode == "lut" && !has_dcp_support { "linear16" } else { mode };
+    let used_lut = if effective_mode == "lut" { 1u32 } else { 0u32 };
+    (effective_mode, used_lut)
+}
+
 fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -558,20 +577,10 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             }
         }
     };
-    // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files
-    // for (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a
-    // DIFFERENT sensor's data wouldn't error — it would just silently produce wrong colors (a
-    // much worse failure mode than not opening at all). JS already picks the file by detected
-    // camera (peek_raw_camera + getDcpLUT's cameraPrefix), so this is a defense-in-depth
-    // backstop, not the primary gate. Downgrade an unsupported "lut" request to the plain
-    // linear16 body instead; `usedLut` in the header tells JS whether its requested mode was
-    // actually honored, since the body FORMAT differs (RGBA8 for lut/srgb vs raw u16 for
-    // linear16) and it needs to parse the right one.
-    const KNOWN_DCP_MAKES: &[&str] = &["panasonic", "sony"];
-    let make_lower = decoded.make.to_lowercase();
-    let has_dcp_support = KNOWN_DCP_MAKES.iter().any(|m| make_lower.contains(m));
-    let effective_mode = if mode == "lut" && !has_dcp_support { "linear16" } else { mode };
-    let used_lut = if effective_mode == "lut" { 1u32 } else { 0u32 };
+    // usedLut in the response header tells JS whether its requested mode was actually honored,
+    // since the body FORMAT differs (RGBA8 for lut/srgb vs raw u16 for linear16) and it needs to
+    // parse the right one. See effective_dcp_mode's doc comment for the "why a backstop" reasoning.
+    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make);
     let body: Vec<u8> = match effective_mode {
         "lut" => {
             let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
@@ -597,6 +606,43 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     out.extend_from_slice(&used_lut.to_le_bytes());
     out.extend_from_slice(&lens_applied.to_le_bytes());
     out.extend_from_slice(&body);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Decode a still the WebView can't (formats::STILL_RUST_EXTS — EXR/HDR/TGA/DDS/QOI/FF/PNM*/
+/// JXL) to display-ready RGBA8. Same framed-request wire format as decode_raw_v2, but a JSON
+/// *response* header (same idiom as faceparse_run above) rather than decode_raw_v2's fixed
+/// 12-byte layout, because this one carries variable metadata (dpi, dpiKnown, a human-readable
+/// note) and there's no reason to invent a second fixed layout for that.
+///
+/// Request : [u32 jsonLen][json {"ext":"exr"}][file bytes]
+/// Response: [u32 hdrLen][json {"w","h","dpi","dpiKnown","note"}][RGBA8 w*h*4]
+#[tauri::command]
+fn decode_image_v1(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let ext = json["ext"].as_str().unwrap_or("").to_lowercase();
+    let decoded = still_decode::open_any_bytes(payload, &ext)?;
+    #[derive(serde::Serialize)]
+    struct Header {
+        w: u32,
+        h: u32,
+        dpi: u32,
+        #[serde(rename = "dpiKnown")]
+        dpi_known: bool,
+        note: Option<String>,
+    }
+    let header = Header {
+        w: decoded.w,
+        h: decoded.h,
+        dpi: decoded.dpi,
+        dpi_known: decoded.dpi_known,
+        note: decoded.note,
+    };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("decode_image_v1 header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + decoded.rgba.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&decoded.rgba);
     Ok(tauri::ipc::Response::new(out))
 }
 
@@ -667,11 +713,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
     }
     let decoded = result?;
 
-    const KNOWN_DCP_MAKES: &[&str] = &["panasonic", "sony"];
-    let make_lower = decoded.make.to_lowercase();
-    let has_dcp_support = KNOWN_DCP_MAKES.iter().any(|m| make_lower.contains(m));
-    let effective_mode = if mode == "lut" && !has_dcp_support { "linear16" } else { mode };
-    let used_lut = if effective_mode == "lut" { 1u32 } else { 0u32 };
+    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make);
     let body: Vec<u8> = match effective_mode {
         "lut" => {
             let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
@@ -1255,9 +1297,8 @@ fn save_to_download_dir(dir: PathBuf, filename: String, data_b64: String) -> Res
         .unwrap_or("gphotos_import");
     let src_path = Path::new(safe_name);
     let src_ext = src_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    const RAW_LOOKING: &[&str] = &["raw", "rw2", "dng", "cr2", "cr3", "nef", "arw", "orf"];
     let mut renamed = false;
-    let final_name = if RAW_LOOKING.contains(&src_ext.as_str()) {
+    let final_name = if crate::formats::is_raw_ext(&src_ext) {
         if let Some(real_ext) = sniff_real_ext(&bytes) {
             renamed = true;
             let stem = src_path.file_stem().and_then(|s| s.to_str()).unwrap_or("gphotos_import");
@@ -1575,6 +1616,7 @@ fn main() {
             source_has_hdr,
             store_dcp_lut,
             decode_raw_v2,
+            decode_image_v1,
             denoise_raw_high,
             cancel_denoise_high,
             lens_profile_available,

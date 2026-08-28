@@ -400,7 +400,7 @@
     dupeClusterSizes: new Map(), // clusterId -> size
     _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
     syncedPaths: new Set(),  // paths known-synced to Google Photos (gphotos registry, folder-local cache)
-    typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff'
+    typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff' | 'heic' | 'webp' | 'hdr' | 'other' | 'video'
     cameraFilter: 'all',
     lensFilter: 'all',
     isoFilter: 'all',
@@ -902,6 +902,14 @@
             <option value="all">All types</option>
             <option value="raw">RAW</option><option value="jpeg">JPEG</option>
             <option value="png">PNG</option><option value="tiff">TIFF</option>
+            <!-- heic/webp/hdr/other added alongside the format-widening work: kind_of() (Rust,
+                 library.rs → formats::media_kind) has always emitted "heic" for iPhone photos —
+                 there was no option here to reach it, so HEIC files were listable but never
+                 filterable. "other" covers the desktop-only decode_image_v1 formats
+                 (TGA/DDS/QOI/FF/PNM*/JXL) plus GIF/BMP/ICO/AVIF, none of which had a bucket of
+                 their own. -->
+            <option value="heic">HEIC</option><option value="webp">WebP</option>
+            <option value="hdr">HDR/EXR</option><option value="other">Other</option>
             <option value="video">Video</option>
           </select>
           <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
@@ -1032,7 +1040,13 @@
     wrap.appendChild(provisionalImg);
     return provisionalImg;
   }
-  const RAW_EXT_RE = /\.(rw2|raw|dng|cr2|cr3|nef|arw|orf)$/i;
+  // Extension list lives in chromasmith-22.html's FORMAT REGISTRY (RAW_FILE_EXT_RE) — this file
+  // loads AFTER that script (build-desktop.sh injects <script src="library-ui.js"> right after
+  // the main page script), so the global is already in scope. Referencing it directly, not a
+  // narrower literal fallback, is deliberate: a silent fallback here is exactly the kind of
+  // drift test/lint_formats.mjs exists to catch, and on desktop RAW_FILE_EXT_RE already
+  // includes formats (like .ari) that a narrower local copy would silently exclude.
+  const RAW_EXT_RE = RAW_FILE_EXT_RE;
   // Minimal framed raw-body invoke (JSON header + binary payload) — same wire format
   // desktop-native.js's framedInvoke uses for store_dcp_lut, duplicated here (not exposed on
   // window there) since it's a one-liner and this file is meant to stay self-contained.

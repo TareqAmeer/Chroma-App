@@ -117,7 +117,17 @@ fn demosaic_cache_key(bytes: &[u8], demosaic_algo: &str) -> u64 {
 
 fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut, String> {
     let source = RawSource::new_from_slice(bytes);
-    let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
+    // Widening formats.rs::RAW_EXTS made this reachable in practice (bay/k25/ptx/some
+    // srf-sr2 variants aren't in rawler's decoder table at all — supported_extensions() is
+    // advertising, not a guarantee, see formats.rs's covers_rawler_supported test). Named and
+    // actionable rather than a bare "no decoder", since a user hitting this has no way to tell
+    // "corrupt file" from "format not implemented" otherwise.
+    let decoder = rawler::get_decoder(&source).map_err(|e| {
+        format!(
+            "the RAW decoder doesn't recognise this file ({e}). If it's a valid RAW, converting \
+             it to DNG with Adobe DNG Converter will open it."
+        )
+    })?;
     let params = RawDecodeParams::default();
     let metadata = decoder
         .raw_metadata(&source, &params)
@@ -190,10 +200,23 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
 
     let cfa_config = match &raw_image.photometric {
         RawPhotometricInterpretation::Cfa(config) => config.clone(),
-        other => return Err(format!("unsupported photometric interpretation: {other:?}")),
+        // The most likely real-world hit from widening RAW_EXTS: an already-demosaiced/linear
+        // DNG (iPhone ProRAW, a Foveon→DNG conversion, and similar). This pipeline needs raw
+        // sensor CFA data — there's no Bayer grid left to demosaic in a linear DNG. Named so it
+        // reads as "this file's kind isn't supported" rather than a bare debug enum dump.
+        other => {
+            return Err(format!(
+                "this is an already-demosaiced (linear) DNG — Chromasmith's RAW pipeline needs \
+                 sensor CFA data, not a rendered image ({other:?})"
+            ))
+        }
     };
     if !cfa_config.cfa.is_rgb() {
-        return Err(format!("CFA pattern '{}' is not RGB — PPG demosaic unavailable", cfa_config.cfa));
+        // Foveon (X3F, layered-not-mosaiced) and monochrome-sensor cameras both fail this check.
+        return Err(format!(
+            "Foveon/monochrome sensors aren't supported by the demosaic pipeline (CFA pattern '{}' is not RGB)",
+            cfa_config.cfa
+        ));
     }
 
     // 2) Camera white balance in Bayer space, LibRaw pre_mul convention: normalize the RGB
@@ -307,7 +330,26 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
             "mhc" => Algorithm::Mhc,
             other => return Err(format!("unknown CS_DEMOSAIC={other} (expected ahd|vng|mhc)")),
         };
-        let cfa_pattern = CfaPattern::bayer_rggb(); // confirmed RGGB via dump_cfa on this camera
+        // Was hardcoded to bayer_rggb() ("confirmed RGGB via dump_cfa on this camera") — safe
+        // while this app only handled Panasonic Bayer sensors, but with formats.rs::RAW_EXTS
+        // now covering ~30 makes that's silently wrong colour for any non-RGGB layout (most
+        // Fuji is GRBG/X-Trans, and BGGR/GBRG both exist). Derive from the file's OWN CFA
+        // (rawler's `cfa_config.cfa.name`, e.g. "RGGB"/"BGGR"/"GRBG"/"GBRG") instead of assuming.
+        // This diagnostic-only alternate path (CS_DEMOSAIC=ahd|vng|mhc) still can't do X-Trans —
+        // hard-error rather than silently demosaicing a 6x6 sensor as if it were 2x2 Bayer.
+        let cfa_pattern = match cfa_config.cfa.name.as_str() {
+            "RGGB" => CfaPattern::bayer_rggb(),
+            "BGGR" => CfaPattern::bayer_bggr(),
+            "GRBG" => CfaPattern::bayer_grbg(),
+            "GBRG" => CfaPattern::bayer_gbrg(),
+            other => {
+                return Err(format!(
+                    "CS_DEMOSAIC={demosaic_choice} doesn't support this sensor's CFA pattern \
+                     ('{other}') — only 2x2 Bayer RGGB/BGGR/GRBG/GBRG. Use the default PPG \
+                     demosaic (unset CS_DEMOSAIC) for this file."
+                ))
+            }
+        };
         let mut planar = vec![0f32; 3 * w * h]; // crate output is planar CHW (R,G,B planes)
         demosaic_fn(&pixels, w, h, &cfa_pattern, algo, &mut planar)
             .map_err(|e| format!("demosaic crate failed: {e}"))?;

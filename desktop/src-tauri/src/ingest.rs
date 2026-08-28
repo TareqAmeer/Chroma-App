@@ -117,20 +117,17 @@ fn ext_lower(p: &Path) -> String {
     p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase()
 }
 
-/// Media the app can actually open, mirroring library.rs's own extension lists. Sidecars are
-/// deliberately NOT here: they ride along with their photo rather than being importable alone.
+/// Media the app can actually open. Delegates to formats::media_kind (the single source of
+/// truth — see that module's doc comment) plus video, which media_kind doesn't classify.
+/// Sidecars are deliberately NOT here: they ride along with their photo rather than being
+/// importable alone.
 fn media_kind(ext: &str) -> Option<&'static str> {
-    match ext {
-        "rw2" | "raw" | "dng" | "cr2" | "cr3" | "nef" | "arw" | "orf" => Some("raw"),
-        "jpg" | "jpeg" => Some("jpeg"),
-        // iPhone photos come off a card as HEIC too — importing everything EXCEPT those would be
-        // a silent partial import, the worst possible failure for a tool whose job is not losing
-        // photos. library.rs lists them for the same reason.
-        "heic" | "heif" => Some("heic"),
-        "png" => Some("png"),
-        "tif" | "tiff" => Some("tiff"),
-        "mp4" | "mov" | "m4v" => Some("video"),
-        _ => None,
+    if crate::formats::is_video_ext(ext) {
+        return Some("video");
+    }
+    match crate::formats::media_kind(ext) {
+        "" => None,
+        k => Some(k),
     }
 }
 
@@ -180,7 +177,7 @@ fn capture_date(path: &str) -> Option<String> {
     // Both branches produce raw EXIF-format date STRINGS ("YYYY:MM:DD HH:MM:SS..."); this common
     // tail normalizes either one to "YYYY-MM-DD" — kept in one place so the two paths can't drift
     // into returning differently-shaped dates.
-    let raw = if matches!(ext.as_str(), "rw2" | "raw" | "dng" | "cr2" | "cr3" | "nef" | "arw" | "orf") {
+    let raw = if crate::formats::is_raw_ext(&ext) {
         raw_exif_date_fast(path)
     } else {
         crate::library::read_meta_public(path).date

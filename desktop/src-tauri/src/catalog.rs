@@ -697,18 +697,17 @@ pub fn catalog_roots(state: tauri::State<CatalogState>) -> Result<Vec<CatalogRoo
 
 // ── Scan phase A: walk + stat + upsert, deletion tracking ──────────────────────────────────────
 
-/// Mirrors `library.rs`'s own extension lists (kept independent rather than imported — this
-/// module is designed to eventually run scans off the main thread without pulling in
-/// `library.rs`'s RAW-decode-heavy dependency surface).
+/// Delegates to formats::media_kind (the single source of truth). formats.rs is deliberately
+/// dependency-free (no rawler, no image crate), which is what satisfies the original objection
+/// here — this module can use it without pulling in library.rs's RAW-decode-heavy dependency
+/// surface, since formats.rs doesn't carry one.
 fn media_kind(ext: &str) -> Option<&'static str> {
-    match ext {
-        "rw2" | "raw" | "dng" | "cr2" | "cr3" | "nef" | "arw" | "orf" => Some("raw"),
-        "jpg" | "jpeg" => Some("jpeg"),
-        "heic" | "heif" => Some("heic"),
-        "png" => Some("png"),
-        "tif" | "tiff" => Some("tiff"),
-        "mp4" | "mov" | "m4v" => Some("video"),
-        _ => None,
+    if crate::formats::is_video_ext(ext) {
+        return Some("video");
+    }
+    match crate::formats::media_kind(ext) {
+        "" => None,
+        k => Some(k),
     }
 }
 

@@ -39,7 +39,20 @@ rayon = "1"
 base64 = "0.22"
 # Library browser: thumbnail generation (downsize + JPEG-encode both RAW-decoded buffers and
 # regular JPEG/PNG files) and a small non-crypto hash for the on-disk thumbnail cache key.
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
+image = { version = "0.25", default-features = false, features = [
+    "jpeg", "png", "tiff",
+    # Added for the desktop-only still-decode path (still_decode.rs) — EXR/HDR/TGA/DDS/QOI/FF/
+    # PNM*(pbm/pgm/ppm/pam)/BMP/ICO/GIF. Deliberately NOT adding "avif": it pulls in dav1d/ravif,
+    # and both macOS ImageIO and Chromium already decode AVIF natively (it stays in
+    # chromasmith-22.html's FMT_STILL_NATIVE bucket, handled by <img>, not Rust).
+    "bmp", "dds", "exr", "ff", "gif", "hdr", "ico", "pnm", "qoi", "tga", "webp",
+] }
+# JPEG XL. Pure Rust, no system libjxl. Already at 0.12.6 in Cargo.lock — pulled transitively via
+# rawler's DNG support — so this promotes an existing transitive dependency to a direct one
+# rather than adding anything new to the build. The "image" feature gives an image::ImageDecoder
+# impl (JxlDecoder), so JXL slots into still_decode.rs's normal `image::DynamicImage` path
+# instead of needing its own bespoke pixel-buffer handling.
+jxl-oxide = { version = "0.12", features = ["image"] }
 # Library browser: EXIF (camera/lens/date) for non-RAW files — rawler covers the RAWs.
 kamadak-exif = "0.5"
 # Native HTTP download for the Google Photos Picker's googleusercontent.com CDN, which the
