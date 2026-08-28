@@ -4544,13 +4544,17 @@
       mo.days.push(row);
     }
     const sortedYears = Array.from(years.keys()).sort((a, b) => b - a);
-    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span>`;
+    // ⚠️ The chevron carries its OWN data-chev-toggle marker and is a separate click target from
+    // the rest of the row (wired below) — expanding a year/month to see its children must never
+    // fire a catalog_query. It used to: one shared row.onclick did both unconditionally, so
+    // merely expanding "2025" to look at its months also queried and loaded every photo in all of
+    // 2025 (openCatalogView's limit:null result set, plus a getSidecarsBatch/getMetaBatch pass
+    // over every path) before the tree even finished opening — on a large library that reads as
+    // the whole app freezing just from browsing the tree.
+    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`;
     // toggleKey is the BARE year or "year:month" string dateExpanded is actually keyed by
     // (yOpen/mOpen below read dateExpanded.has(`${y}`) / has(`${y}:${m}`)) — deliberately NOT
-    // the same string as `scope` (which is the full "date:..." catalog_query scope): a row
-    // both expands AND navigates, and those are two different pieces of state that happened to
-    // look interchangeable until a year row's toggle silently used the wrong namespace and its
-    // chevron never rotated no matter how many times you clicked it.
+    // the same string as `scope` (which is the full "date:..." catalog_query scope).
     const row = (scope, toggleKey, label, count, hasChildren, open) => `
       <div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
         ${hasChildren ? chev(open) : '<span class="lib-tree-chev"></span>'}
@@ -4808,8 +4812,15 @@
     if (!el) return;
     if (!activity.visible) { el.innerHTML = ''; return; }
     const pct = Math.round(activityFrac() * 100);
+    // While the initial directory walk is still running, `total` is genuinely unknown (it's
+    // only known once the whole tree has been enumerated — see walk_root's own comment) — so
+    // there is nothing to show a percentage OF. Showing the running count instead ("Indexing…
+    // 4,213 found") is what actually answers "is this doing something or stuck", which a
+    // permanently-0% ring cannot.
     const label = activity.stage === 'done'
       ? (activity.kind === 'import' ? 'Imported' : 'Indexed') + (activity.total ? ` ${activity.total}` : '')
+      : activity.stage === 'walk' && !activity.total && activity.done
+      ? `Indexing… ${activity.done.toLocaleString()} found`
       : (STAGE_LABELS[activity.stage] || 'Working') + '…';
     let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative">
       <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>`;
@@ -5879,15 +5890,27 @@
       };
     }
     host.querySelectorAll('.lib-tree-row[data-date-scope]').forEach((row) => {
+      const toggleKey = row.dataset.dateToggle;
+      // Chevron: LOCAL state only — toggle which children are visible, re-render the sidebar
+      // from the counts already in memory (refreshCatalogCounts fetched them), and stop right
+      // there. No invoke, no catalog_query, no photo load — this is what makes "just looking at
+      // the tree" cheap regardless of how large the library is.
+      const chevEl = row.querySelector('[data-chev-toggle]');
+      if (chevEl && toggleKey) {
+        chevEl.onclick = (e) => {
+          e.stopPropagation();
+          if (dateExpanded.has(toggleKey)) dateExpanded.delete(toggleKey); else dateExpanded.add(toggleKey);
+          renderCollections();
+        };
+      }
+      // Row (label/count — anywhere but the chevron, which already stopped its own
+      // propagation): the actual "load these photos" action. Also EXPANDS (never collapses) the
+      // node so picking a year still reveals its months as a convenience, but that expansion is
+      // free — it's a re-render from data already in hand, not a second query — and collapsing
+      // stays the chevron's job alone so selecting a date can never surprise-close the tree.
       row.onclick = (e) => {
         e.stopPropagation();
-        const toggleKey = row.dataset.dateToggle;
-        // A year/month row both expands (to reveal its children) AND filters to that whole
-        // scope in the same click — identical to how the real folder tree's buildTreeNode
-        // handles a directory row (CLAUDE.md's own established pattern here, not a new one).
-        if (toggleKey) {
-          if (dateExpanded.has(toggleKey)) dateExpanded.delete(toggleKey); else dateExpanded.add(toggleKey);
-        }
+        if (toggleKey) dateExpanded.add(toggleKey);
         openCatalogView(row.dataset.dateScope);
       };
     });

@@ -671,7 +671,15 @@ struct WalkedFile {
 /// `index_destination` shape. `root_rel` is the root's own rel_path, used to compute each
 /// file's path relative to the VOLUME (stored in the DB) rather than relative to the root
 /// (which would break if two roots on the same volume overlapped).
-fn walk_root(volume_mount: &Path, root_rel: &str) -> Vec<WalkedFile> {
+/// `on_found` is called every 500 files (same cadence `scan_run`'s own upsert loop below uses)
+/// with the running count — the ONLY signal available before the walk finishes, since the total
+/// isn't known until then. Without this, a 300GB library's first scan produced ZERO progress
+/// events for the entire recursive stat pass: `scan_run` used to call `progress()` only after
+/// `walk_root` returned, so the activity pill didn't even appear until every directory had been
+/// enumerated — indistinguishable from the app being hung. Emitting a running count (not a
+/// percentage, which would need a total this phase genuinely doesn't have yet) matches ordinary
+/// progress-UX guidance for an unknown-total operation: show what's known instead of nothing.
+fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize)) -> Vec<WalkedFile> {
     let root_abs = volume_mount.join(root_rel);
     let mut out = Vec::new();
     let mut stack = vec![root_abs];
@@ -710,6 +718,9 @@ fn walk_root(volume_mount: &Path, root_rel: &str) -> Vec<WalkedFile> {
                 mtime,
                 sidecar_mtime: sidecar_mtime_of(&p),
             });
+            if out.len() % 500 == 0 {
+                on_found(out.len());
+            }
         }
     }
     out
@@ -774,7 +785,13 @@ pub fn scan_run(
         if !mount.is_dir() {
             continue; // volume not mounted — nothing to scan, not an error
         }
-        let files = walk_root(&mount, root_rel);
+        // Live count while the walk itself is still running (total unknown — see walk_root's
+        // own comment) — this is the event that makes the activity pill appear within a second
+        // or two of a scan starting, instead of only once the entire tree has been enumerated.
+        let mut walk_progress = |found: usize| {
+            progress(ScanProgress { phase: "walk".into(), done: found, total: 0, current: root_rel.clone() });
+        };
+        let files = walk_root(&mount, root_rel, &mut walk_progress);
         let total = files.len();
         progress(ScanProgress { phase: "walk".into(), done: 0, total, current: root_rel.clone() });
 
@@ -3650,6 +3667,41 @@ mod tests {
         let page2 = query_run(&conn, CatalogQuery::default()).unwrap();
         assert_eq!(page2.entries[0].path, "/Volumes/Archive 1/a.jpg", "path must reflect the NEW mount point");
         assert_eq!(page2.entries[0].id, page1.entries[0].id, "the photo's own id must be unchanged by a remount");
+    }
+
+    /// Before this test's fix, `scan_run` emitted its FIRST progress event only after the whole
+    /// recursive walk had finished — for a large library, that's a silent phase with no feedback
+    /// at all, indistinguishable from a hang. `walk_root` now reports a running count every 500
+    /// files as it goes; this proves that stream actually reaches `scan_run`'s own `progress`
+    /// closure, not just that walk_root's internal counter increments.
+    #[test]
+    fn scan_run_reports_progress_during_the_walk_not_only_after_it() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("walkprog");
+        for i in 0..1200 {
+            std::fs::write(dir.join(format!("p{i:04}.jpg")), b"x").unwrap();
+        }
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        let mut walk_events: Vec<(usize, usize)> = Vec::new(); // (done, total)
+        scan_run(
+            &conn,
+            Some(root.volume_id),
+            &mut |p| {
+                if p.phase == "walk" {
+                    walk_events.push((p.done, p.total));
+                }
+            },
+            &cancel,
+        )
+        .unwrap();
+        // At 1200 files and a 500-file cadence, the walk must report at least twice DURING
+        // enumeration (done=500, done=1000, both with total=0 — genuinely unknown mid-walk) plus
+        // the existing final done=0/total=<final count> event scan_run already emitted before
+        // this fix. Fewer than 2 mid-walk events means the callback isn't actually firing during
+        // the walk, which is the exact regression this test exists to catch.
+        let mid_walk = walk_events.iter().filter(|(done, total)| *done > 0 && *total == 0).count();
+        assert!(mid_walk >= 2, "expected >=2 in-progress walk events, got {walk_events:?}");
     }
 
     /// UPDATE, never DELETE: a file that vanishes from disk is marked `present = 0` so it drops
