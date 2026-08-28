@@ -2268,7 +2268,15 @@
       members.forEach((p) => state.dupeClusters.set(p, clusterId));
     });
     // Cross-folder registry mirrors the current view — a passive record only, never destructive.
-    Promise.all(paths.map((p) => invoke('registry_set_cmd', { name: 'duplicates', path: p, present: state.dupeClusters.has(p) }).catch(() => {})))
+    // ⚠️ ONE batched call, not one invoke() per photo. The per-path version (Promise.all over
+    // registry_set_cmd) measured at 29,663 IPC calls / ~47GB of registry re-reads / ~0.9 BILLION
+    // string comparisons on a real ~30k-photo folder — registry_set_cmd's own registry_read does
+    // a full parse of the whole list and a linear scan on EVERY call. registry_set_many does one
+    // read, one HashSet, one write for the whole batch.
+    const present = [], absent = [];
+    for (const p of paths) (state.dupeClusters.has(p) ? present : absent).push(p);
+    invoke('registry_set_many', { name: 'duplicates', present, absent })
+      .catch(() => {})
       .then(() => renderCollectionCounts());
     renderGrid();
   }
@@ -2276,10 +2284,12 @@
   // ── C3: Google-Photos-synced badge ────────────────────────────────────────────────────
   window.chromasmithRecordSynced = async (paths) => {
     if (!Array.isArray(paths)) return;
-    for (const p of paths) {
-      try { await invoke('registry_set_cmd', { name: 'gphotos', path: p, present: true }); } catch (e) { console.error('registry_set_cmd(gphotos)', e); }
-      state.syncedPaths.add(p);
-    }
+    // Was a serial await-in-loop (one invoke per path, awaited one at a time) — batched for the
+    // same reason as runDupeDetection above, and this one was strictly worse than parallel since
+    // it wasn't even concurrent.
+    try { await invoke('registry_set_many', { name: 'gphotos', present: paths, absent: [] }); }
+    catch (e) { console.error('registry_set_many(gphotos)', e); }
+    paths.forEach((p) => state.syncedPaths.add(p));
     renderCollectionCounts();
     renderGrid();
   };
@@ -2301,7 +2311,8 @@
       if (!gDir || path !== gDir) return;
       // Files living in the Google Photos import-download folder are by definition already
       // mirrored there — mark every photo in it as synced on open.
-      await Promise.all(entries.map((e) => invoke('registry_set_cmd', { name: 'gphotos', path: e.path, present: true }).catch(() => {})));
+      // Same batching fix as runDupeDetection's own comment — one call for the whole folder.
+      await invoke('registry_set_many', { name: 'gphotos', present: entries.map((e) => e.path), absent: [] }).catch(() => {});
       entries.forEach((e) => state.syncedPaths.add(e.path));
       renderCollectionCounts();
     } catch (e) { /* best-effort */ }
@@ -4448,7 +4459,10 @@
       cacheUsage = u;
       renderCollections();
       if (!_cacheWarnShown && u.budget_bytes > 0) {
-        const pct = Math.round(((u.offline_thumbs_bytes + u.decode_cache_bytes) / u.budget_bytes) * 100);
+        // Includes working_thumbs — the row below used to omit it entirely, so the number shown
+        // ("using ~1.1GB of 20GB") disagreed with what was actually on disk (that tier alone
+        // measured 1.2GB on a real ~30k-photo library) and made the warning threshold too.
+        const pct = Math.round(((u.offline_thumbs_bytes + u.decode_cache_bytes + u.working_thumbs_bytes) / u.budget_bytes) * 100);
         if (pct >= CACHE_WARN_PCT) {
           _cacheWarnShown = true;
           if (typeof toast === 'function') toast(`Approaching your ${fmtGB(u.budget_bytes)}GB cache budget (${pct}% used) — free up space in Drives`, false);
@@ -4465,10 +4479,13 @@
   /// looking for "why is this taking up space" would look first.
   function cacheUsageRowHtml() {
     if (!cacheUsage) return '';
-    const used = cacheUsage.offline_thumbs_bytes + cacheUsage.decode_cache_bytes;
+    // ⚠️ Was offline_thumbs + decode ONLY — the working-thumbnails tier (thumbnail/meta/phash
+    // cache) is real disk usage the pruner enforces a cap on, and omitting it here made this
+    // number actively misleading: it read "~1.1GB of 20GB" while that tier alone sat at 1.2GB.
+    const used = cacheUsage.offline_thumbs_bytes + cacheUsage.decode_cache_bytes + cacheUsage.working_thumbs_bytes;
     const pct = Math.min(100, Math.round((used / cacheUsage.budget_bytes) * 100));
     const nearFull = pct >= CACHE_WARN_PCT; // persistent visual cue alongside the one-shot toast
-    return `<div class="lib-coll-row" style="cursor:default" title="Offline thumbnails: ${fmtGB(cacheUsage.offline_thumbs_bytes)} GB (never auto-cleared) · Decode cache: ${fmtGB(cacheUsage.decode_cache_bytes)} GB (auto-managed)">
+    return `<div class="lib-coll-row" style="cursor:default" title="Offline thumbnails: ${fmtGB(cacheUsage.offline_thumbs_bytes)} GB (never auto-cleared) · Decode cache: ${fmtGB(cacheUsage.decode_cache_bytes)} GB (auto-managed) · Working thumbnails: ${fmtGB(cacheUsage.working_thumbs_bytes)} GB (auto-managed)">
         <span class="lib-coll-ic">${ic('drive', 13)}</span>
         <span class="lib-coll-lb" style="color:${nearFull ? 'var(--err,#e05454)' : 'var(--mut)'}">Using ${fmtGB(used)} of ${fmtGB(cacheUsage.budget_bytes)} GB${nearFull ? ' — approaching budget' : ''}</span>
       </div>

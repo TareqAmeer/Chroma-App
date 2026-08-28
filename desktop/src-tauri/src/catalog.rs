@@ -549,8 +549,29 @@ pub struct CatalogRoot {
     pub abs_path: String,
 }
 
+/// `anc` is an ancestor of (or equal to) `desc` as path SEGMENTS, not a string prefix — a bare
+/// `desc.starts_with(anc)` would wrongly match "PHOTOS2" against "PHOTOS". "" is the volume root
+/// and is an ancestor of everything.
+fn is_ancestor_rel(anc: &str, desc: &str) -> bool {
+    if anc.is_empty() || anc == desc {
+        return true;
+    }
+    desc.starts_with(anc) && desc.as_bytes().get(anc.len()) == Some(&b'/')
+}
+
 /// Registers a folder to be catalogued. Scanning is opt-in per root, never "the whole disk" —
 /// mirrors the existing Library's folder-tree model, just with an index behind it now.
+///
+/// ⚠️ Roots must not NEST on the same volume. `catalogRegisterFolder` (library-ui.js) calls this
+/// for every folder the user opens, so browsing <root>/2026 after already having <root> as a
+/// root used to insert BOTH — and scan_run walks every root, so nearly the whole library got
+/// enumerated and upserted TWICE per scan. Measured on a real ~30k-photo library: two roots
+/// (`PHOTOS` and `PHOTOS/2026`, the latter holding 29,541 of the 29,663 total files) turned one
+/// ~14s walk into ~28s, doubling the SELECT+INSERT traffic alongside it. If an ancestor root
+/// already exists, return IT instead of inserting a nested one; if the new root is itself an
+/// ancestor of existing roots, insert it and drop the now-redundant descendants — `photos` keys
+/// on (volume_id, rel_path), not root_id, so no photo row or its ratings/labels/keywords are
+/// affected either way.
 pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Result<CatalogRoot, String> {
     let p = PathBuf::from(path);
     if !p.is_dir() {
@@ -568,6 +589,28 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
         .unwrap_or(&canon_str)
         .trim_start_matches('/')
         .to_string();
+
+    let existing: Vec<(i64, String)> = conn
+        .prepare("SELECT id, rel_path FROM roots WHERE volume_id = ?1")
+        .map_err(|e| e.to_string())?
+        .query_map(params![volume_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    for (id, existing_rel) in &existing {
+        if is_ancestor_rel(existing_rel, &rel_path) {
+            // An ancestor (or itself) is already registered — return it unchanged, insert nothing.
+            let kind: String = conn.query_row("SELECT kind FROM roots WHERE id = ?1", params![id], |r| r.get(0)).map_err(|e| e.to_string())?;
+            let abs = if existing_rel.is_empty() { mount_point.clone() } else { format!("{mount_point}/{existing_rel}") };
+            return Ok(CatalogRoot { id: *id, volume_id, rel_path: existing_rel.clone(), kind, abs_path: abs });
+        }
+    }
+    let descendants: Vec<i64> = existing
+        .iter()
+        .filter(|(_, r)| is_ancestor_rel(&rel_path, r))
+        .map(|(id, _)| *id)
+        .collect();
+
     let kind = kind.unwrap_or_else(|| "originals".to_string());
     conn.execute(
         "INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, ?3, ?4)
@@ -575,6 +618,9 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
         params![volume_id, rel_path, kind, now_secs() as i64],
     )
     .map_err(|e| e.to_string())?;
+    for id in descendants {
+        conn.execute("DELETE FROM roots WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    }
     let id: i64 = conn
         .query_row(
             "SELECT id FROM roots WHERE volume_id = ?1 AND rel_path = ?2",
@@ -583,6 +629,29 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
         )
         .map_err(|e| e.to_string())?;
     Ok(CatalogRoot { id, volume_id, rel_path, kind, abs_path: canon_str })
+}
+
+/// Cleans up nested roots that already exist in a user's DB from before this fix (or from any
+/// path that could still race the check in add_root_run) — idempotent, safe to call every scan.
+/// See add_root_run's doc comment for why nested roots are a problem and why deleting a
+/// descendant root row is safe (no photo data is attached to a root).
+fn collapse_nested_roots(conn: &Connection) -> Result<(), String> {
+    let rows: Vec<(i64, i64, String)> = conn
+        .prepare("SELECT id, volume_id, rel_path FROM roots")
+        .map_err(|e| e.to_string())?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    for (id, volume_id, rel_path) in &rows {
+        let has_ancestor = rows
+            .iter()
+            .any(|(other_id, other_vol, other_rel)| other_id != id && other_vol == volume_id && is_ancestor_rel(other_rel, rel_path));
+        if has_ancestor {
+            conn.execute("DELETE FROM roots WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -685,13 +754,33 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
     let mut stack = vec![root_abs];
     while let Some(dir) = stack.pop() {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        for entry in rd.flatten() {
+        // Collected once per directory (not per file) so the .xmp lookup below is a HashMap hit
+        // instead of a second `stat` syscall per photo — see its comment. `file_type()` comes
+        // from readdir's own d_type on the platforms this app ships for, so the is_dir() check
+        // right after costs no extra syscall either, unlike the `Path::is_dir()` this replaced.
+        let entries: Vec<std::fs::DirEntry> = rd.flatten().collect();
+        // Sidecar mtimes for THIS directory, keyed by stem — built from the listing we already
+        // have, not a fresh stat per photo. Measured: on a real ~30k-photo library this turned
+        // ~29,663 failing `stat` calls (sidecar_mtime_of's old per-file probe, ~4.6s of the ~14s
+        // a walk cost) into zero extra syscalls, since every .xmp's existence and mtime are read
+        // off the SAME entries this loop already enumerated.
+        let mut xmp_mtimes: std::collections::HashMap<std::ffi::OsString, u64> = std::collections::HashMap::new();
+        for e in &entries {
+            let p = e.path();
+            if ext_lower(&p) == "xmp" {
+                if let Some(stem) = p.file_stem() {
+                    xmp_mtimes.insert(stem.to_os_string(), sidecar_mtime_of(&p));
+                }
+            }
+        }
+        for entry in &entries {
             let p = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
             if name.starts_with('.') {
                 continue;
             }
-            if p.is_dir() {
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or_else(|_| p.is_dir());
+            if is_dir {
                 stack.push(p);
                 continue;
             }
@@ -708,6 +797,15 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
+            // Equivalent to the old `sidecar_mtime_of(&photo_path.with_extension("xmp"))`: the
+            // sidecar's mtime, keyed by the photo's own file_stem — since `with_extension` only
+            // ever replaces the extension, the stem is unchanged, and both sides come from the
+            // SAME directory listing, so the comparison is exact. (A sidecar whose case differs
+            // from the photo's own stem, e.g. "Foo.RW2" + "foo.xmp", would not match here even
+            // though `with_extension` might on a case-insensitive filesystem — an edge case this
+            // app's own sidecar writer never produces, since it always writes the photo's exact
+            // stem.)
+            let sidecar_mtime = p.file_stem().and_then(|s| xmp_mtimes.get(s)).copied().unwrap_or(0);
             out.push(WalkedFile {
                 rel_path,
                 rel_dir,
@@ -716,7 +814,7 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
                 kind,
                 size,
                 mtime,
-                sidecar_mtime: sidecar_mtime_of(&p),
+                sidecar_mtime,
             });
             if out.len() % 500 == 0 {
                 on_found(out.len());
@@ -762,6 +860,9 @@ pub fn scan_run(
     let scan_gen: i64 = conn
         .query_row("SELECT COALESCE(MAX(scan_gen), 0) + 1 FROM photos", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
+    // Idempotent, cheap (a handful of roots, never thousands) — cleans up nested roots that
+    // predate add_root_run's own dedupe, or that slipped through it. See its doc comment.
+    collapse_nested_roots(conn)?;
     let mut roots_stmt = conn
         .prepare(
             "SELECT r.id, r.volume_id, r.rel_path, v.last_path
@@ -2773,6 +2874,15 @@ pub fn cache_usage() -> CacheUsage {
 /// a thumbnail exists for a file that's just been deleted — `offline_thumb_bytes` degrades
 /// gracefully either way (a missing file just reads as no thumbnail), but leaving the marker set
 /// would mean nothing ever regenerates it on a later `catalog_thumbnails` pass.
+///
+/// ⚠️ `working_thumbs` (`crate::library::cache_dir()`) is NOT a cache-only directory — it also
+/// holds the cross-folder smart-collection registries and export history (see
+/// `library::registry_path`'s doc comment). A `remove_dir_all` on the whole thing — what this
+/// used to do — deletes favorites/flags/rejects/duplicates/edited status/recents AND export
+/// history right along with the JPEGs, and this command is wired to a live "Free up space"
+/// button in the UI. `offline_thumbs`/`decode` hold no user data and keep the fast
+/// `remove_dir_all` path; only `working_thumbs` walks the directory and deletes file-by-file
+/// through `library::is_evictable_cache_file`.
 #[tauri::command]
 pub fn clear_cache_tier(tier: String, state: tauri::State<CatalogState>) -> Result<u64, String> {
     let dir = match tier.as_str() {
@@ -2781,9 +2891,28 @@ pub fn clear_cache_tier(tier: String, state: tauri::State<CatalogState>) -> Resu
         "working_thumbs" => crate::library::cache_dir(),
         other => return Err(format!("unknown cache tier: {other}")),
     };
-    let freed = dir_size_recursive(&dir);
-    std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let freed = if tier == "working_thumbs" {
+        let mut freed = 0u64;
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for entry in rd.flatten() {
+                let name = entry.file_name();
+                if !crate::library::is_evictable_cache_file(&name.to_string_lossy()) {
+                    continue; // registries / export history — never touched by this tier
+                }
+                if let Ok(m) = entry.metadata() {
+                    if m.is_file() && std::fs::remove_file(entry.path()).is_ok() {
+                        freed += m.len();
+                    }
+                }
+            }
+        }
+        freed
+    } else {
+        let freed = dir_size_recursive(&dir);
+        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        freed
+    };
     if tier == "offline_thumbs" {
         if let Ok(conn) = state.conn.lock() {
             let _ = conn.execute("UPDATE photos SET thumb = 0", []);
@@ -3591,6 +3720,77 @@ mod tests {
         let _ = crate::platform::set_file_mtime(path, unix_secs);
     }
 
+    // ── Nested-root dedupe (is_ancestor_rel / add_root_run / collapse_nested_roots) ─────────
+
+    #[test]
+    fn is_ancestor_rel_is_segment_aware_not_a_string_prefix() {
+        assert!(is_ancestor_rel("", "PHOTOS"), "empty (volume root) is an ancestor of everything");
+        assert!(is_ancestor_rel("PHOTOS", "PHOTOS"), "a path is its own ancestor");
+        assert!(is_ancestor_rel("PHOTOS", "PHOTOS/2026"));
+        assert!(is_ancestor_rel("PHOTOS", "PHOTOS/2026/08"));
+        assert!(!is_ancestor_rel("PHOTOS", "PHOTOS2"), "must not match on a bare string prefix");
+        assert!(!is_ancestor_rel("PHOTOS/2026", "PHOTOS"), "wrong direction");
+        assert!(!is_ancestor_rel("PHOTOSA", "PHOTOSB"));
+    }
+
+    #[test]
+    fn add_root_run_returns_the_existing_ancestor_instead_of_nesting() {
+        let conn = temp_db();
+        let root = scratch_photos_dir("nest_anc");
+        std::fs::create_dir_all(root.join("2026")).unwrap();
+        let outer = add_root_run(&conn, &root.to_string_lossy(), None).unwrap();
+        let inner = add_root_run(&conn, &root.join("2026").to_string_lossy(), None).unwrap();
+        assert_eq!(inner.id, outer.id, "opening a subfolder of an already-registered root must return the SAME root, not a new nested one");
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM roots WHERE volume_id = ?1", params![outer.volume_id], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "must not have inserted a second, nested root row");
+    }
+
+    #[test]
+    fn add_root_run_registering_an_ancestor_after_a_descendant_collapses_to_one() {
+        let conn = temp_db();
+        let root = scratch_photos_dir("nest_desc");
+        std::fs::create_dir_all(root.join("2026")).unwrap();
+        let inner = add_root_run(&conn, &root.join("2026").to_string_lossy(), None).unwrap();
+        let outer = add_root_run(&conn, &root.to_string_lossy(), None).unwrap();
+        assert_ne!(inner.id, outer.id, "the outer root is a genuinely new row here");
+        let remaining: Vec<String> = conn
+            .prepare("SELECT rel_path FROM roots WHERE volume_id = ?1").unwrap()
+            .query_map(params![outer.volume_id], |r| r.get(0)).unwrap()
+            .collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(remaining, vec![outer.rel_path.clone()], "registering the ancestor must drop the now-redundant descendant");
+    }
+
+    #[test]
+    fn collapse_nested_roots_cleans_up_rows_already_in_the_db_and_keeps_photos() {
+        let conn = temp_db();
+        let root = scratch_photos_dir("nest_collapse");
+        std::fs::create_dir_all(root.join("2026")).unwrap();
+        std::fs::write(root.join("2026/a.jpg"), b"x").unwrap();
+        // Insert both roots DIRECTLY (bypassing add_root_run's own dedupe) to simulate rows that
+        // predate this fix.
+        let outer = add_root_run(&conn, &root.to_string_lossy(), None).unwrap();
+        let nested_rel = format!("{}/2026", outer.rel_path);
+        conn.execute(
+            "INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, 'originals', 0)",
+            params![outer.volume_id, nested_rel],
+        ).unwrap();
+        let before: i64 = conn.query_row("SELECT COUNT(*) FROM roots WHERE volume_id = ?1", params![outer.volume_id], |r| r.get(0)).unwrap();
+        assert_eq!(before, 2, "test setup must actually create a nested pair");
+
+        collapse_nested_roots(&conn).unwrap();
+
+        let after: i64 = conn.query_row("SELECT COUNT(*) FROM roots WHERE volume_id = ?1", params![outer.volume_id], |r| r.get(0)).unwrap();
+        assert_eq!(after, 1, "the nested descendant must be gone");
+        let remaining: String = conn.query_row("SELECT rel_path FROM roots WHERE volume_id = ?1", params![outer.volume_id], |r| r.get(0)).unwrap();
+        assert_eq!(remaining, outer.rel_path);
+
+        // scan_run calls collapse_nested_roots itself — a photo under the collapsed root must
+        // still be found and counted, proving no data was lost by deleting the roots row.
+        let cancel = AtomicBool::new(false);
+        let r = scan_run(&conn, Some(outer.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r.added, 1);
+    }
+
     /// The frontend contract, mechanically enforced: every field `library::DirEntry` has, a
     /// `CatalogEntry` must also have (by JSON key), so catalog rows drop straight into
     /// `state.entries` and the existing grid — virtualization, selection, drag, sort — works
@@ -3702,6 +3902,28 @@ mod tests {
         // the walk, which is the exact regression this test exists to catch.
         let mid_walk = walk_events.iter().filter(|(done, total)| *done > 0 && *total == 0).count();
         assert!(mid_walk >= 2, "expected >=2 in-progress walk events, got {walk_events:?}");
+    }
+
+    /// walk_root's sidecar lookup was rewritten from a per-file `stat` (sidecar_mtime_of on
+    /// `photo_path.with_extension("xmp")`) into a per-directory HashMap built off the SAME
+    /// read_dir listing — must produce byte-identical sidecar_mtime values, including for a
+    /// second photo with NO sidecar (0) and a directory with a `.xmp` that has no matching photo
+    /// at all (must not crash or attribute to the wrong stem).
+    #[test]
+    fn walk_root_sidecar_lookup_matches_the_old_per_file_stat_behavior() {
+        let dir = scratch_photos_dir("walk_sidecar");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("a.xmp"), b"<xmp/>").unwrap();
+        std::fs::write(dir.join("b.jpg"), b"y").unwrap(); // no sidecar
+        std::fs::write(dir.join("orphan.xmp"), b"<xmp/>").unwrap(); // sidecar with no matching photo
+        let mut events = 0usize;
+        let files = walk_root(&dir, "", &mut |_| { events += 1; });
+        let a = files.iter().find(|f| f.name == "a.jpg").expect("a.jpg present");
+        let b = files.iter().find(|f| f.name == "b.jpg").expect("b.jpg present");
+        assert!(a.sidecar_mtime > 0, "a.jpg has a real sidecar and must get a nonzero mtime");
+        assert_eq!(b.sidecar_mtime, 0, "b.jpg has no sidecar and must read as 0, matching the old stat-miss behavior");
+        assert_eq!(files.len(), 2, "the orphan .xmp and its own non-media extension must not produce a bogus WalkedFile");
+        let _ = events;
     }
 
     /// UPDATE, never DELETE: a file that vanishes from disk is marked `present = 0` so it drops

@@ -10,34 +10,13 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const IMAGE_EXTS: &[&str] = &[
-    "rw2", "raw", "dng", "cr2", "cr3", "nef", "arw", "orf", "jpg", "jpeg", "png", "tif", "tiff",
-    // HEIC/HEIF: every iPhone photo. These were absent, so an iPhone shoot did not appear in the
-    // Library AT ALL — not as a broken thumbnail, simply missing, which reads as "the folder is
-    // empty" rather than as a missing decoder. The editor could always open them (WKWebView hands
-    // HEIC to ImageIO), so the Library was the only thing standing in the way.
-    "heic", "heif",
-];
-const HEIC_EXTS: &[&str] = &["heic", "heif"];
-const RAW_EXTS: &[&str] = &["rw2", "raw", "dng", "cr2", "cr3", "nef", "arw", "orf"];
-// Same three extensions chromasmith-22.html's VID_EXT_RE accepts for video grading — kept in
-// sync deliberately so a clip the Library lists is always one the editor can actually open.
-const VIDEO_EXTS: &[&str] = &["mp4", "mov", "m4v"];
+// Extension lists live in formats.rs (the single source of truth, mirrored against
+// chromasmith-22.html's FMT_* registry — see that module's doc comment). Re-exported here so
+// existing call sites in this file keep working unchanged.
+use crate::formats::{is_heic_ext, is_image_ext, is_raw_ext, is_video_ext, media_kind};
 
 fn ext_lower(path: &Path) -> String {
     path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase()
-}
-fn is_image_ext(ext: &str) -> bool {
-    IMAGE_EXTS.contains(&ext)
-}
-fn is_raw_ext(ext: &str) -> bool {
-    RAW_EXTS.contains(&ext)
-}
-fn is_heic_ext(ext: &str) -> bool {
-    HEIC_EXTS.contains(&ext)
-}
-fn is_video_ext(ext: &str) -> bool {
-    VIDEO_EXTS.contains(&ext)
 }
 
 /// EXIF orientation (1/3/6/8) for a RAW, read the same way raw_decode.rs does for the full
@@ -739,7 +718,7 @@ fn read_meta(path: &str) -> PhotoMeta {
             model: if md.model.is_empty() { None } else { Some(md.model.trim().to_string()) },
             lens: md.exif.lens_model.clone()
                 .or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone()))
-                .or_else(|| std::fs::read(path).ok().and_then(|b| crate::lens_correct::exif_lens_model_fallback(&b))),
+                .or_else(|| crate::lens_correct::exif_lens_model_fallback_path(Path::new(path))),
             date: md.exif.date_time_original.clone(),
             iso: md.exif.iso_speed_ratings.map(|v| v as u32),
             shutter: md.exif.exposure_time.as_ref().map(|r| fmt_shutter(ratio(r))),
@@ -1450,6 +1429,35 @@ fn registry_set(name: &str, path: &str, present_target: bool) {
     }
 }
 
+/// Batched form of `registry_set_cmd` — the whole reason it exists is the O(n²) it replaces.
+/// The frontend used to call `registry_set_cmd` once PER PHOTO (`Promise.all(paths.map(...))` in
+/// library-ui.js's runDupeDetection/markFolderSyncedIfGphotosDownloads), and every single one of
+/// those calls independently did registry_read (parse the WHOLE registry file) + a linear
+/// `.iter().any()` scan + a full registry_write. Measured on a real ~30k-photo library with a
+/// ~29k-entry duplicates registry: 29,663 IPC calls, ~47GB of file reads, ~0.9 BILLION string
+/// comparisons — on every single folder open. This does one read, one HashSet, one write.
+#[tauri::command]
+pub fn registry_set_many(name: String, present: Vec<String>, absent: Vec<String>) -> Result<(), String> {
+    if !matches!(name.as_str(), "duplicates" | "gphotos") {
+        return Err(format!("registry_set_many: unknown registry '{name}'"));
+    }
+    let mut set: std::collections::HashSet<String> = registry_read(&name).into_iter().collect();
+    let before: std::collections::HashSet<String> = set.clone();
+    for p in present {
+        set.insert(p);
+    }
+    for p in &absent {
+        set.remove(p);
+    }
+    if set == before {
+        return Ok(()); // membership genuinely unchanged — skip the write, not just the count
+    }
+    let mut list: Vec<String> = set.into_iter().collect();
+    list.sort();
+    registry_write(&name, &list);
+    Ok(())
+}
+
 // ── Export/version history ────────────────────────────────────────────────────────────────
 // Recipe-only, not pixel copies: each successful export appends {ts, version, recipe} for that
 // photo. `recipe` is the same base64 FX-snapshot JSON already used by the XMP sidecar/undo
@@ -1820,32 +1828,58 @@ pub fn trash_file(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// `cache_dir()` holds two very different kinds of file: generated, regenerable cache entries
+/// (thumbnail/meta/phash JPEGs and JSON), and hand-maintained USER DATA that happens to live in
+/// the same directory (the cross-folder smart-collection registries, `registry_path` above, and
+/// export history) — favorites, flags, rejects, duplicates, edited status, recents, export
+/// history. Both `prune_caches` below and `clear_cache_tier("working_thumbs")` (catalog.rs) used
+/// to `remove_dir_all`/age-sweep the WHOLE directory with no distinction — a real, reachable
+/// data-loss bug (clear_cache_tier is wired to a UI button today). Denylist first (explicit,
+/// short, and fails closed — an unrecognized name is treated as NOT evictable rather than
+/// guessed at), then an allowlist of every shape this file actually generates.
+pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
+    if name.ends_with("_registry.json") || name == "export_history.json" {
+        return false;
+    }
+    name.ends_with(".jpg") || name.ends_with(".meta.json") || name.ends_with(".phash.json") || name.ends_with(".meta4.json")
+}
+
 /// Launch-time cache pruning — both cache dirs were unbounded (thumbnails ~50-150KB each,
 /// decode-cache JPEGs 5-15MB each; stale mtime/recipe keys accumulate forever since keys change
-/// whenever the source file or its RAW-stage settings do). Cap each dir and evict oldest-mtime
-/// first. Called once from main()'s setup on a background thread — never blocks startup.
+/// whenever the source file or its RAW-stage settings do). Cap each dir and evict least-
+/// recently-ACCESSED first (falls back to modified time on a filesystem without atime tracking).
+/// Called once from main()'s setup on a background thread — never blocks startup.
 pub fn prune_caches() {
-    const THUMB_CAP: u64 = 500 * 1024 * 1024; // 500MB
+    // ⚠️ Measured against a real ~30k-photo library before raising this: cache_dir() (thumbnail
+    // + .meta.json + .phash.json) sat at 1.2GB / 91,873 files — well over the OLD 500MB cap,
+    // which would have deleted ~700MB of it on every single prune, forcing every one of those
+    // files to be regenerated (including the RAW metadata read this session's B fix targets)
+    // over and over. 6GB + the 14GB decode cap below matches the 20GB the cache-usage UI already
+    // advertises, and scales to a ~100k-photo library without thrashing.
+    const THUMB_CAP: u64 = 6 * 1024 * 1024 * 1024; // 6GB
     // Raised from 2GB to 14GB (library-catalog plan's cache-budget split: ~6GB never-pruned
     // offline thumbnails + ~14GB LRU full-size decodes, out of a 20GB total). This tier already
     // does exactly what "recent edits open instantly" needs — a full-resolution decoded JPEG
     // keyed on path+mtime+size+recipe_key (decode_cache_key) — it just needed headroom to hold
     // more than a couple hundred RAWs at once. LRU eviction policy is unchanged, still oldest-
-    // mtime-first; only the ceiling moved.
+    // access-first; only the ceiling moved.
     const DECODE_CAP: u64 = 14 * 1024 * 1024 * 1024; // 14GB
     for (dir, cap) in [(cache_dir(), THUMB_CAP), (decode_cache_dir(), DECODE_CAP)] {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = rd
             .filter_map(|e| e.ok())
             .filter_map(|e| {
+                let name = e.file_name();
+                if !is_evictable_cache_file(&name.to_string_lossy()) { return None; }
                 let m = e.metadata().ok()?;
                 if !m.is_file() { return None; }
-                Some((m.modified().ok()?, m.len(), e.path()))
+                let when = m.accessed().or_else(|_| m.modified()).ok()?;
+                Some((when, m.len(), e.path()))
             })
             .collect();
         let total: u64 = files.iter().map(|f| f.1).sum();
         if total <= cap { continue }
-        files.sort_by_key(|f| f.0); // oldest first
+        files.sort_by_key(|f| f.0); // least-recently-accessed first
         let mut freed = 0u64;
         for (_, len, p) in files {
             if total - freed <= cap { break }

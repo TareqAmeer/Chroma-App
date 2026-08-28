@@ -26,6 +26,7 @@ fn dist_dir() -> PathBuf {
 
 mod platform;
 mod lens_correct;
+mod formats;
 mod library;
 mod raw_decode;
 mod arcface;
@@ -1629,6 +1630,7 @@ fn main() {
             library::backfill_edited_registry,
             library::phash_batch,
             library::registry_set_cmd,
+            library::registry_set_many,
             library::get_decode_cache,
             library::save_decode_cache,
             library::get_lr_thumb,
@@ -1752,10 +1754,16 @@ fn main() {
 
             // Prune unbounded caches (thumbnails/decode JPEGs) in the background — see
             // library::prune_caches for the caps. Never blocks startup.
-            // TEMP DISABLED: added today, only new code touching the thumbnail cache dir;
-            // suspected of racing get_thumbnail's own reads/writes to the same directory right
-            // at startup (the exact moment thumbnails were reported broken). Re-enable once
-            // thumbnail loading is confirmed fixed without it.
+            // STILL DISABLED — but for a narrower reason now. Its data-loss bug (deleting the
+            // favorites/flags/rejects/duplicates/edited/recents registries and export history,
+            // which live in the same directory) and its too-small 500MB cap (measured thrashing
+            // a real ~30k-photo library's 1.2GB working set on every prune) are both fixed —
+            // see is_evictable_cache_file and the raised THUMB_CAP. What's NOT re-verified is
+            // the ORIGINAL concern this comment recorded: a race with get_thumbnail's own reads/
+            // writes to the same directory right at startup. Re-enable once that's confirmed
+            // separately (e.g. delaying the spawn, or auditing get_thumbnail's write path for
+            // TOCTOU against a concurrent prune) — don't flip this on as a side effect of an
+            // unrelated fix.
             // std::thread::spawn(library::prune_caches);
 
             let open_item =
