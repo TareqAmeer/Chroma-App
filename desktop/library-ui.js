@@ -2480,7 +2480,11 @@
         entries = await invoke('list_dir', { path });
         _treeListCache.set(path, entries); // opening a folder is the natural "refresh its listing" moment
       }
-      catalogRegisterFolder(path); // fire-and-forget — see the function's own comment
+      // Still fire-and-forget for ordinary browsing (nobody here awaits it) — but the promise is
+      // captured on `window` so the cold-boot sequence's one-time restore of the last folder can
+      // await JUST this one, without this call site itself needing to know or care whether it's
+      // being called during boot or from an ordinary click.
+      window._lastCatalogRegisterPromise = catalogRegisterFolder(path);
     } catch (e) {
       grid.innerHTML = `<div id="lib-empty">Can't read this folder.</div>`;
       return;
@@ -4886,13 +4890,20 @@
   //      incremental (mtime-keyed) on the Rust side; this stops the redundant tree walk.
   const _catalogRegistered = new Set();
   const _catalogScannedVolumes = new Set();
+  /// Returns the scan promise (previously fire-and-forget with no return value at all) so the
+  /// app's own cold-boot sequence can await JUST the scan — not the background thumbnail/focus/
+  /// hash phases behind it, which stay genuinely backgrounded — before revealing the app. See
+  /// the boot-splash wiring at the bottom of this file for why: those phases used to hide before
+  /// the actual indexing had finished, so the app looked ready and then immediately felt broken.
+  /// Every other caller keeps working exactly as before; a returned promise nobody awaits is
+  /// still fire-and-forget.
   function catalogRegisterFolder(path) {
-    if (LIBTEST) return; // no real catalog backend to hit in the harness
+    if (LIBTEST) return Promise.resolve(); // no real catalog backend to hit in the harness
     for (const seen of _catalogRegistered) {
-      if (path === seen || path.startsWith(seen.endsWith('/') ? seen : seen + '/')) return;
+      if (path === seen || path.startsWith(seen.endsWith('/') ? seen : seen + '/')) return Promise.resolve();
     }
     _catalogRegistered.add(path);
-    invoke('catalog_add_root', { path, kind: null })
+    return invoke('catalog_add_root', { path, kind: null })
       .then((root) => {
         if (!root || _catalogScannedVolumes.has(root.volume_id)) return false;
         _catalogScannedVolumes.add(root.volume_id);
@@ -5053,11 +5064,35 @@
     window.libtestShowQuickLook = (path) => showQuickLook(path);
   }
 
+  /// Mirrors a catalog-scan progress event onto the BOOT SPLASH specifically — separate from the
+  /// ordinary activity pill, which only exists once the app's own chrome has rendered. A no-op
+  /// once `#boot-splash` is gone (the common case: every scan after the first one during a
+  /// session), so this costs nothing outside the one moment it exists for.
+  function updateBootSplashProgress(p) {
+    const wrap = document.getElementById('boot-splash-progress');
+    if (!wrap) return;
+    if (typeof window.bumpBootSplashWatchdog === 'function') window.bumpBootSplashWatchdog(8000);
+    wrap.style.display = 'flex';
+    const spinner = document.getElementById('boot-splash-spinner');
+    if (spinner) spinner.style.display = 'none'; // the progress bar IS the activity indicator now
+    const bar = document.getElementById('boot-splash-bar');
+    const label = document.getElementById('boot-splash-label');
+    const stageLabel = STAGE_LABELS[p.phase] || 'Indexing';
+    if (p.total > 0) {
+      if (bar) bar.style.width = Math.min(100, Math.round((p.done / p.total) * 100)) + '%';
+      if (label) label.textContent = `${stageLabel}… ${p.done.toLocaleString()} / ${p.total.toLocaleString()}`;
+    } else {
+      // Total genuinely unknown yet (the walk phase's own live count, see catalog.rs's
+      // walk_root comment) — show the running count, not a percentage that would just read 0%.
+      if (label) label.textContent = p.done > 0 ? `${stageLabel}… ${p.done.toLocaleString()} found` : `${stageLabel}…`;
+    }
+  }
   function wireActivityListeners() {
     if (!window.__TAURI__ || !window.__TAURI__.event) return; // LIBTEST's mock listen() is a harmless no-op
     window.__TAURI__.event.listen('catalog-scan', (ev) => {
       const p = ev.payload || {};
       activityUpdate('catalog', { stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
+      updateBootSplashProgress(p);
       if (p.phase === 'done') refreshCatalogCounts();
     }).catch(() => {});
     window.__TAURI__.event.listen('ingest-progress', (ev) => {
@@ -6297,6 +6332,17 @@
     // full-window state, not a moment earlier.
     toggleLibrary().then(async () => {
       toggleExpandedView(true);
+      // ⚠️ Wait for the actual catalog SCAN (not just the folder listing toggleLibrary's own
+      // promise already covers) before doing anything else. openFolder (called from inside
+      // toggleLibrary, above) kicks off catalogRegisterFolder — historically fire-and-forget —
+      // and stashes its promise on window._lastCatalogRegisterPromise once it settles into a
+      // real invoke() chain. Without this await, the splash used to hide as soon as the folder's
+      // file LISTING was ready (fast), while the actual indexing work (the walk + metadata read
+      // that this whole session's fixes are about) kept running invisibly behind an app that
+      // already looked ready — which is exactly what made it look "stuck" once you tried to use
+      // it. The progress bar wired into updateBootSplashProgress (this file, wireActivityListeners)
+      // is what the user sees while this await is in flight.
+      if (window._lastCatalogRegisterPromise) { try { await window._lastCatalogRegisterPromise; } catch (e) {} }
       // Reopen whatever photo was open in the editor at last quit — LS_LAST_PATH is written by
       // openInEditorInner every time a photo actually opens. A missing/moved file (deleted since
       // last launch) fails read_file_bytes and just leaves the empty-state screen, same as any

@@ -1045,8 +1045,19 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)">
     Chroma<span style="color:#d4903a;text-shadow:none">smith</span>
   </div>
-  <div style="width:22px;height:22px;border:2px solid rgba(212,144,58,.25);border-top-color:#d4903a;
+  <div id="boot-splash-spinner" style="width:22px;height:22px;border:2px solid rgba(212,144,58,.25);border-top-color:#d4903a;
     border-radius:50%;animation:boot-splash-spin .8s linear infinite"></div>
+  <!-- Indexing progress — hidden by default (a quick "nothing to scan" launch never shows it,
+       so the ordinary case still looks like the plain spinner it always was). desktop-native.js's
+       catalog-scan listener reveals this and fills it in only once real progress arrives, so a
+       large first-time library scan reads as "the app is working," not "the app is stuck" —
+       see that listener's own comment for why the splash used to hide before scanning finished. -->
+  <div id="boot-splash-progress" style="display:none;flex-direction:column;align-items:center;gap:8px;width:220px">
+    <div style="width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden">
+      <div id="boot-splash-bar" style="height:100%;width:0%;background:#d4903a;transition:width .25s ease"></div>
+    </div>
+    <div id="boot-splash-label" style="font-size:11px;color:#9a968c;font-variant-numeric:tabular-nums"></div>
+  </div>
 </div>
 <style>@keyframes boot-splash-spin{to{transform:rotate(360deg)}}</style>
 <script>
@@ -1055,17 +1066,22 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
 // covering the page indefinitely. desktop-native.js overrides this by calling
 // hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
 // ISN'T the Tauri shell), this inline fallback is what removes the splash.
-window.hideBootSplash=function(){const s=document.getElementById('boot-splash');if(!s)return;s.style.opacity='0';setTimeout(()=>s.remove(),400);};
+window.hideBootSplash=function(){const s=document.getElementById('boot-splash');if(!s)return;if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}s.style.opacity='0';setTimeout(()=>s.remove(),400);};
 // Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
 // this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
 // would otherwise leave the splash on screen forever.
 if(!window.__TAURI__)window.hideBootSplash();
-// Safety net: if library-ui.js's own hide call (after its async open+expand settles) never
-// fires — an unexpected exception in that chain, a folder-picker dialog that never resolves,
-// anything — this splash must not be able to permanently block the entire app behind a
-// spinner forever. Whichever fires first wins; hideBootSplash() itself is a no-op once the
-// element's already gone.
-setTimeout(()=>window.hideBootSplash(),6000);
+// Safety net, now a RESETTABLE watchdog rather than one flat deadline. A flat timeout defeats
+// the whole point of showing indexing progress: a real first-time scan of a large library can
+// legitimately take longer than any single fixed number picked in advance, so a flat deadline
+// either hides the splash mid-scan (the original "app looks ready but isn't" bug this exists to
+// fix) or has to be set so generously it stops protecting against a genuinely stuck launch at
+// all. library-ui.js's catalog-scan listener calls bumpBootSplashWatchdog() on every progress
+// event it receives, pushing the deadline forward — so the splash stays up for as long as real,
+// visible progress keeps arriving, and only force-hides if progress genuinely STALLS for the
+// grace period (an unexpected exception, a folder-picker dialog that never resolves, anything).
+window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>window.hideBootSplash(),graceMs||8000);};
+window.bumpBootSplashWatchdog(6000); // initial grace period before any progress event has arrived yet
 </script>
 <div id="status-cap"></div>
 <header>
@@ -4113,7 +4129,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-28a';
+const BUILD='2026-08-29a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
