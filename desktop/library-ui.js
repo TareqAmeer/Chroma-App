@@ -4921,12 +4921,26 @@
   /// left the grid showing real data. `_catalogBgRunning` just skips overlap on rapid repeated
   /// folder-opens — nothing is lost by skipping, since the rows a skipped run would have picked
   /// up (thumb=0 / focus_at stale) are still exactly where the NEXT run will find them.
+  /// Repeatedly invokes catalog_thumbnails (now one 32-item batch per call — see thumbnail_run's
+  /// own comment) with a real pacing delay between calls, instead of a single invoke() that used
+  /// to loop Rust-side until the ENTIRE backlog was clear. Measured before this change: ~11
+  /// minutes of unbroken parallel decoding for ~27,000 newly-imported photos, competing with the
+  /// interactive grid and everything else for the whole duration. An ordinary relaunch with
+  /// nothing new still costs exactly one invoke() (thumb=0 candidate set is empty, has_more is
+  /// false immediately) — this only changes the shape of what happens when there's real,
+  /// genuinely new work to do, not whether there's any work at all.
+  function drainCatalogThumbnails() {
+    return invoke('catalog_thumbnails').then((r) => {
+      if (!r || !r.has_more) return;
+      return new Promise((resolve) => setTimeout(resolve, 200)).then(drainCatalogThumbnails);
+    });
+  }
   let _catalogBgRunning = false;
   function catalogRunBackgroundPhases() {
     if (LIBTEST || _catalogBgRunning) return;
     _catalogBgRunning = true;
     invoke('catalog_stack')
-      .then(() => invoke('catalog_thumbnails'))
+      .then(() => drainCatalogThumbnails())
       .then(() => invoke('catalog_focus'))
       // Hashing a NEW file is a bounded one-time cost (hash_run only touches unhashed/changed-
       // mtime rows), same shape as thumbnails/focus — safe to auto-chain. Re-verifying every

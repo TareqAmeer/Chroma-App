@@ -3182,6 +3182,10 @@ fn thumbnail_bytes_for(path: &str) -> Result<Vec<u8>, String> {
 #[derive(Serialize, Clone, Default)]
 pub struct ThumbResult {
     pub generated: usize,
+    /// True if this batch was full (32 items) — the JS-side pacer uses this to decide whether to
+    /// schedule another paced call or stop, without a second query.
+    #[serde(default)]
+    pub has_more: bool,
 }
 
 /// Same chunked/resumable/offline-safe shape as the other phases. Video is excluded from the
@@ -3189,56 +3193,70 @@ pub struct ThumbResult {
 /// it here at all (CLAUDE.md's own note: the `image` crate can't read MP4, and a real video
 /// thumbnail needs the WebView's own mediabunny pipeline), so attempting it every scan would be
 /// pure waste rather than a retryable transient failure.
+///
+/// ⚠️ Does exactly ONE batch (`ThumbResult.has_more` tells the caller whether to call again),
+/// not a `loop` that drains the whole backlog before returning. The candidate set is already
+/// correctly filtered to `thumb = 0` — an ordinary relaunch with nothing new does zero work, as
+/// intended — but a genuinely large first-time import (thousands of new files) used to run this
+/// as one unbroken invoke() burning every rayon thread for as long as it took to clear the whole
+/// backlog (measured: ~11 minutes for ~27,000 newly-added RAWs), competing with the interactive
+/// grid and everything else for the entire duration. One batch per call lets `catalog_thumbnails`
+/// (below) be re-invoked with a real pacing delay between calls instead, so this phase's own
+/// existence never monopolizes the CPU continuously, regardless of how large the backlog is.
 pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ThumbResult, String> {
     let mut result = ThumbResult::default();
-    loop {
-        if cancel.load(Ordering::Relaxed) {
-            break;
-        }
-        let mut stmt = conn
-            .prepare(
-                "SELECT p.id, p.rel_path, v.last_path, v.is_local
-                 FROM photos p JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.thumb = 0 AND p.kind != 'video'
-                 LIMIT 32", // smaller batch — each unit of work is a real decode, not a header read
-            )
-            .map_err(|e| e.to_string())?;
-        let batch: Vec<(i64, Option<String>)> = stmt
-            .query_map([], |r| {
-                let id: i64 = r.get(0)?;
-                let rel_path: String = r.get(1)?;
-                let last_path: String = r.get(2)?;
-                let is_local: i64 = r.get(3)?;
-                let online = is_local != 0 || Path::new(&last_path).is_dir();
-                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-        drop(stmt);
-        let batch: Vec<(i64, String)> = batch.into_iter().filter_map(|(id, abs)| abs.map(|a| (id, a))).collect();
-        if batch.is_empty() {
-            break;
-        }
-        progress(ScanProgress { phase: "thumb".into(), done: result.generated, total: result.generated + batch.len(), current: String::new() });
-
-        // Decoding is parallelized (same posture as metadata/hash), but the actual JPEG-write
-        // to disk happens sequentially below — cheap relative to the decode, and keeps this
-        // simple rather than juggling concurrent file writes into sharded directories.
-        let generated: Vec<(i64, Option<Vec<u8>>)> = batch.par_iter().map(|(id, abs)| (*id, thumbnail_bytes_for(abs).ok())).collect();
-
-        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-        for (id, bytes) in &generated {
-            let Some(bytes) = bytes else { continue }; // undecodable right now — leave thumb=0, retried next pass
-            if std::fs::write(offline_thumb_path(*id), bytes).is_err() {
-                continue;
-            }
-            tx.execute("UPDATE photos SET thumb = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
-        }
-        tx.commit().map_err(|e| e.to_string())?;
-        result.generated += generated.iter().filter(|(_, b)| b.is_some()).count();
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(result);
     }
-    progress(ScanProgress { phase: "done".into(), done: result.generated, total: result.generated, current: String::new() });
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.rel_path, v.last_path, v.is_local
+             FROM photos p JOIN volumes v ON v.id = p.volume_id
+             WHERE p.present = 1 AND p.thumb = 0 AND p.kind != 'video'
+             LIMIT 32", // smaller batch — each unit of work is a real decode, not a header read
+        )
+        .map_err(|e| e.to_string())?;
+    let batch: Vec<(i64, Option<String>)> = stmt
+        .query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let rel_path: String = r.get(1)?;
+            let last_path: String = r.get(2)?;
+            let is_local: i64 = r.get(3)?;
+            let online = is_local != 0 || Path::new(&last_path).is_dir();
+            Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+    let batch: Vec<(i64, String)> = batch.into_iter().filter_map(|(id, abs)| abs.map(|a| (id, a))).collect();
+    if batch.is_empty() {
+        progress(ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
+        return Ok(result);
+    }
+    let batch_len = batch.len();
+    progress(ScanProgress { phase: "thumb".into(), done: 0, total: batch_len, current: String::new() });
+
+    // Decoding is parallelized (same posture as metadata/hash), but the actual JPEG-write
+    // to disk happens sequentially below — cheap relative to the decode, and keeps this
+    // simple rather than juggling concurrent file writes into sharded directories.
+    let generated: Vec<(i64, Option<Vec<u8>>)> = batch.par_iter().map(|(id, abs)| (*id, thumbnail_bytes_for(abs).ok())).collect();
+
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for (id, bytes) in &generated {
+        let Some(bytes) = bytes else { continue }; // undecodable right now — leave thumb=0, retried next pass
+        if std::fs::write(offline_thumb_path(*id), bytes).is_err() {
+            continue;
+        }
+        tx.execute("UPDATE photos SET thumb = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    result.generated = generated.iter().filter(|(_, b)| b.is_some()).count();
+    // A full batch means there MAY be more (this pass alone can't tell without another SELECT,
+    // and a cheap over-estimate here just costs one extra empty call from the JS-side pacer,
+    // which is harmless) — an under-full batch means the candidate set is exhausted.
+    result.has_more = batch_len == 32;
+    progress(ScanProgress { phase: "thumb".into(), done: result.generated, total: batch_len, current: String::new() });
     Ok(result)
 }
 
@@ -5377,6 +5395,45 @@ mod tests {
         let cancel = AtomicBool::new(false);
         let result = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
         assert_eq!(result.generated, 0, "video must be excluded from the candidate set, not attempted and failed");
+    }
+
+    /// The pacing contract this was rewritten for: ONE batch (capped at 32) per call, with
+    /// `has_more` telling the caller whether to schedule another paced call — not a `loop` that
+    /// silently drains an arbitrarily large backlog before ever returning. Seeds 40 genuinely
+    /// decodable photos (one real JPEG copied under many names) specifically to exercise the
+    /// batch boundary, not just the single-photo case every other test here uses.
+    #[test]
+    fn thumbnail_run_does_exactly_one_batch_and_reports_has_more() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&repo).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| matches!(p.extension().and_then(|e| e.to_str()), Some("jpg") | Some("JPG")))
+        }) else {
+            eprintln!("skipping: no geneva/ jpg present in this checkout");
+            return;
+        };
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("thumb_batch");
+        const N: usize = 40;
+        for i in 0..N {
+            std::fs::copy(&sample, dir.join(format!("p{i:02}.jpg"))).unwrap();
+        }
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.generated, 32, "one call must process exactly one 32-item batch, not the whole backlog");
+        assert!(r1.has_more, "8 candidates remain — has_more must say so");
+
+        let r2 = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.generated, 8, "the second call must drain exactly what's left");
+        assert!(!r2.has_more, "nothing left — has_more must now be false");
+
+        let done: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE thumb = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(done as usize, N, "every candidate must eventually get a thumbnail across paced calls");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
