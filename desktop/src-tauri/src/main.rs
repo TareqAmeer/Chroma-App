@@ -1596,6 +1596,27 @@ fn main() {
     // never appears), the running process is NOT the one src-tauri/src was last edited for —
     // a full quit + relaunch (real recompile) is needed before any native-side fix applies.
     eprintln!("=== Chromasmith native build: {} ===", native_build_tag());
+    // Cap rayon's GLOBAL thread pool — every `.par_iter()` in this codebase (metadata_run,
+    // phash_batch, thumbnail/poster generation, RAW demosaic, DBSCAN clustering, ...) shares one
+    // pool by default, sized to the CPU count. With several of those phases able to run
+    // concurrently against a large library, they collectively saturate every core at once —
+    // confirmed on a real 719GB/57k-photo run: `top` showed chromasmith at up to 324% CPU across
+    // 29 threads on an 8-core machine, load average 7.56 (essentially every core busy), and a
+    // live stack sample (`sample <pid> 3`) caught the MAIN THREAD blocked on a single
+    // `pthread_cond_wait` for the entire 3-second window — inside the app's own `cs://` asset
+    // handler (a plain local-disk `std::fs::read`, touching no catalog state), starved of
+    // scheduling purely because every core was pegged by this process's own background work.
+    // That is macOS's "app not responding" state, not a deadlock or a bug in any one phase — the
+    // work itself was correct, there was just no reserved headroom for the interactive UI thread.
+    // Leaving 2 cores free (never fewer than 2 total, so a 2-core machine still gets real
+    // parallelism) is deliberately generous rather than tuned to the edge, since getting this
+    // wrong in the other direction (over-throttling) would erase some of this session's own
+    // speed-ups; revisit with real measurements if background passes end up feeling slow.
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let workers = (cores.saturating_sub(2)).max(2);
+    if let Err(e) = rayon::ThreadPoolBuilder::new().num_threads(workers).build_global() {
+        eprintln!("rayon: could not cap the global pool at {workers} threads ({e}) — proceeding with rayon's own default sizing");
+    }
     tauri::Builder::default()
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(PendingOAuth(Mutex::new(None)))
