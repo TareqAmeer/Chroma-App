@@ -6357,12 +6357,18 @@
       // it. The progress bar wired into updateBootSplashProgress (this file, wireActivityListeners)
       // is what the user sees while this await is in flight.
       if (window._lastCatalogRegisterPromise) { try { await window._lastCatalogRegisterPromise; } catch (e) {} }
-      // Reopen whatever photo was open in the editor at last quit — LS_LAST_PATH is written by
-      // openInEditorInner every time a photo actually opens. A missing/moved file (deleted since
-      // last launch) fails read_file_bytes and just leaves the empty-state screen, same as any
-      // other unreadable path — no special-casing needed here.
-      const lastPath = !LIBTEST && localStorage.getItem(LS_LAST_PATH);
-      if (lastPath) { try { await openInEditor(lastPath); } catch (e) { console.error('reopen last photo', e); } }
+      // ⚠️ Deliberately does NOT auto-reopen the last-edited photo any more. It used to, right
+      // here, via `openInEditor(lastPath)` — and that turned out to be actively harmful, not
+      // just heavy: it has NO progress events wired to it (unlike the catalog scan above, which
+      // feeds updateBootSplashProgress/bumpBootSplashWatchdog), so on a busy launch — the scan
+      // and this RAW decode competing for I/O on the same external drive — it could easily run
+      // long enough for the watchdog's own no-progress timeout to fire and reveal the app BEFORE
+      // the photo had finished loading, landing on the empty "Add photos" placeholder while the
+      // background scan kept running — confirmed live: exactly the symptom reported. On top of
+      // that, it forced a full RAW demosaic + WebGL render on every single cold launch whether or
+      // not the user wanted to keep editing that photo. The app now opens straight to the
+      // Library, matching most photo apps' own "you land in the browser, not mid-edit" default;
+      // opening a specific photo is one click away, same as it's always been.
       if (typeof window.hideBootSplash === 'function') window.hideBootSplash();
     });
   }
