@@ -122,6 +122,39 @@ for (const n of [200,1000,5000]) {
   }
   await p.close();
 }
+// Regression guard for the pathological case that actually froze the app: a large cluster of
+// near-identical/identical hashes (a burst sequence, brackets, timelapse frames — exactly what a
+// real library accumulates) sharing most or all of the 8 bands at once. A first version of
+// clusterByHash deduped a candidate pair verified via more than one shared band using a Set keyed
+// on the STRING `i+','+j` — harmless for scattered hashes, but on a cluster this large it meant
+// millions of ad-hoc heap-allocated string keys, which a live stack sample of a real ~57k-photo
+// library's WebContent process showed dominating the main thread (71% of samples inside
+// JavaScriptCore's operationSetGet doing string equality) for MINUTES — "app not responding",
+// not just slow. This asserts clusterByHash stays fast even when every hash in a 3,000-photo
+// cluster is pairwise identical (the worst case: every pair shares all 8 bands, so the old
+// string-Set path would have paid its full cost here).
+{
+  const p=await b.newPage();
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=20`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1200);
+  const r=await p.evaluate(()=>{
+    const N=3000;
+    const pairs=[];
+    for(let i=0;i<N;i++)pairs.push([`dup${i}`,'0f1e2d3c4b5a6978']); // all identical -> one big cluster, shares every band
+    const t0=performance.now();
+    const groups=window.__libClusterByHash(pairs);
+    const ms=performance.now()-t0;
+    const sizes=Array.from(groups.values()).map(g=>g.length).sort((a,b)=>b-a);
+    return {ms,n:pairs.length,biggest:sizes[0]||0,groupCount:groups.size};
+  });
+  const BUDGET_MS=5000;
+  const ok = r.ms<=BUDGET_MS && r.biggest===r.n && r.groupCount===1;
+  console.log(`clusterByHash worst-case (n=${r.n}, one big identical cluster): ${r.ms.toFixed(0)}ms <=${BUDGET_MS}ms, cluster size ${r.biggest}/${r.n}  ${ok?'PASS':'FAIL'}`);
+  if(!ok){
+    failures.push(`clusterByHash worst-case took ${r.ms.toFixed(0)}ms (budget ${BUDGET_MS}ms) or produced the wrong cluster (size ${r.biggest}/${r.n}, groups ${r.groupCount})`);
+  }
+  await p.close();
+}
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}

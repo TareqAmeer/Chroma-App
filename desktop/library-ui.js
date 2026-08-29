@@ -2274,18 +2274,54 @@
         arr.push(i);
       }
     }
-    const checked = new Set(); // "i,j" (i<j) — a pair sharing >1 band must still be verified only once
+    // ⚠️ Deliberately NO dedup Set for a pair verified via more than one shared band. A first
+    // version used a Set keyed on the string `i+','+j` — on a library with a large cluster of
+    // near-identical photos (a burst sequence, brackets, timelapse frames — exactly the material
+    // real libraries accumulate), those hashes tend to share MANY of the 8 bands at once, so the
+    // SAME large candidate set got re-verified repeatedly, and EVERY check allocated a new heap
+    // string as a Set key. Measured live on a real 57k-photo library via a stack sample of the
+    // WebContent process: 71% of all samples were inside JavaScriptCore's `operationSetGet` doing
+    // STRING equality comparisons — millions of ad-hoc string allocations froze the whole JS
+    // thread (buttons unresponsive) for minutes. `union(a,b)` is already idempotent, so verifying
+    // the same pair twice just costs a little redundant `popcount32` arithmetic on typed-array
+    // values — cheap, no allocation — nowhere near the cost of the string Set it replaces.
+    //
+    // ⚠️ That reasoning held for SCATTERED near-duplicates but not for one huge tightly-packed
+    // cluster: measured on a synthetic 3,000-photo cluster of fully-identical hashes (worst
+    // case — every pair shares all 8 bands), dropping the dedup Set alone still took ~5.1s,
+    // because every one of the 8 bands independently re-verified and re-unioned the SAME
+    // ~4.5M pairs.
+    //
+    // Two layers fix this, and BOTH matter — a per-pair `find()` check alone (tried first, still
+    // measured ~6.4s) doesn't help, because the x/y double loop over a huge bucket is O(k^2) in
+    // ITERATION COUNT regardless of how cheap each iteration's body is; 31.5M redundant loop
+    // iterations across 7 bands still costs real time even doing nothing per iteration.
+    //   1. Per-BUCKET short-circuit: before even entering the double loop, an O(k) pass checks
+    //      whether every item in this bucket already shares one root (fully connected by an
+    //      earlier band) — if so, skip the whole O(k^2) re-verification for this band. Once a
+    //      cluster is fully unioned (which happens on the FIRST band that processes it), every
+    //      later band's copy of the same bucket collapses to a cheap O(k) walk instead of O(k^2).
+    //   2. Per-PAIR `find()` check (kept from the first attempt): still worth having for the
+    //      partially-connected case a bucket short-circuit alone can't catch — e.g. two SEPARATE
+    //      sub-clusters that only merge into one root partway through a band's own loop.
+    // No extra memory, no string keys — both layers just reuse state this algorithm already
+    // maintains (the union-find structure itself).
     for (let b = 0; b < BANDS; b++) {
       for (const arr of buckets[b].values()) {
         if (arr.length < 2) continue;
+        const root0 = find(pairs[arr[0]][0]);
+        let allSame = true;
+        for (let k = 1; k < arr.length; k++) {
+          if (find(pairs[arr[k]][0]) !== root0) { allSame = false; break; }
+        }
+        if (allSame) continue; // whole bucket already one cluster — nothing new to learn here
         for (let x = 0; x < arr.length; x++) {
-          const i = arr[x], ai = hi[i], bi = lo[i];
+          const i = arr[x], ai = hi[i], bi = lo[i], pi = pairs[i][0];
           for (let y = x + 1; y < arr.length; y++) {
             const j = arr[y];
-            const key = i + ',' + j; // arr is built in increasing index order, so i<j always here
-            if (checked.has(key)) continue;
-            checked.add(key);
-            if (popcount32(ai ^ hi[j]) + popcount32(bi ^ lo[j]) <= DUPE_HAMMING_THRESHOLD) union(pairs[i][0], pairs[j][0]);
+            const pj = pairs[j][0];
+            if (find(pi) === find(pj)) continue; // already known to cluster together
+            if (popcount32(ai ^ hi[j]) + popcount32(bi ^ lo[j]) <= DUPE_HAMMING_THRESHOLD) union(pi, pj);
           }
         }
       }
@@ -2463,9 +2499,20 @@
     const libMain = document.getElementById('lib-main');
     if (libMain) libMain.scrollTop = scrollByFolder.get(path) || 0;
     if (typeof renderCollections === 'function') renderCollections(); // drop stale collection/album highlight
-    // Duplicate detection + sync-status backfill run in the background, gated on the same
-    // openToken so a fast folder switch never lets stale results overwrite the new grid.
-    runDupeDetection(state.entries.map((e) => e.path), openToken);
+    // Sync-status backfill runs in the background, gated on the same openToken so a fast
+    // folder switch never lets stale results overwrite the new grid.
+    //
+    // ⚠️ Duplicate detection is DELIBERATELY NOT run here any more. It used to fire
+    // automatically on every folder open — three rounds of fixes to make that fast enough
+    // (batching the registry write, then the O(n^2) clustering, then a string-Set dedup inside
+    // THAT fix) each bought headroom that the library's own growth ate right back, because the
+    // real problem was never how fast the algorithm was: no mature photo app eagerly recomputes
+    // a duplicate graph on every view. PhotoPrism hashes once at import time and persists it;
+    // digiKam's duplicate MATCHING is an explicit "Find Duplicates" tool, not automatic. This
+    // app now follows the same model — see the "Find duplicates…" row in the Drives panel
+    // (runDupeDetectionOnDemand) — so whatever the real-world worst case turns out to be (a
+    // huge burst of near-identical photos, a much bigger library, anything not yet seen) it can
+    // only ever block when the user explicitly asks for it, not silently gate ordinary browsing.
     loadSyncedForFolder(state.entries, openToken);
     markFolderSyncedIfGphotosDownloads(path, state.entries);
     getMetaBatch(state.entries.map((e) => e.path)).then(() => {
@@ -4547,7 +4594,30 @@
       </div>
       <div class="lib-coll-row" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify library…</span>
+      </div>
+      <div class="lib-coll-row" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Find duplicates…</span>
       </div>`;
+  }
+
+  /// Manual, on-demand — see runDupeDetection's own call site in openFolder for why this is no
+  /// longer automatic. Scoped to the currently-open folder (state.entries), matching what the
+  /// automatic version used to cover; a whole-catalog version (using the indexed photos.phash
+  /// column instead of this per-folder file-cache path) is a real future improvement but a
+  /// separate, larger change.
+  async function runDupeDetectionOnDemand() {
+    if (state.source !== 'folder' || !state.entries.length) {
+      toast('Open a folder first');
+      return;
+    }
+    activityUpdate('catalog', { stage: 'hash', done: 0, total: state.entries.length, current: 'Finding duplicates…' });
+    try {
+      await runDupeDetection(state.entries.map((e) => e.path), state._openToken);
+      const dupeCount = new Set(state.dupeClusters.values()).size;
+      toast(dupeCount ? `Found ${dupeCount} duplicate group${dupeCount === 1 ? '' : 's'}` : 'No duplicates found');
+    } finally {
+      activityUpdate('catalog', { stage: 'done', done: state.entries.length, total: state.entries.length });
+    }
   }
 
   /// Manual, on-demand — see the plan's own logged decision: hashing a NEW file is cheap and
@@ -5963,6 +6033,8 @@
     if (freeUpRow) freeUpRow.onclick = (e) => showCacheMenu(e);
     const verifyRow = host.querySelector('[data-verify-library]');
     if (verifyRow) verifyRow.onclick = () => runVerifyLibrary();
+    const findDupesRow = host.querySelector('[data-find-duplicates]');
+    if (findDupesRow) findDupesRow.onclick = () => runDupeDetectionOnDemand();
     // "By Date" root row: toggles the whole tree open/closed, same gesture the real folder
     // tree's own root uses, but never navigates on its own (a bare "By Date" click isn't a
     // filterable scope — unlike every row inside it).
