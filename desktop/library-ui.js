@@ -2443,6 +2443,16 @@
     let queue = [rootPath];
     let dirsWalked = 0;
     let capHit = false;
+    // Fire one update BEFORE the first batch even starts. The boot splash's watchdog
+    // (chromasmith-22.html's bumpBootSplashWatchdog) force-hides the splash if nothing bumps it
+    // within its grace period — if the first slow stretch of this walk (a contended external
+    // drive, cold OS file-cache) took longer than that grace period, the splash would vanish
+    // with the bar never having rendered even once. This ping alone can't fix a walk that's
+    // genuinely slow throughout, but it closes the specific window where the FIRST update never
+    // arrives in time — measured to be exactly what was happening (see the plan's Root Cause 1).
+    if (typeof updateBootSplashProgress === 'function') {
+      updateBootSplashProgress({ phase: 'subfolders', done: 0, total: 0, current: '' });
+    }
     while (queue.length) {
       const batch = queue.splice(0, SUBFOLDER_WALK_CONCURRENCY);
       const results = await Promise.all(batch.map((dir) => invoke('list_dir', { path: dir }).catch(() => [])));
@@ -2457,18 +2467,16 @@
         }
       }
       queue = queue.concat(nextQueue);
+      // Feed the boot splash's progress bar on EVERY batch (a no-op once #boot-splash-progress
+      // is gone, same guard updateBootSplashProgress already uses for catalog-scan events) — not
+      // throttled to every 50 dirs like the toast below. The watchdog only stays open as long as
+      // updates keep arriving inside its grace window, so a throttle here directly controls
+      // whether the splash survives a slow stretch, not just how chatty the UI looks.
+      if (typeof updateBootSplashProgress === 'function') {
+        updateBootSplashProgress({ phase: 'subfolders', done: collected.length, total: 0, current: '' });
+      }
       if (dirsWalked % 50 < SUBFOLDER_WALK_CONCURRENCY && typeof toast === 'function') {
         toast(`Scanning subfolders… ${dirsWalked} folders, ${collected.length} photos found`, true);
-        // Also feed the boot splash's progress bar (a no-op once #boot-splash-progress is gone,
-        // same guard updateBootSplashProgress already uses for catalog-scan events) — with
-        // "Include subfolders" on, THIS walk, not catalog_scan, is the slow operation the user
-        // is actually waiting on at launch, and it used to be invisible: the splash's opaque
-        // full-screen overlay hides this function's own toast() pills until it's removed, and
-        // it was removed by waiting on catalog_scan/catalog_thumbnails, a pipeline that (thanks
-        // to the walk-skip fix) is now fast and unrelated to this walk's own duration.
-        if (typeof updateBootSplashProgress === 'function') {
-          updateBootSplashProgress({ phase: 'subfolders', done: collected.length, total: 0, current: '' });
-        }
       }
     }
     if (capHit && typeof toast === 'function') toast(`Stopped after ${SUBFOLDER_WALK_CAP} subfolders — this tree is unusually large`, false);

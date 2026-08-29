@@ -94,13 +94,32 @@ fn edited_ts_of(photo_path: &str) -> u64 {
 pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     let mut out = Vec::new();
     let rd = std::fs::read_dir(&path).map_err(|e| format!("read_dir {path}: {e}"))?;
-    for entry in rd.flatten() {
+    // Collected once so the .xmp lookup below is a HashMap hit instead of a second `stat` per
+    // photo — mirrors catalog.rs's walk_root, which fixed the identical pattern there (a per-file
+    // sidecar existence probe measured as a meaningful share of a real walk's cost). This is a
+    // SEPARATE code path (the Library tree's single-level browser, also used by the recursive
+    // subfolder walk) that never got the same fix, so it still paid it on every directory listed.
+    let entries: Vec<std::fs::DirEntry> = rd.flatten().collect();
+    let mut xmp_mtimes: std::collections::HashMap<std::ffi::OsString, u64> = std::collections::HashMap::new();
+    for e in &entries {
+        let p = e.path();
+        if ext_lower(&p) == "xmp" {
+            if let Some(stem) = p.file_stem() {
+                let mt = e.metadata().ok().and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                xmp_mtimes.insert(stem.to_os_string(), mt);
+            }
+        }
+    }
+    for entry in &entries {
         let p = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with('.') {
             continue; // hide dotfiles/dotfolders, matches Finder's default
         }
-        let is_dir = p.is_dir();
+        // file_type() comes from readdir's own d_type on the platforms this app ships for, so
+        // this costs no syscall, unlike the `p.is_dir()` this replaced.
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or_else(|_| p.is_dir());
         let ext = ext_lower(&p);
         let is_image = !is_dir && is_image_ext(&ext);
         let is_video = !is_dir && !is_image && is_video_ext(&ext);
@@ -113,12 +132,64 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
             let path_s = p.to_string_lossy().into_owned();
             // Video has no sidecar-based edit recipe today (grading is applied live, not saved to
             // an .xmp on disk the way photo edits are) — 0 is honest, not a placeholder.
-            let edited_ts = if is_image { edited_ts_of(&path_s) } else { 0 };
+            // Equivalent to the old `edited_ts_of(&path_s)`: `with_extension` only ever replaces
+            // the extension, so the stem is unchanged and both sides come from the SAME listing.
+            let edited_ts = if is_image { p.file_stem().and_then(|s| xmp_mtimes.get(s)).copied().unwrap_or(0) } else { 0 };
             out.push(DirEntry { name, path: path_s, is_dir, is_image, is_video, kind, mtime, size, missing: false, edited_ts });
         }
     }
     out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
     Ok(out)
+}
+
+#[cfg(test)]
+mod list_dir_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("cs_list_dir_{}_{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Pins list_dir's output shape across the file_type()/batched-sidecar refactor: a photo
+    /// WITH a real .xmp sidecar must still report a nonzero edited_ts, one WITHOUT must still
+    /// report exactly 0 (not a false positive from an unrelated sidecar in the same directory),
+    /// and dirs/videos must still be classified correctly with edited_ts always 0.
+    #[test]
+    fn list_dir_reports_correct_kinds_and_edited_ts() {
+        let dir = scratch("basic");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("a.xmp"), b"<xmp/>").unwrap(); // a's sidecar
+        std::fs::write(dir.join("b.jpg"), b"y").unwrap(); // no sidecar
+        std::fs::write(dir.join("orphan.xmp"), b"<xmp/>").unwrap(); // sidecar with no matching photo
+        std::fs::write(dir.join("c.mp4"), b"z").unwrap();
+        std::fs::create_dir(dir.join("sub")).unwrap();
+
+        let out = list_dir(dir.to_string_lossy().into_owned()).unwrap();
+        let by_name = |n: &str| out.iter().find(|e| e.name == n).unwrap_or_else(|| panic!("missing {n}"));
+
+        let a = by_name("a.jpg");
+        assert!(a.is_image && !a.is_dir && !a.is_video);
+        assert!(a.edited_ts > 0, "a.jpg has a real sidecar and must report a nonzero edited_ts");
+
+        let b = by_name("b.jpg");
+        assert_eq!(b.edited_ts, 0, "b.jpg has no sidecar — must not pick up orphan.xmp or a.xmp");
+
+        let c = by_name("c.mp4");
+        assert!(c.is_video && !c.is_image);
+        assert_eq!(c.edited_ts, 0, "video has no sidecar-based edit recipe today");
+
+        let sub = by_name("sub");
+        assert!(sub.is_dir && !sub.is_image && !sub.is_video);
+        assert_eq!(sub.edited_ts, 0);
+
+        // orphan.xmp itself and dotfiles must not surface as entries.
+        assert!(out.iter().all(|e| e.name != "orphan.xmp"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
 
 pub(crate) fn cache_dir() -> PathBuf {

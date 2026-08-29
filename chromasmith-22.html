@@ -1081,7 +1081,7 @@ if(!window.__TAURI__)window.hideBootSplash();
 // visible progress keeps arriving, and only force-hides if progress genuinely STALLS for the
 // grace period (an unexpected exception, a folder-picker dialog that never resolves, anything).
 window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>window.hideBootSplash(),graceMs||8000);};
-window.bumpBootSplashWatchdog(6000); // initial grace period before any progress event has arrived yet
+window.bumpBootSplashWatchdog(10000); // initial grace period before any progress event has arrived yet
 </script>
 <div id="status-cap"></div>
 <header>
