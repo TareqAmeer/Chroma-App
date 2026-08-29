@@ -2459,6 +2459,16 @@
       queue = queue.concat(nextQueue);
       if (dirsWalked % 50 < SUBFOLDER_WALK_CONCURRENCY && typeof toast === 'function') {
         toast(`Scanning subfolders… ${dirsWalked} folders, ${collected.length} photos found`, true);
+        // Also feed the boot splash's progress bar (a no-op once #boot-splash-progress is gone,
+        // same guard updateBootSplashProgress already uses for catalog-scan events) — with
+        // "Include subfolders" on, THIS walk, not catalog_scan, is the slow operation the user
+        // is actually waiting on at launch, and it used to be invisible: the splash's opaque
+        // full-screen overlay hides this function's own toast() pills until it's removed, and
+        // it was removed by waiting on catalog_scan/catalog_thumbnails, a pipeline that (thanks
+        // to the walk-skip fix) is now fast and unrelated to this walk's own duration.
+        if (typeof updateBootSplashProgress === 'function') {
+          updateBootSplashProgress({ phase: 'subfolders', done: collected.length, total: 0, current: '' });
+        }
       }
     }
     if (capHit && typeof toast === 'function') toast(`Stopped after ${SUBFOLDER_WALK_CAP} subfolders — this tree is unusually large`, false);
@@ -4958,7 +4968,7 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Indexing', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
+  const STAGE_LABELS = { walk: 'Indexing', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
   const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed', 'clip'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
