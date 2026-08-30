@@ -24,3 +24,52 @@ require); the model files keep their own licences and are not relicensed by bein
 If you are redistributing a build, or using it commercially, drop those two model files: SAM 2.1
 covers subject selection on its own, and the only feature lost is "auto-exclude face features"
 inside a skin mask.
+
+## Spektrafilm LUT presets (`vendor/luts/spektra_*.bin`)
+
+20 built-in "Spektrafilm" look presets (`LUT_META`'s `"Spektrafilm"` category) are baked from the
+[spektrafilm](https://github.com/andreavolpato/spektrafilm) project's film/print profiles, by
+Andrea Volpato. The `spektrafilm-lut` CLI (spektrafilm's own tool, GPLv3 — only *run*, never
+vendored or copied into this repo) built one 33³ `.cube` per film stock at `--input srgb --output
+srgb --resolution 33 --topology 1lut`, paired with a real-world print/paper stock per
+`spektrafilm-lut list film`/`list print`'s own registry (each colour-negative paired with its
+`info.target_print` from the profile JSON; the 4 reversal stocks — no negative-native print target
+— paired with the brand-matching paper, following the same default the project's own
+`compare_simulation_revisions.py` script uses for reversal-vs-print comparisons). This is tier (a)
+of ROADMAP.md's R3: baked to **display space** (colour response only, hard-clipped at 1.0) — not
+the real scene-referred roll-off, which is the separate, much larger R4.
+
+The **profiles and LUTs themselves** (not the CLI code) are licensed **CC BY-SA 4.0** under
+[`SPEKTRAFILM_LICENSE.txt`](https://github.com/andreavolpato/spektrafilm/blob/main/SPEKTRAFILM_LICENSE.txt),
+a separate licence from the GPLv3 tool. Quantizing a baked cube to this app's Uint8 `.bin` storage
+format is a modification under that licence, so the required attribution is the licence's own
+"modified" form:
+
+    Derived from spektrafilm by Andrea Volpato
+    https://github.com/andreavolpato/spektrafilm
+    Licensed CC BY-SA 4.0
+    Modified by Chromasmith: baked to a fixed 33³ LUT and quantized to 8-bit for
+    vendor/luts/spektra_*.bin.
+
+| Preset key | Film stock | Print/paper stock |
+|---|---|---|
+| `spektra_fuji_c200_ca` | Fujifilm C200 | Fujifilm Crystal Archive Type II |
+| `spektra_fuji_pro_400h_ca` | Fujifilm Pro 400H | Fujifilm Crystal Archive Type II |
+| `spektra_fuji_xtra_400_ca` | Fujifilm Xtra 400 | Fujifilm Crystal Archive Type II |
+| `spektra_kodak_ektar_100_endura` | Kodak Ektar 100 | Kodak Portra Endura |
+| `spektra_kodak_gold_200_endura` | Kodak Gold 200 | Kodak Portra Endura |
+| `spektra_kodak_portra_160_endura` | Kodak Portra 160 | Kodak Portra Endura |
+| `spektra_kodak_portra_400_endura` | Kodak Portra 400 | Kodak Portra Endura |
+| `spektra_kodak_portra_800_endura` | Kodak Portra 800 | Kodak Portra Endura |
+| `spektra_kodak_portra_800_push1_endura` | Kodak Portra 800 (push 1) | Kodak Portra Endura |
+| `spektra_kodak_portra_800_push2_endura` | Kodak Portra 800 (push 2) | Kodak Portra Endura |
+| `spektra_kodak_ultramax_400_endura` | Kodak Ultramax 400 | Kodak Portra Endura |
+| `spektra_kodak_verita_200d_2383` | Kodak Vérité 200D | Kodak 2383 (cinema print) |
+| `spektra_kodak_vision3_200t_2383` | Kodak Vision3 200T | Kodak 2383 (cinema print) |
+| `spektra_kodak_vision3_250d_2383` | Kodak Vision3 250D | Kodak 2383 (cinema print) |
+| `spektra_kodak_vision3_500t_2383` | Kodak Vision3 500T | Kodak 2383 (cinema print) |
+| `spektra_kodak_vision3_50d_2383` | Kodak Vision3 50D | Kodak 2383 (cinema print) |
+| `spektra_fuji_provia_100f` | Fujifilm Provia 100F (reversal) | Fujifilm Crystal Archive Type II |
+| `spektra_fuji_velvia_100` | Fujifilm Velvia 100 (reversal) | Fujifilm Crystal Archive Type II |
+| `spektra_kodak_ektachrome_100` | Kodak Ektachrome 100 (reversal) | Kodak Portra Endura |
+| `spektra_kodak_kodachrome_64` | Kodak Kodachrome 64 (reversal) | Kodak Portra Endura |
