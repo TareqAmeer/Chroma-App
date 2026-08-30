@@ -4792,6 +4792,13 @@ vec2 vidUV(vec2 u){
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
 uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin,adjDehaze;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
+// ROADMAP.md R1: lets basicAdjust's exposure/contrast/tonal-zone clamps pass real >1.0 values
+// through to the (now-float, when this is on — see FXR._initBufs) "lut" FBO instead of clipping
+// them here, so the comp shader's tonemapShoulder has genuine headroom to roll off. Deliberately
+// scoped to basicAdjust ONLY — curves/HSL/masks still clamp to [0,1] even under this flag (a
+// stated limit, not an oversight: extending it there is real additional work per stage, same
+// "small, scoped version" tradeoff this file already makes for the gamut-warning diagnostic).
+uniform float useTonemap;
 uniform float useHlg;    // 1 = source is unconverted HLG (see hlg2rec709; engine-dependent)
 uniform float hlgLw;     // HLG nominal peak luminance in nits (default 400; drives the BT.2408 system gamma)
 // Tone curves: 256x1 RGBA table baked on the CPU (master composed with per-channel point curves,
@@ -5067,13 +5074,16 @@ vec3 basicAdjust(vec3 c){
   lin*=exp2(adjExp);
   lin.r*=1.0+0.22*adjTemp; lin.b*=1.0-0.22*adjTemp;          // temp: + warmer
   lin.g*=1.0-0.14*adjTint; lin.r*=1.0+0.05*adjTint; lin.b*=1.0+0.05*adjTint; // tint: + magenta
-  c=clamp(vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b)),0.0,1.0);
+  c=vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
   // contrast: S-curve around mid-grey (display space)
-  c=clamp((c-0.5)*(1.0+adjCon)+0.5,0.0,1.0);
+  c=(c-0.5)*(1.0+adjCon)+0.5;
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
   // tonal zones (highlights/shadows/whites/blacks) keyed on luminance
-  float lv=dot(c,vec3(.2126,.7152,.0722));
+  float lv=dot(clamp(c,0.0,1.0),vec3(.2126,.7152,.0722)); // zone gating always reads a clamped proxy — gmp's gaussians are meant for the 0..1 display range regardless of tonemap
   float t=adjSh*0.30*gmp(lv,.25,.20)+adjHi*0.30*gmp(lv,.80,.16)+adjWh*0.18*gmp(lv,.92,.10)+adjBl*0.22*gmp(lv,.10,.12);
-  c=clamp(c+t,0.0,1.0);
+  c=c+t;
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
   // saturation + vibrance (vibrance scales weaker on already-saturated pixels)
   float l=dot(c,vec3(.2126,.7152,.0722));
   c=mix(vec3(l),c,1.0+adjSat);
@@ -5565,6 +5575,7 @@ in vec2 uv;out vec4 o;
 uniform sampler2D base,hGlow,bGlow,hEmit;
 uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
 uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2,gamutWarn;
+uniform float useTonemap; // ROADMAP.md R1 (scene-referred highlight roll-off), default 0/off — see the comment at the clamp/shoulder site below
 uniform float useDither,ditherSeed; // TPDF dither at final quantization — see the JS call site's comment
 uniform float dustA,scrA,leakA,fxSeed,artAsp,dustMode; // film artifacts (dust/scratches/light leak) + stable seed + image aspect; dustMode: 0=both,1=black,2=white
 uniform vec3 grK;     // per-channel grain gain (R,G,B)
@@ -5575,6 +5586,28 @@ float l2s(float c){return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
 vec3 S2L(vec3 c){return vec3(s2l(c.r),s2l(c.g),s2l(c.b));}
 vec3 L2S(vec3 c){return vec3(l2s(c.r),l2s(c.g),l2s(c.b));}
 vec3 screen(vec3 a,vec3 b){return 1.-(1.-a)*(1.-b);}
+// ROADMAP.md R1 — scene-referred highlight roll-off, ITU-R BT.2390's own Hermite-spline knee
+// (the same real broadcast-standard family this file already uses precisely elsewhere for HLG,
+// CLAUDE.md §12): identity below KS, a smooth cubic shoulder from (KS,KS) to (1,CEIL) above it,
+// clamped flat at CEIL beyond input 1.0 (BT.2390's own spline is only well-behaved for its
+// bounded t∈[0,1] domain — verified: evaluating the polynomial at t=1 collapses exactly to CEIL,
+// so clamping t there is the correct extension, not a hack). KS<1 is what makes this a REAL
+// roll-off rather than a clip that merely moved: without float FBOs upstream (see this shader's
+// own "base" texture, gated the same way — the "lut" FBO only becomes RGBA16F when this flag is
+// on) nothing above display-8-bit-1.0 would ever survive to reach this function anyway.
+float bt2390Knee(float x,float ks,float ceil_){
+  float t=clamp((x-ks)/max(1.0-ks,1e-6),0.0,1.0);
+  float t2=t*t,t3=t2*t;
+  return (2.0*t3-3.0*t2+1.0)*ks+(t3-2.0*t2+t)*(1.0-ks)+(-2.0*t3+3.0*t2)*ceil_;
+}
+vec3 tonemapShoulder(vec3 lin){
+  const float KS=0.8,CEIL=1.0; // knee starts at 80% of white, shoulders smoothly up to white
+  return vec3(
+    lin.r<=KS?lin.r:bt2390Knee(lin.r,KS,CEIL),
+    lin.g<=KS?lin.g:bt2390Knee(lin.g,KS,CEIL),
+    lin.b<=KS?lin.b:bt2390Knee(lin.b,KS,CEIL)
+  );
+}
 float h21(vec2 p){p=fract(p*vec2(127.1,311.7));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 // VALUE noise for film grain: lattice hash + smooth interp → CLUMPS of a controllable size.
 // ⚠️ Use hash12 (Dave Hoskins), NOT h21 — h21's 127.1 multiplier has a 0.1 fractional residue, so
@@ -5628,7 +5661,7 @@ void main(){
   vec3 lin=S2L(base_s);
   lin=screen(lin, bg);   // bloom first (source-colored)
   lin=screen(lin, hg);   // halation: warm backing via channel-split σ
-  vec3 res=L2S(clamp(lin,0.,1.));
+  vec3 res=L2S(useTonemap>0.5?tonemapShoulder(max(lin,0.0)):clamp(lin,0.,1.));
   // ---- FILM GRAIN — in the NEGATIVE (before print). Value-noise CLUMPS (not 1px white noise),
   //      per-channel signal-dependent σ = grA·grK·v^grPowG·highlightGate, with a shared+
   //      independent mix (corr≈0.4). Calibrated to Dehancer per film format (FXR.CAL.grain).
@@ -5775,8 +5808,13 @@ void main(){
     this._allocTex('lut',w,h,hdrIntermediate);                            // full-res graded base — RGBA16F only when requested+supported
     this._allocTex('lens',w,h);                                           // lens-corrected source (only used when Lens on)
     this._allocTex('nr',w,h);                                             // denoised source (only used when NR on)
-    this._allocTex('hemitF',w,h);                                         // FULL-res halation emit (for a sharp high-pass)
-    ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2)); // reduced-res glow
+    // ROADMAP.md R1: hemitF/the halation-bloom scratch chain also need to be float when the
+    // scene-referred tonemap is active, or a >1.0 highlight from the (now-float) `lut` FBO gets
+    // clamped right back to 8-bit the moment the emission pass writes it — same reasoning as
+    // `lut` above, just extended down the rest of the chain the comp shader's tonemapShoulder
+    // ultimately reads from.
+    this._allocTex('hemitF',w,h,hdrIntermediate);                         // FULL-res halation emit (for a sharp high-pass)
+    ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2,hdrIntermediate)); // reduced-res glow
     // Quarter-res luminance ping-pong for the skin-tone frequency separation (see progs.lumdown).
     const w4=Math.max(1,Math.ceil(w/4)),h4=Math.max(1,Math.ceil(h/4));
     ['sklo_a','sklo_b','skbox'].forEach(n=>this._allocTex(n,w4,h4));
@@ -5955,7 +5993,13 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   // opts.scOverride: force the sigma-scale (=fullImageWidth/REF) — used by the tiled path so
   //   a tile blurs with the WHOLE image's radius, not the tile's.
   // opts.uvOff/uvScale: map this render's local uv → global image uv (grain continuity for tiles).
-  render(P,w,h,opts){const gl=this.gl;const gs=(opts&&opts.glowScale)||1;this._initBufs(w,h,gs,opts&&opts.hdrIntermediate);
+  render(P,w,h,opts){const gl=this.gl;const gs=(opts&&opts.glowScale)||1;
+    // ROADMAP.md R1: the scene-referred tonemap needs the SAME float intermediate video already
+    // uses (opts.hdrIntermediate) — OR'd in here rather than requiring every still call site to
+    // remember to pass it, since "tonemap is on" already implies "float FBOs are needed" by
+    // construction. P.tonemap is false by default everywhere, so this is a no-op for every
+    // existing call site (identical to `opts&&opts.hdrIntermediate` alone).
+    this._initBufs(w,h,gs,(opts&&opts.hdrIntermediate)||P.tonemap);
     const w2=this.w2,h2=this.h2;
     const iw2=1/w2,ih2=1/h2;          // texel step in the REDUCED-res glow buffers
     // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
@@ -6105,7 +6149,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.blur,this.fbs.sklo_b,{img:0,dir:[1/this.w4,0],sig:sigQ},[[0,'skbox',false]],RQ);
       this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
     }
-    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,
+    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:P.tonemap?1:0,
       useHlg:P.hlg&&P.hlg.enabled?1:0,
       hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
       srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
@@ -6174,6 +6218,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const prOn=!!(P.print&&this.printTx);
     gl.activeTexture(gl.TEXTURE0+4);gl.bindTexture(gl.TEXTURE_3D,prOn?this.printTx:this.lutTx);
     gl.uniform1i(ul('printLut'),4);gl.uniform1f(ul('usePrint'),prOn?1:0);
+    gl.uniform1f(ul('useTonemap'),P.tonemap?1:0); // ROADMAP.md R1 — see getFXParams' comment
     // White mode: equal gains tuned to the Rec.709 luminance of the warm gain vector, so the
     // neutral glow carries the same visual weight as the warm one at a given Amount.
     const gW=0.2126*gainR+0.7152*gainG+0.0722*gainB; // luminance of the active gain vector
@@ -14305,6 +14350,12 @@ function computeAdjustBlock(v){
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
 function getFXParams(adjValsOverride){return{
+  // ROADMAP.md R1 — scene-referred highlight roll-off (default OFF, identity-gated: absent/falsy
+  // reproduces today's hard clamp exactly, so every export golden stays byte-identical without
+  // this key ever needing to be read at render()). No UI control yet — set via
+  // `fxState.useTonemap=true` (console / a saved Style) or a recipe's `state.useTonemap` for now;
+  // wiring an actual toggle is a follow-up once the effect itself is validated.
+  tonemap:!!fxState.useTonemap,
   lut:fxState.lut,
   lutMix:fxState.lutMix!=null?fxState.lutMix:1,
   print:fxState.print,

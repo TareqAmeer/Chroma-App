@@ -588,7 +588,7 @@ work starts the week of 2026-09-01.
 
 | # | item | size | note |
 |---|---|---|---|
-| R1 | **Scene-referred float pipeline** | L | The one architectural gap with a real image-quality consequence. Float FBOs through the lut→comp chain + a tone-map at the end. Hard constraint: all 18 `test/golden/` PNGs byte-exact at defaults |
+| R1 | ⏳ **First real slice shipped — exposure-only highlight roll-off, default OFF** | L | See write-up below. Float FBOs now exist through the lut→comp chain and a real BT.2390-style tone-map, but gated behind a not-yet-UI-exposed flag and scoped to basicAdjust only (curves/HSL/masks remain full-scope future work) |
 | R2 | **AgX (or filmic) as an optional input transform** | M | The cheap partial win — most of R1's *visible* benefit without the precision rebuild. Slots in beside `useVlog` |
 | R3 | **Spektrafilm profiles as presets — tier (a)** | S | Bake the 35 stocks × 11 papers to `.cube` into `vendor/luts/` + `LUT_META`. Purely additive, zero engine change, every Dehancer-matched look untouched. ⚠️ Bakes to display space — their colour, not their roll-off. CC BY-SA 4.0 → credit in `LICENSES-MODELS.md` |
 | R4 | **Spektrafilm live in-shader — tier (b)** | L | Real roll-off. **Depends on R1** — do not start first |
@@ -604,6 +604,78 @@ work starts the week of 2026-09-01.
 | R14 | **Camera tethering** (libgphoto2, live view + remote control) | L | macOS/Linux only — Windows has a driver conflict even for them |
 | R15 | **JXL / AVIF export; headless CLI export** | S each | `image` crate features + an export-format entry; the CLI is an argv path into Tauri commands that already exist |
 | R16 | **Draggable panel workspace + unified Library/Edit view** | M | Removes the mode switch between grid and editor; persists panel order |
+
+### R1 — Scene-referred highlight roll-off, first slice (investigated, scoped, and measured — not the full item)
+
+**Investigated first, before writing any shader code**: a real float-FBO path already existed
+(`_allocTex`'s `float16` param, `_hdrSupported()`, the `hdrIntermediate` flag) — but only for
+video's `lut` FBO, never the halation/bloom/comp chain, and never for stills. More importantly:
+RAW highlight headroom above 1.0 is **thrown away today before it ever reaches the GPU** —
+`applyDcpLUT` quantizes to 8-bit (`rgba[j+k]=255*v+0.5`) before `imgTx` is ever uploaded, so
+widening the mid-chain FBOs alone would have been a literal no-op for RAW-sourced photos: there'd
+be nothing above 1.0 anywhere in the pipeline for a tone-map to act on. **R1 as literally worded
+("float FBOs through the chain + a tone-map") is necessary but not sufficient** — solved here for
+the one case that IS real without touching the RAW ingestion path: a user pushing Exposure (or
+any 8-bit/JPEG source) past clipping, which the pipeline can already represent past 1.0 once the
+`lut` FBO is float, since `exp2(adjExp)` is an ordinary multiply with nowhere upstream feeding it
+already-clamped data.
+
+**Shipped**: a real, working, MEASURED slice —
+- `_initBufs` now takes `float16` all the way through the halation/bloom scratch chain
+  (`hemitF`, `bsrc/bglow_h/bglow_v/hsrc/hglow_h/hglow_v`), not just `lut`, whenever `P.tonemap` is
+  true (`render()` ORs it into the existing `hdrIntermediate` flag video already uses — zero new
+  plumbing for the still call sites).
+- `basicAdjust`'s three `clamp(...,0,1)` calls (post-exposure/WB, post-contrast, post-tonal-zones)
+  are now gated on a new `useTonemap` uniform — off (default) reproduces every existing clamp
+  exactly; on, real values >1.0 survive to the float `lut` FBO. Deliberately scoped to
+  `basicAdjust` only — `maskAdjust`, curves, and HSL still clamp unconditionally even with the
+  flag on, a stated limit (matching this file's own precedent for the gamut-warning diagnostic:
+  "not done here to keep this the small, scoped version").
+- `comp`'s final composite (`chromasmith-22.html`'s `vec3 res=...`) now calls a real
+  `tonemapShoulder()` when the flag is on, instead of `clamp(lin,0.,1.)`: identity below 0.8,
+  a cubic Hermite shoulder from (0.8,0.8) to (1.0,1.0) above it. **This is ITU-R BT.2390's own
+  published EETF knee formula** (the same real-broadcast-standard family this file already uses
+  precisely for HLG, CLAUDE.md §12) — not an invented curve. Verified numerically (Node,
+  before touching GLSL) for monotonicity, C1 continuity at the knee (slope 1.000 on both sides),
+  and the correct flat asymptote at the domain's own upper bound before writing a single line of
+  shader code.
+
+⚠️ **A stray backtick in a GLSL comment broke the page** (`` `lut` ``, `` `base` ``) — exactly
+CLAUDE.md §3's named failure class, caught immediately by `export_harness.mjs` ("missing ) after
+argument list") and fixed by switching to double quotes, per that section's own rule.
+
+**Byte-exactness at defaults is trivial, not merely tested**: `P.tonemap` (`fxState.useTonemap`)
+defaults to `false` everywhere, so every gated branch is **unreachable code** at defaults, not
+just numerically identical — confirmed 18/18 `npm test` goldens byte-exact, DCP worker/main-thread
+agreement unaffected.
+
+**The effect is real but measured as modest at this KS/exposure combination, honestly** — not
+oversold. A synthetic radial gradient (bright centre fading to mid-grey; none of the 3 real
+export-harness fixtures have a smooth ramp reaching white, so this diagnostic-only synthetic
+image is what actually exercises the shoulder) pushed +2 stops: clip vs. shoulder differ by up to
+**4/255** in an ~8px-wide transition band right at the edge of the old hard-clip boundary, and are
+byte-identical everywhere else — exactly the shape a shoulder-vs-clip comparison should produce
+(a smoother, slightly brighter approach into the plateau, not a globally different image). Probed
+in `test/probe_tonemap_r1.mjs` (not in `npm test`, same throwaway-diagnostic convention as the
+other `test/probe_*.mjs` files) — this was caught being **numerically correct but visually
+mis-read at reduced-preview size** mid-session (a real image was momentarily mistaken for a blank
+one from a shrunk screenshot; the raw pixel data was right the whole time) — a reminder to verify
+render output with actual pixel values, not a scaled-down screenshot judgment call, consistent
+with this session's own established discipline elsewhere.
+
+**Deliberately not done in this slice** (real remaining scope, not oversights):
+- No UI control yet — `fxState.useTonemap` is set programmatically (console/probe) only.
+- `maskAdjust`/curves/HSL remain hard-clamped even with the flag on.
+- RAW highlight headroom still never reaches `imgTx` — this slice only helps exposure pushes on
+  already-uploaded 8-bit source, not genuine extra stops of real RAW dynamic range. Closing that
+  gap is a separate, larger piece of work (touching `applyDcpLUT`'s quantization step) and is
+  what "R1, fully" actually requires to deliver its stated headline benefit for RAW files.
+- R4 (Spektrafilm's real film roll-off) still explicitly depends on R1 being complete, not this
+  first slice.
+
+*Touches:* `chromasmith-22.html` — `_initBufs`/`render()` (float FBO chain), `basicAdjust`
+(gated clamps), `comp` shader (`bt2390Knee`/`tonemapShoulder`, replaces the pre-composite clamp),
+`getFXParams` (`tonemap` field); new `test/probe_tonemap_r1.mjs`.
 
 ### Sequencing note
 
