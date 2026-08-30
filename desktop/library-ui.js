@@ -65,7 +65,16 @@
         out.push({ path: `${dir}/sub`, name: 'sub', is_dir: true, is_image: false, kind: '', ext: '', mtime: 0, size: 0 });
         return Promise.resolve(out);
       }
-      case 'get_thumbnail': case 'get_thumbnail_or_offline': return Promise.resolve(png.buffer);
+      // ?libhangthumb=1 simulates the exact failure mode that once hung the whole boot sequence:
+      // a single get_thumbnail_or_offline call that never resolves at all (not slow — genuinely
+      // never settles). prefetchThumbnails' per-call timeout (library-ui.js) is what's supposed
+      // to stop this from ever stalling boot again — this mock is what proves it, rather than
+      // trusting the fix by inspection.
+      case 'get_thumbnail': case 'get_thumbnail_or_offline': {
+        const hang = (/[?&]libhangthumb=([\w,]+)/.exec(location.search) || [])[1];
+        if (hang === 'all' || (hang && hang !== 'all' && new RegExp(hang.split(',').join('|')).test(A.path || ''))) return new Promise(() => {});
+        return Promise.resolve(png.buffer);
+      }
       case 'read_file_bytes': return Promise.resolve(png.buffer);
       case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive });
       case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map(() => ({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive })));
@@ -2597,6 +2606,32 @@
   const PREFETCH_CAP = 800;
   const PREFETCH_BUDGET_MS = 4000;
   const PREFETCH_CONCURRENCY = 8;
+  // A real fetch is fast (CLAUDE.md: RAW embedded-preview extraction measured at 97-175ms; a
+  // cached JPEG is faster still) — 1200ms is generous headroom over that, not a "give it plenty
+  // of time" guess. Kept tight deliberately: this is the worst-case cost PER STUCK ITEM, and see
+  // below for why that number, not "3 seconds x however many hang", is what actually bounds boot.
+  const PREFETCH_CALL_TIMEOUT_MS = 1200;
+  // ⚠️ PREFETCH_BUDGET_MS only gates STARTING a new item between loop iterations — it does
+  // nothing for a single invoke() that's already in flight and never settles. A genuinely stuck
+  // Tauri IPC call (a wedged lock, a pathological file, anything) would otherwise hang this ONE
+  // worker's await forever, and since `openFolder` awaits the whole Promise.all, that stalls the
+  // entire boot sequence — with both processes sitting fully idle (confirmed by live process
+  // sampling: no CPU on either side, not "slow", genuinely parked on a promise nothing will ever
+  // resolve). Every individual call is now bounded, so the phase always finishes within a
+  // predictable ceiling no matter what a single photo does.
+  // ⚠️ This bound does NOT scale with how many items are stuck. All PREFETCH_CONCURRENCY (8)
+  // workers run in parallel, and each one independently stops starting new work once
+  // Date.now() >= deadline — so whether 1 thumbnail hangs or all 800 do, the worst case is still
+  // just PREFETCH_BUDGET_MS plus at most one more PREFETCH_CALL_TIMEOUT_MS per worker (the
+  // in-flight call that was already running when the deadline passed) — roughly 4-5s total, not
+  // 1.2s x count. Concurrency is what makes "one call's timeout" and "the whole phase's worst
+  // case" two different, both-bounded numbers instead of the same multiplying one.
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+      promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+    });
+  }
   async function prefetchThumbnails(entries, onProgress) {
     const targets = entries.filter((e) => e.is_image || e.is_video).slice(0, PREFETCH_CAP)
       .filter((e) => !thumbCacheGet(e.path + '@' + (e.mtime || 0)));
@@ -2610,7 +2645,7 @@
       while (next < targets.length && Date.now() < deadline) {
         const e = targets[next++];
         try {
-          const buf = await invoke('get_thumbnail_or_offline', { path: e.path });
+          const buf = await withTimeout(invoke('get_thumbnail_or_offline', { path: e.path }), PREFETCH_CALL_TIMEOUT_MS);
           thumbCachePut(e.path + '@' + (e.mtime || 0), URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })));
         } catch (err) { /* left uncached — the ordinary lazy pump retries it once the card mounts */ }
         done++;
@@ -5271,15 +5306,17 @@
     const label = document.getElementById('boot-splash-label');
     const stageLabel = STAGE_LABELS[p.phase] || 'Indexing';
     if (p.total > 0) {
-      // Real total known — determinate bar, a real percentage, never the indeterminate sweep.
-      if (bar) { bar.classList.remove('boot-bar-indet'); bar.style.width = Math.min(100, Math.round((p.done / p.total) * 100)) + '%'; }
+      // Real total known — a real percentage, and the trickle (chromasmith-22.html) stops
+      // fighting it for control of the bar's width.
+      if (typeof window.bootTrickleStop === 'function') window.bootTrickleStop();
+      if (bar) bar.style.width = Math.min(100, Math.round((p.done / p.total) * 100)) + '%';
       if (label) label.textContent = `${stageLabel}… ${p.done.toLocaleString()} / ${p.total.toLocaleString()}`;
     } else {
       // Total genuinely unknown yet (the walk phase's own live count, see catalog.rs's
-      // walk_root comment) — the bar keeps sweeping (boot-bar-indet, set in the static HTML and
-      // never removed here) so it always reads as motion, and the label carries the running
-      // count instead of a percentage that would just read 0%.
-      if (bar) bar.classList.add('boot-bar-indet');
+      // walk_root comment) — bootTrickleStart grows the bar smoothly toward the real work
+      // instead of a decorative sweep with no relation to actual progress, and the label carries
+      // the running count instead of a percentage that would just read 0%.
+      if (typeof window.bootTrickleStart === 'function') window.bootTrickleStart(p.phase);
       if (label) label.textContent = p.done > 0 ? `${stageLabel}… ${p.done.toLocaleString()} found` : `${stageLabel}…`;
     }
   }

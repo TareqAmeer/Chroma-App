@@ -240,6 +240,35 @@ for (const n of [200,1000,5000]) {
   await p.close();
 }
 
+// Regression guard for the exact bug that got reported live: prefetchThumbnails (the "Loading
+// cached thumbnails" boot phase) had no per-call timeout, so a single get_thumbnail_or_offline
+// call that never resolved hung the ENTIRE boot sequence forever — confirmed by sampling the real
+// running process: both it and its render process sat fully idle, not busy, waiting on a promise
+// nothing would ever settle. The splash's own watchdog then hid the splash after its grace period
+// (working as designed), revealing the app before the Library had actually finished loading —
+// exactly the "stuck on the empty editor" symptom. Runs it twice — one hung call, and EVERY
+// call hung — because the fix's actual claim is that the worst case is bounded by concurrency
+// (PREFETCH_BUDGET_MS + one PREFETCH_CALL_TIMEOUT_MS per worker), not multiplied by how many
+// items are stuck. If that claim were wrong, only the "all hung" run would show it — the
+// single-item case would look fine either way.
+for (const [label, hangParam] of [['one', 'IMG_1003'], ['every', 'all']]) {
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  const t0=Date.now();
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=25&libhangthumb=${hangParam}`,{waitUntil:'domcontentloaded',timeout:120000});
+  // .lib-card.lib-skel (libSkeletonHtml's placeholder rows, also 25 of them by coincidence at
+  // this libn) matches the same selector as a real card — wait for a REAL one (data-path is only
+  // ever set on an actual rendered entry) so this doesn't pass on the pre-render skeleton state.
+  await p.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card[data-path]').length > 0, {timeout: 15000}).catch(()=>{});
+  const elapsedMs = Date.now()-t0;
+  const cards = await p.evaluate(() => document.querySelectorAll('#lib-grid .lib-card[data-path]').length);
+  const BUDGET_MS = 9000; // PREFETCH_BUDGET_MS (4s) + PREFETCH_CALL_TIMEOUT_MS (1.2s) + real margin — must NOT scale with hung-item count
+  const ok = cards === 25 && elapsedMs <= BUDGET_MS;
+  console.log(`${label} thumbnail call(s) hung permanently: grid rendered in ${elapsedMs}ms (<=${BUDGET_MS}ms), ${cards}/25 cards  ${ok?'PASS':'FAIL'}`);
+  if(!ok) failures.push(`hangParam=${hangParam}: a hung get_thumbnail_or_offline call stalled boot: ${elapsedMs}ms elapsed, ${cards}/25 cards rendered`);
+  await p.close();
+}
+
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}

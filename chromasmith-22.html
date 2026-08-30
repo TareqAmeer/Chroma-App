@@ -1053,22 +1053,44 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
        and switches to a determinate bar once a phase's total is known. -->
   <div id="boot-splash-progress" style="display:flex;flex-direction:column;align-items:center;gap:8px;width:220px">
     <div style="width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden">
-      <div id="boot-splash-bar" class="boot-bar-indet" style="height:100%;width:28%;background:#d4903a;border-radius:2px"></div>
+      <div id="boot-splash-bar" style="height:100%;width:0%;background:#d4903a;border-radius:2px;transition:width .2s ease"></div>
     </div>
     <div id="boot-splash-label" style="font-size:11px;color:#9a968c;font-variant-numeric:tabular-nums">Checking your library…</div>
   </div>
 </div>
-<style>
-@keyframes boot-bar-indet-move{0%{transform:translateX(-140%)}100%{transform:translateX(460%)}}
-#boot-splash-bar.boot-bar-indet{animation:boot-bar-indet-move 1.1s cubic-bezier(.4,0,.2,1) infinite}
-</style>
 <script>
+// A phase whose real total isn't known yet (mid-walk) used to get a CSS sweep — motion with no
+// relation to actual progress, which read as "just another spinner" rather than real work
+// happening. This trickles the bar forward instead: smoothly, monotonically, asymptotically
+// toward 92% (never claims 100% for work that isn't verifiably done), restarting only when the
+// PHASE itself changes — so within one phase the bar only ever grows, never sweeps or resets.
+// updateBootSplashProgress (library-ui.js) switches to a real width instead the moment a phase's
+// true total is known; this is purely the "we don't have a number yet" filler.
+window._bootTrickleRAF=null;window._bootTrickleT0=0;window._bootTrickleKey=null;
+window.bootTrickleStart=function(key){
+  const bar=document.getElementById('boot-splash-bar');if(!bar)return;
+  if(window._bootTrickleKey!==key){window._bootTrickleKey=key;window._bootTrickleT0=performance.now();}
+  bar.style.transition='none'; // JS drives every frame directly; a CSS transition would lag behind and look like stutter
+  if(window._bootTrickleRAF)return;
+  const step=(t)=>{
+    const el=t-window._bootTrickleT0;
+    bar.style.width=(92*(1-Math.exp(-el/2200))).toFixed(1)+'%';
+    window._bootTrickleRAF=requestAnimationFrame(step);
+  };
+  window._bootTrickleRAF=requestAnimationFrame(step);
+};
+window.bootTrickleStop=function(){
+  if(window._bootTrickleRAF){cancelAnimationFrame(window._bootTrickleRAF);window._bootTrickleRAF=null;}
+  window._bootTrickleKey=null;
+  const bar=document.getElementById('boot-splash-bar');if(bar)bar.style.transition='width .2s ease';
+};
+window.bootTrickleStart('walk'); // matches the static label above ("Checking your library…") from t=0
 // Web/iOS builds: no multi-stage boot to hide, so drop the splash the instant this parses
 // (right after the element above — no waiting on DOMContentLoaded) rather than leaving it
 // covering the page indefinitely. desktop-native.js overrides this by calling
 // hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
 // ISN'T the Tauri shell), this inline fallback is what removes the splash.
-window.hideBootSplash=function(){const s=document.getElementById('boot-splash');if(!s)return;if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}s.style.opacity='0';setTimeout(()=>s.remove(),400);};
+window.hideBootSplash=function(){const s=document.getElementById('boot-splash');if(!s)return;if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();s.style.opacity='0';setTimeout(()=>s.remove(),400);};
 // Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
 // this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
 // would otherwise leave the splash on screen forever.
