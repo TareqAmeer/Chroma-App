@@ -229,7 +229,7 @@ fn mat3_mul(a: Mat3, b: Mat3) -> Mat3 {
     out
 }
 
-fn mat3_inv(m: Mat3) -> Mat3 {
+pub(crate) fn mat3_inv(m: Mat3) -> Mat3 {
     let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
         + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
     let inv_det = 1.0 / det;

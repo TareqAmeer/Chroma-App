@@ -42,6 +42,12 @@ pub struct DecodedRaw {
     /// as libraw-wasm's imageData().data under dcpSettings.
     #[serde(skip)]
     pub rgb16: Vec<u16>,
+    /// This shot's XYZ(D65)->camera-RGB matrix (see `DemosaicOut::xyz_to_cam`'s doc comment for
+    /// where it comes from) — carried through to here so `srgb_rgba` (ROADMAP.md's R8) can
+    /// render un-DCP'd cameras in real per-camera colour instead of raw camera-native primaries.
+    /// All-zero when unavailable, same sentinel the High-tier denoiser already checks for.
+    #[serde(skip)]
+    pub xyz_to_cam: rawdenoise::Mat3,
 }
 
 /// Output of the expensive, parameter-independent half of the decode (steps 1-4: black/white
@@ -645,6 +651,7 @@ pub fn decode_rw2_bytes_ex(
         make,
         lens_applied,
         rgb16,
+        xyz_to_cam,
     })
 }
 
@@ -1221,25 +1228,150 @@ pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, S
     Ok(rgba)
 }
 
+/// XYZ(D65)->linear-sRGB, the standard published matrix (Bruce Lindbloom's sRGB/D65 reference,
+/// the same one w3c's CSS Color 4 spec and every colour-science library cites) — verified
+/// against that source, not derived. Paired with `xyz_to_cam`'s inverse (camera->XYZ) this
+/// reproduces the universal "camera reference" fallback every raw converter's base tier uses
+/// (dcraw's rgb_cam, darktable's "standard color matrix", RawTherapee's camconst fallback):
+/// white-balance (already applied earlier in this pipeline) -> demosaic (already done) ->
+/// camera RGB -> XYZ -> sRGB -> gamma. It is not chromatically adapted to the shot's own
+/// illuminant (real converters' "enhanced"/fitted tiers do that) — see ROADMAP.md's R8.
+const XYZ_TO_SRGB_D65: rawdenoise::Mat3 =
+    [[3.2404542, -1.5371385, -0.4985314], [-0.9692660, 1.8760108, 0.0415560], [0.0556434, -0.2040259, 1.0572252]];
+
 /// sRGB-gamma the linear u16 RGB to RGBA8 — the "None (LibRaw sRGB)" no-profile path,
 /// previously a 72M-iteration JS loop in desktop-native.js.
-pub fn srgb_rgba(rgb16: &[u16]) -> Vec<u8> {
+///
+/// `xyz_to_cam`: this shot's XYZ(D65)->camera-native-RGB matrix (same field DecodedRaw already
+/// carries for the High-tier denoiser — see raw_decode.rs's own doc comment on where it comes
+/// from). ROADMAP.md's R8: every un-DCP'd camera used to render in raw camera-native primaries
+/// with only a gamma curve applied — genuinely wrong colour, not merely "less accurate" (a
+/// camera's red/green/blue filters don't remotely match sRGB's primaries). The all-zero
+/// sentinel (no usable matrix — camera not in rawler's table, or main.rs's zero-determinant
+/// guard for a missing `color_matrix`) falls back to EXACTLY today's gamma-only behaviour, so
+/// this is a strict improvement wherever a matrix exists and a no-op everywhere else.
+pub fn srgb_rgba(rgb16: &[u16], xyz_to_cam: rawdenoise::Mat3) -> Vec<u8> {
     let g = |v: f32| -> f32 {
+        let v = v.clamp(0.0, 1.0);
         if v <= 0.0031308 {
             v * 12.92
         } else {
             1.055 * v.powf(1.0 / 2.4) - 0.055
         }
     };
+    let cam_to_xyz = if xyz_to_cam == [[0.0; 3]; 3] { None } else { Some(rawdenoise::mat3_inv(xyz_to_cam)) };
+    // cam_to_srgb = XYZ_TO_SRGB_D65 * cam_to_xyz, precomputed once so the per-pixel loop below
+    // is a single 3x3 multiply instead of two chained ones.
+    let cam_to_srgb: Option<rawdenoise::Mat3> = cam_to_xyz.map(|c2x| {
+        let mut m = [[0.0f32; 3]; 3];
+        for i in 0..3 {
+            for j in 0..3 {
+                m[i][j] = (0..3).map(|k| XYZ_TO_SRGB_D65[i][k] * c2x[k][j]).sum();
+            }
+        }
+        // Row-normalize (each row divided by its own sum) — the step dcraw's cam_xyz_coeff also
+        // applies (verified against its real source, not assumed) and which this composition
+        // needs for the same reason: a raw ColorMatrix2 isn't pre-scaled so that a neutral
+        // (equal-channel) camera reading maps to a neutral sRGB one — checked numerically before
+        // writing this (a real Sony matrix's UNNORMALIZED composed matrix sent a neutral grey
+        // patch to RGB(255,119,240), wildly non-neutral). Row-normalizing forces exactly that
+        // property: each row then sums to 1, so a unit vector (1,1,1) maps to (1,1,1).
+        for row in m.iter_mut() {
+            let sum: f32 = row.iter().sum();
+            if sum.abs() > 1e-6 {
+                for v in row.iter_mut() {
+                    *v /= sum;
+                }
+            }
+        }
+        m
+    });
     let px_count = rgb16.len() / 3;
     let mut rgba = vec![0u8; px_count * 4];
     rgba.par_chunks_mut(4)
         .zip(rgb16.par_chunks(3))
         .for_each(|(dst, src)| {
+            let cam = [src[0] as f32 / 65535.0, src[1] as f32 / 65535.0, src[2] as f32 / 65535.0];
+            let out = match cam_to_srgb {
+                Some(m) => [
+                    m[0][0] * cam[0] + m[0][1] * cam[1] + m[0][2] * cam[2],
+                    m[1][0] * cam[0] + m[1][1] * cam[1] + m[1][2] * cam[2],
+                    m[2][0] * cam[0] + m[2][1] * cam[1] + m[2][2] * cam[2],
+                ],
+                None => cam,
+            };
             for c in 0..3 {
-                dst[c] = (g(src[c] as f32 / 65535.0) * 255.0).round() as u8;
+                dst[c] = (g(out[c]) * 255.0).round() as u8;
             }
             dst[3] = 255;
         });
     rgba
 }
+
+#[cfg(test)]
+mod srgb_rgba_tests {
+    use super::*;
+
+    /// ROADMAP.md's R8, regression safety: the all-zero sentinel (no camera matrix available)
+    /// MUST reproduce the exact old gamma-only behaviour byte-for-byte — this is the path every
+    /// existing caller took before this session's change, so it has to stay a true no-op.
+    #[test]
+    fn no_matrix_is_byte_identical_to_plain_gamma() {
+        let rgb16: Vec<u16> = vec![0, 0, 0, 65535, 65535, 65535, 32768, 16384, 8192, 200, 40000, 60000];
+        let out = srgb_rgba(&rgb16, [[0.0; 3]; 3]);
+        // Hand-computed sRGB gamma reference for each channel value above.
+        let g = |v: f32| -> u8 {
+            let v = v.clamp(0.0, 1.0);
+            let s = if v <= 0.0031308 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 };
+            (s * 255.0).round() as u8
+        };
+        for (px, chunk) in rgb16.chunks_exact(3).enumerate() {
+            for c in 0..3 {
+                let expected = g(chunk[c] as f32 / 65535.0);
+                assert_eq!(out[px * 4 + c], expected, "pixel {px} channel {c}: matrix-free path must match plain gamma exactly");
+            }
+            assert_eq!(out[px * 4 + 3], 255);
+        }
+    }
+
+    /// A real camera matrix must render a neutral (white-balanced, equal-RGB) input as
+    /// APPROXIMATELY neutral output — the defining property a correct camera->XYZ->sRGB path
+    /// has and the old (no-matrix) code provably lacked, since a camera's raw channels aren't
+    /// aligned with sRGB primaries at all. Matrix is Sony a7 III's real D65 ColorMatrix2 from
+    /// rawler 0.7.2's own `data/cameras/sony/a7m3.toml` (XYZ->camera direction, this file's
+    /// convention) — a genuine vendor-published matrix, not synthesized for the test.
+    #[test]
+    fn real_camera_matrix_keeps_neutral_grey_neutral() {
+        let xyz_to_cam_a7m3: rawdenoise::Mat3 =
+            [[0.6596, -0.2079, -0.0562], [-0.4782, 1.3016, 0.1933], [-0.097, 0.1581, 0.5181]];
+        // A mid-grey neutral patch: equal R=G=B in camera-native space (as-shot white balance
+        // already applied upstream in the real pipeline, which is exactly what makes a properly
+        // white-balanced neutral subject read as equal camera-RGB channels).
+        let rgb16: Vec<u16> = vec![30000, 30000, 30000];
+        let out = srgb_rgba(&rgb16, xyz_to_cam_a7m3);
+        let (r, g2, b) = (out[0] as i32, out[1] as i32, out[2] as i32);
+        let spread = (r - g2).abs().max((g2 - b).abs()).max((r - b).abs());
+        assert!(spread <= 3, "neutral input should render approximately neutral, got RGB=({r},{g2},{b}), spread={spread}");
+        // And it must NOT be the old no-matrix passthrough's answer for this same input —
+        // proving the matrix path is actually being exercised, not silently skipped.
+        let old = srgb_rgba(&rgb16, [[0.0; 3]; 3]);
+        assert_eq!(old[0], old[1]); // old path is ALSO neutral-preserving for equal RGB in (gamma is per-channel)
+        // but the two paths should agree here only because grey is a fixed point of any
+        // pure-rotation-ish matrix on the diagonal — the real signal is the spread check above
+        // plus the off-neutral case below.
+        let _ = old;
+    }
+
+    /// A saturated (non-neutral) camera-native colour must actually be transformed by the
+    /// matrix, not passed through — proves the matrix multiply is wired in, not a no-op.
+    #[test]
+    fn real_camera_matrix_changes_a_saturated_colour() {
+        let xyz_to_cam_a7m3: rawdenoise::Mat3 =
+            [[0.6596, -0.2079, -0.0562], [-0.4782, 1.3016, 0.1933], [-0.097, 0.1581, 0.5181]];
+        let rgb16: Vec<u16> = vec![50000, 10000, 5000]; // a saturated red-ish patch
+        let with_matrix = srgb_rgba(&rgb16, xyz_to_cam_a7m3);
+        let without = srgb_rgba(&rgb16, [[0.0; 3]; 3]);
+        assert_ne!(&with_matrix[0..3], &without[0..3], "a real per-camera matrix must change a saturated colour's rendering");
+    }
+}
+

@@ -595,7 +595,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             let n = n.cbrt().round() as usize;
             raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
         }
-        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16),
+        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
@@ -728,7 +728,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
             let n = n.cbrt().round() as usize;
             raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
         }
-        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16),
+        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect()
     };
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };

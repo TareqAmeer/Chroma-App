@@ -563,7 +563,7 @@ work starts the week of 2026-09-01.
 | R5 | **Naga single-source shaders** (WGSL → WGPU desktop + generated GLSL ES 3.0 for web/iOS) | L | Author once, generate both; the same mechanism wgpu's own `webgl` feature uses. Generation at dev time, generated GLSL committed into `chromasmith-22.html`, so no build step for the user. ⚠️ **Spike first:** port only the `comp` pass and require all 18 goldens byte-exact from *each* backend. Our runtime template-literal assembly (`mskAnyTex`, `GLSL_OKLAB`) moves to a dev-time step |
 | R6 | **Deconvolution sharpening** | M | Models the lens/sensor PSF and inverts it — recovers real detail instead of unsharp-mask's faked edge contrast, halos and noise gain. More compute; rings if over-driven, so it needs a conservative cap |
 | R7 | **Depth mask + depth-driven lens blur / tilt-shift** | M | Depth Anything V2 as a fourth ONNX model, same pattern as `sam.rs`/`faceparse.rs`. Gives a distance-band mask *and* post-hoc shallow depth of field |
-| R8 | **rawler colour-matrix fallback for un-profiled bodies** | M | Promoted by the ARW work (2026-08-30): F9's crop fix made a Sony ARW decode correctly, but it still has no colour profile — `cameraDcpPrefix` only matches Panasonic DC-S9 and Sony DSC-RX100M5, so every other camera (including the a7-line body this session tested against) gets `null` and skips DCP entirely today. **Not a guess**: this is exactly what darktable and RawTherapee do as their OWN base tier — darktable's "standard color matrix" comes from dcraw, "which in turn gets most of them via Adobe's DNG Converter"; RawTherapee resolves `camconst.json` → dcraw's table → the file's own embedded matrix. Verified concretely against this repo's actual vendored data, not asserted: rawler 0.7.2 ships 103 Sony camera TOMLs (`data/cameras/sony/*.toml`), every one carrying a `[cameras.color_matrix]` block — real, immediate coverage, no new data-gathering. Adopt RawTherapee's resolution order: (1) an explicit `.dcp` on disk (F1) → (2) our own fitted profile where one exists (DC-S9 only) → (3) the file's own embedded matrix (DNG `ColorMatrix2`) → (4) rawler's built-in per-body matrix → (5) generic fallback, status line says so. F1a (done) is a hard prerequisite in spirit — it stopped the DC-S9 sky-gate residual from silently applying to every other camera; R8 is the other half, giving those cameras a real colour matrix instead of none |
+| R8 | ✅ **DONE (tier 4 of 5) — rawler colour-matrix fallback for un-profiled bodies** | M | See write-up below. Shipped the base tier of RawTherapee's resolution order (#4: rawler's built-in per-body matrix); #1 (F1's on-disk `.dcp` resolver) and #3 (embedded `ColorMatrix2`) remain open, #2 (DC-S9 fitted profile) already existed |
 | R9 | **Virtual copies** | M | A persisted second edit record against the same path, appearing in the grid as its own card with its own rating/flags/export. ⚠️ **Not** what Compare mode does (`compareState`, `desktop/library-ui.js:3471`) — Compare already shows one photo under two treatments (Live/Original/history step/Style) but is a transient viewer that persists nothing. Touches the sidecar format + `catalog.rs` |
 | R10 | **CLIP auto-tagging** | S | ⚠️ We already run CLIP ViT-B/32 (`clip.rs`, `catalog_clip_embed`/`catalog_clip_search`) for natural-language search. This is only surfacing those embeddings as visible, filterable per-photo keywords — a labelling + UI layer, **not** new inference |
 | R11 | **Dehaze, colour wheels (lift/gamma/gain), parametric curves** | S each | Conventional controls we simply don't have (we have point curves + 8-band HSL) |
@@ -622,6 +622,48 @@ re-read it before starting F1/F2, since it has the load-bearing detail this tabl
 | F1a | ✅ **DONE — Sky-gate residual → DC-S9 only** | S | `dcpFit(iso,cameraPrefix)` now returns a `sky` flag alongside `ev`/`gr`/`gb`, gated on the SAME `cameraPrefix==='Panasonic DC-S9'` check — plain data threaded through the existing `fit` argument, not a new `bakeDcpLUT` parameter (CLAUDE.md's own warning: this function is compiled into the pixel worker via `toString`, so a captured constant would silently desync). `bakeDcpLUT`'s residual `gate` computation is now `fit.sky?...:0` (collapses to the same no-op every other hue/sat/value combination already takes, rather than wrapping the whole block). DC-S9 unaffected (`sky:true`, byte-identical — `npm run scorecard` 18/18 unchanged, worker/main-thread DCP bake agreement still max|Δ|=0 over 823,875 entries); every other camera (Sony RX100M5, and now any ARW via R8) stops getting an S9-specific blue-sky correction it was never fitted against. ⚠️ Also fixed a latent truthiness bug found while unit-checking this: the old guard was `cameraPrefix&&cameraPrefix!=='Panasonic DC-S9'`, so a **falsy** `cameraPrefix` (null — "no bundled profile for this camera") fell through to the **S9** branch, the opposite of correct. Unreachable today (the one caller throws before `dcpFit` on a null prefix) but would have been a real bug the moment R8 replaces that throw with a fallback path — fixed to a plain `cameraPrefix!=='Panasonic DC-S9'` check |
 | F1b | **`parseDCP` tolerate missing ProfileToneCurve** | S | 201/210 `Adobe Standard/*.dcp` lack tag 50940 and `parseDCP` currently throws on that — identity curve instead of a hard fail |
 | F2 | ✅ **DONE (V-Log-only half) — Auto-detect RAW profile from EXIF (PhotoStyle)** | S | See write-up below. Full per-photo style table (`rawProfile()` → `it.rawProfile`, `getUISnapshot`/⌘Z wiring, `list_dcp_profiles`-gated) remains a bigger follow-on — needs F1 shipped first, since "does this style exist for this camera" is F1's own lookup |
+
+### R8 — Colour-matrix fallback for un-profiled cameras (verified against real conversion math, not assumed)
+
+**Shipped**: `raw_decode::srgb_rgba` (the desktop "None (LibRaw sRGB)" / un-DCP'd-camera path —
+confirmed via trace that this, not a thrown error, is what a Sony ARW already hits today, since
+`desktop-native.js`'s `open()` defaults to `mode='srgb'` and only switches to `'lut'` when a
+bundled DCP prefix matches) now applies this shot's own camera→XYZ→sRGB colour matrix before the
+gamma curve, instead of gamma-only on raw camera-native RGB. The matrix is `xyz_to_cam`, a field
+this pipeline already extracted from rawler's `camera.color_matrix` for the High-tier denoiser —
+newly threaded through to `DecodedRaw` and `srgb_rgba`'s signature. All-zero sentinel (no matrix
+available) is an exact no-op, reproducing prior behaviour byte-for-byte — verified by a dedicated
+regression test.
+
+**How wrong the old behaviour was, concretely**: a camera's raw R/G/B filter response does not
+remotely match sRGB's primaries, so gamma-correcting camera-native values directly (the old
+`srgb_rgba`) is not merely "less accurate" than a real profile — it renders in the wrong colour
+space outright. Visually confirmed on a real ARW (`TM_00522.ARW`): a pink/rose-coloured poodle
+rendered as flat washed-out beige before this fix, with genuine colour restored after.
+
+⚠️ **A real implementation bug was caught by writing the neutral-grey regression test itself,
+not assumed to be correct from the math** — worth recording since it's the standard trap here.
+Composing `XYZ_TO_SRGB_D65 * inverse(xyz_to_cam)` directly and applying it to a real ARW's
+extracted matrix sent a neutral (equal-channel) grey patch to RGB(255,119,240) — wildly
+non-neutral. Root cause, confirmed against dcraw's own published `cam_xyz_coeff` source: a raw
+`ColorMatrix2`/`xyz_to_cam` isn't pre-scaled so a neutral camera reading maps to a neutral output;
+dcraw's real code row-normalizes the composed matrix (each row divided by its own sum) before use.
+Added that step; the same real matrix then reproduced exact neutral-preservation
+(verified: `real_camera_matrix_keeps_neutral_grey_neutral`, `spread<=3` on real hardware numbers).
+
+**Tests** (`raw_decode.rs::srgb_rgba_tests`): the byte-identical no-matrix regression, the
+neutral-preservation property against the real xyz_to_cam this session's own decode extracted for
+a real Sony ARW (not a hand-transcribed camconst TOML value — those may be transformed/normalized
+internally by rawler before exposure, so only a value pulled through the actual code path is
+trustworthy), and a saturated-colour check proving the matrix multiply is actually wired in.
+
+**What this is not**: not chromatic adaptation to the shot's own illuminant, not a fitted profile
+— it's exactly RawTherapee's/darktable's own "standard"/base tier (see the prior-art note on R8's
+original entry, still accurate). Real per-camera colour instead of wrong-space colour; a real
+fitted DCP (F1, or a hand-fit like the DC-S9's) is still strictly better where one exists.
+
+*Touches:* `raw_decode.rs` (`XYZ_TO_SRGB_D65`, `srgb_rgba`, `DecodedRaw.xyz_to_cam`),
+`rawdenoise.rs` (`mat3_inv` made `pub(crate)` for reuse), `main.rs` (both `srgb_rgba` call sites).
 
 ### F2 — Auto-detect V-Log from Panasonic PhotoStyle (root cause + real location, not where expected)
 
