@@ -583,6 +583,43 @@ re-read it before starting F1/F2, since it has the load-bearing detail this tabl
 | F6 | **ICO/DDS frame picker** | S | `still_decode.rs` reports a frame count today but always takes the first/largest; a picker UI is a follow-on, not a blocker |
 | F7 | **Hands-on desktop verification pass** | S | Nothing in Pass 1 was click-tested in the built `.app` — no harness drives the new Tauri commands (`decode_image_v1`, widened `decode_raw_v2` inputs). Open one real file per newly-supported family (at minimum: a Fuji RAF, a Nikon NEF, a JXL, an EXR, a DDS) and confirm the Library thumbnail and the editor agree |
 | F8 | **Regenerate `desktop/dist/` and `ios/App/App/public/`** | S | Pass 1 didn't run `build-desktop.sh`/`build-ios.sh` — those build outputs are still the pre-widening HTML. Cheap, just wasn't done this session |
+| F9 | ✅ **DONE — ARW purple left-edge band; DC-S9 native decode corrected to true sensor resolution** | S | See write-up below. `npm test` + `cargo test --bin chromasmith` pass. Structural fix accepted on DNG-spec + dimension-match reasoning; a real ARW (`TM_00522.ARW`, a dark indoor shot) decoded before/after didn't visually reproduce a purple line either way — the file may just be too dark for a raw-linear dump to show it, since the real defect likely only becomes obvious after the app's own WB/exposure/tone-curve grading, which this quick Rust-side check doesn't replicate. Re-open the file that originally showed the line in the rebuilt app (F8) for a true confirmation |
+
+### F9 — ARW purple left-edge band (root cause + fix)
+
+**Symptom:** a Sony `.ARW` showed a purple/coloured vertical line down the left of the decoded
+photo. Not "formats work not implemented" — Pass 1's 8→32 format widening exposed a real gap:
+`decode_and_demosaic` (`raw_decode.rs:198–199`) always took the frame at `raw_image.width`/
+`height`, the *full sensor readout*, and never read rawler's `RawImage::crop_area`/`active_area`
+(`rawimage.rs:226,228`). Sony bodies carry masked optical-black columns along the sensor edge;
+left in, they demosaic and grade like real image data — exactly a coloured band. RW2 never
+surfaced this because the vendored DC-S9 profile carries no static `crop_area`, so it went
+unnoticed until a body that does was opened.
+
+**Fix shipped:** `raw_decode.rs` now reads `crop_area` (falling back to `active_area`) and crops
+the final interleaved RGB16 buffer to it, *after* demosaic and before the cleanup passes —
+cropping the raw Bayer buffer first would change PPG's edge interpolation and require re-deriving
+the CFA pattern for the new origin (real bodies do shift phase: rawler's own `sony/a500.toml`
+ships an odd `crop_area = [8, 7, 8, 3]`). Post-demosaic the buffer is plain RGB, so no such concern
+applies. `RawImage::cropped_cfa()` — the obvious-looking helper — is `todo!()` in rawler 0.7.2 and
+would have panicked; not used.
+
+⚠️ **This also corrects the DC-S9's own native decode**, from 6016×4016 (full sensor readout,
+including its own masked border) to 6000×4000 — Panasonic's published resolution for this camera.
+rawler resolves this from the RW2 file's own embedded tags, independent of the static camera
+TOML. **User-confirmed to apply uniformly** rather than exempting RW2, after establishing this
+isn't a guess: 6000×4000 matches Panasonic's spec sheet, and — independently — the project's own
+`calib/nr_validate.py` already documented "CS-bin is 6016×4016, LR-TIFF is 6000×4000 — they don't
+pixel-align" as a known, worked-around mismatch. The native decode now simply agrees with what
+the calibration tooling always treated as ground truth. Calibrated colour constants (DCP/LUT/
+sky-gate) are per-pixel-value transforms, not position-dependent, so they remain valid against the
+cropped frame — only the discarded border pixels are affected. Follow-up, not blocking: a few
+`calib/*.py` diagnostic probes (`nr_stage_montage.py`, `tune_hybrid_fast.py`) hardcode patch
+coordinates in the old 6016×4016 space and will need a coordinate-offset update if re-run against
+a fresh decode.
+
+*Touches:* `raw_decode.rs:198–199` (crop-rect capture) and the crop insertion just before
+`DemosaicOut` construction (after the u16 pack step).
 
 ### Sequencing note
 
@@ -590,3 +627,5 @@ F1 unblocks F1a/F1b/F2's full form and is the biggest single item — but it's n
 ForwardMatrix survey, not exploratory. F2's V-Log-only half is independent and worth doing even if
 F1 slips. F3/F7/F8 are cheap and independent of everything else — good session-filler alongside a
 bigger item. F4/F5/F6 are each self-contained follow-ups with no ordering constraint between them.
+F9 is done in code; F7's "open one real file per family" pass should now include an ARW specifically
+to confirm it visually.

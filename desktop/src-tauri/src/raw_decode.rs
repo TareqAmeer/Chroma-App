@@ -198,6 +198,22 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
     let w = raw_image.width;
     let h = raw_image.height;
 
+    // Sony ARW (and any other body carrying real crop/active-area metadata) ships masked
+    // optical-black columns/rows around the usable frame. Left in, they demosaic and grade like
+    // real image data — a solid coloured band along the sensor edge (measured: a vertical
+    // purple line down the left of the photo on a real ARW). rawler exposes exactly where the
+    // usable area is (`crop_area`, preferring it over the wider `active_area` — DNG's own
+    // "recommended" vs "all non-black" distinction), but nothing in this file read either field
+    // before Pass 1's format widening (RW2 never carries one, so it went unnoticed).
+    // Captured now (before `raw_image` is consumed below) and applied to the final RGB16 buffer
+    // AFTER demosaic — cropping the raw Bayer buffer first would change PPG's edge interpolation
+    // and would need to re-derive the CFA pattern for the new origin (real bodies do shift phase:
+    // rawler's own `sony/a500.toml` ships `crop_area = [8, 7, 8, 3]`, an odd top/bottom border).
+    // Post-demosaic the buffer is plain interleaved RGB, so no such phase concern applies.
+    let crop_rect = raw_image.crop_area.or(raw_image.active_area).filter(|r| {
+        r.d.w > 0 && r.d.h > 0 && r.p.x + r.d.w <= w && r.p.y + r.d.h <= h && (r.p.x, r.p.y, r.d.w, r.d.h) != (0, 0, w, h)
+    });
+
     let cfa_config = match &raw_image.photometric {
         RawPhotometricInterpretation::Cfa(config) => config.clone(),
         // The most likely real-world hit from widening RAW_EXTS: an already-demosaiced/linear
@@ -373,6 +389,23 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
             dst[1] = (px[1].clamp(0.0, 1.0) * 65535.0).round() as u16;
             dst[2] = (px[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
         });
+
+    // Drop the masked optical-black border now that it's plain RGB (see the crop_rect comment
+    // above `w`/`h`'s capture for why this happens here, post-demosaic, and not on the raw
+    // Bayer buffer). `crop_rect` is in the pre-demosaic sensor's coordinate space, which is
+    // exactly (out_w, out_h) here — PPG and the CS_DEMOSAIC alt path both preserve dimensions.
+    let (rgb16, out_w, out_h) = match crop_rect {
+        Some(r) if r.d.w < out_w || r.d.h < out_h => {
+            let mut cropped = vec![0u16; r.d.w * r.d.h * 3];
+            cropped.par_chunks_mut(r.d.w * 3).enumerate().for_each(|(row, dst)| {
+                let src_row = r.p.y + row;
+                let src_off = (src_row * out_w + r.p.x) * 3;
+                dst.copy_from_slice(&rgb16[src_off..src_off + r.d.w * 3]);
+            });
+            (cropped, r.d.w, r.d.h)
+        }
+        _ => (rgb16, out_w, out_h),
+    };
 
     let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
     Ok(DemosaicOut {
