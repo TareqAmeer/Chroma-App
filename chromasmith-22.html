@@ -4205,7 +4205,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-30e';
+const BUILD='2026-08-31a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -9093,6 +9093,18 @@ async function loadFXImages(fileList){
         const{canvas,dpi,note}=await window.chromasmithDecodeStill(bytes,ext);
         if(note)log(`${file.name}: ${note}`,'warn');
         entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,fileSize:bytes.byteLength}); // bytes:null → no PNG/JPEG meta splice on export
+        continue;
+      }
+      // ROADMAP.md F6: .ico is otherwise browser-native (FMT_STILL_NATIVE/IMG_EXT_RE, plain
+      // <img>), which only ever shows the ONE frame the browser's own ICO decoder picks. Desktop
+      // routes it through the same Rust decode as RUST_ONLY_RE instead, purely so a multi-frame
+      // icon can offer a frame picker (see fxIcoFramePicker below) — this is additive: an ICO
+      // that only has one frame renders identically either way, and web/iOS (no
+      // chromasmithDecodeStill) falls straight through to the existing <img> path below.
+      if(ext==='ico'&&typeof window.chromasmithDecodeStill==='function'){
+        const{canvas,dpi,note,frameCount}=await window.chromasmithDecodeStill(bytes,ext);
+        if(note)log(`${file.name}: ${note}`,'warn');
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,fileSize:bytes.byteLength,icoFrameCount:frameCount,icoFrame:0,_icoBytes:bytes});
         continue;
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
@@ -14508,7 +14520,32 @@ function showExif(exif){
     (chips.length?`<div class="fx-exif-grid">${chips.join('')}</div>`:'')+
     row('File Name',it.name?(it.ext?`${it.name}.${it.ext}`:it.name):'')+row('Size',fmtSize(it.fileSize))+
     row('File Format',it.ext?it.ext.toUpperCase():'')+
-    row('Lens Model',exif.lens)+row('Camera Make',make)+row('Camera Model',model);
+    row('Lens Model',exif.lens)+row('Camera Make',make)+row('Camera Model',model)+
+    _icoFrameRow(it);
+}
+// ROADMAP.md F6 — minimal ICO/CUR frame picker: a numeric stepper, shown ONLY when the loaded
+// icon actually has more than one directory entry (icoFrameCount set by the RUST_ONLY_RE-style
+// desktop-only load path above). Deliberately small — a dropdown/stepper, not a filmstrip — this
+// format is a rare edit target, not a primary workflow.
+function _icoFrameRow(it){
+  if(!it||!(it.icoFrameCount>1))return'';
+  const n=it.icoFrameCount;
+  return `<div class="fx-exif-row"><span class="fx-exif-lb">Frame</span><span class="fx-exif-val">`+
+    `<input type="number" min="0" max="${n-1}" value="${it.icoFrame||0}" style="width:3em" `+
+    `onchange="fxSetIcoFrame(this.value)"> of ${n}</span></div>`;
+}
+// Re-decodes the CURRENT photo's stashed ICO bytes at a different directory entry and swaps the
+// canvas in place — mirrors the initial decode in loadFXImages exactly (same
+// window.chromasmithDecodeStill call), so a chosen frame renders through the identical path.
+async function fxSetIcoFrame(v){
+  const it=fxImages[fxCurIdx];
+  if(!it||!it._icoBytes||typeof window.chromasmithDecodeStill!=='function')return;
+  const n=Math.max(0,Math.min(it.icoFrameCount-1,parseInt(v,10)||0));
+  try{
+    const{canvas}=await window.chromasmithDecodeStill(it._icoBytes,'ico',n);
+    it.img=canvas;it.icoFrame=n;
+    fxImg=it.img;updateWork();renderPreview();
+  }catch(e){log(`Could not switch ICO frame: ${errStr(e)}`,'err')}
 }
 // The Basic Adjustments panel (exposure/contrast/.../skin) is the one FX section that can be
 // made INDEPENDENT per photo (adjScopeToggle) — everything else (LUT, curves, HSL, grain,

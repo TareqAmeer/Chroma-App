@@ -220,19 +220,19 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
         r.d.w > 0 && r.d.h > 0 && r.p.x + r.d.w <= w && r.p.y + r.d.h <= h && (r.p.x, r.p.y, r.d.w, r.d.h) != (0, 0, w, h)
     });
 
-    let cfa_config = match &raw_image.photometric {
-        RawPhotometricInterpretation::Cfa(config) => config.clone(),
-        // The most likely real-world hit from widening RAW_EXTS: an already-demosaiced/linear
-        // DNG (iPhone ProRAW, a Foveon→DNG conversion, and similar). This pipeline needs raw
-        // sensor CFA data — there's no Bayer grid left to demosaic in a linear DNG. Named so it
-        // reads as "this file's kind isn't supported" rather than a bare debug enum dump.
-        other => {
-            return Err(format!(
-                "this is an already-demosaiced (linear) DNG — Chromasmith's RAW pipeline needs \
-                 sensor CFA data, not a rendered image ({other:?})"
-            ))
-        }
-    };
+    // ROADMAP.md F5: branch on the file's real photometric interpretation instead of assuming
+    // every RAW is a Bayer mosaic. `RawPhotometricInterpretation::LinearRaw` (rawler's real enum
+    // variant — verified in the vendored rawler-0.7.2 source, not guessed) is what DNG's own
+    // PhotometricInterpretation=34892 decodes to: iPhone ProRAW, a Foveon→DNG conversion, and
+    // (per rawler's own decoders) the "compressed" mode-3 variant some Sony ARW/Nikon NEF/Canon
+    // CR2 files use, plus X3F/Foveon natively. All of these carry full per-pixel RGB already —
+    // there's no Bayer grid left to demosaic — so this produces (out_w, out_h, rgb16_f32)
+    // directly instead of running PPG/CS_DEMOSAIC, and skips the Bayer-cell clip-to-white
+    // heuristic below (that trick is specifically about a 2x2 CFA cell; it has no meaning once
+    // channels are already separated per pixel).
+    let (out_w, out_h, rgb16_f32): (usize, usize, Vec<f32>) = match &raw_image.photometric {
+        RawPhotometricInterpretation::Cfa(config) => {
+    let cfa_config = config.clone();
     if !cfa_config.cfa.is_rgb() {
         // Foveon (X3F, layered-not-mosaiced) and monochrome-sensor cameras both fail this check.
         return Err(format!(
@@ -326,7 +326,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
     // passes below (false-color suppression, hue defringe, native NR, lens correction) — those
     // are the actual slow stages, not this interpolation step.
     let demosaic_choice = std::env::var("CS_DEMOSAIC").unwrap_or_else(|_| demosaic_algo.to_string());
-    let (out_w, out_h, rgb16_f32): (usize, usize, Vec<f32>) = if demosaic_choice.is_empty() {
+    if demosaic_choice.is_empty() {
         let pix = PixF32::new_with(pixels, w, h);
         let roi = pix.rect();
         let rgb = PPGDemosaic::new().demosaic(&pix, &cfa_config.cfa, &cfa_config.colors, roi);
@@ -382,6 +382,46 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
             dst[2] = planar[2 * w * h + i];
         });
         (w, h, interleaved)
+    }
+        }
+        RawPhotometricInterpretation::LinearRaw => {
+            // Already full-resolution RGB per DNG's own definition of this photometric
+            // interpretation (and rawler's `cpp` field for it) — no CFA, no demosaic.
+            if raw_image.cpp != 3 {
+                return Err(format!(
+                    "this linear RAW has {} components per pixel — only 3-channel (RGB) linear \
+                     RAW is supported",
+                    raw_image.cpp
+                ));
+            }
+            // White balance: same LibRaw pre_mul convention/normalization as the CFA path
+            // above, applied by channel POSITION (interleaved R,G,B,R,G,B,...) instead of
+            // `cfa.color_at(row,col)` — there's no CFA object for this variant.
+            let mut wb = raw_image.wb_coeffs; // [R, G, B, G2], may contain NaN
+            if wb[0].is_nan() {
+                eprintln!("raw_decode: NaN white-balance coefficients from decoder — falling back to [1,1,1,1] (no WB applied)");
+                wb = [1.0, 1.0, 1.0, 1.0];
+            }
+            let dmin = wb[..3].iter().copied().filter(|v| *v > 0.0).fold(f32::MAX, f32::min);
+            if dmin > 0.0 && dmin.is_finite() {
+                for c in wb.iter_mut() {
+                    *c /= dmin;
+                }
+            }
+            let mut pixels: Vec<f32> = raw_image.data.as_f32().into_owned();
+            pixels.par_chunks_mut(3).for_each(|px| {
+                px[0] = (px[0] * wb[0]).max(0.0);
+                px[1] = (px[1] * wb[1]).max(0.0);
+                px[2] = (px[2] * wb[2]).max(0.0);
+            });
+            (w, h, pixels)
+        }
+        other => {
+            return Err(format!(
+                "this RAW's photometric interpretation ({other:?}) isn't supported by \
+                 Chromasmith's decode pipeline"
+            ))
+        }
     };
 
     // 4) Pack to interleaved u16. Floor already applied; ceiling (1.0) only here — the one

@@ -126,21 +126,19 @@ gated on its own spike.
 ### Format widening
 
 Pass 1 shipped 2026-08-28 (`b193b38`): format registry consolidated, RAW widened 8→32 formats,
-desktop-only still path added (EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL). Full design reasoning (resolution
-order, path-traversal handling, the ForwardMatrix survey) lives in
-`~/.claude/plans/and-these-as-well-validated-wadler.md` — re-read before starting F4/F5/F6.
+desktop-only still path added (EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL). Pass 2 (F4/F5/F6/F7) shipped
+2026-08-31 — EXR/HDR real headroom, linear-DNG passthrough, an ICO frame picker, and a hands-on
+(partial, honestly reported) verification pass — see the Delivered table above. Full design
+reasoning (resolution order, path-traversal handling, the ForwardMatrix survey) lives in
+`~/.claude/plans/and-these-as-well-validated-wadler.md`.
 
 ⚠️ **`bakeDcpLUT` is compiled into the pixel worker via `Function.prototype.toString`**
 (CLAUDE.md §2) and `perf_bench.mjs` asserts worker/main-thread agreement to **max|Δ|=0**. Any new
 parameter touching that function must be a plain argument threaded through, never a captured
 module-scope constant. Run `npm run perf:test` immediately after, in isolation.
 
-| # | item | size | note |
-|---|---|---|---|
-| F4 | EXR/HDR real headroom instead of clamp | M | `still_decode.rs`'s `hdr_to_srgb8` clamps >1.0 with a logged note — reuse the RAW path's `hrOut`/`HR_MAX_STOPS` headroom channel instead (now genuinely wired end-to-end per R1's desktop fix). |
-| F5 | Linear/demosaiced-DNG passthrough | S | `raw_decode.rs` currently rejects linear DNG (iPhone ProRAW, Foveon→DNG) with a named error — real, common file. When `photometric` is RGB, skip demosaic and take pixels directly. |
-| F6 | ICO/DDS frame picker | S | `still_decode.rs` reports a frame count but always takes the first/largest; a picker is a follow-on. |
-| F7 | Hands-on desktop verification (partial) | S | Confirmed this session: ARW open, 3-brand DCP resolution. Still needed: a Fuji RAF, a Nikon NEF, a JXL, an EXR, a DDS opened in the built `.app`, Library thumbnail vs. editor agreement. |
+Format widening has no further open items right now — DDS mip picking remains explicitly
+unimplemented (see F6's Delivered note) and a real Fuji RAF/Nikon NEF/JXL/EXR/DDS file + a GUI
+click-through of the built `.app` are still needed whenever such files/access become available
+(see F7's Delivered note).
 
-Sequencing: F4/F5/F6 are independent, self-contained follow-ups with no ordering constraint
-between them. F7 is cheap session-filler alongside any of them.

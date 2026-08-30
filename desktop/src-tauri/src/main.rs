@@ -650,7 +650,19 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 fn decode_image_v1(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let ext = json["ext"].as_str().unwrap_or("").to_lowercase();
-    let decoded = still_decode::open_any_bytes(payload, &ext)?;
+    // ROADMAP.md F6: optional 0-based frame index for a multi-frame ICO/CUR — absent (the
+    // overwhelming majority of calls) reproduces today's exact "largest entry" behaviour via
+    // still_decode::open_any_bytes_at's own None-is-open_any_bytes contract.
+    let frame = json["frame"].as_u64().map(|v| v as usize);
+    let decoded = still_decode::open_any_bytes_at(payload, &ext, frame)?;
+    let frame_count = still_decode::frame_count(payload, &ext);
+    // ROADMAP.md F4: an EXR/HDR source that actually clipped carries a real-headroom companion
+    // buffer (see still_decode::hdr_to_srgb8's doc comment) — surfaced via a `hasExt` header
+    // flag + a trailing w*h*3 f32 LE segment, same shape as decode_raw_v2's `has_ext`/ext body,
+    // so desktop-native.js's chromasmithDecodeStill can build the SAME `_sceneLinear`/
+    // `_sceneLinearPresent` stash FX.setImage already knows how to upload as HDR. Every existing
+    // caller that doesn't read past the RGBA8 body is completely unaffected — `hasExt` defaults
+    // false and the extra bytes are only appended when Some.
     #[derive(serde::Serialize)]
     struct Header {
         w: u32,
@@ -659,19 +671,31 @@ fn decode_image_v1(request: tauri::ipc::Request) -> Result<tauri::ipc::Response,
         #[serde(rename = "dpiKnown")]
         dpi_known: bool,
         note: Option<String>,
+        #[serde(rename = "hasExt")]
+        has_ext: bool,
+        #[serde(rename = "frameCount")]
+        frame_count: Option<usize>,
     }
+    let ext_bytes: Vec<u8> = decoded
+        .ext
+        .as_ref()
+        .map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect())
+        .unwrap_or_default();
     let header = Header {
         w: decoded.w,
         h: decoded.h,
         dpi: decoded.dpi,
         dpi_known: decoded.dpi_known,
         note: decoded.note,
+        has_ext: decoded.ext.is_some(),
+        frame_count,
     };
     let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("decode_image_v1 header: {e}"))?;
-    let mut out = Vec::with_capacity(4 + header_bytes.len() + decoded.rgba.len());
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + decoded.rgba.len() + ext_bytes.len());
     out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
     out.extend_from_slice(&header_bytes);
     out.extend_from_slice(&decoded.rgba);
+    out.extend_from_slice(&ext_bytes);
     Ok(tauri::ipc::Response::new(out))
 }
 

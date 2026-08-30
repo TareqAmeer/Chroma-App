@@ -202,16 +202,30 @@
   // chromasmith-22.html's loadFXImages calls window.chromasmithDecodeStill for any
   // RUST_ONLY_RE-matched file — see that file's FORMAT REGISTRY comment. Only defined here
   // (native shell), so web/iOS correctly falls through to unsupportedFormatMessage() instead.
-  window.chromasmithDecodeStill = async function (bytes, ext) {
-    const buf = await framedInvoke('decode_image_v1', { ext }, bytes);
+  window.chromasmithDecodeStill = async function (bytes, ext, frame) {
+    // ROADMAP.md F6: `frame` (0-based) picks a specific ICO/CUR directory entry — undefined/null
+    // reproduces today's exact "largest entry" behaviour (see still_decode::open_any_bytes_at).
+    const req = (typeof frame === 'number') ? { ext, frame } : { ext };
+    const buf = await framedInvoke('decode_image_v1', req, bytes);
     const dv = new DataView(buf);
     const hlen = dv.getUint32(0, true);
     const hdr = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hlen)));
-    const rgba = new Uint8ClampedArray(buf, 4 + hlen);
+    const bodyLen = hdr.w * hdr.h * 4;
+    const rgba = new Uint8ClampedArray(buf, 4 + hlen, bodyLen);
     const c = document.createElement('canvas');
     c.width = hdr.w; c.height = hdr.h;
     c.getContext('2d').putImageData(new ImageData(rgba, hdr.w, hdr.h), 0, 0);
-    return { canvas: c, dpi: hdr.dpi, note: hdr.note };
+    // ROADMAP.md F4: an EXR/HDR source that genuinely clipped carries a real-headroom companion
+    // buffer (still_decode::hdr_to_srgb8) — same w*h*3 f32 LE shape as the RAW path's `ext`, so
+    // this reuses the EXACT `_sceneLinear`/`_sceneLinearPresent` stash FX.setImage already checks
+    // (chromasmith-22.html's setImage) for an RGBA16F float-texture upload — no shader change.
+    if (hdr.hasExt) {
+      const sceneLinear = new Float32Array(buf, 4 + hlen + bodyLen, hdr.w * hdr.h * 3);
+      let any = false; for (let i = 0; i < sceneLinear.length; i++) { if (sceneLinear[i] > 1.05) { any = true; break; } }
+      c._sceneLinear = { data: sceneLinear, w: hdr.w, h: hdr.h };
+      c._sceneLinearPresent = any;
+    }
+    return { canvas: c, dpi: hdr.dpi, note: hdr.note, frameCount: hdr.frameCount };
   };
 
   // ── High-tier (neural) RAW denoise — "Denoise now" button in the Noise Reduction panel.
