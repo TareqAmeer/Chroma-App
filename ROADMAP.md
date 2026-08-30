@@ -456,6 +456,51 @@ nothing left to add there.
 
 ---
 
+## Launch screen + GPU/CPU offload — backlog (added 2026-08-30)
+
+### N1 — Load-screen redesign
+
+**Status: blocked on the design** (user will share). Everything visual lives in one place:
+`chromasmith-22.html:~1034–1084` — the `#boot-splash` div, deliberately inline-styled so it paints
+before any stylesheet or JS loads, plus one `@keyframes boot-splash-spin` `<style>` tag. Current
+palette: bg `#17171b`, amber `#d4903a`, text `#f0ece2`, muted `#9a968c`.
+
+**JS contract a redesign must preserve** (driven by `updateBootSplashProgress`,
+`desktop/library-ui.js:~5103–5121`), or the splash silently stops showing progress:
+- ids `boot-splash`, `boot-splash-spinner`, `boot-splash-progress`, `boot-splash-bar`,
+  `boot-splash-label` must all still exist;
+- `#boot-splash-progress` starts `display:none`, flips to `display:flex` on first progress event;
+- `#boot-splash-spinner` is hidden at that same moment (the bar replaces it, doesn't join it);
+- `#boot-splash-bar` is width-driven (`'NN%'`) — needs a definite-width track parent;
+- `#boot-splash-label` is `textContent` only, `tabular-nums`, must not reflow as the count grows
+  (stage names come from `STAGE_LABELS`, `library-ui.js:~4979`);
+- `hideBootSplash` fades `opacity` then removes the node — keep a transition on opacity.
+
+⚠️ Don't touch the watchdog (`bumpBootSplashWatchdog`) or the dismissal `await` on
+`window._lastCatalogRegisterPromise` (`library-ui.js:~6360–6391`) — both fix already-solved races
+(commits `067e9f5`, `63046ee`). After editing, run `build-desktop.sh` (`desktop/dist/` is a copy).
+
+### N2 — Use the GPU alongside the CPU
+
+The premise needed one correction: the render pipeline is already fully GPU (WebGL2, 5 shader
+programs, tiled export) — not "relying completely on CPU". What's genuinely CPU-only: all ONNX
+inference (SAM/SAM2/CLIP/faceparse/arcface/scrfd/subject — no execution provider was ever
+appended), the RAW decode's per-pixel cleanup passes (rayon-parallel, but ~6 separate full-frame
+traversals), and one JS pixel worker (not a pool).
+
+| # | status | finding |
+|---|---|---|
+| N2.0 | ✅ measured | See N2.1 — the SAM test timing comparison doubled as the baseline measurement rather than a separate harness, since it isolated the exact cost in question |
+| N2.1 | ✅ **DONE — CoreML EP, opt-in (`CS_COREML=1`), NOT the default** | Appended via `sam.rs`'s existing `libloading` pattern (the symbol/flags aren't in `ort-sys`'s generated bindings, so declared by hand against ONNX Runtime's public `coreml_provider_factory.h`, fetched and verified, not guessed) in `create_session`/`create_session_from_path` — the latter is shared by every other model file, so one fix covers all of them. **Measured on this dev machine (Intel i5-8257U, Iris Plus, no ANE): `sam::tests` (2 cold session creations) went from 2.77s to 54.38s with the EP appended — a ~20x regression**, all compilation overhead (CoreML compiles the ONNX graph to a CoreML program before first use), paid once per model per process launch. Severe enough to turn a "tap to select, should feel instant" first use into a ~50s hang. Correctness was fine (SAM mask output identical, `inside=1.000 outside=0.000` either way) — this is purely a startup-latency problem on hardware with no ANE to make the trade worthwhile. Very likely a real win on Apple Silicon (a real ANE, and Apple's own CoreML compiler is tuned for it) — hence opt-in via `CS_COREML=1` rather than shipped as a default, until measured on that hardware too |
+| N2.2 | not started | Cleanup-pass fusion in `raw_decode.rs` — merge the pointwise per-pixel traversals (shadows NR, false-colour, defringe are candidates; leave wavelet/PPG alone, they're neighbourhood-dependent). Needs an exact byte-comparison gate against a real RW2, this is calibrated colour |
+| N2.3 | not started | Pool sizing (`cores - 2` in `main.rs`) + a JS worker pool (today: one `_cpuWorker`, `bakeDcpLUT` and `exportSharpen` queue behind each other) — only worth doing if a real measurement shows the queueing costs anything |
+
+❌ **Rejected**: a WGSL/WGPU renderer port for speed — already rejected elsewhere in this file
+(two-shader-copy drift risk), and RapidRAW's own headline win was deleting a JPEG-over-IPC round
+trip this app never had. R5 remains the only sanctioned route to a second backend, spike-gated.
+
+---
+
 ## RapidRAW competitive review — backlog (added 2026-08-28)
 
 Source: a review of [CyberTimon/RapidRAW](https://github.com/CyberTimon/RapidRAW) (README, releases
@@ -518,7 +563,7 @@ work starts the week of 2026-09-01.
 | R5 | **Naga single-source shaders** (WGSL → WGPU desktop + generated GLSL ES 3.0 for web/iOS) | L | Author once, generate both; the same mechanism wgpu's own `webgl` feature uses. Generation at dev time, generated GLSL committed into `chromasmith-22.html`, so no build step for the user. ⚠️ **Spike first:** port only the `comp` pass and require all 18 goldens byte-exact from *each* backend. Our runtime template-literal assembly (`mskAnyTex`, `GLSL_OKLAB`) moves to a dev-time step |
 | R6 | **Deconvolution sharpening** | M | Models the lens/sensor PSF and inverts it — recovers real detail instead of unsharp-mask's faked edge contrast, halos and noise gain. More compute; rings if over-driven, so it needs a conservative cap |
 | R7 | **Depth mask + depth-driven lens blur / tilt-shift** | M | Depth Anything V2 as a fourth ONNX model, same pattern as `sam.rs`/`faceparse.rs`. Gives a distance-band mask *and* post-hoc shallow depth of field |
-| R8 | **rawler colour-matrix fallback for un-profiled bodies** | M | So a non-S9 RAW renders correctly-ish instead of uncalibrated. Keep the DCP path where profiles exist |
+| R8 | **rawler colour-matrix fallback for un-profiled bodies** | M | Promoted by the ARW work (2026-08-30): F9's crop fix made a Sony ARW decode correctly, but it still has no colour profile — `cameraDcpPrefix` only matches Panasonic DC-S9 and Sony DSC-RX100M5, so every other camera (including the a7-line body this session tested against) gets `null` and skips DCP entirely today. **Not a guess**: this is exactly what darktable and RawTherapee do as their OWN base tier — darktable's "standard color matrix" comes from dcraw, "which in turn gets most of them via Adobe's DNG Converter"; RawTherapee resolves `camconst.json` → dcraw's table → the file's own embedded matrix. Verified concretely against this repo's actual vendored data, not asserted: rawler 0.7.2 ships 103 Sony camera TOMLs (`data/cameras/sony/*.toml`), every one carrying a `[cameras.color_matrix]` block — real, immediate coverage, no new data-gathering. Adopt RawTherapee's resolution order: (1) an explicit `.dcp` on disk (F1) → (2) our own fitted profile where one exists (DC-S9 only) → (3) the file's own embedded matrix (DNG `ColorMatrix2`) → (4) rawler's built-in per-body matrix → (5) generic fallback, status line says so. F1a (done) is a hard prerequisite in spirit — it stopped the DC-S9 sky-gate residual from silently applying to every other camera; R8 is the other half, giving those cameras a real colour matrix instead of none |
 | R9 | **Virtual copies** | M | A persisted second edit record against the same path, appearing in the grid as its own card with its own rating/flags/export. ⚠️ **Not** what Compare mode does (`compareState`, `desktop/library-ui.js:3471`) — Compare already shows one photo under two treatments (Live/Original/history step/Style) but is a transient viewer that persists nothing. Touches the sidecar format + `catalog.rs` |
 | R10 | **CLIP auto-tagging** | S | ⚠️ We already run CLIP ViT-B/32 (`clip.rs`, `catalog_clip_embed`/`catalog_clip_search`) for natural-language search. This is only surfacing those embeddings as visible, filterable per-photo keywords — a labelling + UI layer, **not** new inference |
 | R11 | **Dehaze, colour wheels (lift/gamma/gain), parametric curves** | S each | Conventional controls we simply don't have (we have point curves + 8-band HSL) |
@@ -574,7 +619,7 @@ re-read it before starting F1/F2, since it has the load-bearing detail this tabl
 | # | item | size | note |
 |---|---|---|---|
 | F1 | **Adobe camera-profile resolver** — read `Camera/<model>/*.dcp` and `Adobe Standard/*.dcp` in place (never copy — 855MB, and not ours to redistribute) | M | New `dcp_store.rs`: `list_dcp_profiles`/`read_dcp_file` commands, generalise `cameraDcpPrefix` (`chromasmith-22.html:~7920`) from a 2-entry table to a candidate list disk resolves, replace `main.rs`'s `KNOWN_DCP_MAKES` allowlist with a positive make/model assertion. ⚠️ **Path traversal**: prefix/style derive from EXIF Make/Model — untrusted bytes inside a photo. Reject `/ \ .. NUL`, canonicalize, assert still under root — do this FIRST, not as an afterthought |
-| F1a | **Sky-gate residual → DC-S9 only** | S | Bug fix riding along with F1, ship in its own commit: the hue/sat/value residual lift at the end of `bakeDcpLUT` applies unconditionally today even though `dcpFit` correctly gates itself to DC-S9. Changes Sony RX100M5 rendering — needs explicit sign-off since it's a visible behaviour change, not purely additive |
+| F1a | ✅ **DONE — Sky-gate residual → DC-S9 only** | S | `dcpFit(iso,cameraPrefix)` now returns a `sky` flag alongside `ev`/`gr`/`gb`, gated on the SAME `cameraPrefix==='Panasonic DC-S9'` check — plain data threaded through the existing `fit` argument, not a new `bakeDcpLUT` parameter (CLAUDE.md's own warning: this function is compiled into the pixel worker via `toString`, so a captured constant would silently desync). `bakeDcpLUT`'s residual `gate` computation is now `fit.sky?...:0` (collapses to the same no-op every other hue/sat/value combination already takes, rather than wrapping the whole block). DC-S9 unaffected (`sky:true`, byte-identical — `npm run scorecard` 18/18 unchanged, worker/main-thread DCP bake agreement still max|Δ|=0 over 823,875 entries); every other camera (Sony RX100M5, and now any ARW via R8) stops getting an S9-specific blue-sky correction it was never fitted against. ⚠️ Also fixed a latent truthiness bug found while unit-checking this: the old guard was `cameraPrefix&&cameraPrefix!=='Panasonic DC-S9'`, so a **falsy** `cameraPrefix` (null — "no bundled profile for this camera") fell through to the **S9** branch, the opposite of correct. Unreachable today (the one caller throws before `dcpFit` on a null prefix) but would have been a real bug the moment R8 replaces that throw with a fallback path — fixed to a plain `cameraPrefix!=='Panasonic DC-S9'` check |
 | F1b | **`parseDCP` tolerate missing ProfileToneCurve** | S | 201/210 `Adobe Standard/*.dcp` lack tag 50940 and `parseDCP` currently throws on that — identity curve instead of a hard fail |
 | F2 | **Auto-detect RAW profile from EXIF (PhotoStyle) — V-Log first** | S then M | Read Panasonic makernote tag `0x0089` (rawler doesn't expose it — parse the IFD directly). Ship value-17→auto-enable-`useVlog` alone first (self-contained, unambiguous, high value: V-Log footage graded without it looks badly wrong). Full per-photo style table (`rawProfile()` → `it.rawProfile`, `getUISnapshot`/⌘Z wiring, `list_dcp_profiles`-gated) is the bigger follow-on — needs F1 shipped first, since "does this style exist for this camera" is F1's own lookup |
 | F3 | **Desktop file-dialog `add_filter` parity** | S | The plan flagged this as unverified: if `desktop/src-tauri` has a native open-dialog with its own extension filter (separate from the HTML `accept=`), it needs the same FMT_ALL widening or it'll silently exclude formats the app now opens |

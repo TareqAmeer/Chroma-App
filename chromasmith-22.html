@@ -4129,7 +4129,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-29a';
+const BUILD='2026-08-30a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -8058,8 +8058,18 @@ function cameraDcpPrefix(make,model){
 // Applying it to a different sensor's data would be a wrong-but-plausible-looking tweak, not
 // a calibrated one, so any other camera gets identity until it has its own fitted constants.
 function dcpFit(iso,cameraPrefix){
-  if(cameraPrefix&&cameraPrefix!=='Panasonic DC-S9')return{ev:0.0,gb:1.0,gr:1.0};
-  return{ev:0.0,gb:0.9783,gr:0.9860};
+  // sky: gates bakeDcpLUT's residual cool-highlight lift below — fitted ONLY against the
+  // DC-S9 (calib/dcp_residual_tone.py), so it must ride the SAME camera check as ev/gr/gb
+  // rather than applying unconditionally. Before this, every non-S9 camera (e.g. the bundled
+  // Sony DSC-RX100M5 profile) silently got an S9-specific blue-sky correction baked in.
+  // ⚠️ Guard on `!==` alone, NOT `cameraPrefix&&cameraPrefix!==...` — the old `&&` form treated
+  // a falsy cameraPrefix (null/undefined, "no bundled profile for this camera") as "fall through
+  // to the S9 branch", the opposite of correct. Unreachable today (the one caller throws before
+  // getDcpLUT/dcpFit when cameraDcpPrefix() returns null — chromasmith-22.html's
+  // `if(!camPrefix)throw new Error(...)`), but ROADMAP.md's R8 exists specifically to replace
+  // that throw with a fallback path, which would call dcpFit(iso,null) for real.
+  if(cameraPrefix!=='Panasonic DC-S9')return{ev:0.0,gb:1.0,gr:1.0,sky:false};
+  return{ev:0.0,gb:0.9783,gr:0.9860,sky:true};
 }
 const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
 const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
@@ -8325,7 +8335,11 @@ function bakeDcpLUT(dcp,fit,N){
       const ss=(a,b2,x)=>{const t=Math.min(Math.max((x-a)/Math.max(b2-a,1e-9),0),1);return t*t*(3-2*t)};
       const dhh=Math.abs(((h2-215)+180)%360-180);
       const ghRaw=Math.min(Math.max(1-dhh/161.39,0),1), gh=ghRaw*ghRaw*(3-2*ghRaw);
-      const gate=gh*ss(0.10,0.4986,s2)*(ss(0.45,0.62,v2)*(1-ss(0.90,0.985,v2)));
+      // fit.sky: this residual is fitted ONLY against the DC-S9 (see dcpFit above) — folded
+      // into the gate itself (rather than an `if(fit.sky)` wrapper around the whole block) so
+      // the block's own math is untouched and a disabled camera takes the identical `gate<=0`
+      // no-op path every other hue/sat/value combination already takes.
+      const gate=fit.sky?gh*ss(0.10,0.4986,s2)*(ss(0.45,0.62,v2)*(1-ss(0.90,0.985,v2))):0;
       if(gate>0){
         v2=Math.min(Math.max(v2+0.05322*gate,0),1);
         s2=Math.min(Math.max(s2-0.02173*gate,0),1);

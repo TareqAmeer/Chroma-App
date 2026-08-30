@@ -99,6 +99,50 @@ pub(crate) unsafe fn check(api: *const OrtApi, status: OrtStatusPtr, what: &str)
     Ok(())
 }
 
+// CoreML execution provider (N2.1) — routes ops to the Neural Engine/GPU where CoreML supports
+// them, falling back to CPU per-node otherwise. `ort-sys` 2.0.0-rc.12 doesn't generate a binding
+// for this (it's a provider-factory export, not part of the core OrtApi table used elsewhere in
+// this file), so the signature and flag values below are declared by hand against ONNX Runtime's
+// own public header (coreml_provider_factory.h) rather than guessed:
+//   ORT_EXPORT OrtStatus* ORT_API_CALL
+//     OrtSessionOptionsAppendExecutionProvider_CoreML(OrtSessionOptions*, uint32_t coreml_flags);
+//   COREML_FLAG_USE_NONE = 0x000 (let CoreML pick ANE/GPU/CPU per node — the default we want),
+//   COREML_FLAG_USE_CPU_ONLY = 0x001 (explicitly the thing we're NOT setting).
+// Verified present in the vendored dylib via `nm -gU libonnxruntime.dylib | grep CoreML` before
+// writing this — `_OrtSessionOptionsAppendExecutionProvider_CoreML` is exported.
+//
+// ⚠️ OPT-IN, not opt-out — measured, not assumed. On this dev machine (Intel i5-8257U, Iris
+// Plus, no Apple Neural Engine) appending the EP makes `sam::tests` (2 cold session creations:
+// EdgeSAM + SAM2, each compiling its ONNX graph to a CoreML program before first use) go from
+// 2.77s to 54.38s — a ~20x regression, paid once per model per process launch but severe enough
+// to turn a "tap to select, should feel instant" first use into a ~50s hang. CoreML compilation
+// overhead on a device with no ANE apparently dwarfs any per-inference gain from the GPU
+// fallback. This EP is very likely a real win on Apple Silicon (real ANE, and Apple's own
+// CoreML compiler is tuned for it) — `CS_COREML=1` opts in for exactly that case — but must not
+// be the default until measured on that hardware too.
+type AppendCoreMlFn = unsafe extern "C" fn(*mut OrtSessionOptions, u32) -> OrtStatusPtr;
+const COREML_FLAG_USE_NONE: u32 = 0x000;
+
+/// Best-effort: appends the CoreML EP to `opts` only when explicitly opted in (`CS_COREML=1`
+/// — see the measurement note above for why this defaults OFF). A missing symbol, a
+/// non-CoreML platform, or an append failure all just fall back to today's CPU-only session,
+/// logged once, never failing the caller.
+unsafe fn try_append_coreml(h: &OrtHandle, opts: *mut OrtSessionOptions) {
+    if std::env::var_os("CS_COREML").is_none() {
+        return;
+    }
+    let sym: Result<libloading::Symbol<AppendCoreMlFn>, _> = h.lib.get(b"OrtSessionOptionsAppendExecutionProvider_CoreML");
+    match sym {
+        Ok(append) => {
+            let status = append(opts, COREML_FLAG_USE_NONE);
+            if let Err(e) = check(h.api, status, "OrtSessionOptionsAppendExecutionProvider_CoreML") {
+                eprintln!("sam: CoreML EP append failed, continuing CPU-only: {e}");
+            }
+        }
+        Err(e) => eprintln!("sam: CoreML EP symbol not found in onnxruntime dylib, continuing CPU-only: {e}"),
+    }
+}
+
 pub(crate) fn ort_handle() -> Result<&'static OrtHandle, String> {
     static H: OnceLock<Result<OrtHandle, String>> = OnceLock::new();
     H.get_or_init(|| unsafe {
@@ -133,6 +177,7 @@ pub(crate) fn create_session(bytes: &'static [u8]) -> Result<SamSession, String>
     unsafe {
         let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();
         check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
+        try_append_coreml(h, opts);
         let mut session: *mut OrtSession = std::ptr::null_mut();
         let res = check(
             h.api,
@@ -187,6 +232,7 @@ pub(crate) fn create_session_from_path(path: &std::path::Path) -> Result<SamSess
     unsafe {
         let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();
         check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
+        try_append_coreml(h, opts);
         let mut session: *mut OrtSession = std::ptr::null_mut();
         #[cfg(not(windows))]
         let model_path_ptr = path_c.as_ptr();
