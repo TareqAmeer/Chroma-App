@@ -870,6 +870,12 @@ struct CameraIdent {
     // decode shim can populate the metadata panel's lens on EVERY open path, not only the single
     // library-card path that separately calls get_meta.
     lens: String,
+    // Panasonic PhotoStyle (ROADMAP.md's F2), value 17 = V-Log — lets JS auto-enable the V-Log
+    // input transform on load instead of the user having to notice flat/green footage and find
+    // the toggle themselves. None on every non-Panasonic file and instantly-cheap to compute
+    // (kamadak-exif already parsed for the lens fallback above), so no separate command needed.
+    #[serde(rename = "photoStyle", skip_serializing_if = "Option::is_none")]
+    photo_style: Option<u32>,
 }
 
 // Cheap EXIF-only peek (no demosaic) so the JS side can pick the right DCP profile file
@@ -893,7 +899,8 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
         .or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone()))
         .or_else(|| lens_correct::exif_lens_model_fallback(bytes))
         .unwrap_or_default();
-    Ok(CameraIdent { make: md.make.clone(), model: md.model.clone(), lens })
+    let photo_style = if md.make.eq_ignore_ascii_case("panasonic") { lens_correct::panasonic_photo_style(bytes) } else { None };
+    Ok(CameraIdent { make: md.make.clone(), model: md.model.clone(), lens, photo_style })
 }
 
 // A visible way to confirm the RUNNING app actually has today's Rust changes compiled in —

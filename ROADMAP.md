@@ -621,7 +621,46 @@ re-read it before starting F1/F2, since it has the load-bearing detail this tabl
 | F1 | **Adobe camera-profile resolver** — read `Camera/<model>/*.dcp` and `Adobe Standard/*.dcp` in place (never copy — 855MB, and not ours to redistribute) | M | New `dcp_store.rs`: `list_dcp_profiles`/`read_dcp_file` commands, generalise `cameraDcpPrefix` (`chromasmith-22.html:~7920`) from a 2-entry table to a candidate list disk resolves, replace `main.rs`'s `KNOWN_DCP_MAKES` allowlist with a positive make/model assertion. ⚠️ **Path traversal**: prefix/style derive from EXIF Make/Model — untrusted bytes inside a photo. Reject `/ \ .. NUL`, canonicalize, assert still under root — do this FIRST, not as an afterthought |
 | F1a | ✅ **DONE — Sky-gate residual → DC-S9 only** | S | `dcpFit(iso,cameraPrefix)` now returns a `sky` flag alongside `ev`/`gr`/`gb`, gated on the SAME `cameraPrefix==='Panasonic DC-S9'` check — plain data threaded through the existing `fit` argument, not a new `bakeDcpLUT` parameter (CLAUDE.md's own warning: this function is compiled into the pixel worker via `toString`, so a captured constant would silently desync). `bakeDcpLUT`'s residual `gate` computation is now `fit.sky?...:0` (collapses to the same no-op every other hue/sat/value combination already takes, rather than wrapping the whole block). DC-S9 unaffected (`sky:true`, byte-identical — `npm run scorecard` 18/18 unchanged, worker/main-thread DCP bake agreement still max|Δ|=0 over 823,875 entries); every other camera (Sony RX100M5, and now any ARW via R8) stops getting an S9-specific blue-sky correction it was never fitted against. ⚠️ Also fixed a latent truthiness bug found while unit-checking this: the old guard was `cameraPrefix&&cameraPrefix!=='Panasonic DC-S9'`, so a **falsy** `cameraPrefix` (null — "no bundled profile for this camera") fell through to the **S9** branch, the opposite of correct. Unreachable today (the one caller throws before `dcpFit` on a null prefix) but would have been a real bug the moment R8 replaces that throw with a fallback path — fixed to a plain `cameraPrefix!=='Panasonic DC-S9'` check |
 | F1b | **`parseDCP` tolerate missing ProfileToneCurve** | S | 201/210 `Adobe Standard/*.dcp` lack tag 50940 and `parseDCP` currently throws on that — identity curve instead of a hard fail |
-| F2 | **Auto-detect RAW profile from EXIF (PhotoStyle) — V-Log first** | S then M | Read Panasonic makernote tag `0x0089` (rawler doesn't expose it — parse the IFD directly). Ship value-17→auto-enable-`useVlog` alone first (self-contained, unambiguous, high value: V-Log footage graded without it looks badly wrong). Full per-photo style table (`rawProfile()` → `it.rawProfile`, `getUISnapshot`/⌘Z wiring, `list_dcp_profiles`-gated) is the bigger follow-on — needs F1 shipped first, since "does this style exist for this camera" is F1's own lookup |
+| F2 | ✅ **DONE (V-Log-only half) — Auto-detect RAW profile from EXIF (PhotoStyle)** | S | See write-up below. Full per-photo style table (`rawProfile()` → `it.rawProfile`, `getUISnapshot`/⌘Z wiring, `list_dcp_profiles`-gated) remains a bigger follow-on — needs F1 shipped first, since "does this style exist for this camera" is F1's own lookup |
+
+### F2 — Auto-detect V-Log from Panasonic PhotoStyle (root cause + real location, not where expected)
+
+**Shipped**: `lens_correct::panasonic_photo_style(bytes) -> Option<u32>`, wired through
+`main.rs::peek_raw_camera`'s `CameraIdent.photoStyle` → `desktop-native.js`'s
+`NativeLibRawShim.metadata()` → `chromasmith-22.html`'s `loadRw2()`, which sets `#sel-input` to
+`'vlog'` when `photoStyle===17`. Desktop-only (browser/wasm libraw never parses makernotes).
+
+⚠️ **Where the tag actually lives took real tracing to find, and is worth recording precisely.**
+The obvious approach — patch RW2's magic number (0x0055→0x002A, the same trick
+`exif_lens_model_fallback` already uses) and ask kamadak-exif for `Tag::MakerNote` — silently
+returns `None` on a real file ExifTool confirms carries `PhotoStyle: V-Log`. Traced with a debug
+probe dumping every field kamadak-exif *does* parse (67 standard Exif tags, `ifd_num=In(0)`) and
+cross-checking against `exiftool -v3`: **RW2's own container has NO MakerNote tag at all** — its
+`ExifIFD` (reached via tag `0x8769`) has 30 ordinary tags and nothing at `0x927c`. What DOES carry
+PhotoStyle is a **complete standalone JPEG preview embedded under RW2's own tag `0x002e`**
+("JpgFromRaw" in ExifTool's Panasonic.pm) — a real `\xff\xd8\xff\xe1…` file with a normal,
+non-magic-broken EXIF structure of its own, which is where the real MakerNote (194 entries,
+signature `"Panasonic\0\0\0"` + a little-endian mini-IFD, offsets relative to the blob's own
+start) actually sits. kamadak-exif parses this fine via `read_from_container` once handed just
+those bytes — no patching needed, since it's a genuine JPEG.
+
+Verified against **all four documented values on real files**, not just the one that started
+this (`exiftool "-PhotoStyle#"` for raw numeric ground truth): 1=Standard (`__TM2153.RW2`),
+3=Natural (`__TM3238.RW2`), 17=V-Log (`P_TM5168.RW2`), 22=Leica Monochrome (`P_TM2125.RW2`,
+ExifTool itself only labels this "Unknown (22)" — CLAUDE.md's mapping was the one that named it).
+Tests: `lens_correct::tests::photo_style_reads_real_files` (skips gracefully per-file if a
+machine lacks a given fixture, same pattern as `focal_length_fallback_reads_real_rw2`) and
+`photo_style_declines_garbage_without_panicking` (every offset is `bytes.get(...)`-bounded).
+
+⚠️ **The documented multi-photo-batch limitation applies as designed, not as an oversight**:
+`#sel-input` is one global control (CLAUDE.md: batch effects apply identically to every loaded
+photo), so a mixed V-Log/Standard batch has whichever V-Log file loads *last* win for the whole
+batch — this only ever sets `'vlog'`, never back. A real fix needs the same per-photo
+`adjustOverride` machinery `matchSeriesToReference` uses; out of scope for this S-sized first pass.
+
+*Touches:* `desktop/src-tauri/src/lens_correct.rs` (`panasonic_photo_style`, 2 tests),
+`desktop/src-tauri/src/main.rs` (`CameraIdent.photo_style`, `peek_raw_camera`),
+`desktop/desktop-native.js` (`metadata()`), `chromasmith-22.html`'s `loadRw2`.
 | F3 | **Desktop file-dialog `add_filter` parity** | S | The plan flagged this as unverified: if `desktop/src-tauri` has a native open-dialog with its own extension filter (separate from the HTML `accept=`), it needs the same FMT_ALL widening or it'll silently exclude formats the app now opens |
 | F4 | **EXR/HDR real headroom instead of clamp** | M | `still_decode.rs`'s `hdr_to_srgb8` currently clamps >1.0 to white with a logged note — reuse the RAW path's existing `hrOut`/`HR_MAX_STOPS` headroom channel (already threaded through export, `chromasmith-22.html:~8300`) instead, so an EXR's actual dynamic range survives into the HDR gain-map export path |
 | F5 | **Linear/demosaiced-DNG passthrough** | S | `raw_decode.rs`'s photometric check now rejects linear DNG (iPhone ProRAW, Foveon→DNG conversions) with a named error instead of a crash — but it's a common real file, not an edge case. When `photometric` is RGB, skip demosaic and take the pixels directly |

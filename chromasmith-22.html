@@ -8440,6 +8440,27 @@ async function loadRw2(file){
     img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
+  // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
+  // 17 means the file IS V-Log, so grading it as Standard/Rec.709 looks badly wrong (flat,
+  // green) until the user notices and finds the toggle themselves. Desktop-only for now
+  // (m.photoStyle comes from NativeLibRawShim.metadata(); the browser/wasm libraw path never
+  // sets it — no makernote parsing there, and per CLAUDE.md desktop is the maintained RAW
+  // target). Only touches the select's DOM value; no explicit re-render needed here — every
+  // render call reads `sel-input`'s live value via getFXParams() (`input:(document.getElementById
+  // ('sel-input')||{}).value`), so the FIRST render of this photo picks it up like any other
+  // control the user had already set before opening the file.
+  // ⚠️ Known limitation, not fixed here: `sel-input` is ONE global control shared across a
+  // whole batch (CLAUDE.md — Effects/adjustments apply to every loaded photo identically). In a
+  // mixed V-Log/Standard batch, whichever V-Log file loads LAST wins for every photo — this only
+  // ever sets 'vlog', never back — since a real fix needs the same per-photo `adjustOverride`
+  // machinery `matchSeriesToReference` already uses, which is out of scope for this first pass.
+  if(m&&m.photoStyle===17){
+    const selInput=document.getElementById('sel-input');
+    if(selInput&&selInput.value!=='vlog'){
+      selInput.value='vlog';
+      if(typeof log==='function')log('V-Log source detected (Panasonic PhotoStyle) — Input profile set to V-Log (Lumix)','info');
+    }
+  }
   const w=img.width,h=img.height,ch=img.colors||3;let rgb=img.data;
   if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
   let rgba,c,dt;

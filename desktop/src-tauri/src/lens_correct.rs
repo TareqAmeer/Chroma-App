@@ -70,6 +70,78 @@ pub fn exif_lens_model_fallback(bytes: &[u8]) -> Option<String> {
     lens_model_from_exif(&read_patched_rw2_exif(bytes)?)
 }
 
+/// Panasonic PhotoStyle (ROADMAP.md's F2) — reads makernote tag 0x0089 and returns its raw
+/// value, so `main.rs::peek_raw_camera` can offer it to JS for auto-enabling the V-Log input
+/// transform (value 17). Mapping verified against real files with ExifTool + Lightroom (see
+/// CLAUDE.md's Format widening backlog): 1=Standard (covers "Custom" too), 3=Natural, 17=VLog,
+/// 22=Leica Monochrome — all four confirmed present across this session's real RW2 sample.
+///
+/// ⚠️ The PhotoStyle tag is NOT reachable from RW2's own container structure at all — traced
+/// this empirically (dumping raw IFD bytes and cross-checking against `exiftool -v3`), not
+/// assumed. RW2's own IFD0 (magic-patched 0x0055→0x002A the way `read_patched_rw2_exif` does)
+/// has an ExifIFD (tag 0x8769) with 30 ordinary tags and NO MakerNote among them. What DOES
+/// carry PhotoStyle is a complete standalone EXIF+MakerNote block inside the JPEG PREVIEW that
+/// RW2 embeds under its own tag 0x002e ("JpgFromRaw" in ExifTool's Panasonic.pm) — a real,
+/// independent `ÿØÿá…` JPEG file with a normal (non-magic-broken) EXIF structure,
+/// which is why kamadak-exif can parse it directly via `read_from_container` with no patching,
+/// and — unlike the raw container's own ExifIFD — its MakerNote (tag 0x927c) really is present.
+/// Inside that MakerNote: a 12-byte ASCII signature "Panasonic\0\0\0", then a standard
+/// 2-byte-count + 12-byte-entry mini-IFD (little-endian, values ≤4 bytes inline — every real
+/// file checked carries PhotoStyle as SHORT or LONG, count 1, no offset indirection).
+pub fn panasonic_photo_style(bytes: &[u8]) -> Option<u32> {
+    if bytes.len() < 8 || bytes[0] != b'I' || bytes[1] != b'I' {
+        return None; // RW2 is always little-endian Intel byte order — don't guess at others
+    }
+    let u16_at = |o: usize| -> Option<u16> { bytes.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]])) };
+    let u32_at = |o: usize| -> Option<u32> { bytes.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])) };
+    let ifd0_off = u32_at(4)? as usize;
+    let count = u16_at(ifd0_off)? as usize;
+    if count == 0 || count > 512 {
+        return None; // a real RW2 IFD0 has ~60 entries — bounded the same way ingest.rs's raw_exif_date_fast is
+    }
+    let entries_start = ifd0_off + 2;
+    let entries = bytes.get(entries_start..entries_start + count * 12)?;
+    const TAG_JPG_FROM_RAW: u16 = 0x002e;
+    let (_, _, jpg_len, jpg_off_bytes) = entries
+        .chunks_exact(12)
+        .map(|c| (u16::from_le_bytes([c[0], c[1]]), u16::from_le_bytes([c[2], c[3]]), u32::from_le_bytes([c[4], c[5], c[6], c[7]]), [c[8], c[9], c[10], c[11]]))
+        .find(|e| e.0 == TAG_JPG_FROM_RAW)?;
+    let jpg_off = u32::from_le_bytes(jpg_off_bytes) as usize;
+    let jpg = bytes.get(jpg_off..jpg_off + jpg_len as usize)?;
+    if jpg.len() < 4 || jpg[0] != 0xff || jpg[1] != 0xd8 {
+        return None; // not a JPEG SOI marker — this body's embedded-preview tag/shape differs
+    }
+    let embedded = exif::Reader::new().read_from_container(&mut std::io::Cursor::new(jpg)).ok()?;
+    let field = embedded.get_field(exif::Tag::MakerNote, exif::In::PRIMARY)?;
+    let mn = match field.value {
+        exif::Value::Undefined(ref v, _) => v.as_slice(),
+        _ => return None,
+    };
+    const SIG: &[u8; 12] = b"Panasonic\0\0\0";
+    if mn.len() < 14 || &mn[0..12] != SIG {
+        return None; // not Panasonic's makernote shape — don't guess at another vendor's layout
+    }
+    let ifd = &mn[12..];
+    let mn_count = u16::from_le_bytes([ifd[0], ifd[1]]) as usize;
+    if mn_count == 0 || mn_count > 512 || ifd.len() < 2 + mn_count * 12 {
+        return None;
+    }
+    const TAG_PHOTO_STYLE: u16 = 0x0089;
+    for entry in ifd[2..2 + mn_count * 12].chunks_exact(12) {
+        let tag = u16::from_le_bytes([entry[0], entry[1]]);
+        if tag != TAG_PHOTO_STYLE {
+            continue;
+        }
+        let typ = u16::from_le_bytes([entry[2], entry[3]]);
+        return match typ {
+            3 => Some(u16::from_le_bytes([entry[8], entry[9]]) as u32),
+            4 => Some(u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]])),
+            _ => None,
+        };
+    }
+    None
+}
+
 /// The 256KB reads only enough of the file to cover the TIFF/EXIF header + IFD0, where LensModel
 /// lives — measured on real DC-S9 RW2 files, the tag sits at byte offset ~4,300, so this is a
 /// ~60x margin. This exists because `exif_lens_model_fallback(&whole_file)` was measured costing
@@ -527,7 +599,43 @@ mod tests {
             .expect("refine decode should succeed");
         assert!(refined.lens_applied, "expected lens correction to apply on __TM6917.RW2 with auto_lens=true (refine pass)");
     }
+
+    /// Real-world coverage across all four documented PhotoStyle values (ROADMAP.md's F2),
+    /// each independently confirmed against the same files with `exiftool -PhotoStyle` before
+    /// writing this assertion: 1=Standard, 3=Natural, 17=V-Log, 22=Leica Monochrome (ExifTool's
+    /// own table doesn't name 22, reporting "Unknown (22)" — CLAUDE.md's mapping was verified
+    /// independently against Lightroom). Paths are outside the checkout (real captures aren't
+    /// committed) — skips silently if a machine doesn't have that particular file, same pattern
+    /// as `focal_length_fallback_reads_real_rw2` above.
+    #[test]
+    fn photo_style_reads_real_files() {
+        let cases: &[(&str, u32)] = &[
+            ("/Users/tareqameer/Downloads/P_TM5168.RW2", 17),  // V-Log
+            ("/Users/tareqameer/Downloads/__TM3238.RW2", 3),   // Natural
+            ("/Users/tareqameer/Downloads/__TM2153.RW2", 1),   // Standard or Custom
+            ("/Users/tareqameer/Downloads/P_TM2125.RW2", 22),  // Leica Monochrome
+        ];
+        let mut checked = 0;
+        for (path, expected) in cases {
+            let Ok(bytes) = std::fs::read(path) else {
+                eprintln!("skipping: {path} not present on this machine");
+                continue;
+            };
+            let style = panasonic_photo_style(&bytes);
+            assert_eq!(style, Some(*expected), "{path}: expected PhotoStyle {expected}, got {style:?}");
+            checked += 1;
+        }
+        if checked == 0 {
+            eprintln!("photo_style_reads_real_files: no fixtures present on this machine, nothing verified");
+        }
+    }
+
+    /// A non-Panasonic RW2-shaped input (or garbage) must return None, not panic — every offset
+    /// this function reads is bounds-checked via `bytes.get(...)`, never a raw index.
+    #[test]
+    fn photo_style_declines_garbage_without_panicking() {
+        assert_eq!(panasonic_photo_style(&[]), None);
+        assert_eq!(panasonic_photo_style(b"not a tiff file at all"), None);
+        assert_eq!(panasonic_photo_style(&[0u8; 64]), None);
+    }
 }
-
-
-

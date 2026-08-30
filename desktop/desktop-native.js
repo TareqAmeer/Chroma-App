@@ -144,7 +144,10 @@
     // least camera+lens, which get_meta-only paths previously missed.
     async metadata() {
       const id = this._ident || {};
-      return { iso_speed: this._iso, make: id.make || '', model: id.model || '', lens: id.lens || '' };
+      // photoStyle: Panasonic PhotoStyle tag (ROADMAP.md F2), 17 = V-Log — undefined for every
+      // other make/camera, chromasmith-22.html's loadRw2 uses it to auto-enable the V-Log input
+      // transform so footage shot in V-Log doesn't render flat/green until the user notices.
+      return { iso_speed: this._iso, make: id.make || '', model: id.model || '', lens: id.lens || '', photoStyle: id.photoStyle };
     }
     async imageData() {
       if (this._mode === 'linear16') {
