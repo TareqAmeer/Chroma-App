@@ -125,7 +125,10 @@
       // lands — the user sees a photo almost immediately instead of staring at a spinner.
       this._mode = mode; this._lutKey = lutKey; this._bytes = bytes; this._extra = extra;
       this._needsRefine = rawNr !== 'off'; // full quality still gets applied — just not before first paint
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
+      // wantExt (ROADMAP.md R1): only meaningful when mode is 'lut' — asks Rust for the
+      // unquantized companion buffer alongside the normal RGBA8 body, so a real blown
+      // highlight's headroom survives instead of being clamped away before this IPC round trip.
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: true, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
@@ -134,10 +137,13 @@
       // 5th header word: whether auto lens-profile correction was ACTUALLY applied on this
       // decode (ground truth, not a separate DB probe) — surfaced to the lens-auto status UI
       // via window.chromasmithLensApplied so it can show what really happened.
-      const head = new Uint32Array(buf, 0, 5);
+      // 6th header word (ROADMAP.md R1): whether the extended-range companion buffer follows
+      // the RGBA8 body — see main.rs's decode_raw_v2 for the exact wire layout.
+      const head = new Uint32Array(buf, 0, 6);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       const usedLut = head[3] === 1;
       window.chromasmithLensApplied = head[4] === 1; // see the comment above open() for why this doesn't also trigger a refresh here
+      this._hasExt = head[5] === 1;
       this._mode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
       this._buf = buf;
       if (mode === 'lut' && !usedLut && typeof log === 'function') {
@@ -157,10 +163,15 @@
     }
     async imageData() {
       if (this._mode === 'linear16') {
-        return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 20) };
+        return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 24) };
       }
       // rgba:true tells loadRw2 the pixels are final RGBA8 — no JS-side LUT/gamma pass needed.
-      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 20) };
+      // sceneLinear (ROADMAP.md R1): the unquantized companion buffer, immediately after the
+      // RGBA8 body (main.rs's decode_raw_v2 wire layout) — undefined when Rust didn't send one
+      // (has_ext=0), which loadRw2 treats as "no real headroom to preserve", same as today.
+      const bodyLen = this._w * this._h * 4;
+      const sceneLinear = this._hasExt ? new Float32Array(this._buf, 24 + bodyLen, this._w * this._h * 3) : undefined;
+      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 24, bodyLen), sceneLinear };
     }
     get worker() { return { terminate() {} }; }
     // Second phase of the two-phase decode: re-decodes the SAME bytes at full quality
@@ -171,15 +182,18 @@
     async refine() {
       if (!this._needsRefine || !this._bytes) return null;
       const { _mode: mode, _lutKey: lutKey, _extra: extra, _bytes: bytes } = this;
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, ...extra, fast: false } : { mode, ...extra, fast: false }, bytes);
-      const head = new Uint32Array(buf, 0, 5);
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: true, ...extra, fast: false } : { mode, ...extra, fast: false }, bytes);
+      const head = new Uint32Array(buf, 0, 6);
       const w = head[0], h = head[1];
       const usedLut = head[3] === 1;
+      const hasExt = head[5] === 1;
       const effMode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
       if (effMode === 'linear16') {
-        return { width: w, height: h, colors: 3, bits: 16, data: new Uint16Array(buf, 20) };
+        return { width: w, height: h, colors: 3, bits: 16, data: new Uint16Array(buf, 24) };
       }
-      return { width: w, height: h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(buf, 20) };
+      const bodyLen = w * h * 4;
+      const sceneLinear = hasExt ? new Float32Array(buf, 24 + bodyLen, w * h * 3) : undefined;
+      return { width: w, height: h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(buf, 24, bodyLen), sceneLinear };
     }
   }
   window.getLibRaw = async function () { return NativeLibRawShim; };
@@ -259,28 +273,37 @@
     let buf;
     try {
       const req = mode === 'lut'
-        ? { mode, lutKey, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, highStrength, token }
+        ? { mode, lutKey, wantExt: true, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, highStrength, token }
         : { mode, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, highStrength, token };
       buf = await framedInvoke('denoise_raw_high', req, bytes);
     } finally {
       if (unlisten) unlisten();
     }
-    // Same 20-byte header + RGBA8-or-raw-u16 body shape as decode_raw_v2/refine() — see
-    // NativeLibRawShim.refine() above for the reference implementation this mirrors.
-    const head = new Uint32Array(buf, 0, 5);
+    // Same 24-byte header + RGBA8-or-raw-u16 [+ optional extended companion] body shape as
+    // decode_raw_v2/refine() — see NativeLibRawShim.refine() above for the reference
+    // implementation this mirrors. ⚠️ MUST stay in lockstep with main.rs's denoise_raw_high:
+    // that command always writes the 6-word header now (has_ext, 0 or 1), regardless of
+    // whether THIS caller asked for the extended body — reading only 5 words here would
+    // misalign every subsequent offset.
+    const head = new Uint32Array(buf, 0, 6);
     const w = head[0], h = head[1];
     const usedLut = head[3] === 1;
+    const hasExt = head[5] === 1;
     const effMode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
-    let rgba2;
+    let rgba2, sceneLinear2;
     if (effMode === 'linear16') {
-      const rgb2 = new Uint16Array(buf, 20);
+      const rgb2 = new Uint16Array(buf, 24);
       rgba2 = new Uint8ClampedArray(w * h * 4);
       for (let i = 0, j = 0; i < w * h; i++) {
         const s = i * 3;
         rgba2[j++] = rgb2[s] >> 8; rgba2[j++] = rgb2[s + 1] >> 8; rgba2[j++] = rgb2[s + 2] >> 8; rgba2[j++] = 255;
       }
     } else {
-      rgba2 = new Uint8ClampedArray(buf, 20);
+      const bodyLen2 = w * h * 4;
+      rgba2 = new Uint8ClampedArray(buf, 24, bodyLen2);
+      // ROADMAP.md R1: thread the same extended companion buffer through the high-tier NR
+      // path so "Denoise Now" doesn't quietly regress a photo back to clamped highlights.
+      if (hasExt) sceneLinear2 = new Float32Array(buf, 24 + bodyLen2, w * h * 3);
     }
     if (!targetItem) {
       // Interactive path only: the user could have switched photos while this was in flight.
@@ -289,6 +312,13 @@
     }
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     c.getContext('2d').putImageData(new ImageData(rgba2, w, h), 0, 0);
+    if (sceneLinear2) {
+      let any = false; for (let i = 0; i < sceneLinear2.length; i++) { if (sceneLinear2[i] > 1.05) { any = true; break; } }
+      c._sceneLinear = { data: sceneLinear2, w, h };
+      c._sceneLinearPresent = any;
+    } else {
+      delete c._sceneLinear; delete c._sceneLinearPresent; // a re-denoise without headroom must not leave a stale stash from a PREVIOUS decode of this same canvas
+    }
     if (!targetItem) {
       // Live-preview repaint — skipped for an explicit-item (export) call so a mid-batch
       // denoise never flashes an unrelated photo's canvas into the visible editor.

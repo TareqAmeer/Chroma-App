@@ -594,6 +594,12 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // parse the right one. See effective_dcp_mode's doc comment for the "why a backstop" reasoning.
     let lut_key = json["lutKey"].as_str();
     let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
+    // ROADMAP.md R1 (scene-referred), desktop path: JS asks for the extended-range companion
+    // buffer only when it's actually going to use it (a real DCP LUT apply, not srgb/linear16 —
+    // see desktop-native.js's open()). Kept fully opt-in so every existing caller/response shape
+    // is untouched when absent — `ext` is None unless want_ext AND the lut branch is taken.
+    let want_ext = json["wantExt"].as_bool().unwrap_or(false);
+    let mut ext: Option<Vec<f32>> = None;
     let body: Vec<u8> = match effective_mode {
         "lut" => {
             let key = lut_key.ok_or("missing lutKey")?;
@@ -606,19 +612,29 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             };
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
-            raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+            if want_ext {
+                let (rgba, e) = raw_decode::apply_lut_rgba_ext(&decoded.rgb16, &lut, n)?;
+                ext = Some(e);
+                rgba
+            } else {
+                raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+            }
         }
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
-    let mut out = Vec::with_capacity(20 + body.len());
+    let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
+    let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
+    let mut out = Vec::with_capacity(24 + body.len() + ext_bytes.len());
     out.extend_from_slice(&decoded.width.to_le_bytes());
     out.extend_from_slice(&decoded.height.to_le_bytes());
     out.extend_from_slice(&decoded.iso.to_le_bytes());
     out.extend_from_slice(&used_lut.to_le_bytes());
     out.extend_from_slice(&lens_applied.to_le_bytes());
+    out.extend_from_slice(&has_ext.to_le_bytes());
     out.extend_from_slice(&body);
+    out.extend_from_slice(&ext_bytes);
     Ok(tauri::ipc::Response::new(out))
 }
 
@@ -728,6 +744,11 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
 
     let lut_key = json["lutKey"].as_str();
     let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
+    // ROADMAP.md R1 — same opt-in extended-range companion as decode_raw_v2, same reasoning:
+    // this IS the path a user actually views once NR finishes, so it matters at least as much
+    // here.
+    let want_ext = json["wantExt"].as_bool().unwrap_or(false);
+    let mut ext: Option<Vec<f32>> = None;
     let body: Vec<u8> = match effective_mode {
         "lut" => {
             let key = lut_key.ok_or("missing lutKey")?;
@@ -740,19 +761,29 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
             };
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
-            raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+            if want_ext {
+                let (rgba, e) = raw_decode::apply_lut_rgba_ext(&decoded.rgb16, &lut, n)?;
+                ext = Some(e);
+                rgba
+            } else {
+                raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+            }
         }
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect()
     };
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
-    let mut out = Vec::with_capacity(20 + body.len());
+    let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
+    let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
+    let mut out = Vec::with_capacity(24 + body.len() + ext_bytes.len());
     out.extend_from_slice(&decoded.width.to_le_bytes());
     out.extend_from_slice(&decoded.height.to_le_bytes());
     out.extend_from_slice(&decoded.iso.to_le_bytes());
     out.extend_from_slice(&used_lut.to_le_bytes());
     out.extend_from_slice(&lens_applied.to_le_bytes());
+    out.extend_from_slice(&has_ext.to_le_bytes());
     out.extend_from_slice(&body);
+    out.extend_from_slice(&ext_bytes);
     Ok(tauri::ipc::Response::new(out))
 }
 

@@ -1228,6 +1228,63 @@ pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, S
     Ok(rgba)
 }
 
+/// ROADMAP.md R1 (scene-referred), desktop path — mirrors `apply_lut_rgba` exactly (same
+/// trilinear sample, same LUT — `bakeDcpLUT`'s own upper clamp was already removed, so `lut`
+/// itself already carries real values above 1.0 for a genuinely blown highlight) but ALSO
+/// returns the unquantized `v` per channel, instead of only the `v.clamp(0,1)*255` u8 the
+/// normal path needs. A separate function rather than adding an out-param to the existing one:
+/// `apply_lut_rgba` is the hot, always-taken path for every RAW load, and this doubles the
+/// per-pixel writes — kept out of that path entirely so nothing about today's normal decode
+/// speed or behaviour changes for a caller that doesn't ask for it.
+pub fn apply_lut_rgba_ext(rgb16: &[u16], lut: &[f32], n: usize) -> Result<(Vec<u8>, Vec<f32>), String> {
+    if n < 2 || n * n * n * 3 != lut.len() {
+        return Err(format!(
+            "apply_lut_rgba_ext: LUT size mismatch (n={n}, expected {} elements, got {})",
+            n.saturating_mul(n).saturating_mul(n).saturating_mul(3),
+            lut.len()
+        ));
+    }
+    let nm = n - 1;
+    let sc = nm as f32 / 65535.0;
+    let px_count = rgb16.len() / 3;
+    let mut rgba = vec![0u8; px_count * 4];
+    let mut ext = vec![0f32; px_count * 3];
+    rgba.par_chunks_mut(4)
+        .zip(ext.par_chunks_mut(3))
+        .zip(rgb16.par_chunks(3))
+        .for_each(|((dst, dst_ext), src)| {
+            let fr = src[0] as f32 * sc;
+            let fg = src[1] as f32 * sc;
+            let fb = src[2] as f32 * sc;
+            let r0 = (fr as usize).min(nm - 1);
+            let g0 = (fg as usize).min(nm - 1);
+            let b0 = (fb as usize).min(nm - 1);
+            let rf = fr - r0 as f32;
+            let gf = fg - g0 as f32;
+            let bf = fb - b0 as f32;
+            let idx = |r: usize, g: usize, b: usize| 3 * ((b * n + g) * n + r);
+            for c in 0..3 {
+                let c000 = lut[idx(r0, g0, b0) + c];
+                let c100 = lut[idx(r0 + 1, g0, b0) + c];
+                let c010 = lut[idx(r0, g0 + 1, b0) + c];
+                let c110 = lut[idx(r0 + 1, g0 + 1, b0) + c];
+                let c001 = lut[idx(r0, g0, b0 + 1) + c];
+                let c101 = lut[idx(r0 + 1, g0, b0 + 1) + c];
+                let c011 = lut[idx(r0, g0 + 1, b0 + 1) + c];
+                let c111 = lut[idx(r0 + 1, g0 + 1, b0 + 1) + c];
+                let c00 = c000 * (1.0 - rf) + c100 * rf;
+                let c10 = c010 * (1.0 - rf) + c110 * rf;
+                let c01 = c001 * (1.0 - rf) + c101 * rf;
+                let c11 = c011 * (1.0 - rf) + c111 * rf;
+                let v = (c00 * (1.0 - gf) + c10 * gf) * (1.0 - bf) + (c01 * (1.0 - gf) + c11 * gf) * bf;
+                dst_ext[c] = v;
+                dst[c] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            }
+            dst[3] = 255;
+        });
+    Ok((rgba, ext))
+}
+
 /// XYZ(D65)->linear-sRGB, the standard published matrix (Bruce Lindbloom's sRGB/D65 reference,
 /// the same one w3c's CSS Color 4 spec and every colour-science library cites) — verified
 /// against that source, not derived. Paired with `xyz_to_cam`'s inverse (camera->XYZ) this
@@ -1375,3 +1432,60 @@ mod srgb_rgba_tests {
     }
 }
 
+
+#[cfg(test)]
+mod apply_lut_rgba_ext_tests {
+    use super::*;
+
+    /// A tiny synthetic 2x2x2 LUT (the minimum valid size) whose entries deliberately exceed
+    /// 1.0 — standing in for a real bakeDcpLUT table on a genuinely blown highlight, now that
+    /// its own upper clamp is removed (see bakeDcpLUT's comment). Values chosen so max input
+    /// (r=g=b=1) maps to (2.5, 2.5, 2.5): real headroom, not an edge-of-range accident.
+    fn synthetic_headroom_lut() -> Vec<f32> {
+        // Layout matches applyDcpLUT's own: index = 3*((b*N+g)*N+r)+k, N=2.
+        let mut lut = vec![0f32; 2 * 2 * 2 * 3];
+        for b in 0..2 {
+            for g in 0..2 {
+                for r in 0..2 {
+                    let idx = 3 * ((b * 2 + g) * 2 + r);
+                    let v = if r == 1 && g == 1 && b == 1 { 2.5 } else { (r + g + b) as f32 / 3.0 };
+                    lut[idx] = v;
+                    lut[idx + 1] = v;
+                    lut[idx + 2] = v;
+                }
+            }
+        }
+        lut
+    }
+
+    #[test]
+    fn ext_and_normal_agree_on_the_clamped_part() {
+        let lut = synthetic_headroom_lut();
+        // A mid-range input that should NOT trigger the headroom corner.
+        let rgb16: Vec<u16> = vec![20000, 20000, 20000];
+        let normal = apply_lut_rgba(&rgb16, &lut, 2).expect("apply_lut_rgba");
+        let (ext_rgba, _ext) = apply_lut_rgba_ext(&rgb16, &lut, 2).expect("apply_lut_rgba_ext");
+        assert_eq!(normal, ext_rgba, "the two functions must produce byte-identical RGBA8 for the same input/LUT");
+    }
+
+    #[test]
+    fn ext_preserves_real_headroom_the_normal_path_clips() {
+        let lut = synthetic_headroom_lut();
+        let rgb16: Vec<u16> = vec![65535, 65535, 65535]; // full-scale input -> the 2.5 corner
+        let (rgba, ext) = apply_lut_rgba_ext(&rgb16, &lut, 2).expect("apply_lut_rgba_ext");
+        // The quantized RGBA8 body still clips to 255, exactly like the normal path — this is
+        // what the un-widened canvas/PNG path is stuck with.
+        assert_eq!(rgba[0], 255);
+        // But the companion buffer keeps the REAL value — this is the whole point of R1's
+        // desktop wire extension: 2.5 genuinely survives instead of being discarded.
+        assert!(ext[0] > 2.0 && ext[0] < 3.0, "expected ~2.5, got {}", ext[0]);
+        assert_eq!(ext[0], ext[1]);
+        assert_eq!(ext[1], ext[2]);
+    }
+
+    #[test]
+    fn ext_rejects_a_mismatched_lut_size_same_as_the_normal_path() {
+        let bad_lut = vec![0f32; 10]; // not a valid N^3*3
+        assert!(apply_lut_rgba_ext(&[0, 0, 0], &bad_lut, 2).is_err());
+    }
+}

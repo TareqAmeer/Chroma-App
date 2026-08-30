@@ -5849,11 +5849,27 @@ void main(){
     if(this.imgTx&&this.imgTx!==this.vidTx)gl.deleteTexture(this.imgTx);
     this.imgTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.imgTx);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
-    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+    // ROADMAP.md R1: a RAW with real measured headroom (img._sceneLinearPresent — the SAME
+    // hrOut>12 signal that already gates the HDR gain-map export toggle) uploads the genuine
+    // extended-range float buffer instead of the always-8-bit canvas ImageData, so a real
+    // blown sky/window survives onto the GPU as e.g. 3.0 rather than being clamped to 1.0
+    // before this call ever runs. Falls back to the ordinary 8-bit path for every other image
+    // (PNG/JPEG, or a RAW with no measured headroom) — those never carry `_sceneLinear` at all,
+    // so `this.usingSceneLinear` stays false and nothing downstream changes for them.
+    this.usingSceneLinear=!!(img&&img._sceneLinearPresent&&img._sceneLinear&&this._hdrSupported());
+    if(this.usingSceneLinear){
+      const{data,w,h}=img._sceneLinear;
+      const rgba=new Float32Array(w*h*4);
+      for(let i=0,j=0;i<w*h;i++,j+=4){rgba[j]=data[3*i];rgba[j+1]=data[3*i+1];rgba[j+2]=data[3*i+2];rgba[j+3]=1;}
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.FLOAT,rgba);
+      this.imgW=w;this.imgH=h;
+    }else{
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+      this.imgW=img.naturalWidth||img.width;this.imgH=img.naturalHeight||img.height;
+    }
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-    this.imgW=img.naturalWidth||img.width;this.imgH=img.naturalHeight||img.height;
     this._ensureLutTx();
   }
   // Lazy neutral-passthrough 3D LUT init, shared by setImage and setVideoFrame — was originally
@@ -6021,7 +6037,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // remember to pass it, since "tonemap is on" already implies "float FBOs are needed" by
     // construction. P.tonemap is false by default everywhere, so this is a no-op for every
     // existing call site (identical to `opts&&opts.hdrIntermediate` alone).
-    this._initBufs(w,h,gs,(opts&&opts.hdrIntermediate)||P.tonemap);
+    // this.usingSceneLinear (set by setImage, ROADMAP.md R1): a RAW with real measured headroom
+    // forces the float chain + shoulder on its own — the manual P.tonemap flag stays available
+    // for testing/demo purposes independent of real source data.
+    const tonemapOn=P.tonemap||this.usingSceneLinear;
+    this._initBufs(w,h,gs,(opts&&opts.hdrIntermediate)||tonemapOn);
     const w2=this.w2,h2=this.h2;
     const iw2=1/w2,ih2=1/h2;          // texel step in the REDUCED-res glow buffers
     // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
@@ -6171,7 +6191,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.blur,this.fbs.sklo_b,{img:0,dir:[1/this.w4,0],sig:sigQ},[[0,'skbox',false]],RQ);
       this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
     }
-    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:P.tonemap?1:0,
+    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:tonemapOn?1:0,
       useHlg:P.hlg&&P.hlg.enabled?1:0,
       hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
       srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
@@ -6240,7 +6260,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const prOn=!!(P.print&&this.printTx);
     gl.activeTexture(gl.TEXTURE0+4);gl.bindTexture(gl.TEXTURE_3D,prOn?this.printTx:this.lutTx);
     gl.uniform1i(ul('printLut'),4);gl.uniform1f(ul('usePrint'),prOn?1:0);
-    gl.uniform1f(ul('useTonemap'),P.tonemap?1:0); // ROADMAP.md R1 — see getFXParams' comment
+    gl.uniform1f(ul('useTonemap'),tonemapOn?1:0); // ROADMAP.md R1 — see getFXParams' comment and render()'s tonemapOn
     // White mode: equal gains tuned to the Rec.709 luminance of the warm gain vector, so the
     // neutral glow carries the same visual weight as the warm one at a given Amount.
     const gW=0.2126*gainR+0.7152*gainG+0.0722*gainB; // luminance of the active gain vector
@@ -8413,10 +8433,19 @@ function bakeDcpLUT(dcp,fit,N){
       }
       r=tr;g=tg;b=tb;
     }
-    // ProPhoto → sRGB + gamma (the single final value clamp)
-    const sr=Math.min(Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),1),
-          sg=Math.min(Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),1),
-          sb=Math.min(Math.max(PP2SRGB[6]*r+PP2SRGB[7]*g+PP2SRGB[8]*b,0),1);
+    // ProPhoto → sRGB + gamma. ⚠️ ROADMAP.md's R1 (scene-referred): the upper clamp here USED
+    // TO throw away exactly the highlight headroom that made this whole feature a no-op for RAW
+    // files — a real window/sky in a RAW file can genuinely bake to sr/sg/sb well above 1.0
+    // (extended-range ProPhoto values), and this was the exact point that discarded it before
+    // applyDcpLUT or the GPU ever got a chance to see it. Floor only (0), no ceiling — srgbG
+    // already extrapolates its own gamma curve correctly for x>1 (`Math.max(x,0)` inside it,
+    // no upper bound), so gr2/gg2/gb2 below can now genuinely exceed 1.0. The sky-gate residual
+    // right after this is unaffected: it self-gates to ~0 for any value already this bright
+    // (`1-ss(0.90,0.985,v2)`→0 as v2→1), verified by inspection, not just assumed — see its own
+    // comment.
+    const sr=Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),
+          sg=Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),
+          sb=Math.max(PP2SRGB[6]*r+PP2SRGB[7]*g+PP2SRGB[8]*b,0);
     let gr2=srgbG(sr),gg2=srgbG(sg),gb2=srgbG(sb);
     // Residual cool-highlight lift (fitted vs Lightroom, calib/dcp_residual_tone.py +
     // dcp_sky_gate.json): after everything above, LR still renders bright SATURATED COOL
@@ -8521,7 +8550,13 @@ function hrByteForHeadroom(maxV){
   const norm=Math.min(1,Math.log2(maxV)/HR_MAX_STOPS);
   return Math.round(255*_srgbEncode(norm));
 }
-function applyDcpLUT(u16,w,h,lut,hrOut){ // u16: interleaved RGB Uint16, linear camera space
+function applyDcpLUT(u16,w,h,lut,hrOut,extOut){ // u16: interleaved RGB Uint16, linear camera space
+  // extOut (ROADMAP.md R1, optional Float32Array(w*h*3)): the SAME per-pixel `v` this loop
+  // already computes, before `rgba`'s *255+quantize-and-clamp throws away anything above 1.0.
+  // This is the actual fix for "scene-referred only pays when the source has headroom" — RAW
+  // yes, an 8-bit JPEG mostly not: `v` genuinely exceeds 1.0 for a real blown sky/window once
+  // bakeDcpLUT's own upper clamp was removed (see that function's comment), and until this
+  // point in the pipeline that headroom was being computed and then unconditionally discarded.
   const N=lut.n,L=lut.data,NM=N-1,rgba=new Uint8ClampedArray(w*h*4);
   const sc=NM/65535;
   for(let i=0,j=0;i<w*h;i++){
@@ -8535,6 +8570,7 @@ function applyDcpLUT(u16,w,h,lut,hrOut){ // u16: interleaved RGB Uint16, linear 
             c01=q(r0,g0,b0+1)*(1-rf)+q(r0+1,g0,b0+1)*rf, c11=q(r0,g0+1,b0+1)*(1-rf)+q(r0+1,g0+1,b0+1)*rf;
       const v=(c00*(1-gf)+c10*gf)*(1-bf)+(c01*(1-gf)+c11*gf)*bf;
       if(hrOut&&v>maxV)maxV=v;
+      if(extOut)extOut[3*i+k]=v;
       rgba[j+k]=255*v+0.5;
     }
     // ⚠️ Computed for free in the SAME loop that already runs for every RAW load, never a
@@ -8584,7 +8620,16 @@ async function loadRw2(file){
   }
   const w=img.width,h=img.height,ch=img.colors||3;let rgb=img.data;
   if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
-  let rgba,c,dt;
+  let rgba,c,dt,hrOut,sceneLinear;
+  // ⚠️ hrOut/sceneLinear are declared HERE, not with `const` inside the branches below, and
+  // this is load-bearing, not stylistic: the `if(typeof hrOut!=='undefined')` stash check
+  // further down used to sit OUTSIDE the `else if(profile){}` block that declared `hrOut` with
+  // `const` — block-scoped consts stop existing entirely once their `{}` closes, so `typeof
+  // hrOut` there was *always* "undefined" regardless of whether the branch ran (verified with a
+  // standalone Node repro of the exact same shape before touching this file). The browser/wasm
+  // DCP path's `_hdrHeadroom` stash has therefore never actually fired. Declaring both here and
+  // assigning (not declaring) them in each branch fixes that for real, and is what let this
+  // session's new `sceneLinear` stash (ROADMAP.md R1) actually reach the code that reads it.
   // Covers the linearization loop, DCP LUT fetch/bake/apply and the canvas writes — the RW2
   // bytes are already decoded at this point (the worker is already freed in the finally above),
   // but a bad/missing DCP profile, a corrupt profile file, or a canvas failure here previously
@@ -8593,6 +8638,11 @@ async function loadRw2(file){
   try{
     if(img.rgba){
       rgba=img.data; // native shell: decode + DCP develop already done in Rust, pixels are final RGBA8
+      // ROADMAP.md R1: desktop's own extended-range companion, threaded all the way from
+      // main.rs's decode_raw_v2/denoise_raw_high through NativeLibRawShim.imageData()/refine().
+      // undefined when Rust didn't send one (no DCP applied, or no measured headroom) — same
+      // "absent means nothing to preserve" convention the browser path below already uses.
+      sceneLinear=img.sceneLinear;
     }else if(profile){
       if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
       // libraw-wasm's "linear" output is measurably non-linear vs true (ADC-count) linearity:
@@ -8612,8 +8662,13 @@ async function loadRw2(file){
       // sets. The desktop app additionally reads locally-installed Adobe camera profiles.
       if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the Chromasmith desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
       const lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
-      const hrOut=new Uint8ClampedArray(w*h);
-      rgba=applyDcpLUT(rgb,w,h,lut,hrOut);
+      hrOut=new Uint8ClampedArray(w*h);
+      // ROADMAP.md R1: the real scene-linear buffer — see applyDcpLUT's own comment. Always
+      // computed (the loop already runs regardless; this is one more write per channel, not a
+      // second pass) and stashed below exactly like hrOut already is, so setImage can upload it
+      // as a float texture when real headroom is present instead of the always-8-bit canvas.
+      sceneLinear=new Float32Array(w*h*3);
+      rgba=applyDcpLUT(rgb,w,h,lut,hrOut,sceneLinear);
     }else{
       // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
       rgba=new Uint8ClampedArray(w*h*4);
@@ -8634,6 +8689,18 @@ async function loadRw2(file){
       let any=false;for(let i=0;i<hrOut.length;i++){if(hrOut[i]>12){any=true;break;}}
       c._hdrHeadroom={data:hrOut,w,h};
       c._hdrHeadroomPresent=any;
+    }
+    // ROADMAP.md R1: an INDEPENDENT check, not nested inside hrOut's — the desktop `img.rgba`
+    // path (Rust) can carry `sceneLinear` without this function ever computing `hrOut` at all
+    // (that's a browser/applyDcpLUT-only byte-headroom encoding used solely for gain-map HEIC
+    // export), so nesting this inside `hrOut`'s presence would silently never fire on desktop.
+    if(typeof sceneLinear!=='undefined'){
+      // A f32 scan, not the hrOut byte-threshold trick above — real values in this buffer ARE
+      // the linear-ish sRGB-encoded quantity itself, so "any pixel measurably above white"
+      // is a direct, honest presence test rather than a re-derived proxy.
+      let any=false;for(let i=0;i<sceneLinear.length;i++){if(sceneLinear[i]>1.05){any=true;break;}}
+      c._sceneLinear={data:sceneLinear,w,h};
+      c._sceneLinearPresent=any;
     }
   }catch(e){throw new Error('RW2 color processing failed: '+errStr(e))}
   log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
@@ -8657,6 +8724,17 @@ async function loadRw2(file){
       // so if that ever changes again this stays correct instead of silently clipping).
       if(c.width!==refined.width||c.height!==refined.height){c.width=refined.width;c.height=refined.height;}
       c.getContext('2d').putImageData(new ImageData(rgba2,refined.width,refined.height),0,0);
+      // ROADMAP.md R1: keep _sceneLinear in sync with whichever pixels are actually on the
+      // canvas now — same "absent means delete the stale one" rule as chromasmithDenoiseHigh's
+      // own refresh, so a refine that DIDN'T carry extended data (e.g. NR ran but the fast pass
+      // is being effectively kept) can't leave a mismatched stash from the earlier fast decode.
+      if(refined.sceneLinear){
+        let any=false;for(let i=0;i<refined.sceneLinear.length;i++){if(refined.sceneLinear[i]>1.05){any=true;break;}}
+        c._sceneLinear={data:refined.sceneLinear,w:refined.width,h:refined.height};
+        c._sceneLinearPresent=any;
+      }else{
+        delete c._sceneLinear;delete c._sceneLinearPresent;
+      }
       if(typeof updateWork==='function')updateWork();
       if(typeof renderPreview==='function')renderPreview();
       log('RAW refined (noise reduction applied)','info');
