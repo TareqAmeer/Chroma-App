@@ -1790,6 +1790,7 @@ fn main() {
             catalog::catalog_delete_person,
             catalog::catalog_clip_embed,
             catalog::catalog_clip_search,
+            catalog::catalog_clip_tags,
             catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
             catalog::catalog_focus,

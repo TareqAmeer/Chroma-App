@@ -167,6 +167,90 @@ pub fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
+// ── R10: zero-shot CLIP auto-tagging ────────────────────────────────────────────────────────
+// UI layer over the embeddings that already exist, not new inference: `catalog_clip_search`
+// already proves CLIP text-vs-image cosine ranking works, this just runs that same ranking
+// against a small FIXED vocabulary instead of an arbitrary user query, once per photo, so the
+// Info panel can surface a handful of one-click "suggested keyword" chips. This is UX taxonomy,
+// not a calibration constant — genuinely broad and useful matters more than "the right list".
+pub const TAG_VOCABULARY: &[&str] = &[
+    // subjects — people
+    "portrait", "self portrait", "group photo", "family photo", "child", "baby", "toddler",
+    "candid", "couple", "crowd", "wedding", "bride", "groom",
+    // subjects — animals
+    "dog", "cat", "bird", "wildlife", "horse", "farm animal", "insect", "fish", "reptile",
+    // places / scenes — outdoor
+    "beach", "ocean", "sea", "lake", "river", "waterfall", "mountain", "hill", "valley",
+    "forest", "woods", "jungle", "desert", "field", "meadow", "snow", "ice", "glacier",
+    "island", "coastline", "cliff", "cave",
+    // places / scenes — built
+    "city", "skyline", "street", "alley", "architecture", "building", "bridge", "church",
+    "cathedral", "temple", "castle", "ruins", "interior", "room", "kitchen", "bedroom",
+    "office", "garden", "park", "farm", "barn", "market", "stadium", "airport", "train station",
+    "harbor", "lighthouse", "windmill", "vineyard",
+    // vehicles / transport
+    "car", "motorcycle", "bicycle", "boat", "sailboat", "train", "airplane", "hot air balloon",
+    // time / light
+    "sunset", "sunrise", "golden hour", "blue hour", "night", "night sky", "stars", "moon",
+    "silhouette", "fog", "mist", "storm", "lightning", "rainbow", "clear sky", "overcast",
+    "long exposure", "light trails",
+    // genres
+    "landscape", "seascape", "cityscape", "macro", "close-up", "aerial view", "drone shot",
+    "sports", "action shot", "motion blur", "food", "drink", "still life", "product photo",
+    "travel", "street photography", "documentary", "concert", "festival", "event", "party",
+    "sports event", "astrophotography", "underwater", "fireworks", "abstract",
+    // objects / content
+    "flower", "flowers", "plant", "tree", "leaf", "fruit", "vegetable", "book", "artwork",
+    "sculpture", "painting", "graffiti", "sign", "text", "screenshot", "map", "clothing",
+    "jewelry", "toy", "musical instrument", "computer", "phone",
+    // people — activity
+    "smiling", "laughing", "running", "jumping", "dancing", "swimming", "hiking", "climbing",
+    "skiing", "surfing", "cycling", "cooking", "reading", "sleeping",
+    // style / composition
+    "black and white", "sepia", "vintage", "reflection", "bokeh", "shallow depth of field",
+    "symmetry", "minimalism", "pattern", "texture", "high contrast", "low key", "high key",
+    "vibrant colors", "monochrome", "panorama", "double exposure", "selective focus",
+    "flat lay", "top down view", "close-up detail",
+    // weather / season
+    "rain", "raindrops", "autumn", "spring", "summer", "winter", "sunny day", "cloudy sky",
+];
+
+/// The vocabulary embedded once via `embed_text`, cached behind a `OnceLock` — same lazy pattern
+/// as `vision_session`/`text_session`/`tokenizer` above. Costs ~200 text-encoder forward passes
+/// on first use only; every later call reuses the cached vectors.
+fn tag_vocab_embeddings() -> Result<&'static Vec<(String, Vec<f32>)>, String> {
+    static V: OnceLock<Result<Vec<(String, Vec<f32>)>, String>> = OnceLock::new();
+    V.get_or_init(|| {
+        TAG_VOCABULARY
+            .iter()
+            .map(|term| embed_text(term).map(|emb| (term.to_string(), emb)))
+            .collect::<Result<Vec<_>, _>>()
+    })
+    .as_ref()
+    .map_err(|e| e.clone())
+}
+
+/// The empirically-chosen cosine-similarity floor above which a vocabulary term is worth
+/// suggesting as a tag — see `catalog.rs`'s `clip_tag_suggestions_ranks_close_terms_above_far_ones`
+/// test and this crate's R10 verification notes for how it was picked (not guessed): real CLIP
+/// image-vs-unrelated-text cosine similarities sit in a narrow positive band (commonly ~0.15-0.20
+/// for OpenAI CLIP ViT-B/32), so a naive 0.2 guess risks admitting nothing. 0.22 cleared real
+/// correct-tag scores while rejecting real incorrect ones on a hand-checked test photo (see the
+/// README/ROADMAP note for the actual observed scores).
+pub const DEFAULT_TAG_THRESHOLD: f32 = 0.22;
+pub const DEFAULT_TAG_TOP_K: usize = 8;
+
+/// Ranks an already-computed image embedding against the cached vocabulary embeddings, returning
+/// the top-K terms whose cosine similarity clears `threshold`, sorted by score descending.
+pub fn suggest_tags(image_embedding: &[f32], top_k: usize, threshold: f32) -> Result<Vec<(String, f32)>, String> {
+    let vocab = tag_vocab_embeddings()?;
+    let mut scored: Vec<(String, f32)> =
+        vocab.iter().map(|(term, emb)| (term.clone(), cosine_sim(image_embedding, emb))).filter(|(_, s)| *s >= threshold).collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(top_k);
+    Ok(scored)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

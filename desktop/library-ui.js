@@ -250,6 +250,17 @@
       case 'catalog_cluster_faces': return Promise.resolve({ people: 0, clustered_faces: 0, unclustered_faces: 0 });
       case 'catalog_rename_person': case 'catalog_merge_people': case 'catalog_delete_person': return Promise.resolve();
       case 'catalog_clip_embed': return Promise.resolve({ embedded: 0 });
+      case 'catalog_clip_tags': {
+        // R10: fixed fake suggestions so the Info panel's "Suggested" section is exercisable
+        // under ?libtest=1 without a real CLIP model — deterministic per photo id so re-renders
+        // don't jitter, and empty for one id to prove the "no suggestions" silent-empty state.
+        if (A.photoId === 2) return Promise.resolve([]);
+        return Promise.resolve([
+          { term: 'landscape', score: 0.31 },
+          { term: 'mountain', score: 0.27 },
+          { term: 'sunset', score: 0.24 },
+        ]);
+      }
       case 'catalog_clip_search': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
         if (!A.text || !A.text.trim()) return Promise.resolve([]);
@@ -444,6 +455,7 @@
     entries: [],           // image entries in the currently-viewed folder
     sidecars: new Map(),   // path -> {rating,label,edited,recipe} (cached client-side)
     meta: new Map(),       // path -> {camera,lens,date,iso}
+    clipTags: new Map(),   // photo id -> [{term,score}] (R10 suggested-tag cache, see renderInfoPanel)
     dupeClusters: new Map(), // path -> clusterId (only present for clusters of size > 1)
     dupeClusterSizes: new Map(), // clusterId -> size
     _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
@@ -631,6 +643,14 @@
       background:var(--sur2);border:1px solid var(--bdr);font-size:10px;color:var(--txt)}
     .lib-kw-chip-x{cursor:pointer;color:var(--mut);font-size:12px;line-height:1}
     .lib-kw-chip-x:hover{color:var(--txt)}
+    /* R10: zero-shot CLIP tag suggestions (renderInfoPanel) — visually distinct from a real
+       keyword chip (dashed border + muted text, same --mut/opacity convention as .lib-chip-x
+       above) since these aren't yet real keywords until clicked. Sized identically to
+       .lib-kw-chip — same 28px-floor exemption ui_audit.mjs already grants that chip class. */
+    .lib-kw-suggest-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:9px;
+      background:transparent;border:1px dashed var(--bdr);font-size:10px;color:var(--mut);cursor:pointer}
+    .lib-kw-suggest-chip:hover{color:var(--txt);border-color:var(--acc)}
+    .lib-kw-suggest-chip-add{opacity:.7;font-size:11px;line-height:1}
     /* Quick Look (Space bar) — a full-viewport overlay, never part of the editor's own DOM,
        so it stays trivially cheap to open/close: no shader, no canvas, just an <img>. */
     #lib-quicklook{position:fixed;inset:0;z-index:500;background:rgba(10,10,10,.96);
@@ -3618,6 +3638,30 @@
       const leaf = k.split('|').pop();
       return `<span class="lib-kw-chip" data-kw="${esc(k)}" title="${esc(k)}">${esc(leaf)}<span class="lib-kw-chip-x" data-kw-remove="${esc(k)}">×</span></span>`;
     }).join('');
+    // R10: zero-shot CLIP tag suggestions. Cached by photo id (same "fetch once, re-render from
+    // cache" idea getMeta's path-keyed Map already uses above) so re-rendering the panel — e.g.
+    // right after a keyword is added — never costs a second round trip. A photo not yet
+    // CLIP-analyzed comes back an empty array (not an error, see catalog_clip_tags), which is
+    // indistinguishable here from "no cache entry yet" only until the fetch below resolves.
+    const kwSet = new Set(sc.keywords || []);
+    let suggestChips = '';
+    if (entry.id != null) {
+      if (!state.clipTags.has(entry.id)) {
+        state.clipTags.set(entry.id, []); // placeholder so we don't refetch while the real request is in flight
+        invoke('catalog_clip_tags', { photoId: entry.id })
+          .then((hits) => { state.clipTags.set(entry.id, hits || []); if (state.showInfo) renderInfoPanel(); })
+          .catch(() => {});
+      } else {
+        const suggestions = (state.clipTags.get(entry.id) || []).filter((h) => !kwSet.has(h.term));
+        if (suggestions.length) {
+          suggestChips = `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Suggested</div>`
+            + `<div id="lib-info-suggest-chips" style="display:flex;flex-wrap:wrap;gap:4px">`
+            + suggestions.map((h) => `<span class="lib-kw-suggest-chip" data-suggest="${esc(h.term)}" title="${Math.round(h.score * 100)}% match">`
+              + `${esc(h.term)}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
+            + `</div></div>`;
+        }
+      }
+    }
     // Autocomplete against every keyword path already known to the catalog — best-effort
     // (keywordTree only refreshes on the same cadence as the rest of the catalog, i.e. on
     // scan/folder-open, matching how ratings/labels already lag one scan behind a foreign
@@ -3633,11 +3677,15 @@
       + `<input id="lib-info-kw-add" list="lib-kw-datalist" placeholder="Add keyword…" `
       + `style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;border-radius:5px;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt)">`
       + `<datalist id="lib-kw-datalist">${kwOptions}</datalist></div>`
+      + suggestChips
       + `<div style="margin-top:8px;text-align:right"><button class="lib-btn" id="lib-info-close">Close</button></div>`;
     const c = document.getElementById('lib-info-close');
     if (c) c.onclick = () => { state.showInfo = false; renderInfoPanel(); };
     el.querySelectorAll('[data-kw-remove]').forEach((x) => {
       x.onclick = (e) => { e.stopPropagation(); removeKeywordFromPhoto(path, x.dataset.kwRemove); };
+    });
+    el.querySelectorAll('[data-suggest]').forEach((x) => {
+      x.onclick = (e) => { e.stopPropagation(); addKeywordToPhoto(path, x.dataset.suggest); };
     });
     const addInput = document.getElementById('lib-info-kw-add');
     if (addInput) {

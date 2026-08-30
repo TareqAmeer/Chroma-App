@@ -2449,6 +2449,30 @@ pub fn catalog_clip_search(state: tauri::State<CatalogState>, text: String, limi
 }
 
 #[derive(Serialize, Clone)]
+pub struct ClipTagHit {
+    pub term: String,
+    pub score: f32,
+}
+
+/// R10: zero-shot tag suggestions for one photo, reusing its already-stored CLIP image embedding
+/// (no new inference beyond the one-time vocabulary text-embed — see `clip::suggest_tags`). Returns
+/// an empty vec, not an error, when the photo has no `clip_embedding` yet (not analyzed): the UI
+/// treats "no suggestions" as a normal silent state, not a failure.
+#[tauri::command]
+pub fn catalog_clip_tags(state: tauri::State<CatalogState>, photo_id: i64, top_k: Option<usize>) -> Result<Vec<ClipTagHit>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let blob: Option<Vec<u8>> = conn
+        .query_row("SELECT clip_embedding FROM photos WHERE id = ?1", params![photo_id], |r| r.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?
+        .flatten();
+    let Some(blob) = blob else { return Ok(vec![]) };
+    let emb = blob_to_f32_vec(&blob);
+    let hits = crate::clip::suggest_tags(&emb, top_k.unwrap_or(crate::clip::DEFAULT_TAG_TOP_K), crate::clip::DEFAULT_TAG_THRESHOLD)?;
+    Ok(hits.into_iter().map(|(term, score)| ClipTagHit { term, score }).collect())
+}
+
+#[derive(Serialize, Clone)]
 pub struct VerifyEntry {
     pub id: i64,
     pub name: String,
@@ -5129,6 +5153,72 @@ mod tests {
         let _ = (blue_id, red_id);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// R10's threshold, on synthetic vectors (same technique `cluster_run_groups_tight_clusters...`
+    /// below uses — no real ~350MB ONNX models needed to exercise the ranking/threshold logic).
+    /// Builds a 512-dim image embedding "close" to 3 vocabulary terms (small angular offset, high
+    /// cosine similarity) and "far" from the rest (orthogonal, near-zero similarity — a stand-in
+    /// for CLIP's own "unrelated image/text" band, which the README/ROADMAP notes record as
+    /// measured on real photos to sit well under this synthetic far case), then asserts
+    /// `DEFAULT_TAG_THRESHOLD` admits exactly the close terms, in score order, and rejects the far
+    /// ones — mirroring `clip::suggest_tags`'s own filter+sort without needing the cached
+    /// text-encoder vocabulary (which only `embed_text` can build).
+    #[test]
+    fn clip_tag_suggestions_ranks_close_terms_above_far_ones() {
+        let unit = |mut v: Vec<f32>| -> Vec<f32> {
+            let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            for x in v.iter_mut() {
+                *x /= n;
+            }
+            v
+        };
+        // Image embedding: mostly along axis 0.
+        let mut img = vec![0f32; 512];
+        img[0] = 1.0;
+        let img = unit(img);
+
+        // "Close" terms: small angular offset from axis 0 (cosine ~0.95-0.99, comfortably above
+        // the 0.22 threshold).
+        let mut close_a = vec![0f32; 512];
+        close_a[0] = 0.99;
+        close_a[3] = 0.14;
+        let mut close_b = vec![0f32; 512];
+        close_b[0] = 0.97;
+        close_b[4] = 0.24;
+        let mut close_c = vec![0f32; 512];
+        close_c[0] = 0.95;
+        close_c[5] = 0.31;
+
+        // "Far" terms: orthogonal or near-orthogonal to axis 0 (cosine ~0.0-0.05), modeling
+        // CLIP's own "unrelated image/text" band.
+        let mut far_a = vec![0f32; 512];
+        far_a[1] = 1.0;
+        let mut far_b = vec![0f32; 512];
+        far_b[2] = 1.0;
+        let mut far_c = vec![0f32; 512];
+        far_c[0] = 0.05;
+        far_c[6] = 0.999;
+
+        let vocab: Vec<(&str, Vec<f32>)> = vec![
+            ("close_a", unit(close_a)),
+            ("close_b", unit(close_b)),
+            ("close_c", unit(close_c)),
+            ("far_a", unit(far_a)),
+            ("far_b", unit(far_b)),
+            ("far_c", unit(far_c))
+        ];
+
+        let mut scored: Vec<(&str, f32)> = vocab
+            .iter()
+            .map(|(term, emb)| (*term, crate::clip::cosine_sim(&img, emb)))
+            .filter(|(_, s)| *s >= crate::clip::DEFAULT_TAG_THRESHOLD)
+            .collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let terms: Vec<&str> = scored.iter().map(|(t, _)| *t).collect();
+        assert_eq!(terms, vec!["close_a", "close_b", "close_c"], "threshold {} should admit exactly the close terms in score order, got {:?}", crate::clip::DEFAULT_TAG_THRESHOLD, scored);
+        assert!(scored.len() <= crate::clip::DEFAULT_TAG_TOP_K, "must respect top_k");
     }
 
     // ── Face embedding scan phase (AI stack Phase B, part 1) ────────────────────────────────
