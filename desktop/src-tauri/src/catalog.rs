@@ -568,6 +568,12 @@ pub struct CatalogRoot {
     pub rel_path: String,
     pub kind: String,
     pub abs_path: String,
+    /// The EXACT folder that was passed in, relative to the volume mount — NOT the same as
+    /// `rel_path` when an ancestor root already covers it (`rel_path` is then the ancestor's own,
+    /// per the nested-root collapse below). The frontend's catalog-backed folder browse needs
+    /// this to scope a `CatalogQuery` to the folder actually being opened, which can be a
+    /// subfolder of whatever root ended up registered.
+    pub requested_rel_path: String,
 }
 
 /// `anc` is an ancestor of (or equal to) `desc` as path SEGMENTS, not a string prefix — a bare
@@ -623,7 +629,7 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
             // An ancestor (or itself) is already registered — return it unchanged, insert nothing.
             let kind: String = conn.query_row("SELECT kind FROM roots WHERE id = ?1", params![id], |r| r.get(0)).map_err(|e| e.to_string())?;
             let abs = if existing_rel.is_empty() { mount_point.clone() } else { format!("{mount_point}/{existing_rel}") };
-            return Ok(CatalogRoot { id: *id, volume_id, rel_path: existing_rel.clone(), kind, abs_path: abs });
+            return Ok(CatalogRoot { id: *id, volume_id, rel_path: existing_rel.clone(), kind, abs_path: abs, requested_rel_path: rel_path });
         }
     }
     let descendants: Vec<i64> = existing
@@ -649,7 +655,7 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
             |r| r.get(0),
         )
         .map_err(|e| e.to_string())?;
-    Ok(CatalogRoot { id, volume_id, rel_path, kind, abs_path: canon_str })
+    Ok(CatalogRoot { id, volume_id, rel_path: rel_path.clone(), kind, abs_path: canon_str, requested_rel_path: rel_path })
 }
 
 /// Cleans up nested roots that already exist in a user's DB from before this fix (or from any
@@ -710,6 +716,7 @@ pub fn catalog_roots(state: tauri::State<CatalogState>) -> Result<Vec<CatalogRoo
                 rel_path: rel_path.clone(),
                 kind: r.get(3)?,
                 abs_path: abs_path(&last_path, is_local != 0, &rel_path),
+                requested_rel_path: rel_path,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -2629,9 +2636,25 @@ pub struct CatalogQuery {
     /// since SQL's `IN (...)` does not preserve input order.
     #[serde(default)]
     pub photo_ids: Option<Vec<i64>>,
+    /// Ordinary folder browsing's own scope — the Library's ordinary "open this folder" view,
+    /// as opposed to the Date/Search/Duplicates views the other filters above serve. `rel_dir`
+    /// is matched against `photos.rel_dir` (already indexed, `ix_photos_dir`): exact match for a
+    /// single-level browse, or itself-or-any-descendant when `recursive` is set (mirrors
+    /// `is_ancestor_rel`'s own segment-aware prefix rule, not a bare string prefix — see below).
+    #[serde(default)]
+    pub folder: Option<FolderScope>,
 }
 fn default_true() -> bool {
     true
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderScope {
+    pub volume_id: i64,
+    pub rel_dir: String,
+    #[serde(default)]
+    pub recursive: bool,
 }
 
 // ⚠️ Hand-written, not `#[derive(Default)]`: a derived Default gives `include_offline: false`
@@ -2644,7 +2667,8 @@ impl Default for CatalogQuery {
     fn default() -> Self {
         CatalogQuery {
             kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None,
-            no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None
+            no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None,
+            folder: None,
         }
     }
 }
@@ -2696,6 +2720,27 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         // leader satisfies `stack_id = p.id` by construction (see the stacking module's own doc
         // comment: stack_id is always the CURRENT leader's own id).
         where_parts.push("(p.stack_id IS NULL OR p.stack_id = p.id)".to_string());
+
+        if let Some(f) = &q.folder {
+            where_parts.push(format!("p.volume_id = ?{}", values.len() + 1));
+            values.push(Box::new(f.volume_id));
+            if f.rel_dir.is_empty() {
+                // The volume's own root — every photo's rel_dir is a descendant (or, for a
+                // photo sitting directly at the volume root, exactly ""), same convention
+                // is_ancestor_rel uses ("empty is an ancestor of everything"). Non-recursive
+                // still means "exactly this dir", i.e. rel_dir == "".
+                if !f.recursive {
+                    where_parts.push("p.rel_dir = ''".to_string());
+                }
+            } else if f.recursive {
+                where_parts.push(format!("(p.rel_dir = ?{a} OR p.rel_dir LIKE ?{b})", a = values.len() + 1, b = values.len() + 2));
+                values.push(Box::new(f.rel_dir.clone()));
+                values.push(Box::new(format!("{}/%", f.rel_dir)));
+            } else {
+                where_parts.push(format!("p.rel_dir = ?{}", values.len() + 1));
+                values.push(Box::new(f.rel_dir.clone()));
+            }
+        }
 
         if let Some(k) = &q.kind {
             if k != "all" {
@@ -2770,9 +2815,11 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         )
         .map_err(|e| e.to_string())?;
 
-    // `edited_ts` isn't tracked by the catalog yet (it's derived from the sidecar's own mtime,
-    // same as library.rs's `edited_ts_of`, and lands with scan phase C) — select a literal 0
-    // rather than a nonexistent column.
+    // `edited_ts` mirrors library.rs's `edited_ts_of`: the sidecar's own mtime, already tracked
+    // per-row as `sidecar_mtime` (walk_root populates it, 0 when no sidecar exists — see
+    // walk_root_sidecar_lookup_matches_the_old_per_file_stat_behavior). Selected directly rather
+    // than the literal 0 this used to be, now that a folder-scoped query needs the grid's
+    // "date edited" badge/sort to behave the same as the live list_dir path did.
     //
     // `stack_n`/`newest_deriv_rel` are correlated subqueries, not a JOIN+GROUP BY: a stack's
     // members can span at most a handful of rows (a RAW plus its exports), so a per-row scalar
@@ -2786,7 +2833,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         "ORDER BY p.captured DESC, p.mtime DESC"
     };
     let sql = format!(
-        "SELECT p.id, p.name, p.rel_path, p.kind, p.mtime, p.size, 0,
+        "SELECT p.id, p.name, p.rel_path, p.kind, p.mtime, p.size, p.sidecar_mtime,
                 v.last_path, v.is_local, v.label, p.sharpness, p.blurry,
                 (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
                 (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
@@ -2808,6 +2855,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let kind: String = r.get(3)?;
             let mtime: i64 = r.get(4)?;
             let size: i64 = r.get(5)?;
+            let sidecar_mtime: i64 = r.get(6)?;
             let last_path: String = r.get(7)?;
             let is_local: i64 = r.get(8)?;
             let label: String = r.get(9)?;
@@ -2827,7 +2875,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 mtime: mtime as u64,
                 size: size as u64,
                 missing: false,
-                edited_ts: 0,
+                edited_ts: sidecar_mtime as u64,
                 id,
                 offline: !online,
                 volume: label,
@@ -4566,6 +4614,65 @@ mod tests {
         let by_day = query_run(&conn, CatalogQuery { year: Some(2026), month: Some(8), day: Some(20), ..Default::default() }).unwrap();
         assert_eq!(by_day.entries.len(), 1);
         assert_eq!(by_day.entries[0].name, "aug20.jpg");
+    }
+
+    /// The folder scope ordinary browsing now uses (Fix 1 of the catalog-backed-grid plan):
+    /// exact match for a single-level browse, itself-or-descendant for recursive, segment-aware
+    /// (a "PHOTOS" scope must not match "PHOTOS2", same rule is_ancestor_rel already enforces),
+    /// and scoped by volume_id so two volumes with the same rel_dir don't bleed into each other.
+    #[test]
+    fn query_run_scopes_by_folder() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('local','This Mac','/', 1, 0)", []).unwrap();
+        conn.execute("INSERT INTO volumes (uuid, label, last_path, is_local, last_seen) VALUES ('other','Other','/other', 1, 0)", []).unwrap();
+        let vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
+        let other_vid: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid='other'", [], |r| r.get(0)).unwrap();
+        let insert = |rel_path: &str, rel_dir: &str, name: &str, vid: i64, sidecar_mtime: i64| {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, sidecar_mtime, added, present)
+                 VALUES (?1, ?2, ?3, ?4, ?4, 'jpg', 'jpeg', 10, 0, ?5, 0, 1)",
+                params![vid, rel_path, rel_dir, name, sidecar_mtime],
+            )
+            .unwrap();
+        };
+        insert("root.jpg", "", "root.jpg", vid, 0);
+        insert("PHOTOS/a.jpg", "PHOTOS", "a.jpg", vid, 1735000000);
+        insert("PHOTOS/2026/b.jpg", "PHOTOS/2026", "b.jpg", vid, 0);
+        insert("PHOTOS2/c.jpg", "PHOTOS2", "c.jpg", vid, 0); // must NOT match a "PHOTOS" prefix scope
+        insert("PHOTOS/a.jpg", "PHOTOS", "a.jpg", other_vid, 0); // same rel_dir, different volume
+
+        // Non-recursive: exact dir only.
+        let single = query_run(&conn, CatalogQuery {
+            folder: Some(FolderScope { volume_id: vid, rel_dir: "PHOTOS".into(), recursive: false }),
+            ..Default::default()
+        }).unwrap();
+        assert_eq!(single.entries.len(), 1, "non-recursive must not pick up the nested 2026 subfolder");
+        assert_eq!(single.entries[0].name, "a.jpg");
+        assert_eq!(single.entries[0].edited_ts, 1735000000, "edited_ts must reflect the real sidecar_mtime, not a hardcoded 0");
+
+        // Recursive: itself plus any descendant, but not the sibling "PHOTOS2" (segment-aware).
+        let recursive = query_run(&conn, CatalogQuery {
+            folder: Some(FolderScope { volume_id: vid, rel_dir: "PHOTOS".into(), recursive: true }),
+            ..Default::default()
+        }).unwrap();
+        let mut names: Vec<&str> = recursive.entries.iter().map(|e| e.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, vec!["a.jpg", "b.jpg"], "recursive must include the nested subfolder and exclude PHOTOS2 and the other volume");
+
+        // Volume root, non-recursive: only photos with rel_dir == "".
+        let vol_root = query_run(&conn, CatalogQuery {
+            folder: Some(FolderScope { volume_id: vid, rel_dir: "".into(), recursive: false }),
+            ..Default::default()
+        }).unwrap();
+        assert_eq!(vol_root.entries.len(), 1);
+        assert_eq!(vol_root.entries[0].name, "root.jpg");
+
+        // Volume root, recursive: everything in that volume.
+        let vol_all = query_run(&conn, CatalogQuery {
+            folder: Some(FolderScope { volume_id: vid, rel_dir: "".into(), recursive: true }),
+            ..Default::default()
+        }).unwrap();
+        assert_eq!(vol_all.entries.len(), 4, "recursive volume-root scope must cover every photo on that volume, none on the other");
     }
 
     // ── Video capture date ──────────────────────────────────────────────────────────────────

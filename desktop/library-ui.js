@@ -32,12 +32,18 @@
       ? { dur: 12.5, width: 3840, height: 2160, date: '2026-07-20' }
       : { camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' };
   }
+  // Call counters for the "no redundant work" regression test (library_perf.mjs): reopening an
+  // already-cataloged folder must read from catalog_query, not re-walk via list_dir/
+  // listDirRecursive — see Fix 1 of the catalog-backed-grid plan. Exposed on window below.
+  let libtestListDirCalls = 0, libtestCatalogQueryCalls = 0;
+  window.__libtestCallCounts = () => ({ listDir: libtestListDirCalls, catalogQuery: libtestCatalogQueryCalls });
   function libtestInvoke(cmd, args) {
     const A = args || {};
     const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
     const png = Uint8Array.from(atob(px), (c) => c.charCodeAt(0));
     switch (cmd) {
       case 'list_dir': {
+        libtestListDirCalls++;
         const dir = String(A.path || '/test');
         if (/Folders only/.test(dir)) return Promise.resolve([]);
         const out = [];
@@ -147,7 +153,7 @@
       // Photos" is screenshot-verifiable without a real SQLite catalog behind it. Every 7th
       // entry is marked offline, matching the plan's libtest convention for exercising the
       // offline card state in a plain browser.
-      case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path });
+      case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path, requested_rel_path: '' });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
       case 'get_quicklook_preview': return Promise.resolve(png);
@@ -202,6 +208,14 @@
       }
       case 'clear_root_cache': return Promise.resolve(0);
       case 'catalog_hash': return Promise.resolve({ hashed: 0 });
+      // Reached now that catalogRegisterFolder no longer short-circuits under LIBTEST (Fix 1 of
+      // the catalog-backed-grid plan) — catalogRunBackgroundPhases' chain fires for real, so it
+      // needs mocks too, even though there's nothing behind them in the harness to actually stack/
+      // thumbnail/focus-score. `has_more: false` on catalog_thumbnails stops drainCatalogThumbnails
+      // from looping forever against a mock that never has real backlog to drain.
+      case 'catalog_stack': return Promise.resolve({ stacked: 0 });
+      case 'catalog_thumbnails': return Promise.resolve({ generated: 0, has_more: false });
+      case 'catalog_focus': return Promise.resolve({ scored: 0 });
       // One synthetic corrupt entry so the report popover is screenshot-verifiable too.
       case 'catalog_verify': return Promise.resolve({ checked: 20, ok: 19, changed: 0, corrupt: [{ id: 3, name: 'IMG_1003.RW2', path: '/test/AllPhotos/IMG_1003.RW2' }] });
       case 'catalog_keywords': {
@@ -236,9 +250,28 @@
         return Promise.resolve([3, 7, 1, 12, 5].map((id, i) => ({ id: ((id + seed) % 18) + 1, score: 0.9 - i * 0.1 })));
       }
       case 'catalog_query': {
+        const q = A.q || {};
+        // Ordinary folder browsing's own scope (Fix 1 of the catalog-backed-grid plan) — NOT
+        // gated on ?libcat=1, since this is the everyday "open a folder" path every ?libtest=1
+        // page already exercises, not just the opt-in Date/Search/catalog harness. Mirrors
+        // list_dir's own synthetic shape/count (?libn=N, every 6th a video) so
+        // library_perf.mjs's existing DOM/timing budgets keep measuring the same thing — grid
+        // cost for N entries — through the code path that now actually feeds them in the real
+        // app, and so a test can assert list_dir/listDirRecursive are NOT called on this path.
+        if (q.folder) {
+          libtestCatalogQueryCalls++;
+          const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+          const entries = [];
+          for (let i = 1; i <= N; i++) {
+            const isVid = i % 6 === 0;
+            entries.push(isVid
+              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `/test/AllPhotos/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, size: 90000000 + i, missing: false, edited_ts: 0, offline: false, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
+              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i, missing: false, edited_ts: 0, offline: false, volume: 'Test', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null });
+          }
+          return Promise.resolve({ total: N, capped: false, entries });
+        }
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
         const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
-        const q = A.q || {};
         // Expand-in-place mock: item 1 (see the stack_n below) is a synthetic 3-member stack —
         // returns its members directly, ignoring every other filter, matching the real
         // command's own "expand_stack overrides everything else" contract.
@@ -1363,6 +1396,7 @@
     window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
+    window.__libOpenFolder = (path) => openFolder(path);
   }
   // Rows kept mounted beyond the viewport in each direction. This used to be a flat 2, which is
   // enough to avoid a visible GAP while scrolling but nowhere near enough to avoid the far more
@@ -2492,17 +2526,28 @@
     grid.innerHTML = libSkeletonHtml();
     let entries;
     try {
-      if (state.includeSubfolders) {
-        entries = await listDirRecursive(path);
+      // The catalog is now the grid's own data source, not a side-effect kicked off after a
+      // separate live filesystem walk — see catalogRegisterFolder's doc comment and the plan's
+      // Fix 1. Awaited (not fire-and-forget): the catalog_query right below depends on it having
+      // actually registered/scanned this folder. Still captured on `window` so the cold-boot
+      // sequence can await the same promise it always has.
+      const regPromise = catalogRegisterFolder(path);
+      window._lastCatalogRegisterPromise = regPromise;
+      const reg = await regPromise;
+      if (reg) {
+        const page = await invoke('catalog_query', { q: { folder: { volumeId: reg.volumeId, relDir: reg.relDir, recursive: state.includeSubfolders } } });
+        entries = page.entries;
       } else {
-        entries = await invoke('list_dir', { path });
-        _treeListCache.set(path, entries); // opening a folder is the natural "refresh its listing" moment
+        // Fallback only: the catalog couldn't register this folder (e.g. a permissions error a
+        // plain read_dir would also hit) — fall back to the live walk so the grid still shows
+        // something rather than nothing.
+        if (state.includeSubfolders) {
+          entries = await listDirRecursive(path);
+        } else {
+          entries = await invoke('list_dir', { path });
+          _treeListCache.set(path, entries); // opening a folder is the natural "refresh its listing" moment
+        }
       }
-      // Still fire-and-forget for ordinary browsing (nobody here awaits it) — but the promise is
-      // captured on `window` so the cold-boot sequence's one-time restore of the last folder can
-      // await JUST this one, without this call site itself needing to know or care whether it's
-      // being called during boot or from an ordinary click.
-      window._lastCatalogRegisterPromise = catalogRegisterFolder(path);
     } catch (e) {
       grid.innerHTML = `<div id="lib-empty">Can't read this folder.</div>`;
       return;
@@ -4892,43 +4937,40 @@
       <div class="lib-coll-sep"></div>${drivesSectionHtml()}`;
   }
 
-  /// Fire-and-forget: browsing a folder is what builds the catalog, with no separate "add to
-  /// catalog" step the user has to remember. Best-effort on purpose — a failure here (a folder
-  /// under a filesystem statfs can't resolve, e.g.) must never interrupt or slow down the
-  /// ordinary folder-open the user is actually waiting on.
-  // ⚠️ Deduped two ways, because this used to fire a FULL catalog scan — plus the stacking,
-  // thumbnail, focus and hash phases behind it — on every single folder click. Browsing
-  // <root>/2026/08/23 therefore rescanned the whole volume once per level, and those scans ran
-  // against the same disk the grid was trying to read thumbnails from, which is what made every
-  // folder click feel like the library was reloading from scratch.
-  //   1. A path under an already-registered ancestor adds nothing — opening 2026/08/23 after
-  //      2026/08 is the same root — so it short-circuits before any IPC at all.
-  //   2. A volume is scanned at most ONCE per session, so the first folder opened builds the
-  //      index for everything beneath it and later folders just read it. The scan is already
-  //      incremental (mtime-keyed) on the Rust side; this stops the redundant tree walk.
-  const _catalogRegistered = new Set();
-  const _catalogScannedVolumes = new Set();
-  /// Returns the scan promise (previously fire-and-forget with no return value at all) so the
-  /// app's own cold-boot sequence can await JUST the scan — not the background thumbnail/focus/
-  /// hash phases behind it, which stay genuinely backgrounded — before revealing the app. See
-  /// the boot-splash wiring at the bottom of this file for why: those phases used to hide before
-  /// the actual indexing had finished, so the app looked ready and then immediately felt broken.
-  /// Every other caller keeps working exactly as before; a returned promise nobody awaits is
-  /// still fire-and-forget.
+  /// Registers `path` with the catalog and — at most once per COVERING ROOT per session — runs
+  /// the real (walk-skip-optimized) scan for it, then resolves with `{volumeId, relDir}` so
+  /// `openFolder` can read the grid's own entries STRAIGHT FROM THE CATALOG instead of a separate
+  /// live filesystem walk. This is the fix for the deepest issue found across several rounds of
+  /// this session's work: ordinary folder browsing used to run its own independent, uncached
+  /// `list_dir`/`listDirRecursive` walk on every open, completely separate from this scan — so
+  /// every optimization made to the CATALOG's own walk (this function, `catalog_scan`) never
+  /// changed what was actually on screen. Awaited by `openFolder` now, not fire-and-forget.
+  //
+  // `catalog_add_root` is cheap (an ancestor lookup + upsert, not a walk) — safe to call on every
+  // folder open, unlike the scan below. Deduped by ROOT ID, not volume: an earlier version of
+  // this capped by volume_id (matching the OLD, pre-catalog-backed-grid reasoning: "the scan is
+  // already incremental, so repeating it is merely pointless, never wrong"). That stopped being
+  // true the moment the grid started reading from the catalog — `catalog_scan(volume_id)` walks
+  // every ROOT registered for that volume, but a root registered AFTER the volume's one-per-
+  // session scan already ran would never get walked at all, and its folder would show an empty
+  // grid despite having real files on disk. Root-id keying still skips the redundant rescan when
+  // clicking through an already-covered root's own subfolders (catalog_add_root's ancestor
+  // collapse returns the SAME root id for those), while still triggering a real scan — cheap,
+  // thanks to walk-skip, for anything already walked and unchanged — for a genuinely new root.
+  const _catalogScannedRoots = new Set();
   function catalogRegisterFolder(path) {
-    if (LIBTEST) return Promise.resolve(); // no real catalog backend to hit in the harness
-    for (const seen of _catalogRegistered) {
-      if (path === seen || path.startsWith(seen.endsWith('/') ? seen : seen + '/')) return Promise.resolve();
-    }
-    _catalogRegistered.add(path);
     return invoke('catalog_add_root', { path, kind: null })
       .then((root) => {
-        if (!root || _catalogScannedVolumes.has(root.volume_id)) return false;
-        _catalogScannedVolumes.add(root.volume_id);
-        return invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true);
+        if (!root) return null;
+        const needsScan = !_catalogScannedRoots.has(root.id);
+        if (needsScan) _catalogScannedRoots.add(root.id);
+        const scanPromise = needsScan ? invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true) : Promise.resolve(false);
+        return scanPromise.then((scanned) => {
+          if (scanned) { refreshCatalogCounts(); catalogRunBackgroundPhases(); }
+          return { volumeId: root.volume_id, relDir: root.requested_rel_path };
+        });
       })
-      .then((scanned) => { if (scanned) { refreshCatalogCounts(); catalogRunBackgroundPhases(); } })
-      .catch((e) => console.error('catalog_add_root/scan', path, e));
+      .catch((e) => { console.error('catalog_add_root/scan', path, e); return null; });
   }
 
   /// Thumbnails (the offline-browsing tier) and focus scoring are deliberately NOT part of

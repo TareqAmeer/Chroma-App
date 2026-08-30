@@ -155,6 +155,34 @@ for (const n of [200,1000,5000]) {
   }
   await p.close();
 }
+// Fix 1 of the catalog-backed-grid plan: ordinary folder browsing (openFolder) used to run its
+// OWN independent, uncached filesystem walk (list_dir/listDirRecursive) on every single open —
+// completely separate from the SQLite catalog's own walk-skip-optimized scan, which is why every
+// earlier round of "make the catalog's walk faster" work never changed what was actually on
+// screen. It now reads the grid's entries from catalog_query instead, registering/scanning the
+// folder into the catalog first. This asserts the fix stayed fixed: reopening an ALREADY-
+// registered folder must fire catalog_query, and must NOT fire list_dir/listDirRecursive at all —
+// not "fires fewer times", zero, since any nonzero count here is exactly the redundant live walk
+// this fix exists to remove.
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=25`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1500); // let the boot sequence's own first openFolder settle
+  const before = await p.evaluate(() => window.__libtestCallCounts());
+  await p.evaluate((path) => window.__libOpenFolder(path), '/test/Photos');
+  await p.waitForTimeout(300);
+  const after = await p.evaluate(() => window.__libtestCallCounts());
+  const cards = await p.evaluate(() => document.querySelectorAll('#lib-grid .lib-card').length);
+  const listDirFired = after.listDir > before.listDir;
+  const catalogQueryFired = after.catalogQuery > before.catalogQuery;
+  const ok = !listDirFired && catalogQueryFired && cards > 0;
+  console.log(`reopen already-cataloged folder: list_dir calls +${after.listDir-before.listDir}, catalog_query calls +${after.catalogQuery-before.catalogQuery}, cards ${cards}  ${ok?'PASS':'FAIL'}`);
+  if(!ok){
+    failures.push(`reopening a folder fired list_dir ${after.listDir-before.listDir} time(s) (must be 0) or catalog_query didn't fire or the grid stayed empty (cards=${cards})`);
+  }
+  await p.close();
+}
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}
