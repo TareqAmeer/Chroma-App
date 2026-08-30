@@ -46,6 +46,7 @@ mod videothumb;
 mod subject;
 mod ingest;
 mod catalog;
+mod dcp_store;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files for
@@ -53,14 +54,25 @@ mod catalog;
 // sensor's data wouldn't error — it would just silently produce wrong colors (a much worse
 // failure mode than not opening at all). JS already picks the file by detected camera
 // (peek_raw_camera + getDcpLUT's cameraPrefix), so this is a defense-in-depth backstop, not the
-// primary gate. Downgrade an unsupported "lut" request to the plain linear16 body instead.
-// Used identically by decode_raw_v2 and denoise_raw_high — was two copy-pasted blocks, which is
-// exactly the kind of security-relevant gate that should have one definition, not two that can
+// primary gate — the actual profile BYTES only ever come from the bundled `vendor/dcp/` files or
+// dcp_store.rs's own independently traversal-hardened resolver, never from this check. Downgrade
+// an unsupported/mismatched "lut" request to the plain linear16 body instead.
+// Used identically by decode_raw_v2 and denoise_raw_high — one definition, not two that can
 // silently drift apart.
-const KNOWN_DCP_MAKES: &[&str] = &["panasonic", "sony"];
-fn effective_dcp_mode<'a>(mode: &'a str, make: &str) -> (&'a str, u32) {
-    let make_lower = make.to_lowercase();
-    let has_dcp_support = KNOWN_DCP_MAKES.iter().any(|m| make_lower.contains(m));
+//
+// ⚠️ ROADMAP.md's F1 (Adobe on-disk DCP resolver): a fixed 2-brand allowlist (`["panasonic",
+// "sony"]`) can't scale to the 393 cameras `dcp_store.rs` can now resolve profiles for. Replaced
+// with a POSITIVE assertion instead: `lut_key` (the `dcp:<prefix>:<style>` cache key JS is
+// requesting) must itself start with a case-insensitive match of the file's OWN decoded make —
+// i.e. a Sony-decoded file can only apply a "dcp:Sony …" key, regardless of which specific model
+// JS resolved. This scales to any brand while still catching the class of bug it exists for
+// (applying one camera's colour matrix to a different camera's pixels).
+fn effective_dcp_mode<'a>(mode: &'a str, make: &str, lut_key: Option<&str>) -> (&'a str, u32) {
+    let make_lower = make.trim().to_lowercase();
+    let has_dcp_support = !make_lower.is_empty()
+        && lut_key
+            .and_then(|k| k.strip_prefix("dcp:"))
+            .is_some_and(|prefix_and_style| prefix_and_style.to_lowercase().starts_with(&make_lower));
     let effective_mode = if mode == "lut" && !has_dcp_support { "linear16" } else { mode };
     let used_lut = if effective_mode == "lut" { 1u32 } else { 0u32 };
     (effective_mode, used_lut)
@@ -580,10 +592,11 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // usedLut in the response header tells JS whether its requested mode was actually honored,
     // since the body FORMAT differs (RGBA8 for lut/srgb vs raw u16 for linear16) and it needs to
     // parse the right one. See effective_dcp_mode's doc comment for the "why a backstop" reasoning.
-    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make);
+    let lut_key = json["lutKey"].as_str();
+    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
     let body: Vec<u8> = match effective_mode {
         "lut" => {
-            let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
+            let key = lut_key.ok_or("missing lutKey")?;
             let lut = {
                 let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
                 guard
@@ -713,10 +726,11 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
     }
     let decoded = result?;
 
-    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make);
+    let lut_key = json["lutKey"].as_str();
+    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
     let body: Vec<u8> = match effective_mode {
         "lut" => {
-            let key = json["lutKey"].as_str().ok_or("missing lutKey")?;
+            let key = lut_key.ok_or("missing lutKey")?;
             let lut = {
                 let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
                 guard
@@ -1643,6 +1657,8 @@ fn main() {
             #[cfg(target_os = "macos")]
             source_has_hdr,
             store_dcp_lut,
+            dcp_store::list_dcp_profiles,
+            dcp_store::read_dcp_file,
             decode_raw_v2,
             decode_image_v1,
             denoise_raw_high,
@@ -2109,6 +2125,54 @@ fn main() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod effective_dcp_mode_tests {
+    use super::effective_dcp_mode;
+
+    #[test]
+    fn matching_make_honors_lut() {
+        let (mode, used) = effective_dcp_mode("lut", "Panasonic", Some("dcp:Panasonic DC-S9:Standard"));
+        assert_eq!(mode, "lut");
+        assert_eq!(used, 1);
+    }
+
+    #[test]
+    fn any_brand_now_scales_not_just_the_old_2_entry_allowlist() {
+        // ROADMAP.md's F1: a Canon file requesting a Canon-prefixed key must be honored — the
+        // old fixed ["panasonic","sony"] allowlist would have downgraded this unconditionally.
+        let (mode, used) = effective_dcp_mode("lut", "Canon", Some("dcp:Canon EOS 5D Mark IV:Standard"));
+        assert_eq!(mode, "lut");
+        assert_eq!(used, 1);
+    }
+
+    #[test]
+    fn mismatched_make_downgrades_to_linear16() {
+        // Exactly the bug class this gate exists to catch: applying one camera's profile to a
+        // different camera's decoded pixels.
+        let (mode, used) = effective_dcp_mode("lut", "Nikon", Some("dcp:Sony DSC-RX100M5:Standard"));
+        assert_eq!(mode, "linear16");
+        assert_eq!(used, 0);
+    }
+
+    #[test]
+    fn missing_or_malformed_lut_key_downgrades() {
+        let (mode, _) = effective_dcp_mode("lut", "Sony", None);
+        assert_eq!(mode, "linear16");
+        let (mode, _) = effective_dcp_mode("lut", "Sony", Some("not-a-dcp-key"));
+        assert_eq!(mode, "linear16");
+    }
+
+    #[test]
+    fn non_lut_modes_pass_through_unaffected() {
+        let (mode, used) = effective_dcp_mode("srgb", "Nikon", None);
+        assert_eq!(mode, "srgb");
+        assert_eq!(used, 0);
+        let (mode, used) = effective_dcp_mode("linear16", "", None);
+        assert_eq!(mode, "linear16");
+        assert_eq!(used, 0);
+    }
 }
 
 #[cfg(test)]

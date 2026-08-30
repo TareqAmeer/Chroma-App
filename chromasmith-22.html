@@ -8048,6 +8048,27 @@ function cameraDcpPrefix(make,model){
   for(const c of CAMERA_DCP_PREFIXES)if(c.test.test(m)&&c.model.test(mo))return c.prefix;
   return null; // no bundled profile for this camera — caller should skip DCP entirely
 }
+// ROADMAP.md's F1 — desktop-only: when the bundled 2-camera table above doesn't match, ask Rust's
+// dcp_store.rs to look for a real Adobe Camera Raw / DNG Converter profile already installed on
+// this machine (resolution order there: user-installed -> system -> the generic "Adobe Standard"
+// singleton). Bundled ALWAYS wins when it matches — this is deliberately a fallback, never a
+// replacement, so DC-S9/RX100M5 rendering (calibrated with a fitted residual on top) is untouched.
+// Returns null on web/iOS (no filesystem access, and no point asking) and whenever nothing is
+// installed for this camera. `source` is threaded through to getDcpLUT so it knows whether to
+// fetch() the bundled file or invoke() the disk one.
+async function resolveDcpSource(make,model){
+  const bundled=cameraDcpPrefix(make,model);
+  if(bundled)return{prefix:bundled,source:'bundled'};
+  if(!window.__TAURI__||!make||!model)return null;
+  try{
+    const set=await window.__TAURI__.core.invoke('list_dcp_profiles',{make,model});
+    if(!set)return null;
+    return{prefix:set.prefix,source:set.source,styles:set.styles};
+  }catch(e){
+    console.error('list_dcp_profiles',e);
+    return null;
+  }
+}
 // Residual correction constants, refitted against FIVE Lightroom reference TIFFs (ISO
 // 200-5000) on the NATIVE rawler decode + the DNG-SDK-correct pipeline below
 // (calib/dcp_native_fit.py -> dcp_native_fit.json). With the decode truly linear and the
@@ -8155,18 +8176,25 @@ function parseDCP(buf,fname){
     else continue; // only numeric tags are needed
     tags[tag]=val;
   }
-  if(!tags[50964]||!tags[50940]||!tags[50981]||!tags[50982])throw new Error('DCP missing ForwardMatrix/ToneCurve/LookTable');
+  // ROADMAP.md's F1b: ProfileToneCurve (50940) is missing from 201 of 210 real Adobe Standard/
+  // profiles sampled (confirmed against the actual files, not assumed) — `Camera/*` profiles are
+  // 412/412 fine, so this only bites the F1 on-disk-resolver's flat-tree fallback path. DNG's own
+  // spec treats an absent ProfileToneCurve as "apply none" — an identity curve (two points,
+  // (0,0)->(1,1)) reproduces exactly that: bakeDcpLUT's `tone=v=>toneL[...]` interpolation over
+  // these two points is the straight line y=x, a true no-op through that stage.
+  const IDENTITY_TONE_CURVE=new Float64Array([0,0,1,1]);
+  if(!tags[50964]||!tags[50981]||!tags[50982])throw new Error('DCP missing ForwardMatrix/LookTable');
   // Reject tags with the right IDs but wrong element counts — a malformed/truncated table here
   // would otherwise silently produce NaN matrices deep in bakeDcpLUT instead of failing loudly.
   if(tags[50964].length<9)throw new Error(`Corrupt DCP profile (ForwardMatrix has wrong element count): ${fname}`);
-  if(tags[50940].length<4||tags[50940].length%2!==0)throw new Error(`Corrupt DCP profile (ToneCurve has wrong element count): ${fname}`);
+  if(tags[50940]&&(tags[50940].length<4||tags[50940].length%2!==0))throw new Error(`Corrupt DCP profile (ToneCurve has wrong element count): ${fname}`);
   if(tags[50981].length<3)throw new Error(`Corrupt DCP profile (LookTable dims has wrong element count): ${fname}`);
   {
     const[nh,ns,nv]=tags[50981];
     const expectedLook=nh*ns*nv*3;
     if(!(nh>0&&ns>0&&nv>0)||tags[50982].length<expectedLook)throw new Error(`Corrupt DCP profile (LookTable has wrong element count): ${fname}`);
   }
-  return{fm:tags[50964],tone:tags[50940],dims:tags[50981],look:tags[50982],
+  return{fm:tags[50964],tone:tags[50940]||IDENTITY_TONE_CURVE,dims:tags[50981],look:tags[50982],
          enc:tags[51108]?tags[51108][0]:0,baseOff:tags[51109]?tags[51109][0]:0};
 }
 function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4)-0.055}
@@ -8359,22 +8387,46 @@ const _dcpCache={},_dcpLutCache={};
 // cameraPrefix: the vendor/dcp/ filename prefix (see cameraDcpPrefix), REQUIRED now — a photo
 // with no matching bundled camera profile must never silently fall back to the Panasonic
 // files (that was the original bug: every camera got the DC-S9 profile applied to it).
-async function getDcpLUT(cameraPrefix,name,iso){
+// source: 'bundled' (default, fetch() from vendor/dcp/ — unchanged) or one of dcp_store.rs's own
+// source strings ('user-camera'/'system-camera'/'adobe-standard', ROADMAP.md's F1) — a real
+// Adobe Camera Raw / DNG Converter profile already installed on this machine, read in place via
+// Tauri IPC instead of fetch(). Bundled always wins when it matches (resolveDcpSource never
+// returns a disk source unless the bundled 2-camera table already missed), so this is additive.
+async function getDcpLUT(cameraPrefix,name,iso,source){
   if(!cameraPrefix)throw new Error('no bundled DCP profile for this camera');
-  const cacheKey=cameraPrefix+'|'+name;
+  source=source||'bundled';
+  const cacheKey=source+':'+cameraPrefix+'|'+name;
   const key=cacheKey+'@'+(iso||200);
   if(_dcpLutCache[key])return _dcpLutCache[key];
   if(!_dcpCache[cacheKey]){
-    let r;
-    try{
-      r=await fetch('vendor/dcp/'+cameraPrefix+' Camera '+name+'.dcp');
-      if(!r.ok&&name!=='Standard'){ // this camera doesn't have that specific style — fall back to its Standard
-        r=await fetch('vendor/dcp/'+cameraPrefix+' Camera Standard.dcp');
-      }
-    }catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
-    if(!r.ok)throw new Error('DCP profile fetch failed: '+cameraPrefix+' '+name+' ('+r.status+')');
     let buf;
-    try{buf=await r.arrayBuffer();}catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+    if(source==='bundled'){
+      let r;
+      try{
+        r=await fetch('vendor/dcp/'+cameraPrefix+' Camera '+name+'.dcp');
+        if(!r.ok&&name!=='Standard'){ // this camera doesn't have that specific style — fall back to its Standard
+          r=await fetch('vendor/dcp/'+cameraPrefix+' Camera Standard.dcp');
+        }
+      }catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+      if(!r.ok)throw new Error('DCP profile fetch failed: '+cameraPrefix+' '+name+' ('+r.status+')');
+      try{buf=await r.arrayBuffer();}catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+    }else{
+      // Same "this camera doesn't have that specific style — fall back to Standard" retry the
+      // bundled fetch() path above does, for parity on the Camera/ tree (multiple real styles
+      // per camera, same as vendor/dcp/). Adobe Standard's flat tree only ever has 'Standard'
+      // (see resolveDcpSource/dcp_store.rs's DcpProfileSet.styles), so the retry there is a
+      // guaranteed no-op — harmless, not worth special-casing out.
+      try{
+        const bytes=await window.__TAURI__.core.invoke('read_dcp_file',{source,prefix:cameraPrefix,style:name});
+        buf=new Uint8Array(bytes).buffer;
+      }catch(e){
+        if(name==='Standard')throw new Error('Failed to load installed camera profile: '+errStr(e));
+        try{
+          const bytes=await window.__TAURI__.core.invoke('read_dcp_file',{source,prefix:cameraPrefix,style:'Standard'});
+          buf=new Uint8Array(bytes).buffer;
+        }catch(e2){throw new Error('Failed to load installed camera profile: '+errStr(e2))}
+      }
+    }
     _dcpCache[cacheKey]=parseDCP(buf,cameraPrefix+' Camera '+name+'.dcp');
   }
   // Off the main thread (see _cpuRun): 274,625 iterations of the DNG pipeline froze the UI for

@@ -618,10 +618,70 @@ re-read it before starting F1/F2, since it has the load-bearing detail this tabl
 
 | # | item | size | note |
 |---|---|---|---|
-| F1 | **Adobe camera-profile resolver** — read `Camera/<model>/*.dcp` and `Adobe Standard/*.dcp` in place (never copy — 855MB, and not ours to redistribute) | M | New `dcp_store.rs`: `list_dcp_profiles`/`read_dcp_file` commands, generalise `cameraDcpPrefix` (`chromasmith-22.html:~7920`) from a 2-entry table to a candidate list disk resolves, replace `main.rs`'s `KNOWN_DCP_MAKES` allowlist with a positive make/model assertion. ⚠️ **Path traversal**: prefix/style derive from EXIF Make/Model — untrusted bytes inside a photo. Reject `/ \ .. NUL`, canonicalize, assert still under root — do this FIRST, not as an afterthought |
+| F1 | ✅ **DONE — Adobe camera-profile resolver** — reads `Camera/<model>/*.dcp` and `Adobe Standard/*.dcp` in place | M | See write-up below |
 | F1a | ✅ **DONE — Sky-gate residual → DC-S9 only** | S | `dcpFit(iso,cameraPrefix)` now returns a `sky` flag alongside `ev`/`gr`/`gb`, gated on the SAME `cameraPrefix==='Panasonic DC-S9'` check — plain data threaded through the existing `fit` argument, not a new `bakeDcpLUT` parameter (CLAUDE.md's own warning: this function is compiled into the pixel worker via `toString`, so a captured constant would silently desync). `bakeDcpLUT`'s residual `gate` computation is now `fit.sky?...:0` (collapses to the same no-op every other hue/sat/value combination already takes, rather than wrapping the whole block). DC-S9 unaffected (`sky:true`, byte-identical — `npm run scorecard` 18/18 unchanged, worker/main-thread DCP bake agreement still max|Δ|=0 over 823,875 entries); every other camera (Sony RX100M5, and now any ARW via R8) stops getting an S9-specific blue-sky correction it was never fitted against. ⚠️ Also fixed a latent truthiness bug found while unit-checking this: the old guard was `cameraPrefix&&cameraPrefix!=='Panasonic DC-S9'`, so a **falsy** `cameraPrefix` (null — "no bundled profile for this camera") fell through to the **S9** branch, the opposite of correct. Unreachable today (the one caller throws before `dcpFit` on a null prefix) but would have been a real bug the moment R8 replaces that throw with a fallback path — fixed to a plain `cameraPrefix!=='Panasonic DC-S9'` check |
 | F1b | **`parseDCP` tolerate missing ProfileToneCurve** | S | 201/210 `Adobe Standard/*.dcp` lack tag 50940 and `parseDCP` currently throws on that — identity curve instead of a hard fail |
 | F2 | ✅ **DONE (V-Log-only half) — Auto-detect RAW profile from EXIF (PhotoStyle)** | S | See write-up below. Full per-photo style table (`rawProfile()` → `it.rawProfile`, `getUISnapshot`/⌘Z wiring, `list_dcp_profiles`-gated) remains a bigger follow-on — needs F1 shipped first, since "does this style exist for this camera" is F1's own lookup |
+
+### F1 — Adobe camera-profile resolver (real .dcp files, read in place, verified against 3 brands + path-traversal tests)
+
+**Shipped**: new `dcp_store.rs` (`list_dcp_profiles`, `read_dcp_file`), wired through
+`resolveDcpSource()` (chromasmith-22.html) into both `desktop-native.js` DCP call sites
+(`open()` and `chromasmithDenoiseHigh`). Resolution order: bundled `vendor/dcp/` (unchanged,
+always wins) → `~/Library/…/CameraProfiles/Camera/<Make Model>/` (user-installed) →
+`/Library/…/CameraProfiles/Camera/<Make Model>/` (system) →
+`/Library/…/CameraProfiles/Adobe Standard/<Make Model> Adobe Standard.dcp` (generic fallback).
+
+⚠️ **The two real trees have different shapes — confirmed by listing both directly, not
+assumed from either one's naming convention.** `Camera/` is a real per-camera subfolder holding
+several style `.dcp` files; `Adobe Standard/` is a **flat** directory with one file per camera
+directly at its root, no subfolder, no per-style variants. The first implementation draft
+assumed both were subfolder-shaped and would have silently found zero Adobe Standard profiles
+ever (`read_dir` on a non-existent subfolder just fails and moves on) — caught by writing a
+real-file test for the flat tree specifically, not by reading the code twice.
+
+**Path-traversal hardening** (done first, per the plan): every candidate path component
+(`make`, `model`, and their joined `prefix`) is rejected outright on `/ \ .. NUL` or excessive
+length *before* touching a `Path`, then the resolved path is independently re-checked to still
+live under its declared root after canonicalization — two checks, not one, since canonicalize
+alone doesn't stop a `..`-shaped component from being accepted structurally first. Tests:
+`rejects_path_traversal_in_make_and_model`, `rejects_unknown_source`.
+
+**Security backstop generalized, not just re-verified**: `main.rs`'s `effective_dcp_mode` used a
+fixed `KNOWN_DCP_MAKES = ["panasonic", "sony"]` allowlist — which would have silently downgraded
+every F1-resolved Canon/Nikon/Fujifilm/etc. LUT request back to `linear16`, since those brands
+were never in the list. Replaced with a positive assertion: the requested `dcp:<prefix>:<style>`
+key must itself start with the file's own decoded make (case-insensitive) — scales to any brand
+while still catching the actual bug class (applying one camera's matrix to a different camera's
+pixels). 5 new tests, including one asserting Canon specifically now works
+(`any_brand_now_scales_not_just_the_old_2_entry_allowlist`).
+
+**F1b (`parseDCP` tolerates a missing ProfileToneCurve)** shipped alongside it, since F1's own
+Adobe Standard fallback is exactly the tree where this bites: verified directly against a real
+file (`Apple iPad13,1 back camera Adobe Standard.dcp`) that it has no tag 50940 and previously
+threw; now parses with an identity curve (`[0,0,1,1]` — two control points, the straight line
+y=x through `bakeDcpLUT`'s interpolation) and confirmed a real `Camera/`-tree profile with a
+genuine 256-point curve is unaffected (regression-checked directly, not assumed).
+
+**Real-world resolution verified across three brands with a throwaway probe** (not committed —
+matches the "manual open in the packaged app" coverage gap this kind of IPC-backed feature always
+has): Canon EOS R5 → 6 real styles from `system-camera`; Nikon Z 6 → 22 real styles including
+firmware "v2" variants; Fujifilm X-T4 → falls through to `adobe-standard` (no per-camera set
+installed) with the correct single "Standard" style; a nonexistent camera → `None`, no error.
+
+⚠️ **Honesty about colour, unchanged from the original design**: a resolver-found profile is
+Lightroom-*ish*, not Lightroom-*matched* — single ForwardMatrix, no `dcpFit` residual (that stays
+DC-S9-only, per F1a). The log line already said this; nothing new needed there.
+
+**Deferred, not in this pass**: the per-camera dynamic style dropdown (today's `DCP_PROFILES`
+union list stays hardcoded; a disk-resolved camera whose selected style doesn't exist falls back
+to that camera's own "Standard" — the same retry the bundled path already does). F1's own note in
+this file already flagged this as the smaller, separable half.
+
+*Touches:* new `dcp_store.rs`; `chromasmith-22.html` (`resolveDcpSource`, `getDcpLUT`'s new
+`source` param, `parseDCP`'s tone-curve tolerance); `desktop/desktop-native.js` (both DCP call
+sites); `main.rs` (`effective_dcp_mode` generalized, `list_dcp_profiles`/`read_dcp_file`
+registered).
 
 ### R8 — Colour-matrix fallback for un-profiled cameras (verified against real conversion math, not assumed)
 

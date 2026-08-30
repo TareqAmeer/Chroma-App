@@ -74,11 +74,17 @@
       try { this._ident = await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
       _lap('peek_raw_camera done at');
       if (settings && settings.outputBps === 16) {
-        const camPrefix = (typeof cameraDcpPrefix === 'function') ? cameraDcpPrefix(this._ident.make, this._ident.model) : null;
+        // ROADMAP.md's F1: bundled (Panasonic DC-S9 / Sony DSC-RX100M5) always wins when it
+        // matches; otherwise ask dcp_store.rs whether Adobe Camera Raw / DNG Converter has a
+        // real profile for this camera already installed on disk. `dcpSource.source` threads
+        // through to getDcpLUT so it knows whether to fetch() the bundled file or invoke() the
+        // disk one.
+        const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(this._ident.make, this._ident.model) : null;
+        const camPrefix = dcpSource ? dcpSource.prefix : null;
         if (profile && camPrefix) {
           mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
           if (!_rustLuts[lutKey]) {
-            const lut = await getDcpLUT(camPrefix, profile, 200); // iso arg vestigial (constants ISO-independent)
+            const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source); // iso arg vestigial (constants ISO-independent)
             _lap('DCP LUT baked (JS) at');
             await framedInvoke('store_dcp_lut', { key: lutKey },
               new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
@@ -88,7 +94,7 @@
         } else {
           mode = 'linear16';
           if (profile && !camPrefix && typeof log === 'function') {
-            log('No bundled colour profile for this camera — RAW Noise Reduction and geometry still apply, but you\'ll need Basic Adjustments (White Balance/Exposure/etc.) to grade instead of a RAW profile.', 'warn');
+            log('No colour profile found for this camera (checked the bundled set and any Adobe Camera Raw / DNG Converter install) — RAW Noise Reduction and geometry still apply, but you\'ll need Basic Adjustments (White Balance/Exposure/etc.) to grade instead of a RAW profile.', 'warn');
           }
         }
       }
@@ -217,11 +223,13 @@
     const ident = it.exif || {};
     let mode = 'srgb', lutKey = '';
     if (profile) {
-      const camPrefix = (typeof cameraDcpPrefix === 'function') ? cameraDcpPrefix(ident.make || '', ident.model || '') : null;
+      // ROADMAP.md's F1 — same bundled-then-disk resolution as open() above.
+      const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(ident.make || '', ident.model || '') : null;
+      const camPrefix = dcpSource ? dcpSource.prefix : null;
       if (camPrefix) {
         mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
         if (!_rustLuts[lutKey]) {
-          const lut = await getDcpLUT(camPrefix, profile, 200); // iso arg vestigial — see open()'s identical call
+          const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source); // iso arg vestigial — see open()'s identical call
           await framedInvoke('store_dcp_lut', { key: lutKey },
             new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
           _rustLuts[lutKey] = true;
