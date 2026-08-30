@@ -261,12 +261,16 @@
         if (q.folder) {
           libtestCatalogQueryCalls++;
           const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+          // ?liboffline=1 exercises the disconnected-drive scenario: every entry still comes
+          // back (catalog_query's own include_offline default), just flagged offline — the
+          // grid must stay fully populated, not blocked.
+          const offline = /[?&]liboffline=1/.test(location.search);
           const entries = [];
           for (let i = 1; i <= N; i++) {
             const isVid = i % 6 === 0;
             entries.push(isVid
-              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `/test/AllPhotos/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, size: 90000000 + i, missing: false, edited_ts: 0, offline: false, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
-              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i, missing: false, edited_ts: 0, offline: false, volume: 'Test', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null });
+              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `/test/AllPhotos/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
+              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null });
           }
           return Promise.resolve({ total: N, capped: false, entries });
         }
@@ -423,7 +427,9 @@
   const LS_LAST_FOLDER = 'chromasmith_lib_last_folder';
   const LS_LAST_PATH = 'chromasmith_lib_last_path';
   const state = {
-    root: LIBTEST ? '/test/Photos' : (localStorage.getItem(LS_ROOT) || ''),
+    // ?libnoroot=1 exercises the true first-launch state (renderLibraryNoRoot) — otherwise
+    // LIBTEST always has a root, so that path would be untestable in the harness.
+    root: LIBTEST ? (/[?&]libnoroot=1/.test(location.search) ? '' : '/test/Photos') : (localStorage.getItem(LS_ROOT) || ''),
     expanded: new Set(),
     currentFolder: LIBTEST ? '' : (localStorage.getItem(LS_LAST_FOLDER) || ''),
     entries: [],           // image entries in the currently-viewed folder
@@ -795,6 +801,13 @@
       background:rgba(0,0,0,.6);color:#7ec4e8;font-size:10px;display:flex;align-items:center;
       justify-content:center;z-index:2}
     #lib-grid.list-view .lib-dupe-badge,#lib-grid.list-view .lib-synced-badge{position:static;width:16px;height:16px}
+    /* Every corner is already spoken for (raw/stack, edited, dupe, synced) — bottom-center is the
+       one spot left, and this badge is rare enough (only while a volume is unreachable) that it
+       never has to fight another badge for the same pixels. */
+    .lib-offline-badge{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
+      width:16px;height:16px;border-radius:4px;background:rgba(0,0,0,.6);
+      display:flex;align-items:center;justify-content:center;z-index:2}
+    #lib-grid.list-view .lib-offline-badge{position:static;width:16px;height:16px;transform:none}
     /* C1: Compare-pair mode — two panes side by side, sharing one zoom/pan via CSS transform
        on each pane's canvas (re-rendered only on photo/source change, not on every pointermove
        — see renderComparePane's comment). */
@@ -1734,6 +1747,15 @@
   const FLAG_SVG_GREEN = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"/><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"/></svg>';
   const FLAG_SVG_RED = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>';
   const HEART_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"/></svg>';
+  // Shown only on a card whose own volume is unreachable right now (CatalogEntry.offline,
+  // Rust-computed per row) — the thumbnail is real, but it's coming from the cache, not a live
+  // read of the original. A drive-disconnected glyph, not a text label, per the approved
+  // boot-sequence storyboard.
+  const OFFLINE_BADGE_HTML = '<div class="lib-offline-badge" title="Original not reachable right now — showing the cached preview">'
+    + '<svg viewBox="0 0 24 24" width="10" height="10"><rect x="7" y="1" width="10" height="6" fill="#f2f0ea"/>'
+    + '<rect x="4" y="7" width="16" height="16" rx="5" fill="#f2f0ea"/>'
+    + '<line x1="8.5" y1="11.5" x2="15.5" y2="18.5" stroke="#00000090" stroke-width="2.3" stroke-linecap="round"/>'
+    + '<line x1="15.5" y1="11.5" x2="8.5" y2="18.5" stroke="#00000090" stroke-width="2.3" stroke-linecap="round"/></svg></div>';
   // entry.edited_ts (library.rs's get_export_history-adjacent field) is the .xmp sidecar's own
   // mtime, 0 if no sidecar exists yet (never edited) — the list-view "Edited on" column.
   function fmtEditedTs(ts) {
@@ -1748,6 +1770,51 @@
   // without generating an unbounded number of shimmering nodes for a huge folder.
   function libSkeletonHtml(n = 24) {
     return Array.from({ length: n }, () => '<div class="lib-card lib-skel"><div class="lib-thumb-wrap"></div></div>').join('');
+  }
+  /// Nothing has ever been added to the Library — the true first-launch state. Two distinct
+  /// actions, not one: "Add photos" loads loose files straight into the editor (fxPickPhotos,
+  /// chromasmith-22.html), "Add a folder" registers a folder with the Library so it's browsable
+  /// and kept in sync (the same #lib-pick trigger pickFolder() already wires up elsewhere).
+  function renderLibraryNoRoot() {
+    const grid = document.getElementById('lib-grid');
+    if (!grid) return;
+    grid.innerHTML = '<div id="lib-empty" style="grid-column:1/-1;padding:60px 20px">Add photos or a folder'
+      + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'
+      + '<button class="lib-btn" id="lib-empty-addphotos">Add photos</button>'
+      + '<button class="lib-btn" id="lib-empty-addfolder">Add a folder</button>'
+      + '</div>'
+      + '<div style="margin-top:10px;font-size:11px">Drop an image to start · '
+      + '<a id="lib-empty-gphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Google Photos…</a></div></div>';
+    const addPhotos = document.getElementById('lib-empty-addphotos');
+    if (addPhotos) addPhotos.onclick = () => { if (typeof window.fxPickPhotos === 'function') window.fxPickPhotos(); };
+    const addFolder = document.getElementById('lib-empty-addfolder');
+    if (addFolder) addFolder.onclick = () => pickFolder();
+    const gphotos = document.getElementById('lib-empty-gphotos');
+    if (gphotos) gphotos.onclick = () => { const b = document.getElementById('lib-gphotos'); if (b) b.click(); };
+  }
+  /// Persistent, not a toast — this is a standing fact about the current folder, not a one-off
+  /// event. The point of the cache: the grid stays fully browsable (every card its cached
+  /// preview) while a volume is unreachable, so this bar names what's true instead of blocking
+  /// anything. Sticky-positioned inside #lib-main (already the scroll container) rather than a
+  /// second fixed-position layer, so it never needs its own resize/scroll bookkeeping.
+  function renderLibOfflineBar(offline) {
+    const main = document.getElementById('lib-main');
+    if (!main) return;
+    let bar = document.getElementById('lib-offline-bar');
+    if (!offline) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'lib-offline-bar';
+      bar.style.cssText = 'position:sticky;bottom:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:8px;'
+        + 'padding:7px 14px;margin-top:12px;font-size:11.5px;color:#e3b3a2;'
+        + 'background:rgba(201,106,79,.16);border-top:1px solid rgba(201,106,79,.35);backdrop-filter:blur(6px)';
+      bar.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:#c96a4f;flex-shrink:0"></span>'
+        + '<span id="lib-offline-bar-text"></span>';
+      main.appendChild(bar);
+    }
+    const label = state.currentFolder ? baseName(state.currentFolder) : 'This folder';
+    document.getElementById('lib-offline-bar-text').textContent =
+      `${label} — drive not connected · showing cached previews. Reconnect to edit or export the originals.`;
   }
   // Reject/Pick/Favorite only — colour labels (Red/Yellow/Green/Blue/Purple dots) were removed.
   // Reject/Pick still ride the sidecar's free-form `label` string ("Red"/"Green"), unchanged.
@@ -2516,7 +2583,43 @@
     if (capHit && typeof toast === 'function') toast(`Stopped after ${SUBFOLDER_WALK_CAP} subfolders — this tree is unusually large`, false);
     return collected;
   }
-  async function openFolder(path) {
+  // Loads thumbnails STRAIGHT INTO `_thumbCache` (thumbCachePut, the same LRU the ordinary grid
+  // read from) BEFORE any card exists — unlike the lazy `_thumbPump` above, which needs a live,
+  // DOM-connected <img> per job and so can't run ahead of renderGrid(). This is what makes the
+  // boot sequence's "Loading cached thumbnails…" phase real: once this resolves, renderGrid()'s
+  // own loadThumb() calls hit thumbCacheGet() synchronously for everything it warmed, instead of
+  // each card firing its own fresh IPC round trip.
+  // ⚠️ Bounded two ways, or a big/cold folder would block boot exactly as long as the whole-
+  // catalog thumbnail generation this session already moved to a background pass for: capped to
+  // the first PREFETCH_CAP entries (a folder view, not a whole recursive library), and to a hard
+  // wall-clock budget — whichever a genuinely uncached folder hits first, the rest is simply left
+  // for the ordinary lazy pump to pick up once the grid renders, same as it always has.
+  const PREFETCH_CAP = 800;
+  const PREFETCH_BUDGET_MS = 4000;
+  const PREFETCH_CONCURRENCY = 8;
+  async function prefetchThumbnails(entries, onProgress) {
+    const targets = entries.filter((e) => e.is_image || e.is_video).slice(0, PREFETCH_CAP)
+      .filter((e) => !thumbCacheGet(e.path + '@' + (e.mtime || 0)));
+    const total = targets.length;
+    if (!total) return;
+    let done = 0;
+    const deadline = Date.now() + PREFETCH_BUDGET_MS;
+    onProgress(0, total);
+    let next = 0;
+    async function worker() {
+      while (next < targets.length && Date.now() < deadline) {
+        const e = targets[next++];
+        try {
+          const buf = await invoke('get_thumbnail_or_offline', { path: e.path });
+          thumbCachePut(e.path + '@' + (e.mtime || 0), URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })));
+        } catch (err) { /* left uncached — the ordinary lazy pump retries it once the card mounts */ }
+        done++;
+        onProgress(done, total);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, total) }, worker));
+  }
+  async function openFolder(path, opts) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
     if (!LIBTEST) { try { localStorage.setItem(LS_LAST_FOLDER, path); } catch (e) {} }
@@ -2553,6 +2656,22 @@
       return;
     }
     state.entries = entries.filter((e) => e.is_image || e.is_video);
+    // A folder's entries all share one volume, so any one of them (CatalogEntry.offline, a
+    // per-row field the SQL query already computes) says whether THIS folder's drive is
+    // reachable right now. Undefined (the list_dir/listDirRecursive fallback path) reads as
+    // false — that path only runs when the catalog itself failed to register the folder, an
+    // edge case where "can't tell" is the honest answer anyway.
+    renderLibOfflineBar(state.entries.length > 0 && !!state.entries[0].offline);
+    // Boot's own initial folder open (see the toggleLibrary() call site) waits for the FIRST
+    // screenful's worth of thumbnails to actually be in memory before it clears the splash — so
+    // reopening whatever you were last editing paints instantly instead of a placeholder that
+    // fills in a beat later. Never runs for an ordinary click; the lazy per-card pump already
+    // handles that case well and prefetching on every folder switch would slow down browsing.
+    if (opts && opts.prefetchThumbs) {
+      await prefetchThumbnails(state.entries, (done, total) => {
+        if (typeof updateBootSplashProgress === 'function') updateBootSplashProgress({ phase: 'cache', done, total });
+      });
+    }
     // Sidecars are cheap (small JSON reads) and flags/edited badges need them for first paint —
     // await those. Metadata is NOT cheap on a cold folder (a get_meta cache miss reads the whole
     // RAW file for the lens fallback), and awaiting it for EVERY file kept the grid on
@@ -3334,11 +3453,12 @@
         ? `<div class="lib-dupe-badge" title="${dupeSize} similar photos (a RAW and its JPEG sibling clustering together is expected)">⧉${dupeSize}</div>`
         : '';
       const syncedBadge = state.syncedPaths.has(entry.path) ? `<div class="lib-synced-badge" title="Synced to Google Photos">☁</div>` : '';
+      const offlineBadge = entry.offline ? OFFLINE_BADGE_HTML : '';
       if (isList) {
         const m = state.meta.get(entry.path) || {};
         const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
         card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt=""></div>
-          <div class="lib-name">${esc(entry.name)}${entry.missing ? ' (missing)' : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}${videoBadge}${dupeBadge}${syncedBadge}</div>
+          <div class="lib-name">${esc(entry.name)}${entry.missing ? ' (missing)' : ''}${sc.edited ? EDITED_BADGE_HTML : ''}${rawBadge}${videoBadge}${dupeBadge}${syncedBadge}${offlineBadge}</div>
           <div class="lib-col">${esc(m.date)}</div>
           <div class="lib-col">${esc(fmtEditedTs(entry.edited_ts))}</div>
           <div class="lib-col">${esc(m.camera)}</div>
@@ -3361,6 +3481,7 @@
           ${videoBadge}
           ${dupeBadge}
           ${syncedBadge}
+          ${offlineBadge}
           ${state.showTitle ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}
           ${stripInfo}`;
       }
@@ -5018,7 +5139,7 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Indexing', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
+  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading cached thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
   const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed', 'clip'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
@@ -5146,18 +5267,19 @@
     const wrap = document.getElementById('boot-splash-progress');
     if (!wrap) return;
     if (typeof window.bumpBootSplashWatchdog === 'function') window.bumpBootSplashWatchdog(8000);
-    wrap.style.display = 'flex';
-    const spinner = document.getElementById('boot-splash-spinner');
-    if (spinner) spinner.style.display = 'none'; // the progress bar IS the activity indicator now
     const bar = document.getElementById('boot-splash-bar');
     const label = document.getElementById('boot-splash-label');
     const stageLabel = STAGE_LABELS[p.phase] || 'Indexing';
     if (p.total > 0) {
-      if (bar) bar.style.width = Math.min(100, Math.round((p.done / p.total) * 100)) + '%';
+      // Real total known — determinate bar, a real percentage, never the indeterminate sweep.
+      if (bar) { bar.classList.remove('boot-bar-indet'); bar.style.width = Math.min(100, Math.round((p.done / p.total) * 100)) + '%'; }
       if (label) label.textContent = `${stageLabel}… ${p.done.toLocaleString()} / ${p.total.toLocaleString()}`;
     } else {
       // Total genuinely unknown yet (the walk phase's own live count, see catalog.rs's
-      // walk_root comment) — show the running count, not a percentage that would just read 0%.
+      // walk_root comment) — the bar keeps sweeping (boot-bar-indet, set in the static HTML and
+      // never removed here) so it always reads as motion, and the label carries the running
+      // count instead of a percentage that would just read 0%.
+      if (bar) bar.classList.add('boot-bar-indet');
       if (label) label.textContent = p.done > 0 ? `${stageLabel}… ${p.done.toLocaleString()} found` : `${stageLabel}…`;
     }
   }
@@ -6339,7 +6461,7 @@
   }
   setupMarquee();
 
-  async function toggleLibrary() {
+  async function toggleLibrary(opts) {
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
     document.body.classList.toggle('lib-docked', state.open);
@@ -6361,9 +6483,14 @@
           return;
         } catch (e) { console.error('reopen lr album', e); /* fall through to folder */ }
       }
-      if (!state.root) { await pickFolder(); return; }
-      if (state.currentFolder) await openFolder(state.currentFolder);
-      else await openFolder(state.root);
+      // First-ever launch (or every folder removed): show the in-app empty state with two
+      // explicit actions, rather than immediately popping the OS folder picker — a modal dialog
+      // appearing over a screen the user hasn't even seen yet reads as the app grabbing control,
+      // and it means the "first two minutes" storyboard's first-launch frame is unreachable.
+      if (!state.root) { renderLibraryNoRoot(); return; }
+      const openOpts = opts && opts.prefetchThumbs ? { prefetchThumbs: true } : undefined;
+      if (state.currentFolder) await openFolder(state.currentFolder, openOpts);
+      else await openFolder(state.root, openOpts);
     }
   }
   window.chromasmithToggleLibrary = toggleLibrary; // called from the header button in desktop-native.js
@@ -6404,7 +6531,7 @@
     // async open+expand actually landing — previously the user watched all of that happen
     // live. Hidden here, right after the Library has actually settled into its final
     // full-window state, not a moment earlier.
-    toggleLibrary().then(async () => {
+    toggleLibrary({ prefetchThumbs: true }).then(async () => {
       toggleExpandedView(true);
       // ⚠️ Wait for the actual catalog SCAN (not just the folder listing toggleLibrary's own
       // promise already covers) before doing anything else. openFolder (called from inside

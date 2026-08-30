@@ -183,6 +183,63 @@ for (const n of [200,1000,5000]) {
   }
   await p.close();
 }
+
+// Approved boot-sequence storyboard, scenario 1: a true first launch (no folder ever added) must
+// show the in-app two-button empty state — NOT pop the OS folder picker unprompted, and not the
+// bare editor dropzone either. See renderLibraryNoRoot() and its call site in toggleLibrary().
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libnoroot=1`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1000);
+  const r = await p.evaluate(() => ({
+    addPhotos: !!document.getElementById('lib-empty-addphotos'),
+    addFolder: !!document.getElementById('lib-empty-addfolder'),
+  }));
+  const ok = r.addPhotos && r.addFolder;
+  console.log(`first-launch empty state: Add photos button ${r.addPhotos}, Add a folder button ${r.addFolder}  ${ok?'PASS':'FAIL'}`);
+  if(!ok) failures.push(`first-launch empty state is missing a required button: ${JSON.stringify(r)}`);
+  await p.close();
+}
+
+// Scenario 4: a disconnected drive must still show the FULL grid (from cache), not an empty or
+// blocked view, with a persistent bottom status bar naming what's true — and each cached-only
+// card carries the drive-disconnected badge, not a text label (see OFFLINE_BADGE_HTML).
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=12&liboffline=1`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1200);
+  const r = await p.evaluate(() => ({
+    cards: document.querySelectorAll('#lib-grid .lib-card').length,
+    badges: document.querySelectorAll('#lib-grid .lib-offline-badge').length,
+    bar: document.getElementById('lib-offline-bar')?.textContent || null,
+  }));
+  const ok = r.cards === 12 && r.badges === 12 && r.bar && /drive not connected/i.test(r.bar);
+  console.log(`disconnected drive: ${r.cards} cards, ${r.badges} offline badges, status bar ${r.bar ? 'present' : 'MISSING'}  ${ok?'PASS':'FAIL'}`);
+  if(!ok) failures.push(`disconnected-drive scenario didn't render as expected: ${JSON.stringify(r)}`);
+  await p.close();
+}
+
+// The new "Loading cached thumbnails" boot phase (prefetchThumbnails) must actually run BEFORE
+// the grid renders, not after — otherwise it's just relabeling the same lazy per-card loads the
+// splash was already hiding. Verified by the grid's own cards: every one should already carry
+// .loaded (thumbCacheGet hit) the moment renderGrid() finishes, not fill in a beat later.
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=15`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1200);
+  const r = await p.evaluate(() => {
+    const imgs = document.querySelectorAll('#lib-grid .lib-card img');
+    return { total: imgs.length, loaded: Array.from(imgs).filter(i=>i.classList.contains('loaded')).length };
+  });
+  const ok = r.total > 0 && r.loaded === r.total;
+  console.log(`cache-prefetch warms every card before first paint: ${r.loaded}/${r.total} loaded  ${ok?'PASS':'FAIL'}`);
+  if(!ok) failures.push(`prefetchThumbnails didn't warm every card before renderGrid: ${JSON.stringify(r)}`);
+  await p.close();
+}
+
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}

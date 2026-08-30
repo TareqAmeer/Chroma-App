@@ -1045,21 +1045,23 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
     text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)">
     Chroma<span style="color:#d4903a;text-shadow:none">smith</span>
   </div>
-  <div id="boot-splash-spinner" style="width:22px;height:22px;border:2px solid rgba(212,144,58,.25);border-top-color:#d4903a;
-    border-radius:50%;animation:boot-splash-spin .8s linear infinite"></div>
-  <!-- Indexing progress — hidden by default (a quick "nothing to scan" launch never shows it,
-       so the ordinary case still looks like the plain spinner it always was). desktop-native.js's
-       catalog-scan listener reveals this and fills it in only once real progress arrives, so a
-       large first-time library scan reads as "the app is working," not "the app is stuck" —
-       see that listener's own comment for why the splash used to hide before scanning finished. -->
-  <div id="boot-splash-progress" style="display:none;flex-direction:column;align-items:center;gap:8px;width:220px">
+  <!-- The logo and a progress bar are ALWAYS shown together, from the very first frame — never
+       a bare spinner, never text with no bar. Starts in the page's own static HTML (no JS wait)
+       showing the indeterminate "checking" state, so even a launch that resolves in a few
+       hundred ms is never a blank spinner — see the boot-sequence storyboard this implements.
+       desktop-native.js's catalog-scan listener (updateBootSplashProgress) fills in real counts
+       and switches to a determinate bar once a phase's total is known. -->
+  <div id="boot-splash-progress" style="display:flex;flex-direction:column;align-items:center;gap:8px;width:220px">
     <div style="width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden">
-      <div id="boot-splash-bar" style="height:100%;width:0%;background:#d4903a;transition:width .25s ease"></div>
+      <div id="boot-splash-bar" class="boot-bar-indet" style="height:100%;width:28%;background:#d4903a;border-radius:2px"></div>
     </div>
-    <div id="boot-splash-label" style="font-size:11px;color:#9a968c;font-variant-numeric:tabular-nums"></div>
+    <div id="boot-splash-label" style="font-size:11px;color:#9a968c;font-variant-numeric:tabular-nums">Checking your library…</div>
   </div>
 </div>
-<style>@keyframes boot-splash-spin{to{transform:rotate(360deg)}}</style>
+<style>
+@keyframes boot-bar-indet-move{0%{transform:translateX(-140%)}100%{transform:translateX(460%)}}
+#boot-splash-bar.boot-bar-indet{animation:boot-bar-indet-move 1.1s cubic-bezier(.4,0,.2,1) infinite}
+</style>
 <script>
 // Web/iOS builds: no multi-stage boot to hide, so drop the splash the instant this parses
 // (right after the element above — no waiting on DOMContentLoaded) rather than leaving it
