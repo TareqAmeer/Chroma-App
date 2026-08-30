@@ -458,27 +458,59 @@ nothing left to add there.
 
 ## Launch screen + GPU/CPU offload — backlog (added 2026-08-30)
 
-### N1 — Load-screen redesign
+### N1 — Load-screen redesign — ✅ DONE (2026-08-30)
 
-**Status: blocked on the design** (user will share). Everything visual lives in one place:
-`chromasmith-22.html:~1034–1084` — the `#boot-splash` div, deliberately inline-styled so it paints
-before any stylesheet or JS loads, plus one `@keyframes boot-splash-spin` `<style>` tag. Current
-palette: bg `#17171b`, amber `#d4903a`, text `#f0ece2`, muted `#9a968c`.
+Shipped from an approved wireframe storyboard (four scenarios: first launch, warm relaunch, new
+photos found, drive disconnected — each with the exact on-screen copy per frame). Superseded the
+stale contract this section used to document; current shape:
 
-**JS contract a redesign must preserve** (driven by `updateBootSplashProgress`,
-`desktop/library-ui.js:~5103–5121`), or the splash silently stops showing progress:
-- ids `boot-splash`, `boot-splash-spinner`, `boot-splash-progress`, `boot-splash-bar`,
-  `boot-splash-label` must all still exist;
-- `#boot-splash-progress` starts `display:none`, flips to `display:flex` on first progress event;
-- `#boot-splash-spinner` is hidden at that same moment (the bar replaces it, doesn't join it);
-- `#boot-splash-bar` is width-driven (`'NN%'`) — needs a definite-width track parent;
-- `#boot-splash-label` is `textContent` only, `tabular-nums`, must not reflow as the count grows
-  (stage names come from `STAGE_LABELS`, `library-ui.js:~4979`);
-- `hideBootSplash` fades `opacity` then removes the node — keep a transition on opacity.
+- `#boot-splash-spinner` is **gone** — the logo and a progress bar are always shown together, from
+  the static HTML itself (`chromasmith-22.html`'s `#boot-splash-progress` starts `display:flex`,
+  not `none`), so there's never a bare-spinner or text-only frame, even for a phase that resolves
+  in under a second.
+- `#boot-splash-bar` now has an indeterminate mode (`.boot-bar-indet`, a CSS sweep animation) for
+  when a phase's total is genuinely unknown yet (mid-walk), and switches to the old width-driven
+  determinate mode once a real total arrives — `updateBootSplashProgress`
+  (`desktop/library-ui.js`) toggles the class, doesn't replace the element.
+- New `cache` phase (`STAGE_LABELS.cache = 'Loading cached thumbnails'`) backed by a real
+  operation, `prefetchThumbnails()` — warms the in-memory thumb cache for the folder about to be
+  shown BEFORE `renderGrid()` runs, capped by entry count + a wall-clock budget so a cold folder
+  can't block boot the way whole-catalog thumbnail generation used to. Runs only on the boot's own
+  initial `openFolder(path, {prefetchThumbs:true})` call, not on ordinary folder clicks.
+- True first launch (no root ever added) now shows an in-app empty state with two explicit
+  actions — "Add photos" / "Add a folder" (`renderLibraryNoRoot`) — instead of popping the OS
+  folder picker unprompted.
+- A folder whose volume is offline stays fully browsable from the cache instead of blocking:
+  every card renders with a drive-disconnected badge (`OFFLINE_BADGE_HTML`, driven by
+  `CatalogEntry.offline`, already computed per-row), and a persistent status bar
+  (`renderLibOfflineBar`) names what's true.
+- The watchdog (`bumpBootSplashWatchdog`) and the `window._lastCatalogRegisterPromise` dismissal
+  await were left untouched, per this section's own original warning.
+- Covered end to end by `test/library_perf.mjs` (first-launch buttons, offline badges + status
+  bar, and a check that the cache-warm phase actually runs before first paint, not after), plus a
+  `?libnoroot=1`/`?liboffline=1` LIBTEST harness addition so those paths are exercisable without a
+  real catalog behind them.
 
-⚠️ Don't touch the watchdog (`bumpBootSplashWatchdog`) or the dismissal `await` on
-`window._lastCatalogRegisterPromise` (`library-ui.js:~6360–6391`) — both fix already-solved races
-(commits `067e9f5`, `63046ee`). After editing, run `build-desktop.sh` (`desktop/dist/` is a copy).
+### N1a — Offline edit queue + apply-on-reconnect (deferred, not started)
+
+N1's approved wireframe described the offline status bar as: edits made while a drive is
+disconnected are queued locally and automatically applied to the original files once it
+reconnects. That line was **not** built — the status bar currently says the honest, narrower
+thing instead ("Reconnect to edit or export the originals"), because the queueing mechanism is a
+real, separate feature with real data-loss risk if rushed, not a copy change:
+
+- **Today**, opening a photo for editing reads the real file from disk (RAW decode, `raw_decode.rs`
+  et al.) — there is no path that edits a CACHED preview instead, so "edit while offline" doesn't
+  work at all yet, cached thumbnail or not.
+- Building this needs, at minimum: (1) a real decode source for a cached-only photo (the offline
+  thumbnail tier is a small JPEG preview, not enough to grade — would need either a higher-res
+  cached proxy or accepting a degraded offline edit preview), (2) a persisted queue of
+  edits-made-while-offline distinct from the ordinary `.xmp` sidecar write path, (3) reconnect
+  detection (the existing `refreshVolumes` 4s poll already used for the Drives panel/offline
+  badges) wired to replay the queue against the real files, and (4) conflict handling if the
+  original changed on another machine while disconnected.
+- Not estimated (size unknown until the cached-proxy-quality question above is resolved) — surface
+  again once there's real user demand for offline editing specifically, not just offline browsing.
 
 ### N2 — Use the GPU alongside the CPU
 
