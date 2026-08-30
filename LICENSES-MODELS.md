@@ -73,3 +73,26 @@ format is a modification under that licence, so the required attribution is the 
 | `spektra_fuji_velvia_100` | Fujifilm Velvia 100 (reversal) | Fujifilm Crystal Archive Type II |
 | `spektra_kodak_ektachrome_100` | Kodak Ektachrome 100 (reversal) | Kodak Portra Endura |
 | `spektra_kodak_kodachrome_64` | Kodak Kodachrome 64 (reversal) | Kodak Portra Endura |
+
+### R4 addendum — native film-stock highlight shoulders (`vendor/luts/spektra_*_shoulder.bin`)
+
+ROADMAP.md's R4 extracts, for the 16 colour-negative stocks above (the 4 reversal stocks are
+out of scope — see ROADMAP.md), a real per-channel highlight roll-off shape from spektrafilm's
+own density-curve model (not a curve fit or an invented shoulder): each stock's real
+film+print pipeline (`spektrafilm.runtime.pipeline.SimulationPipeline`, the same code path
+`spektrafilm-lut` itself drives) is run at synthetic exposures from -1 to +4.5 stops above the
+model's own documented white anchor (`BundleSpec.stops_above_midgray`'s "auto" resolution for
+encoded sRGB input, 4.0 stops — i.e. the same gain R3's `.cube` bake already used), resampled to
+a 256-point table per channel, and quantized to 8-bit — the same "modification" this licence's
+attribution text already covers for `spektra_*.bin`. The same attribution applies to
+`vendor/luts/spektra_*_shoulder.bin`:
+
+    Derived from spektrafilm by Andrea Volpato
+    https://github.com/andreavolpato/spektrafilm
+    Licensed CC BY-SA 4.0
+    Modified by Chromasmith: real film+print highlight response sampled at synthetic exposures
+    up to +4 stops above white via spektrafilm's own SimulationPipeline, resampled to a 256x1
+    per-channel table and quantized to 8-bit for vendor/luts/spektra_*_shoulder.bin.
+
+The film/print pairing for each `_shoulder.bin` is identical to its `.bin` counterpart in the
+table above (same key, same stock, same print).
