@@ -4153,7 +4153,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-30a';
+const BUILD='2026-08-30b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4946,7 +4946,8 @@ vec3 hueRotate(vec3 c,float deg){
     0.213+cs*0.787-sn*0.213, 0.213-cs*0.213+sn*0.143, 0.213-cs*0.213-sn*0.787,
     0.715-cs*0.715-sn*0.715, 0.715+cs*0.285+sn*0.140, 0.715-cs*0.715+sn*0.715,
     0.072-cs*0.072+sn*0.928, 0.072-cs*0.072-sn*0.283, 0.072+cs*0.928+sn*0.072);
-  return clamp(m*c,0.0,1.0);
+  vec3 r=m*c;
+  return useTonemap<0.5?clamp(r,0.0,1.0):r;                 // ROADMAP.md R1 — don't clip a rotated highlight
 }
 // LR-style Color paint: mixes toward a FIXED target hue at the pixel's own luminance
 // (not a rotation of whatever hue is already there, like TH.y/hueRotate above) — a genuine
@@ -5074,17 +5075,21 @@ vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T,float vLow,float oneWay){
   // lift instead of an absolute one-way rule.
   dL=mix(dL,min(dL,0.0),oneWay);
   lch.x+=w*U.z*dL;
-  return clamp(oklch2rgb(vec3(clamp(lch.x,0.0,1.0),max(lch.y,0.0),lch.z)),0.0,1.0);
+  vec3 rgb=oklch2rgb(vec3(useTonemap<0.5?clamp(lch.x,0.0,1.0):max(lch.x,0.0),max(lch.y,0.0),lch.z));
+  return useTonemap<0.5?clamp(rgb,0.0,1.0):rgb;              // ROADMAP.md R1 — skin convergence keeps highlight headroom
 }
 vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec4 CT){ // A: exp,con,temp,sat | TH: tint,hue(deg) | CT: colHue(deg),colAmt,rot(unused here),colSat — weighted by w
   vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
   lin*=exp2(A.x*w);                                        // exposure (stops), linear light
   lin.r*=1.0+0.22*A.z*w;lin.b*=1.0-0.22*A.z*w;             // temp (matches basicAdjust scaling)
   lin.g*=1.0-0.14*TH.x*w;lin.r*=1.0+0.05*TH.x*w;lin.b*=1.0+0.05*TH.x*w; // tint (matches basicAdjust)
-  c=clamp(vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b)),0.0,1.0);
-  c=clamp((c-0.5)*(1.0+A.y*w)+0.5,0.0,1.0);                // contrast around mid-grey
-  float l=dot(c,vec3(.2126,.7152,.0722));
-  c=clamp(mix(vec3(l),c,1.0+A.w*w),0.0,1.0);               // saturation
+  c=vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);                    // ROADMAP.md R1 — masked highlight roll-off
+  c=(c-0.5)*(1.0+A.y*w)+0.5;                               // contrast around mid-grey
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
+  float l=dot(clamp(c,0.0,1.0),vec3(.2126,.7152,.0722));   // luma proxy always reads a clamped copy, like basicAdjust's zone gate
+  c=mix(vec3(l),c,1.0+A.w*w);                              // saturation
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
   if(TH.y!=0.0)c=mix(c,hueRotate(c,TH.y),w);
   if(CT.y>0.0)c=tintToward(c,CT.x,CT.y*w,CT.w);
   return c;
@@ -5209,7 +5214,7 @@ if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
 if(useHlg>.5)c.rgb=hlg2rec709(c.rgb,hlgLw);
 if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
 if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;c.rgb=mix(lb,texture(lut3,c.rgb*sc+of).rgb,lutMix);}
-if(useHsl>.5){float sc=32./33.,of=.5/33.;c.rgb=texture(hslLut,c.rgb*sc+of).rgb;}
+if(useHsl>.5){float sc=32./33.,of=.5/33.;vec3 ccH=clamp(c.rgb,0.0,1.0);vec3 gradedH=texture(hslLut,ccH*sc+of).rgb;c.rgb=useTonemap>0.5?gradedH+(c.rgb-ccH):gradedH;}
 c.rgb=basicAdjust(c.rgb);
 if(mskN>0.5){
   vec2 gm=uvOffL+uv*uvScaleL;
@@ -5256,26 +5261,29 @@ if(mskN>0.5){
       // was impossible before — masks carried no detail controls at all. The high-pass is measured
       // on SOURCE pixels while this applies post-grade; that mismatch is deliberate and matches
       // what the global Sharpen/Clarity already do.
-      if(mskJ[i].x!=0.0)c.rgb=clamp(c.rgb+srcHP*(mskJ[i].x*w),0.0,1.0);
+      if(mskJ[i].x!=0.0){c.rgb=c.rgb+srcHP*(mskJ[i].x*w);if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);}
       // Clarity: midtone-weighted wide-radius contrast, the same 4*l*(1-l) weighting the global
       // Clarity uses — so it builds structure in the midtones without touching highlight
       // roll-off or crushing shadows, and negative smooths.
       if(mskJ[i].w!=0.0){
-        float lvC=dot(c.rgb,vec3(.2126,.7152,.0722));
-        c.rgb=clamp(c.rgb+srcHPW*(mskJ[i].w*w*4.0*lvC*(1.0-lvC)),0.0,1.0);
+        float lvC=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722)); // midtone-weight proxy always reads a clamped copy
+        c.rgb=c.rgb+srcHPW*(mskJ[i].w*w*4.0*lvC*(1.0-lvC));
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
       }
       c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow,mskJ[i].z); // converge toward the target FIRST,
       c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
-        float lv3=dot(c.rgb,vec3(.2126,.7152,.0722));
+        float lv3=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722));
         float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
-        c.rgb=clamp(c.rgb+t3,0.0,1.0);
+        c.rgb=c.rgb+t3;
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
       }
     }
   }
 }
-if(useCurve>.5){vec3 t=clamp(c.rgb,0.0,1.0)*(255.0/256.0)+(0.5/256.0);
-  c.rgb=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);}
+if(useCurve>.5){vec3 ccC=clamp(c.rgb,0.0,1.0);vec3 t=ccC*(255.0/256.0)+(0.5/256.0);
+  vec3 curved=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);
+  c.rgb=useTonemap>0.5?curved+(c.rgb-ccC):curved;}
 o=c;}`);
 
     // SOURCE EMISSION v22 — rule-based model (linear light), replacing the v5
