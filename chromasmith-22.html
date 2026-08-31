@@ -1379,6 +1379,19 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
         <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()">Reset</button></div>
       </div>
+      <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
+           Gaussian PSF and inverts it with a few iterations of damped Richardson-Lucy, unlike
+           the unsharp-mask Sharpen above which only boosts existing edge contrast. Driven by
+           Amount>0, same pattern as the Lens/NR cards (no enable toggle). -->
+      <div class="fx-ctrl" data-fxsec="deconv">
+        <div class="fx-ctrl-title">Deconvolution</div>
+        <div class="fx-hint">Recovers real detail lost to lens/sensor blur (Richardson-Lucy),
+          instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll
+          see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</div>
+        <div class="fx-row" title="Blend between the original and the deconvolved result."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-deconv-amt" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-amt">0</div></div>
+        <div class="fx-row" title="Size of the assumed lens/sensor blur (Gaussian PSF) to invert."><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-deconv-rad" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-rad">20</div></div>
+        <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetDeconv()">Reset</button></div>
+      </div>
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
         <div class="fx-ctrl-title">Tone Curves <div class="fx-toggle" id="tg-curves" onclick="toggleFX('curves')"></div></div>
@@ -5566,6 +5579,54 @@ void main(){
   o=t>0.?s/t:vec4(0.);
 }`);
 
+    // ROADMAP.md R6 — DECONVOLUTION SHARPENING (damped Richardson-Lucy). Unlike the existing
+    // unsharp-mask Sharpen/Clarity (adjSharp/adjClarity, which only amplify existing edge
+    // contrast), this models the lens/sensor blur as a small Gaussian PSF and iteratively
+    // INVERTS it — recovering real detail, not just boosting contrast at edges. Validated in
+    // plain Node first (see calib's rl_validate script / CLAUDE.md's R6 entry): at 3 iterations
+    // damped RL beats unsharp mask on both detail recovery AND noise/ringing amplification on a
+    // synthetic noisy-blurred edge. Runs as its own tiny multi-pass sub-pipeline (this program +
+    // the existing separable `blur` program, ping-ponged — see render()'s "deconv" stage) rather
+    // than being crammed into the single-pass `lut` shader, because RL needs a fresh blur of the
+    // CURRENT ESTIMATE on every iteration.
+    //   ratio = obs / reblur(est)                          (classic RL correction ratio)
+    //   U     = tanh(|obs-reblur(est)| / dampT)             (damping: ~0 near convergence/noise
+    //                                                         floor, ~1 on real structure)
+    //   step  = clamp(1 + U*(ratio-1), 1-maxStep, 1+maxStep) (per-iteration step CAP — the
+    //                                                         "conservative ring-artifact cap"
+    //                                                         ROADMAP.md explicitly calls for)
+    //   est'  = est * step
+    // This is the damped-RL family (White 1994 / Dey et al. 2006 style damping), not invented —
+    // see the Node validation for the measured effect of dampT/maxStep on ringing.
+    this.progs.deconvUpdate=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D obs,est,reblur;
+uniform float dampT,maxStep;
+void main(){
+  vec3 o3=texture(obs,uv).rgb;
+  vec3 e3=texture(est,uv).rgb;
+  vec3 r3=texture(reblur,uv).rgb;
+  vec3 ratio=o3/max(r3,vec3(1e-4));
+  vec3 diff=o3-r3;
+  vec3 U=vec3(tanh(abs(diff.r)/dampT),tanh(abs(diff.g)/dampT),tanh(abs(diff.b)/dampT));
+  vec3 step_=vec3(1.0)+U*(ratio-vec3(1.0));
+  step_=clamp(step_,vec3(1.0-maxStep),vec3(1.0+maxStep));
+  o=vec4(clamp(e3*step_,0.0,1.0),1.0);
+}`);
+    // Final Amount blend: mix(original, RL-deconvolved result, amount) — same UX pattern as
+    // every other Amount/strength slider in the app (0 = bit-identical to today).
+    this.progs.deconvMix=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D obs,est;
+uniform float amount;
+void main(){
+  o=vec4(mix(texture(obs,uv).rgb,texture(est,uv).rgb,amount),1.0);
+}`);
+
     // LUMINANCE DOWNSAMPLE for the skin-tone frequency separation. A 4x4 box average straight into
     // a quarter-res buffer: the two Gaussian passes that follow then need a sigma 4x smaller, which
     // keeps them inside the blur shader's 48-tap cap (a 2%-of-width sigma is ~80px at 4000px, i.e.
@@ -6063,6 +6124,12 @@ void main(){
     this._allocTex('lut',w,h,hdrIntermediate);                            // full-res graded base — RGBA16F only when requested+supported
     this._allocTex('lens',w,h);                                           // lens-corrected source (only used when Lens on)
     this._allocTex('nr',w,h);                                             // denoised source (only used when NR on)
+    // ROADMAP.md R6 — deconvolution sharpening scratch chain: dcEstA/dcEstB ping-pong the RL
+    // estimate across iterations, dcBlurH/dcBlurV are the separable-Gaussian reblur-of-estimate
+    // scratch (reuses progs.blur, same shader the halation/skin chains use), deconvOut is the
+    // final Amount-blended result the `lut` pass samples from. Full-res like lens/nr (only paid
+    // for when Deconvolution amount>0 — see render()'s dcOn gate).
+    ['dcEstA','dcEstB','dcBlurH','dcBlurV','deconvOut'].forEach(n=>this._allocTex(n,w,h));
     // ROADMAP.md R1: hemitF/the halation-bloom scratch chain also need to be float when the
     // scene-referred tonemap is active, or a >1.0 highlight from the (now-float) `lut` FBO gets
     // clamped right back to 8-bit the moment the emission pass writes it — same reasoning as
@@ -6251,7 +6318,7 @@ void main(){
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1,stockShoulderTex:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -6421,7 +6488,33 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
          nrScale:sc,nrChromaStep,nrChromaSig,nrHlDesat:nrP.hlDesat||0,
          texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
     }
-    const lutSrc=nrOn?'nr':srcAfterLens;
+    let lutSrc=nrOn?'nr':srcAfterLens;
+    // ROADMAP.md R6 — DECONVOLUTION SHARPENING. Runs on the same "source so far" (post lens/NR,
+    // pre-LUT) stage as noise reduction, right before the lut pass consumes it — see the
+    // progs.deconvUpdate/deconvMix comment above for the algorithm. Zero-cost when amount<=0:
+    // the whole block (and its 3*2+1 extra draw calls) is skipped and lutSrc is left untouched,
+    // which is what keeps every export golden byte-identical by construction, not just by a
+    // no-op blend.
+    const dcP=P.deconv,dcAmt=(dcP&&dcP.amount)||0;
+    if(dcAmt>0){
+      // Radius is specified in reference-image (REF-width) pixels, same convention as the
+      // halation sigmas, so it scales correctly across preview/export/tile resolutions.
+      const dcSigma=Math.max(0.4,Math.min(8,(dcP.radius!=null?dcP.radius:1.5)))*sc;
+      const dcIters=3;                    // real-time budget — see the Node validation
+      const dcDampT=0.06,dcMaxStep=0.35;  // damped-RL constants, tuned in the Node validation
+      let curEst=lutSrc;                  // RL est_0 = the observed image itself
+      const names=['dcEstA','dcEstB'];
+      for(let it=0;it<dcIters;it++){
+        this._pass(this.progs.blur,this.fbs.dcBlurH,{img:0,dir:[1/this.w,0],sig:dcSigma},[[0,curEst,false]]);
+        this._pass(this.progs.blur,this.fbs.dcBlurV,{img:0,dir:[0,1/this.h],sig:dcSigma},[[0,'dcBlurH',false]]);
+        const outName=names[it%2];
+        this._pass(this.progs.deconvUpdate,this.fbs[outName],{obs:0,est:1,reblur:2,dampT:dcDampT,maxStep:dcMaxStep},
+          [[0,lutSrc,false],[1,curEst,false],[2,'dcBlurV',false]]);
+        curEst=outName;
+      }
+      this._pass(this.progs.deconvMix,this.fbs.deconvOut,{obs:0,est:1,amount:Math.min(1,dcAmt)},[[0,lutSrc,false],[1,curEst,false]]);
+      lutSrc='deconvOut';
+    }
     // SKIN FREQUENCY SEPARATION — build a quarter-res, heavily blurred luminance of this render's
     // own source, BEFORE the lut pass that consumes it. Only when a mask actually uses lightness
     // uniformity, so the default path pays nothing. Sigma is a fixed fraction of the FULL image
@@ -9260,7 +9353,7 @@ document.addEventListener('change',_ffAutoEnable,true);
 document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button,.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -9356,6 +9449,11 @@ function resetNR(){
   {const s=document.getElementById('sl-adj-sharp'),vs=document.getElementById('vl-adj-sharp');
    if(s){const it=curItem();const isRaw=it&&RAW_FILE_EXT_RE.test('.'+(it.ext||''));s.value=isRaw?40:0;if(vs)vs.textContent=s.value;}}
   fxUpdate();nrSyncGate();log('Noise reduction reset','info');
+}
+function resetDeconv(){
+  ['deconv-amt'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  {const r=document.getElementById('sl-deconv-rad');if(r)r.value=20;}
+  fxUpdate();log('Deconvolution reset','info');
 }
 // Detail/Highlight-Desat only have an effect while Luminance or Color is >0 (the shader NR pass
 // is skipped entirely otherwise — see the comment above the NR shader). Dim them + show a hint
@@ -9878,7 +9976,7 @@ function _cpCommands(){
   const add=(group,label,run)=>cmds.push({group,label,run});
   const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'};
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
-  const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',curves:'Tone Curves',
+  const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',deconv:'Deconvolution',curves:'Tone Curves',
     hsl:'Color Mixer',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
     grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Vignette',
     borders:'Borders',canvas:'Canvas',export:'Export'};
@@ -13514,6 +13612,7 @@ const PASTE_CATEGORIES=[
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','hsl','pointColors']},
   {key:'adjust',label:'Basic Adjustments',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin'],toggles:['tg-adjust'],selects:[]},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:[],selects:[]},
+  {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:[],selects:[]},
   {key:'grain',label:'Film Grain',sliders:['grain-a','grain-sz'],toggles:['tg-grain'],selects:['sel-grain-fmt']},
   {key:'artifacts',label:'Film Artifacts',sliders:['art-du','art-sc','art-lk'],toggles:['tg-art'],selects:[],extra:['artSeed','dustMode']},
   {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
@@ -14472,7 +14571,7 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -14858,6 +14957,11 @@ function getFXParams(adjValsOverride){return{
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
   nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100, hlDesat:adjVal('sl-nr-hldesat')/100},
+  // ROADMAP.md R6 — deconvolution sharpening (damped Richardson-Lucy). amount 0..1 (Amount
+  // slider is 0-100), radius in reference-image pixels (Radius slider 0-100 -> 0-8px, see the
+  // shader-side clamp in render()). Both default 0/1.5 -> amount 0 means the whole pass is
+  // skipped (see render()'s dcAmt>0 gate), so this key is safe to always compute.
+  deconv:{amount:adjVal('sl-deconv-amt')/100, radius:1.5+(adjVal('sl-deconv-rad')/100)*6.5},
   // Lens correction: manual-only (no per-lens profile database — see the shader comment for
   // why). dist/vig/ca in -0.5..0.5, small enough that the single-term radial model stays
   // well-behaved at the frame corners.
