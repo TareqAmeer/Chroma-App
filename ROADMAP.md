@@ -49,11 +49,12 @@ re-add prose write-ups for closed items here** — that's what made this file 90
 | Display-P3 / wide-gamut ICC export | Every calibration constant in `calib/` (113 looks) is fitted against sRGB primaries with no colour-managed reference to verify a wide-gamut change against. Gain-map HDR already ships a bigger visible win (range, not gamut). Revisit only as a final-stage export conversion. |
 | Undo for Delete | `trash_file` already hands off to the macOS Trash (Finder-recoverable). An in-app `restore_from_trash` would duplicate an OS affordance. |
 | JXL / AVIF decode | Neither the user's camera nor phone produces these; would mean vendoring a WASM decoder for formats with no real source files to test against. HEIC (which they do produce) shipped instead. |
-| A second hand-written WGSL renderer (desktop-only) | Two copies of the calibrated model kept pixel-identical forever, across languages where the `toString` generation trick doesn't apply. Superseded by R5 (Naga single-source), a different proposition, still open. |
+| A second hand-written WGSL renderer (desktop-only) | Two copies of the calibrated model kept pixel-identical forever, across languages where the `toString` generation trick doesn't apply. Superseded by R5 (Naga single-source) — spiked and also rejected, see below. |
+| R5 — Naga single-source shaders (WGSL→WGPU desktop + generated GLSL ES 3.0 web/iOS) | **Spike, not the full item, was run 2026-08-31** — verdict: don't pursue. Real findings, not guessed: (1) `naga` (crate `naga` 30.0.1, part of the `gfx-rs/wgpu` monorepo, actively maintained) DOES translate real WGSL→GLSL ES 3.00 — verified hands-on: `cargo install naga-cli`, hand-ported the `comp` fragment shader's core math (s2l/l2s, screen blend, the BT.2390 knee, the post-print sat/vibrance step — same operations, same order, not reinvented) to WGSL, ran `naga --profile es300 --entry-point fs_main comp.wgsl out.frag`, got back real `#version 300 es` GLSL. Naga preserves evaluation order faithfully (every intermediate becomes an explicit `_eN` temp in source order, no visible reassociation) — good for determinism. (2) A real precision caveat, measured not assumed: naga constant-folded `1.0/2.4` to the literal `0.41666666` (8 significant digits) in the generated GLSL, one representation short of `0.416666666666667` — for a shader family whose test suite requires byte-exact PNGs (`test/export_harness.mjs`'s 18 goldens), every such folded constant would need auditing. (3) wgpu's own docs list the GLSL backend as **secondary support**, not primary (WebGPU/Vulkan/Metal/D3D12 are primary); `gfx-rs/naga`'s issue tracker has real, open glsl-out-specific bugs (e.g. #589 mismatched outputs, #2380 wrong array return type, #1457 vertex-order mismatch vs `glslc`) — none hit by this shader slice, but the backend is not battle-hardened the way naga's WGSL/SPIR-V paths are. (4) The bigger finding, checked directly (`grep -rl wgpu\|WGSL desktop/src-tauri/src/` → empty): **the desktop shell has no native GPU shader renderer to unify with.** `desktop/` is a Tauri wrapper around the system WebView (WKWebView on macOS), and it runs the exact same `chromasmith-22.html` — including the same WebGL2 GLSL — as the web build (`main.rs`'s own comments confirm this; RAW decode is native Rust specifically *because* the WebView can't do it, not because rendering is native). So R5's original premise — "two hand-maintained shader copies across web and desktop" — does not describe this codebase's actual architecture; there is only ever one GLSL copy today, reused for free via the WebView. Adding a real WGPU desktop renderer would be a **net-new second rendering pipeline**, not a maintenance reduction, and would reopen exactly the pixel-parity risk the `toString`-generated CPU worker (CLAUDE.md §2) was built to avoid for the *existing* single pipeline. (5) Cost: `naga-cli` alone pulls ~25 transitive crates and a real build step (WGSL source → codegen → paste into the JS template literal) — a genuine addition against this repo's explicit "no build step" constraint (CLAUDE.md §1/§2), for a payoff (a desktop renderer that doesn't currently exist) nobody asked for. **Decision: do not wire naga into the app.** No shader/toggle code was landed — the WGSL/GLSL spike files live outside the repo (`/tmp`) and were not committed. If a genuine second GPU backend is ever wanted (e.g. a real native desktop window instead of a WebView), naga is a credible tool for it — but that is a different, much bigger proposition than "de-duplicate two shader copies," since no second copy exists to de-duplicate. |
 | A full 16-bit render pipeline as the route to better highlights | Measured directly: ≤1/255 difference. Bit depth was never the gap — headroom is (see R1). Don't re-litigate this as a precision problem. |
 | Chasing camera colour breadth by hand-calibrating bodies | Use rawler's embedded per-camera matrices instead — same well every other converter draws from (see R8, shipped). |
 | Lifting any RapidRAW source | AGPL-3.0. Their published ideas/benchmarks are fair game; their code is not. |
-| A WGSL/WGPU renderer port purely for slider-latency speed | RapidRAW's own headline "20fps→120fps" win was deleting a JPEG-over-IPC round trip this app never had (it renders in-page already). R5 remains the only sanctioned route to a second backend, spike-gated. |
+| A WGSL/WGPU renderer port purely for slider-latency speed | RapidRAW's own headline "20fps→120fps" win was deleting a JPEG-over-IPC round trip this app never had (it renders in-page already). R5's own spike (see above) has since concluded there is no second shader copy to unify in the first place. |
 
 ---
 
@@ -84,7 +85,9 @@ codebase. Full working notes: `~/.claude/plans/can-you-review-rapidraw-virtual-g
   WebGL2 choice is what buys web *and* iOS, which none of them have — not a disadvantage to fix.
 - Apps shipping both desktop and mobile do it via one kernel source, machine-translated (Dehancer's
   `dehancer-gpulib-cpp`, Lightroom's shared C++ core). Nobody hand-maintains two shader copies —
-  R5 (Naga) is the only sanctioned path there, gated on its own spike.
+  R5 (Naga) was the sanctioned path there — its spike concluded 2026-08-31 that no second shader
+  copy exists to unify (the desktop shell reuses the same WebGL2/GLSL via its WebView), so this
+  route is closed; see the Rejected/withdrawn table.
 - RapidRAW's film emulations run scene-referred inside their own WGSL shader, and their whole
   pipeline is 32-bit throughout — same direction R1 took, independently confirmed by darktable
   ("all core functions operate on 4×32-bit float buffers... pixels prepared for display only at
@@ -94,15 +97,14 @@ codebase. Full working notes: `~/.claude/plans/can-you-review-rapidraw-virtual-g
 
 | # | item | size | note |
 |---|---|---|---|
-| R5 | Naga single-source shaders (WGSL→WGPU desktop + generated GLSL ES 3.0 web/iOS) | L | Author once, generate both. **Spike first**: port only `comp`, require all 18 goldens byte-exact from each backend. |
 | R13 | Astro stacking, panorama stitching, collage | L | Lowest priority of the merge family. |
 | R14 | Camera tethering (libgphoto2) | L | macOS/Linux only — Windows driver conflict even for them. |
 | R15 | JXL/AVIF export; headless CLI export | S each | `image` crate features + an export-format entry; CLI is an argv path into existing Tauri commands. |
 | R16 | Draggable panel workspace + unified Library/Edit view | M | Removes the mode switch between grid and editor; persists panel order. |
 
 Sequencing: R2 before R4 (R4 depends on R1's remaining gap + is the "real" version of R2's cheap
-stand-in). R3/R10/R15 are session-sized wins needing nothing else. R5 is the biggest single bet,
-gated on its own spike.
+stand-in). R3/R10/R15 are session-sized wins needing nothing else. R5 was the biggest single bet
+and is now closed — see Rejected/withdrawn.
 
 ### Format widening
 
