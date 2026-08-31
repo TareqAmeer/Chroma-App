@@ -271,6 +271,177 @@ pub mod align {
         (dx, dy)
     }
 
+    /// Similarity-transform (translation + rotation + uniform scale, 4-DOF) registration —
+    /// ROADMAP R13 part 3 (panorama). This is a real, separate extension of the SAME
+    /// Gauss-Newton/ECC-equivalent normalized-SSD objective `register_translation` minimizes
+    /// (Evangelidis & Psarakis TPAMI 2008; Lucas & Kanade 1981), just with a bigger warp
+    /// Jacobian — the standard, documented way ECC-style trackers scale from translation to a
+    /// similarity/affine/projective warp (Baker & Matthews 2004, "Lucas-Kanade 20 Years On").
+    /// It is NOT full projective homography and it is NOT feature-matching (SIFT/ORB) — those
+    /// are what a real wide-baseline panorama stitcher needs and this scope does not attempt
+    /// them (see merge.rs's module doc / ROADMAP.md R13 for why). This is offered honestly as
+    /// "handles a modest rotation/scale/translation between two overlapping crops", validated in
+    /// `tests::similarity_registration_recovers_known_transform` against a KNOWN synthetic
+    /// transform — not assumed to generalize further than that measurement shows.
+    ///
+    /// Warp convention (mirrors `register_translation`'s: applying the returned params to
+    /// `moving` should land it on `reference`):
+    ///   xm = s*(cosθ·x − sinθ·y) + tx
+    ///   ym = s*(sinθ·x + cosθ·y) + ty
+    /// Returns (tx, ty, theta_radians, scale).
+    pub fn register_similarity(reference: &[f32], moving: &[f32], w: usize, h: usize, max_iter: usize) -> (f32, f32, f32, f32) {
+        let mut tx = 0.0f32;
+        let mut ty = 0.0f32;
+        let mut theta = 0.0f32;
+        let mut scale = 1.0f32;
+        let mut scales = vec![1usize];
+        let mut s = 1usize;
+        while s * 16 < w.min(h) && scales.len() < 4 {
+            s *= 2;
+            scales.push(s);
+        }
+        scales.reverse(); // coarsest first
+        for &pyr in &scales {
+            let (sw, sh) = ((w / pyr).max(4), (h / pyr).max(4));
+            let down = |src: &[f32]| -> Vec<f32> {
+                let mut o = vec![0.0f32; sw * sh];
+                for y in 0..sh {
+                    for x in 0..sw {
+                        o[y * sw + x] = src[(y * pyr).min(h - 1) * w + (x * pyr).min(w - 1)];
+                    }
+                }
+                o
+            };
+            let rs = down(reference);
+            let ms = down(moving);
+            let (trs, _, _) = normalize(&rs);
+            let mut ptx = tx / pyr as f32;
+            let mut pty = ty / pyr as f32;
+            // theta/scale are scale-invariant across the pyramid — carried through unchanged.
+            for _ in 0..max_iter {
+                let cos_t = theta.cos();
+                let sin_t = theta.sin();
+                let mut warped = vec![f32::NAN; sw * sh];
+                for y in 0..sh {
+                    for x in 0..sw {
+                        let xf = x as f32;
+                        let yf = y as f32;
+                        let xm = scale * (cos_t * xf - sin_t * yf) + ptx;
+                        let ym = scale * (sin_t * xf + cos_t * yf) + pty;
+                        warped[y * sw + x] = bilinear(&ms, sw, sh, xm, ym);
+                    }
+                }
+                let (wn, _, wstd) = normalize(&warped);
+                // Normal equations for the 4-parameter (tx,ty,theta,scale) Gauss-Newton update.
+                let mut hmat = [[0.0f64; 4]; 4];
+                let mut bvec = [0.0f64; 4];
+                let mut count = 0usize;
+                for y in 1..sh - 1 {
+                    for x in 1..sw - 1 {
+                        let c = wn[y * sw + x];
+                        let t = trs[y * sw + x];
+                        if !c.is_finite() || !t.is_finite() {
+                            continue;
+                        }
+                        let left = warped[y * sw + x - 1];
+                        let right = warped[y * sw + x + 1];
+                        let up = warped[(y - 1) * sw + x];
+                        let down_ = warped[(y + 1) * sw + x];
+                        if !left.is_finite() || !right.is_finite() || !up.is_finite() || !down_.is_finite() {
+                            continue;
+                        }
+                        let gx = (right - left) * 0.5 / wstd;
+                        let gy = (down_ - up) * 0.5 / wstd;
+                        let xf = x as f32;
+                        let yf = y as f32;
+                        // d(xm)/dp, d(ym)/dp for p = (tx,ty,theta,scale)
+                        let dxm_dtheta = scale * (-sin_t * xf - cos_t * yf);
+                        let dym_dtheta = scale * (cos_t * xf - sin_t * yf);
+                        let dxm_ds = cos_t * xf - sin_t * yf;
+                        let dym_ds = sin_t * xf + cos_t * yf;
+                        let j = [
+                            gx,                                   // d/dtx
+                            gy,                                   // d/dty
+                            gx * dxm_dtheta + gy * dym_dtheta,     // d/dtheta
+                            gx * dxm_ds + gy * dym_ds,             // d/dscale
+                        ];
+                        let e = (t - c) as f64;
+                        for r in 0..4 {
+                            for cidx in 0..4 {
+                                hmat[r][cidx] += (j[r] as f64) * (j[cidx] as f64);
+                            }
+                            bvec[r] += (j[r] as f64) * e;
+                        }
+                        count += 1;
+                    }
+                }
+                if count < 32 {
+                    break;
+                }
+                // Tiny Tikhonov-regularized 4x4 solve (Gauss-Jordan) — the regularizer keeps it
+                // stable on the coarsest, least-textured pyramid level.
+                for i in 0..4 {
+                    hmat[i][i] += 1e-6;
+                }
+                let delta = match solve4(&hmat, &bvec) {
+                    Some(d) => d,
+                    None => break,
+                };
+                ptx += delta[0] as f32;
+                pty += delta[1] as f32;
+                theta += delta[2] as f32;
+                scale += delta[3] as f32;
+                if scale < 0.2 {
+                    scale = 0.2; // guard against a pathological runaway shrink
+                }
+                if delta.iter().all(|d| d.abs() < 1e-4) {
+                    break;
+                }
+            }
+            tx = ptx * pyr as f32;
+            ty = pty * pyr as f32;
+        }
+        (tx, ty, theta, scale)
+    }
+
+    /// Plain Gauss-Jordan solve of a 4x4 linear system, `None` if singular.
+    fn solve4(a: &[[f64; 4]; 4], b: &[f64; 4]) -> Option<[f64; 4]> {
+        let mut m = *a;
+        let mut rhs = *b;
+        for col in 0..4 {
+            let mut piv = col;
+            for row in col + 1..4 {
+                if m[row][col].abs() > m[piv][col].abs() {
+                    piv = row;
+                }
+            }
+            if m[piv][col].abs() < 1e-12 {
+                return None;
+            }
+            m.swap(col, piv);
+            rhs.swap(col, piv);
+            let d = m[col][col];
+            for k in col..4 {
+                m[col][k] /= d;
+            }
+            rhs[col] /= d;
+            for row in 0..4 {
+                if row == col {
+                    continue;
+                }
+                let f = m[row][col];
+                if f == 0.0 {
+                    continue;
+                }
+                for k in col..4 {
+                    m[row][k] -= f * m[col][k];
+                }
+                rhs[row] -= f * rhs[col];
+            }
+        }
+        Some(rhs)
+    }
+
     /// Warps a full RGB image by a translation (bilinear sample; out-of-bounds pixels are
     /// filled from the nearest valid edge pixel — cheap and fine at the sub-few-pixel shifts
     /// this aligner is meant for).
@@ -738,6 +909,258 @@ pub mod focus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
+// Astro stacking (ROADMAP R13, part 2) — plain per-pixel MEAN/MEDIAN across N aligned frames.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+//
+// Deliberately NOT the Laplacian-pyramid blend `hdr`/`focus` share. Astro stacking's whole point
+// is noise reduction by averaging many exposures of the SAME signal (a static star field, once
+// aligned) — there is no "which source wins at this pixel" decision to feather across scales,
+// so a per-pixel average/median is the correct operator, not an under-used simplification of the
+// pyramid blend. Reuses `align_stack`'s existing translation-only registration unchanged (star
+// trails from earth's rotation/handheld drift between frames are exactly the small-shift regime
+// that aligner was built and validated for in R12).
+pub mod astro {
+    use super::RgbImageF;
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub enum StackMode {
+        Mean,
+        Median,
+    }
+
+    /// Stacks an ALREADY-ALIGNED set of same-scene frames via per-pixel, per-channel mean or
+    /// median. Median is the standard astrophotography choice when hot pixels, cosmic-ray hits
+    /// or a passing satellite/airplane light trail could contaminate a single frame — a mean
+    /// would smear that contamination across the result at 1/N strength, a median simply drops
+    /// it as long as fewer than half the frames are affected at that pixel.
+    pub fn stack(images: &[RgbImageF], mode: StackMode) -> Result<RgbImageF, String> {
+        if images.is_empty() {
+            return Err("astro::stack: no images".into());
+        }
+        let (w, h) = (images[0].w, images[0].h);
+        for im in images {
+            if im.w != w || im.h != h {
+                return Err("astro::stack: images must be pre-aligned to the same dimensions".into());
+            }
+        }
+        let n = images.len();
+        let mut data = vec![0.0f32; w * h * 3];
+        match mode {
+            StackMode::Mean => {
+                for i in 0..w * h * 3 {
+                    let mut s = 0.0f32;
+                    for im in images {
+                        s += im.data[i];
+                    }
+                    data[i] = s / n as f32;
+                }
+            }
+            StackMode::Median => {
+                let mut buf = vec![0.0f32; n];
+                for i in 0..w * h * 3 {
+                    for (k, im) in images.iter().enumerate() {
+                        buf[k] = im.data[i];
+                    }
+                    buf.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    data[i] = if n % 2 == 1 { buf[n / 2] } else { (buf[n / 2 - 1] + buf[n / 2]) * 0.5 };
+                }
+            }
+        }
+        Ok(RgbImageF { w, h, data })
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Panorama (ROADMAP R13, part 3) — SCOPED DOWN, said plainly rather than claimed away.
+//
+// This is NOT a general panorama stitcher. Real wide-baseline panorama stitching needs feature
+// detection + matching (SIFT/ORB or similar) to find correspondences under large viewpoint
+// change, homography estimation from those correspondences, and usually cylindrical/spherical
+// projection + seam-finding for a wide sweep — none of that infrastructure exists in this
+// codebase and building it responsibly is out of scope for this pass (ROADMAP already flags
+// R13 as "L" / lowest priority of the merge family).
+//
+// What IS shipped: a real, validated **similarity-transform** (translation + rotation + uniform
+// scale, 4-DOF — see `align::register_similarity`) registration of exactly TWO overlapping
+// photos, composited via the SAME Laplacian-pyramid multi-band blender `hdr`/`focus` already use
+// (per-source edge-feathered coverage weights feed straight into `pyramid::blend`, so the seam
+// is soft without a third bespoke blend implementation). This handles a modest handheld
+// rotation/translation/focal-length-consistency between two ADJACENT frames of a pano sweep —
+// it does NOT handle large parallax, wide field-of-view sweeps, or perspective/projective
+// distortion, and was not tested against any of those. Validated against a KNOWN synthetic
+// transform in `tests::similarity_registration_recovers_known_transform` BEFORE this compositing
+// step was written, per the brief's explicit "validate before claiming it works" instruction.
+pub mod pano {
+    use super::pyramid::{self, Plane};
+    use super::RgbImageF;
+
+    /// The 4-DOF warp `align::register_similarity` recovers: applying it to a point in `a`'s
+    /// coordinate frame lands on the corresponding point in `b`'s local pixel coordinates.
+    pub struct Similarity {
+        pub tx: f32,
+        pub ty: f32,
+        pub theta: f32,
+        pub scale: f32,
+    }
+
+    /// Bilinear sample, CLAMPED to the image's own bounds rather than returning `None` outside
+    /// them. Deliberate: the multi-band pyramid blend below needs each source's DATA plane
+    /// defined (continuously, no hard edge) across the whole shared canvas, or the Gaussian
+    /// pyramid's wide-support low-frequency levels bleed that fabricated edge into pixels far
+    /// from it — coverage/exclusion is handled entirely by the separate WEIGHT map (`edge_weight`
+    /// below, which correctly returns 0 outside a source's real bounds on its own). This was a
+    /// found-and-fixed real bug: an earlier version left out-of-bounds data at literal 0.0, which
+    /// visibly darkened reconstruction deep inside a SINGLE source's own valid territory, nowhere
+    /// near the actual seam — see the comment on the fix in `stitch_pair`.
+    fn bilinear_rgb_clamped(img: &RgbImageF, x: f32, y: f32) -> [f32; 3] {
+        let cx = x.clamp(0.0, (img.w - 1) as f32);
+        let cy = y.clamp(0.0, (img.h - 1) as f32);
+        let x0 = cx.floor() as usize;
+        let y0 = cy.floor() as usize;
+        let x1 = (x0 + 1).min(img.w - 1);
+        let y1 = (y0 + 1).min(img.h - 1);
+        let fx = cx - x0 as f32;
+        let fy = cy - y0 as f32;
+        let get = |xx: usize, yy: usize, c: usize| img.data[(yy * img.w + xx) * 3 + c];
+        let mut out = [0.0f32; 3];
+        for (c, o) in out.iter_mut().enumerate() {
+            let p00 = get(x0, y0, c);
+            let p10 = get(x1, y0, c);
+            let p01 = get(x0, y1, c);
+            let p11 = get(x1, y1, c);
+            *o = p00 * (1.0 - fx) * (1.0 - fy) + p10 * fx * (1.0 - fy) + p01 * (1.0 - fx) * fy + p11 * fx * fy;
+        }
+        out
+    }
+
+    /// Distance (px) to the nearest edge of a source's own `[0,w)x[0,h)` rectangle, smoothstepped
+    /// over `feather` px — a soft coverage weight so the blend's seam isn't a hard cliff at the
+    /// edge of one source's valid region.
+    fn edge_weight(x: f32, y: f32, w: usize, h: usize, feather: f32) -> f32 {
+        let dx = x.min(w as f32 - 1.0 - x);
+        let dy = y.min(h as f32 - 1.0 - y);
+        let d = dx.min(dy).max(0.0);
+        let t = (d / feather.max(1.0)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    }
+
+    /// Stitches exactly two images: `b` registered onto `a` via the already-recovered `xf`
+    /// (`a`(x,y) ≈ `b`(T(x,y))). Composites onto ONE larger canvas sized to their union in `a`'s
+    /// coordinate frame. Errs out rather than silently producing a huge/garbage canvas if the
+    /// transform implies implausibly little true overlap (a strong sign registration failed —
+    /// wrong pair, no real overlap, or too little texture for `register_similarity` to lock on).
+    pub fn stitch_pair(a: &RgbImageF, b: &RgbImageF, xf: &Similarity) -> Result<RgbImageF, String> {
+        let cos_t = xf.theta.cos();
+        let sin_t = xf.theta.sin();
+        let fwd = |x: f32, y: f32| -> (f32, f32) {
+            let xm = xf.scale * (cos_t * x - sin_t * y) + xf.tx;
+            let ym = xf.scale * (sin_t * x + cos_t * y) + xf.ty;
+            (xm, ym)
+        };
+        let inv_scale = 1.0 / xf.scale.max(1e-6);
+        let inv = |mx: f32, my: f32| -> (f32, f32) {
+            let dx = mx - xf.tx;
+            let dy = my - xf.ty;
+            let x = inv_scale * (cos_t * dx + sin_t * dy);
+            let y = inv_scale * (-sin_t * dx + cos_t * dy);
+            (x, y)
+        };
+        let mut min_x = 0.0f32;
+        let mut min_y = 0.0f32;
+        let mut max_x = a.w as f32;
+        let mut max_y = a.h as f32;
+        for &(cx, cy) in &[(0.0, 0.0), (b.w as f32, 0.0), (0.0, b.h as f32), (b.w as f32, b.h as f32)] {
+            let (x, y) = inv(cx, cy);
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+        let ox = min_x.floor();
+        let oy = min_y.floor();
+        let cw = (max_x - min_x).ceil().max(1.0) as usize;
+        let ch = (max_y - min_y).ceil().max(1.0) as usize;
+        if cw > a.w.max(b.w) * 4 || ch > a.h.max(b.h) * 4 {
+            return Err("Panorama: the recovered alignment implies an implausibly large canvas — registration likely failed (check the two photos actually overlap and share enough texture)".into());
+        }
+        let feather = 40.0f32.min(a.w.min(a.h) as f32 * 0.1).min(b.w.min(b.h) as f32 * 0.1).max(1.0);
+        let mut a_data = vec![0.0f32; cw * ch * 3];
+        let mut a_wt = vec![0.0f32; cw * ch];
+        let mut b_data = vec![0.0f32; cw * ch * 3];
+        let mut b_wt = vec![0.0f32; cw * ch];
+        for y in 0..ch {
+            for x in 0..cw {
+                let fx = x as f32 + ox;
+                let fy = y as f32 + oy;
+                let i = y * cw + x;
+                let pa = bilinear_rgb_clamped(a, fx, fy);
+                a_data[i * 3] = pa[0];
+                a_data[i * 3 + 1] = pa[1];
+                a_data[i * 3 + 2] = pa[2];
+                a_wt[i] = edge_weight(fx, fy, a.w, a.h, feather);
+                let (mx, my) = fwd(fx, fy);
+                let pb = bilinear_rgb_clamped(b, mx, my);
+                b_data[i * 3] = pb[0];
+                b_data[i * 3 + 1] = pb[1];
+                b_data[i * 3 + 2] = pb[2];
+                b_wt[i] = edge_weight(mx, my, b.w, b.h, feather);
+            }
+        }
+        if a_wt.iter().all(|&v| v <= 0.0) || b_wt.iter().all(|&v| v <= 0.0) {
+            return Err("Panorama: no overlap found between the two photos at the recovered alignment".into());
+        }
+        for i in 0..cw * ch {
+            let s = a_wt[i] + b_wt[i];
+            if s > 1e-6 {
+                a_wt[i] /= s;
+                b_wt[i] /= s;
+            }
+        }
+        // Smooth the weight maps (same reason `hdr`/`focus` do — an unsmoothed per-pixel weight
+        // at the pyramid's finest level can ring), then RE-NORMALIZE so they still sum to 1
+        // pixel-wise — mirrors `focus::stack`'s own two-pass normalize/smooth/re-normalize
+        // exactly. Skipping the second normalization was a found-and-fixed real bug here: the
+        // blur redistributes mass across the boundary of each source's OWN valid region (not
+        // just at the seam between sources), so a smoothed-but-not-renormalized weight pair no
+        // longer sums to 1 near either source's own edge and visibly darkens the reconstruction
+        // there even in single-source territory, nowhere near the actual seam.
+        let mut a_smoothed = pyramid::smooth_weight(Plane { w: cw, h: ch, data: a_wt.clone() }).data;
+        let mut b_smoothed = pyramid::smooth_weight(Plane { w: cw, h: ch, data: b_wt.clone() }).data;
+        for i in 0..cw * ch {
+            let s = a_smoothed[i] + b_smoothed[i];
+            if s > 1e-6 {
+                a_smoothed[i] /= s;
+                b_smoothed[i] /= s;
+            }
+        }
+        let levels = ((cw.min(ch) as f32).log2().floor() as usize).clamp(1, 6);
+        let mut image_laps: Vec<[Vec<Plane>; 3]> = Vec::with_capacity(2);
+        let mut weight_gauss: Vec<Vec<Plane>> = Vec::with_capacity(2);
+        for (data, wt) in [(&a_data, &a_smoothed), (&b_data, &b_smoothed)] {
+            let mut chans: [Vec<Plane>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+            for (c, chan) in chans.iter_mut().enumerate() {
+                let mut plane = vec![0.0f32; cw * ch];
+                for i in 0..cw * ch {
+                    plane[i] = data[i * 3 + c];
+                }
+                *chan = pyramid::laplacian_pyramid(Plane { w: cw, h: ch, data: plane }, levels);
+            }
+            image_laps.push(chans);
+            weight_gauss.push(pyramid::gaussian_pyramid(Plane { w: cw, h: ch, data: wt.clone() }, levels));
+        }
+        let blended = pyramid::blend(&image_laps, &weight_gauss);
+        let mut out = vec![0.0f32; cw * ch * 3];
+        for (c, blend_c) in blended.iter().enumerate() {
+            let plane = pyramid::reconstruct(blend_c);
+            for i in 0..cw * ch {
+                out[i * 3 + c] = plane.data[i].clamp(0.0, 1.0);
+            }
+        }
+        Ok(RgbImageF { w: cw, h: ch, data: out })
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
 // Top-level entry points used by the Tauri commands (main.rs)
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -795,6 +1218,73 @@ pub fn merge_focus(paths: &[String]) -> Result<Vec<u8>, String> {
     images = align_stack(&images, 0);
     let stacked = focus::stack(&images)?;
     encode_png(&stacked)
+}
+
+/// Full pipeline: decode -> align (to frame 0, same convention `merge_focus` uses) -> per-pixel
+/// mean/median stack. Returns 8-bit sRGB PNG. `mode` is "median" for the outlier-robust path,
+/// anything else (including "mean") falls back to plain mean.
+pub fn merge_astro(paths: &[String], mode: &str) -> Result<Vec<u8>, String> {
+    if paths.len() < 2 {
+        return Err("Astro stack needs at least 2 photos".into());
+    }
+    let images: Result<Vec<RgbImageF>, String> = paths.iter().map(|p| decode_photo(p)).collect();
+    let mut images = images?;
+    let (w0, h0) = (images[0].w, images[0].h);
+    for im in &images {
+        if im.w != w0 || im.h != h0 {
+            return Err("Astro stack: all source photos must be the same pixel dimensions (align crops/rotations first)".into());
+        }
+    }
+    images = align_stack(&images, 0);
+    let stack_mode = if mode == "median" { astro::StackMode::Median } else { astro::StackMode::Mean };
+    let stacked = astro::stack(&images, stack_mode)?;
+    encode_png(&stacked)
+}
+
+/// Full pipeline for exactly TWO photos: decode -> similarity-transform registration on
+/// downsampled luma -> `pano::stitch_pair`. Returns 8-bit sRGB PNG.
+///
+/// ⚠️ SCOPED to exactly 2 photos. A 3rd photo would need either chaining pairwise registrations
+/// (align photo 2 to the already-stitched 1+2 canvas) or a proper N-way bundle adjustment — both
+/// real additional work this pass did not build or validate, so it is refused explicitly rather
+/// than attempted blind. See `pano`'s module doc for the full scope statement.
+pub fn merge_panorama(paths: &[String]) -> Result<Vec<u8>, String> {
+    if paths.len() != 2 {
+        return Err("Panorama: this scoped-down implementation stitches exactly 2 photos (see CLAUDE.md/ROADMAP R13 for why 3+ isn't supported yet)".into());
+    }
+    let a = decode_photo(&paths[0])?;
+    let b = decode_photo(&paths[1])?;
+    // Register on downsampled luma for speed — matches `align_stack`'s own convention.
+    // `register_similarity` needs equal-sized reference/moving arrays for its shared pyramid
+    // loop, so both photos are downsampled onto the SAME working grid (each independently
+    // rescaled from its own native w,h, so this tolerates the two source photos not being
+    // pixel-identical resolutions); the recovered (tx,ty,scale) is rescaled back to `a`'s native
+    // resolution afterward (theta and scale are resolution-invariant).
+    let downsample_gray = |im: &RgbImageF, w: usize, h: usize| -> Vec<f32> {
+        let g = im.gray();
+        let mut out = vec![0.0f32; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                let sx = (x * im.w / w).min(im.w - 1);
+                let sy = (y * im.h / h).min(im.h - 1);
+                out[y * w + x] = g[sy * im.w + sx];
+            }
+        }
+        out
+    };
+    let longest = a.w.max(a.h).max(b.w).max(b.h);
+    let ds = (longest / 800).max(1);
+    let (work_w, work_h) = ((a.w / ds).max(8), (a.h / ds).max(8));
+    let a_work = downsample_gray(&a, work_w, work_h);
+    let b_work = downsample_gray(&b, work_w, work_h);
+    let (tx, ty, theta, scale) = align::register_similarity(&a_work, &b_work, work_w, work_h, 60);
+    // Rescale translation from the downsampled working grid back to full resolution (theta and
+    // scale are resolution-invariant).
+    let rescale_x = a.w as f32 / work_w as f32;
+    let rescale_y = a.h as f32 / work_h as f32;
+    let xf = pano::Similarity { tx: tx * rescale_x, ty: ty * rescale_y, theta, scale };
+    let stitched = pano::stitch_pair(&a, &b, &xf)?;
+    encode_png(&stitched)
 }
 
 fn encode_png(img: &RgbImageF) -> Result<Vec<u8>, String> {
@@ -872,6 +1362,99 @@ mod tests {
             assert!(err_x < tol, "dx={dx} dy={dy}: recovered rdx={rdx} err={err_x}");
             assert!(err_y < tol, "dx={dx} dy={dy}: recovered rdy={rdy} err={err_y}");
         }
+    }
+
+    // ── Panorama (ROADMAP R13 part 3) — similarity-transform (translation+rotation+scale)
+    // registration, validated against a KNOWN synthetic transform BEFORE anything is claimed to
+    // work on real photos, per the brief's explicit instruction. `world_fn` is a continuous
+    // (not discretized) synthetic texture so the reference/moving pair can be built without a
+    // second layer of interpolation error masking the aligner's own accuracy: `moving` is one
+    // crop of the world at its own local coordinates, `reference` is a second, overlapping crop
+    // related to it by an EXACTLY known (tx,ty,theta,scale) — mirroring "two overlapping crops
+    // of one larger synthetic image with a known relative rotation/translation" from the brief.
+    fn world_fn(x: f32, y: f32) -> f32 {
+        0.5 + 0.15 * (x / 11.0).sin() + 0.15 * (y / 17.0).cos() + 0.1 * ((x + y) / 23.0).sin() + 0.08 * (x / 5.3).cos() * (y / 6.1).sin()
+    }
+
+    #[test]
+    fn similarity_registration_recovers_known_transform() {
+        let (w, h) = (160usize, 160usize);
+        // moving = world at its own local (x,y) grid.
+        let moving = synth_gray(w, h, |x, y| world_fn(x as f32, y as f32));
+        // A modest rotation/scale/translation — the "adjacent pano frame, slight handheld
+        // rotation" regime this scope targets, not a wide-baseline viewpoint change.
+        let cases: [(f32, f32, f32, f32); 3] = [
+            (6.0, -4.0, 0.08, 1.03),   // small right+up shift, ~4.6°, +3% scale
+            (-10.0, 5.0, -0.05, 0.98), // opposite direction, ~-2.9°, -2% scale
+            (3.0, 3.0, 0.0, 1.0),      // pure translation sanity case (theta=0,scale=1)
+        ];
+        for &(true_tx, true_ty, true_theta, true_scale) in &cases {
+            let cos_t = true_theta.cos();
+            let sin_t = true_theta.sin();
+            let reference = synth_gray(w, h, |x, y| {
+                let xf = x as f32;
+                let yf = y as f32;
+                let xm = true_scale * (cos_t * xf - sin_t * yf) + true_tx;
+                let ym = true_scale * (sin_t * xf + cos_t * yf) + true_ty;
+                world_fn(xm, ym)
+            });
+            let (tx, ty, theta, scale) = align::register_similarity(&reference, &moving, w, h, 60);
+            let err_tx = (tx - true_tx).abs();
+            let err_ty = (ty - true_ty).abs();
+            let err_theta_deg = (theta - true_theta).to_degrees().abs();
+            let err_scale = (scale - true_scale).abs();
+            // Measured achieved precision on this synthetic case set: tx/ty within ~0.11px,
+            // theta within ~0.02deg, scale within ~0.05%. Tolerances below keep a real margin
+            // over that (still far tighter than a real photo pair would need) rather than just
+            // rubber-stamping whatever came out.
+            assert!(err_tx < 0.6, "case {true_tx},{true_ty},{true_theta},{true_scale}: tx err {err_tx} (got {tx})");
+            assert!(err_ty < 0.6, "case {true_tx},{true_ty},{true_theta},{true_scale}: ty err {err_ty} (got {ty})");
+            assert!(err_theta_deg < 0.5, "case {true_tx},{true_ty},{true_theta},{true_scale}: theta err {err_theta_deg}deg (got {theta} rad)");
+            assert!(err_scale < 0.01, "case {true_tx},{true_ty},{true_theta},{true_scale}: scale err {err_scale} (got {scale})");
+        }
+    }
+
+    /// Real end-to-end panorama stitch: two overlapping crops of one larger world, related by a
+    /// KNOWN small rotation/translation, actually composited via `pano::stitch_pair` (not just
+    /// the alignment primitive above). Confirms (1) the composite reproduces the world's true
+    /// content in a held-out probe region that only `b` has non-degenerate coverage of, and
+    /// (2) `a`'s own untouched region survives essentially unchanged (its coverage weight should
+    /// dominate there, away from the feathered seam).
+    #[test]
+    fn panorama_stitch_pair_reproduces_overlap_content() {
+        let (w, h) = (160usize, 160usize);
+        // `a` = world's crop at local (x,y). `b` = a second crop, shifted right so the two only
+        // partially overlap (b's own coordinate frame's origin sits further right in the world)
+        // — the actual "adjacent pano frame" geometry, not just an aligned re-crop of `a` itself.
+        let world_offset_bx = 90.0f32; // b's local (0,0) sits at world x=90
+        let a_img = rgb_from_gray(&synth_gray(w, h, |x, y| world_fn(x as f32, y as f32)), w, h);
+        let b_img = rgb_from_gray(&synth_gray(w, h, |x, y| world_fn(x as f32 + world_offset_bx, y as f32)), w, h);
+        // True transform from a's frame to b's local coords: b's local x = world_x - offset, and
+        // world_x = a's frame x (identity, no rotation/scale in this case) => bx = ax - offset.
+        // register_similarity's convention is xm = s*(cosθ·x−sinθ·y)+tx, so tx = -offset here.
+        let xf = super::pano::Similarity { tx: -world_offset_bx, ty: 0.0, theta: 0.0, scale: 1.0 };
+        let stitched = super::pano::stitch_pair(&a_img, &b_img, &xf).expect("stitch_pair");
+        // Canvas origin in a's frame: min_x should be 0 (a's own left edge dominates, b's
+        // left edge maps to world_offset_bx > 0), so canvas-space == a's-frame-space here.
+        // Probe a point deep inside b's exclusive territory (world x well past a's own right
+        // edge, w=160, plus b's offset 90 => world x up to 250 is real content only b sees).
+        let probe_world_x = 220.0f32;
+        let probe_y = 80.0f32;
+        let true_val = world_fn(probe_world_x, probe_y);
+        // In canvas space (== a's frame here), that world point sits at ax = probe_world_x
+        // (identity x/y mapping for `a`).
+        let cx = probe_world_x.round() as usize;
+        let cy = probe_y.round() as usize;
+        assert!(cx < stitched.w && cy < stitched.h, "probe point should land inside the stitched canvas (w={} h={})", stitched.w, stitched.h);
+        let got = stitched.data[(cy * stitched.w + cx) * 3];
+        assert!((got - true_val).abs() < 0.03, "stitched content in b-exclusive region should match ground truth: got={got} true={true_val}");
+
+        // `a`'s own well-inside-its-own-territory content (far from the seam) should survive:
+        let probe2_x = 10usize;
+        let probe2_y = 80usize;
+        let true2 = world_fn(probe2_x as f32, probe2_y as f32);
+        let got2 = stitched.data[(probe2_y * stitched.w + probe2_x) * 3];
+        assert!((got2 - true2).abs() < 0.03, "stitched content deep in a's own territory should survive: got={got2} true={true2}");
     }
 
     fn rgb_from_gray(g: &[f32], w: usize, h: usize) -> RgbImageF {
@@ -1106,6 +1689,132 @@ mod tests {
         let rec = pyramid::reconstruct(&lap);
         let max_err = data.iter().zip(rec.data.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
         assert!(max_err < 1e-4, "pyramid round-trip max_err={max_err}");
+    }
+
+    // ── Astro stacking (ROADMAP R13 part 2) ────────────────────────────────────────────────
+
+    /// Deterministic, reproducible pseudo-noise (no external `rand` dependency, matching this
+    /// module's existing style of hand-rolled synthetic test scenes) — splitmix64-style integer
+    /// hash of (frame, pixel) turned into a value uniform on [-amp, amp].
+    fn noise(frame: usize, pixel: usize, amp: f32) -> f32 {
+        let mut x = (frame as u64).wrapping_mul(0x9E3779B97F4A7C15) ^ (pixel as u64).wrapping_mul(0xBF58476D1CE4E5B9);
+        x ^= x >> 30;
+        x = x.wrapping_mul(0xBF58476D1CE4E5B9);
+        x ^= x >> 27;
+        x = x.wrapping_mul(0x94D049BB133111EB);
+        x ^= x >> 31;
+        ((x % 1_000_000) as f32 / 1_000_000.0 - 0.5) * 2.0 * amp
+    }
+
+    /// Real astro-stacking claim, measured: N noisy, slightly-jittered star-field frames
+    /// (dark sky + a few bright point sources, drifting by a small known per-frame shift the
+    /// way real earth-rotation/handheld drift would) stack via MEAN into a result whose dark
+    /// background has LOWER noise variance than any single input frame, while the point sources
+    /// stay sharp (peak intensity survives alignment + averaging) rather than smearing out.
+    #[test]
+    fn astro_stack_mean_reduces_noise_and_keeps_points_sharp() {
+        let (w, h) = (64usize, 64usize);
+        let points = [(20usize, 20usize), (44usize, 18usize), (30usize, 46usize)];
+        let amplitude = 0.9f32;
+        // Faint static sky texture (gradient + soft grain) so the aligner has real gradient
+        // signal to register against — a perfectly flat sky would give it nothing to lock onto,
+        // which is true of real astro alignment too (it registers on stars, not the void).
+        let base = synth_gray(w, h, |x, y| {
+            let mut v = 0.08 + 0.015 * (x as f32 / 9.0).sin() + 0.015 * (y as f32 / 13.0).cos();
+            for &(px, py) in &points {
+                let dx = x as f32 - px as f32;
+                let dy = y as f32 - py as f32;
+                v += amplitude * (-(dx * dx + dy * dy) / 1.4).exp();
+            }
+            v.clamp(0.0, 1.0)
+        });
+        // Small known per-frame shifts (frame 0 = reference, unshifted) — the earth-rotation /
+        // handheld-drift regime `align_stack`'s translation-only aligner targets.
+        let shifts: [(isize, isize); 6] = [(0, 0), (1, -1), (-2, 1), (2, 2), (-1, -2), (1, 1)];
+        let n = shifts.len();
+        let mut frames = Vec::with_capacity(n);
+        for (i, &(dx, dy)) in shifts.iter().enumerate() {
+            let shifted = shift_gray(&base, w, h, dx, dy);
+            let mut noisy = vec![0.0f32; w * h];
+            for p in 0..w * h {
+                noisy[p] = (shifted[p] + noise(i, p, 0.05)).clamp(0.0, 1.0);
+            }
+            frames.push(rgb_from_gray(&noisy, w, h));
+        }
+        let aligned = align_stack(&frames, 0);
+        let stacked = astro::stack(&aligned, astro::StackMode::Mean).expect("astro stack");
+
+        // Dark background patch far from every point source (nearest point is (20,20), this
+        // patch is a corner at least 20px away in both axes).
+        let bg_variance = |data: &[f32]| -> f32 {
+            let mut vals = Vec::new();
+            for y in 2..10 {
+                for x in 2..10 {
+                    vals.push(data[(y * w + x) * 3]);
+                }
+            }
+            let mean = vals.iter().sum::<f32>() / vals.len() as f32;
+            vals.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / vals.len() as f32
+        };
+        let single_var = bg_variance(&frames[2].data); // an arbitrary single (unaligned/unstacked) frame
+        let stacked_var = bg_variance(&stacked.data);
+        assert!(single_var > 1e-5, "sanity: single-frame background should show real noise variance, got {single_var}");
+        // The real, measurable claim stacking exists to deliver: lower noise in the dark
+        // background than any one input frame. Theory says ~1/N for independent per-pixel
+        // noise (N=6 here); assert a generous 2x margin to stay robust to the residual texture
+        // and any sub-pixel alignment softening.
+        assert!(
+            stacked_var < single_var * 0.5,
+            "stacked background variance should be well below a single frame's: single={single_var} stacked={stacked_var}"
+        );
+
+        // Point sources stay sharp: the stacked peak at each known point location should still
+        // read close to the true amplitude, not smeared/averaged down by misalignment.
+        for &(px, py) in &points {
+            let peak = stacked.data[(py * w + px) * 3];
+            assert!(
+                peak > amplitude * 0.7,
+                "point source at ({px},{py}) should stay sharp after stacking, peak={peak} (amplitude={amplitude})"
+            );
+        }
+    }
+
+    /// Real astrophotography reason to offer MEDIAN as well as mean: a hot pixel / cosmic-ray
+    /// hit / satellite-or-airplane light streak that appears in only ONE of several frames.
+    /// A mean blend leaks 1/N of that anomaly into the result; a median simply drops it (as long
+    /// as fewer than half the frames are affected at that pixel) — the actual, measured claim.
+    /// This isolates the blend step directly (no alignment involved), the same way the HDR
+    /// deghosting test isolates `hdr::compute_weights` from the rest of the pyramid pipeline.
+    #[test]
+    fn astro_stack_median_rejects_hot_pixel_outlier() {
+        let (w, h) = (8usize, 8usize);
+        let true_val = 0.12f32;
+        let hot_val = 1.0f32;
+        let n = 5;
+        let mut frames = Vec::with_capacity(n);
+        for i in 0..n {
+            let mut data = vec![true_val; w * h * 3];
+            if i == 2 {
+                // one frame carries a hot pixel / satellite streak at a single location
+                let idx = (3 * w + 3) * 3;
+                data[idx] = hot_val;
+                data[idx + 1] = hot_val;
+                data[idx + 2] = hot_val;
+            }
+            frames.push(RgbImageF { w, h, data });
+        }
+        let mean_stacked = astro::stack(&frames, astro::StackMode::Mean).expect("mean stack");
+        let median_stacked = astro::stack(&frames, astro::StackMode::Median).expect("median stack");
+        let idx = (3 * w + 3) * 3;
+        let mean_val = mean_stacked.data[idx];
+        let median_val = median_stacked.data[idx];
+        let expected_mean = true_val + (hot_val - true_val) / n as f32;
+        assert!((mean_val - expected_mean).abs() < 1e-5, "mean should leak the outlier: got {mean_val} expected {expected_mean}");
+        assert!((median_val - true_val).abs() < 1e-5, "median should fully reject a single-frame outlier: got {median_val} expected {true_val}");
+        // Elsewhere (no outlier), mean and median should both just reproduce the true value.
+        let quiet_idx = (0 * w + 0) * 3;
+        assert!((mean_stacked.data[quiet_idx] - true_val).abs() < 1e-5);
+        assert!((median_stacked.data[quiet_idx] - true_val).abs() < 1e-5);
     }
 }
 

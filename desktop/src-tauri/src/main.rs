@@ -584,6 +584,40 @@ async fn merge_focus_photos(paths: Vec<String>) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn merge_astro_photos(paths: Vec<String>, mode: String) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let mode2 = mode.clone();
+    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_astro(&paths2, &mode2))
+        .await
+        .map_err(|e| format!("merge_astro_photos: join error: {e}"))??;
+    let suffix = if mode == "median" { "-astro-median" } else { "-astro-mean" };
+    let out_path = merge_output_path(&paths[0], suffix);
+    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    Ok(out_path)
+}
+
+#[tauri::command]
+async fn merge_panorama_photos(paths: Vec<String>) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_panorama(&paths2))
+        .await
+        .map_err(|e| format!("merge_panorama_photos: join error: {e}"))??;
+    let out_path = merge_output_path(&paths[0], "-panorama");
+    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    Ok(out_path)
+}
+
+// ROADMAP R13 part 1 (collage) — the compositing itself runs entirely client-side in
+// chromasmith-22.html's/library-ui.js's own canvas (no alignment or heavy pixel math needed for
+// a fixed-template layout), so the only Rust piece it needs is the same collision-safe output
+// path convention `merge_output_path` already gives HDR/focus/astro merges; `write_file_bytes`
+// (already registered below) then writes the composited PNG the JS side builds.
+#[tauri::command]
+fn collage_output_path(first_source: String) -> String {
+    merge_output_path(&first_source, "-collage")
+}
+
+#[tauri::command]
 fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let mode = json["mode"].as_str().unwrap_or("linear16");
@@ -1798,6 +1832,9 @@ fn main() {
             decode_image_v1,
             merge_hdr_photos,
             merge_focus_photos,
+            merge_astro_photos,
+            merge_panorama_photos,
+            collage_output_path,
             denoise_raw_high,
             cancel_denoise_high,
             lens_profile_available,

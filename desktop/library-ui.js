@@ -3194,6 +3194,138 @@
     files.okPaths = okPaths;
     return files;
   }
+
+  // ── ROADMAP R13 part 2 (astro stacking) — a tiny modal so the user picks Mean vs Median,
+  // same <dialog> pattern as offlineQueueConflictModal below. Mean is the default (plain noise
+  // averaging); Median is offered alongside it because it's cheap to add given merge.rs already
+  // computes both from the same aligned stack, and it's the real astrophotography choice when a
+  // hot pixel, cosmic-ray hit, or a satellite/airplane light streak could contaminate one frame.
+  function astroStackModeModal() {
+    return new Promise((res) => {
+      let dlg = document.getElementById('lib-astro-modal');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'lib-astro-modal';
+        dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:360px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+        dlg.innerHTML = '<div style="font-size:13px;line-height:1.5;margin-bottom:14px">Stack mode:<br>'
+          + '<span style="opacity:.7;font-size:11px">Mean — plain noise-reducing average.<br>'
+          + 'Median — also rejects hot pixels, cosmic-ray hits and satellite/airplane trails that hit only one frame.</span></div>'
+          + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+          + '<button type="button" id="lib-astro-cancel" class="btn bgh">Cancel</button>'
+          + '<button type="button" id="lib-astro-median" class="btn bgh">Median</button>'
+          + '<button type="button" id="lib-astro-mean" class="btn bpri">Mean</button></div>';
+        document.body.appendChild(dlg);
+      }
+      const finish = (v) => { dlg.close(); res(v); };
+      dlg.querySelector('#lib-astro-mean').onclick = () => finish('mean');
+      dlg.querySelector('#lib-astro-median').onclick = () => finish('median');
+      dlg.querySelector('#lib-astro-cancel').onclick = () => finish(null);
+      dlg.onkeydown = (e) => { if (e.key === 'Escape') finish(null); };
+      dlg.showModal();
+    });
+  }
+
+  // ── ROADMAP R13 part 1 (collage) — a small FIXED set of grid templates, not a freeform
+  // drag-and-arrange layout: R13 is the roadmap's lowest-priority "merge family" item, and a
+  // full freeform layout editor (drag/resize/reorder tiles) is a materially bigger UI lift than
+  // this item's place in the batch justifies. Cells are normalized [x,y,w,h] rects in a unit
+  // square; `aspect` is the OUTPUT canvas's width/height. Each template is offered only when the
+  // selection count matches its cell count exactly, plus an "Auto grid" that works for any n>=2.
+  const COLLAGE_TEMPLATES = [
+    { id: '2-h', label: '2-up (side by side)', n: 2, aspect: 2, cells: [[0, 0, 0.5, 1], [0.5, 0, 0.5, 1]] },
+    { id: '2-v', label: '2-up (stacked)', n: 2, aspect: 0.6667, cells: [[0, 0, 1, 0.5], [0, 0.5, 1, 0.5]] },
+    { id: '3-h', label: '3-up (row)', n: 3, aspect: 2.4, cells: [[0, 0, 1 / 3, 1], [1 / 3, 0, 1 / 3, 1], [2 / 3, 0, 1 / 3, 1]] },
+    { id: '3-big', label: '3-up (1 large + 2)', n: 3, aspect: 1.3333, cells: [[0, 0, 0.6667, 1], [0.6667, 0, 0.3333, 0.5], [0.6667, 0.5, 0.3333, 0.5]] },
+    { id: '4-grid', label: '4-up (2x2 grid)', n: 4, aspect: 1, cells: [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]] },
+  ];
+  function autoGridTemplate(n) {
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n / cols);
+    const cells = [];
+    for (let i = 0; i < n; i++) {
+      const cx = i % cols, cy = Math.floor(i / cols);
+      cells.push([cx / cols, cy / rows, 1 / cols, 1 / rows]);
+    }
+    return { id: 'auto', label: `Auto grid (${cols}x${rows})`, n, aspect: (cols / rows) || 1, cells };
+  }
+  function collageTemplateModal(n) {
+    return new Promise((res) => {
+      let dlg = document.getElementById('lib-collage-modal');
+      if (dlg) dlg.remove(); // rebuild every time — the offered template list depends on `n`
+      dlg = document.createElement('dialog');
+      dlg.id = 'lib-collage-modal';
+      dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:360px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      const exact = COLLAGE_TEMPLATES.filter((t) => t.n === n);
+      const templates = [...exact, autoGridTemplate(n)];
+      const btns = templates.map((t, i) => `<button type="button" data-i="${i}" class="btn bgh" style="display:block;width:100%;text-align:left;margin-bottom:6px">${t.label}</button>`).join('');
+      dlg.innerHTML = `<div style="font-size:13px;margin-bottom:10px">Collage layout for ${n} photos:</div>`
+        + `<div>${btns}</div>`
+        + '<div style="display:flex;justify-content:flex-end;margin-top:8px"><button type="button" id="lib-collage-cancel" class="btn bgh">Cancel</button></div>';
+      document.body.appendChild(dlg);
+      const finish = (v) => { dlg.close(); dlg.remove(); res(v); };
+      dlg.querySelectorAll('button[data-i]').forEach((b) => { b.onclick = () => finish(templates[Number(b.dataset.i)]); });
+      dlg.querySelector('#lib-collage-cancel').onclick = () => finish(null);
+      dlg.onkeydown = (e) => { if (e.key === 'Escape') finish(null); };
+      dlg.showModal();
+    });
+  }
+  // Bytes -> base64 in chunks (a naive per-char `+=` loop over a multi-MB PNG is slow; a single
+  // `String.fromCharCode(...bytes)` spread can blow the call stack on a large array).
+  function bytesToBase64(bytes) {
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+    }
+    return btoa(bin);
+  }
+  // Composites `paths` onto one canvas per `tpl` (cover-fit crop into each cell, matching the
+  // familiar "collage app" behavior rather than letterboxing), writes the result as a plain PNG
+  // next to the first source photo via the SAME `write_file_bytes` command exports already use,
+  // at the SAME collision-safe naming convention `merge_output_path` gives HDR/focus/astro
+  // outputs (`collage_output_path` on the Rust side just calls it with a "-collage" suffix). No
+  // alignment, no Rust pixel math — this is pure canvas compositing of already-decoded photos.
+  async function createCollage(paths) {
+    const n = paths.length;
+    const tpl = await collageTemplateModal(n);
+    if (!tpl) return;
+    toast(`Building collage from ${n} photos…`);
+    try {
+      const files = await readPathsAsFiles(paths);
+      if (!files.length) { toast('Could not read any of the selected photos', 'err'); return; }
+      const okPaths = files.okPaths || paths;
+      const bitmaps = await Promise.all(files.map((f) => createImageBitmap(f)));
+      const CW = 3200;
+      const CH = Math.round(CW / tpl.aspect);
+      const canvas = document.createElement('canvas');
+      canvas.width = CW; canvas.height = CH;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, CW, CH);
+      const gap = Math.round(CW * 0.006);
+      tpl.cells.forEach((cell, i) => {
+        const bm = bitmaps[i % bitmaps.length];
+        const [cx, cy, cw, ch] = cell;
+        const px = Math.round(cx * CW) + gap / 2;
+        const py = Math.round(cy * CH) + gap / 2;
+        const pw = Math.max(1, Math.round(cw * CW) - gap);
+        const ph = Math.max(1, Math.round(ch * CH) - gap);
+        // Cover-fit: scale up to fill the cell, crop the overflow, centered.
+        const scale = Math.max(pw / bm.width, ph / bm.height);
+        const sw = pw / scale, sh = ph / scale;
+        const sx = (bm.width - sw) / 2, sy = (bm.height - sh) / 2;
+        ctx.drawImage(bm, sx, sy, sw, sh, px, py, pw, ph);
+      });
+      const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('canvas.toBlob returned null');
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const outPath = await invoke('collage_output_path', { firstSource: okPaths[0] });
+      await invoke('write_file_bytes', { path: outPath, dataB64: bytesToBase64(bytes) });
+      toast('Collage saved — added to library');
+      refreshView();
+      openInEditor(outPath);
+    } catch (e) { toast(humanizeErr('create collage', e), 'err'); }
+  }
+
   // Shared batch-open: reads paths, loads them into the editor, and registers each in Recents
   // (touch_recent) — batch opens used to skip this entirely, so an externally-opened or
   // multi-selected batch never showed up in the Recents smart collection.
@@ -3303,10 +3435,41 @@
         openInEditor(outPath);
       } catch (e) { toast(humanizeErr('focus stack', e), 'err'); }
     });
+    // ── Astro stacking (ROADMAP R13 part 2) — same batch-action shape as HDR/focus above,
+    // reusing merge.rs's translation-only aligner + a new per-pixel mean/median blend.
+    const mergeAstroItem = item('Astro stack…', async () => {
+      const mode = await astroStackModeModal();
+      if (!mode) return;
+      toast(`Stacking ${n} photos (${mode})…`);
+      try {
+        const outPath = await invoke('merge_astro_photos', { paths, mode });
+        toast('Astro stack saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('astro stack', e), 'err'); }
+    });
+    // ── Panorama (ROADMAP R13 part 3) — SCOPED to exactly 2 photos (see merge.rs's `pano`
+    // module doc for why: a real similarity-transform aligner, validated on a known synthetic
+    // transform, but not full feature-matching stitching — 3+ photos would need pairwise
+    // chaining this pass didn't build). Only enabled at exactly 2 selected, not just >=2.
+    const mergePanoItem = item('Stitch panorama (2 photos)…', async () => {
+      toast('Stitching panorama…');
+      try {
+        const outPath = await invoke('merge_panorama_photos', { paths });
+        toast('Panorama saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('stitch panorama', e), 'err'); }
+    });
+    // ── Collage (ROADMAP R13 part 1) — pure client-side canvas compositing, no alignment.
+    const collageItem = item('Create collage…', () => createCollage(paths));
     if (n < 2) {
       mergeHdrItem.style.opacity = '.4'; mergeHdrItem.style.pointerEvents = 'none';
       mergeFocusItem.style.opacity = '.4'; mergeFocusItem.style.pointerEvents = 'none';
+      mergeAstroItem.style.opacity = '.4'; mergeAstroItem.style.pointerEvents = 'none';
+      collageItem.style.opacity = '.4'; collageItem.style.pointerEvents = 'none';
     }
+    if (n !== 2) { mergePanoItem.style.opacity = '.4'; mergePanoItem.style.pointerEvents = 'none'; }
     sep();
     item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
       const files = await readPathsAsFiles(paths);
