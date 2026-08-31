@@ -148,6 +148,36 @@ library); root cause was `CatalogState.conn`'s single `Mutex<Connection>` in
 Immich), and the three-item split (N3.1 root-cause fix, N3.2 unified jobs panel, N3.3 fallback
 modal) all still apply as background/design rationale for anything that touches this area next.
 
+⚠️ **N3.1's root-cause analysis was INCOMPLETE — corrected here rather than silently re-filed,
+same as R9's own correction above.** N3.1 fixed lock contention (the writer/reader `Mutex<Connection>`
+split) but missed a more fundamental issue: in Tauri 2, a plain sync `#[tauri::command]` runs ON
+the thread that dispatches it, not on a worker pool — `async fn` is required, with the actual
+blocking body wrapped in `tauri::async_runtime::spawn_blocking`, to genuinely get it off that
+thread (confirmed via Tauri 2's own IPC/command documentation, not assumed). `grep -c "async fn"
+desktop/src-tauri/src/catalog.rs` returned **0** before this fix — every one of `catalog_scan`,
+`catalog_hash`, `catalog_faces_scan`, `catalog_embed_faces`, `catalog_cluster_faces`,
+`catalog_clip_embed`, `catalog_clip_search`, `catalog_verify`, `catalog_thumbnails`,
+`catalog_focus`, `catalog_rebuild`, `catalog_stack` (catalog.rs) and `ingest_copy` (ingest.rs, the
+actual card-to-disk file copy) was still a blocking call regardless of N3.1's Mutex split. All
+now follow the `async fn` + `spawn_blocking` shape `ingest.rs::scan_card` had already established
+(that one command was fixed earlier and got it right — the miss was not generalizing the same
+fix to its neighbors). `tauri::State<'_,T>` isn't `'static` and can't move into `spawn_blocking`;
+the fix instead takes `tauri::AppHandle` (already `Send + 'static`) and looks up
+`app.state::<CatalogState>()` INSIDE the blocking closure. Lesson for next time this area is
+touched: "the Mutex is split" and "the command is async" are two separate claims — verify both,
+not just the one that was the visible symptom.
+
+**Not fully closed — checked, not fixed, honestly left open:** `main.rs`'s single-photo AI/RAW
+commands (`sam_encode`/`sam2_encode`/`scrfd_detect`/`faceparse_run`/`depth_run`/`decode_raw_v2`/
+`denoise_raw_high`) are ALSO plain sync `#[tauri::command]`s doing real per-photo model
+inference/demosaic work — the same class of bug, just triggered by one interactive action (open a
+photo, run a mask tool) rather than a multi-hour library-wide scan. Left unconverted this pass:
+each already has its own model-session `Mutex` (`sam.rs`/`depth.rs`/`faceparse.rs` — see N3.1's own
+note above) so they don't block EACH OTHER, and converting seven more commands without dedicated
+test time for each risked introducing a real regression under this same brief's time budget. Flagged
+here rather than silently left off the map — worth its own pass if a single-photo-load stall is ever
+reported the way the library-scan one was.
+
 ### Format widening
 
 Pass 1 shipped 2026-08-28 (`b193b38`): format registry consolidated, RAW widened 8→32 formats,
