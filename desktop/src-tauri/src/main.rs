@@ -1758,6 +1758,8 @@ fn main() {
             library::sidecar_delete_version,
             library::set_sidecar,
             library::set_keywords,
+            library::reset_edit,
+            library::undo_reset_edit,
             library::get_export_history,
             library::append_export_history,
             library::duplicate_file,

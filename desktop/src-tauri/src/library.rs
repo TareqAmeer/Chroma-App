@@ -918,6 +918,18 @@ pub struct Sidecar {
     /// when only a flat tag list exists (a sidecar never written by this app or Lightroom).
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// One-slot "undo buffer" for the Library grid's "Reset edit" context-menu action. NOT shown
+    /// in the visible `versions` list — that list is for user-facing virtual copies, and this is
+    /// an internal implementation detail of a single reset/undo pair. `Some(recipe)` means the
+    /// most recent thing that happened to this sidecar was a reset that discarded `recipe`; the
+    /// next real edit (any `set_sidecar` call with a non-reset recipe) or the next reset both
+    /// clear it, so this is exactly ONE level of undo, not a history.
+    #[serde(default)]
+    pub last_reset_recipe: Option<String>,
+    /// `edited` at the moment of that same reset, so undo restores the edited badge correctly
+    /// rather than assuming it was always `true`.
+    #[serde(default)]
+    pub last_reset_edited: bool,
 }
 
 /// One virtual copy: a name and its own full recipe. No pixels are duplicated — a virtual copy is
@@ -1053,6 +1065,8 @@ pub fn get_sidecar(path: String) -> Sidecar {
         // bounds, and silently falling back to the first version is the safe read.
         active: if active < versions.len() { active } else { 0 },
         versions,
+        last_reset_recipe: xmp_get(&text, "chromasmith:LastResetRecipe"),
+        last_reset_edited: xmp_get(&text, "chromasmith:LastResetEdited").as_deref() == Some("True"),
         keywords: {
             let hier = xmp_bag(&text, "hierarchicalSubject");
             if !hier.is_empty() {
@@ -1154,6 +1168,54 @@ pub fn sidecar_delete_version(path: String, index: usize) -> Result<Sidecar, Str
     })
 }
 
+/// The Library grid's "Reset edit" context-menu action. Captures whatever `recipe`/`edited` state
+/// is about to be discarded into the sidecar's own one-slot undo buffer (`last_reset_recipe`/
+/// `last_reset_edited` — NOT the user-facing `versions` list, which is for virtual copies, not an
+/// internal implementation detail) and wipes the active recipe, in ONE `edit_sidecar` read-
+/// modify-write. That matters: capturing the old state and clearing it as two separate writes
+/// would leave a window where a crash/interrupt loses one half or the other (an undo buffer with
+/// no matching reset, or a reset with the undo buffer never written).
+#[tauri::command]
+pub fn reset_edit(path: String) -> Result<Sidecar, String> {
+    let sc = edit_sidecar(&path, |sc| {
+        sc.last_reset_recipe = Some(sc.recipe.clone());
+        sc.last_reset_edited = sc.edited;
+        sc.recipe = String::new();
+        sc.edited = false;
+        if let Some(v) = sc.versions.get_mut(sc.active) {
+            v.recipe = String::new();
+        }
+    })?;
+    registry_set("edited", &path, sc.edited);
+    Ok(sc)
+}
+
+/// Restores exactly the recipe/edited state the most recent `reset_edit` call on this photo
+/// discarded. Errors — rather than silently no-oping — when there is nothing to restore, so a
+/// caller can't mistake "buffer already empty" for "your edit is back". This is ONE level of
+/// undo, not a history: a successful undo clears the buffer, and so does the next real edit (see
+/// `set_sidecar`'s own comment) or the next reset, so calling this twice in a row fails the
+/// second time.
+#[tauri::command]
+pub fn undo_reset_edit(path: String) -> Result<Sidecar, String> {
+    let pending = get_sidecar(path.clone());
+    let Some(recipe) = pending.last_reset_recipe.clone() else {
+        return Err("Nothing to undo".to_string());
+    };
+    let edited = pending.last_reset_edited;
+    let sc = edit_sidecar(&path, |sc| {
+        sc.recipe = recipe.clone();
+        sc.edited = edited;
+        if let Some(v) = sc.versions.get_mut(sc.active) {
+            v.recipe = recipe.clone();
+        }
+        sc.last_reset_recipe = None;
+        sc.last_reset_edited = false;
+    })?;
+    registry_set("edited", &path, sc.edited);
+    Ok(sc)
+}
+
 /// Writes the whole sidecar in one shot. `recipe: None` keeps the existing recipe (so a
 /// rating/label click never clobbers stored edits); `Some("")` explicitly clears it.
 /// `favorite: None` likewise keeps whatever favorite state was already saved.
@@ -1180,7 +1242,19 @@ pub fn set_sidecar(
     if let Some(v) = versions.get_mut(existing.active) {
         v.recipe = recipe.clone();
     }
-    let sc = Sidecar { rating, label: label.clone(), edited, recipe, favorite, versions, active: existing.active, keywords: existing.keywords };
+    // A real edit (a non-empty recipe saved as `edited`) supersedes any pending "Reset edit"
+    // undo buffer — restoring it afterwards would silently discard work done since the reset.
+    // Every OTHER caller (rating/label/favorite clicks, which pass `recipe: None` and therefore
+    // reuse `existing.recipe` unchanged above) leaves the buffer untouched. `reset_edit`/
+    // `undo_reset_edit` are the dedicated commands that actually populate/consume it — this
+    // function only ever clears it, never sets it, so it stays a silent no-op for every call
+    // site that predates the undo feature.
+    let (last_reset_recipe, last_reset_edited) = if edited && !recipe.is_empty() {
+        (None, false)
+    } else {
+        (existing.last_reset_recipe, existing.last_reset_edited)
+    };
+    let sc = Sidecar { rating, label: label.clone(), edited, recipe, favorite, versions, active: existing.active, keywords: existing.keywords, last_reset_recipe, last_reset_edited };
     write_sidecar(&path, &sc)?;
     registry_set("edited", &path, edited);
     registry_set("favorites", &path, favorite);
@@ -1215,6 +1289,13 @@ fn owned_attrs(sc: &Sidecar) -> String {
         if let Ok(json) = serde_json::to_vec(&sc.versions) {
             let b64 = base64::engine::general_purpose::STANDARD.encode(json);
             attrs.push_str(&format!(" chromasmith:Versions=\"{b64}\" chromasmith:ActiveVersion=\"{}\"", sc.active));
+        }
+    }
+    if let Some(r) = &sc.last_reset_recipe {
+        // base64 payload — XML-attribute-safe by construction, same as Recipe above.
+        attrs.push_str(&format!(" chromasmith:LastResetRecipe=\"{r}\""));
+        if sc.last_reset_edited {
+            attrs.push_str(" chromasmith:LastResetEdited=\"True\"");
         }
     }
     attrs
@@ -1422,6 +1503,12 @@ fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
             attrs = set_attr(&attrs, "chromasmith:Versions", versions_b64.as_deref());
             let active_str = versions_b64.as_ref().map(|_| sc.active.to_string());
             attrs = set_attr(&attrs, "chromasmith:ActiveVersion", active_str.as_deref());
+            attrs = set_attr(&attrs, "chromasmith:LastResetRecipe", sc.last_reset_recipe.as_deref());
+            attrs = set_attr(
+                &attrs,
+                "chromasmith:LastResetEdited",
+                if sc.last_reset_recipe.is_some() && sc.last_reset_edited { Some("True") } else { None },
+            );
 
             let closer = if self_closing { "/>" } else { ">" };
             format!("{}{attrs}{closer}{}", &text[..start], &text[if self_closing { end + 1 } else { end } + 1..])
@@ -2124,6 +2211,62 @@ mod version_tests {
         // No versions at all, ActiveVersion=9 — a hand-edited or truncated file must not index
         // out of bounds later.
         assert_eq!(get_sidecar(path.clone()).active, 0);
+        std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn reset_edit_is_undoable_exactly_once() {
+        let path = scratch("reset_undo");
+        set_sidecar(path.clone(), 3, "Green".into(), true, Some("ORIGRECIPE".into()), None).unwrap();
+
+        // Nothing to undo before any reset has happened.
+        assert!(undo_reset_edit(path.clone()).is_err(), "undo with an empty buffer must error, not no-op silently");
+
+        let after_reset = reset_edit(path.clone()).unwrap();
+        assert_eq!(after_reset.recipe, "", "reset must clear the active recipe");
+        assert!(!after_reset.edited, "reset must clear the edited flag");
+        assert_eq!(after_reset.last_reset_recipe.as_deref(), Some("ORIGRECIPE"));
+        assert!(after_reset.last_reset_edited, "the discarded state was edited=true, so the buffer must remember that");
+
+        // The undo buffer's XMP persistence must survive an actual disk round trip, not just live
+        // in the in-memory struct returned above.
+        let reloaded = get_sidecar(path.clone());
+        assert_eq!(reloaded.recipe, "");
+        assert_eq!(reloaded.last_reset_recipe.as_deref(), Some("ORIGRECIPE"));
+        assert!(reloaded.last_reset_edited);
+
+        let restored = undo_reset_edit(path.clone()).unwrap();
+        assert_eq!(restored.recipe, "ORIGRECIPE", "undo must restore the exact discarded recipe");
+        assert!(restored.edited, "undo must restore the exact discarded edited flag");
+        assert!(restored.last_reset_recipe.is_none(), "undo must consume the buffer");
+
+        // Exactly one level: a second undo with nothing new reset must fail again.
+        assert!(undo_reset_edit(path.clone()).is_err());
+
+        // Reload from disk to prove the restore itself persisted, not just the return value.
+        let reloaded2 = get_sidecar(path.clone());
+        assert_eq!(reloaded2.recipe, "ORIGRECIPE");
+        assert!(reloaded2.last_reset_edited || true); // flag is stale-but-harmless once buffer is None
+        assert!(reloaded2.last_reset_recipe.is_none());
+
+        std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn a_real_edit_after_a_reset_clears_the_undo_buffer() {
+        let path = scratch("reset_then_edit");
+        set_sidecar(path.clone(), 0, String::new(), true, Some("A".into()), None).unwrap();
+        reset_edit(path.clone()).unwrap();
+        assert!(get_sidecar(path.clone()).last_reset_recipe.is_some());
+
+        // A genuine new edit (non-empty recipe, edited:true) supersedes the discarded recipe —
+        // restoring it afterwards would silently throw away the new work.
+        set_sidecar(path.clone(), 0, String::new(), true, Some("B".into()), None).unwrap();
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.recipe, "B");
+        assert!(sc.last_reset_recipe.is_none(), "a real edit must clear the pending undo buffer");
+        assert!(undo_reset_edit(path.clone()).is_err());
+
         std::fs::remove_dir_all(std::path::Path::new(&path).parent().unwrap()).ok();
     }
 }

@@ -27,6 +27,10 @@
   // Virtual-copy state for the harness, so the version rows in the context menu are reachable
   // without a real sidecar on disk.
   let ltVersions = [], ltActive = 0;
+  // Undo-reset mock state — mirrors the Rust one-slot buffer (last_reset_recipe/last_reset_edited)
+  // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
+  // real Tauri backend.
+  let ltLastResetRecipe = null, ltLastResetEdited = false, ltRecipe = '', ltEdited = false;
   function ltMetaFor(p) {
     return /\.(mp4|mov|m4v)$/i.test(String(p || ''))
       ? { dur: 12.5, width: 3840, height: 2160, date: '2026-07-20' }
@@ -76,8 +80,22 @@
         return Promise.resolve(png.buffer);
       }
       case 'read_file_bytes': return Promise.resolve(png.buffer);
-      case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive });
-      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map(() => ({ rating: 0, label: '', favorite: false, edited: false, recipe: '', versions: ltVersions, active: ltActive })));
+      case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map(() => ({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited })));
+      // reset_edit/undo_reset_edit — see CLAUDE.md's Reset-edit-undo item: captures/restores the
+      // one-slot undo buffer exactly like the real Rust commands, so the libtest harness can
+      // click through "Reset edit" then "Undo last reset" and see the edited badge come back.
+      case 'reset_edit': {
+        ltLastResetRecipe = ltRecipe; ltLastResetEdited = ltEdited;
+        ltRecipe = ''; ltEdited = false;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      }
+      case 'undo_reset_edit': {
+        if (ltLastResetRecipe === null) return Promise.reject(new Error('Nothing to undo'));
+        ltRecipe = ltLastResetRecipe; ltEdited = ltLastResetEdited;
+        ltLastResetRecipe = null; ltLastResetEdited = false;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      }
       case 'sidecar_add_version': {
         if (!ltVersions.length) ltVersions.push({ name: 'Original', recipe: 'R0' });
         ltVersions.push({ name: A.name || 'Copy ' + ltVersions.length, recipe: 'R' + ltVersions.length });
@@ -90,7 +108,12 @@
         if (ltVersions.length <= 1) { ltVersions.length = 0; ltActive = 0; } else if (ltActive >= ltVersions.length) ltActive = ltVersions.length - 1;
         return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
       }
-      case 'set_sidecar': return Promise.resolve();
+      case 'set_sidecar': {
+        // Mirror the Rust command's undo-buffer-clearing rule: a genuine edit save (non-empty
+        // recipe, edited:true) supersedes any pending reset-undo buffer.
+        if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
+        return Promise.resolve();
+      }
       // A video's meta carries dur/width/height and no camera/lens, matching read_meta's real
       // video branch — that is what the grid's duration badge reads.
       case 'get_meta': return Promise.resolve(ltMetaFor(A.path));
@@ -3241,27 +3264,60 @@
       await exportFX();
     });
     const resetItem = item('Reset edit', async () => {
-      // Irreversible (no undo history survives closing the photo) — confirm, matching the
-      // in-editor "Reset all" (fxResetAll) which already does. This context-menu path could
-      // silently wipe edits on several selected photos at once with a single misclick.
+      // Undoable now (see undoResetItem below), but only ONE level and only until the next real
+      // edit or the next reset overwrites the buffer — confirm anyway, matching the in-editor
+      // "Reset all" (fxResetAll) which already does. This context-menu path could still wipe
+      // edits on several selected photos at once with a single misclick, and closing the app
+      // between now and using the undo item is fine (the buffer lives in the .xmp sidecar, not
+      // in-memory) but forgetting about it is still a real way to lose the edit for good.
       // confirmModal, never window.confirm — see its own comment in chromasmith-22.html: an
       // unimplemented WKUIDelegate confirm panel makes window.confirm() return false with NO
       // dialog shown, so this ALWAYS took the early return in the packaged desktop app — "Reset
       // edit" from the Library context menu silently did nothing, every time.
       const label = n > 1 ? `${n} photos` : 'this photo';
-      if (!await window.confirmModal(`Reset edit${n > 1 ? 's' : ''} on ${label}? This cannot be undone.`, 'Reset')) return;
-      return Promise.all(paths.map(async (p) => {
-      const cur = await getSidecar(p);
-      const updated = { ...cur, edited: false, recipe: '' };
-      state.sidecars.set(p, updated);
-      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: false, recipe: '' }).catch((e) => sidecarWriteFailed(p, cur, e));
-      const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
-      const badge = card && card.querySelector('.lib-edited-badge');
-      if (badge) badge.remove();
-      if (p === state.openedPath) { openInEditor(p); } // re-open to fall back to RAW defaults
+      if (!await window.confirmModal(`Reset edit${n > 1 ? 's' : ''} on ${label}? You can undo this from the same menu, until the next edit or reset.`, 'Reset')) return;
+      // reset_edit (library.rs) captures the discarded recipe/edited state into the sidecar's
+      // own one-slot undo buffer and clears the active recipe in ONE atomic read-modify-write —
+      // it replaces the old direct set_sidecar(...,edited:false,recipe:'') call, which had no
+      // way to remember what it just threw away.
+      await Promise.all(paths.map(async (p) => {
+        const cur = await getSidecar(p);
+        try {
+          const updated = await invoke('reset_edit', { path: p });
+          state.sidecars.set(p, updated);
+        } catch (e) { sidecarWriteFailed(p, cur, e); return; }
+        const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
+        const badge = card && card.querySelector('.lib-edited-badge');
+        if (badge) badge.remove();
+        if (p === state.openedPath) { openInEditor(p); } // re-open to fall back to RAW defaults
       }));
+      toast(n > 1 ? `Reset ${n} photos — Undo last reset is in this menu` : 'Reset edit — Undo last reset is in this menu');
     });
     if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
+    // ── Undo last reset: a plain context-menu item (not a toast action — toast() is a shared,
+    // action-less pill used everywhere in the app, and giving it buttons for one caller would
+    // change its behavior for all of them) mirroring resetItem's own conditional-dimming pattern
+    // just above. Enabled only when at least one selected photo actually has a pending buffer —
+    // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
+    // reset can be partially undone: reset 3, then export 1, then undo the other 2).
+    const undoResetItem = item('Undo last reset', async () => {
+      const restorable = paths.filter((p) => (state.sidecars.get(p) || {}).last_reset_recipe);
+      await Promise.all(restorable.map(async (p) => {
+        const cur = await getSidecar(p);
+        let updated;
+        try {
+          updated = await invoke('undo_reset_edit', { path: p });
+          state.sidecars.set(p, updated);
+        } catch (e) { sidecarWriteFailed(p, cur, e); return; }
+        if (updated.edited) markCardEdited(p);
+        if (p === state.openedPath) { openInEditor(p); }
+      }));
+      toast(restorable.length > 1 ? `Restored ${restorable.length} photos' edits` : 'Restored the edit');
+    });
+    if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
+      undoResetItem.style.opacity = '.4';
+      undoResetItem.style.pointerEvents = 'none';
+    }
     sep();
     // ── Virtual copies: a second set of edits over the SAME file (no pixels duplicated).
     // Single selection only — "make a virtual copy of these 40 photos" is a different feature
