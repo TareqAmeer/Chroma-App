@@ -1774,25 +1774,40 @@ pub fn sidecar_run(
     Ok(result)
 }
 
+// ⚠️ These catalog_* commands are the ones that actually walk/hash/embed/cluster a whole
+// library, so they are the ones that must never run on Tauri's main/IPC thread. In Tauri 2 a
+// plain sync `#[tauri::command]` is invoked ON the calling thread, not dispatched to a worker
+// pool automatically (that was N3.1's incomplete root-cause read — it fixed lock contention via
+// the conn/read_conn Mutex split but left every one of these commands genuinely blocking).
+// `async fn` + `tauri::async_runtime::spawn_blocking` moves the actual work onto Tauri's blocking
+// pool, matching the pattern `ingest.rs::scan_card` already established (see its doc comment).
+// The `app.state::<CatalogState>()` lookup happens INSIDE the closure — `tauri::State<'_,T>`
+// itself isn't `'static` and can't be moved across the spawn_blocking boundary, but `AppHandle`
+// is `Send + Clone + 'static` and can hand back the same managed state from any thread.
 #[tauri::command]
-pub fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>, state: tauri::State<CatalogState>) -> Result<ScanResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
-    let result = scan_run(&conn, volume_id, &mut emit, &state.cancel)?;
-    // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
-    // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
-    // catalog, with no extra round trips from JS.
-    //
-    // ⚠️ Content hashing (phase E, below) is deliberately NOT chained here. Reading an EXIF
-    // header or a small XMP file is cheap; hashing a whole RAW or video is a full-file read —
-    // chaining it into the scan that fires on every ordinary folder-open would make routine
-    // browsing noticeably slower on a large archive. It runs as its own explicit/background
-    // pass (catalog_hash) instead.
-    metadata_run(&conn, &mut emit, &state.cancel)?;
-    sidecar_run(&conn, &mut emit, &state.cancel)?;
-    Ok(result)
+pub async fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>) -> Result<ScanResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
+        let result = scan_run(&conn, volume_id, &mut emit, &state.cancel)?;
+        // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
+        // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
+        // catalog, with no extra round trips from JS.
+        //
+        // ⚠️ Content hashing (phase E, below) is deliberately NOT chained here. Reading an EXIF
+        // header or a small XMP file is cheap; hashing a whole RAW or video is a full-file read —
+        // chaining it into the scan that fires on every ordinary folder-open would make routine
+        // browsing noticeably slower on a large archive. It runs as its own explicit/background
+        // pass (catalog_hash) instead.
+        metadata_run(&conn, &mut emit, &state.cancel)?;
+        sidecar_run(&conn, &mut emit, &state.cancel)?;
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("catalog_scan task panicked: {e}"))?
 }
 
 // ── Scan phase E: content-hash integrity ────────────────────────────────────────────────────
@@ -1878,11 +1893,16 @@ pub fn hash_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cance
 }
 
 #[tauri::command]
-pub fn catalog_hash(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<HashResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    hash_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_hash(app: tauri::AppHandle) -> Result<HashResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        hash_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_hash task panicked: {e}"))?
 }
 
 // ── Face detection (AI stack Phase A) — see scrfd.rs for the model/decode and CLAUDE.md's
@@ -2024,11 +2044,16 @@ pub fn faces_run(
 }
 
 #[tauri::command]
-pub fn catalog_faces_scan(app: tauri::AppHandle, state: tauri::State<CatalogState>, photo_ids: Option<Vec<i64>>) -> Result<FacesResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    faces_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_faces_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<FacesResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        faces_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_faces_scan task panicked: {e}"))?
 }
 
 /// Faces detected for one photo, in the same 0..1 fractional-of-decoded-image convention
@@ -2211,11 +2236,16 @@ pub fn embed_run(
 }
 
 #[tauri::command]
-pub fn catalog_embed_faces(app: tauri::AppHandle, state: tauri::State<CatalogState>, photo_ids: Option<Vec<i64>>) -> Result<EmbedResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_embed_faces(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<EmbedResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_embed_faces task panicked: {e}"))?
 }
 
 // ── Clustering (AI stack Phase B, part 2 / Phase C reconciliation) — DBSCAN over every embedded
@@ -2405,9 +2435,15 @@ pub fn catalog_delete_person(state: tauri::State<CatalogState>, person_id: i64) 
 }
 
 #[tauri::command]
-pub fn catalog_cluster_faces(state: tauri::State<CatalogState>, eps: Option<f64>, min_points: Option<usize>) -> Result<ClusterResult, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    cluster_run(&conn, eps.unwrap_or(0.6), min_points.unwrap_or(2))
+pub async fn catalog_cluster_faces(app: tauri::AppHandle, eps: Option<f64>, min_points: Option<usize>) -> Result<ClusterResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        cluster_run(&conn, eps.unwrap_or(0.6), min_points.unwrap_or(2))
+    })
+    .await
+    .map_err(|e| format!("catalog_cluster_faces task panicked: {e}"))?
 }
 
 #[derive(Serialize, Clone)]
@@ -2549,11 +2585,16 @@ pub fn clip_embed_run(
 }
 
 #[tauri::command]
-pub fn catalog_clip_embed(app: tauri::AppHandle, state: tauri::State<CatalogState>, photo_ids: Option<Vec<i64>>) -> Result<ClipEmbedResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    clip_embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_clip_embed(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<ClipEmbedResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        clip_embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_clip_embed task panicked: {e}"))?
 }
 
 #[derive(Serialize, Clone)]
@@ -2562,29 +2603,61 @@ pub struct ClipSearchHit {
     pub score: f32,
 }
 
+/// Bug #1 fix (2026-08-31 user report): with a small scanned library (6 photos), a nonsense query
+/// like "fdsfsdfksj" still returned all 6 — ranking was correct, but there was no MINIMUM score
+/// below which a photo is excluded entirely, so every CLIP-scanned photo came back regardless of
+/// query relevance, just reordered. Real evidence, not a guessed number: `examples/
+/// clip_search_probe.rs` embedded 2 real photos in this repo (a dog photo each in `Best/` and
+/// `Lucifer/`) against 3 matching queries ("a dog", "a photo of a dog outdoors") and 3 nonsense/
+/// unrelated ones ("fdsfsdfksj", "asdkjqwoieuqwoiuz", "a spaceship in outer space") through this
+/// app's REAL CLIP model (not assumed from another model's numbers):
+///
+/// ```text
+/// match queries:    0.2309 – 0.2828   (4 samples)
+/// nonsense/unrelated: 0.1815 – 0.2045 (6 samples)
+/// ```
+///
+/// A clean gap sits between 0.2045 (nonsense ceiling) and 0.2309 (match floor) on this evidence.
+/// `MIN_SCORE = 0.21` sits in that gap — informed by, but not copy-pasted from, R10's unrelated
+/// `DEFAULT_TAG_THRESHOLD = 0.22` (a different embedding comparison, image-vs-tag not
+/// text-query-vs-image, see that constant's own doc comment) and the LAION-family ~0.2-0.3 "real
+/// vs noise" band (a different model, cited only as a sanity anchor). Small sample (2 photos) —
+/// revisit with more scanned/varied photos if real usage shows false negatives/positives at this
+/// cutoff, per this command's own doc comment's original callout to test with a bigger library.
+const CLIP_SEARCH_MIN_SCORE: f32 = 0.21;
+
 /// Embeds `text` and ranks every CLIP-embedded present photo by cosine similarity, highest
 /// first. A linear scan (see this section's own doc comment on why that's fine at this scale) —
 /// `limit` caps the RETURNED rows, not the work done, since ranking needs every score anyway.
+/// Rows scoring below `CLIP_SEARCH_MIN_SCORE` are dropped entirely, not just ranked last — see
+/// that constant's doc comment for the real measured evidence behind the cutoff.
 #[tauri::command]
-pub fn catalog_clip_search(state: tauri::State<CatalogState>, text: String, limit: Option<usize>) -> Result<Vec<ClipSearchHit>, String> {
-    let query_emb = crate::clip::embed_text(&text)?;
-    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT id, clip_embedding FROM photos WHERE present = 1 AND clip_embedding IS NOT NULL").map_err(|e| e.to_string())?;
-    let mut hits: Vec<ClipSearchHit> = stmt
-        .query_map([], |r| {
-            let id: i64 = r.get(0)?;
-            let blob: Vec<u8> = r.get(1)?;
-            Ok((id, blob))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|(id, blob)| ClipSearchHit { id, score: crate::clip::cosine_sim(&query_emb, &blob_to_f32_vec(&blob)) })
-        .collect();
-    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-    hits.truncate(limit.unwrap_or(200));
-    Ok(hits)
+pub async fn catalog_clip_search(app: tauri::AppHandle, text: String, limit: Option<usize>) -> Result<Vec<ClipSearchHit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let query_emb = crate::clip::embed_text(&text)?;
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT id, clip_embedding FROM photos WHERE present = 1 AND clip_embedding IS NOT NULL").map_err(|e| e.to_string())?;
+        let mut hits: Vec<ClipSearchHit> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let blob: Vec<u8> = r.get(1)?;
+                Ok((id, blob))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|(id, blob)| ClipSearchHit { id, score: crate::clip::cosine_sim(&query_emb, &blob_to_f32_vec(&blob)) })
+            .filter(|h| h.score >= CLIP_SEARCH_MIN_SCORE)
+            .collect();
+        hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        hits.truncate(limit.unwrap_or(200));
+        Ok(hits)
+    })
+    .await
+    .map_err(|e| format!("catalog_clip_search task panicked: {e}"))?
 }
 
 #[derive(Serialize, Clone)]
@@ -2702,11 +2775,16 @@ pub fn verify_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), can
 }
 
 #[tauri::command]
-pub fn catalog_verify(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<VerifyResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    verify_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_verify(app: tauri::AppHandle) -> Result<VerifyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        verify_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_verify task panicked: {e}"))?
 }
 
 #[tauri::command]
@@ -3084,6 +3162,11 @@ pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collecti
     m.insert("all".to_string(), all as u64);
     let blurry: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND blurry = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("blurry".to_string(), blurry as u64);
+    // Bug #1 fix: lets the JS side tell "nothing has been CLIP-analyzed yet" apart from "analyzed,
+    // but nothing scored above catalog_clip_search's real-similarity cutoff" — the same zero-hits
+    // result from catalog_clip_search was ambiguous between those two very different situations.
+    let clip_scanned: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND clip_embedding IS NOT NULL", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("clip_scanned".to_string(), clip_scanned as u64);
     Ok(m)
 }
 
@@ -3480,11 +3563,16 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
 }
 
 #[tauri::command]
-pub fn catalog_thumbnails(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<ThumbResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    thumbnail_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        thumbnail_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_thumbnails task panicked: {e}"))?
 }
 
 
@@ -3613,11 +3701,16 @@ pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), canc
 }
 
 #[tauri::command]
-pub fn catalog_focus(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<FocusResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    focus_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_focus(app: tauri::AppHandle) -> Result<FocusResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        focus_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_focus task panicked: {e}"))?
 }
 
 /// The serving half — called from `library::get_thumbnail` as a fallback when the direct file
@@ -3820,11 +3913,16 @@ pub fn discard_queued_edit(id: i64, state: tauri::State<CatalogState>) -> Result
 // action whose whole point is starting over.
 
 #[tauri::command]
-pub fn catalog_rebuild(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<ScanResult, String> {
-    use tauri::Emitter;
-    state.cancel.store(false, Ordering::Relaxed);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    rebuild_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+pub async fn catalog_rebuild(app: tauri::AppHandle) -> Result<ScanResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        rebuild_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_rebuild task panicked: {e}"))?
 }
 
 pub fn rebuild_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ScanResult, String> {
@@ -4074,9 +4172,15 @@ pub fn stack_run(conn: &Connection, cancel: &AtomicBool) -> Result<StackResult, 
 }
 
 #[tauri::command]
-pub fn catalog_stack(state: tauri::State<CatalogState>) -> Result<StackResult, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    stack_run(&conn, &state.cancel)
+pub async fn catalog_stack(app: tauri::AppHandle) -> Result<StackResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        stack_run(&conn, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_stack task panicked: {e}"))?
 }
 
 fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {

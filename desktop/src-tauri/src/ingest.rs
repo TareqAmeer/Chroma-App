@@ -477,10 +477,19 @@ fn sidecars_for(src: &Path) -> Vec<PathBuf> {
 /// ⚠️ Every per-file failure is collected and the loop continues — the same lesson exportFX()'s
 /// per-photo try/catch encodes (CLAUDE.md §4): one bad file on a flaky card must not discard the
 /// hundreds that copied fine before it.
+// ⚠️ Bug #3 (Chromasmith N3/N4 postmortem): this was a plain sync `#[tauri::command]` copying
+// potentially many gigabytes of RAW files off a card — the same class of "blocks Tauri's calling
+// thread instead of running on a worker pool" bug found in catalog.rs, just not scoped there
+// originally. `scan_card` right above already gets this right (see its own doc comment); this
+// mirrors the exact same async + spawn_blocking shape.
 #[tauri::command]
-pub fn ingest_copy(app: tauri::AppHandle, files: Vec<CardFile>, options: IngestOptions) -> Result<IngestResult, String> {
-    use tauri::Emitter;
-    ingest_run(files, options, &mut |p| { let _ = app.emit("ingest-progress", p); })
+pub async fn ingest_copy(app: tauri::AppHandle, files: Vec<CardFile>, options: IngestOptions) -> Result<IngestResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Emitter;
+        ingest_run(files, options, &mut |p| { let _ = app.emit("ingest-progress", p); })
+    })
+    .await
+    .map_err(|e| format!("ingest_copy task panicked: {e}"))?
 }
 
 /// The whole import, minus the event emitting — split out for the same reason applyGeomTo was
