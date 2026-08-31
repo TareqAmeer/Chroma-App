@@ -48,6 +48,7 @@ mod subject;
 mod ingest;
 mod catalog;
 mod dcp_store;
+mod merge;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files for
@@ -536,6 +537,50 @@ fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, Strin
     out.extend_from_slice(&header_bytes);
     out.extend_from_slice(&map);
     Ok(tauri::ipc::Response::new(out))
+}
+
+// ── HDR merge / focus stacking (ROADMAP R12) ────────────────────────────────────────────────
+// Both take a set of Library paths (2+ photos of the same scene), align them, blend them, and
+// write the result as a new PNG sitting next to the FIRST source photo — an ordinary photo the
+// Library then picks up and the user opens/edits normally, per R12's own "cleanest integration
+// point" call rather than inventing a new file type the rest of the app has to understand. See
+// merge.rs's module doc for the actual algorithms (ECC-equivalent translation alignment, Mertens
+// exposure fusion + median-outlier deghosting, variance-of-Laplacian focus stacking) and their
+// synthetic validation. Blocking/CPU-bound, so both run via spawn_blocking rather than on the
+// async command thread.
+fn merge_output_path(first_source: &str, suffix: &str) -> String {
+    let p = std::path::Path::new(first_source);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("merged");
+    let dir = p.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let mut candidate = dir.join(format!("{stem}{suffix}.png"));
+    let mut n = 2;
+    while candidate.exists() {
+        candidate = dir.join(format!("{stem}{suffix}-{n}.png"));
+        n += 1;
+    }
+    candidate.to_string_lossy().into_owned()
+}
+
+#[tauri::command]
+async fn merge_hdr_photos(paths: Vec<String>) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_hdr(&paths2))
+        .await
+        .map_err(|e| format!("merge_hdr_photos: join error: {e}"))??;
+    let out_path = merge_output_path(&paths[0], "-hdr");
+    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    Ok(out_path)
+}
+
+#[tauri::command]
+async fn merge_focus_photos(paths: Vec<String>) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_focus(&paths2))
+        .await
+        .map_err(|e| format!("merge_focus_photos: join error: {e}"))??;
+    let out_path = merge_output_path(&paths[0], "-focus-stack");
+    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    Ok(out_path)
 }
 
 #[tauri::command]
@@ -1751,6 +1796,8 @@ fn main() {
             dcp_store::read_dcp_file,
             decode_raw_v2,
             decode_image_v1,
+            merge_hdr_photos,
+            merge_focus_photos,
             denoise_raw_high,
             cancel_denoise_high,
             lens_profile_available,

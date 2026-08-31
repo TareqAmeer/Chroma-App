@@ -3279,6 +3279,34 @@
     }
     sep();
     item('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
+    // ── HDR merge / focus stack (ROADMAP R12) — same "select several, run a batch action" UX
+    // as Reset edit above. Both write an ordinary new PNG next to the first selected photo
+    // (merge.rs's merge_output_path) and refresh the grid so it shows up as a normal library
+    // photo, not a special file type. Dimmed (not hidden — §10.13's lesson: a permanently
+    // hidden control is a permanently unaudited one) below 2 selected, since a merge needs at
+    // least 2 source photos.
+    const mergeHdrItem = item('Merge exposures (HDR)…', async () => {
+      toast(`Merging ${n} exposures…`);
+      try {
+        const outPath = await invoke('merge_hdr_photos', { paths });
+        toast('HDR merge saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('merge exposures', e), 'err'); }
+    });
+    const mergeFocusItem = item('Focus stack…', async () => {
+      toast(`Stacking ${n} photos…`);
+      try {
+        const outPath = await invoke('merge_focus_photos', { paths });
+        toast('Focus stack saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('focus stack', e), 'err'); }
+    });
+    if (n < 2) {
+      mergeHdrItem.style.opacity = '.4'; mergeHdrItem.style.pointerEvents = 'none';
+      mergeFocusItem.style.opacity = '.4'; mergeFocusItem.style.pointerEvents = 'none';
+    }
     sep();
     item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
       const files = await readPathsAsFiles(paths);
