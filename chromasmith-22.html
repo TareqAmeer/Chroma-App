@@ -1396,22 +1396,37 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="curves">
         <div class="fx-ctrl-title">Tone Curves <div class="fx-toggle" id="tg-curves" onclick="toggleFX('curves')"></div></div>
         <div class="fx-fields ff-off" id="ff-curves">
-          <div class="btn-row" id="curve-chips">
-            <button class="btn bgh crv-chip on" data-ch="m" onclick="curveSetCh('m')">RGB</button>
-            <button class="btn bgh crv-chip" data-ch="r" onclick="curveSetCh('r')">R</button>
-            <button class="btn bgh crv-chip" data-ch="g" onclick="curveSetCh('g')">G</button>
-            <button class="btn bgh crv-chip" data-ch="b" onclick="curveSetCh('b')">B</button>
+          <div class="btn-row" id="curve-mode-chips">
+            <button class="btn bgh crv-mode-chip on" data-mode="point" onclick="curveSetMode('point')">Point</button>
+            <button class="btn bgh crv-mode-chip" data-mode="param" onclick="curveSetMode('param')">Parametric</button>
           </div>
-          <div style="max-width:280px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px">
-            <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+          <div id="curve-point-block">
+            <div class="btn-row" id="curve-chips" style="margin-top:6px">
+              <button class="btn bgh crv-chip on" data-ch="m" onclick="curveSetCh('m')">RGB</button>
+              <button class="btn bgh crv-chip" data-ch="r" onclick="curveSetCh('r')">R</button>
+              <button class="btn bgh crv-chip" data-ch="g" onclick="curveSetCh('g')">G</button>
+              <button class="btn bgh crv-chip" data-ch="b" onclick="curveSetCh('b')">B</button>
+            </div>
+            <div style="max-width:280px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px">
+              <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+            </div>
+            <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:2px"></canvas>
+            <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
+              <span>Blacks</span><span>Midtones</span><span>Whites</span>
+            </div>
+            <div class="btn-row" style="margin-top:6px">
+              <button class="btn bgh" onclick="curveResetCh()">Reset channel</button>
+              <button class="btn bgh" onclick="curveResetAll()">Reset all</button>
+            </div>
           </div>
-          <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:2px"></canvas>
-          <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
-            <span>Blacks</span><span>Midtones</span><span>Whites</span>
-          </div>
-          <div class="btn-row" style="margin-top:6px">
-            <button class="btn bgh" onclick="curveResetCh()">Reset channel</button>
-            <button class="btn bgh" onclick="curveResetAll()">Reset all</button>
+          <div id="curve-param-block" style="display:none;margin-top:6px">
+            <div class="fx-row" title="Lifts/lowers the darkest tones."><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-s" oninput="paramCurveChanged('s',this.value);document.getElementById('vl-crv-s').textContent=this.value"><div class="fx-val" id="vl-crv-s">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the low-midtones."><div class="fx-label">Darks</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-d" oninput="paramCurveChanged('d',this.value);document.getElementById('vl-crv-d').textContent=this.value"><div class="fx-val" id="vl-crv-d">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the high-midtones."><div class="fx-label">Lights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-l" oninput="paramCurveChanged('l',this.value);document.getElementById('vl-crv-l').textContent=this.value"><div class="fx-val" id="vl-crv-l">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the brightest tones."><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-h" oninput="paramCurveChanged('h',this.value);document.getElementById('vl-crv-h').textContent=this.value"><div class="fx-val" id="vl-crv-h">0</div></div>
+            <div class="btn-row" style="margin-top:6px">
+              <button class="btn bgh" onclick="paramCurveResetAll()">Reset all</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1427,6 +1442,36 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="hslResetBand()">Reset band</button>
             <button class="btn bgh" onclick="hslResetAll()">Reset all</button>
+          </div>
+        </div>
+      </div>
+      <!-- COLOUR WHEELS (ROADMAP R11) — 3-way lift/gamma/gain grading, ASC-CDL -->
+      <div class="fx-ctrl" data-fxsec="wheels">
+        <div class="fx-ctrl-title">Colour Wheels <div class="fx-toggle" id="tg-wheels" onclick="toggleFX('wheels')"></div></div>
+        <div class="fx-fields ff-off" id="ff-wheels">
+          <div class="fx-hint">Drag each wheel off-centre to tint that tonal region; the slider underneath is an independent brightness for the same region. Double-click a wheel to reset it.</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between;margin-top:6px">
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-lift" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Shadows (Lift)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-wheel-lift-l" oninput="wheelLumChanged('lift',this.value);document.getElementById('vl-wheel-lift-l').textContent=this.value" style="width:100%;margin-top:4px">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-lift-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gamma" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Midtones (Gamma)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-wheel-gamma-l" oninput="wheelLumChanged('gamma',this.value);document.getElementById('vl-wheel-gamma-l').textContent=this.value" style="width:100%;margin-top:4px">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gamma-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gain" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Highlights (Gain)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-wheel-gain-l" oninput="wheelLumChanged('gain',this.value);document.getElementById('vl-wheel-gain-l').textContent=this.value" style="width:100%;margin-top:4px">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gain-l">0</div>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn bgh" onclick="wheelResetAll()">Reset all</button>
           </div>
         </div>
       </div>
@@ -5193,6 +5238,22 @@ vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec4 CT){ // A: exp,con,temp,sat |
   if(CT.y>0.0)c=tintToward(c,CT.x,CT.y*w,CT.w);
   return c;
 }
+// ROADMAP R11 — Lift/Gamma/Gain colour wheels, applied as the real ASC-CDL (American Society
+// of Cinematographers Color Decision List) Slope/Offset/Power transform, same formula behind
+// DaVinci Resolve's primary wheels and OpenColorIO's CDLTransform:
+//     out = clamp( (in * slope + offset) ^ power , 0, 1 )   per channel
+// slope/offset/power are computed on the CPU from the 3 wheels' (hue,radius)+luminance state
+// (cdlComputeSOP in the JS — see calib/verify_cdl.mjs for the Node-side validation) and passed
+// in as plain vec3 uniforms, so the shader itself is just the formula, nothing to get wrong.
+// useCDL is identity-gated in getFXParams (cdlIdentity()) exactly like useCurve/useHsl, so an
+// all-neutral wheel state costs nothing and stays byte-identical to today's export goldens.
+uniform vec3 cdlSlope;uniform vec3 cdlOffset;uniform vec3 cdlPower;uniform float useCDL;
+vec3 applyCDL(vec3 c){
+  if(useCDL<0.5)return c;
+  vec3 base=max(c*cdlSlope+cdlOffset,0.0);                 // pow() of a negative base is undefined in GLSL
+  vec3 o=vec3(pow(base.r,cdlPower.r),pow(base.g,cdlPower.g),pow(base.b,cdlPower.b));
+  return clamp(o,0.0,1.0);
+}
 vec3 basicAdjust(vec3 c){
   if(adjOn<0.5)return c;
   // exposure + white balance in linear light
@@ -5393,6 +5454,7 @@ if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,
   c.rgb=mix(lb,graded,lutMix);}
 if(useHsl>.5){float sc=32./33.,of=.5/33.;vec3 ccH=clamp(c.rgb,0.0,1.0);vec3 gradedH=texture(hslLut,ccH*sc+of).rgb;c.rgb=useTonemap>0.5?gradedH+(c.rgb-ccH):gradedH;}
 c.rgb=basicAdjust(c.rgb);
+c.rgb=applyCDL(c.rgb);
 if(mskN>0.5){
   vec2 gm=uvOffL+uv*uvScaleL;
   // Local (low-frequency) lightness for the skin frequency separation. LOCAL uv on purpose — the
@@ -6643,6 +6705,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       vidBreath:(P.filmMotion&&P.filmMotion.breath!=null)?P.filmMotion.breath:1.0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
+      useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
       maskTex:4,maskTex2:7,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
@@ -6924,7 +6987,12 @@ const FX=new FXR();
 // ═══════════════════════════
 // FX UI
 // ═══════════════════════════
-const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),hsl:{hue:{},sat:{},lum:{}},pointColors:[],artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,lutMix:1,print:null,sharedAdjust:null};
+const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),curveMode:'point',curveParam:{s:0,d:0,l:0,h:0},
+  // ROADMAP R11 — 3-way lift/gamma/gain colour wheels (ASC-CDL, see cdlComputeSOP). h=hue
+  // angle in degrees (wheel position), s=radial magnitude 0..1 (0=centre/neutral), l=an
+  // independent luminance slider -100..100. All-neutral (s=0,l=0 on all three) is a no-op.
+  wheels:{lift:{h:0,s:0,l:0},gamma:{h:0,s:0,l:0},gain:{h:0,s:0,l:0}},
+  hsl:{hue:{},sat:{},lum:{}},pointColors:[],artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,lutMix:1,print:null,sharedAdjust:null};
 let fxImg=null,fxTimer=null,_fxHistPushTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
 let _fxAmtTouched=false; // true once the user manually moves grain/halation/bloom Amount after a look pick
 let _fxPristineDefault=null; // captured once at boot, before loadSession() — see loadFXImages
@@ -9320,7 +9388,7 @@ function installFXImages(entries,loadKey){
   // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
-  _resetZoom(); fxHistory=[{j:JSON.stringify(getUISnapshot()),label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush
+  _resetZoom(); fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
   // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
   // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
   // CURRENTLY SELECTED photo's own masks array, swapped by fxSelectImage on every filmstrip
@@ -9472,7 +9540,7 @@ function autoDetectBW(img){
   tg.classList.toggle('on',bw);
   if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if((name==='hsl'||name==='pointcolor')&&typeof bakeHsl==='function')bakeHsl();if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='wheels'&&on)setTimeout(wheelsInitAll,0);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if((name==='hsl'||name==='pointcolor')&&typeof bakeHsl==='function')bakeHsl();if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 // Touching a control in a dimmed (off) section turns that section on, rather than the control
 // silently doing nothing. This is the other half of showing off-sections instead of hiding them:
 // the controls are visible, so they have to be live. Registered once, delegated, capture-phase so
@@ -9641,12 +9709,50 @@ function curveEval(pts){
     return ys[i]*(2*t3-3*t2+1)+m[i]*h*(t3-2*t2+t)+ys[i+1]*(3*t2-2*t3)+m[i+1]*h*(t3-t2);};
 }
 function curvesIdentity(){const C=fxState.curves;
-  return['m','r','g','b'].every(k=>C[k].every(p=>p[0]===p[1]));}
+  const chIdentity=['r','g','b'].every(k=>C[k].every(p=>p[0]===p[1]));
+  if(fxState.curveMode==='param'){const P=fxState.curveParam;return chIdentity&&!P.s&&!P.d&&!P.l&&!P.h;}
+  return chIdentity&&C.m.every(p=>p[0]===p[1]);
+}
+// ══ PARAMETRIC CURVE MODE (ROADMAP R11) ══
+// 4 region sliders (Shadows/Darks/Lights/Highlights) — the standard Lightroom/ACR "Parametric"
+// convention: instead of dragging raw control-point handles, the user nudges a named tonal
+// region up/down and a curve is derived underneath. This is a pure JS layer that computes
+// control points and feeds them into the EXISTING curveEval/bakeCurves machinery — no second
+// curve-baking implementation.
+//
+// Split-point choice: LR/ACR's real defaults split the 0-100% tone range into quarters at
+// 25/50/75 for its 3 draggable region-boundary sliders, with Shadows/Highlights extending past
+// the outer boundaries and Darks/Lights sitting either side of the midpoint. Rather than also
+// exposing 3 more region-boundary sliders (a second control this app doesn't have elsewhere),
+// this picks 4 FIXED interior anchor x-positions at even 0.2 spacing — 0.2/0.4/0.6/0.8 — so
+// Shadows/Darks/Lights/Highlights each get one clearly-separated anchor between the (untouched)
+// black/white endpoints at x=0/1. This deliberately does NOT reuse the point-curve's own
+// 0/.25/.5/.75/1 default positions: those are shared with per-channel R/G/B point edits, and a
+// shared x would make a parametric offset and a point-curve edit at the same x fight silently.
+function _paramMasterPts(){
+  const P=fxState.curveParam,mx=0.16; // ±100 slider -> ±0.16 y-offset at that anchor
+  const pts=[[0,0],[0.2,0.2+P.s/100*mx],[0.4,0.4+P.d/100*mx],[0.6,0.6+P.l/100*mx],[0.8,0.8+P.h/100*mx],[1,1]];
+  // Force the y-sequence non-decreasing (a forward running-max pass): Fritsch-Carlson only
+  // GUARANTEES a monotone spline when the input data is itself monotone, and two adjacent
+  // sliders pushed opposite ways (e.g. Shadows +100, Darks -100) would otherwise hand it a
+  // locally-decreasing sequence -> a non-monotonic, visually-broken tone curve. This clamp
+  // means an extreme opposing pair partially "loses" to its neighbour rather than ever
+  // inverting the curve — verified in calib/verify_param_curve.mjs across the full ±100 grid.
+  for(let i=1;i<pts.length;i++)pts[i][1]=Math.max(pts[i][1],pts[i-1][1]);
+  pts.forEach(p=>{p[1]=Math.min(1,Math.max(0,p[1]));});
+  return pts;
+}
+function paramCurveChanged(k,v){fxState.curveParam[k]=parseFloat(v)||0;curveChanged();}
+function paramCurveResetAll(){fxState.curveParam={s:0,d:0,l:0,h:0};
+  ['s','d','l','h'].forEach(k=>{const s=document.getElementById('sl-crv-'+k),vv=document.getElementById('vl-crv-'+k);if(s)s.value=0;if(vv)vv.textContent='0';});
+  curveChanged();
+}
 // Bake: out_c = master(channel_c(v)) per 8-bit level. Identity bakes to i/255 exactly, and the
 // shader samples texel CENTERS, so identity+useCurve is byte-identical to useCurve off.
 function bakeCurves(){
   const C=fxState.curves,cl=v=>Math.min(1,Math.max(0,v));
-  const fM=curveEval(C.m),fR=curveEval(C.r),fG=curveEval(C.g),fB=curveEval(C.b);
+  const fM=fxState.curveMode==='param'?curveEval(_paramMasterPts()):curveEval(C.m);
+  const fR=curveEval(C.r),fG=curveEval(C.g),fB=curveEval(C.b);
   const d=new Uint8Array(256*4);
   for(let i=0;i<256;i++){const v=i/255;
     d[i*4]=cl(fM(cl(fR(v))))*255+.5|0;d[i*4+1]=cl(fM(cl(fG(v))))*255+.5|0;d[i*4+2]=cl(fM(cl(fB(v))))*255+.5|0;d[i*4+3]=255;}
@@ -9656,6 +9762,16 @@ function curveSetCh(ch){curveCh=ch;document.querySelectorAll('.crv-chip').forEac
 function curveResetCh(){fxState.curves[curveCh]=_identityCurvePts();curveChanged();}
 function curveResetAll(){fxState.curves=_curveDefault();curveChanged();}
 function curveChanged(){bakeCurves();drawCurveEditor();fxUpdate();}
+// Toggle between the raw point-curve editor and the 4-slider parametric mode — same segmented-
+// button pattern as the RGB/R/G/B channel chips above, mirrored for the mode switch itself.
+function curveSetMode(mode){
+  fxState.curveMode=mode;
+  document.querySelectorAll('.crv-mode-chip').forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
+  const pt=document.getElementById('curve-point-block'),pm=document.getElementById('curve-param-block');
+  if(pt)pt.style.display=mode==='point'?'':'none';
+  if(pm)pm.style.display=mode==='param'?'':'none';
+  curveChanged();
+}
 function drawCurveEditor(){
   const cv=document.getElementById('cv-curve');if(!cv||!cv.clientWidth)return;
   const dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth;
@@ -9698,6 +9814,94 @@ function _crvInit(){
   });
   bakeCurves();drawCurveEditor();
 }
+
+// ══ LIFT / GAMMA / GAIN COLOUR WHEELS (ROADMAP R11) — ASC-CDL Slope/Offset/Power ══
+// Real, published, industry-standard transform (American Society of Cinematographers Color
+// Decision List — ASC-CDL, the same math behind DaVinci Resolve's primary wheels and
+// OpenColorIO's CDLTransform): for each channel,
+//     out = clamp( (in * slope + offset) ^ power , 0, 1 )
+// "Slope" is driven by the Gain wheel (multiplicative — dominates highlights, since a
+// multiplicative term moves a bright pixel further than a dark one), "Offset" by the Lift wheel
+// (additive — dominates shadows, since an additive term is a LARGER fraction of a dark value),
+// and "Power" by the Gamma wheel (an exponent — bends the midtones, leaving 0 and 1 fixed).
+// This is deliberately NOT three independent hand-rolled dials; it's the one published formula,
+// ported directly (see calib/verify_cdl.mjs for the Node-side validation against hand points).
+function _wheelDefault(){return{h:0,s:0,l:0};}
+function _wheelsDefault(){return{lift:_wheelDefault(),gamma:_wheelDefault(),gain:_wheelDefault()};}
+function cdlIdentity(){const W=fxState.wheels;
+  return['lift','gamma','gain'].every(k=>W[k].s===0&&W[k].l===0);}
+// Wheel (angle,radius) -> a per-channel RGB offset. Standard 3-wheel colour-balance convention:
+// project the wheel's (x,y) position onto three unit vectors 120° apart, one per primary — same
+// "additive intensity on a hue wheel" idea this app already uses for the video vectorscope
+// (CLAUDE.md §12, drawScopeVectorscope's Rec.709 Cb/Cr wheel + 123° skin-tone line), just with
+// R/G/B primaries in place of Cb/Cr. k=0.4 keeps a full-radius drag from blowing out a channel.
+function _wheelRGB(h,s){
+  const rad=h*Math.PI/180,x=s*Math.cos(rad),y=s*Math.sin(rad),k=0.4;
+  return[0,120,240].map(deg=>{const a=deg*Math.PI/180;return k*(x*Math.cos(a)+y*Math.sin(a));});
+}
+// Computes the SOP (Slope/Offset/Power) triple from the 3 wheels' current state. Pure JS,
+// validated in calib/verify_cdl.mjs BEFORE any GLSL was written (see that script's header).
+function cdlComputeSOP(){
+  const W=fxState.wheels;
+  const liftRGB=_wheelRGB(W.lift.h,W.lift.s), gainRGB=_wheelRGB(W.gain.h,W.gain.s), gammaRGB=_wheelRGB(W.gamma.h,W.gamma.s);
+  const offset=[0,1,2].map(i=>liftRGB[i]+(W.lift.l/100)*0.25);        // lift lum: ±100 -> ±0.25 additive
+  const slope=[0,1,2].map(i=>1+gainRGB[i]+(W.gain.l/100)*1.0);        // gain lum: ±100 -> slope in [0,2]
+  const gammaVal=[0,1,2].map(i=>Math.max(0.05,1+gammaRGB[i]+(W.gamma.l/100)*1.0)); // gamma lum: ±100 -> gamma in [0.05,2]
+  const power=gammaVal.map(g=>1/g);                                   // ASC "Power" = 1/gamma (UI convention: + brightens midtones)
+  return{slope,offset,power};
+}
+function wheelChanged(){bakeNothingCdlIsUniformOnly();fxUpdate();}
+function bakeNothingCdlIsUniformOnly(){/* SOP is recomputed live in getFXParams from fxState.wheels — nothing to bake/cache */}
+function wheelReset(name){fxState.wheels[name]=_wheelDefault();wheelSyncUI(name);wheelChanged();}
+function wheelResetAll(){fxState.wheels=_wheelsDefault();['lift','gamma','gain'].forEach(wheelSyncUI);wheelChanged();}
+function wheelLumChanged(name,v){fxState.wheels[name].l=parseFloat(v)||0;wheelChanged();}
+function wheelSyncUI(name){
+  const cv=document.getElementById('cv-wheel-'+name);if(cv)drawWheel(name);
+  const sl=document.getElementById('sl-wheel-'+name+'-l'),vv=document.getElementById('vl-wheel-'+name+'-l');
+  if(sl)sl.value=fxState.wheels[name].l;if(vv)vv.textContent=fxState.wheels[name].l;
+}
+const WHEEL_NAMES=['lift','gamma','gain'];
+function drawWheel(name){
+  const cv=document.getElementById('cv-wheel-'+name);if(!cv||!cv.clientWidth)return;
+  const dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth;
+  cv.width=w*dpr;cv.height=w*dpr;
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,w);
+  const cx=w/2,cy=w/2,R=w/2-6;
+  // Hue-wheel background (same radial-hue convention as drawScopeVectorscope's Cb/Cr wheel):
+  // conic-style approximation via many thin radial strokes (canvas2D has no conic gradient
+  // fallback needed here — createConicGradient is used where available for a clean sweep).
+  if(x.createConicGradient){
+    const g=x.createConicGradient(0,cx,cy);
+    for(let i=0;i<=12;i++){const deg=i/12*360;g.addColorStop(i/12,`hsl(${deg},85%,55%)`);}
+    x.save();x.beginPath();x.arc(cx,cy,R,0,Math.PI*2);x.clip();x.fillStyle=g;x.fillRect(0,0,w,w);x.restore();
+  }else{
+    for(let deg=0;deg<360;deg+=2){const a0=deg*Math.PI/180,a1=(deg+2.5)*Math.PI/180;
+      x.beginPath();x.moveTo(cx,cy);x.arc(cx,cy,R,a0,a1);x.closePath();x.fillStyle=`hsl(${deg},85%,55%)`;x.fill();}
+  }
+  x.globalAlpha=0.35;x.fillStyle='#000';x.beginPath();x.arc(cx,cy,R,0,Math.PI*2);x.fill();x.globalAlpha=1;
+  x.strokeStyle='rgba(255,255,255,.35)';x.lineWidth=1;x.beginPath();x.arc(cx,cy,R,0,Math.PI*2);x.stroke();
+  x.beginPath();x.arc(cx,cy,2,0,Math.PI*2);x.fillStyle='rgba(255,255,255,.5)';x.fill(); // centre dot = neutral
+  const W=fxState.wheels[name],rad=W.h*Math.PI/180;
+  const px=cx+W.s*R*Math.cos(rad),py=cy-W.s*R*Math.sin(rad);
+  x.beginPath();x.arc(px,py,7,0,Math.PI*2);x.fillStyle='#fff';x.fill();x.strokeStyle='#000';x.lineWidth=1.5;x.stroke();
+}
+function _wheelPos(cv,e){const r=cv.getBoundingClientRect(),cx=r.width/2,cy=r.height/2,R=r.width/2-6;
+  let x=(e.clientX-r.left-cx)/R,y=-(e.clientY-r.top-cy)/R;
+  const s=Math.min(1,Math.hypot(x,y));if(s>0){const sc=s/Math.hypot(x,y);x*=sc;y*=sc;}
+  return{h:Math.atan2(y,x)*180/Math.PI,s};
+}
+function _wheelInit(name){
+  const cv=document.getElementById('cv-wheel-'+name);if(!cv||cv._wheelInit)return;cv._wheelInit=true;
+  let dragging=false;
+  const move=e=>{const p=_wheelPos(cv,e);fxState.wheels[name].h=p.h;fxState.wheels[name].s=p.s;drawWheel(name);};
+  cv.addEventListener('pointerdown',e=>{dragging=true;cv.setPointerCapture(e.pointerId);move(e);clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);});
+  cv.addEventListener('pointermove',e=>{if(!dragging)return;move(e);clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);});
+  const up=()=>{if(!dragging)return;dragging=false;wheelChanged();};
+  cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+  cv.addEventListener('dblclick',()=>{wheelReset(name);});
+  drawWheel(name);
+}
+function wheelsInitAll(){WHEEL_NAMES.forEach(_wheelInit);}
 
 // ══ HSL COLOR MIXER — 8 bands × hue/sat/lum, baked to a 33³ LUT via applyHSL ═══
 const HSL_BANDS=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'];
@@ -10115,7 +10319,7 @@ function _cpCommands(){
   const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'};
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
   const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',deconv:'Deconvolution',curves:'Tone Curves',
-    hsl:'Color Mixer',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
+    hsl:'Color Mixer',wheels:'Colour Wheels',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
     grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Vignette',
     borders:'Borders',canvas:'Canvas',export:'Export'};
   Object.entries(SECTIONS).forEach(([k,label])=>add('Section',label,()=>{switchTab('fx');fxSection(k);}));
@@ -13786,7 +13990,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig','lut-mix'];
-const _FX_SNAP_TOGGLES=['adjust','curves','hsl','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
 const _FX_SNAP_SELECTS=['sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(opts){
@@ -13805,6 +14009,9 @@ function getUISnapshot(opts){
   // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
   // strings. (These hold only plain arrays/objects/numbers, all structured-cloneable.)
   s.curves=_clone(fxState.curves);   // tone-curve control points
+  s.curveMode=fxState.curveMode;     // 'point' or 'param' — ROADMAP R11
+  s.curveParam=_clone(fxState.curveParam); // parametric Shadows/Darks/Lights/Highlights
+  s.wheels=_clone(fxState.wheels);   // lift/gamma/gain colour wheels — ROADMAP R11
   s.hsl=_clone(fxState.hsl);         // HSL mixer band settings
   s.pointColors=_clone(fxState.pointColors||[]); // point color picks
   s.artSeed=fxState.artSeed;                              // artifact placement seed
@@ -13831,6 +14038,7 @@ function getUISnapshot(opts){
 const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','hsl','pointColors']},
+  {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
   {key:'adjust',label:'Basic Adjustments',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin'],toggles:['tg-adjust'],selects:[]},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:[],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:[],selects:[]},
@@ -13898,6 +14106,13 @@ function applyUISnapshot(s){
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')_lutPromise=selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
+  if(s.curveParam)fxState.curveParam=JSON.parse(JSON.stringify(s.curveParam));
+  if(s.curveMode!==undefined){
+    fxState.curveMode=s.curveMode;
+    ['s','d','l','h'].forEach(k=>{const sl=document.getElementById('sl-crv-'+k),vv=document.getElementById('vl-crv-'+k),val=(fxState.curveParam&&fxState.curveParam[k])||0;if(sl)sl.value=val;if(vv)vv.textContent=val;});
+    if(typeof curveSetMode==='function')curveSetMode(s.curveMode);
+  }
+  if(s.wheels){fxState.wheels=JSON.parse(JSON.stringify(s.wheels));if(typeof WHEEL_NAMES!=='undefined')WHEEL_NAMES.forEach(wheelSyncUI);}
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
   if(s.pointColors){fxState.pointColors=JSON.parse(JSON.stringify(s.pointColors));pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
@@ -14796,7 +15011,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-pointcolor','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
+const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
 const _SESS_SELECTS=['sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(quiet){
@@ -14806,6 +15021,9 @@ function saveSession(quiet){
   _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
   _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
   s._curves=fxState.curves;   // tone-curve control points
+  s._curveMode=fxState.curveMode;   // 'point' or 'param' — ROADMAP R11
+  s._curveParam=fxState.curveParam; // parametric Shadows/Darks/Lights/Highlights
+  s._wheels=fxState.wheels;   // lift/gamma/gain colour wheels — ROADMAP R11
   s._hsl=fxState.hsl;         // HSL mixer band settings
   s._pointColors=fxState.pointColors; // point color picks
   s._artSeed=fxState.artSeed; // artifact placement seed
@@ -14861,6 +15079,13 @@ function loadSession(userTriggered){
     _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null){el.value=s[id];el._chipsRender&&el._chipsRender();}});
     _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
     if(s._curves){fxState.curves=s._curves;bakeCurves();drawCurveEditor();}
+    if(s._curveParam)fxState.curveParam=s._curveParam;
+    if(s._curveMode!==undefined){
+      fxState.curveMode=s._curveMode;
+      ['s','d','l','h'].forEach(k=>{const sl=document.getElementById('sl-crv-'+k),vv=document.getElementById('vl-crv-'+k),val=(fxState.curveParam&&fxState.curveParam[k])||0;if(sl)sl.value=val;if(vv)vv.textContent=val;});
+      if(typeof curveSetMode==='function')curveSetMode(s._curveMode);
+    }
+    if(s._wheels){fxState.wheels=s._wheels;if(typeof WHEEL_NAMES!=='undefined')WHEEL_NAMES.forEach(wheelSyncUI);}
     if(s._hsl){fxState.hsl=s._hsl;bakeHsl();hslSyncUI();}
     if(s._pointColors){fxState.pointColors=s._pointColors;pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
     if(s._artSeed!=null)fxState.artSeed=s._artSeed;
@@ -15171,6 +15396,10 @@ function getFXParams(adjValsOverride){return{
   hlg:(function(){const it=typeof curItem==='function'?curItem():null;
     return (it&&it.kind==='video'&&it.needsHlg)?{enabled:true,lw:400}:{enabled:false};})(),
   curves:!!(document.getElementById('tg-curves')||{classList:{contains:()=>false}}).classList.contains('on')&&!curvesIdentity(),
+  // ROADMAP R11 — lift/gamma/gain wheels, identity-gated the same way (§3's established
+  // convention): all-neutral wheels never even compute cdlSOP into a non-identity uniform.
+  cdl:!!(document.getElementById('tg-wheels')||{classList:{contains:()=>false}}).classList.contains('on')&&!cdlIdentity(),
+  cdlSOP:cdlComputeSOP(),
   hsl:(!!(document.getElementById('tg-hsl')||{classList:{contains:()=>false}}).classList.contains('on')&&!hslIdentity())||
       (!!(document.getElementById('tg-pointcolor')||{classList:{contains:()=>false}}).classList.contains('on')&&!pointColorsIdentity()),
   masks:(document.getElementById('tg-local')||{classList:{contains:()=>false}}).classList.contains('on')?fxState.masks:[],
@@ -19612,7 +19841,7 @@ function fxLiveFit(ms){
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
 //  - looks → a preset/LUT other than None/Original is selected
 //  - crop  → any rotate/flip/straighten/crop has been applied
-const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',pointcolor:'tg-pointcolor',local:'tg-local',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
+const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',wheels:'tg-wheels',pointcolor:'tg-pointcolor',local:'tg-local',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
 function _secIsEnabled(key){
   if(typeof FX_GROUPS!=='undefined'&&FX_GROUPS[key])return FX_GROUPS[key].members.some(_secIsEnabled); // deskx Color/Film rail buttons
   const tg=_SEC_TOGGLE[key];
