@@ -1102,7 +1102,26 @@ window.bootTrickleStart('walk'); // matches the static label above ("Checking yo
 // covering the page indefinitely. desktop-native.js overrides this by calling
 // hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
 // ISN'T the Tauri shell), this inline fallback is what removes the splash.
-window.hideBootSplash=function(){document.documentElement.classList.remove('cs-boot-tauri');const s=document.getElementById('boot-splash');if(!s)return;if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();s.style.opacity='0';setTimeout(()=>s.remove(),400);};
+window.hideBootSplash=function(){
+  document.documentElement.classList.remove('cs-boot-tauri');
+  const s=document.getElementById('boot-splash');
+  if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}
+  if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();
+  if(!s)return;
+  // ⚠️ Don't start the opacity fade in this same tick. Removing cs-boot-tauri above reveals the
+  // real DOM (editor+Library, now correctly toggled), but the browser hasn't necessarily laid out
+  // or painted that corrected state YET — style/class changes only take effect at the next paint,
+  // and toggleLibrary/toggleExpandedView additionally queue a requestAnimationFrame(resize) of
+  // their own (desktop/library-ui.js) for the dock-width layout to settle. Starting the fade
+  // immediately let a stale/mid-layout frame (a flash of the plain editor) bleed through the
+  // splash's own opacity transition. Two rAFs guarantee at least one full layout+paint cycle has
+  // completed — invisibly, since the splash is still fully opaque on top — before the fade (and
+  // therefore any visibility of what's underneath) begins.
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    s.style.opacity='0';
+    setTimeout(()=>s.remove(),400);
+  }));
+};
 // Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
 // this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
 // would otherwise leave the splash on screen forever.
@@ -1116,7 +1135,11 @@ if(!window.__TAURI__)window.hideBootSplash();
 // event it receives, pushing the deadline forward — so the splash stays up for as long as real,
 // visible progress keeps arriving, and only force-hides if progress genuinely STALLS for the
 // grace period (an unexpected exception, a folder-picker dialog that never resolves, anything).
-window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>window.hideBootSplash(),graceMs||8000);};
+// ⚠️ On timeout, force the Library into its fully-expanded state BEFORE hiding anything — see
+// window.chromasmithForceLibraryReady's doc comment (library-ui.js) for the bug this closes: a
+// large library's startup chain can legitimately still be running when this fires, and hiding the
+// splash without forcing the visual end state first is exactly what left the bare editor showing.
+window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>{if(typeof window.chromasmithForceLibraryReady==='function'){try{window.chromasmithForceLibraryReady();}catch(e){}}window.hideBootSplash();},graceMs||8000);};
 window.bumpBootSplashWatchdog(10000); // initial grace period before any progress event has arrived yet
 </script>
 <div id="status-cap"></div>

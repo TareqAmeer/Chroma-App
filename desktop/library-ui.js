@@ -3976,6 +3976,12 @@
     const m = state.meta.get(path) || {};
     const sc = state.sidecars.get(path) || {};
     if (!state.meta.has(path)) getMeta(path).then(() => { if (state.showInfo) renderInfoPanel(); }).catch(() => {});
+    // Bug #3 fix: the Keywords chips read state.sidecars, but unlike meta above, nothing ever
+    // fetched it here — a photo whose sidecar hadn't already been prefetched by the grid's batch
+    // scan (e.g. focused via keyboard cursor ahead of the grid's own virtualized batch, or a
+    // freshly-opened folder) rendered a permanently-empty Keywords box with no fetch and no
+    // re-render, indistinguishable from "this photo genuinely has no keywords".
+    if (!state.sidecars.has(path)) getSidecar(path).then(() => { if (state.showInfo) renderInfoPanel(); }).catch(() => {});
     const fmt = (b) => !b ? '' : b > 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b > 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1e3) + ' KB';
     const row = (k, v) => v ? `<div style="display:flex;gap:8px"><span style="color:var(--mut);min-width:74px">${k}</span><span style="flex:1;word-break:break-word">${esc(String(v))}</span></div>` : '';
     const kwChips = (sc.keywords || []).map((k) => {
@@ -4556,6 +4562,29 @@
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
   window.chromasmithToggleExpandedView = () => { if (state.open) toggleExpandedView(); }; // menu-bar "Toggle Full Library" — no-op if the Library isn't even open
+
+  // ⚠️ Boot-time safety valve (chromasmith-22.html's bumpBootSplashWatchdog) — the reported "blank
+  // editor on launch" bug. The normal startup chain (toggleLibrary().then(() => toggleExpandedView
+  // (true) ...)) only calls toggleExpandedView AFTER renderTree()/openFolder() and the catalog-scan
+  // promise all resolve — on a large library (measured: 57k photos) that can legitimately run long
+  // enough to freeze the main thread past the splash watchdog's grace period. When the watchdog
+  // fires, hideBootSplash() runs regardless of whether that chain ever finished — so the app landed
+  // on the untouched default DOM: the bare editor, Library still only docked (not expanded) or not
+  // even opened, because the awaited chain was still stuck. This forces the SAME visual end state
+  // the happy path reaches — Library open + expanded — synchronously and unconditionally, so the
+  // splash is NEVER hidden while leaving the editor as the visible fallback. Safe to call even mid-
+  // load: it only touches state.open/expanded_view/overlay/body classes, never re-fetches, so it
+  // can't race or duplicate the in-flight toggleLibrary() call — that call keeps running and will
+  // still populate the grid once it finishes.
+  window.chromasmithForceLibraryReady = function () {
+    if (!state.open) {
+      state.open = true;
+      overlay.classList.add('on');
+      document.body.classList.add('lib-docked');
+      syncDockPadding();
+    }
+    if (!state.expanded_view) toggleExpandedView(true);
+  };
 
   // Standalone copy/paste-edit for the Photo menu (menu-copy-edit/menu-paste-edit in
   // desktop-native.js) — same __copiedRecipe clipboard as the right-click context menu's Copy/
