@@ -31,6 +31,7 @@
   // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
   // real Tauri backend.
   let ltLastResetRecipe = null, ltLastResetEdited = false, ltRecipe = '', ltEdited = false;
+  let ltOfflineQueue = [], ltOfflineQueueNextId = 0;
   function ltMetaFor(p) {
     return /\.(mp4|mov|m4v)$/i.test(String(p || ''))
       ? { dur: 12.5, width: 3840, height: 2160, date: '2026-07-20' }
@@ -112,6 +113,32 @@
         // Mirror the Rust command's undo-buffer-clearing rule: a genuine edit save (non-empty
         // recipe, edited:true) supersedes any pending reset-undo buffer.
         if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
+        return Promise.resolve();
+      }
+      // N1a offline edit queue — mirrors catalog.rs's real conflict logic closely enough to
+      // exercise the reconnect flow (?liboffq=1/?liboffqconflict=1, see wireOfflineQueueReconnect
+      // below) without a real Tauri backend: queue_offline_edit stores a recipe against a path;
+      // list_offline_queue reports each entry's conflict flag from `ltOfflineQueueConflict`
+      // (settable via ?liboffqconflict=1 for the harness to exercise the prompt path);
+      // apply_queued_edit/discard_queued_edit both remove the entry, the former also "writing"
+      // it into the mock sidecar so a real assertion can check the recipe landed.
+      case 'queue_offline_edit': {
+        ltOfflineQueue = ltOfflineQueue.filter((q) => q.path !== A.path);
+        ltOfflineQueue.push({ id: ++ltOfflineQueueNextId, path: A.path, recipe: A.recipe, queued_at: Date.now() / 1000 });
+        return Promise.resolve();
+      }
+      case 'list_offline_queue': {
+        const conflict = /[?&]liboffqconflict=1/.test(location.search);
+        return Promise.resolve(ltOfflineQueue.map((q) => ({ ...q, conflict })));
+      }
+      case 'apply_queued_edit': {
+        const q = ltOfflineQueue.find((x) => x.id === A.id);
+        if (q) { ltRecipe = q.recipe; ltEdited = true; }
+        ltOfflineQueue = ltOfflineQueue.filter((x) => x.id !== A.id);
+        return Promise.resolve();
+      }
+      case 'discard_queued_edit': {
+        ltOfflineQueue = ltOfflineQueue.filter((x) => x.id !== A.id);
         return Promise.resolve();
       }
       // A video's meta carries dur/width/height and no camera/lens, matching read_meta's real
@@ -483,6 +510,7 @@
     dupeClusterSizes: new Map(), // clusterId -> size
     _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
     syncedPaths: new Set(),  // paths known-synced to Google Photos (gphotos registry, folder-local cache)
+    offlineEditPaths: new Set(), // paths currently open against the reduced-res offline preview (N1a) — see openInEditorInner
     typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff' | 'heic' | 'webp' | 'hdr' | 'other' | 'video'
     cameraFilter: 'all',
     lensFilter: 'all',
@@ -2063,24 +2091,52 @@
         installFXImages([diskCached], loadKey);
         imgCacheStore(path, diskCached, loadKey); // warm the in-memory cache too, for this session
       } else {
-        const buf = await invoke('read_file_bytes', { path });
+        // N1a piece 1: a real decode source for a cached-only (offline) photo. There is no
+        // full-resolution offline cache — building one would be a separate, much bigger
+        // storage-budget undertaking (CLAUDE.md §2's payload-cost rule) — so when the real file
+        // can't be read, this falls back to `get_thumbnail_or_offline`: the SAME never-pruned
+        // 360px-long-edge JPEG the Library grid already shows offline (catalog.rs's "Scan phase
+        // D: offline thumbnails"). Editing against it is real but REDUCED-QUALITY, and the UI
+        // must stay honest about that (the toast below), not pretend it's the original.
+        let buf, offlinePreview = false;
+        try {
+          buf = await invoke('read_file_bytes', { path });
+        } catch (readErr) {
+          try {
+            buf = await invoke('get_thumbnail_or_offline', { path });
+            offlinePreview = true;
+          } catch (offlineErr) {
+            throw readErr; // neither the real file nor any cached preview exists — surface the real error
+          }
+        }
         // lastModified:0 (not the default Date.now()) — chromasmith-22.html's loadFXImages()
         // keys "is this the same photo already loaded" off name+size+lastModified so it knows
         // whether to reset per-photo state (export version, All-FX toggles) on load. A File
         // built fresh from read_file_bytes on every reopen would otherwise get a new
         // lastModified each time (today's timestamp), making the SAME photo look like a
         // different one on every single reopen and defeating that check entirely.
-        const file = new File([buf], baseName(path), { type: mimeFromName(path), lastModified: 0 });
+        const file = new File([buf], baseName(path), { type: offlinePreview ? 'image/jpeg' : mimeFromName(path), lastModified: 0 });
         await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
+          fxImages[0].offlinePreview = offlinePreview;
+          if (offlinePreview) {
+            state.offlineEditPaths.add(path);
+            if (typeof toast === 'function') {
+              toast(`${baseName(path)} — drive not connected. Editing a reduced-quality offline preview; edits are queued and applied at full resolution once it reconnects.`, false);
+            }
+          } else {
+            state.offlineEditPaths.delete(path);
+          }
           const loadKey = `${baseName(path)}:${buf.byteLength}:0`; // must match loadFXImages' own key formula
-          imgCacheStore(path, fxImages[0], loadKey);
+          // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
+          // open must not be served this reduced preview from imgCache.
+          if (!offlinePreview) imgCacheStore(path, fxImages[0], loadKey);
           // Write the disk cache in the background — best-effort, never blocks the UI. Only for
           // RAWs (a JPEG/PNG/TIFF decode is already fast; caching those buys nothing). Waits a
           // beat for the two-phase RAW decode's background NR refine (desktop-native.js) to
           // land first, so the CACHED copy is full quality, not the fast/no-NR first pass.
-          if (isRaw && fxImages[0].img) {
+          if (isRaw && fxImages[0].img && !offlinePreview) {
             // Capture THIS photo's canvas now — the timeout used to re-read fxImages[0] when it
             // fired, so opening another photo within 1.5s encoded the NEW photo's canvas and
             // wrote it under the OLD photo's path+recipeKey, silently poisoning the cache (the
@@ -2241,7 +2297,16 @@
       const cur = await getSidecar(path);
       const updated = { ...cur, edited: true, recipe };
       state.sidecars.set(path, updated);
-      await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
+      if (state.offlineEditPaths.has(path)) {
+        // N1a piece 2: the real file/sidecar isn't reachable right now (that's exactly why this
+        // path is in offlineEditPaths — see openInEditorInner) — there is nowhere for set_sidecar
+        // to write to. Queue the recipe in the catalog DB instead; it replays for real once the
+        // volume reconnects (see wireOfflineQueueReconnect below). This does NOT update the local
+        // sidecar cache/UI "edited" badge as saved-for-real — it stays queued until applied.
+        await invoke('queue_offline_edit', { path, recipe }).catch((e) => console.error('queue_offline_edit', e));
+      } else {
+        await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
+      }
     }));
     // The live canvas only ever shows ONE photo (the currently previewed one) — refreshing
     // every batch photo's thumbnail from it would overwrite the rest with the wrong image.
@@ -6647,6 +6712,72 @@
     toggleRecentMenu({ stopPropagation() {} });
   });
 
+  // N1a piece 3/4: reconnect detection + batched conflict prompt for the offline edit queue.
+  // Deliberately reuses the SAME 4s poll below (not a new timer) — a reconnect is exactly the
+  // "catalog_volumes came back online" event that poll already watches for. Two-way flow:
+  //   - no-conflict entries (original unchanged since queueing) replay silently, one at a time
+  //   - conflicted entries are batched into ONE prompt for the whole set, never one per photo
+  // `offlineQueuePromptOpen` guards against re-opening the modal on the next poll tick while the
+  // user hasn't answered the current one yet.
+  let offlineQueuePromptOpen = false;
+  function offlineQueueConflictModal(n) {
+    return new Promise((res) => {
+      let dlg = document.getElementById('lib-offq-modal');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'lib-offq-modal';
+        dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:440px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+        dlg.innerHTML = '<div id="lib-offq-msg" style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:14px"></div>'
+          + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+          + '<button type="button" id="lib-offq-ignore" class="btn bgh">Ignore queued edits</button>'
+          + '<button type="button" id="lib-offq-apply" class="btn bpri">Apply queued edits anyway</button></div>';
+        document.body.appendChild(dlg);
+      }
+      dlg.querySelector('#lib-offq-msg').textContent =
+        `${n} photo${n > 1 ? 's were' : ' was'} edited offline and ${n > 1 ? 'their' : 'its'} original${n > 1 ? 's have' : ' has'} since changed.\n\n`
+        + 'Ignore queued edits — discard them, leave the changed original untouched.\n'
+        + 'Apply queued edits anyway — apply them to the original as it is now.';
+      const finish = (v) => { dlg.close(); res(v); };
+      dlg.querySelector('#lib-offq-apply').onclick = () => finish('apply');
+      dlg.querySelector('#lib-offq-ignore').onclick = () => finish('ignore');
+      dlg.onkeydown = (e) => { if (e.key === 'Escape') finish(null); };
+      dlg.showModal();
+    });
+  }
+  async function checkOfflineQueueOnReconnect() {
+    if (offlineQueuePromptOpen) return;
+    let queued;
+    try { queued = await invoke('list_offline_queue'); } catch (e) { console.error('list_offline_queue', e); return; }
+    if (!queued || !queued.length) return;
+    const noConflict = queued.filter((q) => !q.conflict);
+    const conflicted = queued.filter((q) => q.conflict);
+    // Non-conflicted entries replay silently and automatically — no prompt for the common case.
+    for (const q of noConflict) {
+      try { await invoke('apply_queued_edit', { id: q.id }); } catch (e) { console.error('apply_queued_edit', e); }
+    }
+    if (noConflict.length && typeof toast === 'function') {
+      toast(`${noConflict.length} offline edit${noConflict.length > 1 ? 's' : ''} applied now that the drive is reconnected.`, true);
+    }
+    if (!conflicted.length) return;
+    // Genuinely conflicted entries — batched into ONE prompt for the whole set, never one per
+    // photo (see this section's header comment).
+    offlineQueuePromptOpen = true;
+    try {
+      const choice = await offlineQueueConflictModal(conflicted.length);
+      if (choice === 'apply') {
+        for (const q of conflicted) { try { await invoke('apply_queued_edit', { id: q.id }); } catch (e) { console.error('apply_queued_edit', e); } }
+        if (typeof toast === 'function') toast(`Applied ${conflicted.length} queued edit${conflicted.length > 1 ? 's' : ''} despite the change${conflicted.length > 1 ? 's' : ''}.`, true);
+      } else if (choice === 'ignore') {
+        for (const q of conflicted) { try { await invoke('discard_queued_edit', { id: q.id }); } catch (e) { console.error('discard_queued_edit', e); } }
+        if (typeof toast === 'function') toast(`Discarded ${conflicted.length} queued edit${conflicted.length > 1 ? 's' : ''}.`, false);
+      }
+      // choice === null (dismissed via Escape): leave the entries queued — the next reconnect
+      // poll will re-check and prompt again, rather than silently resolving anything either way.
+    } finally {
+      offlineQueuePromptOpen = false;
+    }
+  }
+
   // Card detection. macOS emits no mount notification that reaches a Tauri webview, so this
   // polls /Volumes — cheap (one readdir plus a statfs per volume) and only while the Library is
   // actually open, so a backgrounded app does no work.
@@ -6659,7 +6790,11 @@
     // second timer — a catalogued external drive being plugged or unplugged is exactly the
     // same kind of event refreshVolumes() already watches for.
     if (!LIBTEST) invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
+    if (!LIBTEST || /[?&]liboffq=1/.test(location.search)) checkOfflineQueueOnReconnect();
   }, 4000);
+  // Exposed for the harness (?liboffq=1) — driving a real 4s wait per test run is wasteful, so
+  // test/library_perf.mjs-style probes can call this directly instead of racing the timer.
+  window.chromasmithCheckOfflineQueue = checkOfflineQueueOnReconnect;
 
   // ── deskx home screen: the app opens to the full-window Library, not the editor (matches
   // the approved DRK-style wireframe). desktop-native.js sets body.deskx synchronously
