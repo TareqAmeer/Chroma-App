@@ -11330,11 +11330,12 @@ async function _faceparseRunLayers(m){
   const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
   const groupLen=header.width*header.height;
   const body=new Uint8Array(buf,4+hlen);
-  if(header.width!==cropSize||header.height!==cropSize||body.length!==groupLen*4){
+  if(header.width!==cropSize||header.height!==cropSize||body.length!==groupLen*5){
     throw new Error('face-parse: unexpected response size');
   }
-  // Fixed order — see faceparse_run in main.rs / FaceMasks in faceparse.rs.
-  const layers=[0,1,2,3].map(g=>body.subarray(g*groupLen,(g+1)*groupLen));
+  // Fixed order — see faceparse_run in main.rs / FaceMasks in faceparse.rs. Group 4 (skin) was
+  // added for mskFaceSelectSkin; groups 0-3 are unchanged and still only ever feed an eraser.
+  const layers=[0,1,2,3,4].map(g=>body.subarray(g*groupLen,(g+1)*groupLen));
   return{mtW,mtH,cropX0,cropY0,cropSize,layers};
 }
 /// Places one or more of the 4 face-parse layers (union, max not sum) into a full mtW*mtH raster.
@@ -11419,6 +11420,51 @@ async function mskFaceSelectFeature(groupIdx){
     toast((feat?feat.label:'Feature')+' selected — added as a new mask',true);
   }catch(e){
     const msg='Face-feature selection failed — '+(e&&e.message||e);
+    log(msg,'err');if(typeof toast==='function')toast(msg);
+  }finally{
+    _faceparseRunning=false;mskRebuild();
+  }
+}
+// ── Face-parse skin selector (ROADMAP "Mask system" item 4's remainder) ───────────────────────
+// Everything above (mskFaceAutoExclude, mskFaceSelectFeature) turns a face-parse group into an
+// ERASER or a plain new AI mask. This is the first one that turns a group into a POSITIVE Skin
+// selection: group 4 (see faceparse.rs's CLASS_SKIN) is the model's own `skin` class, run on the
+// SAME head-crop-and-run plumbing (_faceparseRunLayers) an existing AI/Skin/Coat scribble already
+// seeded. It still needs that prior scribble — this is a supplementary, face-crop-scoped selector
+// alongside SAM's + Skin, never a replacement for it (see this file's own module doc comment and
+// CLAUDE.md §5b's "SEGMENT FIRST" section: this model has no torso/chest/arm class, so it cannot
+// stand in for whole-subject segmentation).
+//
+// The new mask gets origin:'skin' (not the generic 'ai' mskFaceSelectFeature uses for the other
+// 4 groups) so it renders with the full Skin Tone guided flow (mskCaps' toneTool gate) — that is
+// the entire point of a mask whose selection IS "this photo's skin". The colour-range gate
+// (crOn) starts OFF: the face-parse skin class is already a real per-pixel skin classification,
+// not a person-shaped stand-in that still needs colour refinement the way SAM's + Skin does, so
+// stacking a colour gate on top by default would only narrow an already-correct selection.
+async function mskFaceSelectSkin(){
+  if(!window.__TAURI__){log('Face-parse skin selection needs the desktop app (on-device model)','warn');return;}
+  const src=fxState.masks[mskSel];
+  if(!src||!mskIsAI(src)||!src.px||!src.px.length){log('Scribble to select the subject first — the face crop is derived from that selection','warn');return;}
+  if(_faceparseRunning)return;
+  if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+  _faceparseRunning=true;
+  if(typeof toast==='function')toast('Finding skin…',true);
+  try{
+    const r=await _faceparseRunLayers(src);
+    const px=_facePlace(r,[4]);
+    let has=false;for(let i=0;i<px.length;i++)if(px[i]>32){has=true;break;}
+    if(!has){log('No skin found in this selection (occluded, or not facing the camera?)','warn');toast('Not found — try a clearer view',false);return;}
+    const nm={type:'brush',origin:'skin',ai:true,px,mtW:r.mtW,mtH:r.mtH,aiPoints:[],name:'Skin (Face Parse)',
+      ..._mskAdjustDefaults()};
+    Object.assign(nm,_mskSkinDefaults());
+    Object.assign(nm,_mskToneBlendDefaults('skin'));
+    fxState.masks.push(nm);mskSel=fxState.masks.length-1;
+    _mskTexDirty=true;
+    if(typeof hapt==='function')hapt();
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    toast('Skin selected from face parsing — added as a new mask',true);
+  }catch(e){
+    const msg='Face-parse skin selection failed — '+(e&&e.message||e);
     log(msg,'err');if(typeof toast==='function')toast(msg);
   }finally{
     _faceparseRunning=false;mskRebuild();
@@ -12862,7 +12908,8 @@ function mskRebuild(){
       shape+='<div class="btn-row">'
         +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select')+'</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over">Clear points</button></div>'
-        +(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button></div>'
+        +(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button>'
+          +'<button class="btn bgh" onclick="mskFaceSelectSkin()" title="Adds a NEW mask selecting only face-parsed skin within this selection (cheeks/forehead/neck) — a supplementary, face-crop-scoped alternative to this Skin mask\'s own colour-range gate, not a replacement for it.">'+icon('wand',14)+(_faceparseRunning?' Finding skin…':' Add Skin (Face Parse)')+'</button></div>'
           // Same model, the opposite job: instead of excluding these from a Skin selection, make
           // ONE of them its own selection (Lightroom's People mask offers this per-feature list —
           // Face Skin/Lips/Eyes/Hair as individually selectable targets, not just exclusions).

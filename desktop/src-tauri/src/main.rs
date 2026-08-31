@@ -474,11 +474,14 @@ fn scrfd_detect(request: tauri::ipc::Request) -> Result<serde_json::Value, Strin
     serde_json::to_value(out).map_err(|e| format!("scrfd_detect: {e}"))
 }
 
-// ── Face-feature auto-exclusion (ROADMAP item 16) — see faceparse.rs for the model, the class
-// mapping and why the originally-quoted class table was wrong. Framed request/response, same
-// idiom as sam_encode/sam_points: caller sends an already-cropped RGB8 face region (derived from
-// the SAM subject mask's bounding box) + its width/height; response is 4 same-sized alpha masks
-// (eyes_brows, glasses, lips, hair), each width*height bytes, concatenated in that fixed order.
+// ── Face-feature auto-exclusion + skin selector (ROADMAP item 16, plus item 4's remainder) — see
+// faceparse.rs for the model, the class mapping and why the originally-quoted class table was
+// wrong. Framed request/response, same idiom as sam_encode/sam_points: caller sends an
+// already-cropped RGB8 face region (derived from the SAM subject mask's bounding box) + its
+// width/height; response is 5 same-sized alpha masks (eyes_brows, glasses, lips, hair, skin),
+// each width*height bytes, concatenated in that fixed order. `skin` was added for
+// mskFaceSelectSkin (a POSITIVE skin selector, unlike the first 4 groups which only ever feed an
+// eraser) — same struct, same call, no new command needed.
 #[tauri::command]
 fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
@@ -492,7 +495,12 @@ fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     struct Header { width: u32, height: u32 }
     let header = Header { width: masks.w, height: masks.h };
     let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("faceparse_run header: {e}"))?;
-    let body_len = header_bytes.len() + masks.eyes_brows.len() + masks.glasses.len() + masks.lips.len() + masks.hair.len();
+    let body_len = header_bytes.len()
+        + masks.eyes_brows.len()
+        + masks.glasses.len()
+        + masks.lips.len()
+        + masks.hair.len()
+        + masks.skin.len();
     let mut out = Vec::with_capacity(4 + body_len);
     out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
     out.extend_from_slice(&header_bytes);
@@ -500,6 +508,7 @@ fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     out.extend_from_slice(&masks.glasses);
     out.extend_from_slice(&masks.lips);
     out.extend_from_slice(&masks.hair);
+    out.extend_from_slice(&masks.skin);
     Ok(tauri::ipc::Response::new(out))
 }
 

@@ -1,9 +1,17 @@
-// Face-feature parsing (ROADMAP item 16) — an automatic EXCLUSION layer on top of the AI subject
-// mask (sam.rs). Answers "which pixels inside this person are lips / eyes+brows / glasses / hair",
-// so the Skin Tone tool can auto-erase them instead of requiring a hand-painted brush stroke for
-// each one.
+// Face-feature parsing (ROADMAP item 16, plus item 4's "remainder") — a per-pixel face/skin parser
+// on top of the AI subject mask (sam.rs). Originally answered only "which pixels inside this
+// person are lips / eyes+brows / glasses / hair", so the Skin Tone tool could auto-erase them
+// instead of requiring a hand-painted brush stroke for each one. It now ALSO returns the model's
+// own `skin` class directly (group index 4, CLASS_SKIN below) so a Skin mask can be seeded from
+// real face/skin parsing instead of only from SAM's person-shaped selection + a colour gate — see
+// chromasmith-22.html's mskFaceSelectSkin, added alongside the existing mskFaceAutoExclude /
+// mskFaceSelectFeature call sites that already consume this same `parse()` output.
 //
-// ⚠️ This does NOT replace SAM and must never be used as the skin selector. Model:
+// ⚠️ This does NOT replace SAM as the PRIMARY skin-selection path and must never be used as a
+// substitute for segmentation-first subject selection (CLAUDE.md §5b's "SEGMENT FIRST" section):
+// this model is face-crop-only (see the class table below — no torso/chest/arm class exists), so
+// mskFaceSelectSkin is only ever offered as a supplementary selector for an ALREADY-cropped face
+// region derived from an existing AI mask's bounding box, exactly like mskFaceAutoExclude. Model:
 // jonathandinu/face-parsing (SegFormer fine-tuned on CelebAMask-HQ, ONNX contributed by Xenova).
 // Its 19 classes are FACE-CENTRIC (skin/neck/nose/ears/lips/eyes/brows/glasses/hair/hat/clothing)
 // with NO torso, chest, shoulder or arm class — CelebAMask-HQ is face crops. The complaint that
@@ -50,6 +58,12 @@ const CLASS_EYES_BROWS: [usize; 4] = [4, 5, 6, 7]; // l_eye, r_eye, l_brow, r_br
 const CLASS_GLASSES: [usize; 1] = [3]; // eye_g
 const CLASS_LIPS: [usize; 3] = [10, 11, 12]; // mouth (interior), u_lip, l_lip
 const CLASS_HAIR: [usize; 1] = [13]; // hair
+// Group 5, added for mskFaceSelectSkin (item 4's remainder) — the model's own `skin` class,
+// verified in the module doc comment's id2label table (index 1). Deliberately NOT nose/ears/neck
+// (2, 8, 9, 17) — those are anatomically skin too, but keeping the group to the model's literal
+// `skin` label is the conservative choice: it is what was actually verified against the real
+// .onnx, and anything broader is a guess this file has no measurement to back yet.
+const CLASS_SKIN: [usize; 1] = [1]; // skin
 
 static MODEL_PATH: OnceLock<PathBuf> = OnceLock::new();
 
@@ -78,6 +92,9 @@ pub struct FaceMasks {
     pub glasses: Vec<u8>,
     pub lips: Vec<u8>,
     pub hair: Vec<u8>,
+    /// Group 5 — the model's own `skin` class (CLASS_SKIN), added for mskFaceSelectSkin. Fixed
+    /// order matches every other consumer of this struct: eyes_brows, glasses, lips, hair, skin.
+    pub skin: Vec<u8>,
     pub w: u32,
     pub h: u32,
 }
@@ -126,11 +143,12 @@ pub fn parse(rgb: &[u8], w: u32, h: u32) -> Result<FaceMasks, String> {
     // Per-pixel softmax over the 19 classes at the model's native 128x128, THEN group-sum THEN
     // upsample — softmax first is what makes the result a genuinely soft alpha (confidence),
     // rather than a hard argmax-then-upsample which would just alias a binary edge.
-    let mut group_probs: [Vec<f32>; 4] = [
+    let mut group_probs: [Vec<f32>; 5] = [
         vec![0f32; lside * lside], // eyes_brows
         vec![0f32; lside * lside], // glasses
         vec![0f32; lside * lside], // lips
         vec![0f32; lside * lside], // hair
+        vec![0f32; lside * lside], // skin
     ];
     for px in 0..(lside * lside) {
         let mut mx = f32::MIN;
@@ -153,6 +171,7 @@ pub fn parse(rgb: &[u8], w: u32, h: u32) -> Result<FaceMasks, String> {
         group_probs[1][px] = group_sum(&CLASS_GLASSES);
         group_probs[2][px] = group_sum(&CLASS_LIPS);
         group_probs[3][px] = group_sum(&CLASS_HAIR);
+        group_probs[4][px] = group_sum(&CLASS_SKIN);
     }
 
     let to_u8 = |probs: &[f32]| -> Vec<u8> {
@@ -165,6 +184,7 @@ pub fn parse(rgb: &[u8], w: u32, h: u32) -> Result<FaceMasks, String> {
         glasses: to_u8(&group_probs[1]),
         lips: to_u8(&group_probs[2]),
         hair: to_u8(&group_probs[3]),
+        skin: to_u8(&group_probs[4]),
         w,
         h
     })
@@ -205,8 +225,14 @@ mod tests {
         let masks = parse(crop.as_raw(), cw, ch).expect("face-parse run");
 
         let mean = |m: &[u8]| -> f32 { m.iter().map(|&v| v as f32).sum::<f32>() / (m.len() as f32 * 255.0) };
-        let (eb, gl, lp, ha) = (mean(&masks.eyes_brows), mean(&masks.glasses), mean(&masks.lips), mean(&masks.hair));
-        println!("mean coverage: eyes_brows={eb:.4} glasses={gl:.4} lips={lp:.4} hair={ha:.4}");
+        let (eb, gl, lp, ha, sk) = (
+            mean(&masks.eyes_brows),
+            mean(&masks.glasses),
+            mean(&masks.lips),
+            mean(&masks.hair),
+            mean(&masks.skin)
+        );
+        println!("mean coverage: eyes_brows={eb:.4} glasses={gl:.4} lips={lp:.4} hair={ha:.4} skin={sk:.4}");
 
         // The subject wears sunglasses, which occlude the eyes: glasses should be a real presence,
         // hair should cover a substantial share of this crop (it fills the top/sides of frame),
@@ -217,6 +243,32 @@ mod tests {
         assert!(lp > 0.0005 && lp < 0.05, "lips should be small but present, got {lp:.4}");
         for (name, v) in [("eyes_brows", eb), ("glasses", gl), ("lips", lp), ("hair", ha)] {
             assert!(v < 0.6, "{name} covers implausibly ({v:.4}) much of the crop — check class indices");
+        }
+        // Skin (item 4's remainder, mskFaceSelectSkin) should be the single BIGGEST group in a
+        // head crop dominated by cheeks/forehead/neck, and materially bigger than any one
+        // exclusion feature — but not near-total, since hair alone already claims >5% here and
+        // skin/hair/glasses/eyes+brows/lips must not all be reading the same pixels.
+        assert!(sk > 0.15, "expected skin to cover a real share of a head crop, got {sk:.4}");
+        assert!(sk < 0.85, "skin covers implausibly ({sk:.4}) much of the crop — check class index");
+        assert!(sk > ha, "skin ({sk:.4}) should exceed hair ({ha:.4}) in a face-forward head crop");
+    }
+
+    /// Pure data-transformation check that needs no model: the four EXCLUSION groups and the SKIN
+    /// group must never share a class index (an overlap would double-count a pixel into both an
+    /// eraser and the new positive skin selection, which the softmax-then-group-sum in `parse()`
+    /// can't catch on its own since it treats every group index independently).
+    #[test]
+    fn skin_class_disjoint_from_exclusion_classes() {
+        let exclusion: Vec<usize> = CLASS_EYES_BROWS
+            .iter()
+            .chain(CLASS_GLASSES.iter())
+            .chain(CLASS_LIPS.iter())
+            .chain(CLASS_HAIR.iter())
+            .copied()
+            .collect();
+        for &c in &CLASS_SKIN {
+            assert!(!exclusion.contains(&c), "CLASS_SKIN index {c} overlaps an exclusion group");
+            assert!(c < NUM_CLASSES, "CLASS_SKIN index {c} out of range");
         }
     }
 }
