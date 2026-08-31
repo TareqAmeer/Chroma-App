@@ -348,7 +348,11 @@ pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog
     if let Ok(resp) = get_thumbnail(path.clone()) {
         return Ok(resp);
     }
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Read-only lookup — must go through read_conn, not the writer mutex, or an offline photo's
+    // thumbnail (the fallback path this function exists for) blocks for the whole duration of any
+    // in-progress scan/embed/cluster/CLIP batch (N3.1: the whole point of the reader/writer split
+    // in CatalogState is defeated if a "read" call still takes the writer lock).
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     match crate::catalog::offline_thumb_bytes(&conn, &path) {
         Some(bytes) => Ok(tauri::ipc::Response::new(bytes)),
         None => Err(format!("no thumbnail available (online or offline) for {path}")),
