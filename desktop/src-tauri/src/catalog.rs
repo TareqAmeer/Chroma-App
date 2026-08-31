@@ -1901,35 +1901,73 @@ pub struct FacesResult {
 /// above SCRFD's own 640px input, so nothing is lost to this cap that SCRFD could have used
 /// anyway) rather than a full-resolution demosaic, for the same reason `get_quicklook_preview`
 /// avoids one: a face-sized region only needs a few hundred pixels to detect, not 24 megapixels.
-pub fn faces_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<FacesResult, String> {
+pub fn faces_run(
+    conn: &Connection,
+    photo_ids: Option<&[i64]>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool
+) -> Result<FacesResult, String> {
     let mut result = FacesResult::default();
+    // Scoped selections (a context-menu "Find faces in selection") are already bounded to the
+    // photos the user picked — a single pass over exactly those ids, no LIMIT/loop-until-empty
+    // (that machinery exists only to chunk an unbounded library-wide scan). Unscoped (`None`)
+    // reproduces today's query byte-for-byte.
+    let scoped = photo_ids.is_some();
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
         }
-        let mut stmt = conn
-            .prepare(
+        let batch: Vec<(i64, Option<String>, i64)> = if let Some(ids) = photo_ids {
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
                 "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
                  FROM photos p JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.kind != 'video'
-                   AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)
-                 LIMIT 32"
-            )
-            .map_err(|e| e.to_string())?;
-        let batch: Vec<(i64, Option<String>, i64)> = stmt
-            .query_map([], |r| {
-                let id: i64 = r.get(0)?;
-                let rel_path: String = r.get(1)?;
-                let mtime: i64 = r.get(2)?;
-                let last_path: String = r.get(3)?;
-                let is_local: i64 = r.get(4)?;
-                let online = is_local != 0 || Path::new(&last_path).is_dir();
-                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-        drop(stmt);
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})",
+                placeholders.join(",")
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND p.kind != 'video'
+                       AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)
+                     LIMIT 32"
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        };
         let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
         if batch.is_empty() {
             break;
@@ -1977,17 +2015,20 @@ pub fn faces_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), canc
         }
         tx.commit().map_err(|e| e.to_string())?;
         result.scanned += detected.iter().filter(|(_, _, f)| f.is_some()).count();
+        if scoped {
+            break; // one bounded batch over the exact requested ids — never loop-until-empty
+        }
     }
     progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
     Ok(result)
 }
 
 #[tauri::command]
-pub fn catalog_faces_scan(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<FacesResult, String> {
+pub fn catalog_faces_scan(app: tauri::AppHandle, state: tauri::State<CatalogState>, photo_ids: Option<Vec<i64>>) -> Result<FacesResult, String> {
     use tauri::Emitter;
     state.cancel.store(false, Ordering::Relaxed);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    faces_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    faces_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
 }
 
 /// Faces detected for one photo, in the same 0..1 fractional-of-decoded-image convention
@@ -2039,34 +2080,68 @@ pub struct EmbedResult {
     pub embedded: usize,
 }
 
-pub fn embed_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<EmbedResult, String> {
+pub fn embed_run(
+    conn: &Connection,
+    photo_ids: Option<&[i64]>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool
+) -> Result<EmbedResult, String> {
     let mut result = EmbedResult::default();
     const DECODE_LONG_EDGE: u32 = 1600; // must match faces_run's — kps fractions were derived against this decode's own dimensions
+    // See faces_run's comment: a scoped selection is a single bounded batch, no LIMIT/loop.
+    let scoped = photo_ids.is_some();
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
         }
-        let mut stmt = conn
-            .prepare(
+        let photo_batch: Vec<(i64, Option<String>)> = if let Some(ids) = photo_ids {
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
                 "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
                  FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
-                 WHERE pf.embedding IS NULL AND p.present = 1
-                 LIMIT 16"
-            )
-            .map_err(|e| e.to_string())?;
-        let photo_batch: Vec<(i64, Option<String>)> = stmt
-            .query_map([], |r| {
-                let id: i64 = r.get(0)?;
-                let rel_path: String = r.get(1)?;
-                let last_path: String = r.get(2)?;
-                let is_local: i64 = r.get(3)?;
-                let online = is_local != 0 || Path::new(&last_path).is_dir();
-                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-        drop(stmt);
+                 WHERE p.present = 1 AND p.id IN ({})",
+                placeholders.join(",")
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let last_path: String = r.get(2)?;
+                    let is_local: i64 = r.get(3)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
+                     FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
+                     WHERE pf.embedding IS NULL AND p.present = 1
+                     LIMIT 16"
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let last_path: String = r.get(2)?;
+                    let is_local: i64 = r.get(3)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        };
         let photo_batch: Vec<(i64, String)> = photo_batch.into_iter().filter_map(|(id, abs)| abs.map(|a| (id, a))).collect();
         if photo_batch.is_empty() {
             break;
@@ -2127,17 +2202,20 @@ pub fn embed_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), canc
             // avoid spinning forever re-selecting the same unembeddable rows.
             break;
         }
+        if scoped {
+            break; // one bounded batch over the exact requested ids — never loop-until-empty
+        }
     }
     progress(ScanProgress { phase: "done".into(), done: result.embedded, total: result.embedded, current: String::new() });
     Ok(result)
 }
 
 #[tauri::command]
-pub fn catalog_embed_faces(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<EmbedResult, String> {
+pub fn catalog_embed_faces(app: tauri::AppHandle, state: tauri::State<CatalogState>, photo_ids: Option<Vec<i64>>) -> Result<EmbedResult, String> {
     use tauri::Emitter;
     state.cancel.store(false, Ordering::Relaxed);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    embed_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
 }
 
 // ── Clustering (AI stack Phase B, part 2 / Phase C reconciliation) — DBSCAN over every embedded
@@ -2370,36 +2448,71 @@ pub struct ClipEmbedResult {
     pub embedded: usize,
 }
 
-pub fn clip_embed_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ClipEmbedResult, String> {
+pub fn clip_embed_run(
+    conn: &Connection,
+    photo_ids: Option<&[i64]>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool
+) -> Result<ClipEmbedResult, String> {
     let mut result = ClipEmbedResult::default();
     const DECODE_LONG_EDGE: u32 = 384; // CLIP's own input is 224x224 (shortest-edge+crop) — well under this
+    // See faces_run's comment: a scoped selection is a single bounded batch, no LIMIT/loop.
+    let scoped = photo_ids.is_some();
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
         }
-        let mut stmt = conn
-            .prepare(
+        let batch: Vec<(i64, Option<String>, i64)> = if let Some(ids) = photo_ids {
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
                 "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
                  FROM photos p JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.kind != 'video'
-                   AND (p.clip_scanned_at IS NULL OR p.clip_scanned_at != p.mtime)
-                 LIMIT 32"
-            )
-            .map_err(|e| e.to_string())?;
-        let batch: Vec<(i64, Option<String>, i64)> = stmt
-            .query_map([], |r| {
-                let id: i64 = r.get(0)?;
-                let rel_path: String = r.get(1)?;
-                let mtime: i64 = r.get(2)?;
-                let last_path: String = r.get(3)?;
-                let is_local: i64 = r.get(4)?;
-                let online = is_local != 0 || Path::new(&last_path).is_dir();
-                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-        drop(stmt);
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})",
+                placeholders.join(",")
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND p.kind != 'video'
+                       AND (p.clip_scanned_at IS NULL OR p.clip_scanned_at != p.mtime)
+                     LIMIT 32"
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        };
         let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
         if batch.is_empty() {
             break;
@@ -2427,17 +2540,20 @@ pub fn clip_embed_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress),
         if embedded.iter().all(|(_, _, e)| e.is_none()) {
             break; // nothing in this batch could be embedded — avoid spinning on unreadable rows
         }
+        if scoped {
+            break; // one bounded batch over the exact requested ids — never loop-until-empty
+        }
     }
     progress(ScanProgress { phase: "done".into(), done: result.embedded, total: result.embedded, current: String::new() });
     Ok(result)
 }
 
 #[tauri::command]
-pub fn catalog_clip_embed(app: tauri::AppHandle, state: tauri::State<CatalogState>) -> Result<ClipEmbedResult, String> {
+pub fn catalog_clip_embed(app: tauri::AppHandle, state: tauri::State<CatalogState>, photo_ids: Option<Vec<i64>>) -> Result<ClipEmbedResult, String> {
     use tauri::Emitter;
     state.cancel.store(false, Ordering::Relaxed);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    clip_embed_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    clip_embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
 }
 
 #[derive(Serialize, Clone)]
@@ -5284,7 +5400,7 @@ mod tests {
         let cancel = AtomicBool::new(false);
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
 
-        let r1 = clip_embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let r1 = clip_embed_run(&conn, None, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r1.embedded, 1);
         let blob: Vec<u8> = conn.query_row("SELECT clip_embedding FROM photos WHERE name='plain.jpg'", [], |r| r.get(0)).unwrap();
         let emb = blob_to_f32_vec(&blob);
@@ -5292,7 +5408,7 @@ mod tests {
         let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "stored embedding should be L2-normalized, norm={norm}");
 
-        let r2 = clip_embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let r2 = clip_embed_run(&conn, None, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r2.embedded, 0, "nothing new to embed on a second pass");
 
         std::fs::remove_dir_all(&dir).ok();
@@ -5321,7 +5437,7 @@ mod tests {
         let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
         let cancel = AtomicBool::new(false);
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
-        clip_embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        clip_embed_run(&conn, None, &mut |_| {}, &cancel).unwrap();
 
         let (blue_id, blue_blob): (i64, Vec<u8>) =
             conn.query_row("SELECT id, clip_embedding FROM photos WHERE name='blue.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
@@ -5439,7 +5555,7 @@ mod tests {
         )
         .unwrap();
 
-        let r1 = embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let r1 = embed_run(&conn, None, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r1.embedded, 1);
         let blob: Vec<u8> = conn.query_row("SELECT embedding FROM photo_faces LIMIT 1", [], |r| r.get(0)).unwrap();
         let emb = blob_to_f32_vec(&blob);
@@ -5447,7 +5563,7 @@ mod tests {
         let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "stored embedding should be L2-normalized, norm={norm}");
 
-        let r2 = embed_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let r2 = embed_run(&conn, None, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r2.embedded, 0, "nothing new to embed on a second pass");
 
         std::fs::remove_dir_all(&dir).ok();
@@ -5587,14 +5703,14 @@ mod tests {
         let cancel = AtomicBool::new(false);
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
 
-        let r1 = faces_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let r1 = faces_run(&conn, None, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r1.scanned, 1);
         assert_eq!(r1.faces_found, 0, "a solid-colour image should not detect any faces");
 
         let scanned_at: Option<i64> = conn.query_row("SELECT faces_scanned_at FROM photos WHERE name='plain.jpg'", [], |r| r.get(0)).unwrap();
         assert!(scanned_at.is_some(), "faces_scanned_at must be baselined after a scan");
 
-        let r2 = faces_run(&conn, &mut |_| {}, &cancel).unwrap();
+        let r2 = faces_run(&conn, None, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r2.scanned, 0, "nothing changed — a second pass must not rescan anything");
 
         std::fs::remove_dir_all(&dir).ok();

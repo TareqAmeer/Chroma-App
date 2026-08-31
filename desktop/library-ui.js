@@ -3463,6 +3463,21 @@
     });
     // ── Collage (ROADMAP R13 part 1) — pure client-side canvas compositing, no alignment.
     const collageItem = item('Create collage…', () => createCollage(paths));
+    // ── Scoped face/CLIP analysis (N4) — the sidebar's People search icon
+    // ("Analyze photos — find faces and enable AI search") always scans the WHOLE library,
+    // which stalled for hours on a 49,802-photo library. This scopes the exact same
+    // faces_run → embed_run → cluster_run → clip_embed_run chain (runFindFaces) to just the
+    // selected photos. Valid for any n>=1 (the menu only opens with a selection), so — unlike
+    // the merge/pano items above — there's nothing to dim.
+    item(`Find faces in selection${n > 1 ? ` (${n})` : ''}`, async () => {
+      // Paths → ids: state.entries already carries `.id` alongside `.path` for everything
+      // currently shown in the grid (the same field catalog_query/expandStack/photoIds results
+      // use elsewhere), so no new lookup command is needed — just match on path.
+      const byPath = new Map(state.entries.map((e) => [e.path, e.id]));
+      const ids = paths.map((p) => byPath.get(p)).filter((id) => id != null);
+      if (!ids.length) { toast('Could not resolve the selected photos', 'err'); return; }
+      await runFindFaces(ids);
+    });
     if (n < 2) {
       mergeHdrItem.style.opacity = '.4'; mergeHdrItem.style.pointerEvents = 'none';
       mergeFocusItem.style.opacity = '.4'; mergeFocusItem.style.pointerEvents = 'none';
@@ -5069,13 +5084,21 @@
   /// wants the other, and both need the same expensive per-photo decode anyway. Chains detect →
   /// face-embed → cluster, then CLIP-embed; re-clustering is cheap (pure math over already-
   /// embedded vectors) so it's safe to always re-run after a scan turns up anything new.
-  async function runFindFaces() {
-    toast('Analyzing photos…');
+  /// `photoIds` (optional): scope the scan to exactly these photo ids instead of the whole
+  /// library — the context-menu "Find faces in selection" path (N4). Undefined/omitted
+  /// reproduces the sidebar button's existing full-library behavior exactly: Tauri's `invoke`
+  /// drops an `undefined` property before serializing, so `{ photo_ids: undefined }` arrives on
+  /// the Rust side indistinguishable from no `photo_ids` key at all, and `Option<Vec<i64>>`
+  /// defaults to `None` either way. Clustering is always unscoped (cheap pure math over
+  /// already-embedded vectors — see cluster_run's own doc comment for why it must see the whole
+  /// DB), so it is never passed photoIds.
+  async function runFindFaces(photoIds) {
+    toast(photoIds ? `Analyzing ${photoIds.length} photo${photoIds.length > 1 ? 's' : ''}…` : 'Analyzing photos…');
     try {
-      await invoke('catalog_faces_scan');
-      await invoke('catalog_embed_faces');
+      await invoke('catalog_faces_scan', { photoIds });
+      await invoke('catalog_embed_faces', { photoIds });
       const r = await invoke('catalog_cluster_faces');
-      await invoke('catalog_clip_embed');
+      await invoke('catalog_clip_embed', { photoIds });
       await refreshPeople();
       toast(r.people ? `Found ${r.people} ${r.people === 1 ? 'person' : 'people'}` : 'Photos analyzed — try searching by description', true);
     } catch (e) { toast(humanizeErr('analyze photos', e), 'err'); }
