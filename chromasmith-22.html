@@ -4966,6 +4966,12 @@ uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see 
                           // Unlike Texture/Clarity there is no "negative" reading: this operator only
                           // smooths, so 0 is simply off. y,z,w free.
 uniform vec2 uvOffL,uvScaleL;
+// ROADMAP R7 — Depth Range gate (colRangeWeight's sibling): x: gate on 0/1, y: depLo, z: depHi
+// (0..1, same range-gate convention as mskD's lumLo/lumHi), w free. depthTx is the per-photo
+// relative-depth map (0=far,1=near — see vendor/depth/README.md), uploaded ONCE per photo
+// (FXR.setDepthTex), sampled here in the same photo-space "uv" skinCol already uses (NOT the
+// masked-space "gm", since depth is a property of the pixel itself, not the mask's own space).
+uniform vec4 mskDep[8];uniform sampler2D depthTx;uniform float useDepthTx;
 // Painted/sky masks: up to 8 raster masks packed one-per-channel into TWO RGBA textures (slots
 // 0-3 -> maskTex, slots 4-7 -> maskTex2), authored in JS (brush strokes or the sky heuristic) at a
 // fixed resolution independent of image size, sampled here in the SAME global uv as the analytic
@@ -5291,6 +5297,8 @@ float mskSelWAt(int i,vec2 gm2,vec2 uv2){
   if(D.x>0.001||D.y<0.999){float lv2=dot(srcCol,vec3(.2126,.7152,.0722));
     w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
   w*=colRangeWeight(gateCol2,mskG[i],mskCS[i*4],mskCS[i*4+1],mskCS[i*4+2],mskCS[i*4+3]);
+  {vec4 Dep=mskDep[i];if(Dep.x>0.5&&useDepthTx>0.5){float dv2=texture(depthTx,uv2).r;
+    w*=smoothstep(Dep.y-0.06,Dep.y+0.03,dv2)*(1.0-smoothstep(Dep.z-0.03,Dep.z+0.06,dv2));}}
   if(mskB[i].x>1.5&&mskB[i].z>0.5)w=1.0-w;
   w*=mskE[i].w;
   return w;
@@ -5412,8 +5420,16 @@ if(mskN>0.5){
     if(D.x>0.001||D.y<0.999){float lv2=dot(c.rgb,vec3(.2126,.7152,.0722));
       w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
     w*=colRangeWeight(gateCol,mskG[i],mskCS[i*4],mskCS[i*4+1],mskCS[i*4+2],mskCS[i*4+3]);
-    // Shapeless (Colour Range / Luminance Range) masks invert their GATES, not their shape —
-    // see mskShapeWeight. Applied after both gates so it means "everything except this range".
+    // ROADMAP R7 — Depth Range gate, same shape as the luminance gate just above (D.x/D.y) but
+    // reading the per-photo depth map instead of the graded pixel's own luminance. mskDep[i].x is
+    // the on/off flag (0 = gate never evaluated, so a photo with no depth map computed yet is
+    // still byte-identical for every mask that isn't using this gate); useDepthTx is 0 until
+    // FXR.setDepthTex has actually uploaded a real map for the current photo.
+    {vec4 Dep=mskDep[i];if(Dep.x>0.5&&useDepthTx>0.5){float dv=texture(depthTx,uv).r;
+      w*=smoothstep(Dep.y-0.06,Dep.y+0.03,dv)*(1.0-smoothstep(Dep.z-0.03,Dep.z+0.06,dv));}}
+    // Shapeless (Colour Range / Luminance Range / Depth Range) masks invert their GATES, not
+    // their shape — see mskShapeWeight. Applied after both gates so it means "everything except
+    // this range".
     if(mskB[i].x>1.5&&mskB[i].z>0.5)w=1.0-w;
     w*=mskE[i].w;                          // Amount: one master scale over the finished selection
     // "Selection" preview mode: paint this mask's EFFECTIVE weight (shape x lum gate x colour
@@ -6085,6 +6101,46 @@ void main(){
   }
   o=vec4(clamp(res,0.,1.),1.);
 }`);
+
+    // ROADMAP R7 — depth-driven lens blur / tilt-shift composite. Takes the comp pass's finished
+    // frame (dofSrc) plus 3 progressively-blurred copies of it (dofL1<dofL2<dofL3, built with
+    // `blur` at increasing sigma — see render()'s dofOn block) and continuously blends between
+    // the two layers adjacent to a per-pixel defocus amount `a`, exactly the math validated in
+    // plain Node BEFORE this shader was written (no jump at a layer boundary, monotonic in `a` —
+    // see the depth_blend_validate script referenced from CLAUDE.md's R7 entry). Two selectable
+    // weight sources share this one compositor: real depth (a per-photo map from
+    // vendor/depth/README.md's model, `dofMode=0`) or a plain vertical-position band for
+    // miniature-style tilt-shift (`dofMode=1`, no model needed — the standard real technique for
+    // that look is a focus band around one image row, not depth). ⚠️ `dofBand`/`dofFalloff` are
+    // measured in the SAME 0..1 space as the value being gated (depth 0..1, or global image-
+    // relative uv.y via uvOffL/uvScaleL so a tile/export composes identically to every other
+    // local-adjust mask in this file).
+    this.progs.dof=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D dofSrc,dofL1,dofL2,dofL3,depthTx;
+uniform float dofMode;      // 0 = depth blur, 1 = tilt-shift (vertical band)
+uniform float dofFocus;     // depth mode: focus depth 0..1 (0=far,1=near). tilt-shift: focus uv.y
+uniform float dofBand;      // half-width of the sharp band (0..1) — 0 for depth mode
+uniform float dofFalloff;   // distance beyond the band over which blur ramps to max (>0)
+uniform float dofR1,dofR2,dofR3; // blur radii driving dofL1/L2/L3 — MUST match the sigmas used to build them
+uniform vec2 uvOffL,uvScaleL;
+void main(){
+  vec3 c0=texture(dofSrc,uv).rgb;
+  float val;
+  if(dofMode>0.5){vec2 gm=uvOffL+uv*uvScaleL;val=gm.y;}
+  else{val=texture(depthTx,uv).r;}
+  float dist=max(0.0,abs(val-dofFocus)-dofBand);
+  float a=clamp(dist/max(dofFalloff,1e-4),0.0,1.0);
+  float target=a*dofR3;
+  vec3 c1=texture(dofL1,uv).rgb,c2=texture(dofL2,uv).rgb,c3=texture(dofL3,uv).rgb;
+  vec3 outc;
+  if(target<=dofR1){float t=dofR1>0.0?target/dofR1:0.0;outc=mix(c0,c1,t);}
+  else if(target<=dofR2){float t=(target-dofR1)/max(dofR2-dofR1,1e-4);outc=mix(c1,c2,t);}
+  else{float t=clamp((target-dofR2)/max(dofR3-dofR2,1e-4),0.0,1.0);outc=mix(c2,c3,t);}
+  o=vec4(outc,1.0);
+}`);
   }
   // float16: allocate RGBA16F instead of RGBA8 (see the `lut` FBO's use of this at _initBufs).
   // Requires EXT_color_buffer_float to be RENDERABLE in WebGL2 (linear-filterable half-float
@@ -6130,6 +6186,15 @@ void main(){
     // final Amount-blended result the `lut` pass samples from. Full-res like lens/nr (only paid
     // for when Deconvolution amount>0 — see render()'s dcOn gate).
     ['dcEstA','dcEstB','dcBlurH','dcBlurV','deconvOut'].forEach(n=>this._allocTex(n,w,h));
+    // ROADMAP R7 — depth blur / tilt-shift scratch: dofSrc holds the comp pass's finished frame
+    // when the feature is on (instead of comp writing straight to outFb); dofHtmp is reused as
+    // the horizontal-blur scratch for all three radii in turn (they run sequentially, never
+    // concurrently, so one scratch buffer suffices — same reuse-across-sequential-passes idea as
+    // the halation chain's own scratch buffers); dofL1/L2/L3 hold the three progressively-blurred
+    // full-res layers progs.dof blends between. Full-res like lens/nr above — only ever WRITTEN
+    // when P.depthBlur/P.tiltShift is enabled (render()'s dofOn gate), so this is idle memory,
+    // not idle GPU time, when the feature is off.
+    ['dofSrc','dofHtmp','dofL1','dofL2','dofL3'].forEach(n=>this._allocTex(n,w,h));
     // ROADMAP.md R1: hemitF/the halation-bloom scratch chain also need to be float when the
     // scene-referred tonemap is active, or a >1.0 highlight from the (now-float) `lut` FBO gets
     // clamped right back to 8-bit the moment the emission pass writes it — same reasoning as
@@ -6304,21 +6369,35 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
   setMaskTex2(data,w,h){const gl=this.gl;if(!this.maskTx2)this.maskTx2=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.maskTx2);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.pixelStorei(gl.TEXTURE_2D,gl.UNPACK_FLIP_Y_WEBGL,true);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  // ROADMAP R7 — one single-channel relative-depth map per photo (0=far,255=near — see
+  // vendor/depth/README.md), consumed by BOTH the Depth Range mask gate (colRangeWeight's sibling
+  // in the lut pass) and the depth-blur compositor (progs.dof) above. Uploaded ONCE per photo
+  // (like setMaskTex), never recomputed per mask/per frame — the same "compute once, reuse many"
+  // rule CLAUDE.md §5b's `srcV` uniform already follows. R8 (single channel) keeps this a quarter
+  // the bytes of an RGBA upload for the same resolution.
+  setDepthTex(data,w,h){const gl=this.gl;if(!this.depthTx)this.depthTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.depthTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,w,h,0,gl.RED,gl.UNSIGNED_BYTE,data);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    this.hasDepthTx=true;}
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -6408,11 +6487,12 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mI:new Float32Array(32),
       mS:new Float32Array(128),  // colour-gate samples: 8 masks x 8 samples x (h,s) = 32 vec4
       mJ:new Float32Array(32),   // per-mask detail: x = Texture
-      mK:new Float32Array(32)}); // per-mask detail: x = Noise Reduction (bilateral) strength 0..1
-    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ,mK=U.mK;
+      mK:new Float32Array(32),   // per-mask detail: x = Noise Reduction (bilateral) strength 0..1
+      mDep:new Float32Array(32)});// ROADMAP R7: x = Depth Range gate on/off, y = depLo, z = depHi
+    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ,mK=U.mK,mDep=U.mDep;
     // ⚠️ MUST clear: the packing loop below only writes slots for masks that EXIST, so a stale
     // value from a previous frame with more masks would otherwise linger in an unused slot.
-    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);
+    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);mDep.fill(0);
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;}   // shapeless: gates only (Colour/Luminance Range masks)
@@ -6422,6 +6502,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
       mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
+      // ROADMAP R7 — Depth Range gate, same on/off + floor/ceiling shape as the luminance gate
+      // just above. depOn stays false (mDep[o]=0) for every mask created before this feature and
+      // for every mask that never turned it on, so this is a pure no-op for them.
+      mDep[o]=m.depOn?1:0;mDep[o+1]=m.depLo!=null?m.depLo:0;mDep[o+2]=m.depHi!=null?m.depHi:1;
       mE[o]=m.intersect?2:(m.subtract?1:0);mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would
@@ -6562,11 +6646,16 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       maskTex:4,maskTex2:7,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
-      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,'mskK[0]':mK,
+      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,'mskK[0]':mK,'mskDep[0]':mDep,
       mskAnyTex:MK.some(m=>m.tex)?1:0,
       mskAnyClarity:MK.some(m=>m.clarity)?1:0,
       mskAnyNR:MK.some(m=>m.nr)?1:0,
       skinLum:5,useSkinLum:skinLumOn?1:0,skinCol:6,useSkinCol:anyGate?1:0,
+      // ROADMAP R7 — depthTx bound whenever a real map has been uploaded for THIS photo (via
+      // FXR.setDepthTex); useDepthTx off means every mask's Depth Range gate is skipped, so a
+      // photo with no computed map yet (the common case until a user actually opens the mask
+      // panel — see fxEnsureDepthMap) is byte-identical to before this feature existed.
+      depthTx:9,useDepthTx:this.depthTx?1:0,
       mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
       mskShowSelOp:(opts&&opts.showSelOpacity!=null)?opts.showSelOpacity:0.75,
       mskShowSelOutline:(opts&&opts.showSelOutline)?1:0,
@@ -6577,7 +6666,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -6613,7 +6702,16 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // buffers with LINEAR filtering → free bilinear upscale of the (smooth) glow.
     const outFb=(opts&&opts.outFb!==undefined)?opts.outFb:null;
     const ovp=(opts&&opts.outVp)||[w,h];
-    gl.bindFramebuffer(gl.FRAMEBUFFER,outFb);gl.viewport(0,0,ovp[0],ovp[1]);gl.useProgram(this.progs.comp);
+    // ROADMAP R7 — depth blur / tilt-shift: OFF by default (P.depthBlur/P.tiltShift both undefined
+    // on every existing call site), in which case this is a no-op and comp writes straight to
+    // outFb exactly as before — the identity path that keeps every golden byte-exact. When ON,
+    // comp instead writes into the full-res `dofSrc` scratch buffer so the blur/composite passes
+    // below can run on its output before the FINAL result reaches outFb/ovp.
+    const DB=P.depthBlur,TS=P.tiltShift;
+    const dofOn=!!((DB&&DB.enabled)||(TS&&TS.enabled));
+    gl.bindFramebuffer(gl.FRAMEBUFFER,dofOn?this.fbs.dofSrc:outFb);
+    gl.viewport(0,0,dofOn?w:ovp[0],dofOn?h:ovp[1]);
+    gl.useProgram(this.progs.comp);
     // hEmit = hsrc (pre-blur scalar emit) — needed for the high-pass glow subtraction.
     [['base','lut'],['hGlow','hglow_v'],['bGlow','bglow_v'],['hEmit','hemitF']].forEach(([u,n],i)=>{
       gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,this.txs[n]);
@@ -6688,6 +6786,46 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const uvOff=(opts&&opts.uvOff)||[0,0],uvScale=(opts&&opts.uvScale)||[1,1];
     gl.uniform2f(ul('uvOff'),uvOff[0],uvOff[1]);gl.uniform2f(ul('uvScale'),uvScale[0],uvScale[1]);
     gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);const al=gl.getAttribLocation(cp,'a');gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+    // ROADMAP R7 — depth blur / tilt-shift: 3 progressively-blurred copies of the just-finished
+    // frame (dofSrc), each built with the SAME separable `blur` program the halation/bloom chains
+    // already use, then blended per-pixel by progs.dof. Radii scale with `sc` (=fullImageWidth/REF,
+    // opts.scOverride-aware) exactly like the halation sigmas above, so a tile/loupe/export blurs
+    // at the SAME pixel scale as the full image — not the tile's own smaller scale.
+    if(dofOn){
+      const eff=DB&&DB.enabled?DB:TS;             // whichever is active carries Amount/focus/etc.
+      const amt=(eff.amount!=null?eff.amount:60)/100;         // 0..1, UI default 60
+      const r3=Math.max(0.1,amt*24*sc);           // max blur radius in px at THIS render's scale
+      const r1=r3*0.15,r2=r3*0.45;
+      const mkBlur=(srcName,dstName,sig)=>{
+        this._pass(this.progs.blur,this.fbs.dofHtmp,{img:0,dir:[1/w,0],sig},[[0,srcName,false]]);
+        this._pass(this.progs.blur,this.fbs[dstName],{img:0,dir:[0,1/h],sig},[[0,'dofHtmp',false]]);
+      };
+      mkBlur('dofSrc','dofL1',r1);
+      mkBlur('dofSrc','dofL2',r2);
+      mkBlur('dofSrc','dofL3',r3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,outFb);gl.viewport(0,0,ovp[0],ovp[1]);gl.useProgram(this.progs.dof);
+      [['dofSrc','dofSrc'],['dofL1','dofL1'],['dofL2','dofL2'],['dofL3','dofL3'],['depthTx','depthTx']].forEach(([u,n],i)=>{
+        gl.activeTexture(gl.TEXTURE0+i);
+        gl.bindTexture(gl.TEXTURE_2D,n==='depthTx'?(this.depthTx||this.txs.dofSrc):this.txs[n]);
+        gl.uniform1i(gl.getUniformLocation(this.progs.dof,u),i);
+      });
+      const dp=this.progs.dof,dul=k=>gl.getUniformLocation(dp,k);
+      const tiltMode=!!(TS&&TS.enabled&&!(DB&&DB.enabled));
+      gl.uniform1f(dul('dofMode'),tiltMode?1:0);
+      if(tiltMode){
+        gl.uniform1f(dul('dofFocus'),eff.focus!=null?eff.focus:0.5);       // image-relative uv.y, 0.5 = centre band
+        gl.uniform1f(dul('dofBand'),Math.max(0,(eff.band!=null?eff.band:12)/100/2));
+        gl.uniform1f(dul('dofFalloff'),Math.max(0.02,(eff.falloff!=null?eff.falloff:35)/100));
+      }else{
+        gl.uniform1f(dul('dofFocus'),eff.focus!=null?eff.focus:0.7);       // depth 0..1, 1=nearest
+        gl.uniform1f(dul('dofBand'),Math.max(0,(eff.band!=null?eff.band:6)/100/2));
+        gl.uniform1f(dul('dofFalloff'),Math.max(0.02,(eff.falloff!=null?eff.falloff:30)/100));
+      }
+      gl.uniform1f(dul('dofR1'),r1);gl.uniform1f(dul('dofR2'),r2);gl.uniform1f(dul('dofR3'),r3);
+      gl.uniform2f(dul('uvOffL'),uvOff[0],uvOff[1]);gl.uniform2f(dul('uvScaleL'),uvScale[0],uvScale[1]);
+      gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);const al2=gl.getAttribLocation(dp,'a');gl.enableVertexAttribArray(al2);gl.vertexAttribPointer(al2,2,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    }
   }
   getPixels(){const gl=this.gl,px=new Uint8Array(this.w*this.h*4);
     gl.readPixels(0,0,this.w,this.h,gl.RGBA,gl.UNSIGNED_BYTE,px);
@@ -9988,7 +10126,7 @@ function _cpCommands(){
   const printSel=document.getElementById('sel-print');
   if(printSel)Array.from(printSel.options).forEach(o=>{if(o.value)add('Print profile','Apply print: '+o.textContent,()=>{printSel.value=o.value;selectPrint(o.value);});});
   if(typeof mskAdd==='function'){
-    const MASKS={radial:'Radial',linear:'Linear',color:'Color Range',lum:'Luminance Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin',coat:'Coat'};
+    const MASKS={radial:'Radial',linear:'Linear',color:'Color Range',lum:'Luminance Range',depth:'Depth Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin',coat:'Coat'};
     Object.entries(MASKS).forEach(([k,label])=>add('Mask','Add mask: '+label,()=>{switchTab('fx');fxSection('local');mskAdd(k);}));
   }
   add('Action','Export',()=>{if(typeof exportFX==='function')exportFX();});
@@ -10501,10 +10639,11 @@ function mskAdd(type){
       invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,
       subtract:false,colHue:0,colAmt:0,colSat:0.65};
   }
-  else if(type==='color'||type==='lum'){
+  else if(type==='color'||type==='lum'||type==='depth'){
     // Shapeless masks: no ellipse or gradient at all, the range gates do all the selecting. These
     // existed only as modifiers on a shape mask before, which is not where anyone coming from
-    // Lightroom looks for them.
+    // Lightroom looks for them. Depth Range (ROADMAP R7) is the third — same idea, gated on a
+    // per-photo relative-depth map instead of colour or luminance.
     m={type:'none',origin:type,..._mskAdjustDefaults()};
   }
   else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,..._mskAdjustDefaults()};
@@ -10552,6 +10691,7 @@ function mskAdd(type){
   }
   if(type==='color'){m.crOn=true;m.crRange=40;}
   if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
+  if(type==='depth'){m.depOn=true;m.depLo=0;m.depHi=0.5;}  // starting selection: the farther half
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
@@ -10570,6 +10710,13 @@ function mskAdd(type){
   }
   if(type==='color'){mskCrEyedropper(true);log('Click the color you want to select — this mask has no shape, the color range IS the selection','info');}
   if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
+  if(type==='depth'){
+    mskSetPreviewMode('select');
+    log('Set the Depth floor/ceiling below to pick a near/far band — Selection view is on so you can see it','info');
+    // Compute (or reuse the cached) depth map for this photo, then re-render once it lands so the
+    // Selection preview reflects the real gate instead of a flat "no map yet" (useDepthTx=0) frame.
+    fxEnsureDepthMap().then(()=>{if(typeof renderPreview==='function')renderPreview();});
+  }
 }
 
 // ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
@@ -11436,6 +11583,56 @@ async function _faceparseRunLayers(m){
   const layers=[0,1,2,3,4].map(g=>body.subarray(g*groupLen,(g+1)*groupLen));
   return{mtW,mtH,cropX0,cropY0,cropSize,layers};
 }
+
+// ── Depth estimation (ROADMAP R7) — desktop-only (depth.rs, main.rs's depth_run), same
+// framed-request/response idiom as _faceparseRunLayers above. Computed ONCE per photo, on
+// demand (first time either the Depth Range mask type or the Depth Blur effect actually needs
+// it), and cached on the image element itself (img._depthMap) so switching tools/masks never
+// re-runs inference. A downsized working resolution (512 long edge) is plenty — the model's own
+// fixed input is 518x518 anyway (see vendor/depth/README.md), and the result is upsampled back
+// to this working size, not the photo's full resolution, then bilinearly upscaled again by the
+// GPU sampler at render time (same "resolution-independent" convention mskTexDims already uses
+// for raster masks).
+let _depthRunning=false;
+function fxHasDepthMap(){
+  const it=(typeof curItem==='function')?curItem():null;
+  return !!(it&&it.img&&it.img._depthMap);
+}
+async function fxEnsureDepthMap(){
+  if(!capNative())return null;             // browser build has no Rust depth_run — see README
+  const it=(typeof curItem==='function')?curItem():null;
+  const img=it&&it.img;
+  if(!img)return null;
+  if(img._depthMap)return img._depthMap;
+  if(_depthRunning)return null;
+  _depthRunning=true;
+  try{
+    const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
+    if(!sw||!sh)return null;
+    const long=512,scale=long/Math.max(sw,sh);
+    const dw=Math.max(1,Math.round(sw*scale)),dh=Math.max(1,Math.round(sh*scale));
+    const cv=document.createElement('canvas');cv.width=dw;cv.height=dh;
+    const cx=cv.getContext('2d');cx.drawImage(img,0,0,dw,dh);
+    const d=cx.getImageData(0,0,dw,dh).data;
+    const rgb=new Uint8Array(dw*dh*3);
+    for(let i=0,j=0;i<dw*dh;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+    const buf=await _samFramedInvoke('depth_run',{width:dw,height:dh},rgb);
+    const dv=new DataView(buf);
+    const hlen=dv.getUint32(0,true);
+    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const body=new Uint8Array(buf,4+hlen);
+    if(header.width!==dw||header.height!==dh||body.length!==dw*dh){
+      log('Depth estimate returned an unexpected size — skipping','error');
+      return null;
+    }
+    img._depthMap={data:body,w:dw,h:dh};
+    if(typeof FX!=='undefined'&&FX&&FX.setDepthTex)FX.setDepthTex(body,dw,dh);
+    return img._depthMap;
+  }catch(e){
+    log('Depth estimate failed: '+(e&&e.message||e),'error');
+    return null;
+  }finally{_depthRunning=false;}
+}
 /// Places one or more of the 4 face-parse layers (union, max not sum) into a full mtW*mtH raster.
 function _facePlace(r,groupIdxs){
   const{mtW,mtH,cropX0,cropY0,cropSize,layers}=r;
@@ -12109,7 +12306,10 @@ function mskAddMenu(ev){
     +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
       +item('Skin','wand','skin')+item('Coat','wand','coat')+item('AI Select','wand','ai'):'')
     +'<div class="msk-more-sep"></div>'+hd('Range')
-    +item('Color Range','eyedropper','color')+item('Luminance Range','sun','lum');
+    +item('Color Range','eyedropper','color')+item('Luminance Range','sun','lum')
+    // Depth Range needs a real per-photo depth map (vendor/depth's ONNX model, main.rs's
+    // depth_run) — desktop-only, same gate as Skin/Coat/AI Select above, not a layout check.
+    +(desktop?item('Depth Range','focus','depth'):'');
   const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
   document.body.appendChild(d);
   const r=ev.currentTarget.getBoundingClientRect();
@@ -12803,6 +13003,13 @@ function mskCrToggle(el){
   const m=fxState.masks[mskSel];if(!m)return;
   m.crOn=!!el.checked;mskMeasureSrcV(m);mskRebuild();fxUpdate();
 }
+// ROADMAP R7 — Depth Range gate toggle, sibling to mskCrToggle above.
+function mskDepToggle(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.depOn=!!el.checked;
+  if(m.depOn&&m.depLo==null){m.depLo=0;m.depHi=1;}
+  mskRebuild();fxUpdate();
+}
 function mskCrDropSample(i){
   const m=fxState.masks[mskSel];if(!m||!m.crSamples)return;
   m.crSamples.splice(i,1);
@@ -13075,6 +13282,20 @@ function mskRebuild(){
   if(!caps.coatDepth&&!caps.eyeBright){
     selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
       +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
+  }
+  // ROADMAP R7 — Depth Range gate: on EVERY mask type, mirroring how Colour range works above
+  // (a selection primitive, not a Skin-only or shapeless-only control — CLAUDE.md §5b's rule for
+  // the colour gate). Desktop-only (needs vendor/depth's model); shown disabled with an
+  // explanatory note until a map has actually been computed for this photo, rather than hidden,
+  // per CLAUDE.md §10.13 (a switched-off section reads better dimmed than vanished).
+  if(window.__TAURI__){
+    const hasMap=fxHasDepthMap();
+    selBody+='<div class="fx-row" title="Restricts this mask to a near/far band of the photo\'s estimated depth."><div class="fx-label">Depth range</div>'
+      +'<input type="checkbox" '+(m.depOn?'checked':'')+(hasMap?'':' disabled')+' onchange="mskDepToggle(this)"></div>'
+      +(!hasMap?'<div class="msk-hint">Computing depth map… (first use per photo takes a moment)</div>'
+        :(m.depOn?_mskRow('Depth floor','depLo',m.depLo!=null?m.depLo:0,0,100,0.01,false,'0 = farthest pixel in the photo')
+          +_mskRow('Depth ceiling','depHi',m.depHi!=null?m.depHi:1,0,100,0.01,false,'100 = nearest pixel in the photo'):''));
+    if(!hasMap)fxEnsureDepthMap().then(()=>{if(typeof mskRebuild==='function')mskRebuild();});
   }
 
   // ── "+ Coat"'s two direct one-slider controls ─────────────────────────────────────────────
@@ -15004,6 +15225,17 @@ function getFXParams(adjValsOverride){return{
     extreme:!!(document.getElementById('tg-hal-extreme')||{}).classList?.contains('on'), // ≈×5-6 stylised halation
     protect:parseFloat((document.getElementById('sl-hal-p')||{value:0}).value)/100*0.15}, // slider 0-100 → linear-lum threshold 0..0.15 (eyes ~0.05-0.07)
   bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value)/100,radius:parseFloat(document.getElementById('sl-bloom-r').value)},
+  // ROADMAP R7 — depth-driven lens blur (real depth, needs a computed depth map — see
+  // fxDepthMapFor/depthTx) and tilt-shift (a plain vertical focus band, no model needed — see
+  // render()'s dof composite for why these two share one compositor with different weight
+  // sources). Both absent/false by default -> render()'s dofOn stays false -> comp writes
+  // straight to outFb exactly as before every golden was recorded.
+  depthBlur:{enabled:!!(document.getElementById('tg-depthblur')||{classList:{contains:()=>false}}).classList.contains('on')&&fxHasDepthMap(),
+    amount:adjVal('sl-depthblur-a')||60,focus:(adjVal('sl-depthblur-focus')||70)/100,
+    band:adjVal('sl-depthblur-band')||6,falloff:adjVal('sl-depthblur-fall')||30},
+  tiltShift:{enabled:!!(document.getElementById('tg-tiltshift')||{classList:{contains:()=>false}}).classList.contains('on'),
+    amount:adjVal('sl-tiltshift-a')||60,focus:(adjVal('sl-tiltshift-focus')||50)/100,
+    band:adjVal('sl-tiltshift-band')||12,falloff:adjVal('sl-tiltshift-fall')||35},
   debug:parseFloat((document.getElementById('sel-debug')||{}).value||0),
   vignette:document.getElementById('tg-vig').classList.contains('on')?(adjVal('sl-vig')/100):0,
   canvas:{enabled:!!(document.getElementById('tg-canvas')||{classList:{contains:()=>false}}).classList.contains('on'),

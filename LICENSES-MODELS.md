@@ -14,6 +14,7 @@ are not in git (they are ~1.1 GB); the desktop build fetches them from the sourc
 | **ArcFace `w600k_r50`** (`vendor/arcface`) | Groups photos of the same person | InsightFace, research/OSS terms |
 | **CLIP ViT-B/32** (`vendor/clip`) | Natural-language photo search | MIT (OpenAI) |
 | **RawNIND UtNet2** (`vendor/rawdenoise`) | High-quality RAW noise reduction | **GPL-3.0** |
+| **Depth Anything V2 Small** (`vendor/depth`) | Depth Range mask + depth blur/tilt-shift | Apache-2.0 |
 | **ONNX Runtime** (`vendor/onnxruntime`) | Runs all of the above | MIT |
 
 Two of these — **EdgeSAM** and the **face-parsing** model — carry non-commercial / research terms.

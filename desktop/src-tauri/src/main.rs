@@ -33,6 +33,7 @@ mod raw_decode;
 mod arcface;
 mod clip;
 mod faceparse;
+mod depth;
 mod scrfd;
 mod sam;
 mod rawdenoise;
@@ -509,6 +510,31 @@ fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     out.extend_from_slice(&masks.lips);
     out.extend_from_slice(&masks.hair);
     out.extend_from_slice(&masks.skin);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+// ── Depth estimation (ROADMAP R7) — see depth.rs for the model, the licensing verification and
+// the honest caveat on I/O contract verification. Framed request/response, same idiom as
+// faceparse_run above: caller sends a decoded RGB8 photo (downsampled to a working size on the JS
+// side, the same "photo already resized before it reaches Rust" convention faceparse_run and
+// sam_encode use) + width/height; response is one width*height byte depth map (0=far, 255=near).
+#[tauri::command]
+fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("depth_run: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let map = depth::estimate(payload, w, h)?;
+    #[derive(serde::Serialize)]
+    struct Header { width: u32, height: u32 }
+    let header = Header { width: w, height: h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("depth_run header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + map.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&map);
     Ok(tauri::ipc::Response::new(out))
 }
 
@@ -1843,6 +1869,7 @@ fn main() {
             sam2_encode,
             sam2_points,
             faceparse_run,
+            depth_run,
             scrfd_detect,
             save_to_gphotos_downloads,
             gphotos_downloads_dir,
@@ -2137,6 +2164,7 @@ fn main() {
             // Face-feature auto-exclusion (ROADMAP item 16) — same bundled-resource-with-
             // dev-fallback pattern as the SAM2 models above.
             faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
+            depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
 
             // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-
             // resource-with-dev-fallback pattern; too large for include_bytes! like SAM2/
