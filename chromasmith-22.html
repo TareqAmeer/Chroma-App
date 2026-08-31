@@ -13,11 +13,23 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chromasmith">
 <title>CHROMASMITH</title>
+<!-- Desktop (Tauri) boot gate — set SYNCHRONOUSLY here, before the parser ever reaches <body>,
+     so header/.tabs/main can be hidden from their very first paint rather than relying solely on
+     #boot-splash's z-index to cover them. window.__TAURI__ is injected by Tauri's own document-
+     start init script, so it's already present by the time this runs. Web/iOS builds never see
+     __TAURI__ so this is a no-op there. Cleared by library-ui.js's startup chain once Library has
+     actually opened/expanded (see hideBootSplash() call site), the same moment the splash itself
+     is hidden — never on a timer, or it could reveal the editor before Library is ready. -->
+<script>if(window.__TAURI__)document.documentElement.classList.add('cs-boot-tauri');</script>
 <!-- coi-serviceworker (MIT, Guido Zuidhof): injects COOP/COEP client-side so SharedArrayBuffer
      works on GitHub Pages (which can't set headers). Required by the libraw-wasm RW2 decoder.
      It reloads the page once on first visit to gain cross-origin isolation. -->
 <script src="coi-serviceworker.min.js"></script>
 <style>
+/* Desktop boot gate (see the inline script above): hides the web-layout editor chrome until
+   the Tauri shell has actually settled into the Library. visibility (not display:none) so
+   layout/measurements that happen during startup are unaffected — only paint is suppressed. */
+html.cs-boot-tauri body>header,html.cs-boot-tauri body>.tabs,html.cs-boot-tauri body>main{visibility:hidden}
 /* ══ EMBEDDED TYPEFACES ══════════════════════════════════════════════════════════════════════
    The app is a single offline file — there is no CDN and no second request to make, so both
    faces are base64 data URIs (~85KB combined on a 17.5MB file). Latin subsets only.
@@ -1090,7 +1102,7 @@ window.bootTrickleStart('walk'); // matches the static label above ("Checking yo
 // covering the page indefinitely. desktop-native.js overrides this by calling
 // hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
 // ISN'T the Tauri shell), this inline fallback is what removes the splash.
-window.hideBootSplash=function(){const s=document.getElementById('boot-splash');if(!s)return;if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();s.style.opacity='0';setTimeout(()=>s.remove(),400);};
+window.hideBootSplash=function(){document.documentElement.classList.remove('cs-boot-tauri');const s=document.getElementById('boot-splash');if(!s)return;if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();s.style.opacity='0';setTimeout(()=>s.remove(),400);};
 // Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
 // this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
 // would otherwise leave the splash on screen forever.
