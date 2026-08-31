@@ -1462,6 +1462,15 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
                the shader and is the effective weight. For a gated mask those differ a lot, and
                without saying so the three modes look like three contradictory answers. -->
           <div id="msk-prevmode-hint" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px"></div>
+          <div class="fx-row" id="msk-selview-opacity-row" style="display:none">
+            <div class="fx-label">Overlay opacity</div>
+            <input class="fx-slider" type="range" min="10" max="100" step="1" value="75" id="sl-msk-selview-opacity" oninput="mskSelViewOpacityInput(this.value)">
+            <div class="fx-val" id="vl-msk-selview-opacity">75</div>
+          </div>
+          <div class="fx-row" id="msk-selview-outline-row" style="display:none">
+            <div class="fx-label">Edge only</div>
+            <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
+          </div>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
@@ -4922,6 +4931,8 @@ uniform vec4 mskCS[32];   // 8 masks x 8 samples, 2 per vec4 => 4 vec4 per mask 
 uniform vec4 mskH[8];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
 uniform vec4 mskI[8];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
+uniform float mskShowSelOp;      // Selection-view overlay opacity, 0.1..1.0 (UI-only, never exported)
+uniform float mskShowSelOutline; // Selection-view: >0.5 draws only the boundary of w (edge-detect), not a fill
 uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
 uniform float mskAnyClarity;  // same idea for per-mask Clarity, which needs a WIDER tap set
 // Quarter-res blurred luminance of this render's own source (see progs.lumdown + two blur passes).
@@ -5241,6 +5252,32 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
   if(B.z>0.5)w=1.0-w;
   return w;
 }
+// Effective (shape x lum-gate x colour-gate x Amount) weight for mask i at an arbitrary sample
+// point, used ONLY by the "Selection" preview's edge-only outline mode (mskShowSelOutline) to
+// re-evaluate w at 4 neighbouring texels so the boundary can be detected with a small Sobel-like
+// gradient on the weight field itself. Mirrors the per-pixel loop in main() exactly (shape combine
+// + subtract-prev/intersect + eraser subtraction + luminance gate + colour-range gate + shapeless
+// invert + Amount) so the outline traces the SAME boundary the filled overlay would show, never a
+// second, drifting definition of "selected".
+float mskSelWAt(int i,vec2 gm2,vec2 uv2){
+  float w=mskShapeWeight(i,gm2);
+  if(mskE[i].x>1.5&&i>0)w=min(w,mskShapeWeight(i-1,gm2));
+  else if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm2));
+  for(int j=0;j<8;j++){
+    if(float(j)>=mskN)break;
+    if(j==i||mskJ[j].y<0.5)continue;
+    w=max(0.0,w-mskShapeWeight(j,gm2));
+  }
+  vec3 srcCol=texture(img,uv2).rgb;
+  vec3 gateCol2=useSkinCol>0.5?texture(skinCol,uv2).rgb:srcCol;
+  vec4 D=mskD[i];
+  if(D.x>0.001||D.y<0.999){float lv2=dot(srcCol,vec3(.2126,.7152,.0722));
+    w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
+  w*=colRangeWeight(gateCol2,mskG[i],mskCS[i*4],mskCS[i*4+1],mskCS[i*4+2],mskCS[i*4+3]);
+  if(mskB[i].x>1.5&&mskB[i].z>0.5)w=1.0-w;
+  w*=mskE[i].w;
+  return w;
+}
 void main(){vec4 c=texture(img,vidUV(uv)+vidWeave);
 if(vidBreath!=1.0)c.rgb*=vidBreath;
 // Source-pixel high-pass, computed ONCE. Used by the global Sharpen/Clarity below and, when any
@@ -5333,7 +5370,21 @@ if(mskN>0.5){
     // cannot show what the gates do — and a colour range is untunable if you cannot see it.
     if(mskShowSel>=0.0&&abs(mskShowSel-float(i))<0.5){
       float g=dot(c.rgb,vec3(.2126,.7152,.0722));
-      o=vec4(mix(vec3(g),vec3(1.0,0.15,0.15),clamp(w,0.0,1.0)*0.75),1.0);
+      float wv=clamp(w,0.0,1.0);
+      if(mskShowSelOutline>0.5){
+        // Edge-only outline: re-evaluate the effective weight at 4 neighbouring texels and paint
+        // red only where it changes sharply (the selection BOUNDARY), leaving the interior showing
+        // the plain photo — cheaper and clearer than a filled overlay for judging a feathered edge.
+        vec2 gs=texSize*uvScaleL;
+        float wL=mskSelWAt(i,gm-vec2(gs.x,0.0),uv-vec2(texSize.x,0.0));
+        float wR=mskSelWAt(i,gm+vec2(gs.x,0.0),uv+vec2(texSize.x,0.0));
+        float wU=mskSelWAt(i,gm-vec2(0.0,gs.y),uv-vec2(0.0,texSize.y));
+        float wD=mskSelWAt(i,gm+vec2(0.0,gs.y),uv+vec2(0.0,texSize.y));
+        float edge=clamp((abs(wR-wL)+abs(wD-wU))*2.0,0.0,1.0);
+        o=vec4(mix(vec3(g),vec3(1.0,0.15,0.15),edge*mskShowSelOp),1.0);
+      }else{
+        o=vec4(mix(vec3(g),vec3(1.0,0.15,0.15),wv*mskShowSelOp),1.0);
+      }
       return;
     }
     if(w>0.001){
@@ -6377,6 +6428,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mskAnyClarity:MK.some(m=>m.clarity)?1:0,
       skinLum:5,useSkinLum:skinLumOn?1:0,skinCol:6,useSkinCol:anyGate?1:0,
       mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
+      mskShowSelOp:(opts&&opts.showSelOpacity!=null)?opts.showSelOpacity:0.75,
+      mskShowSelOutline:(opts&&opts.showSelOutline)?1:0,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
@@ -13108,6 +13161,16 @@ function mskAutoLabel(m,i){
 // lut shader to render the EFFECTIVE per-pixel weight (shape x lum gate x colour gate) — the only
 // way to tune a colour range without guessing. See mskShowSel in the shader / render().
 let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
+// Selection-view (mskPreviewMode==='select') display controls — UI-only, never persisted with the
+// mask and never applied on export (see mskShowSelIdx: export paths pass showSel:-1 unconditionally).
+let mskSelViewOpacity=0.75;   // 0.1..1.0, how strongly the red overlay mixes over the greyscale photo
+let mskSelViewOutline=false;  // true: draw only the selection's boundary (edge-detect on w), not a filled overlay
+function mskSelViewOpacityInput(v){
+  mskSelViewOpacity=Math.max(0.1,Math.min(1,(+v)/100));
+  const lab=document.getElementById('vl-msk-selview-opacity');if(lab)lab.textContent=v;
+  if(typeof fxUpdate==='function')fxUpdate();
+}
+function mskSelViewOutlineToggle(v){mskSelViewOutline=!!v;if(typeof fxUpdate==='function')fxUpdate();}
 const MSK_PREVMODE_HINT={
   overlay:'Showing the mask SHAPE only — for a Skin mask that is the raw AI subject, hair and glasses included. Not what gets adjusted.',
   isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the color range is not applied here.',
@@ -13117,6 +13180,10 @@ function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
   const hint=document.getElementById('msk-prevmode-hint');
   if(hint)hint.textContent=MSK_PREVMODE_HINT[v]||'';
   document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  const opRow=document.getElementById('msk-selview-opacity-row'),edRow=document.getElementById('msk-selview-outline-row');
+  const showCtl=v==='select';
+  if(opRow)opRow.style.display=showCtl?'':'none';
+  if(edRow)edRow.style.display=showCtl?'':'none';
   if(typeof fxUpdate==='function')fxUpdate();}   // 'select' changes the RENDER, not just the overlay
 // Which mask index the shader should render as a selection map (-1 = normal photo). Gated on the
 // Local Adjustments section being on and a mask being selected, and never set during export.
@@ -14777,7 +14844,7 @@ function renderLoupe(){
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,
+  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]}); // export-scale grain & glow
   FX.setImage(fxWork);                                              // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -14883,7 +14950,7 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,
+  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]});
   FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
@@ -15043,7 +15110,7 @@ function renderPreview(){
   // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
-  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,...seedOpt});
+  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,...seedOpt});
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
@@ -15051,7 +15118,7 @@ function renderPreview(){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),gamutWarn:fxGamutWarn,...seedOpt});      // re-render processed into FX.cv
+    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,...seedOpt});      // re-render processed into FX.cv
     _applySplitPos();
   } else {
     const orig=document.getElementById('fx-canvas-orig');
