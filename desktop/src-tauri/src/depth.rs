@@ -11,18 +11,15 @@
 // the ONLY Depth Anything V2 size with no non-commercial clause (Base/Large are cc-by-nc-4.0),
 // which is also why Small was picked over a possibly-more-accurate larger variant.
 //
-// ⚠️ UNLIKE faceparse.rs, this integration's I/O contract was NOT verified with a live
-// onnxruntime forward pass — every attempt in the build environment failed for an unrelated
-// reason (no matching onnx Python wheel for the system's Python 3.8; the local onnxruntime-node
-// install fetched only a darwin/arm64 native binding on an x86_64 host). What WAS verified for
-// real: `strings -a model_quantized.onnx` shows exactly the input/output tensor names below (the
-// standard Transformers `DPTImageProcessor`/`AutoModelForDepthEstimation` export naming), and
-// `preprocessor_config.json` was downloaded as a real file, not guessed. The fixed 518x518 square
-// input size is taken from that file's `size` field; run_session already validates the output
-// element count against the expected H*W and returns a descriptive Err rather than panicking if a
-// live model disagrees, so a contract mismatch fails loudly on first real desktop run instead of
-// silently — re-run with a debug eprintln of `outputs[0].len()` on first real hardware use and
-// update this comment with the confirmed number.
+// Verified with a REAL live onnxruntime forward pass (`examples/depth_probe.rs`, run against
+// `test/fixtures/portrait.png`, 512x384): input/output tensor names ("pixel_values"/
+// "predicted_depth") and the fixed 518x518 square input size are correct as assumed — the run
+// completed in ~1.19s (release build, CPU EP) and returned exactly 196,608 bytes (512*384) with a
+// real, non-degenerate spread (byte range 0..254, mean 99.4, a smooth gradient — not NaN/flat
+// garbage). The earlier attempt at this check (Python `onnx`/`onnxruntime-node`) failed for
+// unrelated tooling reasons (no matching wheel / arm64-only native binding on this x86_64 host);
+// `examples/depth_probe.rs` sidesteps that entirely by using the app's OWN Rust ONNX runtime path
+// (`sam::create_session_from_path`/`run_session`), the same one this code actually ships with.
 //
 // Output convention: Depth Anything predicts DISPARITY (inverse depth) — larger raw value = nearer
 // the camera, per the model's own repo (DepthAnything/Depth-Anything-V2 issue #93). There is no
