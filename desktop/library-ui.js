@@ -1010,6 +1010,7 @@
       <button class="lib-btn lib-btn-icon" id="lib-pick" title="Choose root folder">${ic('library',17)}</button>
       <button class="lib-btn lib-btn-icon" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',17)}</button>
       <button class="lib-btn lib-btn-icon" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',17)}</button>
+      <button class="lib-btn lib-btn-icon" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',17)}</button>
       <button class="lib-btn lib-btn-icon" id="lib-expand" title="Full-window view — G">${ic('fit',17)}</button>
     </div>
     <div id="lib-filters">
@@ -1482,11 +1483,16 @@
   // renderGrid's comment: 200 files is comfortable, 1,000 is heavy, 5,000 does not load.
   const VIRT_MIN = 400;
   // Test hook: the grid probe needs the measured metrics, which are otherwise closure-local.
+  // ⚠️ Bug #2: this was declared ONLY inside `if (LIBTEST)` below, so `window.__libInfo` was
+  // undefined in the real packaged app — a "dead public API nobody calls" not because nothing
+  // wanted to call it, but because it plain didn't exist outside the test harness. It's the
+  // real trigger both the toolbar ⓘ button and the "Get Info" context-menu item call, so it must
+  // exist unconditionally.
+  window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
   if (LIBTEST) {
     window.__libState = () => ({ m: state._virtMetrics, on: state._virtOn, n: (state._virtAll || []).length, range: state._virtRange });
     window.__libRenderGrid = () => renderGrid();
     window.__libSelect = (p) => { state.selected.add(p); };
-    window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
@@ -3411,6 +3417,14 @@
     }
     sep();
     item('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
+    // ── Get Info (Bug #2 fix): the Info panel (renderInfoPanel) was fully built and functional
+    // but had no discoverable trigger anywhere in the UI — only an undiscoverable 'i'/'I' keydown
+    // shortcut (itself duplicated, with a second copy gated on state.source==='lr' that never
+    // fired for local photos) and a dead `window.__libInfo` nobody called. Right-click → Get Info
+    // is the conventional macOS/Lightroom entry point. Targets the first (or only) selected
+    // photo via `_kbCursor`, same as the keyboard shortcut, so the panel shows THIS photo rather
+    // than whatever was focused before the right-click.
+    item('Get Info', () => { state._kbCursor = paths[0]; window.__libInfo(true); });
     // ── HDR merge / focus stack (ROADMAP R12) — same "select several, run a batch action" UX
     // as Reset edit above. Both write an ordinary new PNG next to the first selected photo
     // (merge.rs's merge_output_path) and refresh the grid so it shows up as a normal library
@@ -3942,6 +3956,9 @@
     const path = state._kbCursor || state.openedPath
       || (state.selected.size ? [...state.selected][0] : null);
     let el = document.getElementById('lib-info');
+    // Bug #2: invoking Get Info with nothing selected/focused used to silently do nothing —
+    // no panel, no feedback, indistinguishable from the trigger being broken. Toast instead.
+    if (state.showInfo && !path) { toast('Select a photo first to see its info'); state.showInfo = false; }
     if (!state.showInfo || !path) { if (el) el.remove(); return; }
     if (!el) {
       el = document.createElement('div');
@@ -4527,6 +4544,10 @@
   overlay.querySelector('#lib-recent').onclick = toggleRecentMenu;
   // #lib-close removed: the top-bar Library button is the single control for this.
   overlay.querySelector('#lib-expand').onclick = () => toggleExpandedView();
+  // Bug #2 fix: discoverable Info-panel trigger — window.__libInfo(true) already existed and
+  // worked, it just had no button anywhere pointing at it. Uses the same _kbCursor/openedPath/
+  // selected fallback renderInfoPanel already reads, so no new "what's the target" logic needed.
+  overlay.querySelector('#lib-info-btn').onclick = () => window.__libInfo(true);
   function toggleExpandedView(force) {
     state.expanded_view = force !== undefined ? force : !state.expanded_view;
     overlay.classList.toggle('full', state.expanded_view);
@@ -5094,14 +5115,27 @@
   /// DB), so it is never passed photoIds.
   async function runFindFaces(photoIds) {
     toast(photoIds ? `Analyzing ${photoIds.length} photo${photoIds.length > 1 ? 's' : ''}…` : 'Analyzing photos…');
+    // ⚠️ Before this, a scoped (N4) scan showed only the toast above — the real per-phase
+    // progress ('catalog-scan' events from catalog_faces_scan/catalog_embed_faces/
+    // catalog_clip_embed) already reaches wireActivityListeners' generic 'catalog-scan' handler
+    // regardless of scope, but there was no IMMEDIATE feedback the moment the button is clicked:
+    // catalog_faces_scan's first progress event doesn't fire until after the first photo has
+    // decoded+run through SCRFD, which can be a visible beat on a single scoped photo. Priming
+    // the pill here (same 'catalog' kind + 'faces' stage the real events use) means the bar is
+    // already showing before the first real event arrives, not just after.
+    activityUpdate('catalog', { stage: 'faces', done: 0, total: photoIds ? photoIds.length : 0, current: '' });
     try {
       await invoke('catalog_faces_scan', { photoIds });
       await invoke('catalog_embed_faces', { photoIds });
       const r = await invoke('catalog_cluster_faces');
       await invoke('catalog_clip_embed', { photoIds });
       await refreshPeople();
+      activityUpdate('catalog', { stage: 'done', done: photoIds ? photoIds.length : 0, total: photoIds ? photoIds.length : 0 });
       toast(r.people ? `Found ${r.people} ${r.people === 1 ? 'person' : 'people'}` : 'Photos analyzed — try searching by description', true);
-    } catch (e) { toast(humanizeErr('analyze photos', e), 'err'); }
+    } catch (e) {
+      activity.visible = false; renderActivity();
+      toast(humanizeErr('analyze photos', e), 'err');
+    }
   }
 
   /// AI stack Phase D: natural-language photo search. Two round trips, not one — `catalog_clip_search`
@@ -5123,7 +5157,17 @@
     try { hits = await invoke('catalog_clip_search', { text, limit: 200 }); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not search photos.</div>'; return; }
     if (!hits.length) {
-      grid.innerHTML = '<div id="lib-empty">No photos have been analyzed for search yet — click the search icon next to "People" in the sidebar first.</div>';
+      // Bug #1 fix: catalog_clip_search now drops photos scoring below a real minimum-similarity
+      // cutoff (see catalog.rs's CLIP_SEARCH_MIN_SCORE), so an empty result is no longer proof
+      // that nothing has been analyzed — it's now the ALSO-correct "your query genuinely matched
+      // nothing" case (e.g. a nonsense string). Disambiguate via catalog_counts' clip_scanned,
+      // rather than showing the "click the search icon first" message when photos WERE analyzed
+      // and the search is just working correctly.
+      let analyzedAny = false;
+      try { const counts = await invoke('catalog_counts'); analyzedAny = (counts.clip_scanned || 0) > 0; } catch (e) {}
+      grid.innerHTML = analyzedAny
+        ? '<div id="lib-empty">No matching photos found.</div>'
+        : '<div id="lib-empty">No photos have been analyzed for search yet — click the search icon next to "People" in the sidebar first.</div>';
       state.entries = [];
       renderCollections();
       return;
@@ -5591,8 +5635,15 @@
       : activity.stage === 'walk' && !activity.total && activity.done
       ? `Indexing… ${activity.done.toLocaleString()} found`
       : (STAGE_LABELS[activity.stage] || 'Working') + '…';
+    // ⚠️ The ring + "· NN%" text alone doesn't read as "there's a progress bar" — a real user
+    // testing N4 didn't recognize it as one and had to be told to click-to-expand to see the
+    // actual `.lib-act-bar`. Show that same bar markup in the COLLAPSED pill too, not only once
+    // expanded, so "is this doing something" is answerable at a glance. Kept out of the `<span>`
+    // pill itself (a bar under inline text needs its own block) — sits directly under the pill.
+    const collapsedBar = !activity.expanded && activity.stage !== 'done' && activity.total
+      ? `<div class="lib-act-bar" style="position:absolute;left:0;right:0;top:100%;margin:2px 0 0"><div style="width:${pct}%"></div></div>` : '';
     let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative">
-      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>`;
+      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${collapsedBar}`;
     if (activity.expanded && isGenericJob) {
       const bar = activity.stage !== 'done' && activity.total
         ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
