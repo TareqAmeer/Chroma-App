@@ -561,49 +561,91 @@ fn merge_output_path(first_source: &str, suffix: &str) -> String {
     candidate.to_string_lossy().into_owned()
 }
 
+/// N3.2: emits `merge.rs`'s `MergeProgress` callback ("decode"/"align"/"blend" phases, with real
+/// per-photo counts for decode) through the SAME `job-progress` event/schema `catalog-scan`
+/// already uses, onto the SAME activity pill in the Library sidebar (library-ui.js) — rather
+/// than inventing a fourth mechanism. Align/blend stay coarse 0/1→1/1 ticks (the alignment
+/// pyramid and Laplacian blend aren't instrumented internally — real intermediate progress there
+/// would mean threading a callback through an already-verified numerical algorithm's inner
+/// loops, not worth the risk for a step that's seconds long even on a big stack); decode gets a
+/// real i-of-n count since it's naturally one unit of work per source photo. These commands still
+/// have no cancel token (unlike the catalog scans) — merge.rs's tight loops have no natural
+/// cancellation point without that same invasive threading, so this is not wired to N3.3's
+/// fallback either; see ROADMAP.md's N3 writeup for why that's a deliberate, documented gap.
+fn emit_job(app: &tauri::AppHandle, job: &str, label: &str, phase: &str, done: usize, total: usize) {
+    let _ = app.emit(
+        "job-progress",
+        &serde_json::json!({"job": job, "label": label, "phase": phase, "done": done, "total": total}),
+    );
+}
+
 #[tauri::command]
-async fn merge_hdr_photos(paths: Vec<String>) -> Result<String, String> {
+async fn merge_hdr_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result<String, String> {
     let paths2 = paths.clone();
-    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_hdr(&paths2))
-        .await
-        .map_err(|e| format!("merge_hdr_photos: join error: {e}"))??;
+    let app2 = app.clone();
+    let label = "Merging HDR";
+    let png = tauri::async_runtime::spawn_blocking(move || {
+        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+        merge::merge_hdr_progress(&paths2, &mut cb)
+    })
+    .await
+    .map_err(|e| format!("merge_hdr_photos: join error: {e}"))??;
     let out_path = merge_output_path(&paths[0], "-hdr");
     std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    emit_job(&app, "merge", label, "done", 1, 1);
     Ok(out_path)
 }
 
 #[tauri::command]
-async fn merge_focus_photos(paths: Vec<String>) -> Result<String, String> {
+async fn merge_focus_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result<String, String> {
     let paths2 = paths.clone();
-    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_focus(&paths2))
-        .await
-        .map_err(|e| format!("merge_focus_photos: join error: {e}"))??;
+    let app2 = app.clone();
+    let label = "Focus stacking";
+    let png = tauri::async_runtime::spawn_blocking(move || {
+        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+        merge::merge_focus_progress(&paths2, &mut cb)
+    })
+    .await
+    .map_err(|e| format!("merge_focus_photos: join error: {e}"))??;
     let out_path = merge_output_path(&paths[0], "-focus-stack");
     std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    emit_job(&app, "merge", label, "done", 1, 1);
     Ok(out_path)
 }
 
 #[tauri::command]
-async fn merge_astro_photos(paths: Vec<String>, mode: String) -> Result<String, String> {
+async fn merge_astro_photos(app: tauri::AppHandle, paths: Vec<String>, mode: String) -> Result<String, String> {
     let paths2 = paths.clone();
     let mode2 = mode.clone();
-    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_astro(&paths2, &mode2))
-        .await
-        .map_err(|e| format!("merge_astro_photos: join error: {e}"))??;
+    let app2 = app.clone();
+    let label = "Astro stacking";
+    let png = tauri::async_runtime::spawn_blocking(move || {
+        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+        merge::merge_astro_progress(&paths2, &mode2, &mut cb)
+    })
+    .await
+    .map_err(|e| format!("merge_astro_photos: join error: {e}"))??;
     let suffix = if mode == "median" { "-astro-median" } else { "-astro-mean" };
     let out_path = merge_output_path(&paths[0], suffix);
     std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    emit_job(&app, "merge", label, "done", 1, 1);
     Ok(out_path)
 }
 
 #[tauri::command]
-async fn merge_panorama_photos(paths: Vec<String>) -> Result<String, String> {
+async fn merge_panorama_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result<String, String> {
     let paths2 = paths.clone();
-    let png = tauri::async_runtime::spawn_blocking(move || merge::merge_panorama(&paths2))
-        .await
-        .map_err(|e| format!("merge_panorama_photos: join error: {e}"))??;
+    let app2 = app.clone();
+    let label = "Merging panorama";
+    let png = tauri::async_runtime::spawn_blocking(move || {
+        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+        merge::merge_panorama_progress(&paths2, &mut cb)
+    })
+    .await
+    .map_err(|e| format!("merge_panorama_photos: join error: {e}"))??;
     let out_path = merge_output_path(&paths[0], "-panorama");
     std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    emit_job(&app, "merge", label, "done", 1, 1);
     Ok(out_path)
 }
 

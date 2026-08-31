@@ -1183,13 +1183,35 @@ pub fn align_stack(images: &[RgbImageF], ref_idx: usize) -> Vec<RgbImageF> {
         .collect()
 }
 
+/// N3.2: a `job-progress` event payload matching `catalog.rs`'s `ScanProgress` shape
+/// ({phase,done,total,current}) plus a `job` name, so the Library's unified jobs panel can
+/// standardize on ONE schema for both catalog scans and these previously-silent merges instead
+/// of inventing a second one. `Fn(phase,done,total)` rather than a struct, so `merge.rs` (which
+/// has no `tauri` dependency and shouldn't need one) stays decoupled from the event system —
+/// `main.rs`'s command wrapper is what turns each call into an actual `app.emit`.
+pub type MergeProgress<'a> = dyn FnMut(&str, usize, usize) + 'a;
+
+fn noop_progress(_phase: &str, _done: usize, _total: usize) {}
+
 /// Full pipeline: decode -> align -> Mertens fusion w/ deghosting. Returns 8-bit sRGB PNG bytes.
 pub fn merge_hdr(paths: &[String]) -> Result<Vec<u8>, String> {
+    merge_hdr_progress(paths, &mut noop_progress)
+}
+
+/// Same as `merge_hdr`, with progress callbacks: `("decode", i, n)` per photo decoded, then one
+/// `("align", 0, 1)` and one `("blend", 0, 1)` — coarse (the alignment/fusion algorithms
+/// themselves aren't instrumented internally), but real: it turns "nothing happens for 10+
+/// seconds" into "3 of 5 decoded, then aligning, then blending" instead of adding fake ticks.
+pub fn merge_hdr_progress(paths: &[String], progress: &mut MergeProgress) -> Result<Vec<u8>, String> {
     if paths.len() < 2 {
         return Err("HDR merge needs at least 2 photos".into());
     }
-    let images: Result<Vec<RgbImageF>, String> = paths.iter().map(|p| decode_photo(p)).collect();
-    let mut images = images?;
+    let n = paths.len();
+    let mut images = Vec::with_capacity(n);
+    for (i, p) in paths.iter().enumerate() {
+        images.push(decode_photo(p)?);
+        progress("decode", i + 1, n);
+    }
     let (w0, h0) = (images[0].w, images[0].h);
     for im in &images {
         if im.w != w0 || im.h != h0 {
@@ -1197,48 +1219,79 @@ pub fn merge_hdr(paths: &[String]) -> Result<Vec<u8>, String> {
         }
     }
     let ref_idx = images.len() / 2;
-    images = align_stack(&images, ref_idx);
+    progress("align", 0, 1);
+    let images = align_stack(&images, ref_idx);
+    progress("align", 1, 1);
+    progress("blend", 0, 1);
     let fused = hdr::fuse(&images, true)?;
-    encode_png(&fused)
+    let out = encode_png(&fused);
+    progress("blend", 1, 1);
+    out
 }
 
 /// Full pipeline: decode -> align -> variance-of-Laplacian focus stack. Returns 8-bit sRGB PNG.
 pub fn merge_focus(paths: &[String]) -> Result<Vec<u8>, String> {
+    merge_focus_progress(paths, &mut noop_progress)
+}
+
+pub fn merge_focus_progress(paths: &[String], progress: &mut MergeProgress) -> Result<Vec<u8>, String> {
     if paths.len() < 2 {
         return Err("Focus stack needs at least 2 photos".into());
     }
-    let images: Result<Vec<RgbImageF>, String> = paths.iter().map(|p| decode_photo(p)).collect();
-    let mut images = images?;
+    let n = paths.len();
+    let mut images = Vec::with_capacity(n);
+    for (i, p) in paths.iter().enumerate() {
+        images.push(decode_photo(p)?);
+        progress("decode", i + 1, n);
+    }
     let (w0, h0) = (images[0].w, images[0].h);
     for im in &images {
         if im.w != w0 || im.h != h0 {
             return Err("Focus stack: all source photos must be the same pixel dimensions (align crops/rotations first)".into());
         }
     }
-    images = align_stack(&images, 0);
+    progress("align", 0, 1);
+    let images = align_stack(&images, 0);
+    progress("align", 1, 1);
+    progress("blend", 0, 1);
     let stacked = focus::stack(&images)?;
-    encode_png(&stacked)
+    let out = encode_png(&stacked);
+    progress("blend", 1, 1);
+    out
 }
 
 /// Full pipeline: decode -> align (to frame 0, same convention `merge_focus` uses) -> per-pixel
 /// mean/median stack. Returns 8-bit sRGB PNG. `mode` is "median" for the outlier-robust path,
 /// anything else (including "mean") falls back to plain mean.
 pub fn merge_astro(paths: &[String], mode: &str) -> Result<Vec<u8>, String> {
+    merge_astro_progress(paths, mode, &mut noop_progress)
+}
+
+pub fn merge_astro_progress(paths: &[String], mode: &str, progress: &mut MergeProgress) -> Result<Vec<u8>, String> {
     if paths.len() < 2 {
         return Err("Astro stack needs at least 2 photos".into());
     }
-    let images: Result<Vec<RgbImageF>, String> = paths.iter().map(|p| decode_photo(p)).collect();
-    let mut images = images?;
+    let n = paths.len();
+    let mut images = Vec::with_capacity(n);
+    for (i, p) in paths.iter().enumerate() {
+        images.push(decode_photo(p)?);
+        progress("decode", i + 1, n);
+    }
     let (w0, h0) = (images[0].w, images[0].h);
     for im in &images {
         if im.w != w0 || im.h != h0 {
             return Err("Astro stack: all source photos must be the same pixel dimensions (align crops/rotations first)".into());
         }
     }
-    images = align_stack(&images, 0);
+    progress("align", 0, 1);
+    let images = align_stack(&images, 0);
+    progress("align", 1, 1);
+    progress("blend", 0, 1);
     let stack_mode = if mode == "median" { astro::StackMode::Median } else { astro::StackMode::Mean };
     let stacked = astro::stack(&images, stack_mode)?;
-    encode_png(&stacked)
+    let out = encode_png(&stacked);
+    progress("blend", 1, 1);
+    out
 }
 
 /// Full pipeline for exactly TWO photos: decode -> similarity-transform registration on
@@ -1249,11 +1302,18 @@ pub fn merge_astro(paths: &[String], mode: &str) -> Result<Vec<u8>, String> {
 /// real additional work this pass did not build or validate, so it is refused explicitly rather
 /// than attempted blind. See `pano`'s module doc for the full scope statement.
 pub fn merge_panorama(paths: &[String]) -> Result<Vec<u8>, String> {
+    merge_panorama_progress(paths, &mut noop_progress)
+}
+
+pub fn merge_panorama_progress(paths: &[String], progress: &mut MergeProgress) -> Result<Vec<u8>, String> {
     if paths.len() != 2 {
         return Err("Panorama: this scoped-down implementation stitches exactly 2 photos (see CLAUDE.md/ROADMAP R13 for why 3+ isn't supported yet)".into());
     }
     let a = decode_photo(&paths[0])?;
+    progress("decode", 1, 2);
     let b = decode_photo(&paths[1])?;
+    progress("decode", 2, 2);
+    progress("align", 0, 1);
     // Register on downsampled luma for speed — matches `align_stack`'s own convention.
     // `register_similarity` needs equal-sized reference/moving arrays for its shared pyramid
     // loop, so both photos are downsampled onto the SAME working grid (each independently
@@ -1283,8 +1343,12 @@ pub fn merge_panorama(paths: &[String]) -> Result<Vec<u8>, String> {
     let rescale_x = a.w as f32 / work_w as f32;
     let rescale_y = a.h as f32 / work_h as f32;
     let xf = pano::Similarity { tx: tx * rescale_x, ty: ty * rescale_y, theta, scale };
+    progress("align", 1, 1);
+    progress("blend", 0, 1);
     let stitched = pano::stitch_pair(&a, &b, &xf)?;
-    encode_png(&stitched)
+    let out = encode_png(&stitched);
+    progress("blend", 1, 1);
+    out
 }
 
 fn encode_png(img: &RgbImageF) -> Result<Vec<u8>, String> {
