@@ -4948,6 +4948,10 @@ uniform vec4 mskJ[8];     // x: Texture (-1..1, source high-pass gain; negative 
                           //    (which reaches back exactly one slot, so only ONE region could ever
                           //    be excluded) any number of masks can be erasers, and order stops
                           //    mattering. z,w free.
+uniform float mskAnyNR;  // 1 when any mask has nonzero Noise Reduction, so the bilateral tap ring is computed
+uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see srcNR block in main()).
+                          // Unlike Texture/Clarity there is no "negative" reading: this operator only
+                          // smooths, so 0 is simply off. y,z,w free.
 uniform vec2 uvOffL,uvScaleL;
 // Painted/sky masks: up to 8 raster masks packed one-per-channel into TWO RGBA textures (slots
 // 0-3 -> maskTex, slots 4-7 -> maskTex2), authored in JS (brush strokes or the sky heuristic) at a
@@ -5278,6 +5282,14 @@ float mskSelWAt(int i,vec2 gm2,vec2 uv2){
   w*=mskE[i].w;
   return w;
 }
+// Range weight for the per-mask NR bilateral filter (see the mskAnyNR block in main() below).
+// Declared before use — see CLAUDE.md §3 on GLSL function ordering. exp(-dl^2/(2*sigR^2)) with
+// sigR=0.08 (78.125 == 1/(2*0.08*0.08)), chosen ~1.3x a typical sensor-noise sigma of 0.06 — the
+// standard sigma-ratio convention (Tomasi & Manduchi 1998), validated numerically in Node first.
+float nrRangeW(vec3 samp,vec3 center){
+  float dl=dot(samp-center,vec3(.2126,.7152,.0722));
+  return exp(-dl*dl*78.125);
+}
 void main(){vec4 c=texture(img,vidUV(uv)+vidWeave);
 if(vidBreath!=1.0)c.rgb*=vidBreath;
 // Source-pixel high-pass, computed ONCE. Used by the global Sharpen/Clarity below and, when any
@@ -5302,6 +5314,32 @@ if(mskAnyClarity>0.5){
   vec3 nbW=(texture(img,vidUV(uv+vec2(0.,texSize.y*rW)))+texture(img,vidUV(uv-vec2(0.,texSize.y*rW)))
            +texture(img,vidUV(uv+vec2(texSize.x*rW,0.)))+texture(img,vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
   srcHPW=c.rgb-nbW;
+}
+// Per-mask Noise Reduction: a small, FIXED 3x3 bilateral filter (Tomasi & Manduchi 1998 — spatial
+// Gaussian x range Gaussian) on SOURCE pixels, same pre-grade/post-apply convention as Texture and
+// Clarity above. Unlike a box blur, taps that differ a lot in luminance from the center (i.e.
+// across an edge) are down-weighted, so it smooths grain within a region without blurring across
+// a boundary — validated numerically in Node against a synthetic step+noise chart before this GLSL
+// was written (9-tap bilateral cut flat-region noise variance ~2.7x vs the untouched noisy image,
+// while a same-tap-count box blur nearly DOUBLED the edge error by bleeding across the boundary).
+// Spatial weights are baked constants for the fixed ring (sigS=0.9 texel): orthogonal neighbours
+// 0.540, diagonal neighbours 0.291, center is always 1.0. Gated on mskAnyNR exactly like
+// mskAnyTex/mskAnyClarity, so the 8 extra taps are never paid by a photo that doesn't ask for them.
+vec3 srcNR=vec3(0.0);
+if(mskAnyNR>0.5){
+  vec3 cc=c.rgb;
+  vec3 s10=texture(img,vidUV(uv+vec2(0.0,-texSize.y))).rgb;
+  vec3 s01=texture(img,vidUV(uv+vec2(-texSize.x,0.0))).rgb;
+  vec3 s21=texture(img,vidUV(uv+vec2(texSize.x,0.0))).rgb;
+  vec3 s12=texture(img,vidUV(uv+vec2(0.0,texSize.y))).rgb;
+  vec3 s00=texture(img,vidUV(uv+vec2(-texSize.x,-texSize.y))).rgb;
+  vec3 s20=texture(img,vidUV(uv+vec2(texSize.x,-texSize.y))).rgb;
+  vec3 s02=texture(img,vidUV(uv+vec2(-texSize.x,texSize.y))).rgb;
+  vec3 s22=texture(img,vidUV(uv+vec2(texSize.x,texSize.y))).rgb;
+  float w10=0.540*nrRangeW(s10,cc),w01=0.540*nrRangeW(s01,cc),w21=0.540*nrRangeW(s21,cc),w12=0.540*nrRangeW(s12,cc);
+  float w00=0.291*nrRangeW(s00,cc),w20=0.291*nrRangeW(s20,cc),w02=0.291*nrRangeW(s02,cc),w22=0.291*nrRangeW(s22,cc);
+  float wsum=1.0+w10+w01+w21+w12+w00+w20+w02+w22;
+  srcNR=(cc+s10*w10+s01*w01+s21*w21+s12*w12+s00*w00+s20*w20+s02*w02+s22*w22)/wsum;
 }
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
 // adjSharp boosts all frequencies; adjClarity weights by midtone mask (4*lum*(1-lum)).
@@ -5400,6 +5438,12 @@ if(mskN>0.5){
       if(mskJ[i].w!=0.0){
         float lvC=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722)); // midtone-weight proxy always reads a clamped copy
         c.rgb=c.rgb+srcHPW*(mskJ[i].w*w*4.0*lvC*(1.0-lvC));
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+      // Noise Reduction: mix toward the bilateral-filtered source by strength*w. Unipolar (no
+      // "negative NR") — see mskK[i].x's comment for why this is unlike Texture/Clarity.
+      if(mskK[i].x>0.0){
+        c.rgb=mix(c.rgb,srcNR,mskK[i].x*w);
         if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
       }
       c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow,mskJ[i].z); // converge toward the target FIRST,
@@ -6296,11 +6340,12 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mE:new Float32Array(32),mF:new Float32Array(32),mG:new Float32Array(32),mH:new Float32Array(32),
       mI:new Float32Array(32),
       mS:new Float32Array(128),  // colour-gate samples: 8 masks x 8 samples x (h,s) = 32 vec4
-      mJ:new Float32Array(32)}); // per-mask detail: x = Texture
-    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ;
+      mJ:new Float32Array(32),   // per-mask detail: x = Texture
+      mK:new Float32Array(32)}); // per-mask detail: x = Noise Reduction (bilateral) strength 0..1
+    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ,mK=U.mK;
     // ⚠️ MUST clear: the packing loop below only writes slots for masks that EXIST, so a stale
     // value from a previous frame with more masks would otherwise linger in an unused slot.
-    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);
+    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;}   // shapeless: gates only (Colour/Luminance Range masks)
@@ -6325,6 +6370,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // 0..1 strength of the one-way clamp (was a hard boolean) — see tanOneWayAmt's doc comment.
       mJ[o+2]=(m.tanOneWayAmt!=null?m.tanOneWayAmt:(m.tanOneWay?100:0))/100;
       mJ[o+3]=(m.clarity||0)/100;  // Clarity: -1..1 gain on the WIDE source high-pass (see srcHPW)
+      mK[o]=(m.nr||0)/100;    // Noise Reduction: 0..1 unipolar mix toward the bilateral-filtered source
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -6423,9 +6469,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       maskTex:4,maskTex2:7,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
-      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,
+      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,'mskK[0]':mK,
       mskAnyTex:MK.some(m=>m.tex)?1:0,
       mskAnyClarity:MK.some(m=>m.clarity)?1:0,
+      mskAnyNR:MK.some(m=>m.nr)?1:0,
       skinLum:5,useSkinLum:skinLumOn?1:0,skinCol:6,useSkinCol:anyGate?1:0,
       mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
       mskShowSelOp:(opts&&opts.showSelOpacity!=null)?opts.showSelOpacity:0.75,
@@ -10200,7 +10247,7 @@ function oklch2rgb(h,C,L){
          l2s(-1.2684380046*l+2.6097574011*m-0.3413193965*s2),
          l2s(-0.0041960863*l-0.7034186147*m+1.7076147010*s2)];
 }
-const MSK_MAX=8;   // must match mskA..mskJ[8] in the lut shader and the two maskTex/maskTex2 raster channels
+const MSK_MAX=8;   // must match mskA..mskK[8] in the lut shader and the two maskTex/maskTex2 raster channels
 const CR_MAX_SAMPLES=8;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max.
 // Raised from 6: auto-seeding (mskAutoSamples, k=4) already claims 4 of the old 6 slots, leaving
 // only 2 for a manual shift-click add-on — too little headroom on a subject with more than two
@@ -10272,7 +10319,8 @@ function _mskSkinDefaults(){return{
   tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
   tanDepth:0,tanWarm:0,srcV:null,_okSpace:true,
   amount:100,name:'',muted:false,     // amount = master scale on the whole mask; name = user label
-  tex:0,isExclude:false,tanOneWay:false,tanOneWayAmt:0};}  // Texture: +sharpen/-soften; isExclude: eraser.
+  tex:0,isExclude:false,tanOneWay:false,tanOneWayAmt:0,
+  nr:0};}  // Texture: +sharpen/-soften; isExclude: eraser; nr: 0..100 edge-aware NR strength (unipolar).
   // tanOneWayAmt (0..100): strength of the one-way clamp, replacing the old hard on/off. 0 behaves
   // exactly like tanOneWay:false (skin can lighten toward the target); 100 exactly like
   // tanOneWay:true (skin only ever darkens). Values in between allow a SMALL amount of shadow lift
@@ -13065,6 +13113,7 @@ function mskRebuild(){
     +'<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
     +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
     +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
+    +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.')
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
     // Color paint: a Lightroom-style "tint the masked area toward this color" control — distinct
     // from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already there).

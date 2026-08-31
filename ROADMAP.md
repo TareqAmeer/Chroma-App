@@ -32,6 +32,7 @@ re-add prose write-ups for closed items here** — that's what made this file 90
 | F3 — Desktop dialog filter parity | Resolved as a non-issue: there is no native file-open dialog with an extension filter anywhere in the app (every `dialog\|open` call is folder-only); nothing to widen. |
 | F8 — Regenerate build outputs | `desktop/dist/` and iOS `www/`/`public/` resynced via `build-desktop.sh`/`npm run sync`. iOS `pod install` itself fails on this dev Mac (no full Xcode) — pre-existing, documented, CI is the real iOS build path. |
 | UX item B remainder — Selection-view opacity + edge-only outline | The `mskShowSel` "Selection" preview (CLAUDE.md §5b) got two new UI-only controls, shown only while that mode is active: an Overlay opacity slider (`sl-msk-selview-opacity`, 10-100%, `mskShowSelOp` uniform) and an "Edge only" checkbox (`ck-msk-selview-outline`, `mskShowSelOutline` uniform) that draws just the selection's boundary instead of a filled tint — a small Sobel-like gradient on the effective weight field, re-evaluated at 4 neighbouring texels via a new `mskSelWAt()` GLSL helper that mirrors the main loop's shape+lum-gate+colour-gate+Amount computation exactly (so the outline traces the same boundary the fill would show, not a second drifting definition). Both are session-only state (`mskSelViewOpacity`/`mskSelViewOutline`), never persisted with the mask and never reach export (export call sites don't set `showSel` at all, so the new uniforms are moot there by construction). Verified: `node test/export_harness.mjs` clean (no GLSL compile errors), `npm test` 18/18 export goldens + 21/21 mask + perf + 0 UI-audit violations, all unchanged from baseline since no shipped recipe uses Selection view. |
+| Item 6 remainder — per-mask edge-aware Noise Reduction | A genuinely different operator from Texture/Clarity's bipolar high-pass add/subtract: a fixed 3x3 (9-tap) bilateral filter (Tomasi & Manduchi 1998 — spatial Gaussian x range Gaussian, real published formula, not invented) on source pixels, mixed in per-mask by a new unipolar `nr` slider (0 = off, no "negative NR" — this operator only smooths). Validated in Node FIRST against a synthetic step-edge+noise chart before any GLSL: the 9-tap bilateral cut flat-region noise variance ~2.7x (0.00314→0.00118) while a same-tap-count box blur nearly DOUBLED edge error (0.052→0.097) by bleeding across the boundary; the bilateral kept edge-adjacent pixels within 0.004-0.008 of the clean 0.2/0.8 step vs the box blur's 0.384/0.581. Ported to GLSL following the exact Texture/Clarity architecture: a new `mskK[8]` uniform array (`x` = NR strength) and `mskAnyNR` gate alongside `mskJ`/`mskAnyTex`/`mskAnyClarity`, computed once as `srcNR` in `main()` and gated so the 8 extra taps are never paid when unused; `nr:0` added to `_mskSkinDefaults()` so `_mskToSnap`/session/undo persistence and new-mask creation all pick it up for free, the same way Texture/Clarity already do. UI: a "Noise Reduction" row in the mask panel's Adjust group next to Texture/Clarity. Verified: `node test/export_harness.mjs` clean (no GLSL compile error, no blank render), all 18/18 export goldens byte-identical to baseline (unreachable by construction — no shipped recipe sets `nr`), 21/21 mask round-trip tests, 0 UI-audit regressions, perf budgets unchanged. |
 | F9 — ARW purple-edge band | `decode_and_demosaic` never read rawler's `crop_area`/`active_area`, so Sony's masked optical-black sensor columns demosaiced as real image data. Fixed by cropping post-demosaic (pre-demosaic would need CFA-phase re-derivation — checked, real bodies do shift phase, e.g. `sony/a500.toml`'s odd offsets). Also corrected the DC-S9's own native decode to its true 6000×4000 (was 6016×4016, including its own masked border) — applied uniformly per user decision, independently corroborated by `calib/nr_validate.py`'s own pre-existing note about this exact mismatch. |
 
 ## Rejected / withdrawn
@@ -61,23 +62,14 @@ announce themselves).
   segmentation) would separate lips/brows/hair without any hand-brushing. `desktop/src-tauri/
   src/faceparse.rs` already does face-feature exclusion; this would be the selector itself.
   Not attempted this session — scoped but not started; see note below.
-- **Item 6 remainder** — true edge-aware per-mask noise reduction. Texture/Clarity (bipolar,
-  shipped) cover sharpen/soften; a genuinely different NR operator is its own piece of work.
-  Not attempted this session — scoped but not started; see note below.
 
-**2026-08-31 session note**: both items above were read and scoped (this file's own open-item
-text, `faceparse.rs`, and the guided-filter code behind the raster-mask Refine button were all
-reviewed) but not implemented in this pass, per this repo's own "validate before building"
-discipline rather than shipping a guessed cut. Item 4's remainder needs the face-parse skin class
-turned into a NEW raster-mask entry point end-to-end (Rust command + `_mskToSnap`/`_mskFromSnap`
-wiring + a real photo to confirm the skin class is actually cleanly separable, per
-`faceparse.rs`'s own doc-comment caveat about the class table needing independent verification)
-— that is a multi-file Rust+JS feature, not a slider. Item 6's remainder needs a JS reference
-implementation of an edge-aware kernel validated against synthetic test images BEFORE any GLSL is
-written (this file's own process rule), then a real per-pixel guided-filter/bilateral pass added
-to the `lut` fragment shader with a `mskAnyNR`-style gate — real GPU work needing its own focused
-session with shader verification (`node test/export_harness.mjs` after every touch, per CLAUDE.md
-§3) rather than being folded in behind a smaller, unrelated UI change.
+**2026-08-31 session note**: Item 4's remainder was read and scoped (this file's own open-item
+text and `faceparse.rs` were reviewed) but not implemented in this pass, per this repo's own
+"validate before building" discipline rather than shipping a guessed cut. It needs the face-parse
+skin class turned into a NEW raster-mask entry point end-to-end (Rust command +
+`_mskToSnap`/`_mskFromSnap` wiring + a real photo to confirm the skin class is actually cleanly
+separable, per `faceparse.rs`'s own doc-comment caveat about the class table needing independent
+verification) — that is a multi-file Rust+JS feature, not a slider.
 
 ### Boot/offline
 
