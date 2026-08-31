@@ -5555,14 +5555,31 @@
     // there is nothing to show a percentage OF. Showing the running count instead ("Indexing…
     // 4,213 found") is what actually answers "is this doing something or stuck", which a
     // permanently-0% ring cannot.
-    const label = activity.stage === 'done'
+    // 'job' is the generic lane (N3.2): merges, the named-subject library scan, and any future
+    // one-off long op that doesn't fit the catalog/import stage lists. It carries its OWN label
+    // (activity.label) and cancel callback (activity.cancelFn) instead of STAGE_LABELS/a fixed
+    // cancel command — unifying the SCHEMA (kind/stage/done/total/current + one visible place)
+    // without forcing every job through the catalog-scan-shaped stage list it doesn't have.
+    const isGenericJob = activity.kind !== 'import' && activity.kind !== 'catalog';
+    const label = isGenericJob
+      ? (activity.stage === 'done' ? (activity.label || 'Job') + ' done' : (activity.label || 'Working') + '…')
+      : activity.stage === 'done'
       ? (activity.kind === 'import' ? 'Imported' : 'Indexed') + (activity.total ? ` ${activity.total}` : '')
       : activity.stage === 'walk' && !activity.total && activity.done
       ? `Indexing… ${activity.done.toLocaleString()} found`
       : (STAGE_LABELS[activity.stage] || 'Working') + '…';
     let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative">
       <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>`;
-    if (activity.expanded) {
+    if (activity.expanded && isGenericJob) {
+      const bar = activity.stage !== 'done' && activity.total
+        ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
+      html += `<div class="lib-act-pop" onclick="event.stopPropagation()">
+        <div class="lib-act-pop-head"><span>${esc(activity.label || 'Job')}</span>
+          <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : (activity.cancelFn ? 'Cancel' : '')}</span></div>
+        <div class="lib-act-pop-body">
+          <div class="lib-act-stage active"><span style="width:12px;display:inline-block;text-align:center">${activity.stage === 'done' ? '✓' : '›'}</span><span>${esc(activity.current || activity.label || 'Working')}</span><span class="lib-act-stage-n">${activity.stage === 'done' ? '' : (activity.total ? `${activity.done} of ${activity.total}` : '')}</span></div>${bar}
+        </div></div>`;
+    } else if (activity.expanded) {
       const stages = STAGE_ORDER.filter((s) => s === 'copy' ? activity.kind === 'import' : activity.kind === 'catalog');
       const activeIdx = stages.indexOf(activity.stage);
       html += `<div class="lib-act-pop" onclick="event.stopPropagation()">
@@ -5615,6 +5632,7 @@
         e.stopPropagation();
         if (activity.stage === 'done') { activity.visible = false; renderActivity(); return; }
         if (activity.kind === 'catalog') invoke('catalog_scan_cancel').catch(() => {});
+        else if (typeof activity.cancelFn === 'function') { try { activity.cancelFn(); } catch (e) {} }
         activity.expanded = false;
         renderActivity();
       };
@@ -5693,7 +5711,69 @@
       const done = p.total && p.done >= p.total ? p.total : p.done;
       activityUpdate('import', { stage: p.total && done >= p.total ? 'done' : 'copy', done, total: p.total || 0, current: p.current || '' });
     }).catch(() => {});
+    // N3.2: the generic lane for anything that isn't a catalog scan or a card import — today
+    // that's merge.rs's HDR/focus/astro/panorama commands (main.rs emits this alongside them,
+    // coarse phase-level since their inner loops are numerical pyramids not worth instrumenting
+    // per-pixel — see ROADMAP.md's N3 writeup). Schema is the SAME {phase,done,total,current}
+    // shape as catalog-scan, plus a `job`/`label` so this one event name can carry many kinds of
+    // work without a new event per feature.
+    window.__TAURI__.event.listen('job-progress', (ev) => {
+      const p = ev.payload || {};
+      activityUpdate(p.job || 'job', { label: p.label || p.job, stage: p.phase || 'working', done: p.done || 0, total: p.total || 0, current: p.current || '' });
+    }).catch(() => {});
   }
+
+  /// Public entry point for JS-side long-running ops that aren't Rust events — the Named-Subject
+  /// "Find across library" scan (chromasmith-22.html's subjFindAll) previously ran a bespoke
+  /// _subjScanBusy/_subjScanProgress pair with its own inline panel and nothing in the shared
+  /// activity indicator, so it was invisible from anywhere else in the app (ROADMAP N3.2). It
+  /// keeps its own inline per-photo results list (that UI has no equivalent in this generic
+  /// pill), but now ALSO mirrors progress here so there's one consistent place showing "is
+  /// anything running" regardless of which feature started it. `patch.cancelFn`, if given, wires
+  /// the pill's own Cancel button; omit it for a job with no cancel path.
+  window.libActivityJob = function (job, patch) { activityUpdate(job, patch || {}); };
+  window.libActivityJobDone = function (job, extra) { activityUpdate(job, { stage: 'done', ...(extra || {}) }); };
+
+  // ── N3.3: shared blocking-wait modal — the FALLBACK UI ──────────────────────────────────────
+  // Every long-running op in the N3 inventory (catalog scans via N3.1's reader/writer split,
+  // merges via spawn_blocking, the subject scan, stills/video export/tiled render) is already
+  // non-blocking by construction, so nothing in this codebase calls this today — see ROADMAP.md's
+  // N3 writeup for the honest "found none" note. It exists as a real, ready-to-use escape hatch
+  // for the rare FUTURE op that genuinely can't be made safe to run alongside other work: an
+  // unmissable centered <dialog> (same construction as `lib-offq-modal` above — plain
+  // `document.createElement('dialog')` + inline styles, no framework) stating what's running and
+  // that the app must wait, with the SAME progress-bar markup class (`.lib-act-bar`) the activity
+  // pill already uses so a viewer sees one consistent progress-bar look everywhere in the app.
+  // ⚠️ Deliberately NOT wired to any job automatically — a caller opens it explicitly
+  // (`libBlockingWaitModal.show(label)`), then feeds it progress via the SAME `libActivityJob`
+  // schema (`libBlockingWaitModal.update({done,total,current})`), then closes it
+  // (`libBlockingWaitModal.hide()`) when the op finishes. Using this for something that COULD run
+  // concurrently with other work is a regression, not a shortcut — N3.2's non-modal panel is the
+  // default and should be tried first.
+  window.libBlockingWaitModal = (() => {
+    let dlg = null;
+    function ensure() {
+      if (dlg) return dlg;
+      dlg = document.createElement('dialog');
+      dlg.id = 'lib-blocking-wait-modal';
+      dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:18px 20px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.innerHTML = '<div id="lib-bwm-title" style="font-size:13px;font-weight:600;margin-bottom:6px"></div>'
+        + '<div id="lib-bwm-sub" style="font-size:12px;color:var(--mut);margin-bottom:12px">Please wait — this can\'t run alongside other work.</div>'
+        + '<div class="lib-act-bar" style="margin-bottom:6px"><div id="lib-bwm-bar" style="width:0%"></div></div>'
+        + '<div id="lib-bwm-current" style="font-size:11px;color:var(--mut)"></div>';
+      document.body.appendChild(dlg);
+      // No close button/Escape handler on purpose — this models a genuine "the app must wait"
+      // state, not a dismissible notice. Dismissal happens only via hide(), called by the caller
+      // once the blocking op actually finishes.
+      dlg.addEventListener('cancel', (e) => e.preventDefault());
+      return dlg;
+    }
+    return {
+      show(label) { const d = ensure(); d.querySelector('#lib-bwm-title').textContent = label || 'Working…'; d.querySelector('#lib-bwm-bar').style.width = '0%'; d.querySelector('#lib-bwm-current').textContent = ''; if (!d.open) d.showModal(); },
+      update({ done, total, current } = {}) { const d = ensure(); const pct = total ? Math.round((done / total) * 100) : 0; d.querySelector('#lib-bwm-bar').style.width = pct + '%'; d.querySelector('#lib-bwm-current').textContent = current || (total ? `${done} of ${total}` : ''); },
+      hide() { if (dlg && dlg.open) dlg.close(); },
+    };
+  })();
 
   async function openCatalogView(scope) {
     state.source = 'catalog';
