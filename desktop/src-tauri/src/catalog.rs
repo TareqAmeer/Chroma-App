@@ -1945,7 +1945,8 @@ pub fn faces_run(
             let sql = format!(
                 "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
                  FROM photos p JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})",
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})
+                   AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)",
                 placeholders.join(",")
             );
             let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -2127,7 +2128,7 @@ pub fn embed_run(
             let sql = format!(
                 "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
                  FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.id IN ({})",
+                 WHERE p.present = 1 AND p.id IN ({}) AND pf.embedding IS NULL",
                 placeholders.join(",")
             );
             let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -2506,7 +2507,8 @@ pub fn clip_embed_run(
             let sql = format!(
                 "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
                  FROM photos p JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})",
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})
+                   AND (p.clip_scanned_at IS NULL OR p.clip_scanned_at != p.mtime)",
                 placeholders.join(",")
             );
             let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
