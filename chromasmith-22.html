@@ -4272,7 +4272,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-31a';
+const BUILD='2026-08-31c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -11461,6 +11461,10 @@ async function subjFindAll(idx){
   _subjScanBusy=true;_subjScanCancel=false;_subjScanResults=null;
   const todo=fxImages.map((_,i)=>i).filter(i=>i!==fxCurIdx);
   _subjScanProgress={done:0,total:todo.length};
+  // N3.2: mirror onto the Library sidebar's shared activity indicator (library-ui.js) alongside
+  // the local inline panel below — one consistent "is anything running" place app-wide instead
+  // of this being the one scan nowhere else can see. No-op if the Library UI isn't loaded.
+  if(typeof window.libActivityJob==='function')window.libActivityJob('subject',{label:'Finding "'+s.name+'"',done:0,total:todo.length,cancelFn:subjFindAllCancel});
   mskRebuild();
   const origIdx=fxCurIdx;
   const results=[];
@@ -11487,7 +11491,10 @@ async function subjFindAll(idx){
     _subjScanProgress.done++;
     // Rebuild every few photos rather than every single one — this scan can touch dozens of
     // photos and the panel doesn't need to repaint at that rate to feel live.
-    if(_subjScanProgress.done%2===0||_subjScanProgress.done===_subjScanProgress.total)mskRebuild();
+    if(_subjScanProgress.done%2===0||_subjScanProgress.done===_subjScanProgress.total){
+      mskRebuild();
+      if(typeof window.libActivityJob==='function')window.libActivityJob('subject',{label:'Finding "'+s.name+'"',done:_subjScanProgress.done,total:_subjScanProgress.total,cancelFn:subjFindAllCancel});
+    }
   }
   // The scan's own sam_encode calls evicted whatever the user's actual current photo had cached —
   // restore it so returning to normal editing doesn't hit a stale-token error on the next scribble.
@@ -11495,6 +11502,7 @@ async function subjFindAll(idx){
   results.sort((a,b)=>b.score-a.score);
   _subjScanResults={subjId:s.id,name:s.name,results,partial:_subjScanCancel,checked:results.length&&_subjScanProgress?_subjScanProgress.done:todo.length};
   _subjScanBusy=false;_subjScanProgress=null;
+  if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('subject',{label:'Finding "'+s.name+'"'});
   samEnsureEncoded();
   mskRebuild();
 }
@@ -17391,7 +17399,12 @@ async function exportFX(){
   if(mobExp)_expOverlay(true);   // mobile: the panel sheet may be closed — show a proper overlay
   const setProg=(done,label)=>{if(progBar)progBar.style.width=Math.round(done/N*100)+'%';if(progTxt)progTxt.textContent=label;
     const ef=document.getElementById('eo-fill'),et=document.getElementById('eo-txt');
-    if(ef)ef.style.width=Math.round(done/N*100)+'%';if(et)et.textContent=label;};
+    if(ef)ef.style.width=Math.round(done/N*100)+'%';if(et)et.textContent=label;
+    // N3.2: mirror onto the Library sidebar's shared activity indicator too — this export already
+    // has its own bar/overlay (desktop progress bar + mobile _expOverlay), but nothing surfaced it
+    // in the ONE consistent place the rest of the app's long ops now use. No-op if the Library UI
+    // isn't loaded (e.g. the export_harness/plain-browser build).
+    if(typeof window.libActivityJob==='function')window.libActivityJob('export',{label:'Exporting',done,total:N,current:label,cancelFn:()=>{fxExportCancel=true;}});};
   // Per-photo status list: a single progress bar reads "done" the same way whether every photo
   // actually saved or a few silently didn't — the exact bug report this fixes ("log says
   // successful but some photos don't get exported"). Only shown for N>1; a single-photo export
@@ -17750,6 +17763,7 @@ async function exportFX(){
     if(progBox)progBox.style.display='none';
     _expOverlay(false);
     fxExportCancel=false;
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting'});
   }
 }
 // Same border+canvas-matte compositing exportFX/canvasCompose do for stills (see CLAUDE.md §12
@@ -17866,7 +17880,9 @@ async function fxVideoExportSmall(it){
     progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
   if(cancelBtn)cancelBtn.style.display='';
   if(progBox)progBox.style.display='block';
-  const setProg=(frac,label)=>{if(progBar)progBar.style.width=Math.round(frac*100)+'%';if(progTxt)progTxt.textContent=label;};
+  const setProg=(frac,label)=>{if(progBar)progBar.style.width=Math.round(frac*100)+'%';if(progTxt)progTxt.textContent=label;
+    // N3.2: same shared-activity mirror exportFX's setProg does — see that comment.
+    if(typeof window.libActivityJob==='function')window.libActivityJob('export',{label:'Exporting video',done:Math.round(frac*100),total:100,current:label,cancelFn:()=>{fxExportCancel=true;}});};
 
   // Borders + canvas matte (A7): sizes are constant for the whole clip (percentage-of-width
   // border thickness computed off the fixed graded size, matte aspect ratio likewise fixed), so
@@ -18026,6 +18042,7 @@ async function fxVideoExportSmall(it){
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
     fxExportCancel=false;
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video'});
     // The export loop drove FX with EXPORT-resolution frames — restore the live preview to
     // whichever frame the transport bar is actually showing, same as exportFX's own final
     // preview-refresh call (kept separately try/caught there for the same reason: a failure
