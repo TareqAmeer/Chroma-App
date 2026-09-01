@@ -16,7 +16,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const SCHEMA_VERSION: i64 = 10;
@@ -1993,31 +1993,46 @@ pub fn faces_run(
         if batch.is_empty() {
             break;
         }
-        progress(ScanProgress { phase: "faces".into(), done: result.scanned, total: result.scanned + batch.len(), current: String::new() });
+        let total_in_batch = batch.len();
+        let base_scanned = result.scanned;
+        progress(ScanProgress { phase: "faces".into(), done: base_scanned, total: base_scanned + total_in_batch, current: String::new() });
 
+        // Chunked rather than one par_iter over the whole batch: progress() can only be called
+        // from THIS thread (a rayon closure isn't Send-safe to call it from — see clip_embed_run's
+        // history), so a single par_iter().map() over the whole batch reports done=0 before and
+        // done=total after with NOTHING in between. On a small scoped batch (e.g. 10 photos) that
+        // reads as "stuck at 0%" for the whole batch, which is exactly the reported bug — the
+        // batch itself was too coarse a progress granularity, not just the walk phase's known
+        // total:0 case. CHUNK=4 gives real incremental ticks while keeping each chunk parallel.
         const DECODE_LONG_EDGE: u32 = 1600;
-        let detected: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = batch
-            .par_iter()
-            .map(|(id, abs, mtime)| {
-                let faces = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
-                    .ok()
-                    .and_then(|(rgb, w, h)| crate::scrfd::detect(&rgb, w, h).ok().map(|faces| (faces, w, h)))
-                    .map(|(faces, w, h)| {
-                        faces
-                            .into_iter()
-                            .map(|f| crate::scrfd::Face {
-                                x0: f.x0 / w as f32,
-                                y0: f.y0 / h as f32,
-                                x1: f.x1 / w as f32,
-                                y1: f.y1 / h as f32,
-                                score: f.score,
-                                kps: f.kps.map(|(x, y)| (x / w as f32, y / h as f32))
-                            })
-                            .collect()
-                    });
-                (*id, *mtime, faces)
-            })
-            .collect();
+        const CHUNK: usize = 4;
+        let mut detected: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = Vec::with_capacity(total_in_batch);
+        for chunk in batch.chunks(CHUNK) {
+            let mut part: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = chunk
+                .par_iter()
+                .map(|(id, abs, mtime)| {
+                    let faces = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
+                        .ok()
+                        .and_then(|(rgb, w, h)| crate::scrfd::detect(&rgb, w, h).ok().map(|faces| (faces, w, h)))
+                        .map(|(faces, w, h)| {
+                            faces
+                                .into_iter()
+                                .map(|f| crate::scrfd::Face {
+                                    x0: f.x0 / w as f32,
+                                    y0: f.y0 / h as f32,
+                                    x1: f.x1 / w as f32,
+                                    y1: f.y1 / h as f32,
+                                    score: f.score,
+                                    kps: f.kps.map(|(x, y)| (x / w as f32, y / h as f32))
+                                })
+                                .collect()
+                        });
+                    (*id, *mtime, faces)
+                })
+                .collect();
+            detected.append(&mut part);
+            progress(ScanProgress { phase: "faces".into(), done: base_scanned + detected.len(), total: base_scanned + total_in_batch, current: String::new() });
+        }
 
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         for (id, mtime, faces) in &detected {
@@ -2189,30 +2204,42 @@ pub fn embed_run(
             }
         }
 
-        progress(ScanProgress { phase: "embed".into(), done: result.embedded, total: result.embedded + face_rows.len(), current: String::new() });
+        let base_embedded = result.embedded;
+        let total_faces = face_rows.len();
+        progress(ScanProgress { phase: "embed".into(), done: base_embedded, total: base_embedded + total_faces, current: String::new() });
 
-        let embedded: Vec<(i64, Option<Vec<f32>>)> = photo_batch
-            .par_iter()
-            .flat_map(|(photo_id, abs)| {
-                let decoded = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok();
-                let my_faces: Vec<&(i64, i64, String)> = face_rows.iter().filter(|(pid, _, _)| pid == photo_id).collect();
-                my_faces
-                    .into_iter()
-                    .map(|(_, face_id, kps_json)| {
-                        let emb = decoded.as_ref().and_then(|(rgb, w, h)| {
-                            let kps_frac: Vec<(f32, f32)> = serde_json::from_str(kps_json).ok()?;
-                            if kps_frac.len() != 5 {
-                                return None;
-                            }
-                            let kps_px: [(f32, f32); 5] =
-                                std::array::from_fn(|i| (kps_frac[i].0 * *w as f32, kps_frac[i].1 * *h as f32));
-                            crate::arcface::embed(rgb, *w, *h, &kps_px).ok()
-                        });
-                        (*face_id, emb)
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+        // Chunked by PHOTO (same reasoning as faces_run above — a single par_iter over the whole
+        // batch reports done=0 the entire time it's actually running, which is what "stuck at 0%"
+        // turned out to mean on a small scoped batch). Progress is counted in FACES, not photos,
+        // since that's what `total` above is denominated in.
+        const CHUNK: usize = 4;
+        let mut embedded: Vec<(i64, Option<Vec<f32>>)> = Vec::with_capacity(total_faces);
+        for chunk in photo_batch.chunks(CHUNK) {
+            let mut part: Vec<(i64, Option<Vec<f32>>)> = chunk
+                .par_iter()
+                .flat_map(|(photo_id, abs)| {
+                    let decoded = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok();
+                    let my_faces: Vec<&(i64, i64, String)> = face_rows.iter().filter(|(pid, _, _)| pid == photo_id).collect();
+                    my_faces
+                        .into_iter()
+                        .map(|(_, face_id, kps_json)| {
+                            let emb = decoded.as_ref().and_then(|(rgb, w, h)| {
+                                let kps_frac: Vec<(f32, f32)> = serde_json::from_str(kps_json).ok()?;
+                                if kps_frac.len() != 5 {
+                                    return None;
+                                }
+                                let kps_px: [(f32, f32); 5] =
+                                    std::array::from_fn(|i| (kps_frac[i].0 * *w as f32, kps_frac[i].1 * *h as f32));
+                                crate::arcface::embed(rgb, *w, *h, &kps_px).ok()
+                            });
+                            (*face_id, emb)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            embedded.append(&mut part);
+            progress(ScanProgress { phase: "embed".into(), done: base_embedded + embedded.len(), total: base_embedded + total_faces, current: String::new() });
+        }
 
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         for (face_id, emb) in &embedded {
@@ -2555,15 +2582,30 @@ pub fn clip_embed_run(
         if batch.is_empty() {
             break;
         }
-        progress(ScanProgress { phase: "clip".into(), done: result.embedded, total: result.embedded + batch.len(), current: String::new() });
+        let total_in_batch = batch.len();
+        let base_embedded = result.embedded;
+        progress(ScanProgress { phase: "clip".into(), done: base_embedded, total: base_embedded + total_in_batch, current: String::new() });
 
-        let embedded: Vec<(i64, i64, Option<Vec<f32>>)> = batch
-            .par_iter()
-            .map(|(id, abs, mtime)| {
-                let emb = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().and_then(|(rgb, w, h)| crate::clip::embed_image(&rgb, w, h).ok());
-                (*id, *mtime, emb)
-            })
-            .collect();
+        // Chunked, not one par_iter over the whole batch — see faces_run's comment above for why:
+        // a single par_iter().map() reports done=0 for the ENTIRE batch's runtime (progress() isn't
+        // Send-safe to call from inside the rayon closure), which is what "stuck at 0%" turned out
+        // to mean on a small scoped run. This replaces the earlier attempt that tried to work
+        // around the Send bound with a Mutex<&mut dyn FnMut> (didn't compile — dyn FnMut has no
+        // Send bound, so Mutex<...> wasn't Sync either); chunking sidesteps the problem entirely by
+        // only ever calling progress() from this thread, between chunks.
+        const CHUNK: usize = 4;
+        let mut embedded: Vec<(i64, i64, Option<Vec<f32>>)> = Vec::with_capacity(total_in_batch);
+        for chunk in batch.chunks(CHUNK) {
+            let mut part: Vec<(i64, i64, Option<Vec<f32>>)> = chunk
+                .par_iter()
+                .map(|(id, abs, mtime)| {
+                    let emb = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().and_then(|(rgb, w, h)| crate::clip::embed_image(&rgb, w, h).ok());
+                    (*id, *mtime, emb)
+                })
+                .collect();
+            embedded.append(&mut part);
+            progress(ScanProgress { phase: "clip".into(), done: base_embedded + embedded.len(), total: base_embedded + total_in_batch, current: String::new() });
+        }
 
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         for (id, mtime, emb) in &embedded {
@@ -3507,6 +3549,29 @@ pub struct ThumbResult {
 /// grid and everything else for the entire duration. One batch per call lets `catalog_thumbnails`
 /// (below) be re-invoked with a real pacing delay between calls instead, so this phase's own
 /// existence never monopolizes the CPU continuously, regardless of how large the backlog is.
+// ⚠️ A SMALLER, SEPARATE pool for full-image-decode batch work (thumbnail generation, focus
+// scoring below) — not the global rayon pool every other `.par_iter()` in this file uses.
+// main.rs's global pool is already capped to `cores-2` for the app as a whole (see its own
+// comment: a live 57k-photo run showed the main thread stuck in `pthread_cond_wait` for a full
+// 3s window from total core saturation). That cap alone doesn't stop ONE batch's `.par_iter()`
+// here from still using every one of those `cores-2` threads simultaneously for as long as a
+// batch of real decodes takes — confirmed live: on a cold thumbnail cache, this batch pass
+// running concurrently with the interactive Library grid's own per-card `get_thumbnail_fast`/
+// `get_thumbnail_or_offline` (dispatched onto Tauri's separate tokio worker pool, so they don't
+// even touch THIS pool, but still compete for the same finite physical cores) left the on-screen
+// grid's visible cards without a single thumbnail for 50+ seconds. Halving the already-reduced
+// budget again is what actually leaves headroom: `cores-2` real cores earmarked for tokio's
+// interactive dispatch + the main UI thread, this pool gets at most half of the REMAINING
+// capacity so a bulk pass can never re-saturate everything by itself.
+fn decode_batch_pool() -> &'static rayon::ThreadPool {
+    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+    POOL.get_or_init(|| {
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        let workers = (cores.saturating_sub(2) / 2).max(1);
+        rayon::ThreadPoolBuilder::new().num_threads(workers).build().expect("decode batch pool")
+    })
+}
+
 pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ThumbResult, String> {
     let mut result = ThumbResult::default();
     if cancel.load(Ordering::Relaxed) {
@@ -3544,7 +3609,8 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
     // Decoding is parallelized (same posture as metadata/hash), but the actual JPEG-write
     // to disk happens sequentially below — cheap relative to the decode, and keeps this
     // simple rather than juggling concurrent file writes into sharded directories.
-    let generated: Vec<(i64, Option<Vec<u8>>)> = batch.par_iter().map(|(id, abs)| (*id, thumbnail_bytes_for(abs).ok())).collect();
+    let generated: Vec<(i64, Option<Vec<u8>>)> = decode_batch_pool()
+        .install(|| batch.par_iter().map(|(id, abs)| (*id, thumbnail_bytes_for(abs).ok())).collect());
 
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     for (id, bytes) in &generated {
@@ -3674,8 +3740,9 @@ pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), canc
         }
         progress(ScanProgress { phase: "focus".into(), done: result.scored, total: result.scored + batch.len(), current: String::new() });
 
-        let scored: Vec<(i64, i64, Option<f64>)> =
-            batch.par_iter().map(|(id, abs, mtime)| (*id, *mtime, thumbnail_bytes_for(abs).ok().and_then(|b| laplacian_variance_from_jpeg(&b)))).collect();
+        let scored: Vec<(i64, i64, Option<f64>)> = decode_batch_pool().install(|| {
+            batch.par_iter().map(|(id, abs, mtime)| (*id, *mtime, thumbnail_bytes_for(abs).ok().and_then(|b| laplacian_variance_from_jpeg(&b)))).collect()
+        });
 
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         for (id, mtime, score) in &scored {
