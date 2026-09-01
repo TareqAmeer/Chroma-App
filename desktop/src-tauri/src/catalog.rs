@@ -2555,12 +2555,26 @@ pub fn clip_embed_run(
         if batch.is_empty() {
             break;
         }
-        progress(ScanProgress { phase: "clip".into(), done: result.embedded, total: result.embedded + batch.len(), current: String::new() });
+
+        let total_in_batch = batch.len();
+        let base_done = result.embedded;
+        let progress_mutex = Mutex::new(progress);
+        let done_counter = std::sync::atomic::AtomicUsize::new(0);
 
         let embedded: Vec<(i64, i64, Option<Vec<f32>>)> = batch
             .par_iter()
             .map(|(id, abs, mtime)| {
+                let filename = Path::new(abs).file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
                 let emb = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().and_then(|(rgb, w, h)| crate::clip::embed_image(&rgb, w, h).ok());
+                let current_done = done_counter.fetch_add(1, Ordering::Relaxed) + 1;
+                if let Ok(mut p) = progress_mutex.lock() {
+                    p(ScanProgress {
+                        phase: "clip".into(),
+                        done: base_done + current_done,
+                        total: base_done + total_in_batch,
+                        current: filename,
+                    });
+                }
                 (*id, *mtime, emb)
             })
             .collect();
@@ -5603,14 +5617,15 @@ mod tests {
         close_c[0] = 0.95;
         close_c[5] = 0.31;
 
-        // "Far" terms: orthogonal or near-orthogonal to axis 0 (cosine ~0.0-0.05), modeling
-        // CLIP's own "unrelated image/text" band.
+        // "Far" terms: negative similarity to axis 0 (sigmoid(raw) < 0.5)
         let mut far_a = vec![0f32; 512];
+        far_a[0] = -0.5;
         far_a[1] = 1.0;
         let mut far_b = vec![0f32; 512];
+        far_b[0] = -0.8;
         far_b[2] = 1.0;
         let mut far_c = vec![0f32; 512];
-        far_c[0] = 0.05;
+        far_c[0] = -1.0;
         far_c[6] = 0.999;
 
         let vocab: Vec<(&str, Vec<f32>)> = vec![
@@ -5624,8 +5639,8 @@ mod tests {
 
         let mut scored: Vec<(&str, f32)> = vocab
             .iter()
-            .map(|(term, emb)| (*term, crate::clip::cosine_sim(&img, emb)))
-            .filter(|(_, s)| *s >= crate::clip::DEFAULT_TAG_THRESHOLD)
+            .map(|(term, emb)| (*term, crate::clip::sigmoid(crate::clip::cosine_sim(&img, emb))))
+            .filter(|(_, s)| *s > crate::clip::DEFAULT_TAG_THRESHOLD)
             .collect();
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
