@@ -1420,6 +1420,22 @@ fn strip_element(text: &str, local_name: &str) -> String {
     format!("{}{}", &text[..tag_start - 1], &text[close_at..])
 }
 
+/// Same job as `strip_element`, but matches the open tag by its full `prefix:Name`, whether or
+/// not it carries attributes — `strip_element` only matches a bare "<ns:Name>" (no attributes),
+/// which `mwg-rs:Regions` (`rdf:parseType="Resource"`) never is.
+fn strip_full_element(text: &str, tag_name: &str) -> String {
+    let open_needle = format!("<{tag_name}");
+    let Some(tag_start) = text.find(&open_needle) else { return text.to_string() };
+    let Some(gt) = text[tag_start..].find('>').map(|i| tag_start + i) else { return text.to_string() };
+    if text.as_bytes()[gt - 1] == b'/' {
+        // Self-closing (`<ns:Name .../>`) — nothing more to find.
+        return format!("{}{}", &text[..tag_start], &text[gt + 1..]);
+    }
+    let close_needle = format!("</{tag_name}>");
+    let Some(close_at) = text[gt..].find(&close_needle).map(|i| gt + i + close_needle.len()) else { return text.to_string() };
+    format!("{}{}", &text[..tag_start], &text[close_at..])
+}
+
 /// Post-processes an already attrs-merged sidecar string to reflect `keywords` — a second pass
 /// after `write_sidecar`'s own attribute merge, because a keyword bag is CHILD markup
 /// (`<dc:subject><rdf:Bag>...`), not an attribute, and needs its own insertion/removal logic.
@@ -1466,6 +1482,113 @@ fn apply_keywords_to_xmp(xmp: String, keywords: &[String]) -> String {
     }
 }
 
+/// One face/pet region for the XMP writer — 0..1 fractional box, the same convention
+/// `catalog::FaceBox` already uses, so the caller can pass a `photo_faces` row straight through
+/// with a name attached. `kind` is `"Face"` or `"Pet"` per the MWG Region spec's own vocabulary
+/// (it only defines Face/Pet/Focus/BarCode types); Chromasmith's own person/pet distinction
+/// (`people.kind`) maps directly onto it.
+#[derive(Deserialize, Clone)]
+pub struct PersonRegion {
+    pub name: String,
+    pub kind: String, // "person" | "pet"
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+}
+
+/// Builds the `mwg-rs:Regions` + `Iptc4xmpExt:PersonInImage` child markup for a photo's named
+/// faces — CLAUDE.md people-pets plan failure #11 ("names never reach XMP... lost on a catalog
+/// rebuild or a new machine"). Mirrors `keyword_bags_xml`'s shape exactly: build the child XML,
+/// strip whatever's already there, splice the fresh version in. `mwg-rs:Area` uses CENTRE x/y +
+/// width/height (the Metadata Working Group's own convention, not a corner box like `FaceBox`),
+/// normalized 0..1 — converted here so every other box in the app can stay corner-based.
+fn person_regions_xml(people: &[PersonRegion]) -> String {
+    if people.is_empty() {
+        return String::new();
+    }
+    let region_li = |p: &PersonRegion| {
+        let (w, h) = ((p.x1 - p.x0).max(0.0), (p.y1 - p.y0).max(0.0));
+        let (cx, cy) = (p.x0 + w / 2.0, p.y0 + h / 2.0);
+        let ty = if p.kind == "pet" { "Pet" } else { "Face" };
+        format!(
+            "<rdf:li rdf:parseType=\"Resource\"><mwg-rs:Name>{}</mwg-rs:Name><mwg-rs:Type>{ty}</mwg-rs:Type><mwg-rs:Area rdf:parseType=\"Resource\" stArea:x=\"{cx}\" stArea:y=\"{cy}\" stArea:w=\"{w}\" stArea:h=\"{h}\" stArea:unit=\"normalized\"/></rdf:li>",
+            xml_escape(&p.name)
+        )
+    };
+    let regions: String = people.iter().map(region_li).collect();
+    let mut names: Vec<String> = Vec::new();
+    for p in people {
+        if !names.contains(&p.name) {
+            names.push(p.name.clone());
+        }
+    }
+    let name_li: String = names.iter().map(|n| format!("<rdf:li>{}</rdf:li>", xml_escape(n))).collect();
+    format!(
+        "<mwg-rs:Regions rdf:parseType=\"Resource\"><mwg-rs:RegionList><rdf:Bag>{regions}</rdf:Bag></mwg-rs:RegionList></mwg-rs:Regions><Iptc4xmpExt:PersonInImage><rdf:Bag>{name_li}</rdf:Bag></Iptc4xmpExt:PersonInImage>"
+    )
+}
+
+/// Same shape as `apply_keywords_to_xmp`: add the namespaces only when actually needed (so a
+/// photo with no named faces stays byte-identical to today), strip any existing region/person
+/// markup, splice fresh markup in when `people` is non-empty.
+fn apply_people_to_xmp(xmp: String, people: &[PersonRegion]) -> String {
+    let xmp = if !people.is_empty() {
+        match find_description_attrs(&xmp) {
+            Some((start, end, _)) => {
+                let mut attrs = xmp[start..end].to_string();
+                for (ns, uri) in [
+                    ("xmlns:mwg-rs", "http://www.metadataworkinggroup.com/schemas/regions/"),
+                    ("xmlns:stArea", "http://ns.adobe.com/xmp/sType/Area#"),
+                    ("xmlns:Iptc4xmpExt", "http://iptc.org/std/Iptc4xmpExt/2008-02-29/"),
+                ] {
+                    if !has_attr(&attrs, ns) {
+                        attrs = set_attr(&attrs, ns, Some(uri));
+                    }
+                }
+                format!("{}{attrs}{}", &xmp[..start], &xmp[end..])
+            }
+            None => xmp,
+        }
+    } else {
+        xmp
+    };
+
+    // ⚠️ NOT `strip_element` — that helper only matches a childless open tag ("<ns:Name>", no
+    // attributes), which is exactly what `dc:subject`/`hierarchicalSubject` are but NOT what
+    // `mwg-rs:Regions` is (it opens as `<mwg-rs:Regions rdf:parseType="Resource">`, so the naive
+    // ":Regions>" needle never matches). `strip_full_element` below matches on the tag NAME only,
+    // attributes or not.
+    let mut text = strip_full_element(&xmp, "mwg-rs:Regions");
+    text = strip_full_element(&text, "Iptc4xmpExt:PersonInImage");
+    if people.is_empty() {
+        return text;
+    }
+    let markup = person_regions_xml(people);
+    let Some((start, end, self_closing)) = find_description_attrs(&text) else { return text };
+    if self_closing {
+        format!("{}{}>{}</rdf:Description>{}", &text[..start], &text[start..end], markup, &text[end + 2..])
+    } else {
+        match text[end + 1..].find("</rdf:Description>").map(|i| end + 1 + i) {
+            Some(close_at) => format!("{}{}{}", &text[..close_at], markup, &text[close_at..]),
+            None => text,
+        }
+    }
+}
+
+/// JS-facing entry point — writes named face/pet regions into a photo's XMP sidecar, the
+/// portable record that survives a catalog rebuild or the library moving to another machine.
+/// Deliberately WRITE-only for now: reading regions back into the catalog on import is a bigger
+/// piece (an `import_people_from_xmp` pass mirroring `faces_run`) tracked separately — this
+/// command is what makes there be something to read in the first place. Reuses `get_sidecar`/
+/// `write_sidecar` so a person write never clobbers rating/keywords/develop settings the way a
+/// from-scratch rebuild would (see `write_sidecar`'s own warning about that).
+#[tauri::command]
+pub fn set_people_regions(path: String, people: Vec<PersonRegion>) -> Result<(), String> {
+    let sc = get_sidecar(path.clone());
+    write_sidecar_with_people(&path, &sc, &people)
+}
+
 /// The single writer. Everything that changes a sidecar goes through here so the serialisation
 /// lives in exactly one place.
 ///
@@ -1476,6 +1599,18 @@ fn apply_keywords_to_xmp(xmp: String, keywords: &[String]) -> String {
 /// walks straight into. Falls back to `plain_template` (byte-identical to the old behaviour)
 /// when there's no existing file, or its `<rdf:Description>` tag can't be located.
 fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
+    write_sidecar_ex(path, sc, &[])
+}
+
+/// Same writer, plus the person/pet XMP regions — a separate entry point rather than adding
+/// `people` to `Sidecar` itself, since (unlike rating/keywords) region data isn't read back into
+/// `Sidecar` today (see `set_people_regions`'s doc comment) and doesn't belong on a struct that
+/// implies round-trip symmetry it doesn't have yet.
+fn write_sidecar_with_people(path: &str, sc: &Sidecar, people: &[PersonRegion]) -> Result<(), String> {
+    write_sidecar_ex(path, sc, people)
+}
+
+fn write_sidecar_ex(path: &str, sc: &Sidecar, people: &[PersonRegion]) -> Result<(), String> {
     let sc_path = sidecar_path(path);
     let existing = std::fs::read_to_string(&sc_path).ok();
 
@@ -1521,6 +1656,7 @@ fn write_sidecar(path: &str, sc: &Sidecar) -> Result<(), String> {
         None => plain_template(sc),
     };
     let xmp = apply_keywords_to_xmp(xmp, &sc.keywords);
+    let xmp = apply_people_to_xmp(xmp, people);
     std::fs::write(sc_path, xmp).map_err(|e| format!("write sidecar: {e}"))?;
     Ok(())
 }
@@ -2646,6 +2782,60 @@ mod sidecar_preservation_tests {
         assert!(!text.contains("hierarchicalSubject"));
         let sc = get_sidecar(path);
         assert!(sc.keywords.is_empty());
+    }
+
+    // ── People & Pets XMP regions (CLAUDE.md failure #11) ───────────────────────────────────
+
+    #[test]
+    fn person_regions_round_trip_into_mwg_rs_xmp() {
+        let path = scratch("people-regions");
+        set_people_regions(
+            path.clone(),
+            vec![
+                PersonRegion { name: "Sofia".into(), kind: "person".into(), x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.5 },
+                PersonRegion { name: "Juno".into(), kind: "pet".into(), x0: 0.5, y0: 0.5, x1: 0.7, y1: 0.8 },
+            ],
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains("xmlns:mwg-rs="), "the mwg-rs namespace must be declared");
+        assert!(text.contains("xmlns:Iptc4xmpExt="), "the Iptc4xmpExt namespace must be declared");
+        assert!(text.contains("<mwg-rs:Name>Sofia</mwg-rs:Name>"));
+        assert!(text.contains("<mwg-rs:Type>Face</mwg-rs:Type>"), "a person region must be typed Face");
+        assert!(text.contains("<mwg-rs:Type>Pet</mwg-rs:Type>"), "a pet region must be typed Pet");
+        // Sofia's box is [0.1,0.2]-[0.3,0.5]: centre (0.2, 0.35), size (0.2, 0.3). Compared
+        // with a tolerance, not a literal string match — f32 arithmetic on 0.1/0.2/0.3 doesn't
+        // round-trip through Display exactly (0.1 + (0.3-0.1)/2.0 prints as "0.20000002").
+        let cx: f32 = xmp_get(&text, "stArea:x").expect("stArea:x must be present").parse().unwrap();
+        let w: f32 = xmp_get(&text, "stArea:w").expect("stArea:w must be present").parse().unwrap();
+        assert!((cx - 0.2).abs() < 1e-5, "area x must be the box CENTRE (0.2), not the corner (0.1): got {cx}");
+        assert!((w - 0.2).abs() < 1e-5, "area w must be 0.2: got {w}");
+        let names = xmp_bag(&text, "PersonInImage");
+        assert_eq!(names, vec!["Sofia".to_string(), "Juno".to_string()]);
+    }
+
+    #[test]
+    fn person_regions_never_touch_existing_keywords_or_rating() {
+        let path = scratch("people-regions-preserve");
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+        set_people_regions(path.clone(), vec![PersonRegion { name: "Alice".into(), kind: "person".into(), x0: 0.0, y0: 0.0, x1: 0.1, y1: 0.1 }])
+            .unwrap();
+
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Travel".to_string()], "writing person regions must not clobber existing keywords");
+    }
+
+    #[test]
+    fn clearing_all_people_removes_the_regions_elements() {
+        let path = scratch("people-regions-clear");
+        set_people_regions(path.clone(), vec![PersonRegion { name: "Alice".into(), kind: "person".into(), x0: 0.0, y0: 0.0, x1: 0.1, y1: 0.1 }])
+            .unwrap();
+        set_people_regions(path.clone(), vec![]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(!text.contains("mwg-rs:Regions"), "an empty people list must remove the element, not leave it empty");
+        assert!(!text.contains("PersonInImage"));
     }
 
     /// Setting keywords must not disturb third-party fields already in the file — the same

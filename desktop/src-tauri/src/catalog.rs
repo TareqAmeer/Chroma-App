@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_VERSION: i64 = 11;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -438,6 +438,45 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
                 UNIQUE(photo_id)
             );",
         )?;
+    }
+
+    // v10 -> v11: People & Pets unification (see desktop/design/people-pets-wireframes.html and
+    // CLAUDE.md's people-tagging plan). Three additions, all additive/nullable so an existing
+    // library upgrades with zero data loss:
+    //   - `people.kind` ('person' | 'pet') — a pet is a Person row with a species, not a
+    //     separate table, so naming/merge/split/rename all work identically for both.
+    //   - `people.ignored` — the "not a real person, stop suggesting this" bucket (screen A's
+    //     pinned Ignored row). Distinct from delete: an ignored person's faces stay assigned so
+    //     they don't re-surface as a fresh unnamed cluster on the next scan.
+    //   - `photo_faces.confirmed` (0 = machine-proposed, 1 = user-confirmed) — screen B's
+    //     permanent split between "confirmed" and "also might be" faces. A `cluster_run` that
+    //     only ever nulls unconfirmed assignments (see below) can no longer destroy a review
+    //     you've already done, which was CLAUDE.md failure #5.
+    if version < 11 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("people", "kind")? {
+            conn.execute("ALTER TABLE people ADD COLUMN kind TEXT NOT NULL DEFAULT 'person'", [])?;
+        }
+        if !has_col("people", "ignored")? {
+            conn.execute("ALTER TABLE people ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !has_col("photo_faces", "confirmed")? {
+            // ⚠️ The column default is 0 (unconfirmed), NOT 1 — a SQLite column default applies
+            // to every future INSERT that omits the column, not just this migration's backfill,
+            // and a face `faces_run` detects tomorrow must start unconfirmed so `cluster_run` can
+            // actually propose it. Existing rows are backfilled to 1 separately, right below:
+            // they predate the confirmed/proposed split entirely, and treating them as confirmed
+            // is the only reading that doesn't retroactively demote every name a user already
+            // gave someone into a "suggestion" the moment they upgrade.
+            conn.execute(
+                "ALTER TABLE photo_faces ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            conn.execute("UPDATE photo_faces SET confirmed = 1", [])?;
+        }
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -2417,8 +2456,14 @@ pub struct ClusterResult {
 /// single face is left unclustered (noise) rather than becoming its own "Person" of one, since
 /// DBSCAN's whole value here is refusing to force outliers into groups.
 pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<ClusterResult, String> {
+    // ⚠️ CONFIRMED faces (the user reviewed and accepted them — see screen B / people-pets
+    // wireframes) are excluded from clustering ENTIRELY, not just protected from the wipe below.
+    // Before `confirmed` existed, every run nulled every assignment and re-derived it from
+    // scratch, which is failure #5 in the people-pets plan: a re-cluster could silently move a
+    // face you had already confirmed belonged to someone. Now a confirmed face's `person_id` is
+    // never touched by this function again — DBSCAN only ever proposes fresh/unconfirmed faces.
     let mut stmt = conn
-        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL")
+        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL AND confirmed = 0")
         .map_err(|e| e.to_string())?;
     let rows: Vec<(i64, Vec<f32>, Option<i64>)> = stmt
         .query_map([], |r| {
@@ -2450,10 +2495,24 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
 
     let mut result = ClusterResult::default();
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    tx.execute("UPDATE photo_faces SET person_id = NULL", []).map_err(|e| e.to_string())?;
+    // Only UNCONFIRMED assignments are cleared — a confirmed face keeps its person_id through
+    // this wipe (it was never selected by the query above, so it can't be reassigned below either).
+    tx.execute("UPDATE photo_faces SET person_id = NULL WHERE confirmed = 0", []).map_err(|e| e.to_string())?;
     // Only AUTO people are cleared wholesale — a named (user-renamed/merged-into) person survives
-    // even if this run assigns it zero faces, so a rename is never silently lost.
-    tx.execute("DELETE FROM people WHERE auto = 1", []).map_err(|e| e.to_string())?;
+    // even if this run assigns it zero faces, so a rename is never silently lost. ⚠️ Also spared:
+    // any still-`auto` person who owns at least one CONFIRMED face — `photo_faces.person_id` is
+    // `ON DELETE SET NULL`, so deleting the person row here would silently null out a face the
+    // user already reviewed even though the wipe above explicitly left it alone. A person only
+    // ever gets a confirmed face through `catalog_confirm_person`/`catalog_split_faces`, both of
+    // which also clear `auto` — this is defense in depth for any future caller that confirms a
+    // face without remembering to do the same (a real gap caught by
+    // confirmed_faces_survive_a_recluster_untouched's own test setup, which does exactly that).
+    tx.execute(
+        "DELETE FROM people WHERE auto = 1
+         AND id NOT IN (SELECT DISTINCT person_id FROM photo_faces WHERE confirmed = 1 AND person_id IS NOT NULL)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
 
     if rows.is_empty() {
         tx.commit().map_err(|e| e.to_string())?;
@@ -2487,7 +2546,11 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
         let person_id = reconcile_person_for_cluster(&tx, face_ids, &old_person_of, &named_people, &mut next_auto_num, now)?;
         people_seen.insert(person_id);
         for fid in face_ids {
-            tx.execute("UPDATE photo_faces SET person_id = ?1 WHERE id = ?2", params![person_id, fid]).map_err(|e| e.to_string())?;
+            tx.execute(
+                "UPDATE photo_faces SET person_id = ?1, confirmed = 0 WHERE id = ?2",
+                params![person_id, fid],
+            )
+            .map_err(|e| e.to_string())?;
             result.clustered_faces += 1;
         }
     }
@@ -2535,6 +2598,419 @@ pub fn catalog_delete_person(state: tauri::State<CatalogState>, person_id: i64) 
     Ok(())
 }
 
+/// Marks a person's faces as reviewed-and-accepted, without changing who they're assigned to.
+/// This is the "Confirm" side of screen B's permanent confirmed/suggested split, and it's what
+/// takes a face out of `cluster_run`'s reach for good (see that function's own comment).
+#[tauri::command]
+pub fn catalog_confirm_person(state: tauri::State<CatalogState>, person_id: i64, face_ids: Option<Vec<i64>>) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    match face_ids {
+        Some(ids) if !ids.is_empty() => {
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 2)).collect();
+            let sql = format!(
+                "UPDATE photo_faces SET confirmed = 1 WHERE person_id = ?1 AND id IN ({})",
+                placeholders.join(",")
+            );
+            let mut p: Vec<&dyn rusqlite::ToSql> = vec![&person_id];
+            for id in &ids {
+                p.push(id);
+            }
+            conn.execute(&sql, p.as_slice()).map_err(|e| e.to_string())?;
+        }
+        _ => {
+            conn.execute("UPDATE photo_faces SET confirmed = 1 WHERE person_id = ?1", params![person_id])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    conn.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The inverse of merge (CLAUDE.md failure #4: "catalog_merge_people has no inverse. A wrong
+/// merge is permanent."). Moves the given faces out of their current person entirely: into a
+/// brand new person if `into_name` is given, into an existing one if `into_id` is given, or back
+/// to Unnamed (`person_id = NULL`, `confirmed = 0`) if neither is given — screen D's "Send back
+/// to Unnamed", the safest of its four options.
+#[tauri::command]
+pub fn catalog_split_faces(
+    state: tauri::State<CatalogState>,
+    face_ids: Vec<i64>,
+    into_id: Option<i64>,
+    into_name: Option<String>,
+) -> Result<i64, String> {
+    if face_ids.is_empty() {
+        return Err("no faces selected".into());
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let target_id = if let Some(id) = into_id {
+        tx.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        id
+    } else if let Some(name) = into_name {
+        let now = now_secs() as i64;
+        tx.execute(
+            "INSERT INTO people (name, cover_face_id, created, auto) VALUES (?1, ?2, ?3, 0)",
+            params![name, face_ids[0], now],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.last_insert_rowid()
+    } else {
+        for fid in &face_ids {
+            tx.execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE id = ?1", params![fid])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        return Ok(0);
+    };
+    for fid in &face_ids {
+        tx.execute(
+            "UPDATE photo_faces SET person_id = ?1, confirmed = 1 WHERE id = ?2",
+            params![target_id, fid],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(target_id)
+}
+
+/// Sets/unsets the "not a real person, stop suggesting this" flag (screen A's pinned Ignored
+/// row). An ignored person's faces stay assigned to it — they're deliberately NOT unassigned the
+/// way `catalog_delete_person` does, so they don't resurface as a fresh unnamed cluster on the
+/// next scan.
+#[tauri::command]
+pub fn catalog_set_person_ignored(state: tauri::State<CatalogState>, person_id: i64, ignored: bool) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute("UPDATE people SET ignored = ?1, auto = 0 WHERE id = ?2", params![ignored as i64, person_id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Person / Pet toggle (screen B). No automatic pet detector exists yet — see this file's
+/// PetDetection note — so this is presently the only way a pet person gets created: by hand,
+/// from an existing (human-pipeline-detected — i.e. probably useless) or manually-taught entry.
+#[tauri::command]
+pub fn catalog_set_person_kind(state: tauri::State<CatalogState>, person_id: i64, kind: String) -> Result<(), String> {
+    if kind != "person" && kind != "pet" {
+        return Err(format!("unknown kind {kind:?} (expected \"person\" or \"pet\")"));
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute("UPDATE people SET kind = ?1 WHERE id = ?2", params![kind, person_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// One face-embedding cluster from the Unnamed backlog, for the review-mode screen (screen C):
+/// a `cover_face_id` to show, the rest of the cluster's face ids, a face count, and — when the
+/// cluster's nearest confirmed centroid is close enough — a `suggested_person_id`/`name` so
+/// review mode can pre-fill the name field instead of asking the user to type a stranger's name
+/// from scratch. Distinct from `catalog_people`: those are the NAMED people; this is exactly the
+/// backlog CLAUDE.md failure #6 describes as "computed, returned, and thrown away" today.
+#[derive(Serialize, Clone)]
+pub struct UnnamedCluster {
+    pub person_id: i64,
+    pub cover_face_id: Option<i64>,
+    pub face_ids: Vec<i64>,
+    pub face_count: i64,
+}
+
+#[tauri::command]
+pub fn catalog_unnamed_clusters(state: tauri::State<CatalogState>) -> Result<Vec<UnnamedCluster>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let mut pstmt = conn
+        .prepare("SELECT id, cover_face_id FROM people WHERE auto = 1 AND ignored = 0 ORDER BY id")
+        .map_err(|e| e.to_string())?;
+    let people: Vec<(i64, Option<i64>)> = pstmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(pstmt);
+
+    let mut out = Vec::with_capacity(people.len());
+    for (pid, cover) in people {
+        let mut fstmt = conn
+            .prepare("SELECT id FROM photo_faces WHERE person_id = ?1 ORDER BY score DESC")
+            .map_err(|e| e.to_string())?;
+        let face_ids: Vec<i64> = fstmt
+            .query_map(params![pid], |r| r.get(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        if face_ids.is_empty() {
+            continue;
+        }
+        out.push(UnnamedCluster { person_id: pid, cover_face_id: cover, face_count: face_ids.len() as i64, face_ids });
+    }
+    Ok(out)
+}
+
+// ── Portable People & Pets sidecar (people-pets wireframes screen K) ───────────────────────────
+//
+// XMP (set_people_regions, above) is the interoperable per-photo record — it survives a
+// reorganisation and is readable by Lightroom/Bridge, but it carries names and boxes only, never
+// embeddings, so importing it back would mean re-running face detection+embedding to make faces
+// clusterable again. This is the FAST path: one JSON file at the root of the external drive
+// itself (`.chromasmith/people.json`), carrying names AND embeddings, keyed by each photo's
+// `rel_path` (stable across machines — it's relative to the volume, not the mount point, which
+// differs by OS/user). Plugging the drive into another Mac and adopting this file skips the
+// entire detect→embed→cluster pass, not just the naming.
+//
+// ⚠️ Deliberately NOT auto-merged on mount. `catalog_detect_portable_people` only REPORTS what's
+// there; only `catalog_import_portable_people`, an explicit user action (the wireframe's "Use
+// it" button), actually writes anything — silently merging two machines' people lists is how you
+// get duplicate "Sofia"s with no way back, exactly the failure mode CLAUDE.md warns adopt-on-
+// mount features away from elsewhere in this codebase.
+
+#[derive(Serialize, Deserialize, Clone)]
+struct PortableFace {
+    rel_path: String,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    score: f32,
+    kps: String,
+    /// Base64 of the raw little-endian f32x512 blob `photo_faces.embedding` already stores —
+    /// reusing that exact encoding rather than JSON floats keeps the file a fraction of the size.
+    embedding: Option<String>,
+    confirmed: bool,
+    person_name: String,
+    person_kind: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct PortablePeopleFile {
+    written_at: i64,
+    hostname: String,
+    face_count: usize,
+    person_count: usize,
+    faces: Vec<PortableFace>,
+}
+
+fn portable_people_path(dest_dir: &str) -> PathBuf {
+    Path::new(dest_dir).join(".chromasmith").join("people.json")
+}
+
+#[derive(Serialize, Clone)]
+pub struct PortablePeopleSummary {
+    pub written_at: i64,
+    pub hostname: String,
+    pub face_count: usize,
+    pub person_count: usize,
+}
+
+/// The wireframe's "This drive already has people data" banner check — read-only, cheap, safe
+/// to call every time a volume mounts. `None` when there's no file there yet.
+#[tauri::command]
+pub fn catalog_detect_portable_people(dest_dir: String) -> Result<Option<PortablePeopleSummary>, String> {
+    let path = portable_people_path(&dest_dir);
+    let Ok(text) = std::fs::read_to_string(&path) else { return Ok(None) };
+    let file: PortablePeopleFile = serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(Some(PortablePeopleSummary {
+        written_at: file.written_at,
+        hostname: file.hostname,
+        face_count: file.face_count,
+        person_count: file.person_count,
+    }))
+}
+
+/// Writes every named/confirmed face to `<dest_dir>/.chromasmith/people.json`. Called explicitly
+/// (a "Save to drive" action), not on every rename — matching CLAUDE.md's own flagged concern
+/// about writing thousands of sidecars on every edit; one JSON file has no such cost, but keeping
+/// the trigger explicit keeps the mental model ("this is a deliberate backup/export") consistent
+/// with the XMP writer's own batched trigger.
+#[tauri::command]
+pub fn catalog_export_portable_people(state: tauri::State<CatalogState>, dest_dir: String) -> Result<PortablePeopleSummary, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    export_portable_people_run(&conn, &dest_dir)
+}
+
+fn export_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<PortablePeopleSummary, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.rel_path, f.x0, f.y0, f.x1, f.y1, f.score, f.kps, f.embedding, f.confirmed, pe.name, pe.kind
+             FROM photo_faces f
+             JOIN photos p ON p.id = f.photo_id
+             JOIN people pe ON pe.id = f.person_id
+             WHERE f.person_id IS NOT NULL AND pe.ignored = 0",
+        )
+        .map_err(|e| e.to_string())?;
+    let faces: Vec<PortableFace> = stmt
+        .query_map([], |r| {
+            let embedding: Option<Vec<u8>> = r.get(7)?;
+            let confirmed: i64 = r.get(8)?;
+            Ok(PortableFace {
+                rel_path: r.get(0)?,
+                x0: r.get(1)?,
+                y0: r.get(2)?,
+                x1: r.get(3)?,
+                y1: r.get(4)?,
+                score: r.get(5)?,
+                kps: r.get(6)?,
+                embedding: {
+                    use base64::Engine;
+                    embedding.map(|b| base64::engine::general_purpose::STANDARD.encode(b))
+                },
+                confirmed: confirmed != 0,
+                person_name: r.get(9)?,
+                person_kind: r.get(10)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let person_count = {
+        let mut names = std::collections::HashSet::new();
+        for f in &faces {
+            names.insert(f.person_name.clone());
+        }
+        names.len()
+    };
+    let file = PortablePeopleFile {
+        written_at: now_secs() as i64,
+        hostname: hostname_for_export(),
+        face_count: faces.len(),
+        person_count,
+        faces,
+    };
+    let path = portable_people_path(dest_dir);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string(&file).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(PortablePeopleSummary {
+        written_at: file.written_at,
+        hostname: file.hostname,
+        face_count: file.face_count,
+        person_count: file.person_count,
+    })
+}
+
+fn hostname_for_export() -> String {
+    std::process::Command::new("scutil")
+        .arg("--get")
+        .arg("ComputerName")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "this Mac".to_string())
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct PortableImportResult {
+    pub faces_matched: usize,
+    pub faces_unmatched: usize,
+    pub people_created: usize,
+}
+
+/// The explicit "Use it" action — matches each portable face to a LOCAL photo by `rel_path`
+/// within the given volume (`dest_dir` must be a volume's own mount point, i.e. what
+/// `catalog_export_portable_people` was called with), finds-or-creates the named person, and
+/// writes the face row (inserting the face itself if this machine never ran its own detection
+/// pass over that photo — the whole point of adopting the file instead of rescanning).
+/// ⚠️ Never called implicitly — see this section's own header comment on why adopt-on-mount is
+/// deliberately not automatic.
+#[tauri::command]
+pub fn catalog_import_portable_people(state: tauri::State<CatalogState>, dest_dir: String) -> Result<PortableImportResult, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    import_portable_people_run(&conn, &dest_dir)
+}
+
+fn import_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<PortableImportResult, String> {
+    let path = portable_people_path(dest_dir);
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let file: PortablePeopleFile = serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
+
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut result = PortableImportResult::default();
+    let mut person_ids: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    let now = now_secs() as i64;
+
+    for face in &file.faces {
+        let photo_id: Option<i64> = tx
+            .query_row(
+                "SELECT p.id FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.rel_path = ?1 AND v.last_path = ?2",
+                params![face.rel_path, dest_dir],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let Some(photo_id) = photo_id else {
+            result.faces_unmatched += 1;
+            continue;
+        };
+
+        let person_id = if let Some(&id) = person_ids.get(&face.person_name) {
+            id
+        } else {
+            let existing: Option<i64> = tx
+                .query_row("SELECT id FROM people WHERE name = ?1", params![face.person_name], |r| r.get(0))
+                .optional()
+                .map_err(|e| e.to_string())?;
+            let id = match existing {
+                Some(id) => id,
+                None => {
+                    tx.execute(
+                        "INSERT INTO people (name, cover_face_id, created, auto, kind) VALUES (?1, NULL, ?2, 0, ?3)",
+                        params![face.person_name, now, face.person_kind],
+                    )
+                    .map_err(|e| e.to_string())?;
+                    result.people_created += 1;
+                    tx.last_insert_rowid()
+                }
+            };
+            person_ids.insert(face.person_name.clone(), id);
+            id
+        };
+
+        let embedding_blob: Option<Vec<u8>> = face
+            .embedding
+            .as_deref()
+            .and_then(|b64| {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD.decode(b64).ok()
+            });
+
+        // Reuse an existing face row for this photo at (nearly) the same box if one exists —
+        // this machine may have already run its own detection pass — otherwise insert fresh.
+        let existing_face: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM photo_faces WHERE photo_id = ?1 AND ABS(x0 - ?2) < 0.01 AND ABS(y0 - ?3) < 0.01",
+                params![photo_id, face.x0, face.y0],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let confirmed = face.confirmed as i64;
+        match existing_face {
+            Some(fid) => {
+                tx.execute(
+                    "UPDATE photo_faces SET person_id = ?1, confirmed = ?2 WHERE id = ?3",
+                    params![person_id, confirmed, fid],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, embedding, person_id, confirmed)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![photo_id, face.x0, face.y0, face.x1, face.y1, face.score, face.kps, embedding_blob, person_id, confirmed],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+        result.faces_matched += 1;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn catalog_cluster_faces(app: tauri::AppHandle, eps: Option<f64>, min_points: Option<usize>) -> Result<ClusterResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -2558,6 +3034,15 @@ pub struct PersonNode {
     /// of a flat "Person 1..Person 40" list — see people-pets-wireframes.html screen A. Was
     /// tracked in the `people.auto` column since v6 but never reached the frontend before this.
     pub auto: bool,
+    /// 'person' | 'pet' — a pet is a Person row with a species, not a separate table/UI/store
+    /// (people-pets wireframes screen I: "the word Subjects goes away"). No automatic pet
+    /// detector exists yet (see catalog.rs's PetDetection note near the bottom of this file) —
+    /// today a pet person can only be created by hand via `catalog_set_person_kind`.
+    pub kind: String,
+    /// `true` = user said "not a real person, stop suggesting this" (screen A's pinned Ignored
+    /// row). Distinct from delete: an ignored person's faces stay assigned, so they don't
+    /// resurface as a fresh unnamed cluster on the next scan.
+    pub ignored: bool,
 }
 
 #[tauri::command]
@@ -2565,14 +3050,24 @@ pub fn catalog_people(state: tauri::State<CatalogState>) -> Result<Vec<PersonNod
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT p.id, p.name, p.cover_face_id, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id), p.auto
+            "SELECT p.id, p.name, p.cover_face_id, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id), p.auto, p.kind, p.ignored
              FROM people p ORDER BY p.name"
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |r| {
             let auto: i64 = r.get(4)?;
-            Ok(PersonNode { id: r.get(0)?, name: r.get(1)?, cover_face_id: r.get(2)?, face_count: r.get(3)?, auto: auto != 0 })
+            let kind: String = r.get(5)?;
+            let ignored: i64 = r.get(6)?;
+            Ok(PersonNode {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                cover_face_id: r.get(2)?,
+                face_count: r.get(3)?,
+                auto: auto != 0,
+                kind,
+                ignored: ignored != 0,
+            })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
@@ -5946,6 +6441,150 @@ mod tests {
         assert_eq!(name2, "Alice", "the rename must survive a re-cluster");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    // CLAUDE.md failure #5: a re-cluster used to null EVERY assignment and rebuild from scratch,
+    // which could silently move a face the user had already reviewed. A confirmed face's
+    // person_id must survive re-clustering completely untouched, even when new/unconfirmed faces
+    // are being clustered at the same time.
+    fn confirmed_faces_survive_a_recluster_untouched() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("cluster_confirmed");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let photo_id: i64 = conn.query_row("SELECT id FROM photos LIMIT 1", [], |r| r.get(0)).unwrap();
+
+        let unit = |mut v: Vec<f32>| -> Vec<f32> {
+            let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            for x in v.iter_mut() {
+                *x /= n;
+            }
+            v
+        };
+        let insert = |emb: &[f32]| -> i64 {
+            let blob = f32_vec_to_blob(emb);
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, embedding) VALUES (?1,0,0,1,1,0.9,'[]',?2)",
+                params![photo_id, blob],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let mut base = vec![0f32; 512];
+        base[0] = 1.0;
+        let f1 = insert(&unit(base.clone()));
+        let _f2 = insert(&unit(base.clone()));
+
+        cluster_run(&conn, 0.1, 2).unwrap();
+        let person_id: i64 = conn.query_row("SELECT person_id FROM photo_faces WHERE id = ?1", params![f1], |r| r.get(0)).unwrap();
+        conn.execute("UPDATE photo_faces SET confirmed = 1 WHERE id = ?1", params![f1]).unwrap();
+
+        // Insert a THIRD face with a wildly different embedding — an ordinary re-cluster run
+        // must still leave the confirmed face's person_id exactly as it was.
+        let mut other = vec![0f32; 512];
+        other[1] = 1.0;
+        insert(&unit(other));
+        cluster_run(&conn, 0.1, 2).unwrap();
+
+        let (pid_after, confirmed_after): (Option<i64>, i64) = conn
+            .query_row("SELECT person_id, confirmed FROM photo_faces WHERE id = ?1", params![f1], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(pid_after, Some(person_id), "a confirmed face's person_id must never move on re-cluster");
+        assert_eq!(confirmed_after, 1, "confirming a face must survive a re-cluster");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── Portable People & Pets sidecar (people-pets wireframes screen K) ────────────────────
+
+    #[test]
+    fn portable_people_export_then_import_round_trips_the_name_and_embedding() {
+        // Hand-constructed volume/photo rows rather than a real `add_root_run`/`scan_run`: a
+        // scratch dir under the system temp dir resolves (via APFS firmlinks) to the BOOT
+        // volume's own mount point, which this test process has no permission to write a
+        // `.chromasmith/` folder into — a real external-drive mount point is a normal writable
+        // directory, so that permission failure would never occur in the feature's real use.
+        // What matters here is the MATCHING logic (rel_path -> photo, embedding round trip), not
+        // volume detection, which is already covered by scan_run's own tests.
+        let dest_dir = std::env::temp_dir().join(format!("cs_portable_people_{}", std::process::id())).to_string_lossy().into_owned();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        let rel_path = "a.jpg";
+
+        let src = temp_db();
+        src.execute(
+            "INSERT INTO volumes (uuid, label, last_path, is_local) VALUES ('vol-src', 'Drive', ?1, 1)",
+            params![dest_dir],
+        )
+        .unwrap();
+        let vol_id = src.last_insert_rowid();
+        src.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, present, added)
+             VALUES (?1, ?2, '', 'a.jpg', 'a.jpg', 'jpg', 'photo', 1, 0, 1, 0)",
+            params![vol_id, rel_path],
+        )
+        .unwrap();
+        let photo_id = src.last_insert_rowid();
+
+        let mut emb = vec![0f32; 512];
+        emb[3] = 1.0;
+        let blob = f32_vec_to_blob(&emb);
+        src.execute(
+            "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, embedding) VALUES (?1,0.1,0.2,0.3,0.4,0.9,'[]',?2)",
+            params![photo_id, blob],
+        )
+        .unwrap();
+        let face_id = src.last_insert_rowid();
+        src.execute(
+            "INSERT INTO people (name, cover_face_id, created, auto, kind) VALUES ('Sofia', ?1, 0, 0, 'person')",
+            params![face_id],
+        )
+        .unwrap();
+        let person_id = src.last_insert_rowid();
+        src.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 1 WHERE id = ?2", params![person_id, face_id]).unwrap();
+
+        let summary = export_portable_people_run(&src, &dest_dir).unwrap();
+        assert_eq!(summary.face_count, 1);
+        assert_eq!(summary.person_count, 1);
+        assert!(Path::new(&dest_dir).join(".chromasmith/people.json").exists());
+
+        // A SECOND, independent catalog (a different machine) — same photo at the same rel_path
+        // and the same volume mount point (a real external drive keeps the same mount path
+        // convention across a Mac; that's the whole premise of matching on rel_path at all).
+        let dst = temp_db();
+        dst.execute(
+            "INSERT INTO volumes (uuid, label, last_path, is_local) VALUES ('vol-dst', 'Drive', ?1, 1)",
+            params![dest_dir],
+        )
+        .unwrap();
+        let vol_id2 = dst.last_insert_rowid();
+        dst.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, present, added)
+             VALUES (?1, ?2, '', 'a.jpg', 'a.jpg', 'jpg', 'photo', 1, 0, 1, 0)",
+            params![vol_id2, rel_path],
+        )
+        .unwrap();
+        let dst_photo_id = dst.last_insert_rowid();
+
+        let result = import_portable_people_run(&dst, &dest_dir).unwrap();
+        assert_eq!(result.faces_matched, 1);
+        assert_eq!(result.faces_unmatched, 0);
+        assert_eq!(result.people_created, 1);
+
+        let (name, confirmed, embedding): (String, i64, Vec<u8>) = dst
+            .query_row(
+                "SELECT pe.name, f.confirmed, f.embedding FROM photo_faces f JOIN people pe ON pe.id = f.person_id WHERE f.photo_id = ?1",
+                params![dst_photo_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(name, "Sofia");
+        assert_eq!(confirmed, 1);
+        assert_eq!(blob_to_f32_vec(&embedding), emb, "the embedding must survive the round trip, not just the name");
+
+        std::fs::remove_dir_all(&dest_dir).ok();
     }
 
     // ── Face detection scan phase (AI stack Phase A) ────────────────────────────────────────
