@@ -2709,37 +2709,34 @@
   // Loads thumbnails STRAIGHT INTO `_thumbCache` (thumbCachePut, the same LRU the ordinary grid
   // read from) BEFORE any card exists — unlike the lazy `_thumbPump` above, which needs a live,
   // DOM-connected <img> per job and so can't run ahead of renderGrid(). This is what makes the
-  // boot sequence's "Loading cached thumbnails…" phase real: once this resolves, renderGrid()'s
-  // own loadThumb() calls hit thumbCacheGet() synchronously for everything it warmed, instead of
-  // each card firing its own fresh IPC round trip.
-  // ⚠️ Bounded two ways, or a big/cold folder would block boot exactly as long as the whole-
-  // catalog thumbnail generation this session already moved to a background pass for: capped to
-  // the first PREFETCH_CAP entries (a folder view, not a whole recursive library), and to a hard
-  // wall-clock budget — whichever a genuinely uncached folder hits first, the rest is simply left
-  // for the ordinary lazy pump to pick up once the grid renders, same as it always has.
-  const PREFETCH_CAP = 800;
-  const PREFETCH_BUDGET_MS = 4000;
+  // boot sequence's "Loading thumbnails…" phase real: once this resolves, renderGrid()'s own
+  // loadThumb() calls hit thumbCacheGet() synchronously for everything it warmed, instead of each
+  // card firing its own fresh IPC round trip.
+  // ⚠️ Bounded to the first PREFETCH_CAP entries — a real screenful, not a whole folder page (an
+  // earlier version capped at 800 and additionally raced a fixed 4s wall clock, so on a real large/
+  // slow-drive library it abandoned the loop with almost nothing prefetched, and Library appeared
+  // full of placeholders — exactly the "shows the library before it finishes loading the
+  // thumbnails" bug this was rewritten to fix). There is no wall-clock budget any more: this AWAITS
+  // full completion, because every individual call below is bounded by PREFETCH_CALL_TIMEOUT_MS —
+  // see its comment for why that (not a separate clock) is what actually bounds the worst case.
+  const PREFETCH_CAP = 100;
   const PREFETCH_CONCURRENCY = 8;
   // A real fetch is fast (CLAUDE.md: RAW embedded-preview extraction measured at 97-175ms; a
   // cached JPEG is faster still) — 1200ms is generous headroom over that, not a "give it plenty
-  // of time" guess. Kept tight deliberately: this is the worst-case cost PER STUCK ITEM, and see
-  // below for why that number, not "3 seconds x however many hang", is what actually bounds boot.
+  // of time" guess. This is the worst-case cost PER STUCK ITEM, and it's also the ONLY bound on
+  // the whole phase now (see below): with PREFETCH_CAP=100 and PREFETCH_CONCURRENCY=8 workers each
+  // independently pulling the next target, worst case is ⌈100/8⌉ × 1200ms ≈ 15s if every single
+  // item somehow hangs — normal case (each fetch actually fast) finishes in well under a second.
   const PREFETCH_CALL_TIMEOUT_MS = 1200;
-  // ⚠️ PREFETCH_BUDGET_MS only gates STARTING a new item between loop iterations — it does
-  // nothing for a single invoke() that's already in flight and never settles. A genuinely stuck
-  // Tauri IPC call (a wedged lock, a pathological file, anything) would otherwise hang this ONE
+  // ⚠️ Every invoke() is individually bounded by PREFETCH_CALL_TIMEOUT_MS above, or a genuinely
+  // stuck Tauri IPC call (a wedged lock, a pathological file, anything) would hang that ONE
   // worker's await forever, and since `openFolder` awaits the whole Promise.all, that stalls the
   // entire boot sequence — with both processes sitting fully idle (confirmed by live process
   // sampling: no CPU on either side, not "slow", genuinely parked on a promise nothing will ever
-  // resolve). Every individual call is now bounded, so the phase always finishes within a
-  // predictable ceiling no matter what a single photo does.
-  // ⚠️ This bound does NOT scale with how many items are stuck. All PREFETCH_CONCURRENCY (8)
-  // workers run in parallel, and each one independently stops starting new work once
-  // Date.now() >= deadline — so whether 1 thumbnail hangs or all 800 do, the worst case is still
-  // just PREFETCH_BUDGET_MS plus at most one more PREFETCH_CALL_TIMEOUT_MS per worker (the
-  // in-flight call that was already running when the deadline passed) — roughly 4-5s total, not
-  // 1.2s x count. Concurrency is what makes "one call's timeout" and "the whole phase's worst
-  // case" two different, both-bounded numbers instead of the same multiplying one.
+  // resolve). Because that per-item bound is unconditional, the loop itself doesn't need its own
+  // wall-clock deadline on top of it — removing that separate clock is what lets this genuinely
+  // wait for all PREFETCH_CAP thumbnails to land, per the boot sequence's own stated intent,
+  // rather than abandoning early on a real large/slow-drive library.
   function withTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
@@ -2752,11 +2749,10 @@
     const total = targets.length;
     if (!total) return;
     let done = 0;
-    const deadline = Date.now() + PREFETCH_BUDGET_MS;
     onProgress(0, total);
     let next = 0;
     async function worker() {
-      while (next < targets.length && Date.now() < deadline) {
+      while (next < targets.length) {
         const e = targets[next++];
         try {
           const buf = await withTimeout(invoke('get_thumbnail_or_offline', { path: e.path }), PREFETCH_CALL_TIMEOUT_MS);
@@ -5315,7 +5311,7 @@
     // cache-tier menu uses, but a read-only report rather than clickable actions: this isn't a
     // "pick one" decision, it's "here is what needs your attention."
     const menu = document.createElement('div');
-    menu.style.cssText = 'position:fixed;z-index:200;left:50%;top:50%;transform:translate(-50%,-50%);'
+    menu.style.cssText = 'position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%);'
       + 'background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:14px;'
       + 'min-width:320px;max-width:480px;max-height:60vh;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:12px';
     const esc2 = (s2) => String(s2 || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -5506,7 +5502,7 @@
       }],
     ];
     const menu = document.createElement('div');
-    menu.style.cssText = 'position:fixed;z-index:200;background:var(--sur2);border:1px solid var(--bdr);'
+    menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
       + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
@@ -5630,7 +5626,7 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading cached thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
+  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
   const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed', 'clip'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
@@ -6754,7 +6750,7 @@
       }],
     ];
     const menu = document.createElement('div');
-    menu.style.cssText = 'position:fixed;z-index:200;background:var(--sur2);border:1px solid var(--bdr);'
+    menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
       + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
@@ -6809,7 +6805,7 @@
     }]);
 
     const menu = document.createElement('div');
-    menu.style.cssText = 'position:fixed;z-index:200;background:var(--sur2);border:1px solid var(--bdr);'
+    menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
       + 'border-radius:7px;padding:4px;min-width:220px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
