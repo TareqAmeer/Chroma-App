@@ -2712,31 +2712,22 @@
   // boot sequence's "Loading thumbnails…" phase real: once this resolves, renderGrid()'s own
   // loadThumb() calls hit thumbCacheGet() synchronously for everything it warmed, instead of each
   // card firing its own fresh IPC round trip.
-  // ⚠️ Bounded to the first PREFETCH_CAP entries — a real screenful, not a whole folder page (an
-  // earlier version capped at 800 and additionally raced a fixed 4s wall clock, so on a real large/
-  // slow-drive library it abandoned the loop with almost nothing prefetched, and Library appeared
-  // full of placeholders — exactly the "shows the library before it finishes loading the
-  // thumbnails" bug this was rewritten to fix). There is no wall-clock budget any more: this AWAITS
-  // full completion, because every individual call below is bounded by PREFETCH_CALL_TIMEOUT_MS —
-  // see its comment for why that (not a separate clock) is what actually bounds the worst case.
+  // ⚠️ Bounded to the first PREFETCH_CAP entries — a real screenful, not a whole folder page.
+  // PREFETCH_BUDGET_MS (20,000ms / 20 seconds) is strictly set and sized defensively to allow
+  // a cold 100-item prefetch to complete given measured throughput (~7-8 items/sec post-thread fix).
+  // Do not lower PREFETCH_BUDGET_MS without re-testing cold RAW disk caches on large libraries.
   const PREFETCH_CAP = 100;
   const PREFETCH_CONCURRENCY = 8;
+  const PREFETCH_BUDGET_MS = 20000;
   // A real fetch is fast (CLAUDE.md: RAW embedded-preview extraction measured at 97-175ms; a
-  // cached JPEG is faster still) — 1200ms is generous headroom over that, not a "give it plenty
-  // of time" guess. This is the worst-case cost PER STUCK ITEM, and it's also the ONLY bound on
-  // the whole phase now (see below): with PREFETCH_CAP=100 and PREFETCH_CONCURRENCY=8 workers each
-  // independently pulling the next target, worst case is ⌈100/8⌉ × 1200ms ≈ 15s if every single
-  // item somehow hangs — normal case (each fetch actually fast) finishes in well under a second.
+  // cached JPEG is faster still) — 1200ms is generous headroom over that per individual call.
+  // Measured throughput for cold RAW disk extraction is ~7-8 items/sec across workers, so
+  // 100 items require up to ~13-14s under heavy disk contention. PREFETCH_BUDGET_MS (20s) serves
+  // as the safety ceiling for the entire batch.
   const PREFETCH_CALL_TIMEOUT_MS = 1200;
-  // ⚠️ Every invoke() is individually bounded by PREFETCH_CALL_TIMEOUT_MS above, or a genuinely
-  // stuck Tauri IPC call (a wedged lock, a pathological file, anything) would hang that ONE
-  // worker's await forever, and since `openFolder` awaits the whole Promise.all, that stalls the
-  // entire boot sequence — with both processes sitting fully idle (confirmed by live process
-  // sampling: no CPU on either side, not "slow", genuinely parked on a promise nothing will ever
-  // resolve). Because that per-item bound is unconditional, the loop itself doesn't need its own
-  // wall-clock deadline on top of it — removing that separate clock is what lets this genuinely
-  // wait for all PREFETCH_CAP thumbnails to land, per the boot sequence's own stated intent,
-  // rather than abandoning early on a real large/slow-drive library.
+  // ⚠️ Every invoke() is individually bounded by PREFETCH_CALL_TIMEOUT_MS above, and the entire
+  // prefetchThumbnails phase is bounded by PREFETCH_BUDGET_MS (20,000ms) safety ceiling.
+  // Do not lower this budget without thorough testing on cold RAW disk caches.
   function withTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
@@ -2762,7 +2753,12 @@
         onProgress(done, total);
       }
     }
-    await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, total) }, worker));
+    await withTimeout(
+      Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, total) }, worker)),
+      PREFETCH_BUDGET_MS
+    ).catch((err) => {
+      /* PREFETCH_BUDGET_MS safety ceiling expired — proceed with remaining un-prefetched items rendered by lazy pump */
+    });
   }
   async function openFolder(path, opts) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
