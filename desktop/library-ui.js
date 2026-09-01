@@ -4049,28 +4049,43 @@
     }
   }
 
+  // The Info panel shows one photo's chips (the focused/first-of-selection one — see
+  // renderInfoPanel's own comment), but editing keywords from it should act on the WHOLE
+  // selection, matching the keyword-tree drag-and-drop path below which already does this via
+  // Promise.all. Without this, typing a tag with 5 photos selected silently tagged only 1.
+  function infoPanelTargetPaths(path) {
+    return (state.selected.size > 1 && state.selected.has(path)) ? [...state.selected] : [path];
+  }
+
   /// Full hierarchical paths this photo carries, tagged via the info panel or drag-to-tag. The
   /// merge (existing + new, deduped) happens here rather than in the caller so both entry
   /// points share one rule.
   async function addKeywordToPhoto(path, keyword) {
-    const sc = state.sidecars.get(path) || { keywords: [] };
-    const current = sc.keywords || [];
-    if (current.includes(keyword)) return;
-    const next = [...current, keyword];
-    try {
-      await invoke('set_keywords', { path, keywords: next });
-      state.sidecars.set(path, { ...sc, keywords: next });
-      renderInfoPanel();
-    } catch (e) { toast(humanizeErr('tag the photo', e), 'err'); }
+    const paths = infoPanelTargetPaths(path);
+    await Promise.all(paths.map(async (p) => {
+      const sc = state.sidecars.get(p) || { keywords: [] };
+      const current = sc.keywords || [];
+      if (current.includes(keyword)) return;
+      const next = [...current, keyword];
+      try {
+        await invoke('set_keywords', { path: p, keywords: next });
+        state.sidecars.set(p, { ...sc, keywords: next });
+      } catch (e) { toast(humanizeErr('tag the photo', e), 'err'); }
+    }));
+    if (paths.length > 1) toast(`Tagged ${paths.length} photos "${keyword}"`);
+    renderInfoPanel();
   }
   async function removeKeywordFromPhoto(path, keyword) {
-    const sc = state.sidecars.get(path) || { keywords: [] };
-    const next = (sc.keywords || []).filter((k) => k !== keyword);
-    try {
-      await invoke('set_keywords', { path, keywords: next });
-      state.sidecars.set(path, { ...sc, keywords: next });
-      renderInfoPanel();
-    } catch (e) { toast(humanizeErr('remove the tag', e), 'err'); }
+    const paths = infoPanelTargetPaths(path);
+    await Promise.all(paths.map(async (p) => {
+      const sc = state.sidecars.get(p) || { keywords: [] };
+      const next = (sc.keywords || []).filter((k) => k !== keyword);
+      try {
+        await invoke('set_keywords', { path: p, keywords: next });
+        state.sidecars.set(p, { ...sc, keywords: next });
+      } catch (e) { toast(humanizeErr('remove the tag', e), 'err'); }
+    }));
+    renderInfoPanel();
   }
 
   /// Operations that only make sense on a multi-selection, surfaced as a bar rather than living
