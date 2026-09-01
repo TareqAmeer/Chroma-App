@@ -1849,6 +1849,30 @@ fn main() {
     if let Err(e) = rayon::ThreadPoolBuilder::new().num_threads(workers).build_global() {
         eprintln!("rayon: could not cap the global pool at {workers} threads ({e}) — proceeding with rayon's own default sizing");
     }
+    // ⚠️ The rayon cap above only bounds RAYON's own worker threads. Every `#[tauri::command]
+    // async fn` that does heavy per-file work (decode_raw_v2, get_thumbnail, catalog_scan's whole
+    // chain, thumbnail_run, faces_run, embed_run, clip_embed_run, sam_encode, ...) reaches that
+    // work via `tauri::async_runtime::spawn_blocking`, which — left on Tauri's default runtime —
+    // draws from TOKIO's blocking-thread pool, a SEPARATE pool with its own default ceiling of
+    // 512 threads, uncoordinated with rayon's. A large-folder scan fires several of these
+    // concurrently (catalog_scan's chain, the grid's own per-card get_thumbnail_or_offline calls
+    // at PREFETCH_CONCURRENCY=8, catalog_thumbnails' paced batches, faces/embed/clip if "Analyze
+    // photos" is running too) plus rayon's own already-capped pool doing full-image RAW decode
+    // and ONNX inference at the same time. On an 8-core machine that is `workers` (rayon) PLUS
+    // however many tokio blocking threads happen to be live simultaneously — nothing stops that
+    // sum from exceeding the whole machine's core count by a wide margin, which is a much more
+    // severe version of the CPU-saturation issue measured above (that one only stalled the UI
+    // thread; sustained full-core overload for minutes on end is what drives a thermal shutdown
+    // on a thermally-limited machine, not just "app not responding"). Building our OWN tokio
+    // runtime with max_blocking_threads capped to the SAME `workers` budget and handing it to
+    // Tauri via async_runtime::set (must happen before Builder::default() touches the runtime at
+    // all) means every spawn_blocking call — not just rayon's — respects one coordinated ceiling.
+    let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .max_blocking_threads(workers)
+        .build()
+        .expect("failed to build the capped tokio runtime");
+    tauri::async_runtime::set(tokio_rt.handle().clone());
     tauri::Builder::default()
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(PendingOAuth(Mutex::new(None)))
@@ -1973,6 +1997,7 @@ fn main() {
             catalog::catalog_verify,
             catalog::catalog_faces_scan,
             catalog::catalog_photo_faces,
+            catalog::catalog_face_crop,
             catalog::catalog_embed_faces,
             catalog::catalog_cluster_faces,
             catalog::catalog_people,

@@ -269,6 +269,54 @@ for (const [label, hangParam] of [['one', 'IMG_1003'], ['every', 'all']]) {
   await p.close();
 }
 
+// Boot readiness (RC-1, "library appears before it's usable"): the OLD boot gate resolved once
+// toggleLibrary()'s promise chain settled — which only guarantees cards exist in the DOM, not
+// that they have pixels, since loadThumb() queues each card's decode and returns immediately.
+// That gap is exactly why the Library used to reveal a screenful of empty grey cards. This
+// intercepts the real hideBootSplash() call (via an init script, so it's wrapped before
+// library-ui.js's boot IIFE ever runs) and snapshots every MOUNTED card's <img> state at the
+// instant the splash actually comes down — the assertion that never existed before: firstPaintReady()
+// (library-ui.js) must resolve only once every mounted card has settled, loaded or failed.
+// ⚠️ At libn=30 (a realistic first-screenful size, below PREFETCH_CAP=100) this mock's own
+// prefetchThumbnails call already warms every card before renderGrid runs, so this specific case
+// can't tell a correctly-gated boot from the old ungated one — verified by hand (not asserted
+// here, since it would just be re-testing the mock's own instant-resolving promises) that forcing
+// entries past PREFETCH_CAP surfaces cards still mid-decode when the old gate fired. What THIS
+// assertion guards going forward is the invariant itself: nobody may reintroduce a path where
+// hideBootSplash() runs before every mounted card is settled, regardless of why.
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.addInitScript(() => {
+    window.__bootSnapshot = null;
+    Object.defineProperty(window, '__hideBootSplashReal', { value: undefined, writable: true, configurable: true });
+    const install = () => {
+      if (typeof window.hideBootSplash !== 'function' || window.__hideBootSplashWrapped) return;
+      window.__hideBootSplashWrapped = true;
+      const orig = window.hideBootSplash;
+      window.hideBootSplash = function (...args) {
+        const imgs = Array.from(document.querySelectorAll('#lib-grid .lib-card[data-path] img'));
+        window.__bootSnapshot = {
+          total: imgs.length,
+          settled: imgs.filter(i => i.classList.contains('loaded') || i.classList.contains('thumb-error')).length,
+        };
+        return orig.apply(this, args);
+      };
+    };
+    // hideBootSplash is defined inline in chromasmith-22.html before library-ui.js loads, but
+    // poll briefly in case script order ever changes rather than depending on it.
+    const t = setInterval(() => { install(); if (window.__hideBootSplashWrapped) clearInterval(t); }, 5);
+    setTimeout(() => clearInterval(t), 5000);
+  });
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=30`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForFunction(() => window.__bootSnapshot !== null, {timeout: 20000}).catch(()=>{});
+  const snap = await p.evaluate(() => window.__bootSnapshot);
+  const ok = !!snap && snap.total > 0 && snap.settled === snap.total;
+  console.log(`boot readiness: splash hid with ${snap ? `${snap.settled}/${snap.total}` : 'NO SNAPSHOT'} mounted cards settled  ${ok?'PASS':'FAIL'}`);
+  if(!ok) failures.push(`hideBootSplash() fired before every mounted card settled: ${JSON.stringify(snap)}`);
+  await p.close();
+}
+
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}

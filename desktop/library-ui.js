@@ -288,17 +288,54 @@
         ]);
       }
       case 'set_keywords': return Promise.resolve();
+      // Stateful (failure 13, CLAUDE.md people-pets plan) — earlier this array was a hardcoded
+      // literal returned fresh every call, so rename/merge/delete resolved without the sidebar
+      // ever reflecting it and no People UI change could be seen working in this harness. Module
+      // scope, not per-call, so a rename/merge/delete genuinely persists for the rest of the tab.
       case 'catalog_people': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
-        return Promise.resolve([
-          { id: 1, name: 'Person 1', cover_face_id: 1, face_count: 5 },
-          { id: 2, name: 'Alice', cover_face_id: 2, face_count: 2 },
-        ]);
+        if (!window.__libtestPeople) {
+          window.__libtestPeople = [
+            { id: 1, name: 'Sofia', cover_face_id: 1, face_count: 412, auto: false },
+            { id: 2, name: 'Marcus', cover_face_id: 2, face_count: 207, auto: false },
+            { id: 3, name: 'Person 3', cover_face_id: 3, face_count: 33, auto: true },
+            { id: 4, name: 'Person 4', cover_face_id: 4, face_count: 31, auto: true },
+            { id: 5, name: 'Person 5', cover_face_id: 5, face_count: 12, auto: true },
+          ];
+        }
+        return Promise.resolve(window.__libtestPeople.slice());
+      }
+      case 'catalog_face_crop': {
+        // 2x2 solid-color JPEG, just enough bytes for the browser to decode and fire onload —
+        // proves the avatar's loaded/fade wiring works without needing real face data.
+        const b64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAACAAIBAREA/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAA/AKp//9k=';
+        const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return Promise.resolve(bytes);
       }
       case 'catalog_faces_scan': return Promise.resolve({ scanned: 0, faces_found: 0 });
       case 'catalog_embed_faces': return Promise.resolve({ embedded: 0 });
       case 'catalog_cluster_faces': return Promise.resolve({ people: 0, clustered_faces: 0, unclustered_faces: 0 });
-      case 'catalog_rename_person': case 'catalog_merge_people': case 'catalog_delete_person': return Promise.resolve();
+      case 'catalog_rename_person': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) { p.name = args.name; p.auto = false; }
+        return Promise.resolve();
+      }
+      case 'catalog_merge_people': {
+        const list = window.__libtestPeople || [];
+        const from = list.find((x) => x.id === args.fromId);
+        const into = list.find((x) => x.id === args.intoId);
+        if (from && into) {
+          into.face_count += from.face_count;
+          into.auto = false;
+          window.__libtestPeople = list.filter((x) => x.id !== args.fromId);
+        }
+        return Promise.resolve();
+      }
+      case 'catalog_delete_person': {
+        window.__libtestPeople = (window.__libtestPeople || []).filter((x) => x.id !== args.personId);
+        return Promise.resolve();
+      }
       case 'catalog_clip_embed': return Promise.resolve({ embedded: 0 });
       case 'catalog_clip_tags': {
         // R10: fixed fake suggestions so the Info panel's "Suggested" section is exercisable
@@ -668,6 +705,20 @@
     .lib-coll-row.on .lib-coll-count{color:var(--acc)}
     .lib-coll-sep{height:1px;background:var(--bdr);margin:8px 2px}
     .lib-coll-heading{font-size:11px;font-weight:600;letter-spacing:0;color:var(--mut);padding:2px 8px 6px}
+    /* People & Pets — face avatar in place of the generic .lib-coll-ic user glyph (people-pets
+       wireframes screen A). 20px circle, filled lazily from catalog_face_crop (an <img> so a
+       failed/never-scanned crop just shows the empty background rather than a broken-image icon
+       — see .lib-face-ava img{visibility}). .unnamed gets a dashed ring, matching the
+       "suggestion, not committed" language .lib-kw-suggest-chip already uses elsewhere in this
+       file, since an un-renamed auto cluster is exactly that: the machine's guess, not yours. */
+    .lib-face-ava{width:20px;height:20px;border-radius:50%;flex:0 0 auto;overflow:hidden;
+      background:var(--sur2);border:1px solid var(--bdr);position:relative}
+    .lib-face-ava.unnamed{border-style:dashed;border-color:var(--mut)}
+    .lib-face-ava img{width:100%;height:100%;object-fit:cover;visibility:hidden}
+    .lib-face-ava img.loaded{visibility:visible}
+    /* Named list scrolls internally so Folders/Keywords never move as the count grows — the
+       flat "Person 1..Person 40" flood this replaces (CLAUDE.md people-pets plan, failure 14). */
+    .lib-people-scroll{max-height:150px;overflow-y:auto;margin:0 -4px;padding:0 4px}
     #lib-main{overflow:auto;padding:16px}
     /* List mode's sticky header (#lib-list-head, top:0 below) vs #lib-main's own padding: a
        padded overflow:auto container only masks scrolled-behind content within its padding band
@@ -1767,6 +1818,7 @@
           if (job.isVideo) _thumbActiveVideo--;
           _thumbDoneCount++;
           updateThumbProgress();
+          _resolveThumbPaintWaiters();
           _thumbPump();
           // Batch settled (this generation's queue drained and no job still in flight): show
           // ONE summary toast if anything failed, instead of a silent per-thumbnail CSS class.
@@ -1786,6 +1838,34 @@
     if (!el) return;
     if (_thumbDoneCount >= _thumbTotalCount || _thumbTotalCount < 8) { el.textContent = ''; return; }
     el.textContent = `Loading photos… ${_thumbDoneCount}/${_thumbTotalCount}`;
+  }
+  /// The real readiness gate for the boot splash: resolves once every card mounted in the
+  /// CURRENT grid generation has settled — loaded OR failed, `_thumbDoneCount >= _thumbTotalCount`
+  /// exactly mirrors updateThumbProgress's own "batch settled" condition above, which is the
+  /// existing, already-correct completion check for this queue. This replaces the old boot gate
+  /// (toggleLibrary().then(...)), which resolved once cards existed in the DOM, not once they had
+  /// pixels — the root reason 12 prior fixes never closed this bug: they all sped up or
+  /// instrumented that promise chain without changing what it actually measured.
+  /// `_thumbPaintWaiters` is checked in loadThumb's job `.finally()` below, the one place every
+  /// job (success or failure) is guaranteed to pass through.
+  let _thumbPaintWaiters = [];
+  function firstPaintReady(timeoutMs) {
+    return new Promise((resolve) => {
+      // Nothing queued yet (e.g. an empty folder, or every card was already a cache hit and
+      // painted synchronously in loadThumb before this is even called) — already ready.
+      if (_thumbTotalCount === 0 || _thumbDoneCount >= _thumbTotalCount) { resolve(); return; }
+      const gen = _thumbGen;
+      let settled = false;
+      const done = () => { if (settled) return; settled = true; resolve(); };
+      _thumbPaintWaiters.push({ gen, done });
+      if (timeoutMs) setTimeout(done, timeoutMs); // never let a stuck/slow card hang the caller forever
+    });
+  }
+  function _resolveThumbPaintWaiters() {
+    if (_thumbDoneCount < _thumbTotalCount || !_thumbPaintWaiters.length) return;
+    const waiters = _thumbPaintWaiters;
+    _thumbPaintWaiters = [];
+    for (const w of waiters) w.done();
   }
   function fmtDuration(sec) {
     if (!sec || !isFinite(sec)) return '';
@@ -1823,6 +1903,14 @@
     _thumbDoneCount = 0;
     _thumbFailToastShown = false;
     updateThumbProgress();
+    // Any waiter armed for the generation just discarded can never see its own queue reach
+    // done>=total (that queue is gone) — resolve them now rather than making them ride out their
+    // own timeout for no reason (e.g. a boot that immediately switches folders again).
+    if (_thumbPaintWaiters.length) {
+      const waiters = _thumbPaintWaiters;
+      _thumbPaintWaiters = [];
+      for (const w of waiters) w.done();
+    }
   }
 
   // Small orange pen icon for the "edited" corner badge — replaces the old EDITED text pill.
@@ -2712,31 +2800,37 @@
   // boot sequence's "Loading thumbnails…" phase real: once this resolves, renderGrid()'s own
   // loadThumb() calls hit thumbCacheGet() synchronously for everything it warmed, instead of each
   // card firing its own fresh IPC round trip.
-  // ⚠️ Bounded to the first PREFETCH_CAP entries — a real screenful, not a whole folder page (an
-  // earlier version capped at 800 and additionally raced a fixed 4s wall clock, so on a real large/
-  // slow-drive library it abandoned the loop with almost nothing prefetched, and Library appeared
-  // full of placeholders — exactly the "shows the library before it finishes loading the
-  // thumbnails" bug this was rewritten to fix). There is no wall-clock budget any more: this AWAITS
-  // full completion, because every individual call below is bounded by PREFETCH_CALL_TIMEOUT_MS —
-  // see its comment for why that (not a separate clock) is what actually bounds the worst case.
+  // ⚠️ Bounded TWO ways, both required — this has been wrong in both directions on this exact
+  // library, so don't "simplify" either one away again:
+  //   1. PREFETCH_CAP — the first N entries, a real screenful, not a whole folder page (an earlier
+  //      version capped at 800, which no wall clock could realistically clear).
+  //   2. PREFETCH_BUDGET_MS — a wall-clock deadline on the whole phase. A version WITHOUT this
+  //      (reasoning that PREFETCH_CALL_TIMEOUT_MS alone bounds each call) was shipped and measured
+  //      live against this user's real library: the status bar showed "Generating thumbnails… 0%"
+  //      — a genuinely COLD on-disk thumbnail cache doing full RAW demosaic/decode for the first
+  //      time, competing with this very prefetch for CPU cores against catalog.rs's own background
+  //      bulk thumbnail pass. Each `get_thumbnail_or_offline` call can legitimately take far longer
+  //      than a "fast fetch," so the per-item timeout alone let the loop keep dispatching new
+  //      native decodes for MINUTES, never reaching renderGrid().
+  //      That specific contention is now fixed at its root: catalog.rs's bulk thumbnail_run/focus-
+  //      scoring batches run on their OWN smaller `decode_batch_pool()` (half of the app's already-
+  //      reduced `cores-2` global rayon budget) instead of saturating every core, leaving real
+  //      headroom for this prefetch's interactive `get_thumbnail_or_offline` calls (dispatched via
+  //      Tauri's separate tokio pool). Measured live post-fix: the ordinary lazy per-card pump,
+  //      hitting the exact same call, went from stuck at 0 progress for 50+s to steady ~7-8
+  //      items/sec. The wall clock stays as a safety net (never remove it again without live
+  //      re-measurement) but is now sized to let a genuinely cold 100-item batch actually finish —
+  //      at ~7-8/s that's ~13-15s; 20s leaves real margin without reintroducing an unbounded stall.
   const PREFETCH_CAP = 100;
+  const PREFETCH_BUDGET_MS = 20000;
   const PREFETCH_CONCURRENCY = 8;
-  // A real fetch is fast (CLAUDE.md: RAW embedded-preview extraction measured at 97-175ms; a
-  // cached JPEG is faster still) — 1200ms is generous headroom over that, not a "give it plenty
-  // of time" guess. This is the worst-case cost PER STUCK ITEM, and it's also the ONLY bound on
-  // the whole phase now (see below): with PREFETCH_CAP=100 and PREFETCH_CONCURRENCY=8 workers each
-  // independently pulling the next target, worst case is ⌈100/8⌉ × 1200ms ≈ 15s if every single
-  // item somehow hangs — normal case (each fetch actually fast) finishes in well under a second.
+  // A WARM cache fetch is fast (CLAUDE.md: RAW embedded-preview extraction measured at 97-175ms; a
+  // cached JPEG is faster still) — 1200ms is generous headroom over that. This bounds the cost of
+  // ONE stuck/slow item so a single pathological file can't hang its worker past the next
+  // PREFETCH_BUDGET_MS check; it does NOT by itself bound the whole phase (see above) — a cold
+  // cache generating real thumbnails can validly take longer than this per item, which is why the
+  // wall-clock budget above is sized in whole seconds, not this constant scaled up.
   const PREFETCH_CALL_TIMEOUT_MS = 1200;
-  // ⚠️ Every invoke() is individually bounded by PREFETCH_CALL_TIMEOUT_MS above, or a genuinely
-  // stuck Tauri IPC call (a wedged lock, a pathological file, anything) would hang that ONE
-  // worker's await forever, and since `openFolder` awaits the whole Promise.all, that stalls the
-  // entire boot sequence — with both processes sitting fully idle (confirmed by live process
-  // sampling: no CPU on either side, not "slow", genuinely parked on a promise nothing will ever
-  // resolve). Because that per-item bound is unconditional, the loop itself doesn't need its own
-  // wall-clock deadline on top of it — removing that separate clock is what lets this genuinely
-  // wait for all PREFETCH_CAP thumbnails to land, per the boot sequence's own stated intent,
-  // rather than abandoning early on a real large/slow-drive library.
   function withTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
@@ -2748,21 +2842,30 @@
       .filter((e) => !thumbCacheGet(e.path + '@' + (e.mtime || 0)));
     const total = targets.length;
     if (!total) return;
+    // ⚠️ `done` counts CACHE HITS only, never attempts. A version that incremented on every
+    // attempt (success or timeout) reported "100%" while a cold RAW-decode batch cached ZERO
+    // thumbnails — every call rejected inside the try/catch below, `done++` still ran, and the
+    // splash/pill read complete having warmed nothing. `attempted` drives the loop's own
+    // termination bookkeeping only; `onProgress` gets the honest number.
     let done = 0;
+    let attempted = 0;
+    const deadline = Date.now() + PREFETCH_BUDGET_MS;
     onProgress(0, total);
     let next = 0;
     async function worker() {
-      while (next < targets.length) {
+      while (next < targets.length && Date.now() < deadline) {
         const e = targets[next++];
         try {
           const buf = await withTimeout(invoke('get_thumbnail_or_offline', { path: e.path }), PREFETCH_CALL_TIMEOUT_MS);
           thumbCachePut(e.path + '@' + (e.mtime || 0), URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })));
+          done++;
         } catch (err) { /* left uncached — the ordinary lazy pump retries it once the card mounts */ }
-        done++;
+        attempted++;
         onProgress(done, total);
       }
     }
     await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, total) }, worker));
+    return { done, attempted, total };
   }
   async function openFolder(path, opts) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
@@ -5454,36 +5557,74 @@
       </div><div class="lib-coll-sep"></div>`;
   }
 
-  /// Flat list, sorted by descending face count (the people you actually have the most photos
-  /// of surface first) — no hierarchy the way Keywords has, so no tree/expand machinery needed.
-  /// Rows with zero faces (a named person a re-cluster emptied — see cluster_run's own doc
-  /// comment) still show, so the user can see and clean up a name they chose rather than it
-  /// silently vanishing.
+  /// Loads one person's face crop lazily via `catalog_face_crop` and fades it into the given
+  /// <img>. Fire-and-forget: a scan that hasn't run, an offline volume, or a person with no
+  /// `cover_face_id` all just leave the avatar's plain background showing — see people-pets
+  /// wireframes screen A ("no face thumbnails anywhere" was the #1 cited defect; this is the
+  /// backend call that already existed — `catalog_photo_faces`'s sibling — and was never wired
+  /// to anything on the frontend before this).
+  function loadFaceCrop(faceId, imgEl) {
+    if (faceId == null) return;
+    invoke('catalog_face_crop', { faceId }).then((buf) => {
+      if (!imgEl.isConnected) return;
+      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      imgEl.src = url;
+      imgEl.classList.add('loaded');
+      imgEl.onload = () => URL.revokeObjectURL(url);
+    }).catch(() => {});
+  }
+  function faceAvaHtml(person, size) {
+    const cls = person.auto ? 'lib-face-ava unnamed' : 'lib-face-ava';
+    const style = size ? ` style="width:${size}px;height:${size}px"` : '';
+    return `<span class="${cls}"${style} data-face-id="${person.cover_face_id ?? ''}"><img alt=""></span>`;
+  }
+  /// Named people are the section — sorted by descending face count, own bounded/scrolling list
+  /// so it can never push Folders/Keywords off screen (people-pets wireframes screen A, failure
+  /// 14: a scan used to render "Person 1..Person N" as flat rows and flood the sidebar). Every
+  /// still-machine-generated cluster (`auto:true`, see catalog.rs's `people.auto`) collapses
+  /// behind one pinned, counted "Unnamed" row instead of appearing as a row of its own — naming
+  /// a cluster is what promotes it into the named list above.
   function peopleSectionHtml() {
+    const scanLabel = 'Analyze photos — find faces and enable AI search';
+    const scanGlyph = `<span id="lib-people-scan" title="${scanLabel}" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span>`;
     if (!peopleList.length) {
-      return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People`
-        + `<span id="lib-people-scan" title="Analyze photos — find faces and enable AI search" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>`
+      return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People &amp; Pets${scanGlyph}</div>`
         + `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`;
     }
-    const sorted = peopleList.slice().sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
-    const rows = sorted.map((p) => {
+    const named = peopleList.filter((p) => !p.auto).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
+    const unnamedCount = peopleList.filter((p) => p.auto).reduce((n, p) => n + (p.face_count || 0), 0);
+    const row = (p) => {
       const scope = `person:${p.id}`;
       return `<div class="lib-coll-row${state.catalogScope === scope && state.source === 'catalog' ? ' on' : ''}" data-person="${p.id}">
-        <span class="lib-coll-ic">${ic('user', 14)}</span><span class="lib-coll-lb">${esc(p.name)}</span>
+        ${faceAvaHtml(p)}<span class="lib-coll-lb">${esc(p.name)}</span>
         <span class="lib-coll-count">${p.face_count || ''}</span>
       </div>`;
-    }).join('');
-    return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People`
-      + `<span id="lib-people-scan" title="Analyze photos — find faces and enable AI search" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span></div>` + rows;
+    };
+    const namedRows = named.length
+      ? `<div class="lib-people-scroll">${named.map(row).join('')}</div>`
+      : `<div class="lib-coll-row" style="opacity:.5;cursor:default">Review faces to name people</div>`;
+    const unnamedRow = `<div class="lib-coll-row${state.catalogScope === 'person:unnamed' ? ' on' : ''}" data-people-review="1">
+        <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
+        <span class="lib-coll-count">${unnamedCount || ''}</span>
+      </div>`;
+    return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People &amp; Pets${scanGlyph}</div>`
+      + namedRows + unnamedRow;
   }
   function wirePeopleRows(host) {
     const scanBtn = host.querySelector('#lib-people-scan');
     if (scanBtn) scanBtn.onclick = (e) => { e.stopPropagation(); runFindFaces(); };
+    host.querySelectorAll('.lib-face-ava[data-face-id]').forEach((ava) => {
+      const faceId = parseInt(ava.dataset.faceId, 10);
+      const img = ava.querySelector('img');
+      if (img && Number.isFinite(faceId)) loadFaceCrop(faceId, img);
+    });
     host.querySelectorAll('.lib-coll-row[data-person]').forEach((row) => {
       const id = parseInt(row.dataset.person, 10);
       row.onclick = () => openCatalogView(`person:${id}`);
       row.oncontextmenu = (e) => { e.preventDefault(); showPersonMenu(e, id); };
     });
+    const reviewRow = host.querySelector('[data-people-review]');
+    if (reviewRow) reviewRow.onclick = () => toast('Review mode is coming next — see the wireframes for the planned flow.');
   }
   function showPersonMenu(e, id) {
     const p = peopleList.find((x) => x.id === id);
@@ -5641,7 +5782,7 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search' };
+  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search', paint: 'Loading thumbnails' };
   const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed', 'clip'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
@@ -5790,9 +5931,13 @@
   /// ordinary activity pill, which only exists once the app's own chrome has rendered. A no-op
   /// once `#boot-splash` is gone (the common case: every scan after the first one during a
   /// session), so this costs nothing outside the one moment it exists for.
+  window._bootStageLabelFor = (phase) => STAGE_LABELS[phase] || phase || 'Indexing';
   function updateBootSplashProgress(p) {
     const wrap = document.getElementById('boot-splash-progress');
     if (!wrap) return;
+    // Read by chromasmith-22.html's watchdog if it fires while this splash is still up, so the
+    // stall banner can name the actual stage instead of a generic "startup".
+    window._bootLastPhase = p.phase;
     if (typeof window.bumpBootSplashWatchdog === 'function') window.bumpBootSplashWatchdog(8000);
     const bar = document.getElementById('boot-splash-bar');
     const label = document.getElementById('boot-splash-label');
@@ -7205,6 +7350,18 @@
       // it. The progress bar wired into updateBootSplashProgress (this file, wireActivityListeners)
       // is what the user sees while this await is in flight.
       if (window._lastCatalogRegisterPromise) { try { await window._lastCatalogRegisterPromise; } catch (e) {} }
+      // ⚠️ THE readiness fix. Everything above this line only guarantees CARDS exist in the DOM
+      // — renderGrid() resolves once it has appended elements, not once their <img>s have pixels
+      // (loadThumb queues each card's decode and returns immediately). Twelve prior attempts at
+      // this exact bug all sped up or better-instrumented the chain above without ever changing
+      // that fact, which is why the Library kept revealing itself full of empty grey cards no
+      // matter how fast/reliable the scan got. firstPaintReady() (this file) resolves once every
+      // card mounted in the CURRENT grid generation has actually settled — loaded or failed —
+      // which is the one thing the old gate never measured. Bounded to 8s so a single
+      // pathological card (matches the outer watchdog's own grace) can't hang the splash forever;
+      // the outer bumpBootSplashWatchdog safety net still applies on top of this.
+      updateBootSplashProgress({ phase: 'paint', done: 0, total: 0, current: '' });
+      await firstPaintReady(8000);
       // ⚠️ Deliberately does NOT auto-reopen the last-edited photo any more. It used to, right
       // here, via `openInEditor(lastPath)` — and that turned out to be actively harmful, not
       // just heavy: it has NO progress events wired to it (unlike the catalog scan above, which

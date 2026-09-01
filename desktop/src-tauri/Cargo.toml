@@ -9,6 +9,10 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
+# Direct dep so main.rs can build+cap its own runtime (max_blocking_threads) instead of Tauri's
+# uncapped default — see main()'s own comment for why. Version pinned to what tauri already pulls
+# transitively (Cargo.lock), so this isn't a second copy of the crate.
+tokio = { version = "1.52", features = ["rt-multi-thread"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-deep-link = "2"

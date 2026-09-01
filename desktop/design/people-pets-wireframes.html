@@ -1,0 +1,1030 @@
+<title>People &amp; Pets Wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Instrument+Sans:wght@400;500;600&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{
+  /* deck chrome — deliberately NOT the app palette, so the page never gets
+     confused with the thing it is describing */
+  --pg:#0e0e11; --pg2:#15151a; --ink:#e6e4df; --ink2:#8d8a84; --line:#26262e;
+  --note:#7fb0c6;              /* annotation voice */
+  --bad:#cf7d72;               /* failure markers */
+  --good:#6fb98a;
+  /* app tokens, verbatim from chromasmith-22.html:44 — mockups must be translatable */
+  --bg:#17171b; --sur:#1f1f25; --sur2:#26262d; --bdr:#34343f; --acc:#d4903a;
+  --acc2:#4a9ddc; --txt:#f0ece2; --mut:#9a968f; --ok:#52c97a;
+  --lift-2:inset 0 1px 0 rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.35),0 14px 32px -8px rgba(0,0,0,.5);
+  --deck:'Instrument Sans',ui-sans-serif,system-ui,sans-serif;
+  --disp:'Fraunces',Georgia,serif;
+  --app:'Inter',ui-sans-serif,system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--ink);font-family:var(--deck);
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:var(--note)}
+:focus-visible{outline:2px solid var(--note);outline-offset:2px;border-radius:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ── shell ─────────────────────────────────────────────── */
+.shell{display:grid;grid-template-columns:212px minmax(0,1fr);gap:0;max-width:1500px;margin:0 auto}
+.rail{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:28px 18px;
+  border-right:1px solid var(--line);background:var(--pg)}
+.rail h2{font-family:var(--disp);font-size:16px;font-weight:600;margin:0 0 4px;letter-spacing:.01em}
+.rail .sub{color:var(--ink2);font-size:11.5px;margin:0 0 20px;line-height:1.4}
+.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.rail a{display:flex;gap:9px;padding:5px 7px;border-radius:5px;text-decoration:none;
+  color:var(--ink2);font-size:12.5px;line-height:1.35}
+.rail a:hover{background:var(--pg2);color:var(--ink)}
+.rail a b{font-family:var(--mono);font-size:10.5px;color:var(--note);font-weight:400;
+  flex:0 0 13px;padding-top:1px}
+.main{padding:28px 34px 90px;min-width:0}
+
+/* ── deck header ───────────────────────────────────────── */
+.hero{border-bottom:1px solid var(--line);padding-bottom:26px;margin-bottom:34px}
+.hero .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--note);margin:0 0 10px}
+.hero h1{font-family:var(--disp);font-weight:600;font-size:clamp(30px,4.4vw,46px);line-height:1.05;
+  margin:0 0 14px;text-wrap:balance;letter-spacing:-.01em}
+.hero p{max-width:66ch;color:var(--ink2);margin:0 0 10px;font-size:15px}
+.hero p strong{color:var(--ink);font-weight:500}
+
+/* ── failure ledger ────────────────────────────────────── */
+.ledger{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:26px 0 0}
+.ledger div{background:var(--pg2);padding:11px 13px;font-size:12.5px;line-height:1.45;color:var(--ink2)}
+.ledger div b{display:block;font-family:var(--mono);font-size:10.5px;color:var(--bad);
+  font-weight:400;margin-bottom:3px}
+.ledger div i{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--ink2);opacity:.7}
+
+/* ── plates ────────────────────────────────────────────── */
+.plate{margin:0 0 64px;scroll-margin-top:22px}
+.plate>header{display:flex;align-items:baseline;gap:12px;margin-bottom:5px;flex-wrap:wrap}
+.plate>header .k{font-family:var(--mono);font-size:12px;color:var(--note)}
+.plate>header h3{font-family:var(--disp);font-size:23px;font-weight:600;margin:0;letter-spacing:-.005em}
+.plate>.lede{color:var(--ink2);max-width:70ch;margin:0 0 18px;font-size:14px}
+.fixes{display:inline-flex;gap:5px;flex-wrap:wrap;vertical-align:2px}
+.fx{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:999px;
+  border:1px solid rgba(207,125,114,.4);color:var(--bad);white-space:nowrap}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:22px;align-items:start}
+@media (max-width:1080px){.split{grid-template-columns:minmax(0,1fr)}}
+.notes{display:flex;flex-direction:column;gap:14px;font-size:12.5px;line-height:1.5;color:var(--ink2)}
+.notes h4{font-size:11px;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;
+  color:var(--note);margin:0 0 5px;font-weight:400}
+.notes p{margin:0}
+.notes code,.mono{font-family:var(--mono);font-size:11.5px;color:var(--ink);
+  background:var(--pg2);padding:1px 4px;border-radius:3px}
+
+/* ── app mockup chrome ─────────────────────────────────── */
+.app{background:var(--bg);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;
+  font-family:var(--app);color:var(--txt);font-size:12px;box-shadow:var(--lift-2)}
+.appcap{font-family:var(--mono);font-size:10.5px;color:var(--ink2);margin:7px 2px 0;letter-spacing:.02em}
+.win{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:430px}
+.win.dock{grid-template-columns:1fr;max-width:356px}
+.side{border-right:1px solid var(--bdr);padding:9px 11px;overflow:hidden;background:var(--bg)}
+.body{padding:13px;min-width:0;background:var(--bg)}
+.topbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:7px 12px;
+  border-bottom:1px solid var(--bdr);color:var(--mut);font-size:11px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--bdr);flex:0 0 auto}
+
+/* sidebar rows — mirrors .lib-coll-row / .lib-coll-heading */
+.head{font-size:11px;font-weight:600;color:var(--mut);padding:2px 8px 6px;display:flex;
+  align-items:center;justify-content:space-between}
+.head .act{color:var(--acc);font-size:10.5px;font-weight:500;cursor:default}
+.sep{height:1px;background:var(--bdr);margin:9px 2px}
+.row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12px}
+.row.on{background:rgba(212,144,58,.14);color:var(--acc)}
+.row .ct{font-family:var(--mono);font-size:10px;color:var(--mut);margin-left:auto}
+.row.on .ct{color:var(--acc)}
+.row.hov{background:var(--sur2)}
+
+/* face avatars — the thing the app has none of today */
+.face{width:22px;height:22px;border-radius:50%;flex:0 0 auto;position:relative;
+  background:linear-gradient(150deg,#4a4038,#2a2620);border:1px solid var(--bdr)}
+.face.lg{width:54px;height:54px}
+.face.xl{width:88px;height:88px;border-radius:8px}
+.face.unnamed{border:1px dashed var(--mut);background:linear-gradient(150deg,#2e2e36,#232329)}
+.face.pet{background:linear-gradient(150deg,#4a3a2c,#2b2019)}
+.face i{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border-radius:50%;
+  background:var(--sur2);border:1px solid var(--bdr);display:grid;place-items:center;
+  font-size:7px;font-style:normal;color:var(--mut);line-height:1}
+.face.sel{box-shadow:0 0 0 2px var(--acc)}
+
+/* generic app widgets */
+.btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
+  padding:5px 10px;font-size:11.5px;display:inline-flex;align-items:center;gap:5px}
+.btn.pri{background:var(--acc);color:#000;border-color:var(--acc);font-weight:500}
+.btn.sm{padding:3px 8px;font-size:11px;border-radius:6px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:9px;
+  background:var(--sur2);border:1px solid var(--bdr);font-size:10px}
+.chip.sug{background:transparent;border:1px dashed var(--bdr);color:var(--mut)}
+.chip .x{color:var(--mut);font-size:11px}
+.tile{background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;aspect-ratio:3/2}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.grid8{display:grid;grid-template-columns:repeat(8,1fr);gap:9px}
+.mut{color:var(--mut)}
+.sm{font-size:11px}
+.xs{font-size:10px}
+.stack{display:flex;flex-direction:column;gap:9px}
+.rowf{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.panel{background:var(--sur);border:1px solid var(--bdr);border-radius:9px;padding:11px}
+.glass{background:var(--sur);border:1px solid var(--bdr);border-radius:9px;
+  box-shadow:var(--lift-2);padding:11px}
+.bar{height:4px;border-radius:3px;background:var(--bdr);overflow:hidden}
+.bar>span{display:block;height:100%;background:var(--acc)}
+.kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--bdr);border-radius:4px;
+  padding:1px 5px;background:var(--sur2);color:var(--mut)}
+.callout{border-left:2px solid var(--note);padding:2px 0 2px 12px;color:var(--ink2);
+  font-size:13px;max-width:70ch;margin:0 0 18px}
+.warn{border-left-color:var(--bad)}
+hr.rule{border:0;border-top:1px solid var(--line);margin:52px 0 34px}
+h2.sec{font-family:var(--disp);font-size:19px;font-weight:600;margin:0 0 6px}
+</style>
+
+<div class="shell">
+<nav class="rail">
+  <h2>People &amp; Pets</h2>
+  <p class="sub">Wireframes for review · Chromasmith Library + Editor</p>
+  <ol>
+    <li><a href="#ledger"><b>—</b><span>What's broken</span></a></li>
+    <li><a href="#a"><b>A</b><span>Library sidebar</span></a></li>
+    <li><a href="#b"><b>B</b><span>Person view</span></a></li>
+    <li><a href="#c"><b>C</b><span>Review mode</span></a></li>
+    <li><a href="#d"><b>D</b><span>Merge &amp; split</span></a></li>
+    <li><a href="#e"><b>E</b><span>Docked filmstrip</span></a></li>
+    <li><a href="#f"><b>F</b><span>Info panel</span></a></li>
+    <li><a href="#g"><b>G</b><span>Grid card</span></a></li>
+    <li><a href="#h"><b>H</b><span>Batch bar</span></a></li>
+    <li><a href="#p"><b>P</b><span>Pet pipeline</span></a></li>
+    <li><a href="#i"><b>I</b><span>Editor Info panel</span></a></li>
+    <li><a href="#j"><b>J</b><span>Scan states</span></a></li>
+    <li><a href="#k"><b>K</b><span>Portable drive</span></a></li>
+    <li><a href="#open"><b>?</b><span>Open questions</span></a></li>
+  </ol>
+</nav>
+
+<main class="main">
+
+<header class="hero">
+  <p class="eyebrow">Wireframes · for review</p>
+  <h1>Naming the faces you already found</h1>
+  <p>Chromasmith detects faces, embeds them, clusters them, and can recognise a specific
+  animal. <strong>The recognition works. The interface around it barely exists.</strong></p>
+  <p>People are a flat list of <em>text rows</em> in the Library sidebar — the backend returns
+  a <code class="mono">cover_face_id</code> and exposes <code class="mono">catalog_photo_faces</code>,
+  but the UI calls neither, so there is <strong>not one face thumbnail anywhere in the app</strong>.
+  You name people from a faceless list, and merge by retyping a name from memory. Meanwhile pets
+  live in a separate store, under a separate word ("Subjects"), inside the photo-grading panel.</p>
+  <p>These wireframes unify the two and give the whole thing the loop it's missing:
+  <strong>see the face, confirm or reject, name it, move to the next.</strong></p>
+</header>
+
+<section id="ledger" class="plate">
+  <header><span class="k">00</span><h3>What's broken</h3></header>
+  <p class="lede">Every screen below is annotated with the numbers it addresses. All thirteen are
+  observable in the current source, not inferred.</p>
+  <div class="ledger">
+    <div><b>1 · no faces</b>Sidebar renders text rows only; no thumbnail exists in the product.<br><i>library-ui.js:5521</i></div>
+    <div><b>2 · no review</b>Cluster output is presented as settled fact — nothing between the algorithm and your sidebar.<br><i>runFindFaces:5163</i></div>
+    <div><b>3 · no reject</b>No "not this person". The only escape from a bad face is deleting the person, losing the name.<br><i>showPersonMenu:5495</i></div>
+    <div><b>4 · no split</b><code class="mono">catalog_merge_people</code> has no inverse. A wrong merge is permanent.<br><i>catalog.rs:2438</i></div>
+    <div><b>5 · re-cluster wipes</b>Every run nulls all assignments and deletes all auto groups. Only a typed name protects you.<br><i>cluster_run:2380</i></div>
+    <div><b>6 · orphans vanish</b><code class="mono">unclustered_faces</code> is computed, returned, and thrown away. Singletons are unreachable.<br><i>catalog.rs:2410</i></div>
+    <div><b>7 · no bulk naming</b>One person at a time, through a right-click modal. No keyboard loop.<br><i>library-ui.js:5495</i></div>
+    <div><b>8 · merge by typing</b>You retype a name from a newline list. A typo fails the operation.<br><i>library-ui.js:5506</i></div>
+    <div><b>9 · absent per-photo</b>No people row in the Info panel, no face badge on a grid card.<br><i>renderInfoPanel:3955</i></div>
+    <div><b>10 · no batch action</b>Multi-select offers keywords and albums, never a person.<br><i>renderBatchBar:4098</i></div>
+    <div><b>11 · not portable</b>Names never reach XMP. A catalog rebuild or a new machine loses all of it.<br><i>no mwg-rs writer</i></div>
+    <div><b>12 · pets elsewhere</b>Animals are a different store, word and window from people.<br><i>subject.rs ↔ :11229</i></div>
+    <div><b>13 · untestable</b><code class="mono">?libtest=1</code> people mocks are static, so no change here can be seen working.<br><i>library-ui.js:291</i></div>
+    <div><b>14 · sidebar floods</b>A scan renders Person 1…40 as flat rows; Folders/Keywords get pushed off screen.<br><i>peopleSectionHtml:5514</i></div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ══ A ══════════════════════════════════════════════ -->
+<section id="a" class="plate">
+  <header><span class="k">A</span><h3>Library sidebar</h3>
+    <span class="fixes"><span class="fx">1</span><span class="fx">3</span><span class="fx">6</span><span class="fx">12</span><span class="fx">14</span></span></header>
+  <p class="lede">Today a scan floods the sidebar with <em>Person 1…Person 40</em> and the rest of
+  the tree is pushed off screen. The fix is structural: <b>Named people are the section</b>, and
+  every unnamed cluster collapses behind a single counted row. The section also gets its own
+  bounded scroll, so nothing below it ever moves again.</p>
+
+  <div class="split">
+  <div>
+    <div class="app"><div class="win">
+      <div class="topbar"><span class="dot"></span><span>Library</span><span class="mut">·  12,481 photos</span></div>
+      <div class="side">
+        <div class="head">Albums</div>
+        <div class="row"><span class="face" style="border-radius:3px;width:14px;height:14px"></span>Iceland 2025<span class="ct">318</span></div>
+        <div class="row"><span class="face" style="border-radius:3px;width:14px;height:14px"></span>Portfolio<span class="ct">64</span></div>
+        <div class="sep"></div>
+
+        <div class="head">People &amp; Pets <span class="act">Review 40 ›</span></div>
+
+        <!-- bounded, internally scrolling list of NAMED people only -->
+        <div style="max-height:132px;overflow:auto;border:1px solid transparent;
+             border-radius:6px;padding-right:2px;position:relative">
+          <div class="row on"><span class="face"><i>◐</i></span>Sofia<span class="ct">412</span></div>
+          <div class="row"><span class="face"></span>Marcus<span class="ct">207</span></div>
+          <div class="row"><span class="face pet"><i>❋</i></span>Juno<span class="ct">143</span></div>
+          <div class="row"><span class="face"></span>Anna<span class="ct">88</span></div>
+          <div class="row"><span class="face pet"><i>❋</i></span>Pepper<span class="ct">31</span></div>
+          <div class="row"><span class="face"></span>Elena<span class="ct">22</span></div>
+        </div>
+        <div style="height:14px;margin-top:-14px;position:relative;pointer-events:none;
+          background:linear-gradient(to bottom,transparent,var(--bg))"></div>
+
+        <!-- the two buckets, pinned BELOW the scroll box so they never scroll away -->
+        <div class="row hov" style="margin-top:3px"><span class="face unnamed"></span>Unnamed<span class="ct">40</span></div>
+        <div class="row"><span class="face unnamed" style="opacity:.45"></span><span class="mut">Ignored</span><span class="ct">7</span></div>
+
+        <div class="sep"></div>
+        <div class="head">Folders</div>
+        <div class="row mut">2025 · Geneva<span class="ct">840</span></div>
+        <div class="row mut">2025 · Iceland<span class="ct">318</span></div>
+      </div>
+      <div class="body">
+        <div class="rowf" style="margin-bottom:11px">
+          <span class="chip">Sofia <span class="x">×</span></span>
+          <span class="mut sm">412 photos</span>
+          <span style="margin-left:auto"></span>
+          <span class="btn sm">Review faces</span>
+          <span class="btn sm">Merge…</span>
+        </div>
+        <div class="grid4">
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+        </div>
+      </div>
+    </div></div>
+    <p class="appcap">Full library view · 230px sidebar · named list scrolls internally, buckets pinned</p>
+
+    <div class="app" style="margin-top:16px;padding:13px;display:grid;
+      grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="mut xs" style="margin-bottom:7px">TODAY</div>
+        <div style="max-height:150px;overflow:hidden;position:relative">
+          <div class="row mut">Person 1<span class="ct">88</span></div>
+          <div class="row mut">Person 2<span class="ct">41</span></div>
+          <div class="row mut">Person 3<span class="ct">33</span></div>
+          <div class="row mut">Person 4<span class="ct">31</span></div>
+          <div class="row mut">Person 5<span class="ct">28</span></div>
+          <div class="row mut">Person 6<span class="ct">24</span></div>
+          <div class="row mut">Person 7<span class="ct">19</span></div>
+          <div style="position:absolute;inset:auto 0 0 0;height:44px;
+            background:linear-gradient(to bottom,transparent,var(--bg))"></div>
+        </div>
+        <div class="xs" style="color:var(--acc);margin-top:4px">…33 more rows. Folders are off screen.</div>
+      </div>
+      <div>
+        <div class="mut xs" style="margin-bottom:7px">PROPOSED</div>
+        <div class="row"><span class="face"></span>Sofia<span class="ct">412</span></div>
+        <div class="row"><span class="face"></span>Marcus<span class="ct">207</span></div>
+        <div class="row"><span class="face pet"><i>❋</i></span>Juno<span class="ct">143</span></div>
+        <div class="row hov"><span class="face unnamed"></span>Unnamed<span class="ct">40</span></div>
+        <div class="sep" style="margin:5px 2px"></div>
+        <div class="row mut">Folders</div>
+        <div class="xs" style="color:var(--ok);margin-top:4px">Section height is bounded. Nothing below it moves.</div>
+      </div>
+    </div>
+    <p class="appcap">The actual complaint, and the fix</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Named vs unnamed is the split</h4><p>An auto group called "Person 14" is not
+    information — it's a to-do item. It belongs in a counted backlog row, not in the navigation.
+    Naming one promotes it into the list; that's the only way rows appear.</p></div>
+    <div><h4>Bounded scroll</h4><p>The named list caps around 6 rows and scrolls internally, so
+    Folders and Keywords sit at a stable position no matter how many people you have. The two
+    buckets are pinned <em>outside</em> the scroll box so they're always reachable.</p></div>
+    <div><h4>Row anatomy</h4><p>22px circular crop · name · count. A pet carries a corner glyph
+    rather than a separate section — species is an attribute of a subject, not a different
+    kind of object.</p></div>
+    <div><h4>Scan becomes Review</h4><p>The header's unlabelled 13px search glyph is replaced by a
+    stateful action: <span class="mono">Scan</span> when empty, <span class="mono">Review 40 ›</span>
+    when there's a backlog — which is now the <em>only</em> route into unnamed clusters, and
+    exactly where you want people to go.</p></div>
+    <div><h4>Sort</h4><p>Named list by descending count, as today. Consider pinning a
+    "Favourites" subset once someone has more than ~15 named people.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ B ══════════════════════════════════════════════ -->
+<section id="b" class="plate">
+  <header><span class="k">B</span><h3>Person view</h3>
+    <span class="fixes"><span class="fx">2</span><span class="fx">5</span></span></header>
+  <p class="lede">Clicking a person opens their grid with a header band, and — the important part —
+  a <b>separate suggestions strip</b>. Confirmed faces and machine guesses are never mixed into one
+  count, so a re-cluster can add proposals without ever rewriting what you already decided.</p>
+
+  <div class="split">
+  <div>
+    <div class="app"><div class="win">
+      <div class="topbar"><span class="dot"></span><span>Library</span><span class="mut">·  Sofia</span></div>
+      <div class="side">
+        <div class="head">People &amp; Pets <span class="act">Review 24 ›</span></div>
+        <div class="row"><span class="face unnamed"></span>Unnamed<span class="ct">24</span></div>
+        <div class="row on"><span class="face"></span>Sofia<span class="ct">412</span></div>
+        <div class="row"><span class="face"></span>Marcus<span class="ct">207</span></div>
+        <div class="row"><span class="face pet"><i>❋</i></span>Juno<span class="ct">143</span></div>
+      </div>
+      <div class="body">
+        <div class="rowf" style="align-items:flex-start;gap:13px;margin-bottom:13px">
+          <span class="face xl"></span>
+          <div class="stack" style="gap:5px;flex:1">
+            <div class="rowf">
+              <span style="font-size:15px;font-weight:600;border-bottom:1px dashed var(--bdr);padding-bottom:1px">Sofia</span>
+              <span class="chip">Person</span><span class="chip sug">Pet</span>
+            </div>
+            <div class="mut sm">412 confirmed faces · 9 suggested · in 268 photos</div>
+            <div class="rowf" style="margin-top:3px">
+              <span class="btn pri sm">Review faces</span>
+              <span class="btn sm">Merge…</span><span class="btn sm">Split…</span>
+              <span class="btn sm">⋯</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-bottom:13px;background:transparent;border-style:dashed">
+          <div class="rowf" style="margin-bottom:8px">
+            <b style="font-size:11.5px">Also might be Sofia</b>
+            <span class="mut xs">9 faces · from the last scan</span>
+            <span style="margin-left:auto"></span>
+            <span class="btn sm">Confirm all</span><span class="btn sm">Not Sofia</span>
+          </div>
+          <div class="grid8">
+            <span class="face lg unnamed" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face lg unnamed" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face lg unnamed" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face lg unnamed" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face lg unnamed" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face lg unnamed" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+          </div>
+        </div>
+
+        <div class="mut xs" style="margin-bottom:7px">CONFIRMED</div>
+        <div class="grid4">
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+        </div>
+      </div>
+    </div></div>
+    <p class="appcap">Person view · suggestions kept visually outside the confirmed set</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Why a separate strip</h4><p>Today a re-cluster nulls every assignment and rebuilds.
+    If suggestions live in their own tier, clustering only ever <em>proposes</em> — your
+    confirmations are durable and failure 5 stops being possible by construction.</p></div>
+    <div><h4>Dashed border, again</h4><p>Same language as the sidebar: dashed means the machine
+    said it, solid means you did.</p></div>
+    <div><h4>Kind toggle</h4><p>Person / Pet sits on the person, not in a separate part of the
+    app. This is the whole unification, expressed as one control.</p></div>
+    <div><h4>Inline rename</h4><p>The name is an editable field in the header. The rename modal
+    goes away.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ C ══════════════════════════════════════════════ -->
+<section id="c" class="plate">
+  <header><span class="k">C</span><h3>Review mode — the core new screen</h3>
+    <span class="fixes"><span class="fx">2</span><span class="fx">3</span><span class="fx">6</span><span class="fx">7</span></span></header>
+  <p class="lede">One cluster at a time, faces only, keyboard-driven. Type a name, press Enter,
+  land on the next cluster. This is the loop the app has no answer for today, and it's the one
+  thing every comparable tool gets right.</p>
+
+  <div class="split">
+  <div>
+    <div class="app" style="padding:0">
+      <div class="topbar" style="border-bottom:1px solid var(--bdr)">
+        <span class="dot"></span><span>Review faces</span>
+        <span class="mut">·  cluster 3 of 11</span>
+        <span style="margin-left:auto"></span><span class="mut">Esc to exit</span>
+      </div>
+      <div style="padding:16px 18px 18px">
+        <div class="rowf" style="margin-bottom:14px">
+          <div style="flex:1;min-width:200px">
+            <div class="rowf" style="gap:8px">
+              <input value="Sof" style="flex:1;background:var(--sur2);border:1px solid var(--acc);
+                border-radius:8px;color:var(--txt);padding:8px 11px;font:500 13px var(--app);min-width:0" readonly>
+              <span class="btn pri">Name 18 faces</span>
+            </div>
+            <div class="glass" style="margin-top:6px;padding:5px;display:flex;flex-direction:column;gap:1px">
+              <div class="row hov"><span class="face"></span>Sofia<span class="ct">412</span></div>
+              <div class="row"><span class="face"></span>Sofia Lindqvist<span class="ct">31</span></div>
+              <div class="row mut"><span class="face unnamed"></span>Create new person "Sof"</div>
+            </div>
+          </div>
+          <div class="stack" style="gap:5px;text-align:right">
+            <div class="mut xs">3 of 11 clusters · 24 faces left</div>
+            <div class="bar" style="width:150px"><span style="width:27%"></span></div>
+          </div>
+        </div>
+
+        <div class="grid8" style="margin-bottom:14px">
+          <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+          <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+          <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+          <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+          <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+          <span class="face" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px;opacity:.4"></span>
+          <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+          <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+        </div>
+        <div class="mut xs" style="margin-bottom:14px">One face deselected — it stays unnamed and
+        returns to the queue rather than being force-fitted.</div>
+
+        <div class="rowf" style="border-top:1px solid var(--bdr);padding-top:12px">
+          <span class="kbd">↵</span><span class="mut xs">Name &amp; next</span>
+          <span class="kbd">X</span><span class="mut xs">Ignore</span>
+          <span class="kbd">S</span><span class="mut xs">Split selection</span>
+          <span class="kbd">M</span><span class="mut xs">Merge into…</span>
+          <span class="kbd">Space</span><span class="mut xs">Toggle face</span>
+          <span class="kbd">→</span><span class="mut xs">Skip</span>
+        </div>
+      </div>
+    </div>
+    <p class="appcap">Review mode · a full-window pass over the backlog</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Naming is a picker, not a text box</h4><p>Typing filters existing people with their
+    faces shown, so merging happens naturally at the moment of naming — and failure 8 disappears
+    without a merge dialog being involved at all.</p></div>
+    <div><h4>Deselect ≠ delete</h4><p>An excluded face returns to Unnamed. Nothing is destroyed
+    by getting a cluster slightly wrong, which is what makes the loop safe to run fast.</p></div>
+    <div><h4>Ignore is first-class</h4><p><span class="kbd">X</span> sends a cluster to Ignored —
+    the background strangers you never want proposed again.</p></div>
+    <div><h4>Prior art</h4><p>Photos' "Add Name" queue, Lightroom's People stack, digiKam's
+    confirm/reject wall. All three converge on this shape; the common thread is that naming is a
+    <em>session</em>, not a per-item chore.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ D ══════════════════════════════════════════════ -->
+<section id="d" class="plate">
+  <header><span class="k">D</span><h3>Merge &amp; split</h3>
+    <span class="fixes"><span class="fx">4</span><span class="fx">8</span></span></header>
+  <p class="lede">Merge becomes a visual multi-select with a "likely the same person" band from
+  nearest-centroid distance. Split — which has no backend inverse today — pulls faces out into a
+  new or existing person.</p>
+
+  <div class="split">
+  <div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" class="mergesplit">
+      <div>
+        <div class="app" style="padding:14px">
+          <div class="rowf" style="margin-bottom:4px"><b style="font-size:13px">Merge into Sofia</b></div>
+          <div class="mut xs" style="margin-bottom:11px">Select the people that are also Sofia.</div>
+          <div class="mut xs" style="margin-bottom:6px">LIKELY THE SAME PERSON</div>
+          <div class="grid3" style="margin-bottom:12px">
+            <div class="stack" style="gap:4px;align-items:center">
+              <span class="face lg sel"></span><span class="xs">Person 4</span><span class="mut xs">31</span></div>
+            <div class="stack" style="gap:4px;align-items:center">
+              <span class="face lg sel"></span><span class="xs">Sofia L.</span><span class="mut xs">12</span></div>
+            <div class="stack" style="gap:4px;align-items:center">
+              <span class="face lg"></span><span class="xs">Person 9</span><span class="mut xs">8</span></div>
+          </div>
+          <div class="mut xs" style="margin-bottom:6px">EVERYONE ELSE</div>
+          <div class="grid3" style="margin-bottom:12px">
+            <div class="stack" style="gap:4px;align-items:center">
+              <span class="face lg"></span><span class="xs">Marcus</span><span class="mut xs">207</span></div>
+            <div class="stack" style="gap:4px;align-items:center">
+              <span class="face lg"></span><span class="xs">Anna</span><span class="mut xs">88</span></div>
+            <div class="stack" style="gap:4px;align-items:center">
+              <span class="face lg pet"></span><span class="xs">Juno</span><span class="mut xs">143</span></div>
+          </div>
+          <div class="rowf"><span class="btn pri sm">Merge 2 people</span><span class="btn sm">Cancel</span></div>
+        </div>
+        <p class="appcap">Merge · multi-select, no typing</p>
+      </div>
+      <div>
+        <div class="app" style="padding:14px">
+          <div class="rowf" style="margin-bottom:4px"><b style="font-size:13px">Split from Sofia</b></div>
+          <div class="mut xs" style="margin-bottom:11px">3 faces selected.</div>
+          <div class="grid6" style="margin-bottom:12px">
+            <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px;opacity:.45"></span>
+            <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px;opacity:.45"></span>
+            <span class="face sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px"></span>
+            <span class="face" style="width:100%;height:auto;aspect-ratio:1;border-radius:6px;opacity:.45"></span>
+          </div>
+          <div class="stack" style="gap:7px">
+            <span class="btn pri sm" style="justify-content:center">Move to a new person</span>
+            <span class="btn sm" style="justify-content:center">Move to an existing person…</span>
+            <span class="btn sm" style="justify-content:center">Send back to Unnamed</span>
+            <span class="btn sm" style="justify-content:center">Ignore these faces</span>
+          </div>
+        </div>
+        <p class="appcap">Split · the missing inverse of merge</p>
+      </div>
+    </div>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Merge is many-to-one</h4><p>The backend is pairwise today. The UI collecting a
+    multi-select and the command looping is fine — but it should be one undoable
+    transaction, not N calls.</p></div>
+    <div><h4>Split needs new backend</h4><p><code>catalog_split_person</code> and
+    <code>catalog_set_face_person</code> don't exist. They are small, and they are what turn a
+    wrong merge from permanent into a mistake.</p></div>
+    <div><h4>"Send back to Unnamed"</h4><p>The safest of the four options, and deliberately
+    listed — recovery should never require knowing where a face is going.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ E ══════════════════════════════════════════════ -->
+<section id="e" class="plate">
+  <header><span class="k">E</span><h3>Docked filmstrip sidebar</h3>
+    <span class="fixes"><span class="fx">1</span></span></header>
+  <p class="lede">The narrow mode is 356px with the sidebar stacked vertically in a
+  <span class="mono">minmax(120px,26%)</span> track — the tightest constraint in the app, and where
+  a face-based design either survives or doesn't.</p>
+
+  <div class="split">
+  <div>
+    <div class="app" style="max-width:356px"><div class="win dock">
+      <div class="topbar" style="grid-column:auto"><span class="dot"></span><span>Library</span>
+        <span style="margin-left:auto" class="mut">⤢</span></div>
+      <div class="side" style="border-right:none;border-bottom:1px solid var(--bdr)">
+        <div class="head">People &amp; Pets <span class="act">24 ›</span></div>
+        <div class="row hov"><span class="face unnamed" style="width:18px;height:18px"></span>Unnamed<span class="ct">24</span></div>
+        <div class="row on"><span class="face" style="width:18px;height:18px"></span>Sofia<span class="ct">412</span></div>
+        <div class="row"><span class="face" style="width:18px;height:18px"></span>Marcus<span class="ct">207</span></div>
+        <div class="row"><span class="face pet" style="width:18px;height:18px"><i style="width:9px;height:9px;font-size:6px">❋</i></span>Juno<span class="ct">143</span></div>
+        <div class="row mut" style="justify-content:center;font-size:11px">Show 3 more</div>
+      </div>
+      <div class="body" style="padding:10px">
+        <div class="grid3">
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+        </div>
+      </div>
+    </div></div>
+    <p class="appcap">Docked mode · 356px (DOCK_W), sidebar in the 26% track</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>What shrinks</h4><p>Face 22 → 18px, and the row actions collapse entirely into the
+    <span class="mono">⋯</span> menu. Nothing is removed except chrome.</p></div>
+    <div><h4>What must not shrink</h4><p>Unnamed stays pinned, and the row keeps a 28px hit
+    height — <code>ui_audit.mjs</code> enforces that floor and will fail the build otherwise.</p></div>
+    <div><h4>Truncation over scroll</h4><p>The list caps and offers "Show 3 more" rather than
+    fighting the outer scroll box for a 26% track.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ F ══════════════════════════════════════════════ -->
+<section id="f" class="plate">
+  <header><span class="k">F</span><h3>Info panel — people in this photo</h3>
+    <span class="fixes"><span class="fx">9</span></span></header>
+  <p class="lede">The per-photo entry point that doesn't exist. It's also the most natural place
+  to name someone: you're already looking at the photo, and the unknown face is right there.</p>
+
+  <div class="split">
+  <div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div class="app" style="width:252px;padding:12px">
+        <div class="mut xs" style="letter-spacing:.06em;margin-bottom:9px">INFO</div>
+        <div class="sm" style="margin-bottom:2px">__TM3390.RW2</div>
+        <div class="mut xs" style="margin-bottom:11px">DC-S9 · 35mm · f/2.0 · 1/500 · ISO 200</div>
+
+        <div class="mut xs" style="margin-bottom:6px">PEOPLE &amp; PETS</div>
+        <div class="rowf" style="gap:6px;margin-bottom:5px">
+          <span class="chip"><span class="face" style="width:15px;height:15px;margin-left:-2px"></span>Sofia <span class="x">×</span></span>
+          <span class="chip"><span class="face pet" style="width:15px;height:15px;margin-left:-2px"></span>Juno <span class="x">×</span></span>
+        </div>
+        <div class="rowf" style="gap:6px;margin-bottom:11px">
+          <span class="chip sug"><span class="face unnamed" style="width:15px;height:15px;margin-left:-2px"></span>Who is this?</span>
+        </div>
+
+        <div class="mut xs" style="margin-bottom:6px">KEYWORDS</div>
+        <div class="rowf" style="gap:5px">
+          <span class="chip">Geneva <span class="x">×</span></span>
+          <span class="chip">Portrait <span class="x">×</span></span>
+          <span class="chip sug">+ swimming</span>
+        </div>
+      </div>
+
+      <div class="app" style="flex:1;min-width:250px;padding:0;position:relative">
+        <div style="aspect-ratio:3/2;background:linear-gradient(160deg,#2a2620,#191917);position:relative">
+          <div style="position:absolute;left:22%;top:20%;width:19%;aspect-ratio:1;
+            border:1.5px solid var(--acc);border-radius:4px">
+            <span style="position:absolute;left:-1px;bottom:-19px;background:var(--acc);color:#000;
+              font:500 9px var(--app);padding:1px 5px;border-radius:3px;white-space:nowrap">Sofia</span>
+          </div>
+          <div style="position:absolute;left:56%;top:44%;width:15%;aspect-ratio:1;
+            border:1.5px dashed var(--mut);border-radius:4px">
+            <span style="position:absolute;left:-1px;bottom:-19px;background:var(--sur2);color:var(--mut);
+              font:9px var(--app);padding:1px 5px;border-radius:3px;border:1px solid var(--bdr);white-space:nowrap">Name…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="appcap">Info panel chips + click-to-name face rectangles over the photo</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Chips, not a new vocabulary</h4><p>Solid chip = confirmed, dashed = detected but
+    unassigned. Identical to how keywords and CLIP suggestions already read one row below, so
+    there's nothing new to learn.</p></div>
+    <div><h4>Rectangles are already available</h4><p><code>catalog_photo_faces</code> returns
+    fractional boxes and is never called. Drawing them is nearly free.</p></div>
+    <div><h4>Multi-select aware</h4><p>Follows <code>infoPanelTargetPaths</code>, the same way
+    keyword edits already apply across a selection.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ G/H ════════════════════════════════════════════ -->
+<section id="g" class="plate">
+  <header><span class="k">G · H</span><h3>Grid card &amp; batch bar</h3>
+    <span class="fixes"><span class="fx">9</span><span class="fx">10</span></span></header>
+  <p class="lede">Tagging state should be visible while browsing, and assignable to a whole
+  selection at once.</p>
+
+  <div class="split">
+  <div>
+    <div class="app" style="padding:14px">
+      <div class="grid4" style="margin-bottom:16px">
+        <div style="position:relative"><div class="tile"></div>
+          <span style="position:absolute;left:5px;bottom:5px;display:flex;gap:3px">
+            <span class="face" style="width:16px;height:16px;box-shadow:0 0 0 1.5px var(--bg)"></span>
+            <span class="face pet" style="width:16px;height:16px;box-shadow:0 0 0 1.5px var(--bg)"></span></span>
+        </div>
+        <div style="position:relative"><div class="tile"></div>
+          <span style="position:absolute;left:5px;bottom:5px">
+            <span class="face unnamed" style="width:16px;height:16px;box-shadow:0 0 0 1.5px var(--bg)"></span></span>
+          <span style="position:absolute;right:5px;bottom:5px;font:10px var(--mono);color:var(--mut)">1 unnamed</span>
+        </div>
+        <div class="tile"></div>
+        <div style="position:relative"><div class="tile" style="box-shadow:0 0 0 2px var(--acc)"></div></div>
+      </div>
+
+      <div class="glass" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+        <b class="sm">3 selected</b>
+        <span class="btn sm">Keywords…</span>
+        <span class="btn sm">Add to album…</span>
+        <span class="btn sm" style="border-color:var(--acc);color:var(--acc)">
+          <span class="face" style="width:14px;height:14px"></span> Assign to person…</span>
+        <span class="btn sm">Export…</span>
+      </div>
+    </div>
+    <p class="appcap">Grid card face pips + batch bar person action</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Pips, not a badge</h4><p>Tiny face crops read as "who", where a numeric badge only
+    reads as "how many". A photo with unresolved faces shows a dashed pip, which quietly
+    surfaces the backlog while you browse.</p></div>
+    <div><h4>Assign to person is the fast path</h4><p>Rubber-band a run of frames of one person
+    and name them in a single action, without going near the clustering at all.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ P ══════════════════════════════════════════════ -->
+<section id="p" class="plate">
+  <header><span class="k">P</span><h3>Real pet detection</h3>
+    <span class="fixes"><span class="fx">12</span></span></header>
+  <p class="lede">Pets get the same automatic pipeline as faces — detect, crop, cluster, review —
+  rather than the current teach-then-find. That's a new detector and a new embedding, and it comes
+  with one honest caveat worth designing around.</p>
+
+  <div class="callout warn"><b>The research says detection is easy and identity is hard.</b>
+  Immich, the closest comparable product, stalled on exactly this and concluded there is
+  <em>"no good enough and free model"</em> for telling one dog from another. Finding <em>a dog</em>
+  is a solved, permissively-licensed problem. So the design must expect pet clusters to be
+  messier than face clusters — which means the review loop matters <em>more</em> for pets, not
+  less, and pet suggestions should stay in the dashed "suggested" tier longer.</div>
+
+  <div class="split">
+  <div>
+    <div class="app" style="padding:14px">
+      <div class="mut xs" style="letter-spacing:.06em;margin-bottom:11px">THE PIPELINE, SIDE BY SIDE</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="stack" style="gap:7px">
+          <div class="rowf"><span class="face" style="width:18px;height:18px"></span><b class="sm">People</b></div>
+          <div class="panel sm" style="padding:8px 10px">SCRFD detect <span class="mut xs">— face box + 5 keypoints</span></div>
+          <div class="panel sm" style="padding:8px 10px">ArcFace embed <span class="mut xs">— 512-d identity</span></div>
+          <div class="panel sm" style="padding:8px 10px">DBSCAN <span class="mut xs">— eps 0.6</span></div>
+          <div class="panel sm" style="padding:8px 10px;border-color:var(--ok)">Tight clusters
+            <span class="mut xs">— few corrections</span></div>
+        </div>
+        <div class="stack" style="gap:7px">
+          <div class="rowf"><span class="face pet" style="width:18px;height:18px"><i style="width:9px;height:9px;font-size:6px">❋</i></span><b class="sm">Pets</b>
+            <span class="chip sug" style="margin-left:auto">new</span></div>
+          <div class="panel sm" style="padding:8px 10px">RT-DETR detect
+            <span class="mut xs">— cat / dog / horse / bird, Apache-2.0</span></div>
+          <div class="panel sm" style="padding:8px 10px">Re-ID embed on the crop
+            <span class="mut xs">— MegaDescriptor or DINOv2</span></div>
+          <div class="panel sm" style="padding:8px 10px">Same DBSCAN
+            <span class="mut xs">— looser eps, tuned separately</span></div>
+          <div class="panel sm" style="padding:8px 10px;border-color:var(--acc)">Looser clusters
+            <span class="mut xs">— expect real correction</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="appcap">Two pipelines, one review loop, one sidebar section</p>
+
+    <div class="app" style="padding:14px;margin-top:14px">
+      <div class="rowf" style="margin-bottom:11px">
+        <b class="sm">Review · pets</b>
+        <span class="chip sug">Dog · 91%</span>
+        <span class="mut xs">cluster 2 of 4</span>
+        <span style="margin-left:auto"></span>
+        <span class="btn sm">Split by looks</span>
+      </div>
+      <div class="grid8" style="margin-bottom:11px">
+        <span class="face pet sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+        <span class="face pet sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+        <span class="face pet sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+        <span class="face pet" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px;opacity:.4"></span>
+        <span class="face pet sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+        <span class="face pet sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+        <span class="face pet" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px;opacity:.4"></span>
+        <span class="face pet sel" style="width:100%;height:auto;aspect-ratio:1;border-radius:7px"></span>
+      </div>
+      <div class="rowf">
+        <input value="Juno" style="flex:1;background:var(--sur2);border:1px solid var(--acc);
+          border-radius:8px;color:var(--txt);padding:7px 11px;font:500 13px var(--app);min-width:0" readonly>
+        <span class="btn pri sm">Name 6</span>
+        <span class="btn sm">Ignore</span>
+      </div>
+      <div class="mut xs" style="margin-top:8px">Two crops excluded — a different dog at the same
+      park. Pet clusters need this more often than face clusters do.</div>
+    </div>
+    <p class="appcap">Identical review UI, tuned expectations</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Detector: RT-DETR</h4><p>Apache-2.0, ONNX-exportable, COCO animal classes. Chosen
+    over YOLOv8/v11 specifically because Ultralytics is <b>AGPL-3.0</b> — unusable in a public
+    <code>.dmg</code> without open-sourcing the whole app or buying an enterprise licence.</p></div>
+    <div><h4>Embedding: a licence decision</h4><p><b>MegaDescriptor</b> is the field standard for
+    individual animal re-ID and would give the best clusters — but it's <b>CC BY-NC 4.0</b>. It
+    would join EdgeSAM and face-parsing in <code>LICENSES-MODELS.md</code> as a third
+    non-commercial model. <b>DINOv2</b> (Apache-2.0) is the clean-licence fallback at some
+    accuracy cost. <em>Worth your call before implementation.</em></p></div>
+    <div><h4>Species is a free label</h4><p>The detector already returns a class, so a pet gets
+    "Dog"/"Cat" automatically — useful as a filter and as a sanity check on a bad cluster,
+    at no extra model cost.</p></div>
+    <div><h4>PerSAM doesn't die</h4><p>The existing teach-then-find becomes the manual assist for
+    the case detection misses — an unusual animal, or one pet among several. It stops being the
+    only way in.</p></div>
+    <div><h4>Cost</h4><p>This is the largest single item in the deck: two new vendored models, a
+    second detect+embed pass over the library, and separate cluster tuning.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ I ══════════════════════════════════════════════ -->
+<section id="i" class="plate">
+  <header><span class="k">I</span><h3>Editor Info panel</h3>
+    <span class="fixes"><span class="fx">9</span><span class="fx">12</span></span></header>
+  <p class="lede">In the editor, People &amp; Pets belongs in <b>Info</b> — the last button on the
+  right rail (<code class="mono">data-fxsec="info"</code>, "Preview Info &amp; Metadata"). It's
+  metadata about the photo in front of you, not a grading control, and putting it there makes the
+  editor's panel and the Library's Info panel the same design.</p>
+
+  <div class="split">
+  <div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+      <div class="app" style="flex:1;min-width:230px;padding:0">
+        <div style="aspect-ratio:4/3;background:linear-gradient(160deg,#2c261e,#17171b);position:relative">
+          <div style="position:absolute;left:14%;top:24%;width:21%;aspect-ratio:1;
+            border:1.5px solid var(--acc);border-radius:4px">
+            <span style="position:absolute;left:-1px;bottom:-18px;background:var(--acc);color:#000;
+              font:500 9px var(--app);padding:1px 5px;border-radius:3px">Sofia</span></div>
+          <div style="position:absolute;left:56%;top:50%;width:24%;aspect-ratio:1;
+            border:1.5px solid var(--acc);border-radius:4px">
+            <span style="position:absolute;left:-1px;bottom:-18px;background:var(--acc);color:#000;
+              font:500 9px var(--app);padding:1px 5px;border-radius:3px">Juno</span></div>
+          <div style="position:absolute;left:78%;top:16%;width:14%;aspect-ratio:1;
+            border:1.5px dashed var(--mut);border-radius:4px">
+            <span style="position:absolute;left:-1px;bottom:-18px;background:var(--sur2);color:var(--mut);
+              font:9px var(--app);padding:1px 5px;border-radius:3px;border:1px solid var(--bdr)">Name…</span></div>
+        </div>
+        <p class="appcap" style="padding:0 10px 9px">Editor preview · boxes only while Info is open</p>
+      </div>
+
+      <!-- right tool panel + rail -->
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <div class="app" style="width:250px;padding:12px">
+          <div class="mut xs" style="letter-spacing:.06em;margin-bottom:10px">PREVIEW INFO &amp; METADATA</div>
+
+          <div class="mut xs" style="margin-bottom:6px">PEOPLE &amp; PETS</div>
+          <div class="stack" style="gap:4px;margin-bottom:6px">
+            <div class="row hov"><span class="face"></span>Sofia
+              <span class="mut xs" style="margin-left:auto">⋯</span></div>
+            <div class="row hov"><span class="face pet"><i>❋</i></span>Juno
+              <span class="chip sug" style="margin-left:auto;font-size:9px">Dog</span></div>
+            <div class="row" style="border:1px dashed var(--bdr);border-radius:6px">
+              <span class="face unnamed"></span><span class="mut">Who is this?</span></div>
+          </div>
+          <div class="rowf" style="margin-bottom:12px">
+            <span class="btn sm">Find faces here</span>
+            <span class="btn sm">Teach a pet…</span>
+          </div>
+
+          <div class="sep"></div>
+          <div class="mut xs" style="margin:8px 0 6px">FILE</div>
+          <div style="font:11px var(--mono);color:var(--mut);line-height:1.7">
+            __TM3390.RW2<br>6000 × 4000 · 24.1 MP<br>DC-S9 · 35mm · f/2.0<br>1/500 · ISO 200</div>
+        </div>
+
+        <!-- the rail, Info highlighted as the last button -->
+        <div class="app" style="width:62px;padding:6px 4px;display:flex;flex-direction:column;gap:3px">
+          <div class="stack" style="gap:3px;align-items:center;font-size:8px;color:var(--mut);text-align:center">
+            <div style="padding:5px 2px">Looks</div>
+            <div style="padding:5px 2px">Light</div>
+            <div style="padding:5px 2px">Colour</div>
+            <div style="padding:5px 2px">Detail</div>
+            <div style="padding:5px 2px">Masks</div>
+            <div style="padding:5px 2px">Effects</div>
+            <div style="padding:5px 2px">Export</div>
+            <div style="height:1px;background:var(--bdr);width:70%;margin:2px 0"></div>
+            <div style="padding:6px 2px;background:rgba(212,144,58,.14);color:var(--acc);
+              border-radius:6px;width:100%;font-weight:600">Info</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="appcap">Editor · People &amp; Pets inside Info, the last rail button</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Why Info, not its own section</h4><p>Everything else on that rail changes pixels.
+    This doesn't — it's a fact about the photo, sitting with the other facts. It also means one
+    fewer rail button, and the rail is already 14 items deep.</p></div>
+    <div><h4>Same component both places</h4><p>The Library Info panel (screen F) and this are the
+    same list. Build it once.</p></div>
+    <div><h4>Boxes follow the panel</h4><p>Face rectangles draw only while Info is the open
+    section, over <code>#fx-mask-overlay</code>'s sibling layer — the same fractional-viewBox
+    trick that keeps mask overlays glued through zoom and pan.</p></div>
+    <div><h4>The confirm loop moves here</h4><p>The existing Yes/No pass and its accuracy stats
+    survive intact — they just live in Info and write to the shared store instead of
+    <code>subjects.json</code> plus <code>localStorage</code>.</p></div>
+    <div><h4>The word "Subjects" goes away</h4><p>One vocabulary across both windows.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ J ══════════════════════════════════════════════ -->
+<section id="j" class="plate">
+  <header><span class="k">J</span><h3>Empty, scanning, and done</h3>
+    <span class="fixes"><span class="fx">2</span></span></header>
+  <p class="lede">Today one unlabelled glyph silently starts a four-stage pipeline with no
+  preview of what it will do. These are the three states it should have instead.</p>
+
+  <div class="split">
+  <div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px">
+      <div>
+        <div class="app" style="padding:14px;min-height:172px">
+          <div class="head" style="padding-left:0">People &amp; Pets</div>
+          <div class="stack" style="gap:9px;align-items:flex-start">
+            <div class="mut sm" style="line-height:1.45">Find the people and pets across your
+              12,481 photos. Runs in the background; nothing is changed on disk.</div>
+            <span class="btn pri sm">Scan for faces</span>
+            <span class="mut xs">About 20 minutes · uses this Mac only</span>
+          </div>
+        </div>
+        <p class="appcap">Empty · says what it will do first</p>
+      </div>
+      <div>
+        <div class="app" style="padding:14px;min-height:172px">
+          <div class="head" style="padding-left:0">People &amp; Pets <span class="act">Cancel</span></div>
+          <div class="stack" style="gap:8px">
+            <div class="rowf"><span class="sm">Finding faces</span>
+              <span class="mut xs" style="margin-left:auto;font-family:var(--mono)">4,182 / 12,481</span></div>
+            <div class="bar"><span style="width:34%"></span></div>
+            <div class="mut xs" style="line-height:1.7">
+              ✓ Finding faces<br>· Analyzing faces<br>· Grouping<br>· Indexing for search</div>
+            <div class="sep" style="margin:2px"></div>
+            <div class="row"><span class="face"></span>Person 1<span class="ct">88</span></div>
+            <div class="row"><span class="face"></span>Person 2<span class="ct">41</span></div>
+            <div class="mut xs">Results appear as they're found.</div>
+          </div>
+        </div>
+        <p class="appcap">Scanning · named stages, cancellable, incremental</p>
+      </div>
+      <div>
+        <div class="app" style="padding:14px;min-height:172px">
+          <div class="head" style="padding-left:0">People &amp; Pets</div>
+          <div class="stack" style="gap:9px;align-items:flex-start">
+            <div class="sm" style="line-height:1.45">Found <b>1,842 faces</b> in 11 groups.</div>
+            <span class="btn pri sm">Review and name them</span>
+            <div class="mut xs" style="line-height:1.45">24 faces didn't match a group — they're
+              in Unnamed.</div>
+          </div>
+        </div>
+        <p class="appcap">Done · ends by handing you the loop, not a list</p>
+      </div>
+    </div>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Stage names already exist</h4><p><code>STAGE_LABELS</code> at
+    <code>library-ui.js:5651</code> already says "Finding faces / Analyzing faces / Indexing for
+    search". They're just never shown in this section.</p></div>
+    <div><h4>Finish into an action</h4><p>The scan's success state is the best moment to start
+    naming. Ending on a toast wastes it.</p></div>
+    <div><h4>Say where it runs</h4><p>"uses this Mac only" — everything here is local, and that's
+    worth stating once for a feature that scans faces.</p></div>
+  </aside>
+  </div>
+</section>
+
+<!-- ══ K ══════════════════════════════════════════════ -->
+<section id="k" class="plate">
+  <header><span class="k">K</span><h3>Portable across machines</h3>
+    <span class="fixes"><span class="fx">11</span></span></header>
+  <p class="lede">Names live only in a local SQLite catalog. Move the drive to the desktop and
+  every hour of naming is gone, plus a 20-minute rescan. Two writes fix this permanently.</p>
+
+  <div class="split">
+  <div>
+    <div class="app" style="padding:14px;margin-bottom:14px">
+      <div class="glass" style="display:flex;gap:12px;align-items:flex-start">
+        <span class="face lg" style="border-radius:8px"></span>
+        <div style="flex:1">
+          <div class="sm" style="margin-bottom:3px"><b>This drive already has people data.</b></div>
+          <div class="mut xs" style="margin-bottom:9px;line-height:1.5">
+            1,842 faces · 11 people · 2 pets — last named on <span class="mono">Tareq's MacBook</span>,
+            2 days ago. Use it and skip the scan.</div>
+          <div class="rowf"><span class="btn pri sm">Use it</span>
+            <span class="btn sm">Scan again instead</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="app" style="padding:14px">
+      <div class="mut xs" style="letter-spacing:.06em;margin-bottom:10px">WHERE NAMES ARE WRITTEN</div>
+      <div class="stack" style="gap:10px">
+        <div class="rowf" style="align-items:flex-start;gap:10px">
+          <span class="chip" style="font-family:var(--mono);flex:0 0 auto">.xmp</span>
+          <div class="mut xs" style="flex:1;line-height:1.5">
+            <b style="color:var(--txt)">Per photo, beside the file.</b>
+            <code class="mono" style="color:var(--mut)">mwg-rs:Regions</code> face rectangles +
+            <code class="mono" style="color:var(--mut)">Iptc4xmpExt:PersonInImage</code> — the same
+            sidecar authority keywords already use. Readable by Lightroom and Bridge.</div>
+        </div>
+        <div class="rowf" style="align-items:flex-start;gap:10px">
+          <span class="chip" style="font-family:var(--mono);flex:0 0 auto">.chromasmith/</span>
+          <div class="mut xs" style="flex:1;line-height:1.5">
+            <b style="color:var(--txt)">Once per library root, on the drive itself.</b>
+            People, pets, embeddings and face crops — so the desktop adopts the whole thing
+            instantly rather than re-deriving it from 12,481 sidecars.</div>
+        </div>
+      </div>
+    </div>
+    <p class="appcap">Adopt-on-mount banner, and the two things it reads</p>
+  </div>
+
+  <aside class="notes">
+    <div><h4>Why both</h4><p>The sidecar is the interoperable record and survives the library
+    being reorganised. The drive-root file is the fast path and carries the embeddings, which
+    XMP has no place for.</p></div>
+    <div><h4>Adopt, never auto-merge</h4><p>The banner asks. Silently merging two machines'
+    people lists is how you get duplicate Sofias with no way back.</p></div>
+    <div><h4>Sidecars are the fallback</h4><p>If the drive-root file is missing or stale, names
+    still come back from the <code>.xmp</code> files — just slower.</p></div>
+  </aside>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section id="open" class="plate">
+  <h2 class="sec">Open questions for this review</h2>
+  <div class="ledger" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
+    <div><b>Q1 · pet embedding licence</b>RESOLVED: real detector (screen P). One decision
+      left — <b>MegaDescriptor</b> (best clusters, CC BY-NC, joins EdgeSAM/face-parsing as a
+      third non-commercial model) vs <b>DINOv2</b> (Apache-2.0, some accuracy cost). Recommend
+      DINOv2 given the app already ships a public commercial <code>.dmg</code>.</div>
+    <div><b>Q2 · review mode's home</b>Full-window pass (screen C) or a panel inside the Library?
+      Full-window is faster to work through; a panel keeps the grid visible for context.</div>
+    <div><b>Q3 · write XMP when?</b>On every name, or batched on a "Save names to photos"
+      action? Writing 12,481 sidecars during a scan is a lot of disk churn.</div>
+    <div><b>Q4 · confirmed vs suggested</b>Screen B splits them permanently. That means a face
+      only counts once you say so — accurate, but the counts will read lower than they do today
+      until you've done a review pass.</div>
+    <div><b>Q5 · Ignored's reach</b>Should an ignored person be excluded from future
+      clustering entirely, or just hidden? Excluding is cleaner but makes an accidental ignore
+      harder to undo.</div>
+    <div><b>Q6 · face crop storage</b>Cache crops on disk beside the catalog, or decode on
+      demand? On-demand is simpler; a review wall of 200 faces will feel it.</div>
+  </div>
+</section>
+
+</main>
+</div>

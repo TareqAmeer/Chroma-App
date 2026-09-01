@@ -1139,7 +1139,45 @@ if(!window.__TAURI__)window.hideBootSplash();
 // window.chromasmithForceLibraryReady's doc comment (library-ui.js) for the bug this closes: a
 // large library's startup chain can legitimately still be running when this fires, and hiding the
 // splash without forcing the visual end state first is exactly what left the bare editor showing.
-window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>{if(typeof window.chromasmithForceLibraryReady==='function'){try{window.chromasmithForceLibraryReady();}catch(e){}}window.hideBootSplash();},graceMs||8000);};
+// ⚠️ The give-up path used to be VISUALLY IDENTICAL to a real, settled launch — hideBootSplash()
+// ran the same way either way, so a stalled boot and a healthy one were indistinguishable on
+// screen, and this is a large part of why 12 prior fixes "felt like no progress": there was no
+// way to tell a launch that quietly gave up from one that actually finished. On fire, this now
+// stamps a small dismissible banner naming the stage the splash was stuck on and how long it had
+// been stalled, so a genuine hang (a stale external-volume stat, a writer-lock convoy, a panic
+// inside a Tauri spawn_blocking call that leaves the invoke promise unsettled forever — all real,
+// not hypothetical, see the plan doc) becomes diagnosable instead of invisible. Still reveals the
+// Library either way — never traps the user behind the splash.
+window._bootSplashArmedAt=performance.now();
+window.showBootStallBanner=function(phase,elapsedMs){
+  const label=(window._bootStageLabelFor&&window._bootStageLabelFor(phase))||phase||'startup';
+  const secs=Math.round(elapsedMs/1000);
+  let b=document.getElementById('boot-stall-banner');
+  if(!b){
+    b=document.createElement('div');
+    b.id='boot-stall-banner';
+    b.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:99998;'
+      +'background:#3a2a12;color:#f0ece2;border:1px solid rgba(212,144,58,.4);border-radius:8px;'
+      +'padding:8px 14px;font-size:12px;font-family:-apple-system,sans-serif;display:flex;'
+      +'align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.35)';
+    document.body.appendChild(b);
+  }
+  const msg=document.createElement('span');
+  msg.textContent=`Still preparing ${label.toLowerCase()} — stalled ${secs}s. The library is open; this is still running in the background.`;
+  const close=document.createElement('button');
+  close.textContent='Dismiss';
+  close.style.cssText='background:none;border:1px solid rgba(240,236,226,.35);color:inherit;'
+    +'border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer';
+  close.onclick=()=>b.remove();
+  b.innerHTML='';b.appendChild(msg);b.appendChild(close);
+  console.warn(`[boot] watchdog fired: stalled on "${phase}" after ${secs}s`);
+};
+window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>{
+  const elapsed=performance.now()-(window._bootSplashArmedAt||performance.now());
+  if(typeof window.chromasmithForceLibraryReady==='function'){try{window.chromasmithForceLibraryReady();}catch(e){}}
+  window.hideBootSplash();
+  window.showBootStallBanner(window._bootLastPhase||'walk',elapsed);
+},graceMs||8000);};
 window.bumpBootSplashWatchdog(10000); // initial grace period before any progress event has arrived yet
 </script>
 <div id="status-cap"></div>
@@ -4307,7 +4345,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-08-31c';
+const BUILD='2026-09-01a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.

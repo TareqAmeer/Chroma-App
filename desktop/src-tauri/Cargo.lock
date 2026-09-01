@@ -456,6 +456,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-window-state",
  "tokenizers",
+ "tokio",
  "ureq",
  "windows 0.58.0",
 ]

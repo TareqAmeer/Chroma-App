@@ -329,6 +329,7 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
                 .unwrap_or_else(|| "<non-string panic>".to_string());
             Err(format!("thumbnail decode panicked for {path_for_panic_msg}: {msg}"))
         })
+        .map(tauri::ipc::Response::new)
 }
 
 /// `get_thumbnail`, with a fallback to the catalog's never-pruned offline thumbnail tier when
@@ -359,7 +360,7 @@ pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog
     }
 }
 
-fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
+pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let key = cache_key(&path, mtime, meta.len());
@@ -370,7 +371,7 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
         // re-rendering clears — the same symptom class as the video-poster bug this path was
         // rewritten to fix. Below the floor, fall through and regenerate.
         if bytes.len() > 128 {
-            return Ok(tauri::ipc::Response::new(bytes));
+            return Ok(bytes);
         }
     }
     // ImageIO first for non-RAW stills (ROADMAP 15). Measured cold, this is the difference
@@ -384,7 +385,7 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
         if !is_raw_ext(&ext) && is_image_ext(&ext) {
             if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(&path, 360) {
                 let _ = std::fs::write(&cache_path, &bytes);
-                return Ok(tauri::ipc::Response::new(bytes));
+                return Ok(bytes);
             }
         }
         // Video posters come from AVFoundation — the OS's own decoder, the same one Finder and
@@ -396,7 +397,7 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
             let dur = crate::catalog::video_track_info(&path).map(|i| i.duration_secs).unwrap_or(0.0);
             if let Some(bytes) = crate::videothumb::poster_jpeg(&path, 360, dur) {
                 let _ = std::fs::write(&cache_path, &bytes);
-                return Ok(tauri::ipc::Response::new(bytes));
+                return Ok(bytes);
             }
         }
     }
@@ -429,7 +430,7 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
             if let Ok(bytes) = std::fs::read(&tmp) {
                 let _ = std::fs::remove_file(&tmp);
                 let _ = std::fs::write(&cache_path, &bytes);
-                return Ok(tauri::ipc::Response::new(bytes));
+                return Ok(bytes);
             }
         }
         let _ = std::fs::remove_file(&tmp);
@@ -461,7 +462,7 @@ fn get_thumbnail_inner(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| format!("jpeg encode: {e}"))?;
     let bytes = out.into_inner();
     let _ = std::fs::write(&cache_path, &bytes);
-    Ok(tauri::ipc::Response::new(bytes))
+    Ok(bytes)
 }
 
 // Lightroom cloud thumbnails, cached by asset id. Renditions are immutable (an asset id always

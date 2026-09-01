@@ -2098,6 +2098,79 @@ pub fn catalog_photo_faces(state: tauri::State<CatalogState>, photo_id: i64) -> 
     Ok(rows)
 }
 
+/// Crops a face out of its photo's existing cached thumbnail, for the People &amp; Pets sidebar
+/// and review UI — the piece the frontend has never had (see CLAUDE.md's people-tagging plan:
+/// `PersonNode.cover_face_id` and this face's own box were always available, nothing ever
+/// rendered them as an image). Deliberately built on `library::get_thumbnail_inner`'s existing
+/// 360px cache rather than a fresh full-resolution decode: a face crop is shown at ~90px, the
+/// thumbnail cache already handles RAW/HEIC/video/orientation for every format in the app, and
+/// reusing it means a face crop costs nothing extra once the grid has already been scrolled past
+/// that photo once. Cropped+resized result is cached again under its own key so repeat renders
+/// (the same person's row in three different views) don't even re-touch the source thumbnail.
+#[tauri::command]
+pub fn catalog_face_crop(state: tauri::State<CatalogState>, face_id: i64) -> Result<tauri::ipc::Response, String> {
+    let (photo_id, x0, y0, x1, y1): (i64, f32, f32, f32, f32) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT photo_id, x0, y0, x1, y1 FROM photo_faces WHERE id = ?1",
+            params![face_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .map_err(|e| format!("face {face_id}: {e}"))?
+    };
+    let path = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let (rel_path, last_path, is_local): (String, String, i64) = conn
+            .query_row(
+                "SELECT p.rel_path, v.last_path, v.is_local FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.id = ?1",
+                params![photo_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .map_err(|e| format!("photo {photo_id}: {e}"))?;
+        let online = is_local != 0 || Path::new(&last_path).is_dir();
+        if !online {
+            return Err("volume offline".into());
+        }
+        abs_path(&last_path, is_local != 0, &rel_path)
+    };
+
+    let cache_key = format!("face-{face_id}-v1.jpg");
+    let cache_path = crate::library::cache_dir().join(&cache_key);
+    if let Ok(bytes) = std::fs::read(&cache_path) {
+        if bytes.len() > 128 {
+            return Ok(tauri::ipc::Response::new(bytes));
+        }
+    }
+
+    let thumb_bytes = crate::library::get_thumbnail_inner(path)?;
+    let img = image::load_from_memory(&thumb_bytes).map_err(|e| format!("decode thumbnail: {e}"))?;
+    let (w, h) = (img.width() as f32, img.height() as f32);
+
+    // 35% margin on each side — a tight box crops off the chin/forehead the moment the head
+    // tilts even slightly, which is the common case in a real photo, not the exception.
+    let bw = (x1 - x0).max(0.01);
+    let bh = (y1 - y0).max(0.01);
+    let mx = bw * 0.35;
+    let my = bh * 0.35;
+    let cx0 = ((x0 - mx).max(0.0) * w) as u32;
+    let cy0 = ((y0 - my).max(0.0) * h) as u32;
+    let cx1 = ((x1 + mx).min(1.0) * w) as u32;
+    let cy1 = ((y1 + my).min(1.0) * h) as u32;
+    let cw = cx1.saturating_sub(cx0).max(1).min(img.width() - cx0.min(img.width().saturating_sub(1)));
+    let ch = cy1.saturating_sub(cy0).max(1).min(img.height() - cy0.min(img.height().saturating_sub(1)));
+
+    let cropped = img.crop_imm(cx0.min(img.width().saturating_sub(1)), cy0.min(img.height().saturating_sub(1)), cw, ch);
+    let resized = cropped.resize_to_fill(200, 200, image::imageops::FilterType::Triangle);
+
+    let mut out = Vec::new();
+    resized
+        .to_rgb8()
+        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Jpeg)
+        .map_err(|e| format!("encode face crop: {e}"))?;
+    let _ = std::fs::write(&cache_path, &out);
+    Ok(tauri::ipc::Response::new(out))
+}
+
 // ── Face embedding (AI stack Phase B, part 1) — ArcFace, resumable via `photo_faces.embedding IS
 // NULL` (a freshly (re)inserted face row from `faces_run` always starts NULL, so a photo whose
 // faces changed on rescan gets its embeddings recomputed for free, same self-healing shape
@@ -2480,6 +2553,11 @@ pub struct PersonNode {
     pub name: String,
     pub cover_face_id: Option<i64>,
     pub face_count: i64,
+    /// `true` = still the machine's own "Person N" grouping, never renamed/merged by the user.
+    /// Exposed so the frontend can split the sidebar into Named vs. an Unnamed backlog instead
+    /// of a flat "Person 1..Person 40" list — see people-pets-wireframes.html screen A. Was
+    /// tracked in the `people.auto` column since v6 but never reached the frontend before this.
+    pub auto: bool,
 }
 
 #[tauri::command]
@@ -2487,12 +2565,15 @@ pub fn catalog_people(state: tauri::State<CatalogState>) -> Result<Vec<PersonNod
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT p.id, p.name, p.cover_face_id, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id)
+            "SELECT p.id, p.name, p.cover_face_id, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id), p.auto
              FROM people p ORDER BY p.name"
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([], |r| Ok(PersonNode { id: r.get(0)?, name: r.get(1)?, cover_face_id: r.get(2)?, face_count: r.get(3)? }))
+        .query_map([], |r| {
+            let auto: i64 = r.get(4)?;
+            Ok(PersonNode { id: r.get(0)?, name: r.get(1)?, cover_face_id: r.get(2)?, face_count: r.get(3)?, auto: auto != 0 })
+        })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -3140,6 +3221,15 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
 
     let expanding = q.expand_stack.is_some();
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    // Every row on a given (non-local) volume shares the exact same `last_path` (the volume's
+    // mount root) — a boot-time "All Photos" query over 57k rows on one external drive used to
+    // call `Path::is_dir()` on that IDENTICAL path 57,422 times. This memoizes it to one stat per
+    // distinct volume path, cutting a 57k-syscall stall (and the long read-transaction it held
+    // open, which is what was blocking WAL auto-checkpoint — see CLAUDE.md-style plan doc) down to
+    // a handful of checks. `RefCell` because `query_map`'s row closure only borrows `Fn`, not
+    // `FnMut`.
+    let online_cache: std::cell::RefCell<std::collections::HashMap<String, bool>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
     let mut entries = stmt
         .query_map(param_refs.as_slice(), |r| {
             let id: i64 = r.get(0)?;
@@ -3157,7 +3247,10 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let stack_n: i64 = r.get(12)?;
             let newest_deriv_rel: Option<String> = r.get(13)?;
             let stack_id: Option<i64> = r.get(14)?;
-            let online = is_local != 0 || Path::new(&last_path).is_dir();
+            let online = is_local != 0 || {
+                let mut cache = online_cache.borrow_mut();
+                *cache.entry(last_path.clone()).or_insert_with(|| Path::new(&last_path).is_dir())
+            };
             Ok(CatalogEntry {
                 name,
                 path: abs_path(&last_path, is_local != 0, &rel_path),
