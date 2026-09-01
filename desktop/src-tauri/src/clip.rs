@@ -23,9 +23,9 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use tokenizers::Tokenizer;
 
-const IMAGE_SIZE: u32 = 224;
-const MEAN: [f32; 3] = [0.48145466, 0.4578275, 0.40821073];
-const STD: [f32; 3] = [0.26862954, 0.26130258, 0.27577711];
+const IMAGE_SIZE: u32 = 256;
+const MEAN: [f32; 3] = [0.5, 0.5, 0.5];
+const STD: [f32; 3] = [0.5, 0.5, 0.5];
 const MAX_TOKENS: usize = 77; // CLIP's own model_max_length (tokenizer_config.json)
 const EOT_TOKEN_ID: u32 = 49407; // "<|endoftext|>" — also this tokenizer's pad_token, verified against tokenizer_config.json
 
@@ -167,6 +167,11 @@ pub fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
+/// Sigmoid activation function: 1 / (1 + exp(-x))
+pub fn sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
+}
+
 // ── R10: zero-shot CLIP auto-tagging ────────────────────────────────────────────────────────
 // UI layer over the embeddings that already exist, not new inference: `catalog_clip_search`
 // already proves CLIP text-vs-image cosine ranking works, this just runs that same ranking
@@ -237,17 +242,25 @@ fn tag_vocab_embeddings() -> Result<&'static Vec<(String, Vec<f32>)>, String> {
 /// for OpenAI CLIP ViT-B/32), so a naive 0.2 guess risks admitting nothing. 0.22 cleared real
 /// correct-tag scores while rejecting real incorrect ones on a hand-checked test photo (see the
 /// README/ROADMAP note for the actual observed scores).
-pub const DEFAULT_TAG_THRESHOLD: f32 = 0.22;
+pub const DEFAULT_TAG_THRESHOLD: f32 = 0.5;
 pub const DEFAULT_TAG_TOP_K: usize = 8;
 
 /// Ranks an already-computed image embedding against the cached vocabulary embeddings, returning
-/// the top-K terms whose cosine similarity clears `threshold`, sorted by score descending.
+/// the top-K terms whose Sigmoid score clears `threshold` (> 0.5), sorted by score descending.
 pub fn suggest_tags(image_embedding: &[f32], top_k: usize, threshold: f32) -> Result<Vec<(String, f32)>, String> {
     let vocab = tag_vocab_embeddings()?;
-    let mut scored: Vec<(String, f32)> =
-        vocab.iter().map(|(term, emb)| (term.clone(), cosine_sim(image_embedding, emb))).filter(|(_, s)| *s >= threshold).collect();
+    let mut scored: Vec<(String, f32)> = vocab
+        .iter()
+        .map(|(term, emb)| {
+            let raw = cosine_sim(image_embedding, emb);
+            (term.clone(), sigmoid(raw))
+        })
+        .filter(|(_, s)| *s > threshold)
+        .collect();
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    scored.truncate(top_k);
+    if top_k > 0 {
+        scored.truncate(top_k);
+    }
     Ok(scored)
 }
 
@@ -293,6 +306,45 @@ mod tests {
     /// The whole point of CLIP: two semantically different queries must embed further apart than
     /// the same query embedded twice — a real, if coarse, correctness signal without needing a
     /// labeled image dataset.
+    #[test]
+    fn sigmoid_thresholding_allows_multiple_tags_simultaneously() {
+        let x1 = 0.8f32;
+        let x2 = 0.2f32;
+        let x3 = -0.5f32;
+
+        let s1 = sigmoid(x1); // ~0.69 > 0.5
+        let s2 = sigmoid(x2); // ~0.55 > 0.5
+        let s3 = sigmoid(x3); // ~0.38 < 0.5
+
+        assert!(s1 > 0.5);
+        assert!(s2 > 0.5);
+        assert!(s3 <= 0.5);
+
+        let img_emb = vec![1.0f32, 0.0, 0.0];
+        let tag1_emb = vec![0.8f32, 0.6, 0.0];
+        let tag2_emb = vec![0.3f32, 0.95, 0.0];
+        let tag3_emb = vec![-0.4f32, 0.91, 0.0];
+
+        let tags = vec![
+            ("tag1".to_string(), tag1_emb),
+            ("tag2".to_string(), tag2_emb),
+            ("tag3".to_string(), tag3_emb),
+        ];
+
+        let applied: Vec<(String, f32)> = tags
+            .into_iter()
+            .map(|(name, emb)| {
+                let score = sigmoid(cosine_sim(&img_emb, &emb));
+                (name, score)
+            })
+            .filter(|(_, score)| *score > 0.5)
+            .collect();
+
+        assert_eq!(applied.len(), 2, "Multiple tags clearing > 0.5 threshold should be applied simultaneously");
+        assert_eq!(applied[0].0, "tag1");
+        assert_eq!(applied[1].0, "tag2");
+    }
+
     #[test]
     fn different_text_queries_are_less_similar_than_identical_ones() {
         setup_model();

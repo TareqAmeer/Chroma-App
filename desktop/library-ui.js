@@ -3982,12 +3982,12 @@
     const row = (k, v) => v ? `<div style="display:flex;gap:8px"><span style="color:var(--mut);min-width:74px">${k}</span><span style="flex:1;word-break:break-word">${esc(String(v))}</span></div>` : '';
     const kwChips = (sc.keywords || []).map((k) => {
       const leaf = k.split('|').pop();
-      return `<span class="lib-kw-chip" data-kw="${esc(k)}" title="${esc(k)}">${esc(leaf)}<span class="lib-kw-chip-x" data-kw-remove="${esc(k)}">×</span></span>`;
+      return `<span class="lib-kw-chip" data-kw="${esc(k)}" title="${esc(k)}">${esc(leaf)} <span class="lib-kw-chip-x" data-kw-remove="${esc(k)}" style="cursor:pointer;margin-left:2px">✕</span></span>`;
     }).join('');
-    // R10: zero-shot CLIP tag suggestions. Cached by photo id (same "fetch once, re-render from
+    // R10: zero-shot SigLIP tag suggestions. Cached by photo id (same "fetch once, re-render from
     // cache" idea getMeta's path-keyed Map already uses above) so re-rendering the panel — e.g.
     // right after a keyword is added — never costs a second round trip. A photo not yet
-    // CLIP-analyzed comes back an empty array (not an error, see catalog_clip_tags), which is
+    // analyzed comes back an empty array (not an error, see catalog_clip_tags), which is
     // indistinguishable here from "no cache entry yet" only until the fetch below resolves.
     const kwSet = new Set(sc.keywords || []);
     let suggestChips = '';
@@ -4000,10 +4000,10 @@
       } else {
         const suggestions = (state.clipTags.get(entry.id) || []).filter((h) => !kwSet.has(h.term));
         if (suggestions.length) {
-          suggestChips = `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Suggested</div>`
+          suggestChips = `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Suggested Tags</div>`
             + `<div id="lib-info-suggest-chips" style="display:flex;flex-wrap:wrap;gap:4px">`
-            + suggestions.map((h) => `<span class="lib-kw-suggest-chip" data-suggest="${esc(h.term)}" title="${Math.round(h.score * 100)}% match">`
-              + `${esc(h.term)}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
+            + suggestions.map((h) => `<button class="lib-kw-suggest-chip" data-suggest="${esc(h.term)}" title="${Math.round(h.score * 100)}% match" style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:9px;background:var(--sur2);border:1px solid var(--bdr);font-size:10px;color:var(--txt);cursor:pointer">`
+              + `${esc(h.term)} <span style="opacity:.6">+</span></button>`).join('')
             + `</div></div>`;
         }
       }
@@ -4018,22 +4018,30 @@
       + row('ISO', m.iso) + row('Shutter', m.shutter) + row('Aperture', m.aperture)
       + row('Focal', m.focal_len) + row('Size', fmt(entry.size))
       + row('Label', sc.label) + row('Edited', sc.edited ? 'Yes' : '')
-      + `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Keywords</div>`
-      + `<div id="lib-info-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px">${kwChips}</div>`
-      + `<input id="lib-info-kw-add" list="lib-kw-datalist" placeholder="Add keyword…" `
-      + `style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;border-radius:5px;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt)">`
+      + `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Applied Tags</div>`
+      + `<div id="lib-info-kw-field" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:4px 6px;border-radius:5px;background:var(--sur2);border:1px solid var(--bdr);min-height:30px;box-sizing:border-box">`
+      + `${kwChips}`
+      + `<input id="lib-info-kw-add" list="lib-kw-datalist" placeholder="${(sc.keywords || []).length ? '' : 'Add tag…'}" `
+      + `style="flex:1;min-width:60px;border:none;background:transparent;color:var(--txt);font-size:11px;outline:none;padding:2px 0">`
+      + `</div>`
       + `<datalist id="lib-kw-datalist">${kwOptions}</datalist></div>`
       + suggestChips
       + `<div style="margin-top:8px;text-align:right"><button class="lib-btn" id="lib-info-close">Close</button></div>`;
     const c = document.getElementById('lib-info-close');
     if (c) c.onclick = () => { state.showInfo = false; renderInfoPanel(); };
+    const fieldBox = document.getElementById('lib-info-kw-field');
+    const addInput = document.getElementById('lib-info-kw-add');
+    if (fieldBox && addInput) {
+      fieldBox.onclick = (e) => {
+        if (e.target === fieldBox) addInput.focus();
+      };
+    }
     el.querySelectorAll('[data-kw-remove]').forEach((x) => {
       x.onclick = (e) => { e.stopPropagation(); removeKeywordFromPhoto(path, x.dataset.kwRemove); };
     });
     el.querySelectorAll('[data-suggest]').forEach((x) => {
       x.onclick = (e) => { e.stopPropagation(); addKeywordToPhoto(path, x.dataset.suggest); };
     });
-    const addInput = document.getElementById('lib-info-kw-add');
     if (addInput) {
       addInput.onkeydown = (e) => {
         if (e.key !== 'Enter') return;
