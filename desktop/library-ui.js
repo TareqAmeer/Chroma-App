@@ -1878,6 +1878,18 @@
           if (job.isVideo) _thumbActiveVideo--;
           _thumbDoneCount++;
           updateThumbProgress();
+          // ⚠️ Keeps the OUTER watchdog (chromasmith-22.html) alive while real per-card decode
+          // progress is happening. Without this, only the SINGLE synthetic 'paint' phase event at
+          // the start of firstPaintReady()'s wait ever bumped it — so on a real, slow decode batch
+          // (contended cores, cold RAW demosaic) the outer watchdog's own 8s grace ran out and
+          // force-revealed the library BEFORE this inner gate's wait finished, even though real
+          // progress was actively happening the whole time. Confirmed live: fixing only the
+          // starvation (deferring catalogRunBackgroundPhases) shrank the empty-grid window but
+          // didn't close it, because this gap was still racing it independently. A no-op once the
+          // splash element is gone (updateBootSplashProgress's own guard).
+          if (typeof updateBootSplashProgress === 'function') {
+            updateBootSplashProgress({ phase: 'paint', done: _thumbDoneCount, total: _thumbTotalCount });
+          }
           _resolveThumbPaintWaiters();
           _thumbPump();
           // Batch settled (this generation's queue drained and no job still in flight): show
@@ -6205,6 +6217,12 @@
   /// once `#boot-splash` is gone (the common case: every scan after the first one during a
   /// session), so this costs nothing outside the one moment it exists for.
   window._bootStageLabelFor = (phase) => STAGE_LABELS[phase] || phase || 'Indexing';
+  // ⚠️ One bar for the whole boot sequence — chromasmith-22.html's bootProgressSet owns the
+  // actual bar width (weighted phase slices + a monotonic guard so it can never visibly regress
+  // or restart; see its own comment). This function's job is now just: forward the raw event
+  // there, and render a label that reads as ONE ongoing process rather than a new phase starting
+  // over each time — "Preparing your library… 62%", not "Reading photo info… 4,201 / 9,800" that
+  // then jumps to a differently-worded, differently-scaled line a moment later.
   function updateBootSplashProgress(p) {
     const wrap = document.getElementById('boot-splash-progress');
     if (!wrap) return;
@@ -6212,23 +6230,11 @@
     // stall banner can name the actual stage instead of a generic "startup".
     window._bootLastPhase = p.phase;
     if (typeof window.bumpBootSplashWatchdog === 'function') window.bumpBootSplashWatchdog(8000);
-    const bar = document.getElementById('boot-splash-bar');
+    if (typeof window.bootProgressSet === 'function') window.bootProgressSet(p.phase, p.done || 0, p.total || 0);
     const label = document.getElementById('boot-splash-label');
-    const stageLabel = STAGE_LABELS[p.phase] || 'Indexing';
-    if (p.total > 0) {
-      // Real total known — a real percentage, and the trickle (chromasmith-22.html) stops
-      // fighting it for control of the bar's width.
-      if (typeof window.bootTrickleStop === 'function') window.bootTrickleStop();
-      if (bar) bar.style.width = Math.min(100, Math.round((p.done / p.total) * 100)) + '%';
-      if (label) label.textContent = `${stageLabel}… ${p.done.toLocaleString()} / ${p.total.toLocaleString()}`;
-    } else {
-      // Total genuinely unknown yet (the walk phase's own live count, see catalog.rs's
-      // walk_root comment) — bootTrickleStart grows the bar smoothly toward the real work
-      // instead of a decorative sweep with no relation to actual progress, and the label carries
-      // the running count instead of a percentage that would just read 0%.
-      if (typeof window.bootTrickleStart === 'function') window.bootTrickleStart(p.phase);
-      if (label) label.textContent = p.done > 0 ? `${stageLabel}… ${p.done.toLocaleString()} found` : `${stageLabel}…`;
-    }
+    if (!label) return;
+    const shown = typeof window._bootShownPct === 'number' ? Math.round(window._bootShownPct) : 0;
+    label.textContent = shown > 0 ? `Preparing your library… ${shown}%` : 'Preparing your library…';
   }
   function wireActivityListeners() {
     if (!window.__TAURI__ || !window.__TAURI__.event) return; // LIBTEST's mock listen() is a harmless no-op
@@ -7633,7 +7639,12 @@
       // which is the one thing the old gate never measured. Bounded to 8s so a single
       // pathological card (matches the outer watchdog's own grace) can't hang the splash forever;
       // the outer bumpBootSplashWatchdog safety net still applies on top of this.
-      updateBootSplashProgress({ phase: 'paint', done: 0, total: 0, current: '' });
+      // ⚠️ Seed with the REAL counts already sitting in _thumbDoneCount/_thumbTotalCount (set by
+      // renderGrid()'s own loadThumb() calls, just above), not total:0. A fake total:0 here
+      // forces updateBootSplashProgress into its indeterminate "trickle" branch — which RESETS
+      // the bar to 0% on every phase-key change — for a phase that already has a real number
+      // available, producing exactly the "bar reaches the end and restarts" flash this replaces.
+      updateBootSplashProgress({ phase: 'paint', done: _thumbDoneCount, total: _thumbTotalCount, current: '' });
       await firstPaintReady(8000);
       // ⚠️ Deliberately does NOT auto-reopen the last-edited photo any more. It used to, right
       // here, via `openInEditor(lastPath)` — and that turned out to be actively harmful, not

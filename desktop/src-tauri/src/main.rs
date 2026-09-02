@@ -2102,17 +2102,24 @@ fn main() {
 
             // Prune unbounded caches (thumbnails/decode JPEGs) in the background — see
             // library::prune_caches for the caps. Never blocks startup.
-            // STILL DISABLED — but for a narrower reason now. Its data-loss bug (deleting the
-            // favorites/flags/rejects/duplicates/edited/recents registries and export history,
-            // which live in the same directory) and its too-small 500MB cap (measured thrashing
-            // a real ~30k-photo library's 1.2GB working set on every prune) are both fixed —
-            // see is_evictable_cache_file and the raised THUMB_CAP. What's NOT re-verified is
-            // the ORIGINAL concern this comment recorded: a race with get_thumbnail's own reads/
-            // writes to the same directory right at startup. Re-enable once that's confirmed
-            // separately (e.g. delaying the spawn, or auditing get_thumbnail's write path for
-            // TOCTOU against a concurrent prune) — don't flip this on as a side effect of an
-            // unrelated fix.
-            // std::thread::spawn(library::prune_caches);
+            // RE-ENABLED. Its two real bugs (deleting the favorites/flags/rejects/duplicates/
+            // edited/recents registries + export history that live in the same directory, and a
+            // too-small 500MB cap that thrashed a real ~30k-photo library's 1.2GB working set on
+            // every prune) are both fixed — see is_evictable_cache_file and the raised THUMB_CAP.
+            // The remaining TOCTOU concern this comment used to record — a race between prune's
+            // `remove_file` and a concurrent `get_thumbnail` read/write to the SAME path — is not
+            // a corruption risk on inspection: `fs::write` isn't atomic here, but POSIX unlink
+            // only removes the directory entry, never the data an already-open fd is reading or
+            // writing; the only observable effect of losing the race is a spurious cache MISS
+            // (file not found → regenerate), the exact same self-healing path a stale/missing
+            // cache entry already takes everywhere else in this file. The delay below is a light,
+            // free mitigation on top of that reasoning, not a requirement for correctness: it
+            // keeps prune off the CPU-contended first few seconds of boot this session's other
+            // fixes were about, so it can never compete with the interactive first-paint decode.
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                library::prune_caches();
+            });
 
             let open_item =
                 MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Some("CmdOrCtrl+O"))?;

@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_VERSION: i64 = 13;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -496,6 +496,38 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         }
         if !has_col("photo_faces", "species")? {
             conn.execute("ALTER TABLE photo_faces ADD COLUMN species TEXT", [])?;
+        }
+    }
+
+    // v12 -> v13: `thumb` was a bare 0/1 flag with no validity stamp, so `get_thumbnail_or_offline`
+    // could only ever use the offline tier as a FALLBACK (on live-decode failure) — never as a
+    // fast path, even when a mounted volume's offline copy is provably still current. On a large
+    // library this meant the never-pruned offline-thumbnail tier (thumbnail_run's own output) sat
+    // unread on every ordinary launch while the interactive grid re-decoded from scratch, which is
+    // exactly the CPU contention this whole fix is about — a cheap disk read was available and
+    // unused. `thumb_mtime` records the photo's mtime AT THE TIME the offline thumbnail was
+    // generated; `get_thumbnail_or_offline` now serves the offline copy directly when it matches
+    // the file's CURRENT mtime, and only re-decodes when it doesn't (edit, replace, or never
+    // generated) — preserving the existing "always show the true, current thumbnail" guarantee via
+    // the mtime check instead of by unconditionally paying for a fresh decode.
+    if version < 13 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "thumb_mtime")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN thumb_mtime INTEGER NOT NULL DEFAULT 0", [])?;
+            // Backfill EXISTING thumb=1 rows with their current mtime, in the SAME migration step
+            // that adds the column — without this, thumb_mtime defaults to 0 for every photo
+            // already thumbnailed (which on a large, already-scanned library is most of them), and
+            // 0 can never match a real live mtime, so the new fast path below would silently miss
+            // on every one of them until thumbnail_run happened to regenerate each row someday
+            // (it only touches thumb=0 rows — an already-successful row is never revisited). This
+            // doesn't weaken any existing guarantee: the OLD fallback path served these same
+          // offline copies completely unconditionally, with no mtime check of any kind — trusting
+            // "current mtime" for a row already trusted with no check at all is strictly safer,
+            // not a new risk.
+            conn.execute("UPDATE photos SET thumb_mtime = mtime WHERE thumb = 1", [])?;
         }
     }
 
@@ -2519,7 +2551,9 @@ pub fn catalog_face_crop(state: tauri::State<CatalogState>, face_id: i64) -> Res
         abs_path(&last_path, is_local != 0, &rel_path)
     };
 
-    let cache_key = format!("face-{face_id}-v1.jpg");
+    // v2: source switched from the 360px grid thumbnail to the 1600px quicklook preview — bump
+    // the key or every already-cached (pixelated) v1 crop keeps being served forever.
+    let cache_key = format!("face-{face_id}-v2.jpg");
     let cache_path = crate::library::cache_dir().join(&cache_key);
     if let Ok(bytes) = std::fs::read(&cache_path) {
         if bytes.len() > 128 {
@@ -2527,8 +2561,14 @@ pub fn catalog_face_crop(state: tauri::State<CatalogState>, face_id: i64) -> Res
         }
     }
 
-    let thumb_bytes = crate::library::get_thumbnail_inner(path)?;
-    let img = image::load_from_memory(&thumb_bytes).map_err(|e| format!("decode thumbnail: {e}"))?;
+    // ⚠️ Was `get_thumbnail_inner` — the 360px GRID thumbnail. A face's bounding box is typically
+    // a small fraction of a frame, so cropping it out of a 360px source and upscaling to 200x200
+    // meant real source detail well under 100px stretched to fill the crop — confirmed live:
+    // "the faces are so pixelated it's hard to tell who it is". `quicklook_preview_bytes` is the
+    // same 1600px-long-edge tier Quick Look already uses (RAW: camera's own embedded preview, no
+    // full demosaic — still fast), giving ~4.4x the linear source resolution to crop from.
+    let thumb_bytes = crate::library::quicklook_preview_bytes(&path)?;
+    let img = image::load_from_memory(&thumb_bytes).map_err(|e| format!("decode preview: {e}"))?;
     let (w, h) = (img.width() as f32, img.height() as f32);
 
     // 35% margin on each side — a tight box crops off the chin/forehead the moment the head
@@ -2545,7 +2585,11 @@ pub fn catalog_face_crop(state: tauri::State<CatalogState>, face_id: i64) -> Res
     let ch = cy1.saturating_sub(cy0).max(1).min(img.height() - cy0.min(img.height().saturating_sub(1)));
 
     let cropped = img.crop_imm(cx0.min(img.width().saturating_sub(1)), cy0.min(img.height().saturating_sub(1)), cw, ch);
-    let resized = cropped.resize_to_fill(200, 200, image::imageops::FilterType::Triangle);
+    // 360 (was 200): the review grid's cells are minmax(96px,1fr) — comfortably wider than 200px
+    // real pixels on anything but a narrow window, before even counting a 2x retina display. With
+    // the source now at 1600px there's real detail to spend on a bigger output instead of
+    // discarding it at encode time.
+    let resized = cropped.resize_to_fill(360, 360, image::imageops::FilterType::Triangle);
 
     let mut out = Vec::new();
     resized
@@ -4523,26 +4567,27 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
     }
     let mut stmt = conn
         .prepare(
-            "SELECT p.id, p.rel_path, v.last_path, v.is_local
+            "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
              FROM photos p JOIN volumes v ON v.id = p.volume_id
              WHERE p.present = 1 AND p.thumb = 0 AND p.kind != 'video'
              LIMIT 32", // smaller batch — each unit of work is a real decode, not a header read
         )
         .map_err(|e| e.to_string())?;
-    let batch: Vec<(i64, Option<String>)> = stmt
+    let batch: Vec<(i64, Option<String>, i64)> = stmt
         .query_map([], |r| {
             let id: i64 = r.get(0)?;
             let rel_path: String = r.get(1)?;
             let last_path: String = r.get(2)?;
             let is_local: i64 = r.get(3)?;
+            let mtime: i64 = r.get(4)?;
             let online = is_local != 0 || Path::new(&last_path).is_dir();
-            Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+            Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     drop(stmt);
-    let batch: Vec<(i64, String)> = batch.into_iter().filter_map(|(id, abs)| abs.map(|a| (id, a))).collect();
+    let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
     if batch.is_empty() {
         progress(ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
         return Ok(result);
@@ -4553,19 +4598,21 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
     // Decoding is parallelized (same posture as metadata/hash), but the actual JPEG-write
     // to disk happens sequentially below — cheap relative to the decode, and keeps this
     // simple rather than juggling concurrent file writes into sharded directories.
-    let generated: Vec<(i64, Option<Vec<u8>>)> = decode_batch_pool()
-        .install(|| batch.par_iter().map(|(id, abs)| (*id, thumbnail_bytes_for(abs).ok())).collect());
+    let generated: Vec<(i64, Option<Vec<u8>>, i64)> = decode_batch_pool()
+        .install(|| batch.par_iter().map(|(id, abs, mtime)| (*id, thumbnail_bytes_for(abs).ok(), *mtime)).collect());
 
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    for (id, bytes) in &generated {
+    for (id, bytes, mtime) in &generated {
         let Some(bytes) = bytes else { continue }; // undecodable right now — leave thumb=0, retried next pass
         if std::fs::write(offline_thumb_path(*id), bytes).is_err() {
             continue;
         }
-        tx.execute("UPDATE photos SET thumb = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        // thumb_mtime records the mtime this thumbnail was generated AGAINST — get_thumbnail_or_
+        // offline's fast path only trusts this file when the live source still matches it.
+        tx.execute("UPDATE photos SET thumb = 1, thumb_mtime = ?2 WHERE id = ?1", params![id, mtime]).map_err(|e| e.to_string())?;
     }
     tx.commit().map_err(|e| e.to_string())?;
-    result.generated = generated.iter().filter(|(_, b)| b.is_some()).count();
+    result.generated = generated.iter().filter(|(_, b, _)| b.is_some()).count();
     // A full batch means there MAY be more (this pass alone can't tell without another SELECT,
     // and a cheap over-estimate here just costs one extra empty call from the JS-side pacer,
     // which is harmless) — an under-full batch means the candidate set is exhausted.
@@ -4735,6 +4782,27 @@ pub fn offline_thumb_bytes(conn: &Connection, path: &str) -> Option<Vec<u8>> {
     let id = find_photo_by_abs_path(conn, path)?;
     let has_thumb: bool = conn.query_row("SELECT thumb FROM photos WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)).ok()? != 0;
     if !has_thumb {
+        return None;
+    }
+    std::fs::read(offline_thumb_path(id)).ok()
+}
+
+/// The FAST-PATH counterpart to `offline_thumb_bytes` above — that one is a FALLBACK, only tried
+/// after a live decode has already failed, because a bare `thumb=1` flag carries no information
+/// about whether the cached copy is still current. This checks `thumb_mtime` (the photo's mtime
+/// AT THE TIME the offline thumbnail was generated, set by `thumbnail_run`) against the live
+/// file's CURRENT mtime, passed in by the caller (a cheap `fs::metadata` the caller already did
+/// to decide whether to even try this path). A match means the offline copy is provably still
+/// the right rendering — safe to serve directly, skipping a live decode entirely — a mismatch
+/// (edit, replace, or never generated) correctly falls through to the existing live-decode path,
+/// preserving the "always show the true, current thumbnail" guarantee via the mtime check instead
+/// of by unconditionally paying for a fresh decode on every call.
+pub fn offline_thumb_bytes_if_current(conn: &Connection, path: &str, live_mtime: u64) -> Option<Vec<u8>> {
+    let id = find_photo_by_abs_path(conn, path)?;
+    let (has_thumb, thumb_mtime): (bool, i64) = conn
+        .query_row("SELECT thumb, thumb_mtime FROM photos WHERE id = ?1", params![id], |r| Ok((r.get::<_, i64>(0)? != 0, r.get(1)?)))
+        .ok()?;
+    if !has_thumb || thumb_mtime as u64 != live_mtime {
         return None;
     }
     std::fs::read(offline_thumb_path(id)).ok()

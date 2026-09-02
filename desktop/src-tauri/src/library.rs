@@ -346,6 +346,22 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
 /// one, even if the catalog happens to have an offline copy on file from before an edit.
 #[tauri::command]
 pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog::CatalogState>) -> Result<tauri::ipc::Response, String> {
+    // ⚠️ FAST PATH, checked first: on a large library this is what actually makes a warm relaunch
+    // fast. The catalog's own bulk thumbnail pass (thumbnail_run) may have ALREADY decoded and
+    // written this exact photo to the never-pruned offline tier — before this fix, that work sat
+    // unread on every ordinary launch because the fallback below only fires on a live-decode
+    // FAILURE, so every card re-paid the full RAW-demosaic cost every single time regardless of
+    // whether a perfectly good cached copy already existed. `thumb_mtime` (added alongside this)
+    // is what makes serving it directly SAFE rather than a staleness risk: it only fires when the
+    // live file's mtime still matches what the cached copy was generated against.
+    if let Ok(meta) = std::fs::metadata(&path) {
+        let live_mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+        if let Ok(conn) = state.read_conn.lock() {
+            if let Some(bytes) = crate::catalog::offline_thumb_bytes_if_current(&conn, &path, live_mtime) {
+                return Ok(tauri::ipc::Response::new(bytes));
+            }
+        }
+    }
     if let Ok(resp) = get_thumbnail(path.clone()) {
         return Ok(resp);
     }
@@ -584,31 +600,40 @@ pub fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
 /// deliberately NEVER reached by opening a photo into the actual editor — that path keeps doing
 /// its normal full decode unchanged. This is a separate, non-destructive view: leaving Quick
 /// Look never triggers a decode, only actually opening the editor (an explicit action) does.
-#[tauri::command]
-pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, String> {
-    const QUICKLOOK_LONG_EDGE: u32 = 1600;
-    let ext = ext_lower(Path::new(&path));
+const QUICKLOOK_LONG_EDGE: u32 = 1600;
+
+/// The actual decode logic behind `get_quicklook_preview` (below), factored out to plain bytes so
+/// `catalog.rs`'s `catalog_face_crop` can reuse it too — a `#[tauri::command]` can't be called as
+/// a normal function. Face crops used to come out of `get_thumbnail_inner`'s 360px grid thumbnail
+/// (a face bounding box is typically a small fraction of a frame, so cropping THAT and upscaling
+/// to 200x200 meant real source detail well under 100px being stretched — confirmed live: faces
+/// were "so pixelated it's hard to tell who it is"). This is the same 1600px-long-edge tier
+/// Quick Look already uses for fast culling: RAW gets the camera's own embedded preview (no full
+/// demosaic, still fast), everything else gets a scaled decode — a real, sharp improvement over
+/// the 360px source without paying for a full-resolution RAW decode per face.
+pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
+    let ext = ext_lower(Path::new(path));
     if is_raw_ext(&ext) {
-        let img = rawler::analyze::extract_preview_pixels(&path, &RawDecodeParams::default())
+        let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
             .map_err(|e| format!("preview decode: {e}"))?;
-        let img = apply_orientation_dynamic(img, raw_orientation(&path));
+        let img = apply_orientation_dynamic(img, raw_orientation(path));
         let mut out = Cursor::new(Vec::new());
         img.to_rgb8()
             .write_to(&mut out, image::ImageFormat::Jpeg)
             .map_err(|e| format!("jpeg encode: {e}"))?;
-        return Ok(tauri::ipc::Response::new(out.into_inner()));
+        return Ok(out.into_inner());
     }
     #[cfg(target_os = "macos")]
     {
         if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
-            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(&path, QUICKLOOK_LONG_EDGE) {
-                return Ok(tauri::ipc::Response::new(bytes));
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(path, QUICKLOOK_LONG_EDGE) {
+                return Ok(bytes);
             }
         }
         if is_heic_ext(&ext) {
-            let tmp = cache_dir().join(format!("quicklook-{}.jpg", fnv1a(&[&path])));
+            let tmp = cache_dir().join(format!("quicklook-{}.jpg", fnv1a(&[path])));
             let ok = std::process::Command::new("/usr/bin/sips")
-                .args(["-s", "format", "jpeg", "-Z", &QUICKLOOK_LONG_EDGE.to_string(), &path, "--out"])
+                .args(["-s", "format", "jpeg", "-Z", &QUICKLOOK_LONG_EDGE.to_string(), path, "--out"])
                 .arg(&tmp)
                 .output()
                 .map(|o| o.status.success())
@@ -616,7 +641,7 @@ pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, Strin
             if ok {
                 if let Ok(bytes) = std::fs::read(&tmp) {
                     let _ = std::fs::remove_file(&tmp);
-                    return Ok(tauri::ipc::Response::new(bytes));
+                    return Ok(bytes);
                 }
             }
             let _ = std::fs::remove_file(&tmp);
@@ -628,7 +653,7 @@ pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, Strin
     }
     // Non-macOS / anything ImageIO didn't take: still_decode, same fallback
     // `get_thumbnail_inner` uses, just at QUICKLOOK_LONG_EDGE.
-    let img = crate::still_decode::open_any_path(Path::new(&path))?;
+    let img = crate::still_decode::open_any_path(Path::new(path))?;
     let (w, h) = (img.width(), img.height());
     let scale = QUICKLOOK_LONG_EDGE as f32 / w.max(h) as f32;
     let thumb = if scale < 1.0 {
@@ -638,7 +663,22 @@ pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, Strin
     };
     let mut out = Cursor::new(Vec::new());
     thumb.to_rgb8().write_to(&mut out, image::ImageFormat::Jpeg).map_err(|e| format!("jpeg encode: {e}"))?;
-    Ok(tauri::ipc::Response::new(out.into_inner()))
+    Ok(out.into_inner())
+}
+
+/// The Library's full-screen Quick Look (Space bar): a fast, LARGE preview for rapid culling —
+/// Photo Mechanic's whole trick, judge sharpness/composition at speed without ever paying for a
+/// full RAW demosaic. Three sources, in the same priority order `get_thumbnail_inner` already
+/// established, just at a much bigger size than the 360px grid thumbnail — see
+/// `quicklook_preview_bytes` above for the actual decode logic.
+///
+/// Not cached (same reasoning as `get_preview`: a one-shot provisional frame, not reused) and
+/// deliberately NEVER reached by opening a photo into the actual editor — that path keeps doing
+/// its normal full decode unchanged. This is a separate, non-destructive view: leaving Quick
+/// Look never triggers a decode, only actually opening the editor (an explicit action) does.
+#[tauri::command]
+pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, String> {
+    quicklook_preview_bytes(&path).map(tauri::ipc::Response::new)
 }
 
 /// Decodes `path` to RGB8 pixels capped at `long_edge` on the long side — the same three-tier

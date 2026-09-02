@@ -1081,22 +1081,50 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
   </div>
 </div>
 <script>
-// A phase whose real total isn't known yet (mid-walk) used to get a CSS sweep — motion with no
-// relation to actual progress, which read as "just another spinner" rather than real work
-// happening. This trickles the bar forward instead: smoothly, monotonically, asymptotically
-// toward 92% (never claims 100% for work that isn't verifiably done), restarting only when the
-// PHASE itself changes — so within one phase the bar only ever grows, never sweeps or resets.
-// updateBootSplashProgress (library-ui.js) switches to a real width instead the moment a phase's
-// true total is known; this is purely the "we don't have a number yet" filler.
+// ONE bar for the whole boot sequence, not a series of per-phase bars that each restart from 0 —
+// that restart-on-phase-change look (confirmed live: "the loading bar reaches the end and then
+// restarts again") is exactly what this replaces. Each boot phase owns a fixed SLICE of the 0-100
+// range, in the order they actually occur (walk -> subfolders -> metadata -> sidecar -> cache ->
+// paint); within a slice the bar advances by that phase's own done/total, or — when the total
+// isn't known yet (an in-progress walk) — by the same asymptotic trickle as before, just scaled
+// into that phase's slice instead of the whole bar. A hard monotonic guard (never display a
+// SMALLER percentage than already shown) means even an out-of-order or repeated event can't make
+// the bar visibly regress. The bar reaching 100% is therefore the SAME moment the library becomes
+// usable — 'paint' is the last slice and its own total is real mounted-card count, so filling it
+// means every visible card actually has pixels (see firstPaintReady, library-ui.js).
+window._bootSlices={walk:[0,12],subfolders:[12,18],metadata:[18,35],sidecar:[35,45],cache:[45,70],paint:[70,100]};
+window._bootShownPct=0;
 window._bootTrickleRAF=null;window._bootTrickleT0=0;window._bootTrickleKey=null;
-window.bootTrickleStart=function(key){
+function _bootPaintPct(pct){
   const bar=document.getElementById('boot-splash-bar');if(!bar)return;
-  if(window._bootTrickleKey!==key){window._bootTrickleKey=key;window._bootTrickleT0=performance.now();}
-  bar.style.transition='none'; // JS drives every frame directly; a CSS transition would lag behind and look like stutter
+  pct=Math.max(0,Math.min(100,pct));
+  if(pct<window._bootShownPct)return; // monotonic guard — never regress the bar
+  window._bootShownPct=pct;
+  bar.style.width=pct.toFixed(1)+'%';
+}
+window.bootProgressSet=function(phase,done,total){
+  const slice=window._bootSlices[phase];
+  if(!slice){ // a post-boot/background phase (thumb/focus/hash/faces/...) — no slice, no-op
+    return;
+  }
+  const [lo,hi]=slice;
+  if(total>0){
+    if(window._bootTrickleRAF){cancelAnimationFrame(window._bootTrickleRAF);window._bootTrickleRAF=null;window._bootTrickleKey=null;}
+    _bootPaintPct(lo+(hi-lo)*Math.min(1,done/total));
+    return;
+  }
+  // Total genuinely unknown yet — trickle asymptotically toward the TOP of this phase's own
+  // slice (never past it, never claiming a later phase's territory) rather than sweeping the
+  // whole bar. Restarts its own clock on a phase change, same as before, but the DISPLAYED
+  // percentage still can't regress because of the monotonic guard above — so the visible bar
+  // itself never jumps backward, even though the trickle math resets underneath.
+  if(window._bootTrickleKey!==phase){window._bootTrickleKey=phase;window._bootTrickleT0=performance.now();}
+  const bar=document.getElementById('boot-splash-bar');if(!bar)return;
+  bar.style.transition='none';
   if(window._bootTrickleRAF)return;
   const step=(t)=>{
     const el=t-window._bootTrickleT0;
-    bar.style.width=(92*(1-Math.exp(-el/2200))).toFixed(1)+'%';
+    _bootPaintPct(lo+(hi-lo)*0.92*(1-Math.exp(-el/2200)));
     window._bootTrickleRAF=requestAnimationFrame(step);
   };
   window._bootTrickleRAF=requestAnimationFrame(step);
@@ -1106,7 +1134,7 @@ window.bootTrickleStop=function(){
   window._bootTrickleKey=null;
   const bar=document.getElementById('boot-splash-bar');if(bar)bar.style.transition='width .2s ease';
 };
-window.bootTrickleStart('walk'); // matches the static label above ("Checking your library…") from t=0
+window.bootProgressSet('walk',0,0); // matches the static label above ("Checking your library…") from t=0
 // Web/iOS builds: no multi-stage boot to hide, so drop the splash the instant this parses
 // (right after the element above — no waiting on DOMContentLoaded) rather than leaving it
 // covering the page indefinitely. desktop-native.js overrides this by calling
