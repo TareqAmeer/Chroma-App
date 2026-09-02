@@ -92,3 +92,5 @@ site/photos-src/
 !site/assets/**/*.png
 !site/assets/**/*.jpg
 !site/assets/manifest.json
+
+diagnostics/reports/
