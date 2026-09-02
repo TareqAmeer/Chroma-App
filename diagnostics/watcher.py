@@ -16,10 +16,13 @@ from freeze_detector import FreezeDetector
 from log_capture import LogStreamCapture, RelaunchCapture
 from js_relay import JsRelay, PASTE_SNIPPET
 import sample_capture
+import run_meta
 
 BUNDLE_ID = 'com.tareq.chromasmith'
 PROCESS_POLL_S = 1.0
 FREEZE_POLL_S = 3.0
+
+ACTIVE_RUN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports', '.active_run')
 
 
 class Session:
@@ -45,6 +48,18 @@ class Session:
         os.makedirs(self.run_dir, exist_ok=True)
         os.makedirs(self.samples_dir, exist_ok=True)
         self._events_file = open(self.events_path, 'a')
+
+        meta = run_meta.capture()
+        with open(os.path.join(self.run_dir, 'meta.json'), 'w') as f:
+            json.dump(meta, f, indent=2)
+        self._write_event({'ts': time.time(), 'category': 'meta', **meta})
+        print(f"Repo: {meta['branch']}@{meta['commit_short']}"
+              f"{' (dirty: ' + str(len(meta['dirty_files'])) + ' files)' if meta['dirty_files'] else ''}"
+              f"  BUILD={meta['build_stamp']}")
+
+        os.makedirs(os.path.dirname(ACTIVE_RUN_FILE), exist_ok=True)
+        with open(ACTIVE_RUN_FILE, 'w') as f:
+            f.write(self.run_dir)
 
         if self.relaunch:
             print("--relaunch: spawning the app binary directly for guaranteed stderr capture.")
@@ -73,6 +88,9 @@ class Session:
         print("(Develop > Chromasmith > the page) to capture JS-side errors:")
         print()
         print(PASTE_SNIPPET)
+        print()
+        print("Tag a moment during this session from another terminal with:")
+        print('  python3 diagnostics/cli.py mark "clicked Export"')
         print()
 
         relay = JsRelay(self._write_event)
@@ -140,4 +158,11 @@ class Session:
         relay.stop()
         log_cap.stop()
         self._events_file.close()
+        try:
+            if os.path.exists(ACTIVE_RUN_FILE):
+                with open(ACTIVE_RUN_FILE) as f:
+                    if f.read().strip() == self.run_dir:
+                        os.remove(ACTIVE_RUN_FILE)
+        except OSError:
+            pass
         return 0

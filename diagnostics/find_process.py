@@ -46,7 +46,7 @@ def _app_bundle_for_pid(pid):
             idx = line.index('.app/Contents/MacOS/')
             start = line.rfind(' ', 0, idx)
             return line[start + 1:idx + 4]
-        if f" txt " in line and f"/{EXE_NAME}" in line and line.rstrip().endswith(EXE_NAME):
+        if " txt " in line and f"/{EXE_NAME}" in line and line.rstrip().endswith(EXE_NAME):
             exe_line = line
     if exe_line:
         return exe_line.split()[-1]

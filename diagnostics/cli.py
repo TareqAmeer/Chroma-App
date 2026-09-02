@@ -3,11 +3,13 @@
 Entrypoint for Chromasmith's live diagnostic tool.
 
   python3 diagnostics/cli.py start [--duration 15m] [--relaunch] [--use-spindump]
-  python3 diagnostics/cli.py report [--run <timestamp>]
+  python3 diagnostics/cli.py report [--run <timestamp>] [--for-claude]
+  python3 diagnostics/cli.py mark "clicked Export"
 
 See diagnostics/README.md for the full walkthrough.
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -17,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 REPORTS_DIR = os.path.join(ROOT, 'reports')
+ACTIVE_RUN_FILE = os.path.join(REPORTS_DIR, '.active_run')
 
 
 def parse_duration(s):
@@ -54,7 +57,26 @@ def cmd_report(args):
         if run_dir is None:
             print(f"No runs found under {REPORTS_DIR}", file=sys.stderr)
             return 1
-    return report.run(run_dir)
+    return report.run(run_dir, for_claude=args.for_claude)
+
+
+def cmd_mark(args):
+    if not os.path.exists(ACTIVE_RUN_FILE):
+        print("No active diagnostic session — start one with "
+              "`python3 diagnostics/cli.py start` first.", file=sys.stderr)
+        return 1
+    with open(ACTIVE_RUN_FILE) as f:
+        run_dir = f.read().strip()
+    events_path = os.path.join(run_dir, 'events.jsonl')
+    if not run_dir or not os.path.exists(events_path):
+        print(f"Active run pointer is stale ({run_dir!r} has no events.jsonl) — "
+              "the session may have already ended.", file=sys.stderr)
+        return 1
+    event = {'ts': time.time(), 'category': 'marker', 'msg': args.text}
+    with open(events_path, 'a') as f:
+        f.write(json.dumps(event) + '\n')
+    print(f"Marked: \"{args.text}\" in {os.path.basename(run_dir)}")
+    return 0
 
 
 def main():
@@ -74,7 +96,13 @@ def main():
 
     p_report = sub.add_parser('report', help='Re-render a report from a saved run')
     p_report.add_argument('--run', help='Run timestamp under diagnostics/reports/ (default: latest)')
+    p_report.add_argument('--for-claude', action='store_true',
+                           help='Print the condensed Claude-ready digest to stdout')
     p_report.set_defaults(func=cmd_report)
+
+    p_mark = sub.add_parser('mark', help='Tag the current moment in the active run, e.g. "clicked Export"')
+    p_mark.add_argument('text')
+    p_mark.set_defaults(func=cmd_mark)
 
     args = parser.parse_args()
     sys.exit(args.func(args))
