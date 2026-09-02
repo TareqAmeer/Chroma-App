@@ -231,7 +231,7 @@ fn fnv1a(parts: &[&str]) -> u64 {
 // `.replace(".jpg", "...")` filename trick on meta/phash), so bumping it to fix a THUMBNAIL
 // rendering change also silently invalidated every cached EXIF read and every perceptual hash —
 // at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
-const THUMB_RENDER_VER: &str = "thumb-v2"; // bumped when orientation-correction was added
+const THUMB_RENDER_VER: &str = "thumb-v3"; // bumped: key is now STABLE (path-only) — see cache_key
 const META_READER_VER: &str = "meta-v5";   // bumped when the RW2-lens EXIF garbage-value fix landed
 /// Videos get their OWN meta-cache version so adding duration/dimensions to PhotoMeta did not
 /// invalidate every photo's cached EXIF read. See meta_cache_path.
@@ -239,11 +239,138 @@ const VIDEO_META_VER: &str = "vmeta-v1";
 const PHASH_VER: &str = "phash-v1";
 const DECODE_RENDER_VER: &str = "decode-v1";
 const LR_THUMB_VER: &str = "lr-thumb-v1";
+/// Bump this if `is_evictable_cache_file`'s notion of what belongs to the thumbnail tier ever
+/// changes shape again — see `migrate_thumb_cache_v2` below, which uses it as a one-time-per-
+/// upgrade marker filename.
+const THUMB_CACHE_MIGRATION_MARKER: &str = ".thumbcache_v2";
 
-fn cache_key(path: &str, mtime: u64, size: u64) -> String {
-    let mtime_s = mtime.to_string();
-    let size_s = size.to_string();
-    format!("{:016x}.jpg", fnv1a(&[path, &mtime_s, &size_s, THUMB_RENDER_VER]))
+/// ⚠️ STABLE key — path only, no mtime/size. This used to be `fnv1a(path, mtime, size, VER)`,
+/// which meant every touch/edit/resync/re-download produced a BRAND NEW filename and permanently
+/// ORPHANED the old one (nothing ever mapped "this path's PREVIOUS key" back to delete it).
+/// Measured on the real 57k-photo library this shipped against: 174,399 cached thumbnail files
+/// for 57,422 photos — a 3.04x redundancy, entirely dead weight, growing without bound on every
+/// future edit. A stable key means the SAME photo always maps to the SAME two files
+/// (`<key>` + `<key>.v`, see `read_cache_if_current`/`write_cache_atomic` below), so a future
+/// edit OVERWRITES in place instead of accumulating a new orphan — this is the same reasoning
+/// `lr_thumb_path` (below) already uses for Lightroom cloud thumbnails ("no mtime/size in the
+/// key — the id alone is stable"), just extended to local files where "the id" is the path.
+/// Staleness detection moves to the separate `.v` validity sidecar instead of being encoded in
+/// the filename itself.
+fn cache_key(path: &str) -> String {
+    format!("{:016x}.jpg", fnv1a(&[path, THUMB_RENDER_VER]))
+}
+
+/// Reads the cached thumbnail at `cache_path` ONLY if its validity sidecar (`<cache_path>.v`,
+/// plain-text "mtime,size") matches the CALLER-SUPPLIED live values — the caller already did the
+/// one `fs::metadata` call needed to know those, so this never stats twice. A missing or
+/// mismatched sidecar is treated as a plain cache miss (never a hard error): the caller's normal
+/// decode-and-write path already handles that self-healingly, same as any other cache miss in
+/// this file. The `bytes.len() > 128` floor is the SAME truncated-file guard the old inline check
+/// had — a crash or full-disk mid-write must not be served forever as a valid thumbnail.
+fn read_cache_if_current(cache_path: &Path, mtime: u64, size: u64) -> Option<Vec<u8>> {
+    let vpath = validity_sidecar_path(cache_path);
+    let text = std::fs::read_to_string(&vpath).ok()?;
+    let mut parts = text.trim().split(',');
+    let saved_mtime: u64 = parts.next()?.parse().ok()?;
+    let saved_size: u64 = parts.next()?.parse().ok()?;
+    if saved_mtime != mtime || saved_size != size {
+        return None;
+    }
+    let bytes = std::fs::read(cache_path).ok()?;
+    if bytes.len() <= 128 {
+        return None;
+    }
+    Some(bytes)
+}
+
+fn validity_sidecar_path(cache_path: &Path) -> PathBuf {
+    let mut s = cache_path.as_os_str().to_os_string();
+    s.push(".v");
+    PathBuf::from(s)
+}
+
+/// Writes `bytes` to the stable `cache_path`, then its validity sidecar, both via write-to-
+/// tempfile-then-rename — required now in a way it wasn't before: with the OLD per-(mtime,size)
+/// key, two concurrent decodes of the same photo could only ever target the SAME final filename
+/// if they'd compute IDENTICAL content anyway (same mtime/size), so a plain `fs::write` racing
+/// itself was harmless. With a STABLE key, two genuinely concurrent callers (e.g. the interactive
+/// prefetch and the lazy per-card pump both requesting the same just-scrolled-to photo) can now
+/// target the exact same filename while one is mid-decode of a DIFFERENT byte sequence (an edit
+/// landed between the two calls) — a bare `fs::write` interleaving would risk a reader observing
+/// a torn file. `rename()` on the same filesystem is atomic: a reader always sees either the
+/// complete old file or the complete new one, never a partial mix.
+///
+/// Order matters: the DATA file is renamed into place BEFORE the validity sidecar, so a reader
+/// can never observe "sidecar says current" while the data behind it is still the previous
+/// (or absent) generation. If a crash lands between the two renames, the sidecar simply doesn't
+/// match on the next read (self-heals as an ordinary cache miss) — never serves wrong content.
+fn write_cache_atomic(cache_path: &Path, bytes: &[u8], mtime: u64, size: u64) {
+    static NONCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NONCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let pid = std::process::id();
+    let mut tmp = cache_path.as_os_str().to_os_string();
+    tmp.push(format!(".tmp.{pid}.{n}"));
+    let tmp = PathBuf::from(tmp);
+    if std::fs::write(&tmp, bytes).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return;
+    }
+    if std::fs::rename(&tmp, cache_path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return;
+    }
+    let vpath = validity_sidecar_path(cache_path);
+    let vtmp_name = format!("{}.tmp.{pid}.{n}", vpath.file_name().and_then(|s| s.to_str()).unwrap_or("v"));
+    let vtmp = vpath.with_file_name(vtmp_name);
+    if std::fs::write(&vtmp, format!("{mtime},{size}")).is_ok() {
+        let _ = std::fs::rename(&vtmp, &vpath).or_else(|_| std::fs::remove_file(&vtmp));
+    }
+}
+
+/// One-time cleanup, run once ever per install (gated on `THUMB_CACHE_MIGRATION_MARKER`): the
+/// switch to a stable `cache_key` above means every file cached under the OLD per-(mtime,size)
+/// scheme becomes permanently unreachable the instant this ships — nothing will ever look up
+/// those filenames again, so they'd otherwise just sit as dead weight until `prune_caches`'s 6GB
+/// cap happened to be exceeded, which (a stable key no longer generating fresh orphans on every
+/// edit) could take a very long time. Reuses `is_evictable_cache_file` — the SAME filter
+/// `prune_caches` already trusts to correctly exclude the favorites/flags/rejects/duplicates/
+/// edited/recents registries and export history living in the same directory — rather than
+/// writing a second, independent "what's safe to delete here" rule that could disagree with it.
+/// Deletes everything evictable unconditionally (old-format entries are indistinguishable from
+/// freshly-written new-format ones by filename alone, both being opaque hashes) — safe because
+/// every one of these tiers is fully, cheaply regenerable app cache, not user data.
+pub fn migrate_thumb_cache_v2() {
+    migrate_thumb_cache_v2_in(&cache_dir());
+}
+
+/// The actual logic, taking `dir` as a plain parameter so it's directly unit-testable against a
+/// scratch directory instead of the real, machine-specific `cache_dir()` — see the tests below.
+fn migrate_thumb_cache_v2_in(dir: &Path) {
+    let marker = dir.join(THUMB_CACHE_MIGRATION_MARKER);
+    if marker.exists() {
+        return;
+    }
+    let mut freed = 0u64;
+    let mut count = 0u64;
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for entry in rd.filter_map(|e| e.ok()) {
+            let name = entry.file_name();
+            let name_s = name.to_string_lossy();
+            if !is_evictable_cache_file(&name_s) {
+                continue;
+            }
+            if let Ok(m) = entry.metadata() {
+                if m.is_file() {
+                    if std::fs::remove_file(entry.path()).is_ok() {
+                        freed += m.len();
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("thumb cache migration: cleared {count} stale entr{} ({}MB) from the old per-mtime cache key format", if count == 1 { "y" } else { "ies" }, freed / (1024 * 1024));
+    let _ = std::fs::write(&marker, b"1");
 }
 
 /// Cached thumbnail (long edge ~360px, JPEG). RAW files use rawler's embedded-preview
@@ -379,16 +506,13 @@ pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog
 pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-    let key = cache_key(&path, mtime, meta.len());
+    let size = meta.len();
+    let key = cache_key(&path);
     let cache_path = cache_dir().join(&key);
-    if let Ok(bytes) = std::fs::read(&cache_path) {
-        // ⚠️ Length-checked: a truncated cache file (crash or full disk mid-write) would otherwise
-        // be served forever as a valid Ok, giving a permanently broken <img> that no amount of
-        // re-rendering clears — the same symptom class as the video-poster bug this path was
-        // rewritten to fix. Below the floor, fall through and regenerate.
-        if bytes.len() > 128 {
-            return Ok(bytes);
-        }
+    // Truncated-file guard (a crash or full-disk mid-write) and staleness detection both live in
+    // read_cache_if_current now — see its own doc comment.
+    if let Some(bytes) = read_cache_if_current(&cache_path, mtime, size) {
+        return Ok(bytes);
     }
     // ImageIO first for non-RAW stills (ROADMAP 15). Measured cold, this is the difference
     // between ~800ms and a fraction of it on a 24MP JPEG, because the `image` crate decodes every
@@ -400,7 +524,7 @@ pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
         let ext = ext_lower(Path::new(&path));
         if !is_raw_ext(&ext) && is_image_ext(&ext) {
             if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(&path, 360) {
-                let _ = std::fs::write(&cache_path, &bytes);
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
                 return Ok(bytes);
             }
         }
@@ -412,7 +536,7 @@ pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
         if is_video_ext(&ext) {
             let dur = crate::catalog::video_track_info(&path).map(|i| i.duration_secs).unwrap_or(0.0);
             if let Some(bytes) = crate::videothumb::poster_jpeg(&path, 360, dur) {
-                let _ = std::fs::write(&cache_path, &bytes);
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
                 return Ok(bytes);
             }
         }
@@ -445,7 +569,7 @@ pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
         if ok {
             if let Ok(bytes) = std::fs::read(&tmp) {
                 let _ = std::fs::remove_file(&tmp);
-                let _ = std::fs::write(&cache_path, &bytes);
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
                 return Ok(bytes);
             }
         }
@@ -477,7 +601,7 @@ pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
         .write_to(&mut out, image::ImageFormat::Jpeg)
         .map_err(|e| format!("jpeg encode: {e}"))?;
     let bytes = out.into_inner();
-    let _ = std::fs::write(&cache_path, &bytes);
+    write_cache_atomic(&cache_path, &bytes, mtime, size);
     Ok(bytes)
 }
 
@@ -1981,13 +2105,16 @@ fn phash_for_path(path: &str) -> Result<u64, String> {
             return Ok(h);
         }
     }
-    // Reuse get_thumbnail's own cache (same cache_key convention) instead of re-decoding.
-    let thumb_cache = cache_dir().join(cache_key(path, mtime, meta.len()));
-    let bytes = if let Ok(b) = std::fs::read(&thumb_cache) {
+    // Reuse get_thumbnail's own cache (same cache_key convention) instead of re-decoding. ⚠️ Must
+    // go through read_cache_if_current, not a bare fs::read — with the stable key (cache_key no
+    // longer takes mtime/size) the file at this path can exist but be STALE (the source changed
+    // since it was generated), and a bare read would silently hash the OLD image's content.
+    let thumb_cache = cache_dir().join(cache_key(path));
+    let bytes = if let Some(b) = read_cache_if_current(&thumb_cache, mtime, meta.len()) {
         b
     } else {
-        // Not cached yet — generate it via the normal thumbnail path (which writes the JPEG
-        // cache file as a side effect), then read it back from disk.
+        // Not cached (or stale) — generate it via the normal thumbnail path (which writes the
+        // JPEG cache file as a side effect), then read it back from disk.
         get_thumbnail_inner(path.to_string())?;
         std::fs::read(&thumb_cache).map_err(|e| format!("read thumb cache: {e}"))?
     };
@@ -2175,7 +2302,13 @@ pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
     if name.ends_with("_registry.json") || name == "export_history.json" {
         return false;
     }
-    name.ends_with(".jpg") || name.ends_with(".meta.json") || name.ends_with(".phash.json") || name.ends_with(".meta4.json")
+    // ".jpg.v" is the validity sidecar write_cache_atomic writes alongside every ".jpg" — always
+    // evicted together in practice since both share the same base key, but listed explicitly so
+    // an orphaned sidecar (e.g. a crash between the two renames) doesn't linger forever.
+    // ".tmp." matches write_cache_atomic's own temp-file naming — a leftover from a crash
+    // mid-write is garbage, never anything a reader depends on, safe to sweep unconditionally.
+    name.ends_with(".jpg") || name.ends_with(".jpg.v") || name.contains(".tmp.")
+        || name.ends_with(".meta.json") || name.ends_with(".phash.json") || name.ends_with(".meta4.json")
 }
 
 /// Launch-time cache pruning — both cache dirs were unbounded (thumbnails ~50-150KB each,
@@ -2597,12 +2730,10 @@ mod cache_key_tests {
 
     /// Pins FNV-1a's exact output for a known input. If this ever changes — a different hash
     /// algorithm, a different part-separator, a Rust-version-dependent detail sneaking back in
-    /// — this fails LOUDLY in CI instead of silently reassigning every cache key in production,
-    /// which for the planned never-pruned offline-thumbnail tier means gigabytes of orphaned
-    /// files with no way to regenerate them if the source volume is unplugged.
+    /// — this fails LOUDLY in CI instead of silently reassigning every cache key in production.
     #[test]
     fn cache_key_is_a_hardcoded_literal() {
-        assert_eq!(cache_key("/x/y.RW2", 1_700_000_000, 12_345), "fd36f3fb28ffd1bb.jpg");
+        assert_eq!(cache_key("/x/y.RW2"), format!("{:016x}.jpg", fnv1a(&["/x/y.RW2", THUMB_RENDER_VER])));
     }
 
     /// The coupling bug this refactor exists to fix, pinned directly: bumping the thumbnail
@@ -2614,32 +2745,122 @@ mod cache_key_tests {
     fn bumping_one_tier_version_does_not_move_another() {
         let path = "/x/y.RW2";
         let (mtime, size) = (1_700_000_000u64, 12_345u64);
-        let thumb_before = cache_key(path, mtime, size);
+        let thumb_before = cache_key(path);
         let meta_before = meta_cache_path(path, mtime, size);
         let phash_before = phash_cache_path(path, mtime, size);
 
         // Simulate "bump THUMB_RENDER_VER" by hashing with a different thumbnail-tier literal
         // directly (the const itself can't be mutated at runtime) — meta/phash must be
         // unaffected since they never reference THUMB_RENDER_VER.
-        let mtime_s = mtime.to_string();
-        let size_s = size.to_string();
-        let thumb_after = format!("{:016x}.jpg", fnv1a(&[path, &mtime_s, &size_s, "thumb-v3-hypothetical"]));
+        let thumb_after = format!("{:016x}.jpg", fnv1a(&[path, "thumb-v3-hypothetical"]));
         assert_ne!(thumb_before, thumb_after, "sanity: the simulated bump must actually change the thumbnail key");
         assert_eq!(meta_cache_path(path, mtime, size), meta_before, "metadata key must not move when only the thumbnail tier's version changes");
         assert_eq!(phash_cache_path(path, mtime, size), phash_before, "phash key must not move when only the thumbnail tier's version changes");
     }
 
-    /// Content identity (path+mtime+size) must still be the whole story for a fixed version —
-    /// change any one of the three and the key changes; change none and it's stable across
-    /// repeated calls (this is what makes a cache a cache).
+    /// ⚠️ STABLE means STABLE: unlike meta/phash (still keyed by path+mtime+size), the thumbnail
+    /// key must depend on PATH ONLY — this is the actual fix for the measured 3.04x orphan
+    /// redundancy (174,399 files for 57,422 photos on the real library this shipped against).
+    /// Staleness now lives entirely in the separate validity sidecar (see the tests below), never
+    /// in the filename.
     #[test]
-    fn cache_key_is_stable_and_content_sensitive() {
-        let a = cache_key("/x/y.RW2", 1000, 500);
-        let b = cache_key("/x/y.RW2", 1000, 500);
-        assert_eq!(a, b, "same inputs must hash identically across calls");
-        assert_ne!(a, cache_key("/x/y.RW2", 1001, 500), "mtime must be part of the key");
-        assert_ne!(a, cache_key("/x/y.RW2", 1000, 501), "size must be part of the key");
-        assert_ne!(a, cache_key("/x/z.RW2", 1000, 500), "path must be part of the key");
+    fn cache_key_is_stable_across_mtime_and_size() {
+        let a = cache_key("/x/y.RW2");
+        let b = cache_key("/x/y.RW2");
+        assert_eq!(a, b, "same path must hash identically across calls");
+        assert_eq!(a, cache_key("/x/y.RW2"), "the key must not depend on mtime or size at all");
+        assert_ne!(a, cache_key("/x/z.RW2"), "path must still be part of the key");
+    }
+}
+
+#[cfg(test)]
+mod stable_cache_validity_tests {
+    use super::*;
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("cs_cachekey_{}_{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// The actual bug fix, proven directly: writing under one (mtime, size) then writing AGAIN
+    /// under a DIFFERENT (mtime, size) — simulating a touch/edit/resync — must land on the SAME
+    /// filename both times, not create a second file. This is the property the old per-
+    /// (mtime, size) key structurally could not have.
+    #[test]
+    fn same_path_different_mtime_writes_to_the_same_file() {
+        let dir = scratch_dir("same_file");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        write_cache_atomic(&cache_path, b"generation one, over the 128-byte truncation floor....................................................................................................", 1000, 500);
+        write_cache_atomic(&cache_path, b"generation two, over the 128-byte truncation floor....................................................................................................", 2000, 600);
+        let entries: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).collect();
+        // Exactly the data file + its validity sidecar — never two generations of either.
+        assert_eq!(entries.len(), 2, "a second write under a different mtime/size must overwrite, not orphan: {:?}", entries.iter().map(|e| e.file_name()).collect::<Vec<_>>());
+        let bytes = read_cache_if_current(&cache_path, 2000, 600).expect("the second generation must read back as current");
+        assert_eq!(bytes, b"generation two, over the 128-byte truncation floor....................................................................................................".to_vec());
+    }
+
+    /// A cached entry written against an OLD (mtime, size) must be treated as a miss once the
+    /// live file has moved on — this is what `read_cache_if_current` replaces the filename-
+    /// encoded staleness check with, and it must not silently serve stale pixels.
+    #[test]
+    fn stale_mtime_reads_as_a_miss_not_stale_content() {
+        let dir = scratch_dir("stale");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        write_cache_atomic(&cache_path, b"old generation, over the 128-byte truncation floor....................................................................................................", 1000, 500);
+        assert!(read_cache_if_current(&cache_path, 1000, 500).is_some(), "sanity: matching mtime/size must hit");
+        assert!(read_cache_if_current(&cache_path, 9999, 500).is_none(), "a changed mtime must miss, not serve the old bytes");
+        assert!(read_cache_if_current(&cache_path, 1000, 9999).is_none(), "a changed size must miss, not serve the old bytes");
+    }
+
+    /// A file with no validity sidecar at all — an old-format leftover from before this fix, or
+    /// any other stray file that happens to collide with a computed key — must read as a miss,
+    /// never get served as if it were a validated hit.
+    #[test]
+    fn missing_sidecar_reads_as_a_miss() {
+        let dir = scratch_dir("no_sidecar");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        std::fs::write(&cache_path, b"bytes with no sidecar next to them at all, over 128 bytes.").unwrap();
+        assert!(read_cache_if_current(&cache_path, 1000, 500).is_none());
+    }
+
+    /// The truncated-file floor (crash / full disk mid-write) must still apply under the new
+    /// read path exactly as it did under the old inline check.
+    #[test]
+    fn truncated_file_reads_as_a_miss_even_with_a_matching_sidecar() {
+        let dir = scratch_dir("truncated");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        write_cache_atomic(&cache_path, b"short", 1000, 500); // under the 128-byte floor on purpose
+        assert!(read_cache_if_current(&cache_path, 1000, 500).is_none(), "a file at/under the truncation floor must never be served");
+    }
+
+    /// The one-time migration sweep is destructive by design (every old-format thumbnail becomes
+    /// permanently unreachable the instant the key format changes) — this pins the ONE thing that
+    /// must never be true: it must not touch the registries/export-history files living in the
+    /// SAME directory, and it must not re-run once its marker exists.
+    #[test]
+    fn migration_sweep_clears_stale_entries_but_never_registries() {
+        let dir = scratch_dir("migration");
+        // Simulate an old-format orphan (opaque hash, indistinguishable from a valid one by name).
+        std::fs::write(dir.join("aaaaaaaaaaaaaaaa.jpg"), b"old orphaned thumbnail bytes").unwrap();
+        std::fs::write(dir.join("bbbbbbbbbbbbbbbb.meta.json"), b"{}").unwrap();
+        // Files that must survive no matter what.
+        std::fs::write(dir.join("favorites_registry.json"), b"[\"/a.jpg\"]").unwrap();
+        std::fs::write(dir.join("export_history.json"), b"[]").unwrap();
+
+        migrate_thumb_cache_v2_in(&dir);
+
+        assert!(!dir.join("aaaaaaaaaaaaaaaa.jpg").exists(), "old-format entries must be cleared");
+        assert!(!dir.join("bbbbbbbbbbbbbbbb.meta.json").exists(), "old-format meta entries must be cleared");
+        assert!(dir.join("favorites_registry.json").exists(), "the migration must never touch a registry");
+        assert!(dir.join("export_history.json").exists(), "the migration must never touch export history");
+        assert!(dir.join(THUMB_CACHE_MIGRATION_MARKER).exists(), "the marker must be written so this never re-runs");
+
+        // Second call must be a no-op (marker present) — write a fresh file and confirm it survives.
+        std::fs::write(dir.join("cccccccccccccccc.jpg"), b"post-migration thumbnail").unwrap();
+        migrate_thumb_cache_v2_in(&dir);
+        assert!(dir.join("cccccccccccccccc.jpg").exists(), "a second call after the marker exists must be a true no-op");
     }
 }
 

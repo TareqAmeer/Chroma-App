@@ -2118,6 +2118,15 @@ fn main() {
             // fixes were about, so it can never compete with the interactive first-paint decode.
             std::thread::spawn(|| {
                 std::thread::sleep(std::time::Duration::from_secs(20));
+                // One-time-per-install: the thumbnail cache key just became stable (path-only,
+                // no more mtime/size baked into the filename — see library::cache_key's own doc
+                // comment for the measured 3.04x orphan redundancy this fixes). Every file cached
+                // under the OLD key format is now permanently unreachable, so this reclaims it in
+                // one pass rather than leaving it to rot until prune_caches' 6GB cap is eventually
+                // exceeded, which a stable key (no longer generating fresh orphans on every edit)
+                // could take a very long time to reach. Runs once ever, before the ordinary prune
+                // below, on the same delayed background thread so neither competes with boot.
+                library::migrate_thumb_cache_v2();
                 library::prune_caches();
             });
 
