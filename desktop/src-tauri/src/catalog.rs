@@ -3953,6 +3953,43 @@ pub fn catalog_scan_cancel(state: tauri::State<CatalogState>) {
     state.cancel.store(true, Ordering::Relaxed);
 }
 
+/// Clears the cancel flag at the START of a paced multi-batch drain (catalog_thumbnails,
+/// catalog_hq_offline), which — unlike the one-shot job commands — must NOT clear it per batch
+/// or the user's Cancel is erased by the next batch milliseconds later. Call once, before the
+/// first batch; never inside the loop.
+#[tauri::command]
+pub fn catalog_cancel_reset(state: tauri::State<CatalogState>) {
+    state.cancel.store(false, Ordering::Relaxed);
+}
+
+/// User-facing "Pause background indexing" — a deliberate, persistent choice (the frontend keeps
+/// it in localStorage and re-asserts it on every launch), distinct from `cancel`, which is a
+/// one-shot "stop what's running now". While paused, every paced drain loop declines to start a
+/// new batch. This exists because there was previously NO way to reclaim the machine from
+/// background work short of quitting the app.
+static BG_PAUSED: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn catalog_bg_set_paused(paused: bool) {
+    BG_PAUSED.store(paused, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn catalog_bg_paused() -> bool {
+    BG_PAUSED.load(Ordering::Relaxed)
+}
+
+pub(crate) fn bg_is_paused() -> bool {
+    BG_PAUSED.load(Ordering::Relaxed)
+}
+
+/// Whether a cancel is currently pending — lets a JS drain loop stop issuing further batches
+/// instead of relying solely on each batch aborting itself.
+#[tauri::command]
+pub fn catalog_cancel_pending(state: tauri::State<CatalogState>) -> bool {
+    state.cancel.load(Ordering::Relaxed)
+}
+
 // ── Query ────────────────────────────────────────────────────────────────────────────────────
 
 /// A superset of `library::DirEntry` — every field that struct has, plus catalog additions.
@@ -4672,6 +4709,11 @@ pub struct ThumbResult {
     /// schedule another paced call or stop, without a second query.
     #[serde(default)]
     pub has_more: bool,
+    /// Photos still needing an offline preview AFTER this batch — the real backlog, so the
+    /// Indexing panel can show "2,808 of 57,288" instead of a per-batch "0 of 32" that looks
+    /// frozen for hours while steadily working.
+    #[serde(default)]
+    pub remaining: u64,
 }
 
 /// Same chunked/resumable/offline-safe shape as the other phases. Video is excluded from the
@@ -4712,21 +4754,22 @@ fn decode_batch_pool() -> &'static rayon::ThreadPool {
     })
 }
 
-pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ThumbResult, String> {
-    let mut result = ThumbResult::default();
-    if cancel.load(Ordering::Relaxed) {
-        return Ok(result);
-    }
-    let mut stmt = conn
-        .prepare(
-            "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
-             FROM photos p JOIN volumes v ON v.id = p.volume_id
-             WHERE p.present = 1 AND p.kind != 'video'
-               AND (p.thumb = 0 OR p.thumb_long_edge < 800)
-             LIMIT 32", // smaller batch — each unit of work is a real decode, not a header read
-        )
-        .map_err(|e| e.to_string())?;
-    let batch: Vec<(i64, Option<String>, i64)> = stmt
+/// The candidate predicate, in ONE place — `thumbnail_select_batch` and
+/// `thumbnail_remaining` must never disagree, or the progress readout drifts from the work.
+const THUMB_CANDIDATE_WHERE: &str =
+    "p.present = 1 AND p.kind != 'video' AND (p.thumb = 0 OR p.thumb_long_edge < 800)";
+
+/// Phase A — pick the next batch. Pure SQL, no decoding: safe to run under a SHORT read lock.
+fn thumbnail_select_batch(conn: &Connection) -> Result<Vec<(i64, String, i64)>, String> {
+    let sql = format!(
+        "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
+         FROM photos p JOIN volumes v ON v.id = p.volume_id
+         WHERE {THUMB_CANDIDATE_WHERE}
+         LIMIT 32"
+    );
+    let rows: Vec<(i64, Option<String>, i64)> = conn
+        .prepare(&sql)
+        .map_err(|e| e.to_string())?
         .query_map([], |r| {
             let id: i64 = r.get(0)?;
             let rel_path: String = r.get(1)?;
@@ -4739,23 +4782,31 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    drop(stmt);
-    let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
-    if batch.is_empty() {
-        progress(ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
-        return Ok(result);
-    }
-    let batch_len = batch.len();
-    progress(ScanProgress { phase: "thumb".into(), done: 0, total: batch_len, current: String::new() });
+    Ok(rows.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect())
+}
 
-    // Decoding is parallelized (same posture as metadata/hash), but the actual JPEG-write
-    // to disk happens sequentially below — cheap relative to the decode, and keeps this
-    // simple rather than juggling concurrent file writes into sharded directories.
-    let generated: Vec<(i64, Option<Vec<u8>>, i64)> = decode_batch_pool()
-        .install(|| batch.par_iter().map(|(id, abs, mtime)| (*id, thumbnail_bytes_for(abs).ok(), *mtime)).collect());
+/// How many photos still need an offline preview — the REAL backlog, for honest progress.
+/// The old code reported `total: batch_len` (always 32), which is why an hour of steady work
+/// read as a frozen "0 of 32" with no way to tell it was advancing at all.
+fn thumbnail_remaining(conn: &Connection) -> u64 {
+    let sql = format!("SELECT COUNT(*) FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE {THUMB_CANDIDATE_WHERE}");
+    conn.query_row(&sql, [], |r| r.get::<_, i64>(0)).map(|n| n as u64).unwrap_or(0)
+}
 
+/// Phase B — the expensive part. Takes NO database handle by construction, so it is impossible
+/// to accidentally hold the catalog lock across it (which is exactly what made the whole app
+/// unresponsive: `thumbnail_run` used to run this entire 32-photo `par_iter` inside the writer
+/// lock, blocking every UI read and every other phase for the duration).
+fn thumbnail_decode_batch(batch: &[(i64, String, i64)]) -> Vec<(i64, Option<Vec<u8>>, i64)> {
+    decode_batch_pool()
+        .install(|| batch.par_iter().map(|(id, abs, mtime)| (*id, thumbnail_bytes_for(abs).ok(), *mtime)).collect())
+}
+
+/// Phase C — write the results. Short write lock: file writes plus one small transaction.
+fn thumbnail_commit_batch(conn: &Connection, generated: &[(i64, Option<Vec<u8>>, i64)]) -> Result<usize, String> {
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    for (id, bytes, mtime) in &generated {
+    let mut n = 0usize;
+    for (id, bytes, mtime) in generated {
         let Some(bytes) = bytes else { continue }; // undecodable right now — leave thumb=0, retried next pass
         if std::fs::write(offline_thumb_path(*id), bytes).is_err() {
             continue;
@@ -4763,14 +4814,37 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
         // thumb_mtime records the mtime this thumbnail was generated AGAINST — get_thumbnail_or_
         // offline's fast path only trusts this file when the live source still matches it.
         tx.execute("UPDATE photos SET thumb = 1, thumb_mtime = ?2, thumb_long_edge = 800 WHERE id = ?1", params![id, mtime]).map_err(|e| e.to_string())?;
+        n += 1;
     }
     tx.commit().map_err(|e| e.to_string())?;
-    result.generated = generated.iter().filter(|(_, b, _)| b.is_some()).count();
+    Ok(n)
+}
+
+/// Single-connection wrapper over the three phases above — used by the tests (and any caller
+/// that legitimately already holds one connection for the whole operation). ⚠️ The Tauri command
+/// `catalog_thumbnails` deliberately does NOT use this: it drives the same three phases with
+/// SEPARATE short-lived locks so the decode never runs under the catalog lock.
+pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ThumbResult, String> {
+    let mut result = ThumbResult::default();
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(result);
+    }
+    let batch = thumbnail_select_batch(conn)?;
+    if batch.is_empty() {
+        progress(ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
+        return Ok(result);
+    }
+    let batch_len = batch.len();
+    let remaining = thumbnail_remaining(conn);
+    progress(ScanProgress { phase: "thumb".into(), done: 0, total: remaining as usize, current: String::new() });
+    let generated = thumbnail_decode_batch(&batch);
+    result.generated = thumbnail_commit_batch(conn, &generated)?;
+    result.remaining = remaining.saturating_sub(result.generated as u64);
     // A full batch means there MAY be more (this pass alone can't tell without another SELECT,
     // and a cheap over-estimate here just costs one extra empty call from the JS-side pacer,
     // which is harmless) — an under-full batch means the candidate set is exhausted.
     result.has_more = batch_len == 32;
-    progress(ScanProgress { phase: "thumb".into(), done: result.generated, total: batch_len, current: String::new() });
+    progress(ScanProgress { phase: "thumb".into(), done: result.generated, total: remaining as usize, current: String::new() });
     Ok(result)
 }
 
@@ -4936,14 +5010,39 @@ fn hq_offline_lut_for(bytes: &[u8]) -> Option<(Vec<f32>, usize)> {
 /// looks like what opening the same RAW normally would, not a degraded stand-in. Callers MUST
 /// have already confirmed a LUT exists via `hq_offline_lut_for` — this function pays for the
 /// expensive demosaic unconditionally, on the assumption it will actually be used.
+/// ⚠️ MEMORY, not speed, is the binding constraint here — this ships on an 8GB machine and the
+/// original version held ~312MB of full-resolution buffers live at once for a 24MP frame
+/// (144MB `rgb16` + 96MB RGBA + a redundant 72MB `to_rgb8()` copy). Running that alongside three
+/// parallel thumbnail decodes produced measured, sustained swap thrashing (70M swapins) that
+/// slowed the WHOLE app by roughly 20x. Two changes, both about peak footprint:
+///   1. `drop(decoded)` the moment the LUT has been applied — frees the 144MB u16 buffer before
+///      the encoder ever runs, instead of keeping it live to the end of the function.
+///   2. Compact RGBA -> RGB **in place** in the buffer we already own, rather than letting
+///      `to_rgb8()` allocate a second full-frame image. Saves another 72MB.
+/// Peak goes ~312MB -> ~240MB during the LUT apply, and ~96MB -> ~72MB during encode.
 fn hq_offline_decode_raw(bytes: &[u8], lut: &[f32], n: usize) -> Result<Vec<u8>, String> {
     let decoded = crate::raw_decode::decode_rw2_bytes(bytes, false, crate::raw_decode::NrTier::Fast, "", false, None)?;
-    let rgba = crate::raw_decode::apply_lut_rgba(&decoded.rgb16, lut, n)?;
-    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("hq_offline: RGBA buffer size mismatch")?;
+    let (w, h) = (decoded.width, decoded.height);
+    let mut rgba = crate::raw_decode::apply_lut_rgba(&decoded.rgb16, lut, n)?;
+    drop(decoded); // frees the 144MB interleaved-u16 buffer before the encode allocates anything
+
+    // RGBA -> RGB, in place, reusing the same allocation (dst always trails src, so no overlap
+    // hazard). `to_rgb8()` would allocate a whole second full-resolution image to do this.
+    let px = (w as usize) * (h as usize);
+    if rgba.len() < px * 4 {
+        return Err("hq_offline: RGBA buffer smaller than the decoded frame".into());
+    }
+    for i in 0..px {
+        let (s, d) = (i * 4, i * 3);
+        rgba[d] = rgba[s];
+        rgba[d + 1] = rgba[s + 1];
+        rgba[d + 2] = rgba[s + 2];
+    }
+    rgba.truncate(px * 3);
+
+    let img = image::RgbImage::from_raw(w, h, rgba).ok_or("hq_offline: RGB buffer size mismatch")?;
     let mut out = std::io::Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(img)
-        .to_rgb8()
-        .write_to(&mut out, image::ImageFormat::Jpeg)
+    img.write_to(&mut out, image::ImageFormat::Jpeg)
         .map_err(|e| format!("hq_offline jpeg encode: {e}"))?;
     Ok(out.into_inner())
 }
@@ -4953,109 +5052,129 @@ fn hq_offline_decode_raw(bytes: &[u8], lut: &[f32], n: usize) -> Result<Vec<u8>,
 /// own comments — nowhere near thumbnail_run's 32-per-batch pace). `cancel` is checked between
 /// items, not just at entry, so a quit-requested cancellation (see main.rs's window-close
 /// handler) actually stops promptly mid-batch rather than finishing whatever's already queued.
-pub fn hq_offline_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<HqOfflineResult, String> {
+/// ⚠️ Takes `&CatalogState`, NOT `&Connection`, specifically so it can lock and UNLOCK around the
+/// expensive part. The previous shape (caller locks, passes `&Connection` in) meant a
+/// multi-second full-resolution RAW decode ran with the catalog writer lock held, blocking every
+/// UI read and every other indexing phase for its whole duration. Four scopes now: a short read
+/// lock to pick the work, a short write lock to evict, NO lock across the decode, and a short
+/// write lock to record the result.
+pub fn hq_offline_run(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<HqOfflineResult, String> {
     let mut result = HqOfflineResult::default();
-    if cancel.load(Ordering::Relaxed) {
+    if cancel.load(Ordering::Relaxed) || bg_is_paused() {
         return Ok(result);
     }
-    let target = hq_offline_target_set(conn)?;
-    result.target_total = target.len();
 
-    // ── Eviction: anything cached that's no longer in the live target set ──
-    let existing: Vec<(i64, i64, String, i64)> = conn
-        .prepare("SELECT hq.photo_id, hq.mtime, p.ext, hq.is_copy FROM hq_offline hq JOIN photos p ON p.id = hq.photo_id")
-        .map_err(|e| e.to_string())?
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-    for (id, _mtime, ext, is_copy) in &existing {
-        if !target.contains_key(id) {
-            let out_ext = if *is_copy != 0 { ext.as_str() } else { "jpg" };
+    // ── Scope 1 (READ lock): the live target set, what's already cached, and the row detail for
+    // whichever single photo we're about to generate. Everything the decode needs is copied out
+    // here so the lock can be dropped before any real work starts. ──
+    struct Job { id: i64, mtime: i64, reason: String, abs: String, ext: String, is_raw: bool }
+    let (target_total, evictions, job): (usize, Vec<(i64, String)>, Option<Job>) = {
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        let target = hq_offline_target_set(&conn)?;
+        let existing: Vec<(i64, i64, String, i64)> = conn
+            .prepare("SELECT hq.photo_id, hq.mtime, p.ext, hq.is_copy FROM hq_offline hq JOIN photos p ON p.id = hq.photo_id")
+            .map_err(|e| e.to_string())?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        let evictions: Vec<(i64, String)> = existing
+            .iter()
+            .filter(|(id, _, _, _)| !target.contains_key(id))
+            .map(|(id, _, ext, is_copy)| (*id, if *is_copy != 0 { ext.clone() } else { "jpg".to_string() }))
+            .collect();
+
+        let existing_current: std::collections::HashMap<i64, i64> = existing.iter().map(|(id, mtime, _, _)| (*id, *mtime)).collect();
+        let mut to_generate: Vec<(i64, i64, String)> = target
+            .iter()
+            .filter(|(id, (mtime, _))| existing_current.get(id) != Some(mtime))
+            .map(|(id, (mtime, reason))| (*id, *mtime, reason.clone()))
+            .collect();
+        to_generate.sort_by_key(|(id, _, _)| *id); // deterministic order, mainly for test reproducibility
+
+        // Still one photo per call: a full-resolution decode peaks around 240MB even after the
+        // buffer fixes in hq_offline_decode_raw, and this ships on an 8GB machine.
+        let job = to_generate.into_iter().next().and_then(|(id, mtime, reason)| {
+            let row: Option<(String, String, i64, String, String)> = conn
+                .query_row(
+                    "SELECT p.rel_path, v.last_path, v.is_local, p.ext, p.kind FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.id = ?1",
+                    params![id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
+                .ok();
+            let (rel_path, last_path, is_local, ext, kind) = row?;
+            let online = is_local != 0 || Path::new(&last_path).is_dir();
+            if !online {
+                return None; // can't cache a photo we can't currently read — retried once it reconnects
+            }
+            Some(Job { id, mtime, reason, abs: abs_path(&last_path, is_local != 0, &rel_path), ext, is_raw: kind == "raw" })
+        });
+        (target.len(), evictions, job)
+    };
+    result.target_total = target_total;
+
+    // ── Scope 2 (WRITE lock, brief): evict anything no longer in the live target set. ──
+    if !evictions.is_empty() {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        for (id, out_ext) in &evictions {
             let _ = std::fs::remove_file(hq_offline_path(*id, out_ext));
             conn.execute("DELETE FROM hq_offline WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
             result.evicted += 1;
         }
     }
 
-    // ── Generation: target rows missing OR whose live mtime moved on since the cached copy ──
-    let existing_current: std::collections::HashMap<i64, i64> = existing.into_iter().map(|(id, mtime, _, _)| (id, mtime)).collect();
-    let mut to_generate: Vec<(i64, i64, String)> = target
-        .iter()
-        .filter(|(id, (mtime, _))| existing_current.get(id) != Some(mtime))
-        .map(|(id, (mtime, reason))| (*id, *mtime, reason.clone()))
-        .collect();
-    to_generate.sort_by_key(|(id, _, _)| *id); // deterministic order, mainly for test reproducibility
-    // 1, not 4: this whole call holds the CatalogState WRITER lock for its duration (the caller,
-    // catalog_hq_offline, locks conn before calling in) — every full decode inside that window
-    // blocks every other catalog write (ratings, sidecar saves, scans) app-wide. A future pass
-    // could restructure this to decode OUTSIDE the lock and only take it for the brief SQL read/
-    // write, but bounding worst-case lock-hold time to ONE decode is the safe minimum for now.
-    const BATCH: usize = 1;
-    to_generate.truncate(BATCH);
-    if to_generate.is_empty() {
+    let Some(job) = job else {
         progress(ScanProgress { phase: "hq_offline".into(), done: 0, total: 0, current: String::new() });
         return Ok(result);
+    };
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(result);
     }
-    progress(ScanProgress { phase: "hq_offline".into(), done: 0, total: to_generate.len(), current: String::new() });
+    progress(ScanProgress { phase: "hq_offline".into(), done: 0, total: 1, current: String::new() });
 
-    for (id, mtime, reason) in &to_generate {
-        if cancel.load(Ordering::Relaxed) {
-            break;
-        }
-        let row: Option<(String, String, i64, String, String)> = conn
-            .query_row(
-                "SELECT p.rel_path, v.last_path, v.is_local, p.ext, p.kind FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.id = ?1",
-                params![id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
-            )
-            .ok();
-        let Some((rel_path, last_path, is_local, ext, kind)) = row else { continue };
-        let online = is_local != 0 || Path::new(&last_path).is_dir();
-        if !online {
-            continue; // can't cache a photo we can't currently read from — retried once it reconnects
-        }
-        let abs = abs_path(&last_path, is_local != 0, &rel_path);
-        let is_raw = kind == "raw";
-        let (out_ext, is_copy, bytes): (String, bool, Option<Vec<u8>>) = if is_raw {
-            let Some(raw_bytes) = std::fs::read(&abs).ok() else { continue };
-            // ⚠️ Cheap metadata peek FIRST — only pay for the full demosaic once a LUT is
-            // confirmed to exist. See hq_offline_lut_for's doc comment for the freeze this fixes.
-            match hq_offline_lut_for(&raw_bytes) {
-                Some((lut, n)) => match hq_offline_decode_raw(&raw_bytes, &lut, n) {
-                    Ok(b) => ("jpg".to_string(), false, Some(b)),
-                    Err(_) => continue, // a real decode failure (corrupt file, etc.) — not retried via pending_raw_sample, that's for missing LUTs only
-                },
-                None => {
-                    result.skipped_no_lut += 1;
-                    if result.pending_raw_sample.is_none() {
-                        result.pending_raw_sample = Some(abs.clone());
-                    }
-                    continue;
-                }
+    // ── Scope 3 (NO lock): file read + decode + encode + write. The expensive part. ──
+    let (out_ext, is_copy, bytes): (String, bool, Option<Vec<u8>>) = if job.is_raw {
+        let Some(raw_bytes) = std::fs::read(&job.abs).ok() else { return Ok(result) };
+        // ⚠️ Cheap metadata peek FIRST — only pay for the full demosaic once a LUT is
+        // confirmed to exist. See hq_offline_lut_for's doc comment for the freeze this fixes.
+        match hq_offline_lut_for(&raw_bytes) {
+            Some((lut, n)) => match hq_offline_decode_raw(&raw_bytes, &lut, n) {
+                Ok(b) => ("jpg".to_string(), false, Some(b)),
+                Err(_) => return Ok(result), // real decode failure (corrupt file) — not a missing-LUT retry
+            },
+            None => {
+                result.skipped_no_lut += 1;
+                result.pending_raw_sample = Some(job.abs.clone());
+                return Ok(result);
             }
-        } else {
-            (ext.clone(), true, std::fs::read(&abs).ok())
-        };
-        let Some(bytes) = bytes else { continue };
-        let path = hq_offline_path(*id, &out_ext);
-        let tmp = path.with_extension(format!("{out_ext}.tmp.{}", std::process::id()));
-        if std::fs::write(&tmp, &bytes).is_err() {
-            continue;
         }
-        if std::fs::rename(&tmp, &path).is_err() {
-            let _ = std::fs::remove_file(&tmp);
-            continue;
-        }
+    } else {
+        (job.ext.clone(), true, std::fs::read(&job.abs).ok())
+    };
+    let Some(bytes) = bytes else { return Ok(result) };
+    let path = hq_offline_path(job.id, &out_ext);
+    let tmp = path.with_extension(format!("{out_ext}.tmp.{}", std::process::id()));
+    if std::fs::write(&tmp, &bytes).is_err() {
+        return Ok(result);
+    }
+    if std::fs::rename(&tmp, &path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return Ok(result);
+    }
+
+    // ── Scope 4 (WRITE lock, brief): record it. ──
+    {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT INTO hq_offline (photo_id, mtime, reason, is_copy) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(photo_id) DO UPDATE SET mtime = excluded.mtime, reason = excluded.reason, is_copy = excluded.is_copy",
-            params![id, mtime, reason, is_copy as i64],
+            params![job.id, job.mtime, job.reason, is_copy as i64],
         )
         .map_err(|e| e.to_string())?;
-        result.generated += 1;
     }
-    progress(ScanProgress { phase: "hq_offline".into(), done: result.generated, total: to_generate.len(), current: String::new() });
+    result.generated += 1;
+    progress(ScanProgress { phase: "hq_offline".into(), done: result.generated, total: 1, current: String::new() });
     Ok(result)
 }
 
@@ -5064,8 +5183,9 @@ pub async fn catalog_hq_offline(app: tauri::AppHandle) -> Result<HqOfflineResult
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        hq_offline_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+        // No lock taken here — hq_offline_run manages its own short-lived scopes so the decode
+        // never runs under the catalog lock. See its doc comment.
+        hq_offline_run(&state, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
     })
     .await
     .map_err(|e| format!("catalog_hq_offline task panicked: {e}"))?
@@ -5085,9 +5205,45 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
-        state.cancel.store(false, Ordering::Relaxed);
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        thumbnail_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+        // ⚠️ Deliberately does NOT reset `cancel` here, unlike the one-shot job commands
+        // (catalog_scan/hash/faces_scan/verify/...). This command is a PACED CONTINUATION batch:
+        // drainCatalogThumbnails (library-ui.js) calls it every 200ms until has_more is false.
+        // Resetting per batch meant the user's Cancel was erased 200ms later by the next batch,
+        // so the button was structurally incapable of stopping this phase — confirmed live: an
+        // hour of clicking Cancel did nothing. The drain loop clears the flag ONCE before its
+        // first batch instead (catalog_cancel_reset, below).
+        let mut result = ThumbResult::default();
+        // Pause is checked with the same weight as cancel: a paused user must not have a new
+        // batch started behind their back.
+        if state.cancel.load(Ordering::Relaxed) || bg_is_paused() {
+            return Ok(result);
+        }
+        // ⚠️ THREE separate short-lived locks, never one held across the decode. The decode is
+        // 32 real image decodes; holding the catalog lock through it (what this used to do)
+        // blocked every UI database read and every other phase for the whole batch — a large
+        // part of why the app was unusable for an hour. `thumbnail_decode_batch` takes no
+        // connection at all, so the lock cannot be held across it by construction.
+        let (batch, remaining) = {
+            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+            (thumbnail_select_batch(&conn)?, thumbnail_remaining(&conn))
+        };
+        if batch.is_empty() {
+            let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
+            return Ok(result);
+        }
+        let batch_len = batch.len();
+        let _ = app.emit("catalog-scan", ScanProgress { phase: "thumb".into(), done: 0, total: remaining as usize, current: String::new() });
+
+        let generated = thumbnail_decode_batch(&batch); // NO lock held here
+
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            result.generated = thumbnail_commit_batch(&conn, &generated)?;
+        }
+        result.remaining = remaining.saturating_sub(result.generated as u64);
+        result.has_more = batch_len == 32;
+        let _ = app.emit("catalog-scan", ScanProgress { phase: "thumb".into(), done: result.generated, total: remaining as usize, current: String::new() });
+        Ok(result)
     })
     .await
     .map_err(|e| format!("catalog_thumbnails task panicked: {e}"))?

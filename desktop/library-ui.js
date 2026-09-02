@@ -273,7 +273,23 @@
       // thumbnail/focus-score. `has_more: false` on catalog_thumbnails stops drainCatalogThumbnails
       // from looping forever against a mock that never has real backlog to drain.
       case 'catalog_stack': return Promise.resolve({ stacked: 0 });
-      case 'catalog_thumbnails': return Promise.resolve({ generated: 0, has_more: false });
+      // ?libthumbforever=1 simulates the phase that ran for an hour with a dead Cancel button:
+      // catalog_thumbnails reports has_more FOREVER. drainCatalogThumbnails must still stop when
+      // cancelled — the Rust flag alone could never do it (it was cleared per batch), so this
+      // pins the JS-side stop. `remaining` is deliberately >32 so the honest-progress assertion
+      // has something real to check against the old per-batch "0 of 32".
+      case 'catalog_thumbnails': {
+        if (/[?&]libthumbforever=1/.test(location.search)) {
+          window.__libThumbBatches = (window.__libThumbBatches || 0) + 1;
+          return Promise.resolve({ generated: 1, has_more: true, remaining: 57288 - window.__libThumbBatches });
+        }
+        return Promise.resolve({ generated: 0, has_more: false, remaining: 0 });
+      }
+      case 'catalog_cancel_reset': return Promise.resolve();
+      case 'catalog_cancel_pending': return Promise.resolve(false);
+      case 'catalog_bg_set_paused': return Promise.resolve();
+      case 'catalog_bg_paused': return Promise.resolve(false);
+      case 'catalog_scan_cancel': return Promise.resolve();
       case 'catalog_focus': return Promise.resolve({ scored: 0 });
       // ?libhqstuck=1 simulates the exact failure mode that once froze the whole app: a RAW
       // whose camera can NEVER get a DCP LUT baked (no bundled/disk profile) reports the SAME
@@ -1622,6 +1638,8 @@
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
     window.__libHqOfflineDrain = () => hqOfflineDrainLoop();
+    window.__libDrainThumbs = () => drainCatalogThumbnails();
+    window.__libBgStopAll = () => bgStopAll();
   }
   // Rows kept mounted beyond the viewport in each direction. This used to be a flat 2, which is
   // enough to avoid a visible GAP while scrolling but nowhere near enough to avoid the far more
@@ -6075,15 +6093,51 @@
   /// nothing new still costs exactly one invoke() (thumb=0 candidate set is empty, has_more is
   /// false immediately) — this only changes the shape of what happens when there's real,
   /// genuinely new work to do, not whether there's any work at all.
-  function drainCatalogThumbnails() {
-    return invoke('catalog_thumbnails').then((r) => {
+  // ⚠️ `_bgStopped` is the JS half of making Cancel actually work. The Rust `cancel` flag alone
+  // was never enough here: catalog_thumbnails used to clear it at the start of every batch, so a
+  // click was erased 200ms later by the next call (confirmed live — an hour of clicking Cancel
+  // did nothing). Rust no longer resets it per batch, and this flag independently stops the loop
+  // from issuing further batches, so neither half depends on the other being correct.
+  let _bgStopped = false;
+  function bgStopAll() {
+    _bgStopped = true;
+    if (!LIBTEST) invoke('catalog_scan_cancel').catch(() => {});
+  }
+  // Persistent "Pause background indexing" — survives relaunch (localStorage) and is re-asserted
+  // to Rust on startup. Deliberately separate from Cancel: Cancel stops what is running now,
+  // pause stops anything from starting until the user says otherwise.
+  const LS_BG_PAUSED = 'chromasmith_bg_paused';
+  function bgPaused() {
+    try { return localStorage.getItem(LS_BG_PAUSED) === '1'; } catch (e) { return false; }
+  }
+  function bgSetPaused(paused) {
+    try { localStorage.setItem(LS_BG_PAUSED, paused ? '1' : '0'); } catch (e) {}
+    if (!LIBTEST) invoke('catalog_bg_set_paused', { paused: !!paused }).catch(() => {});
+    if (paused) bgStopAll();
+    renderActivity();
+  }
+  window.chromasmithBgPaused = bgPaused;
+  window.chromasmithBgSetPaused = bgSetPaused;
+  async function drainCatalogThumbnails() {
+    _bgStopped = false;
+    if (!LIBTEST) await invoke('catalog_cancel_reset').catch(() => {}); // ONCE, before the first batch — never inside the loop
+    for (;;) {
+      if (_bgStopped || bgPaused()) return;
+      let r;
+      try { r = await invoke('catalog_thumbnails'); } catch (e) { console.error('catalog_thumbnails', e); return; }
       if (!r || !r.has_more) return;
-      return new Promise((resolve) => setTimeout(resolve, 200)).then(drainCatalogThumbnails);
-    });
+      // Real backlog, not the per-batch count — see ThumbResult.remaining. This is what turns a
+      // permanently-"0 of 32" panel into "2,808 of 57,288".
+      if (typeof r.remaining === 'number') {
+        window.__libActivityTotal = r.remaining; // read by test/library_perf.mjs's honest-progress assertion
+        activityUpdate('catalog', { stage: 'thumb', done: 0, total: r.remaining });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
   let _catalogBgRunning = false;
   function catalogRunBackgroundPhases() {
-    if (LIBTEST || _catalogBgRunning) return;
+    if (LIBTEST || _catalogBgRunning || bgPaused() || _bgStopped) return;
     _catalogBgRunning = true;
     invoke('catalog_stack')
       .then(() => drainCatalogThumbnails())
@@ -6160,7 +6214,10 @@
   /// going," not just "one IPC call happens to be in flight" — see CatalogState's own doc
   /// comment on that field.
   async function hqOfflineDrainLoop() {
-    if (LIBTEST || _hqOfflineDraining) return;
+    // ⚠️ Never runs concurrently with drainCatalogThumbnails. Both do real image decodes; on an
+    // 8GB machine running them together produced measured, sustained swap thrashing (70M
+    // swapins) that slowed the entire app by roughly 20x. One bulk decoder at a time.
+    if (LIBTEST || _hqOfflineDraining || _catalogBgRunning || bgPaused() || _bgStopped) return;
     _hqOfflineDraining = true;
     if (!LIBTEST) invoke('catalog_hq_offline_set_active', { active: true }).catch(() => {});
     try {
@@ -6176,6 +6233,7 @@
       const stuck = new Set();
       const MAX_ITERS = 300; // >= the 200-photo target, generous margin for eviction rounds too
       for (let i = 0; i < MAX_ITERS; i++) {
+        if (_bgStopped || bgPaused()) break;
         let r;
         try {
           r = await invoke('catalog_hq_offline');
@@ -6321,6 +6379,12 @@
           return `<div class="lib-act-stage ${cls}"><span style="width:12px;display:inline-block;text-align:center">${icon}</span><span>${STAGE_LABELS[s]}</span><span class="lib-act-stage-n">${n}</span></div>${bar}`;
         }).join('')
         + `</div>`
+        // Pause background indexing — the persistent escape hatch. There was previously NO way
+        // to reclaim the machine from background work short of quitting the app.
+        + `<div style="padding:7px 11px;border-top:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;gap:8px">
+             <span style="font-size:11px;color:var(--mut)">Pause background indexing</span>
+             <button type="button" id="lib-act-pause" class="btn bgh" style="font-size:11px;padding:2px 9px">${bgPaused() ? 'Resume' : 'Pause'}</button>
+           </div>`
         + (activity.failed && activity.failed.length
           ? `<div style="padding:8px 11px;border-top:1px solid var(--bdr);background:rgba(229,72,77,.08)">`
             + activity.failed.slice(0, 8).map((f) => `<div style="font-size:10px;color:var(--mut);padding:1px 0">${esc(f)}</div>`).join('')
@@ -6350,12 +6414,18 @@
       pop.style.left = (desiredLeft - pr.left) + 'px';
       pop.style.right = 'auto';
     }
+    const pauseBtn = document.getElementById('lib-act-pause');
+    if (pauseBtn) {
+      pauseBtn.onclick = (e) => { e.stopPropagation(); bgSetPaused(!bgPaused()); };
+    }
     const cancelBtn = document.getElementById('lib-act-cancel');
     if (cancelBtn) {
       cancelBtn.onclick = (e) => {
         e.stopPropagation();
         if (activity.stage === 'done') { activity.visible = false; renderActivity(); return; }
-        if (activity.kind === 'catalog') invoke('catalog_scan_cancel').catch(() => {});
+        // bgStopAll, not a bare catalog_scan_cancel: the Rust flag alone cannot stop a paced
+        // drain loop (see drainCatalogThumbnails' comment on why this button did nothing).
+        if (activity.kind === 'catalog') bgStopAll();
         else if (typeof activity.cancelFn === 'function') { try { activity.cancelFn(); } catch (e) {} }
         activity.expanded = false;
         renderActivity();
@@ -6419,6 +6489,12 @@
     if (!label) return;
     const shown = typeof window._bootShownPct === 'number' ? Math.round(window._bootShownPct) : 0;
     label.textContent = shown > 0 ? `Preparing your library… ${shown}%` : 'Preparing your library…';
+  }
+  // The pause choice lives in localStorage (JS) but is ENFORCED in Rust, so it has to be
+  // re-asserted on every launch — otherwise a user who paused and quit would find indexing
+  // running again the moment they reopened the app.
+  if (!LIBTEST) {
+    try { invoke('catalog_bg_set_paused', { paused: bgPaused() }).catch(() => {}); } catch (e) {}
   }
   function wireActivityListeners() {
     if (!window.__TAURI__ || !window.__TAURI__.event) return; // LIBTEST's mock listen() is a harmless no-op
@@ -7855,5 +7931,5 @@
   // photo into the guaranteed-offline set without waiting for the next relaunch. 90s, not
   // continuous — a full drain pass touches the DB and (when there's real work) does full RAW
   // decodes, so this stays a background heartbeat, not a tight poll.
-  if (!LIBTEST) setInterval(() => { hqOfflineDrainLoop(); }, 90000);
+  if (!LIBTEST) setInterval(() => { if (!bgPaused() && !_bgStopped) hqOfflineDrainLoop(); }, 90000);
 })();

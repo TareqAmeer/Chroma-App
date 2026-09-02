@@ -260,6 +260,16 @@ fn cache_key(path: &str) -> String {
     format!("{:016x}.jpg", fnv1a(&[path, THUMB_RENDER_VER]))
 }
 
+/// Resolution-aware variant for the non-360px tiers (the 800px offline reference, the 1600px
+/// Quick Look / face-crop source). Keyed separately so a 360px grid thumbnail and an 800px
+/// offline preview for the SAME photo never collide — they are different pixels for different
+/// jobs, and serving one where the other is expected is exactly the class of bug the sidecar
+/// validity check exists to prevent.
+fn cache_key_at(path: &str, long_edge: u32) -> String {
+    let le = long_edge.to_string();
+    format!("{:016x}.jpg", fnv1a(&[path, THUMB_RENDER_VER, &le]))
+}
+
 /// Reads the cached thumbnail at `cache_path` ONLY if its validity sidecar (`<cache_path>.v`,
 /// plain-text "mtime,size") matches the CALLER-SUPPLIED live values — the caller already did the
 /// one `fs::metadata` call needed to know those, so this never stats twice. A missing or
@@ -736,7 +746,11 @@ const QUICKLOOK_LONG_EDGE: u32 = 1600;
 /// demosaic, still fast), everything else gets a scaled decode — a real, sharp improvement over
 /// the 360px source without paying for a full-resolution RAW decode per face.
 pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
-    quicklook_preview_bytes_at(path, QUICKLOOK_LONG_EDGE)
+    // Cached: face-crop generation (catalog_face_crop) hits this once per face, and a review
+    // session walks many faces from the same few photos — re-decoding a 1600px preview per face
+    // was pure waste. Falls back to an uncached decode if the file can't be stat'd.
+    cached_preview_bytes_at(path, QUICKLOOK_LONG_EDGE)
+        .or_else(|_| quicklook_preview_bytes_at(path, QUICKLOOK_LONG_EDGE))
 }
 
 /// The actual, now-parameterized decode logic. Added for the offline reference tier (catalog::
@@ -816,8 +830,27 @@ fn quicklook_preview_bytes_at(path: &str, long_edge: u32) -> Result<Vec<u8>, Str
 
 /// The offline REFERENCE tier's own entry point (catalog::thumbnail_run) — 800px, view-quality,
 /// not the guaranteed-editable hq_offline tier. `pub(crate)` since only catalog.rs calls it.
+/// ⚠️ Disk-CACHED, unlike bare `quicklook_preview_bytes_at`. Swapping this path off
+/// `get_thumbnail_inner` (which read AND wrote `cache_dir()`) onto the uncached quicklook
+/// decoder silently removed all reuse: every retry, and every other caller wanting the same
+/// pixels, re-paid the full decode. Restored here with the same
+/// `read_cache_if_current`/`write_cache_atomic` machinery the 360px tier uses, keyed by
+/// resolution so the two tiers can't collide.
 pub(crate) fn offline_reference_bytes(path: &str) -> Result<Vec<u8>, String> {
-    quicklook_preview_bytes_at(path, OFFLINE_REFERENCE_LONG_EDGE)
+    cached_preview_bytes_at(path, OFFLINE_REFERENCE_LONG_EDGE)
+}
+
+pub(crate) fn cached_preview_bytes_at(path: &str, long_edge: u32) -> Result<Vec<u8>, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let size = meta.len();
+    let cache_path = cache_dir().join(cache_key_at(path, long_edge));
+    if let Some(bytes) = read_cache_if_current(&cache_path, mtime, size) {
+        return Ok(bytes);
+    }
+    let bytes = quicklook_preview_bytes_at(path, long_edge)?;
+    write_cache_atomic(&cache_path, &bytes, mtime, size);
+    Ok(bytes)
 }
 pub(crate) const OFFLINE_REFERENCE_LONG_EDGE: u32 = 800;
 

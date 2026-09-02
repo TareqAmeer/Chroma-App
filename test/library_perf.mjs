@@ -345,6 +345,35 @@ for (const [label, hangParam] of [['one', 'IMG_1003'], ['every', 'all']]) {
   await p.close();
 }
 
+// Regression guard for the bug that made an hour of clicking Cancel do nothing:
+// catalog_thumbnails cleared the Rust `cancel` flag at the START of every batch, so a cancel was
+// erased 200ms later by the next paced call. Rust no longer resets per batch, and the JS drain
+// loop independently stops issuing batches — this pins the JS half, which is the half that works
+// even if the Rust flag is wrong. ?libthumbforever=1 reports has_more forever, so a loop that
+// ignores the stop flag never terminates.
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=5&libthumbforever=1`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForFunction(() => typeof window.__libDrainThumbs === 'function', {timeout: 15000});
+  const BUDGET_MS = 15000;
+  const r = await p.evaluate((budget) => {
+    const drain = window.__libDrainThumbs().then(() => 'returned');
+    setTimeout(() => window.__libBgStopAll(), 1000); // user clicks Cancel one second in
+    return Promise.race([drain, new Promise((res) => setTimeout(() => res('STILL RUNNING'), budget))]);
+  }, BUDGET_MS).catch((e) => 'ERROR: ' + e.message);
+  const ok = r === 'returned';
+  console.log(`Cancel actually stops the thumbnail drain: ${r}  ${ok?'PASS':'FAIL'}`);
+  if(!ok) failures.push(`drainCatalogThumbnails ignored Cancel (${r}) — this is the bug that left the app grinding for an hour with a dead button`);
+
+  // Honest progress: the emitted total must be the real backlog, not the 32-item batch size.
+  const total = await p.evaluate(() => window.__libActivityTotal || 0);
+  const okTotal = total > 32;
+  console.log(`progress reports the real backlog, not the batch: total=${total} (>32)  ${okTotal?'PASS':'FAIL'}`);
+  if(!okTotal) failures.push(`activity total was ${total} — the panel is still reporting a per-batch count, which is why it read "0 of 32" for an hour`);
+  await p.close();
+}
+
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}
