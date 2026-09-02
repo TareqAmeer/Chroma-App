@@ -6121,16 +6121,21 @@
   async function drainCatalogThumbnails() {
     _bgStopped = false;
     if (!LIBTEST) await invoke('catalog_cancel_reset').catch(() => {}); // ONCE, before the first batch — never inside the loop
+    let startRemaining = null; // captured on the first real batch, so `done` can move at all
     for (;;) {
       if (_bgStopped || bgPaused()) return;
       let r;
       try { r = await invoke('catalog_thumbnails'); } catch (e) { console.error('catalog_thumbnails', e); return; }
       if (!r || !r.has_more) return;
       // Real backlog, not the per-batch count — see ThumbResult.remaining. This is what turns a
-      // permanently-"0 of 32" panel into "2,808 of 57,288".
+      // permanently-"0 of 32" panel into "2,808 of 57,288". `done` is derived the same way: the
+      // panel used to hardcode done:0 here, so even once `remaining` started reporting honestly
+      // the counter still visibly never moved — the exact complaint that surfaced this.
       if (typeof r.remaining === 'number') {
+        if (startRemaining === null) startRemaining = r.remaining;
+        const done = Math.max(0, startRemaining - r.remaining);
         window.__libActivityTotal = r.remaining; // read by test/library_perf.mjs's honest-progress assertion
-        activityUpdate('catalog', { stage: 'thumb', done: 0, total: r.remaining });
+        activityUpdate('catalog', { stage: 'thumb', done, total: startRemaining });
       }
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
@@ -6139,14 +6144,19 @@
   function catalogRunBackgroundPhases() {
     if (LIBTEST || _catalogBgRunning || bgPaused() || _bgStopped) return;
     _catalogBgRunning = true;
-    invoke('catalog_stack')
-      .then(() => drainCatalogThumbnails())
-      .then(() => invoke('catalog_focus'))
+    // ⚠️ Each phase is independently attempted. This used to be a bare .then() chain, so a
+    // single rejection (e.g. catalog_stack failing) silently skipped EVERY later phase --
+    // thumbnails, focus, hash -- with the error going only to the WebView console, invisible
+    // from stderr. That failure mode is indistinguishable from "indexing is just slow".
+    const step = (name, fn) => fn().catch((e) => { console.error('background phase ' + name, e); });
+    step('stack', () => invoke('catalog_stack'))
+      .then(() => step('thumbnails', () => drainCatalogThumbnails()))
+      .then(() => step('focus', () => invoke('catalog_focus')))
       // Hashing a NEW file is a bounded one-time cost (hash_run only touches unhashed/changed-
       // mtime rows), same shape as thumbnails/focus — safe to auto-chain. Re-verifying every
       // ALREADY-hashed file (detecting drift) is unbounded and stays a manual "Verify library"
       // action (showVerifyMenu) — see the plan's own logged decision on this split.
-      .then(() => invoke('catalog_hash'))
+      .then(() => step('hash', () => invoke('catalog_hash')))
       .catch((e) => console.error('catalog background phases', e))
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }

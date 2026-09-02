@@ -764,7 +764,18 @@ pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
 fn quicklook_preview_bytes_at(path: &str, long_edge: u32) -> Result<Vec<u8>, String> {
     let ext = ext_lower(Path::new(path));
     if is_raw_ext(&ext) {
+        // ⚠️ Measured live: extract_preview_pixels (preview -> full, no thumbnail tier) fails
+        // outright on real iPhone ProRAW DNGs that extract_thumbnail_pixels (thumbnail -> preview
+        // -> full — what get_thumbnail_inner used before this function existed) handles fine.
+        // Confirmed the regression directly: those exact files had thumb=1 (a working 360px
+        // offline preview) before this function replaced get_thumbnail_inner on this code path,
+        // and generated=0 on every batch after, because DNG's `thumbnail_image` and
+        // `preview_image` IFDs can genuinely differ (unlike RW2, where both calls hit the same
+        // embedded JPEG — see quicklook_preview_bytes_at's own siblings). Falling back to the
+        // thumbnail tier instead of failing keeps every caller of this function (Quick Look,
+        // face crops, the offline reference tier) working for exactly the files that regressed.
         let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
+            .or_else(|_| rawler::analyze::extract_thumbnail_pixels(path, &RawDecodeParams::default()))
             .map_err(|e| format!("preview decode: {e}"))?;
         let img = apply_orientation_dynamic(img, raw_orientation(path));
         let (w, h) = (img.width(), img.height());

@@ -4756,8 +4756,13 @@ fn decode_batch_pool() -> &'static rayon::ThreadPool {
 
 /// The candidate predicate, in ONE place — `thumbnail_select_batch` and
 /// `thumbnail_remaining` must never disagree, or the progress readout drifts from the work.
+/// `thumb_long_edge = -1` is the "attempted and failed, do not auto-retry" sentinel (see
+/// `thumbnail_commit_batch`) — without excluding it here, a single undecodable file blocks the
+/// ENTIRE queue forever: with no ORDER BY, `LIMIT 32` kept re-selecting the exact same doomed
+/// rows on every call, `generated` stayed 0, and `remaining` never moved. Measured live on the
+/// real library: 32 iPhone ProRAW DNGs, one call every 200ms, zero progress for over an hour.
 const THUMB_CANDIDATE_WHERE: &str =
-    "p.present = 1 AND p.kind != 'video' AND (p.thumb = 0 OR p.thumb_long_edge < 800)";
+    "p.present = 1 AND p.kind != 'video' AND p.thumb_long_edge >= 0 AND p.thumb_long_edge < 800";
 
 /// Phase A — pick the next batch. Pure SQL, no decoding: safe to run under a SHORT read lock.
 fn thumbnail_select_batch(conn: &Connection) -> Result<Vec<(i64, String, i64)>, String> {
@@ -4765,6 +4770,7 @@ fn thumbnail_select_batch(conn: &Connection) -> Result<Vec<(i64, String, i64)>, 
         "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {THUMB_CANDIDATE_WHERE}
+         ORDER BY p.id
          LIMIT 32"
     );
     let rows: Vec<(i64, Option<String>, i64)> = conn
@@ -4797,18 +4803,34 @@ fn thumbnail_remaining(conn: &Connection) -> u64 {
 /// to accidentally hold the catalog lock across it (which is exactly what made the whole app
 /// unresponsive: `thumbnail_run` used to run this entire 32-photo `par_iter` inside the writer
 /// lock, blocking every UI read and every other phase for the duration).
-fn thumbnail_decode_batch(batch: &[(i64, String, i64)]) -> Vec<(i64, Option<Vec<u8>>, i64)> {
+fn thumbnail_decode_batch(batch: &[(i64, String, i64)]) -> Vec<(i64, Result<Vec<u8>, String>, i64)> {
     decode_batch_pool()
-        .install(|| batch.par_iter().map(|(id, abs, mtime)| (*id, thumbnail_bytes_for(abs).ok(), *mtime)).collect())
+        .install(|| batch.par_iter().map(|(id, abs, mtime)| (*id, thumbnail_bytes_for(abs), *mtime)).collect())
 }
 
 /// Phase C — write the results. Short write lock: file writes plus one small transaction.
-fn thumbnail_commit_batch(conn: &Connection, generated: &[(i64, Option<Vec<u8>>, i64)]) -> Result<usize, String> {
+/// ⚠️ A decode FAILURE now sets `thumb_long_edge = -1` — see THUMB_CANDIDATE_WHERE's doc comment
+/// for the infinite-stall this closes. It does NOT touch `thumb`/`thumb_mtime`, so a previously-
+/// working lower-res offline copy (there almost always is one — this tier only ever runs as an
+/// UPGRADE pass) keeps being served exactly as before; only the 800px upgrade attempt stops. The
+/// real error is logged (not silently discarded via `.ok()`, which is how this went unnoticed
+/// live) so a genuinely fixable decode bug — like the DNG one this shipped alongside — is visible
+/// the first time it happens, not only after someone notices progress stalled.
+fn thumbnail_commit_batch(conn: &Connection, generated: &[(i64, Result<Vec<u8>, String>, i64)]) -> Result<usize, String> {
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     let mut n = 0usize;
-    for (id, bytes, mtime) in generated {
-        let Some(bytes) = bytes else { continue }; // undecodable right now — leave thumb=0, retried next pass
+    for (id, result, mtime) in generated {
+        let bytes = match result {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("[bg] thumbnail id={id}: permanently skipping (decode failed): {e}");
+                tx.execute("UPDATE photos SET thumb_long_edge = -1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+                continue;
+            }
+        };
         if std::fs::write(offline_thumb_path(*id), bytes).is_err() {
+            eprintln!("[bg] thumbnail id={id}: permanently skipping (disk write failed)");
+            tx.execute("UPDATE photos SET thumb_long_edge = -1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
             continue;
         }
         // thumb_mtime records the mtime this thumbnail was generated AGAINST — get_thumbnail_or_
@@ -5205,6 +5227,7 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
+        eprintln!("[bg] catalog_thumbnails: enter");
         // ⚠️ Deliberately does NOT reset `cancel` here, unlike the one-shot job commands
         // (catalog_scan/hash/faces_scan/verify/...). This command is a PACED CONTINUATION batch:
         // drainCatalogThumbnails (library-ui.js) calls it every 200ms until has_more is false.
@@ -5228,6 +5251,7 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
             (thumbnail_select_batch(&conn)?, thumbnail_remaining(&conn))
         };
         if batch.is_empty() {
+            eprintln!("[bg] catalog_thumbnails: no candidates (remaining={remaining}) -> done");
             let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
             return Ok(result);
         }
@@ -5242,6 +5266,7 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
         }
         result.remaining = remaining.saturating_sub(result.generated as u64);
         result.has_more = batch_len == 32;
+        eprintln!("[bg] catalog_thumbnails: batch={batch_len} generated={} remaining={} has_more={}", result.generated, result.remaining, result.has_more);
         let _ = app.emit("catalog-scan", ScanProgress { phase: "thumb".into(), done: result.generated, total: remaining as usize, current: String::new() });
         Ok(result)
     })

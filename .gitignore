@@ -94,3 +94,4 @@ site/photos-src/
 !site/assets/manifest.json
 
 diagnostics/reports/
+.diagvenv/

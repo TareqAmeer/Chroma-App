@@ -1214,7 +1214,13 @@ window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)cl
   const elapsed=performance.now()-(window._bootSplashArmedAt||performance.now());
   if(typeof window.chromasmithForceLibraryReady==='function'){try{window.chromasmithForceLibraryReady();}catch(e){}}
   window.hideBootSplash();
-  window.showBootStallBanner(window._bootLastPhase||'walk',elapsed);
+  // ⚠️ Banner call removed on the user's explicit instruction ("the notification at the top of
+  // the app is useless so best to hide it moving forward") — it fired repeatedly during the
+  // background-indexing contention this same session introduced and gave no actionable
+  // information beyond "something is slow," which the Indexing panel already communicates better.
+  // showBootStallBanner (above) is left defined, unused, in case a more useful version of this
+  // is wanted later; console.warn still logs the stall for anyone actually debugging.
+  console.warn(`[boot] watchdog fired: stalled on "${window._bootLastPhase||'walk'}" after ${Math.round(elapsed/1000)}s`);
 },graceMs||8000);};
 window.bumpBootSplashWatchdog(10000); // initial grace period before any progress event has arrived yet
 </script>
