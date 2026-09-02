@@ -6118,24 +6118,33 @@
   }
   window.chromasmithBgPaused = bgPaused;
   window.chromasmithBgSetPaused = bgSetPaused;
+  // ⚠️ MODULE-level, not local to drainCatalogThumbnails — confirmed live: the panel visibly
+  // flickered between 0 and a climbing number, and the cause was the PREVIOUS version deriving
+  // `done` from a `startRemaining` baseline captured fresh on every call to this function. This
+  // loop restarts more than once per app session (a fresh catalog_scan on a newly-visited root
+  // re-fires catalogRunBackgroundPhases; a transient invoke() error ends one drain early and a
+  // later trigger starts a new one) — each restart re-captured a LOWER startRemaining (real work
+  // had completed since the last restart), which made the displayed total visibly drop and done
+  // snap back toward zero on every restart, even though nothing had regressed.
+  // `doneThisSession` fixes this by never being derived from a baseline at all: it's a running
+  // SUM of `generated` across every batch, so it can only ever increase, restart or not. `total`
+  // is computed as done + whatever's still outstanding, so it stays internally consistent (and
+  // grows on its own if new work is discovered mid-session — e.g. a newly-scanned folder) instead
+  // of being a frozen number that the real backlog can fall behind or jump ahead of.
+  let _thumbDoneThisSession = 0;
   async function drainCatalogThumbnails() {
     _bgStopped = false;
     if (!LIBTEST) await invoke('catalog_cancel_reset').catch(() => {}); // ONCE, before the first batch — never inside the loop
-    let startRemaining = null; // captured on the first real batch, so `done` can move at all
     for (;;) {
       if (_bgStopped || bgPaused()) return;
       let r;
       try { r = await invoke('catalog_thumbnails'); } catch (e) { console.error('catalog_thumbnails', e); return; }
       if (!r || !r.has_more) return;
-      // Real backlog, not the per-batch count — see ThumbResult.remaining. This is what turns a
-      // permanently-"0 of 32" panel into "2,808 of 57,288". `done` is derived the same way: the
-      // panel used to hardcode done:0 here, so even once `remaining` started reporting honestly
-      // the counter still visibly never moved — the exact complaint that surfaced this.
       if (typeof r.remaining === 'number') {
-        if (startRemaining === null) startRemaining = r.remaining;
-        const done = Math.max(0, startRemaining - r.remaining);
+        _thumbDoneThisSession += r.generated || 0;
+        const total = _thumbDoneThisSession + r.remaining;
         window.__libActivityTotal = r.remaining; // read by test/library_perf.mjs's honest-progress assertion
-        activityUpdate('catalog', { stage: 'thumb', done, total: startRemaining });
+        activityUpdate('catalog', { stage: 'thumb', done: _thumbDoneThisSession, total });
       }
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
