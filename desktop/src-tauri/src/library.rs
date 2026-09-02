@@ -736,13 +736,37 @@ const QUICKLOOK_LONG_EDGE: u32 = 1600;
 /// demosaic, still fast), everything else gets a scaled decode — a real, sharp improvement over
 /// the 360px source without paying for a full-resolution RAW decode per face.
 pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
+    quicklook_preview_bytes_at(path, QUICKLOOK_LONG_EDGE)
+}
+
+/// The actual, now-parameterized decode logic. Added for the offline reference tier (catalog::
+/// thumbnail_run, bumped from a hardcoded 360px grid-thumbnail reuse to its own explicit target)
+/// which needs a DIFFERENT size (800px) from Quick Look/face-crop's 1600px — both share this one
+/// implementation rather than diverging into two near-identical decode paths. ⚠️ The RAW branch
+/// now explicitly downscales to `long_edge`: the camera's own embedded preview is returned as-is
+/// regardless of what's asked for (often 1600-2000px+ on modern cameras), which was fine when the
+/// only caller wanted "as big as free," but would silently blow the offline tier's whole per-photo
+/// disk budget if reused unchanged at a smaller target.
+fn quicklook_preview_bytes_at(path: &str, long_edge: u32) -> Result<Vec<u8>, String> {
     let ext = ext_lower(Path::new(path));
     if is_raw_ext(&ext) {
         let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
             .map_err(|e| format!("preview decode: {e}"))?;
         let img = apply_orientation_dynamic(img, raw_orientation(path));
+        let (w, h) = (img.width(), img.height());
+        let scale = long_edge as f32 / w.max(h) as f32;
+        let out_img = if scale < 1.0 {
+            img.resize(
+                (w as f32 * scale).round().max(1.0) as u32,
+                (h as f32 * scale).round().max(1.0) as u32,
+                image::imageops::FilterType::Triangle,
+            )
+        } else {
+            img
+        };
         let mut out = Cursor::new(Vec::new());
-        img.to_rgb8()
+        out_img
+            .to_rgb8()
             .write_to(&mut out, image::ImageFormat::Jpeg)
             .map_err(|e| format!("jpeg encode: {e}"))?;
         return Ok(out.into_inner());
@@ -750,14 +774,14 @@ pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
     #[cfg(target_os = "macos")]
     {
         if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
-            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(path, QUICKLOOK_LONG_EDGE) {
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(path, long_edge) {
                 return Ok(bytes);
             }
         }
         if is_heic_ext(&ext) {
-            let tmp = cache_dir().join(format!("quicklook-{}.jpg", fnv1a(&[path])));
+            let tmp = cache_dir().join(format!("quicklook-{}-{}.jpg", fnv1a(&[path]), long_edge));
             let ok = std::process::Command::new("/usr/bin/sips")
-                .args(["-s", "format", "jpeg", "-Z", &QUICKLOOK_LONG_EDGE.to_string(), path, "--out"])
+                .args(["-s", "format", "jpeg", "-Z", &long_edge.to_string(), path, "--out"])
                 .arg(&tmp)
                 .output()
                 .map(|o| o.status.success())
@@ -776,10 +800,10 @@ pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
         return Err("no quicklook preview for video".into());
     }
     // Non-macOS / anything ImageIO didn't take: still_decode, same fallback
-    // `get_thumbnail_inner` uses, just at QUICKLOOK_LONG_EDGE.
+    // `get_thumbnail_inner` uses, just at the requested long_edge.
     let img = crate::still_decode::open_any_path(Path::new(path))?;
     let (w, h) = (img.width(), img.height());
-    let scale = QUICKLOOK_LONG_EDGE as f32 / w.max(h) as f32;
+    let scale = long_edge as f32 / w.max(h) as f32;
     let thumb = if scale < 1.0 {
         img.resize((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle)
     } else {
@@ -789,6 +813,13 @@ pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
     thumb.to_rgb8().write_to(&mut out, image::ImageFormat::Jpeg).map_err(|e| format!("jpeg encode: {e}"))?;
     Ok(out.into_inner())
 }
+
+/// The offline REFERENCE tier's own entry point (catalog::thumbnail_run) — 800px, view-quality,
+/// not the guaranteed-editable hq_offline tier. `pub(crate)` since only catalog.rs calls it.
+pub(crate) fn offline_reference_bytes(path: &str) -> Result<Vec<u8>, String> {
+    quicklook_preview_bytes_at(path, OFFLINE_REFERENCE_LONG_EDGE)
+}
+pub(crate) const OFFLINE_REFERENCE_LONG_EDGE: u32 = 800;
 
 /// The Library's full-screen Quick Look (Space bar): a fast, LARGE preview for rapid culling —
 /// Photo Mechanic's whole trick, judge sharpness/composition at speed without ever paying for a

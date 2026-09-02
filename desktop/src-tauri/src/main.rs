@@ -162,9 +162,39 @@ fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
         .chunks_exact(4)
         .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
         .collect();
+    // Also persist to disk — see catalog::persist_dcp_lut's doc comment. This is what lets the
+    // offline full-res background job (catalog::hq_offline_run) apply DCP-accurate color without
+    // depending on the interactive editor having baked this exact profile earlier in the SAME
+    // session; once baked here, it survives every future launch.
+    catalog::persist_dcp_lut(&key, &lut);
+    // `make` (the raw EXIF camera make this LUT was resolved for, e.g. "Panasonic") — recorded in
+    // a small manifest so hq_offline_run can map a photo's OWN decoded.make (free from its full
+    // decode, no extra IPC) back to this key. camPrefix's bundled-vs-disk-profile resolution is
+    // JS-only logic (dcp_store.rs/resolveDcpSource) that a background Rust job has no way to
+    // replicate — this manifest is what avoids needing to.
+    if let Some(make) = json["make"].as_str() {
+        if !make.trim().is_empty() {
+            catalog::record_dcp_lut_for_make(make, &key);
+        }
+    }
     let mut guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
     guard.get_or_insert_with(HashMap::new).insert(key, std::sync::Arc::new(lut));
     Ok(())
+}
+
+/// The "cancel and quit" side of the quit-block dialog (see the window-close handler in
+/// `setup()`). Sets `cancel` so any in-flight `hq_offline_run` batch stops between items rather
+/// than finishing whatever's already queued, clears `hq_offline_active` (the window-close
+/// handler's own gate) so the close this triggers doesn't immediately re-block itself, then exits
+/// for real via `app.exit()` — NOT `window.close()`, which would just re-fire the same
+/// CloseRequested event and loop.
+#[tauri::command]
+fn hq_offline_force_quit(app: tauri::AppHandle) {
+    use tauri::Manager;
+    let state = app.state::<catalog::CatalogState>();
+    state.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    state.hq_offline_active.store(false, std::sync::atomic::Ordering::Relaxed);
+    app.exit(0);
 }
 
 // ── AI tap-to-select (Masks panel) — see sam.rs for the model I/O contract. A single-slot
@@ -2022,6 +2052,10 @@ fn main() {
             catalog::catalog_clip_tags,
             catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
+            catalog::catalog_hq_offline,
+            catalog::catalog_hq_offline_list,
+            catalog::catalog_hq_offline_set_active,
+            hq_offline_force_quit,
             catalog::catalog_focus,
             catalog::catalog_stack,
             catalog::catalog_keywords,
@@ -2077,6 +2111,29 @@ fn main() {
         })
         .setup(|app| {
             let handle = app.handle();
+
+            // ⚠️ Quit-blocking while the offline full-res cache is actively generating — the
+            // user's own explicit ask: closing mid-generation with no warning would silently
+            // strand the hot-100-edited/hot-100-added set half-built, with no indication anything
+            // was interrupted. `hq_offline_active` (CatalogState) is JS-controlled (set true when
+            // its drain loop starts, false when it naturally finishes) precisely so this check
+            // reflects "the whole drain sequence," not just whether one batch invoke happens to
+            // be in flight. On block: prevent the close and emit an event for the frontend's own
+            // Wait/Cancel-and-quit dialog — `hq_offline_force_quit` (below) is what actually exits
+            // once the user picks "cancel and quit."
+            if let Some(window) = app.get_webview_window("main") {
+                let handle_for_close = handle.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        use tauri::{Emitter, Manager};
+                        let state = handle_for_close.state::<catalog::CatalogState>();
+                        if state.hq_offline_active.load(std::sync::atomic::Ordering::Relaxed) {
+                            api.prevent_close();
+                            let _ = handle_for_close.emit("hq-offline-quit-blocked", ());
+                        }
+                    }
+                });
+            }
 
             // Resolve dist_dir() once — see DIST_DIR_RESOLVED's doc comment above. Same
             // bundled-resource-with-dev-fallback pattern as the onnxruntime dylib below.

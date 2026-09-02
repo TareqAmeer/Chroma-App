@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_VERSION: i64 = 14;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -40,13 +40,110 @@ fn now_secs() -> u64 {
 /// ⚠️ `CS_CATALOG_DIR` overrides this for tests. Without it, `library_perf.mjs`'s synthetic
 /// 50,000-entry catalog runs (and any future Rust test) would scan/migrate/rebuild against the
 /// REAL library. Only the shipped app relies on the default.
-fn catalog_dir() -> PathBuf {
+pub(crate) fn catalog_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("CS_CATALOG_DIR") {
         let p = PathBuf::from(dir);
         let _ = std::fs::create_dir_all(&p);
         return p;
     }
     crate::platform::data_root()
+}
+
+/// Persisted DCP LUT bytes, keyed the same way `store_dcp_lut`'s in-memory `DCP_LUTS` cache is
+/// (e.g. `"dcp:Panasonic DC-S9:Standard"`) — a background job (the offline full-res cache, see
+/// `library::hq_offline_run`) needs the SAME LUT the interactive editor uses, but can't depend on
+/// the editor having been open recently to have warmed the in-memory-only cache. Baking a LUT
+/// needs no photo pixels at all (it's a pure function of the camera model + profile name), so
+/// this only ever needs to exist once per (camera, profile) pair actually used, not once per
+/// photo — see `chromasmith-22.html`'s `ensureDcpLutsPersisted` for what proactively warms it.
+pub(crate) fn dcp_lut_dir() -> PathBuf {
+    let dir = catalog_dir().join("dcp_luts");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn dcp_lut_file_name(key: &str) -> String {
+    format!("{:016x}.bin", fnv1a_str(key))
+}
+
+/// Same FNV-1a used everywhere else in this codebase for stable on-disk keys (library.rs's own
+/// copy is private to that module) — small, dependency-free, deterministic.
+fn fnv1a_str(s: &str) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+pub(crate) fn persist_dcp_lut(key: &str, lut: &[f32]) {
+    let path = dcp_lut_dir().join(dcp_lut_file_name(key));
+    let mut bytes = Vec::with_capacity(lut.len() * 4);
+    for v in lut {
+        bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    // Same tempfile+rename atomicity as library.rs's write_cache_atomic — a bake only ever
+    // happens once per (camera, profile) pair, so contention is unlikely, but a torn write here
+    // would poison every future read of this LUT with silently wrong colors, not just a cache
+    // miss, so it's worth the same care regardless.
+    let tmp = path.with_extension(format!("bin.tmp.{}", std::process::id()));
+    if std::fs::write(&tmp, &bytes).is_ok() {
+        let _ = std::fs::rename(&tmp, &path).or_else(|_| std::fs::remove_file(&tmp));
+    }
+}
+
+pub(crate) fn load_persisted_dcp_lut(key: &str) -> Option<Vec<f32>> {
+    let path = dcp_lut_dir().join(dcp_lut_file_name(key));
+    let bytes = std::fs::read(&path).ok()?;
+    if bytes.is_empty() || bytes.len() % 4 != 0 {
+        return None;
+    }
+    Some(bytes.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+}
+
+fn dcp_manifest_path() -> PathBuf {
+    dcp_lut_dir().join("manifest.json")
+}
+
+fn dcp_manifest_read() -> std::collections::HashMap<String, String> {
+    std::fs::read_to_string(dcp_manifest_path())
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// `make_lower` (trimmed, lowercased) -> the exact `lutKey` string to look up in
+/// `load_persisted_dcp_lut`. Written whenever the interactive editor bakes a LUT for a RAW file
+/// (`store_dcp_lut`, main.rs) — a photo the user has ever opened and edited already has an entry
+/// by construction, which covers the "last 100 edited" half of the hot-200 set for free. The
+/// "last 100 added" half can still miss if a fresh import has never been opened; hq_offline_run
+/// treats that as a normal, retriable skip rather than an error (see its own doc comment).
+pub(crate) fn record_dcp_lut_for_make(make: &str, key: &str) {
+    let make_lower = make.trim().to_lowercase();
+    if make_lower.is_empty() {
+        return;
+    }
+    let mut m = dcp_manifest_read();
+    if m.get(&make_lower).map(|k| k.as_str()) == Some(key) {
+        return; // already recorded, avoid a pointless write on every RAW open
+    }
+    m.insert(make_lower, key.to_string());
+    if let Ok(json) = serde_json::to_string(&m) {
+        let path = dcp_manifest_path();
+        let tmp = path.with_extension(format!("json.tmp.{}", std::process::id()));
+        if std::fs::write(&tmp, json).is_ok() {
+            let _ = std::fs::rename(&tmp, &path).or_else(|_| std::fs::remove_file(&tmp));
+        }
+    }
+}
+
+pub(crate) fn dcp_lut_key_for_make(make: &str) -> Option<String> {
+    let make_lower = make.trim().to_lowercase();
+    if make_lower.is_empty() {
+        return None;
+    }
+    dcp_manifest_read().get(&make_lower).cloned()
 }
 
 fn catalog_db_path() -> PathBuf {
@@ -75,6 +172,12 @@ pub struct CatalogState {
     pub conn: Mutex<Connection>,
     pub read_conn: Mutex<Connection>,
     pub cancel: AtomicBool,
+    /// True while the JS-side hq_offline drain loop is actively running (set/cleared by JS via
+    /// `hq_offline_set_active`, not by `hq_offline_run` itself — a single batch call is too short
+    /// a window to represent "the whole drain sequence is still going"). Read by main.rs's
+    /// window-close handler to decide whether to block quitting with the "still caching, wait or
+    /// cancel?" prompt the user asked for.
+    pub hq_offline_active: AtomicBool,
 }
 
 impl CatalogState {
@@ -129,7 +232,7 @@ impl CatalogState {
                 (c1, c2)
             }
         };
-        CatalogState { conn: Mutex::new(conn), read_conn: Mutex::new(read_conn), cancel: AtomicBool::new(false) }
+        CatalogState { conn: Mutex::new(conn), read_conn: Mutex::new(read_conn), cancel: AtomicBool::new(false), hq_offline_active: AtomicBool::new(false) }
     }
 }
 
@@ -529,6 +632,44 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             // not a new risk.
             conn.execute("UPDATE photos SET thumb_mtime = mtime WHERE thumb = 1", [])?;
         }
+    }
+
+    // v13 -> v14: the offline-editing story. Two pieces:
+    //
+    // 1. `thumb_long_edge` tracks what resolution the offline thumbnail at `offline_thumb_path`
+    //    was actually generated at. The offline tier's target resolution is bumping 360px -> 800px
+    //    (still reference-quality, not editable) — without a column to record what's ALREADY on
+    //    disk, thumbnail_run's `WHERE thumb = 0` filter would never revisit an existing thumb=1
+    //    row to upgrade it. Every existing row defaults to 0, which is always < the new target, so
+    //    the WHOLE library naturally re-queues for a one-time upgrade pass without any separate
+    //    backfill UPDATE needed here — see thumbnail_run's own WHERE clause.
+    // 2. `hq_offline`: the NEW guaranteed-offline tier — the last 100 edited + last 100 added
+    //    photos (live, re-evaluated set — see library::hq_offline_run), cached at FULL resolution
+    //    with real DCP-accurate color for RAW sources (via a persisted DCP LUT, see
+    //    catalog::persist_dcp_lut) or a byte-identical copy for already-rendered stills. Unlike
+    //    the 360/800px reference tier, a photo with an `hq_offline` row is meant to be
+    //    indistinguishable from having the original downloaded locally — the editor opens it
+    //    through the SAME normal-photo path as any local file when the source volume is
+    //    unreachable, not the reduced-preview "offline edit queue" (N1a) special case.
+    if version < 14 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "thumb_long_edge")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN thumb_long_edge INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS hq_offline (
+                photo_id  INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+                mtime     INTEGER NOT NULL,
+                reason    TEXT    NOT NULL,   -- 'edited' | 'added' | 'edited,added' (both)
+                is_copy   INTEGER NOT NULL    -- 1 = verbatim file copy (already-rendered still),
+                                              -- 0 = decoded+DCP-corrected JPEG (RAW source)
+            );
+            ",
+        )?;
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -4316,8 +4457,18 @@ pub struct CacheUsage {
     /// 500MB LRU (grid thumbnails for whatever folder is currently open) — self-managing, shown
     /// for visibility only.
     pub working_thumbs_bytes: u64,
-    /// The plan's own stated total (offline thumbs + decode cache combine toward this; working
-    /// thumbnails are a separate, much smaller LRU tier and aren't counted against it).
+    /// Never-pruned — the last-100-edited + last-100-added guaranteed-offline tier (full
+    /// resolution, DCP-accurate for RAW sources). See library::hq_offline_run. Membership-evicted
+    /// (a photo dropping out of the live set deletes its own entry), not LRU-capped like the
+    /// tiers above, so this is expected to stay small and roughly constant regardless of library
+    /// size — it tracks a fixed ~200-photo window, not the whole catalog.
+    pub hq_offline_bytes: u64,
+    /// The plan's own stated total (offline thumbs + decode cache + hq_offline combine toward
+    /// this; working thumbnails are a separate, much smaller LRU tier and aren't counted against
+    /// it). Raised 20GB -> 30GB alongside the offline reference tier's 360px -> 800px bump and
+    /// the new hq_offline tier — see the plan doc's own sizing math (measured: 800px x ~70k
+    /// photos ~= 6-10.5GB, hq_offline's 200 photos ~= 2.4-4GB, both comfortably inside the
+    /// existing working/decode caps' remaining headroom in realistic, not worst-case, usage).
     pub budget_bytes: u64,
 }
 
@@ -4327,7 +4478,8 @@ pub fn cache_usage() -> CacheUsage {
         offline_thumbs_bytes: dir_size_recursive(&thumb_dir()),
         decode_cache_bytes: dir_size_recursive(&crate::library::decode_cache_dir()),
         working_thumbs_bytes: dir_size_recursive(&crate::library::cache_dir()),
-        budget_bytes: 20 * 1024 * 1024 * 1024,
+        hq_offline_bytes: dir_size_recursive(&hq_offline_dir()),
+        budget_bytes: 30 * 1024 * 1024 * 1024,
     }
 }
 
@@ -4504,13 +4656,13 @@ pub fn clear_root_cache(root_id: i64, state: tauri::State<CatalogState>) -> Resu
 /// `Json`, so the `Json` arm here is unreachable in practice; kept explicit rather than an
 /// `unwrap` so a future change to that function's response shape fails loudly instead of
 /// panicking a background scan thread.
+/// ⚠️ Deliberately NOT the same decode as the grid's `get_thumbnail` (360px, speed-first, LRU-
+/// evictable) — this is the offline REFERENCE tier's own 800px, never-pruned generation, via
+/// `library::offline_reference_bytes`. They used to share one function; bumping the offline
+/// tier's resolution without also bumping the grid's would have meant either paying 800px decode
+/// cost for every grid scroll, or reusing a still-360px source and never actually reaching 800px.
 fn thumbnail_bytes_for(path: &str) -> Result<Vec<u8>, String> {
-    use tauri::ipc::{InvokeResponseBody, IpcResponse};
-    let resp = crate::library::get_thumbnail(path.to_string())?;
-    match resp.body().map_err(|e| e.to_string())? {
-        InvokeResponseBody::Raw(bytes) => Ok(bytes),
-        InvokeResponseBody::Json(_) => Err("unexpected JSON thumbnail response".to_string()),
-    }
+    crate::library::offline_reference_bytes(path)
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -4569,7 +4721,8 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
         .prepare(
             "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
              FROM photos p JOIN volumes v ON v.id = p.volume_id
-             WHERE p.present = 1 AND p.thumb = 0 AND p.kind != 'video'
+             WHERE p.present = 1 AND p.kind != 'video'
+               AND (p.thumb = 0 OR p.thumb_long_edge < 800)
              LIMIT 32", // smaller batch — each unit of work is a real decode, not a header read
         )
         .map_err(|e| e.to_string())?;
@@ -4609,7 +4762,7 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
         }
         // thumb_mtime records the mtime this thumbnail was generated AGAINST — get_thumbnail_or_
         // offline's fast path only trusts this file when the live source still matches it.
-        tx.execute("UPDATE photos SET thumb = 1, thumb_mtime = ?2 WHERE id = ?1", params![id, mtime]).map_err(|e| e.to_string())?;
+        tx.execute("UPDATE photos SET thumb = 1, thumb_mtime = ?2, thumb_long_edge = 800 WHERE id = ?1", params![id, mtime]).map_err(|e| e.to_string())?;
     }
     tx.commit().map_err(|e| e.to_string())?;
     result.generated = generated.iter().filter(|(_, b, _)| b.is_some()).count();
@@ -4619,6 +4772,283 @@ pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), 
     result.has_more = batch_len == 32;
     progress(ScanProgress { phase: "thumb".into(), done: result.generated, total: batch_len, current: String::new() });
     Ok(result)
+}
+
+// ── Guaranteed-offline tier (hq_offline) ────────────────────────────────────────────────────
+//
+// The last 100 EDITED + last 100 ADDED photos, kept at FULL resolution with real DCP-accurate
+// color (RAW) or a byte-identical copy (already-rendered stills), so the editor can treat them
+// exactly like a locally-downloaded file when the source volume is unreachable — no reduced-
+// preview fallback, no queued-recipe replay. Live, re-evaluated: the target set is recomputed
+// every call, so a photo rolling out of the window (edited further back than #100, or an older
+// import than #100) is evicted and its disk space reclaimed automatically.
+//
+// ⚠️ Deliberately NOT keyed by `thumb`/`thumb_mtime` — those describe the 800px REFERENCE tier
+// (thumbnail_run above), a completely separate, much cheaper pass. Mixing them would mean a
+// cheap reference-thumbnail regeneration could accidentally satisfy (or block) an expensive
+// full-res generation, or vice versa.
+
+pub(crate) fn hq_offline_dir() -> PathBuf {
+    let dir = catalog_dir().join("hq_offline");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn hq_offline_path(id: i64, ext: &str) -> PathBuf {
+    let shard = (id.rem_euclid(256)).to_string();
+    let dir = hq_offline_dir().join(shard);
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(format!("{id}.{ext}"))
+}
+
+/// One row per photo currently GUARANTEED offline-editable — read by the frontend to decide
+/// whether `openInEditorInner` can treat a disconnected photo as a normal local file.
+#[derive(Serialize, Clone)]
+pub struct HqOfflineEntry {
+    pub photo_id: i64,
+    /// The CACHED (hq_offline tier) file's path — what the editor should actually open.
+    pub path: String,
+    /// The photo's real, original path — what the frontend keys its lookups by (state.entries'
+    /// own `.path`, openInEditorInner's `path` argument, etc.). Without this, JS would have no
+    /// way to map "the photo the user just clicked" to "its guaranteed-offline cached copy."
+    pub original_path: String,
+    pub reason: String,
+}
+
+#[tauri::command]
+pub fn catalog_hq_offline_list(state: tauri::State<CatalogState>) -> Result<Vec<HqOfflineEntry>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT hq.photo_id, hq.reason, hq.is_copy, p.ext, p.rel_path, v.last_path, v.is_local
+             FROM hq_offline hq JOIN photos p ON p.id = hq.photo_id JOIN volumes v ON v.id = p.volume_id",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            let photo_id: i64 = r.get(0)?;
+            let reason: String = r.get(1)?;
+            let is_copy: i64 = r.get(2)?;
+            let ext: String = r.get(3)?;
+            let rel_path: String = r.get(4)?;
+            let last_path: String = r.get(5)?;
+            let is_local: i64 = r.get(6)?;
+            let out_ext = if is_copy != 0 { ext } else { "jpg".to_string() };
+            Ok((photo_id, reason, out_ext, abs_path(&last_path, is_local != 0, &rel_path)))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|(photo_id, reason, ext, original_path)| HqOfflineEntry {
+            path: hq_offline_path(photo_id, &ext).to_string_lossy().into_owned(),
+            photo_id,
+            original_path,
+            reason,
+        })
+        .collect())
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct HqOfflineResult {
+    pub generated: usize,
+    pub evicted: usize,
+    pub skipped_no_lut: usize,
+    pub target_total: usize,
+    /// One representative RAW file path from the skipped-for-no-LUT set, if any — lets the
+    /// frontend self-heal (peek its camera, bake+persist "Camera Standard" via the SAME flow an
+    /// interactive RAW open already uses, then retry) instead of staying stuck. Reactive rather
+    /// than proactively pre-baking every camera the catalog might contain, which would need its
+    /// own "distinct camera models" query for a benefit that, in practice, this already covers in
+    /// at most a couple of retry rounds — most libraries have 1-2 distinct cameras.
+    #[serde(default)]
+    pub pending_raw_sample: Option<String>,
+}
+
+/// Computes the live target set — last 100 by `sidecar_mtime` (edited at least once) UNION last
+/// 100 by `added` (import time) — and returns `(photo_id, mtime, reason)`. Both queries are
+/// cheap, index-backed scans over `present=1 AND kind != 'video'`; 100 is small enough that no
+/// caching of this set is worth the staleness risk (see the module doc: "live, re-evaluated").
+fn hq_offline_target_set(conn: &Connection) -> Result<std::collections::HashMap<i64, (i64, String)>, String> {
+    let mut out: std::collections::HashMap<i64, (i64, String)> = std::collections::HashMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, mtime FROM photos WHERE present = 1 AND kind != 'video' AND sidecar_mtime > 0 ORDER BY sidecar_mtime DESC LIMIT 100")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for (id, mtime) in rows {
+            out.insert(id, (mtime, "edited".to_string()));
+        }
+    }
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, mtime FROM photos WHERE present = 1 AND kind != 'video' ORDER BY added DESC LIMIT 100")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for (id, mtime) in rows {
+            out.entry(id).and_modify(|(_, reason)| { if !reason.contains("added") { reason.push_str(",added"); } }).or_insert((mtime, "added".to_string()));
+        }
+    }
+    Ok(out)
+}
+
+/// Decodes ONE RAW photo to full resolution with DCP-accurate color, mirroring decode_raw_v2's
+/// own default parameters exactly (main.rs) — Fast-tier native NR, standard PPG demosaic, no
+/// auto-lens (opt-in, no per-photo state available here), full (non-"fast") quality — so this
+/// looks like what opening the same RAW normally would, not a degraded stand-in. Returns `Ok(None)`
+/// (a SKIP, not an error) when no DCP LUT has been persisted yet for this camera — see
+/// `dcp_lut_key_for_make`'s doc comment for why that's an expected, retriable state rather than a
+/// failure.
+fn hq_offline_decode_raw(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
+    let decoded = crate::raw_decode::decode_rw2_bytes(bytes, false, crate::raw_decode::NrTier::Fast, "", false, None)?;
+    let Some(lut_key) = dcp_lut_key_for_make(&decoded.make) else {
+        return Ok(None);
+    };
+    let Some(lut) = load_persisted_dcp_lut(&lut_key) else {
+        return Ok(None);
+    };
+    let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
+    if n < 2 || n * n * n * 3 != lut.len() {
+        return Ok(None); // corrupt/truncated persisted LUT — treat as absent, never crash on it
+    }
+    let rgba = crate::raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?;
+    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("hq_offline: RGBA buffer size mismatch")?;
+    let mut out = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(img)
+        .to_rgb8()
+        .write_to(&mut out, image::ImageFormat::Jpeg)
+        .map_err(|e| format!("hq_offline jpeg encode: {e}"))?;
+    Ok(Some(out.into_inner()))
+}
+
+/// One batch per call — eviction first (cheap, do it every time so space is reclaimed promptly),
+/// then a SMALL generation batch (full RAW decode is "multi-second to ~15s", see raw_decode.rs's
+/// own comments — nowhere near thumbnail_run's 32-per-batch pace). `cancel` is checked between
+/// items, not just at entry, so a quit-requested cancellation (see main.rs's window-close
+/// handler) actually stops promptly mid-batch rather than finishing whatever's already queued.
+pub fn hq_offline_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<HqOfflineResult, String> {
+    let mut result = HqOfflineResult::default();
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(result);
+    }
+    let target = hq_offline_target_set(conn)?;
+    result.target_total = target.len();
+
+    // ── Eviction: anything cached that's no longer in the live target set ──
+    let existing: Vec<(i64, i64, String, i64)> = conn
+        .prepare("SELECT hq.photo_id, hq.mtime, p.ext, hq.is_copy FROM hq_offline hq JOIN photos p ON p.id = hq.photo_id")
+        .map_err(|e| e.to_string())?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    for (id, _mtime, ext, is_copy) in &existing {
+        if !target.contains_key(id) {
+            let out_ext = if *is_copy != 0 { ext.as_str() } else { "jpg" };
+            let _ = std::fs::remove_file(hq_offline_path(*id, out_ext));
+            conn.execute("DELETE FROM hq_offline WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+            result.evicted += 1;
+        }
+    }
+
+    // ── Generation: target rows missing OR whose live mtime moved on since the cached copy ──
+    let existing_current: std::collections::HashMap<i64, i64> = existing.into_iter().map(|(id, mtime, _, _)| (id, mtime)).collect();
+    let mut to_generate: Vec<(i64, i64, String)> = target
+        .iter()
+        .filter(|(id, (mtime, _))| existing_current.get(id) != Some(mtime))
+        .map(|(id, (mtime, reason))| (*id, *mtime, reason.clone()))
+        .collect();
+    to_generate.sort_by_key(|(id, _, _)| *id); // deterministic order, mainly for test reproducibility
+    const BATCH: usize = 4; // full decode is heavy — a small batch keeps this call's own latency bounded for pacing/cancel
+    to_generate.truncate(BATCH);
+    if to_generate.is_empty() {
+        progress(ScanProgress { phase: "hq_offline".into(), done: 0, total: 0, current: String::new() });
+        return Ok(result);
+    }
+    progress(ScanProgress { phase: "hq_offline".into(), done: 0, total: to_generate.len(), current: String::new() });
+
+    for (id, mtime, reason) in &to_generate {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let row: Option<(String, String, i64, String, String)> = conn
+            .query_row(
+                "SELECT p.rel_path, v.last_path, v.is_local, p.ext, p.kind FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .ok();
+        let Some((rel_path, last_path, is_local, ext, kind)) = row else { continue };
+        let online = is_local != 0 || Path::new(&last_path).is_dir();
+        if !online {
+            continue; // can't cache a photo we can't currently read from — retried once it reconnects
+        }
+        let abs = abs_path(&last_path, is_local != 0, &rel_path);
+        let is_raw = kind == "raw";
+        let (out_ext, is_copy, bytes): (String, bool, Option<Vec<u8>>) = if is_raw {
+            match std::fs::read(&abs).ok().and_then(|b| hq_offline_decode_raw(&b).ok()).flatten() {
+                Some(b) => ("jpg".to_string(), false, Some(b)),
+                None => {
+                    result.skipped_no_lut += 1;
+                    if result.pending_raw_sample.is_none() {
+                        result.pending_raw_sample = Some(abs.clone());
+                    }
+                    continue;
+                }
+            }
+        } else {
+            (ext.clone(), true, std::fs::read(&abs).ok())
+        };
+        let Some(bytes) = bytes else { continue };
+        let path = hq_offline_path(*id, &out_ext);
+        let tmp = path.with_extension(format!("{out_ext}.tmp.{}", std::process::id()));
+        if std::fs::write(&tmp, &bytes).is_err() {
+            continue;
+        }
+        if std::fs::rename(&tmp, &path).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            continue;
+        }
+        conn.execute(
+            "INSERT INTO hq_offline (photo_id, mtime, reason, is_copy) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(photo_id) DO UPDATE SET mtime = excluded.mtime, reason = excluded.reason, is_copy = excluded.is_copy",
+            params![id, mtime, reason, is_copy as i64],
+        )
+        .map_err(|e| e.to_string())?;
+        result.generated += 1;
+    }
+    progress(ScanProgress { phase: "hq_offline".into(), done: result.generated, total: to_generate.len(), current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_hq_offline(app: tauri::AppHandle) -> Result<HqOfflineResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        hq_offline_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_hq_offline task panicked: {e}"))?
+}
+
+/// JS calls this once when its drain loop starts and once when it naturally finishes (fully
+/// caught up: a call returned nothing left to generate or evict) — see `hq_offline_active`'s own
+/// doc comment on `CatalogState` for why the flag can't just be derived from `catalog_hq_offline`
+/// itself. Read by main.rs's window-close handler.
+#[tauri::command]
+pub fn catalog_hq_offline_set_active(active: bool, state: tauri::State<CatalogState>) {
+    state.hq_offline_active.store(active, Ordering::Relaxed);
 }
 
 #[tauri::command]

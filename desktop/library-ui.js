@@ -2264,15 +2264,31 @@
         // 360px-long-edge JPEG the Library grid already shows offline (catalog.rs's "Scan phase
         // D: offline thumbnails"). Editing against it is real but REDUCED-QUALITY, and the UI
         // must stay honest about that (the toast below), not pretend it's the original.
-        let buf, offlinePreview = false;
+        let buf, offlinePreview = false, hqOfflineCacheExt = null;
         try {
           buf = await invoke('read_file_bytes', { path });
         } catch (readErr) {
-          try {
-            buf = await invoke('get_thumbnail_or_offline', { path });
-            offlinePreview = true;
-          } catch (offlineErr) {
-            throw readErr; // neither the real file nor any cached preview exists — surface the real error
+          // ⚠️ Checked BEFORE the reduced-quality fallback below — a photo in the guaranteed-
+          // offline set (last 100 edited + last 100 added, see refreshHqOfflineIndex) has a REAL
+          // full-resolution, DCP-accurate cached copy. Reading it here and leaving offlinePreview
+          // FALSE is what makes it "no difference... as if downloaded": every offlinePreview-
+          // gated special case below (the reduced-quality toast, the offline-edit queue, the
+          // never-cache-under-the-real-key guard) simply doesn't apply, because as far as the
+          // rest of this function is concerned, the read just succeeded normally.
+          const hq = _hqOfflineByPath.get(path);
+          if (hq) {
+            try {
+              buf = await invoke('read_file_bytes', { path: hq.path });
+              hqOfflineCacheExt = (hq.path.match(/\.([^.\/]+)$/) || [, ''])[1].toLowerCase();
+            } catch (hqErr) { buf = null; }
+          }
+          if (!buf) {
+            try {
+              buf = await invoke('get_thumbnail_or_offline', { path });
+              offlinePreview = true;
+            } catch (offlineErr) {
+              throw readErr; // neither the real file, its hq_offline cache, nor any preview exists — surface the real error
+            }
           }
         }
         // lastModified:0 (not the default Date.now()) — chromasmith-22.html's loadFXImages()
@@ -2281,7 +2297,13 @@
         // built fresh from read_file_bytes on every reopen would otherwise get a new
         // lastModified each time (today's timestamp), making the SAME photo look like a
         // different one on every single reopen and defeating that check entirely.
-        const file = new File([buf], baseName(path), { type: offlinePreview ? 'image/jpeg' : mimeFromName(path), lastModified: 0 });
+        // ⚠️ Mime derives from the CACHE file's real extension when hqOfflineCacheExt is set, not
+        // `path`'s — a RAW source's hq_offline cache is a JPEG (DCP-decoded), so mimeFromName on
+        // the ORIGINAL .RW2-style path would claim a RAW mimetype for bytes that are actually a
+        // JPEG. A byte-copied still (already JPEG/HEIC/etc originally) has a matching extension
+        // either way, so this is a no-op for that case.
+        const fileMime = offlinePreview ? 'image/jpeg' : (hqOfflineCacheExt ? mimeFromName('x.' + hqOfflineCacheExt) : mimeFromName(path));
+        const file = new File([buf], baseName(path), { type: fileMime, lastModified: 0 });
         await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
@@ -6060,6 +6082,136 @@
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }
 
+  // ── Guaranteed-offline tier (hq_offline): last-100-edited + last-100-added, full resolution,
+  // DCP-accurate for RAW — the user's own explicit ask was "treat those 200 photos as if they
+  // have been downloaded... no difference between them and the ones on the external drive." See
+  // catalog.rs's hq_offline_run for the generation/eviction logic; this is purely the frontend
+  // side: an index the editor consults on open, the paced drain loop, camera-LUT self-heal, and
+  // the quit-block dialog for the one thing the user separately asked for — never lose in-
+  // progress work silently by quitting mid-generation.
+  let _hqOfflineByPath = new Map(); // original path -> {path: cached file path, reason}
+  let _hqOfflineDraining = false;
+
+  async function refreshHqOfflineIndex() {
+    if (LIBTEST) return;
+    try {
+      const entries = await invoke('catalog_hq_offline_list');
+      _hqOfflineByPath = new Map((entries || []).map((e) => [e.original_path, { path: e.path, reason: e.reason }]));
+    } catch (e) { console.error('catalog_hq_offline_list', e); }
+  }
+
+  /// Minimal reimplementation of desktop-native.js's own `framedInvoke` (private to that file's
+  /// IIFE, not reachable from here) — same wire format store_dcp_lut expects: [u32 jsonLen][json
+  /// utf8][payload]. Kept tiny and local rather than restructuring desktop-native.js to export it.
+  function _hqFramedInvoke(cmd, jsonObj, payload) {
+    const json = new TextEncoder().encode(JSON.stringify(jsonObj));
+    const framed = new Uint8Array(4 + json.length + payload.length);
+    new DataView(framed.buffer).setUint32(0, json.length, true);
+    framed.set(json, 4);
+    framed.set(payload, 4 + json.length);
+    return invoke(cmd, framed);
+  }
+
+  /// Reactive self-heal for hq_offline_run's `pending_raw_sample`: a RAW whose camera has no
+  /// persisted "Camera Standard" DCP LUT yet (the common gap — a freshly imported photo the
+  /// editor has never opened, so the normal RAW-open bake never ran). Peeks the camera, resolves
+  /// + bakes + persists via the EXACT same functions the interactive editor already calls on
+  /// every RAW load (resolveDcpSource/getDcpLUT, chromasmith-22.html) — this reuses tested,
+  /// working code rather than re-deriving DCP resolution logic here. Best-effort: any failure
+  /// just leaves this camera skipped for one more drain round, never a hard error surfaced to
+  /// the user (a background cache warm-up is not worth interrupting anyone over).
+  async function hqOfflineTryBakeCameraFor(rawPath) {
+    try {
+      const buf = await invoke('read_file_bytes', { path: rawPath });
+      const ident = await invoke('peek_raw_camera', new Uint8Array(buf));
+      const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(ident.make || '', ident.model || '') : null;
+      const camPrefix = dcpSource ? dcpSource.prefix : null;
+      if (!camPrefix) return false;
+      const lut = await getDcpLUT(camPrefix, 'Standard', 200, dcpSource.source);
+      await _hqFramedInvoke('store_dcp_lut', { key: 'dcp:' + camPrefix + ':Standard', make: ident.make || '' },
+        new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+      return true;
+    } catch (e) {
+      console.error('hqOfflineTryBakeCameraFor', rawPath, e);
+      return false;
+    }
+  }
+
+  /// Paced drain loop — one small batch per `catalog_hq_offline` call (Rust caps it at 4, full
+  /// RAW decode being "multi-second to ~15s" per photo, nowhere near thumbnail_run's pace), with
+  /// a real gap between calls so this never reads as a stall on top of everything else the app
+  /// might be doing. `hq_offline_active` is reported to Rust for the whole loop's duration (not
+  /// per-call) so the quit-block window-close handler reflects "the drain sequence is still
+  /// going," not just "one IPC call happens to be in flight" — see CatalogState's own doc
+  /// comment on that field.
+  async function hqOfflineDrainLoop() {
+    if (LIBTEST || _hqOfflineDraining) return;
+    _hqOfflineDraining = true;
+    if (!LIBTEST) invoke('catalog_hq_offline_set_active', { active: true }).catch(() => {});
+    try {
+      let bakedThisRound = new Set();
+      for (;;) {
+        let r;
+        try {
+          r = await invoke('catalog_hq_offline');
+        } catch (e) { console.error('catalog_hq_offline', e); break; }
+        if (!r) break;
+        if (r.pending_raw_sample && !bakedThisRound.has(r.pending_raw_sample)) {
+          bakedThisRound.add(r.pending_raw_sample); // never retry the SAME file twice in one loop — a genuine decode failure must not spin forever
+          await hqOfflineTryBakeCameraFor(r.pending_raw_sample);
+        }
+        if ((r.generated || 0) > 0 || (r.evicted || 0) > 0) {
+          await refreshHqOfflineIndex();
+        }
+        // Caught up: nothing generated, nothing evicted, and no camera still needs baking.
+        if ((r.generated || 0) === 0 && (r.evicted || 0) === 0 && !r.pending_raw_sample) break;
+        await new Promise((resolve) => setTimeout(resolve, 400)); // real gap between heavy full-res decodes
+      }
+    } finally {
+      _hqOfflineDraining = false;
+      if (!LIBTEST) invoke('catalog_hq_offline_set_active', { active: false }).catch(() => {});
+    }
+  }
+
+  // Quit-block dialog: main.rs's window-close handler prevents the close and emits this event
+  // whenever hq_offline_active is true at the moment the user tries to quit — the user's own
+  // explicit ask ("if i try to close the app before it finishes, i should get an alert... with
+  // the option to cancel it and close it"). "Cancel and quit" calls hq_offline_force_quit, which
+  // sets the cancel flag (stops the in-flight decode between items) and exits for real — never
+  // window.close(), which would just re-fire this same event and loop.
+  function hqOfflineQuitBlockedModal() {
+    return new Promise((resolve) => {
+      const d = document.createElement('dialog');
+      d.id = 'hq-offline-quit-modal';
+      d.style.cssText = 'border:none;border-radius:10px;padding:0;background:var(--sur1,#1c1c1f);color:var(--tx1,#f0ece2);max-width:380px';
+      d.innerHTML = `
+        <div style="padding:20px">
+          <div style="font-size:14px;font-weight:600;margin-bottom:8px">Still preparing offline photos</div>
+          <div style="font-size:12px;color:var(--tx2,#9a968c);line-height:1.5;margin-bottom:16px">
+            Chromasmith is still caching your most recently edited and added photos for offline use. Quitting now will leave this unfinished — you can wait a moment, or quit anyway and pick up where it left off next time.
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button id="hq-offline-quit-wait" style="padding:6px 14px;border-radius:6px;border:1px solid var(--bd1,#333);background:transparent;color:inherit;cursor:pointer">Wait</button>
+            <button id="hq-offline-quit-anyway" style="padding:6px 14px;border-radius:6px;border:none;background:#e5484d;color:#fff;cursor:pointer">Quit anyway</button>
+          </div>
+        </div>`;
+      document.body.appendChild(d);
+      d.showModal();
+      const cleanup = (choice) => { d.close(); d.remove(); resolve(choice); };
+      d.querySelector('#hq-offline-quit-wait').onclick = () => cleanup('wait');
+      d.querySelector('#hq-offline-quit-anyway').onclick = () => cleanup('quit');
+      d.addEventListener('cancel', () => cleanup('wait')); // Escape key — default to the safe choice
+    });
+  }
+  if (!LIBTEST && window.__TAURI__ && window.__TAURI__.event) {
+    window.__TAURI__.event.listen('hq-offline-quit-blocked', async () => {
+      // A second close attempt while the dialog is already up must not stack a duplicate.
+      if (document.getElementById('hq-offline-quit-modal')) return;
+      const choice = await hqOfflineQuitBlockedModal();
+      if (choice === 'quit') { try { await invoke('hq_offline_force_quit'); } catch (e) {} }
+    }).catch(() => {});
+  }
+
   // ── Activity indicator ────────────────────────────────────────────────────────────────────
   // One chained pipeline, not three silent subsystems — a copy/scan that's actually running
   // has to be visible somewhere, or "why hasn't All Photos updated yet" has no answer. Backed
@@ -7659,6 +7811,17 @@
       // Library, matching most photo apps' own "you land in the browser, not mid-edit" default;
       // opening a specific photo is one click away, same as it's always been.
       if (typeof window.hideBootSplash === 'function') window.hideBootSplash();
+      // Guaranteed-offline tier: warm the index immediately (cheap, just a DB read — so the
+      // editor can already treat a cached photo as local even before this launch's drain loop
+      // does any new work), then start the paced drain AFTER the splash is down, same gating
+      // reasoning as catalogRunBackgroundPhases — this must never compete with first paint.
+      refreshHqOfflineIndex().then(() => hqOfflineDrainLoop());
     });
   }
+  // "Live, re-evaluated set" (the user's own explicit requirement): re-check periodically while
+  // the app is open, not just once at boot, so an edit or import made mid-session promotes a
+  // photo into the guaranteed-offline set without waiting for the next relaunch. 90s, not
+  // continuous — a full drain pass touches the DB and (when there's real work) does full RAW
+  // decodes, so this stays a background heartbeat, not a tight poll.
+  if (!LIBTEST) setInterval(() => { hqOfflineDrainLoop(); }, 90000);
 })();

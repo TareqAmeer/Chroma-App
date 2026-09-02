@@ -86,7 +86,12 @@
           if (!_rustLuts[lutKey]) {
             const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source); // iso arg vestigial (constants ISO-independent)
             _lap('DCP LUT baked (JS) at');
-            await framedInvoke('store_dcp_lut', { key: lutKey },
+            // `make` (the raw EXIF camera make this LUT was resolved for) lets the offline
+            // full-res background job (catalog::hq_offline_run) find the right persisted LUT by
+            // the SAME `decoded.make` its own full decode already returns for free — without a
+            // manifest entry it would have no way to map a photo's camera back to a lutKey, since
+            // camPrefix (the disk/bundled DCP resolution) is JS-only logic.
+            await framedInvoke('store_dcp_lut', { key: lutKey, make: this._ident.make || '' },
               new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
             _rustLuts[lutKey] = true;
             _lap('DCP LUT registered with Rust at');
@@ -258,7 +263,7 @@
         mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
         if (!_rustLuts[lutKey]) {
           const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source); // iso arg vestigial — see open()'s identical call
-          await framedInvoke('store_dcp_lut', { key: lutKey },
+          await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
             new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
           _rustLuts[lutKey] = true;
         }
