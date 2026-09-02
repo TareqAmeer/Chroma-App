@@ -56,6 +56,7 @@
       "vendor/sam2/encoder.onnx": "vendor/sam2/encoder.onnx",
       "vendor/sam2/decoder.onnx": "vendor/sam2/decoder.onnx",
       "vendor/faceparse/model_quantized.onnx": "vendor/faceparse/model_quantized.onnx",
+      "vendor/rtdetr/model_quantized.onnx": "vendor/rtdetr/model_quantized.onnx",
       "vendor/rawdenoise/model_linear.onnx": "vendor/rawdenoise/model_linear.onnx",
       "vendor/rawdenoise/model_bayer.onnx": "vendor/rawdenoise/model_bayer.onnx",
       "../dist": "dist"

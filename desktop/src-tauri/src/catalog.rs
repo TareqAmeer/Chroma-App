@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_VERSION: i64 = 12;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -476,6 +476,26 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
                 [],
             )?;
             conn.execute("UPDATE photo_faces SET confirmed = 1", [])?;
+        }
+    }
+
+    // v11 -> v12: pet detection (RT-DETR, petdetect.rs — see people-pets wireframes screen P).
+    // `photos.pets_scanned_at` mirrors `faces_scanned_at`'s resumability convention exactly.
+    // `photo_faces.species` is set ONLY on a pet detection (NULL for a human face row) — it lets
+    // the review queue show "Dog"/"Cat" as a hint before the user has named the auto pet-person
+    // pets_run creates for each detection, since there is no re-identification model to cluster
+    // multiple sightings of the SAME animal together the way DBSCAN does for faces (see
+    // petdetect.rs's own module doc on why that's a separate, unsolved problem).
+    if version < 12 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "pets_scanned_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN pets_scanned_at INTEGER", [])?;
+        }
+        if !has_col("photo_faces", "species")? {
+            conn.execute("ALTER TABLE photo_faces ADD COLUMN species TEXT", [])?;
         }
     }
 
@@ -2111,6 +2131,181 @@ pub async fn catalog_faces_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64
     .map_err(|e| format!("catalog_faces_scan task panicked: {e}"))?
 }
 
+// ── Pet detection (people-pets wireframes screen P) — see petdetect.rs for the model/decode.
+// Mirrors faces_run EXACTLY (same resumable/chunked/cancellable shape, same batch size) with one
+// structural difference: a detected animal has no re-identification embedding to cluster on, so
+// unlike a face (which lands unassigned, `person_id = NULL`, until `cluster_run` proposes a
+// group), each pet detection immediately gets its OWN fresh auto pet-person — there is nothing
+// smarter to do without an embedder (see petdetect.rs's module doc), and this is what makes a
+// detection show up in the ordinary Unnamed review queue with zero frontend changes: it's simply
+// a `people` row with `auto=1, kind='pet'` and one face, exactly like a DBSCAN singleton.
+
+#[derive(Serialize, Clone, Default)]
+pub struct PetsResult {
+    pub scanned: usize,
+    pub pets_found: usize,
+}
+
+pub fn pets_run(
+    conn: &Connection,
+    photo_ids: Option<&[i64]>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<PetsResult, String> {
+    let mut result = PetsResult::default();
+    let scoped = photo_ids.is_some();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let batch: Vec<(i64, Option<String>, i64)> = if let Some(ids) = photo_ids {
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})
+                   AND (p.pets_scanned_at IS NULL OR p.pets_scanned_at != p.mtime)",
+                placeholders.join(",")
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND p.kind != 'video'
+                       AND (p.pets_scanned_at IS NULL OR p.pets_scanned_at != p.mtime)
+                     LIMIT 32",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        };
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        let total_in_batch = batch.len();
+        let base_scanned = result.scanned;
+        progress(ScanProgress { phase: "pets".into(), done: base_scanned, total: base_scanned + total_in_batch, current: String::new() });
+
+        const DECODE_LONG_EDGE: u32 = 1600;
+        const CHUNK: usize = 4; // same "stuck at 0%" fix faces_run's own comment explains
+        let mut detected: Vec<(i64, i64, Option<Vec<crate::petdetect::PetDetection>>)> = Vec::with_capacity(total_in_batch);
+        for chunk in batch.chunks(CHUNK) {
+            let mut part: Vec<(i64, i64, Option<Vec<crate::petdetect::PetDetection>>)> = chunk
+                .par_iter()
+                .map(|(id, abs, mtime)| {
+                    let dets = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
+                        .ok()
+                        .and_then(|(rgb, w, h)| crate::petdetect::detect(&rgb, w, h).ok());
+                    (*id, *mtime, dets)
+                })
+                .collect();
+            detected.append(&mut part);
+            progress(ScanProgress { phase: "pets".into(), done: base_scanned + detected.len(), total: base_scanned + total_in_batch, current: String::new() });
+        }
+
+        let now = now_secs() as i64;
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        let mut next_auto_num = {
+            // Continue the SAME "Pet N" numbering across runs, mirroring reconcile_person_for_
+            // cluster's own next_auto_num convention for faces — a fresh scan shouldn't restart
+            // at "Pet 1" and collide with names a previous scan already used.
+            let max: Option<i64> = tx
+                .query_row(
+                    "SELECT MAX(CAST(SUBSTR(name, 5) AS INTEGER)) FROM people WHERE kind = 'pet' AND name LIKE 'Pet %'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(None);
+            max.unwrap_or(0) as usize + 1
+        };
+        for (id, mtime, dets) in &detected {
+            let Some(dets) = dets else { continue }; // unreadable right now — leave unscanned, retried next pass
+            for d in dets {
+                let name = loop {
+                    let candidate = format!("Pet {next_auto_num}");
+                    next_auto_num += 1;
+                    let exists: bool = tx
+                        .query_row("SELECT 1 FROM people WHERE name = ?1", params![candidate], |_| Ok(true))
+                        .optional()
+                        .map_err(|e| e.to_string())?
+                        .unwrap_or(false);
+                    if !exists {
+                        break candidate;
+                    }
+                };
+                tx.execute(
+                    "INSERT INTO people (name, cover_face_id, created, auto, kind) VALUES (?1, NULL, ?2, 1, 'pet')",
+                    params![name, now],
+                )
+                .map_err(|e| e.to_string())?;
+                let person_id = tx.last_insert_rowid();
+                tx.execute(
+                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, person_id, confirmed, species)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, '[]', ?7, 0, ?8)",
+                    params![id, d.x0, d.y0, d.x1, d.y1, d.score, person_id, d.species],
+                )
+                .map_err(|e| e.to_string())?;
+                let cover_id = tx.last_insert_rowid();
+                tx.execute("UPDATE people SET cover_face_id = ?1 WHERE id = ?2", params![cover_id, person_id]).map_err(|e| e.to_string())?;
+                result.pets_found += 1;
+            }
+            tx.execute("UPDATE photos SET pets_scanned_at = ?1 WHERE id = ?2", params![mtime, id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.scanned += detected.iter().filter(|(_, _, d)| d.is_some()).count();
+        if scoped {
+            break;
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_pets_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<PetsResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        pets_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_pets_scan task panicked: {e}"))?
+}
+
 /// Faces detected for one photo, in the same 0..1 fractional-of-decoded-image convention
 /// `faces_run` stores them in — the caller (a preview-sized `<img>`) can scale directly by its
 /// own displayed width/height with no extra lookup.
@@ -2861,11 +3056,19 @@ pub struct UnnamedCluster {
     pub cover_face_id: Option<i64>,
     pub face_ids: Vec<i64>,
     pub face_count: i64,
+    /// Set only for a pet detection (petdetect.rs) — a hint the review UI can show before the
+    /// user has named the cluster ("Dog", screen P's own "Dog · 91%" chip). Always None for a
+    /// human face cluster.
+    pub species: Option<String>,
 }
 
 #[tauri::command]
 pub fn catalog_unnamed_clusters(state: tauri::State<CatalogState>) -> Result<Vec<UnnamedCluster>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    catalog_unnamed_clusters_run(&conn)
+}
+
+fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>, String> {
     let mut pstmt = conn
         .prepare("SELECT id, cover_face_id FROM people WHERE auto = 1 AND ignored = 0 ORDER BY id")
         .map_err(|e| e.to_string())?;
@@ -2879,17 +3082,19 @@ pub fn catalog_unnamed_clusters(state: tauri::State<CatalogState>) -> Result<Vec
     let mut out = Vec::with_capacity(people.len());
     for (pid, cover) in people {
         let mut fstmt = conn
-            .prepare("SELECT id FROM photo_faces WHERE person_id = ?1 ORDER BY score DESC")
+            .prepare("SELECT id, species FROM photo_faces WHERE person_id = ?1 ORDER BY score DESC")
             .map_err(|e| e.to_string())?;
-        let face_ids: Vec<i64> = fstmt
-            .query_map(params![pid], |r| r.get(0))
+        let rows: Vec<(i64, Option<String>)> = fstmt
+            .query_map(params![pid], |r| Ok((r.get(0)?, r.get(1)?)))
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
-        if face_ids.is_empty() {
+        if rows.is_empty() {
             continue;
         }
-        out.push(UnnamedCluster { person_id: pid, cover_face_id: cover, face_count: face_ids.len() as i64, face_ids });
+        let species = rows.iter().find_map(|(_, s)| s.clone());
+        let face_ids: Vec<i64> = rows.into_iter().map(|(id, _)| id).collect();
+        out.push(UnnamedCluster { person_id: pid, cover_face_id: cover, face_count: face_ids.len() as i64, face_ids, species });
     }
     Ok(out)
 }
@@ -6854,6 +7059,61 @@ mod tests {
         assert!(scanned_at.is_some(), "faces_scanned_at must be baselined after a scan");
 
         let r2 = faces_run(&conn, None, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.scanned, 0, "nothing changed — a second pass must not rescan anything");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    // Real end-to-end pets_run: detects an animal, creates ITS OWN fresh auto pet-person (no
+    // embedder to cluster sightings on — see petdetect.rs's module doc), and the result shows up
+    // through the SAME catalog_unnamed_clusters/faces_for_path paths a human face does, with zero
+    // frontend changes. Uses the same real-photo fixture petdetect.rs's own test does (not
+    // committed — see that test's doc comment); skips gracefully when absent.
+    fn pets_run_detects_and_creates_a_review_ready_auto_pet_person() {
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::petdetect::set_model_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/rtdetr/model_quantized.onnx"));
+        let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dog_test_fixture.jpg");
+        if !fixture.exists() {
+            eprintln!("skipping: {} not present in this checkout (see petdetect.rs's test doc comment)", fixture.display());
+            return;
+        }
+
+        let conn = temp_db();
+        let dir = scratch_photos_dir("pets");
+        std::fs::copy(&fixture, dir.join("dog.jpg")).unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+
+        let r1 = pets_run(&conn, None, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.scanned, 1);
+        assert!(r1.pets_found >= 1, "must find at least the dog");
+
+        let scanned_at: Option<i64> = conn.query_row("SELECT pets_scanned_at FROM photos WHERE name='dog.jpg'", [], |r| r.get(0)).unwrap();
+        assert!(scanned_at.is_some(), "pets_scanned_at must be baselined after a scan");
+
+        let (person_id, name, auto, kind, face_count): (i64, String, i64, String, i64) = conn
+            .query_row(
+                "SELECT p.id, p.name, p.auto, p.kind, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id)
+                 FROM people p WHERE p.kind = 'pet' AND p.auto = 1 LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .expect("must create an auto pet-person");
+        assert!(name.starts_with("Pet "));
+        assert_eq!(auto, 1);
+        assert_eq!(kind, "pet");
+        assert_eq!(face_count, 1);
+
+        // Shows up in the review queue exactly like an unnamed face cluster, and its species
+        // hint is set — the whole point of not needing any frontend change for this feature.
+        let clusters = catalog_unnamed_clusters_run(&conn).unwrap();
+        assert!(clusters.iter().any(|c| c.person_id == person_id), "the auto pet-person must appear in the Unnamed review queue");
+        let species: Option<String> = conn.query_row("SELECT species FROM photo_faces WHERE person_id = ?1", params![person_id], |r| r.get(0)).unwrap();
+        assert_eq!(species.as_deref(), Some("dog"));
+
+        let r2 = pets_run(&conn, None, &mut |_| {}, &cancel).unwrap();
         assert_eq!(r2.scanned, 0, "nothing changed — a second pass must not rescan anything");
 
         std::fs::remove_dir_all(&dir).ok();

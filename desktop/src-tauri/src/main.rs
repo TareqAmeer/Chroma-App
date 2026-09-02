@@ -33,6 +33,7 @@ mod raw_decode;
 mod arcface;
 mod clip;
 mod faceparse;
+mod petdetect;
 mod depth;
 mod scrfd;
 mod sam;
@@ -1997,6 +1998,7 @@ fn main() {
             catalog::catalog_hash,
             catalog::catalog_verify,
             catalog::catalog_faces_scan,
+            catalog::catalog_pets_scan,
             catalog::catalog_photo_faces,
             catalog::catalog_faces_for_path,
             catalog::catalog_record_pet_sighting,
@@ -2326,6 +2328,7 @@ fn main() {
             // Face-feature auto-exclusion (ROADMAP item 16) — same bundled-resource-with-
             // dev-fallback pattern as the SAM2 models above.
             faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
+            petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
             depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
 
             // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-

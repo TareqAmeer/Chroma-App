@@ -316,6 +316,7 @@
       case 'catalog_faces_scan': return Promise.resolve({ scanned: 0, faces_found: 0 });
       case 'catalog_embed_faces': return Promise.resolve({ embedded: 0 });
       case 'catalog_cluster_faces': return Promise.resolve({ people: 0, clustered_faces: 0, unclustered_faces: 0 });
+      case 'catalog_pets_scan': return Promise.resolve({ scanned: 0, pets_found: 0 });
       case 'catalog_rename_person': {
         const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
         if (p) { p.name = args.name; p.auto = false; }
@@ -5338,10 +5339,21 @@
       await invoke('catalog_faces_scan', { photoIds });
       await invoke('catalog_embed_faces', { photoIds });
       const r = await invoke('catalog_cluster_faces');
+      // Pets (RT-DETR, petdetect.rs) piggyback on the same "Analyze photos" action — one button,
+      // one People & Pets section, matching the wireframes' whole point of unifying the two.
+      // No embed/cluster step: a detection has no re-identification embedding to group sightings
+      // on, so each one becomes its own auto pet-person directly (see pets_run's own comment) —
+      // it shows up in the SAME Unnamed review queue faces do, ready for the user to name via
+      // the ordinary review-mode flow (which, for a pet, is the fast path INTO subject.rs's
+      // Teach/Find loop rather than a replacement for it).
+      const rp = await invoke('catalog_pets_scan', { photoIds }).catch(() => ({ pets_found: 0 }));
       await invoke('catalog_clip_embed', { photoIds });
       await refreshPeople();
       activityUpdate('catalog', { stage: 'done', done: photoIds ? photoIds.length : 0, total: photoIds ? photoIds.length : 0 });
-      toast(r.people ? `Found ${r.people} ${r.people === 1 ? 'person' : 'people'}` : 'Photos analyzed — try searching by description', true);
+      const parts = [];
+      if (r.people) parts.push(`${r.people} ${r.people === 1 ? 'person' : 'people'}`);
+      if (rp.pets_found) parts.push(`${rp.pets_found} ${rp.pets_found === 1 ? 'pet' : 'pets'}`);
+      toast(parts.length ? `Found ${parts.join(' and ')}` : 'Photos analyzed — try searching by description', true);
     } catch (e) {
       activity.visible = false; renderActivity();
       toast(humanizeErr('analyze photos', e), 'err');
@@ -5769,7 +5781,8 @@
     const c = reviewState.clusters[reviewState.idx];
     if (!c) { reviewGoTo(reviewState.idx + 1); return; }
     reviewState.deselected = new Set();
-    document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} faces`;
+    const speciesHint = c.species ? ` · ${c.species[0].toUpperCase()}${c.species.slice(1)} detected` : '';
+    document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} face${c.face_count === 1 ? '' : 's'}${speciesHint}`;
     const nameInput = document.getElementById('lib-review-name');
     nameInput.value = '';
     setTimeout(() => nameInput.focus(), 0);
