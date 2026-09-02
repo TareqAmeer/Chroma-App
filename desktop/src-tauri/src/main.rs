@@ -1919,6 +1919,34 @@ fn main() {
         // close — the window otherwise always opened at tauri.conf.json's fixed 1440x900. Default
         // config (all flags) tracks every window the app creates, which today is just "main".
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        // See Cargo.toml's comment on the dependency: a real log file replaces `log stream`,
+        // which does not capture this app's own log output at all (confirmed live).
+        // ⚠️ `file_name` below is NOT respected — verified live against a real running
+        // instance: the file is always named after the product name regardless of this
+        // setting (~/Library/Logs/com.tareq.chromasmith/Chromasmith.log, capital C). Left
+        // set (harmless) in case a future plugin version honors it; diagnostics/log_file.py
+        // points at the real observed path, not this one.
+        // ⚠️ `attachConsole()` (chromasmith-22.html) forwarding JS console.* calls into this same
+        // pipeline works independently of these targets — it's the plugin's `log` command on the
+        // Rust side accepting records from anywhere. The Webview target below is the OTHER
+        // direction (relaying Rust-originated log records back into the page's own devtools
+        // console for visibility) — included for convenience, not required for the fix above.
+        // ⚠️ This logger is process-global — every dependency crate's own `log::` output lands
+        // here too. Verified live: `rawler` (the RAW decoder) alone produced 1383 WARN lines
+        // ("No lens data available") in one 45s session, drowning out anything else. Quieted
+        // at the source via level_for; diagnostics/log_file.py is ALSO target-aware for any
+        // other dependency that turns out to be equally chatty in the future.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout))
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                    file_name: Some("chromasmith".into()),
+                }))
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview))
+                .level(log::LevelFilter::Info)
+                .level_for("rawler", log::LevelFilter::Error)
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             #[cfg(target_os = "macos")]
             write_gainmap_heic,

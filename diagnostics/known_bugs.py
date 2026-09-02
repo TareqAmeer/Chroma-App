@@ -25,9 +25,9 @@ PATTERNS = [
     (re.compile(r'LINK FAILED', re.I), 'shader-link-failed',
      "Pairs with the quiet-shader-bug class above — a program failed to link and the "
      "feature it drives will look switched off rather than erroring visibly."),
-    (re.compile(r'native_panic'), 'native-panic',
-     "A Rust panic was caught by the native ring buffer (diag.rs's panic hook) — previously "
-     "invisible outside a terminal entirely. Very likely the direct cause of a crash/restart "
+    (re.compile(r'PANIC:'), 'native-panic',
+     "A Rust panic was caught by diag.rs's panic hook (this codebase's first — previously "
+     "invisible outside a terminal entirely). Very likely the direct cause of a crash/restart "
      "near this timestamp; check the message for the panicking function and file:line."),
 ]
 

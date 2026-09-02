@@ -73,9 +73,23 @@ def cmd_mark(args):
               "the session may have already ended.", file=sys.stderr)
         return 1
     event = {'ts': time.time(), 'category': 'marker', 'msg': args.text}
+
+    if not args.no_screenshot:
+        import screenshot
+        shot_path = os.path.join(run_dir, 'screenshots', f"mark_{int(event['ts'])}.png")
+        try:
+            if screenshot.capture_window(shot_path):
+                event['screenshot'] = shot_path
+            else:
+                print("(no screenshot: app window not found, or `swift`/`screencapture` unavailable)",
+                      file=sys.stderr)
+        except screenshot.ScreenRecordingPermissionError as e:
+            print(f"(no screenshot: {e})", file=sys.stderr)
+
     with open(events_path, 'a') as f:
         f.write(json.dumps(event) + '\n')
-    print(f"Marked: \"{args.text}\" in {os.path.basename(run_dir)}")
+    shot_note = f" (screenshot: {event['screenshot']})" if 'screenshot' in event else ""
+    print(f"Marked: \"{args.text}\" in {os.path.basename(run_dir)}{shot_note}")
     return 0
 
 
@@ -102,6 +116,8 @@ def main():
 
     p_mark = sub.add_parser('mark', help='Tag the current moment in the active run, e.g. "clicked Export"')
     p_mark.add_argument('text')
+    p_mark.add_argument('--no-screenshot', action='store_true',
+                         help="Don't capture the app window (screenshot is automatic by default)")
     p_mark.set_defaults(func=cmd_mark)
 
     args = parser.parse_args()

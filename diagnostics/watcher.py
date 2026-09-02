@@ -16,6 +16,7 @@ from freeze_detector import FreezeDetector
 from log_capture import LogStreamCapture, RelaunchCapture
 from js_relay import JsRelay, PASTE_SNIPPET
 from native_bridge import NativeBridgePoller, DIAG_PATH
+from log_file import LogFileTailer, LOG_PATH
 import sample_capture
 import run_meta
 
@@ -23,6 +24,7 @@ BUNDLE_ID = 'com.tareq.chromasmith'
 PROCESS_POLL_S = 1.0
 FREEZE_POLL_S = 3.0
 NATIVE_BRIDGE_POLL_S = 2.0
+LOG_FILE_POLL_S = 2.0
 
 ACTIVE_RUN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports', '.active_run')
 
@@ -96,9 +98,10 @@ class Session:
         print(f"Watching pid {self.pid} ({self.app_path or 'unknown bundle'})")
         print(f"Run dir: {self.run_dir}")
         print()
-        print("Native sessions (window.__TAURI__) now capture JS errors, IPC timing, "
-              "config state and the native log ring buffer AUTOMATICALLY — no paste needed.")
-        print("Fallback for a browser/Pages session, or a stale binary predating this bridge —")
+        print("Native sessions (window.__TAURI__) now capture JS errors, IPC timing, and "
+              "config state AUTOMATICALLY — no paste needed. Native + attachConsole()'d frontend "
+              f"logs are tailed straight from {LOG_PATH}.")
+        print("Fallback for a browser/Pages session, or a binary predating these features —")
         print("paste once into Safari's Web Inspector console (Develop > Chromasmith > the page):")
         print()
         print(PASTE_SNIPPET)
@@ -111,6 +114,7 @@ class Session:
         relay.start()
 
         native_bridge = NativeBridgePoller(self._write_event)
+        log_file_tail = LogFileTailer(self._write_event)
 
         freeze = FreezeDetector(BUNDLE_ID)
 
@@ -123,6 +127,7 @@ class Session:
         next_process_poll = start
         next_freeze_poll = start
         next_native_poll = start
+        next_logfile_poll = start
         exit_reason = 'duration elapsed'
 
         try:
@@ -145,6 +150,10 @@ class Session:
                 if now >= next_native_poll:
                     next_native_poll = now + NATIVE_BRIDGE_POLL_S
                     native_bridge.poll()
+
+                if now >= next_logfile_poll:
+                    next_logfile_poll = now + LOG_FILE_POLL_S
+                    log_file_tail.poll()
 
                 if now >= next_freeze_poll:
                     next_freeze_poll = now + FREEZE_POLL_S
@@ -181,6 +190,9 @@ class Session:
                   "the app is running a binary older than this feature, or window.__TAURI__ "
                   "wasn't present (a browser/Pages session). JS-error/IPC visibility for this "
                   "run relies on the manual Web Inspector paste, if you did it.")
+        if not log_file_tail.seen_any:
+            print(f"Note: never saw {LOG_PATH} change — either the app hasn't logged anything "
+                  "yet this run, or it's running a binary predating tauri-plugin-log.")
         relay.stop()
         log_cap.stop()
         self._events_file.close()

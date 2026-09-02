@@ -3,14 +3,18 @@ Polls the diag_state.json file chromasmith-22.html's own native diagnostics
 bridge writes (gated on window.__TAURI__, active automatically for every
 native session — see the comment above that block in chromasmith-22.html,
 near native_build_tag). This is what removes the manual Web Inspector paste
-as a requirement: JS errors, IPC timing, UI/config state, and the native
-Rust ring buffer (diag.rs) all arrive through one file instead.
+as a requirement: JS errors, IPC timing, and UI/config state arrive through
+one file this way.
+
+Native LOG lines are no longer part of this payload — that's log_file.py's
+job now, tailing the real file tauri-plugin-log writes to disk (see that
+module's docstring). `diag_native_state` (still polled here) only answers
+what genuinely isn't a log line: catalog progress counters and the running
+binary's own path/mtime.
 
 The JS side clears its own error/IPC buffers after each write, so every
-successful read here is inherently "new since the last write" for those —
-no dedup needed beyond the mtime check. The Rust ring buffer (diag_native_state)
-is NOT cleared between reads (multiple JS writers could be polling it), so
-its entries are deduped here by tracking the newest timestamp already emitted.
+successful read here is inherently "new since the last write" — no dedup
+needed beyond the mtime check.
 """
 import json
 import os
@@ -22,7 +26,6 @@ class NativeBridgePoller:
     def __init__(self, on_event):
         self.on_event = on_event
         self._last_mtime = None
-        self._last_native_log_ts = 0.0
         self.seen_any = False
 
     def poll(self):
@@ -73,24 +76,6 @@ class NativeBridgePoller:
         native = payload.get('native')
         if not native:
             return
-
-        for entry in native.get('recent_logs', []):
-            ts = entry.get('ts') or 0.0
-            if ts <= self._last_native_log_ts:
-                continue
-            self._last_native_log_ts = max(self._last_native_log_ts, ts)
-            level = entry.get('level', 'info')
-            # Only warn/error/panic count as "errors" in the report — an info-level
-            # line (e.g. catalog_thumbnails' routine progress log, already captured
-            # properly by the dedicated 'progress' category below) would otherwise
-            # inflate the error count with noise that isn't actually a problem.
-            category = 'error' if level in ('warn', 'error', 'panic') else 'native_log'
-            self.on_event({
-                'ts': ts,
-                'category': category,
-                'kind': f"native_{level}",
-                'msg': entry.get('msg'),
-            })
 
         self.on_event({
             'ts': base_ts,

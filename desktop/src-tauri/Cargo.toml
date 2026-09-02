@@ -20,6 +20,14 @@ tauri-plugin-deep-link = "2"
 # always opens at tauri.conf.json's fixed 1440x900, forgetting wherever it was last resized or
 # moved. Officially maintained (tauri-apps org), same as the other tauri-plugin-* deps above.
 tauri-plugin-window-state = "2"
+# Writes to a REAL file on disk (~/Library/Logs/com.tareq.chromasmith/chromasmith.log) — this
+# replaces `log stream`, which was checked directly against a real running instance and
+# confirmed to only ever capture os_log/NSLog traffic from system frameworks, never this app's
+# own eprintln!/log:: text (see diagnostics/README.md). Also targets Webview so the JS side's
+# attachConsole() (chromasmith-22.html) routes console.log/error into the same file — the
+# frontend's diagnostics no longer depend on a manual Safari Web Inspector paste at all.
+tauri-plugin-log = "2"
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Manual asset server: Tauri's declarative app.security.headers config does not reliably

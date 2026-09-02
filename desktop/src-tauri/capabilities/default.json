@@ -9,6 +9,7 @@
     "core:window:allow-start-dragging",
     "core:menu:default",
     "dialog:default",
+    "log:default",
     "fs:default",
     "fs:allow-read-file",
     "fs:allow-write-file",

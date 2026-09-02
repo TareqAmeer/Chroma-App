@@ -1,57 +1,42 @@
-//! Native-side diagnostics bridge.
+//! Native-side diagnostics support.
 //!
 //! `log stream --predicate 'process == "chromasmith"'` (what diagnostics/log_capture.py
-//! used to rely on for native stderr) was confirmed live to capture only os_log/NSLog
-//! traffic from system frameworks (AppleJPEG, CarbonCore, ...) attributed to this
-//! process — never our own `eprintln!`/`println!` text. Plain stdio writes from a
-//! GUI-launched app simply don't reach unified logging here. This module is the
-//! fallback: a small in-memory ring buffer that IS reachable from JS via a Tauri
-//! command, so the diagnostics tool can poll it instead.
+//! originally relied on for native stderr) was confirmed live to capture only os_log/NSLog
+//! traffic from system frameworks (AppleJPEG, CarbonCore, ...) attributed to this process
+//! — never our own `eprintln!`/`log::` text. Plain stdio writes from a GUI-launched app
+//! simply don't reach unified logging here.
 //!
-//! Also home to the one process-wide panic hook (there was none before this) and a
-//! shared counter for thumbnail-generation progress, which previously existed as two
-//! independently-counted, unsynchronized paths (see the `catalog-scan` listener
-//! comment in library-ui.js) — this gives a diagnostics poller one place to read
-//! "is the indexer actually moving" without caring which path produced the number.
+//! The real fix is `tauri-plugin-log` (see main.rs's `.plugin(tauri_plugin_log::Builder...)`
+//! and its `LogDir` target) — it writes a genuine file to disk
+//! (`~/Library/Logs/com.tareq.chromasmith/chromasmith.log`) that `tail`/`cat` (or
+//! diagnostics/log_capture.py) can read directly, and `attachConsole()` on the JS side
+//! (chromasmith-22.html) forwards the frontend's own console.log/error into the same
+//! pipeline — so log capture for BOTH sides is now "read a file", not a ring buffer this
+//! module used to maintain and a Tauri command to poll it. `log()` below is a thin
+//! wrapper over the `log` crate's own macros for that reason; it holds no state of its own.
+//!
+//! What's left here, genuinely not covered by a log line: the one process-wide panic hook
+//! (there was none before this), and a shared counter for thumbnail-generation progress,
+//! which previously existed as two independently-counted, unsynchronized paths (see the
+//! `catalog-scan` listener comment in library-ui.js) — this gives a diagnostics poller one
+//! place to read "is the indexer actually moving" without caring which path produced it.
 
 use serde::Serialize;
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
-const RING_CAPACITY: usize = 200;
-
-#[derive(Serialize, Clone)]
-struct LogEntry {
-    ts: f64,
-    level: String,
-    msg: String,
-}
-
-fn ring() -> &'static Mutex<VecDeque<LogEntry>> {
-    static RING: OnceLock<Mutex<VecDeque<LogEntry>>> = OnceLock::new();
-    RING.get_or_init(|| Mutex::new(VecDeque::with_capacity(RING_CAPACITY)))
-}
-
-fn now_secs_f64() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
-}
-
-/// Log a diagnostic line. Still `eprintln!`s it (terminal visibility is unchanged
-/// for anyone running from a shell) AND pushes it into the ring buffer a Tauri
-/// command can hand to JS, which is the part that was missing before.
-pub fn log(level: &str, msg: impl Into<String>) {
-    let msg = msg.into();
-    eprintln!("[{level}] {msg}");
-    if let Ok(mut buf) = ring().lock() {
-        if buf.len() >= RING_CAPACITY {
-            buf.pop_front();
-        }
-        buf.push_back(LogEntry { ts: now_secs_f64(), level: level.to_string(), msg });
+/// Log a diagnostic line through the `log` crate, which `tauri_plugin_log`'s targets
+/// (Stdout + LogDir + Webview, see main.rs) persist to a real file automatically.
+/// A panic is tagged with a literal "PANIC:" prefix — it's logged at ERROR level like
+/// any other error (PanicHookInfo's own Display text doesn't otherwise say "panic"),
+/// and diagnostics/known_bugs.py's native-panic match depends on that exact string.
+pub fn log(level: &str, msg: impl AsRef<str>) {
+    let msg = msg.as_ref();
+    match level {
+        "panic" => log::error!("PANIC: {msg}"),
+        "error" => log::error!("{msg}"),
+        "warn" => log::warn!("{msg}"),
+        _ => log::info!("{msg}"),
     }
 }
 
@@ -79,7 +64,6 @@ pub fn record_thumb_progress(generated_this_batch: u64, remaining: u64) {
 
 #[derive(Serialize)]
 pub struct DiagNativeState {
-    recent_logs: Vec<serde_json::Value>,
     binary_path: String,
     binary_mtime: Option<f64>,
     thumb_generated_session: u64,
@@ -88,15 +72,6 @@ pub struct DiagNativeState {
 
 #[tauri::command]
 pub fn diag_native_state() -> DiagNativeState {
-    let logs: Vec<serde_json::Value> = ring()
-        .lock()
-        .map(|buf| {
-            buf.iter()
-                .map(|e| serde_json::json!({"ts": e.ts, "level": e.level, "msg": e.msg}))
-                .collect()
-        })
-        .unwrap_or_default();
-
     let exe = std::env::current_exe().ok();
     let binary_path = exe.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
     let binary_mtime = exe
@@ -109,7 +84,6 @@ pub fn diag_native_state() -> DiagNativeState {
     let remaining = THUMB_REMAINING.load(Ordering::Relaxed);
 
     DiagNativeState {
-        recent_logs: logs,
         binary_path,
         binary_mtime,
         thumb_generated_session: THUMB_GENERATED_SESSION.load(Ordering::Relaxed),

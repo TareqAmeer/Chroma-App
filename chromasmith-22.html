@@ -4394,7 +4394,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-02b';
+const BUILD='2026-09-02c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -20189,6 +20189,16 @@ if(window.__TAURI__){
   window.__TAURI__.core.invoke('native_build_tag').then(tag=>{
     log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit (⌘Q) and relaunch, not just reload`,'info');
   }).catch(()=>{});
+}
+// tauri-plugin-log's attachConsole() (see main.rs's `.plugin(tauri_plugin_log::Builder...)`)
+// patches window.console.log/warn/error to also forward into the SAME log file the native
+// side writes to (~/Library/Logs/com.tareq.chromasmith/chromasmith.log) — every console.error
+// this app has ever emitted now lands somewhere `tail`/`cat` can read directly, permanently,
+// with no per-session setup. Available as window.__TAURI__.log because tauri.conf.json sets
+// app.withGlobalTauri:true. Complements, doesn't replace, the native diagnostics bridge below
+// — attachConsole only forwards explicit console.* calls, not uncaught errors/IPC timing/state.
+if(window.__TAURI__&&window.__TAURI__.log&&window.__TAURI__.log.attachConsole){
+  window.__TAURI__.log.attachConsole().catch(()=>{});
 }
 // Native diagnostics bridge — desktop/diagnostics/README.md's original design needed a
 // manual paste into Safari's Web Inspector every session to see JS errors/IPC timing at

@@ -234,7 +234,7 @@ def render_markdown(summary, events_path, meta, incident_files, repeat_loops, co
                       + (f" ({prog['delta_remaining']:+d})" if prog['delta_remaining'] is not None else ""))
         lines.append(f"- generated this session: {prog['generated_session']}")
         stuck_note = ""
-        if prog['reading_count'] > 1 and not prog['moving']:
+        if prog['reading_count'] > 1 and not prog['moving'] and (prog['first_remaining'] or 0) > 0:
             stuck_note = " — ⚠️ backlog did not shrink across readings, indexer may be stuck"
         lines.append(f"- {prog['reading_count']} readings this run{stuck_note}")
         lines.append("")
@@ -271,7 +271,12 @@ def render_markdown(summary, events_path, meta, incident_files, repeat_loops, co
     if summary['markers']:
         lines.append("## User action markers\n")
         for m in summary['markers']:
-            lines.append(f"- `{_fmt_ts(m['ts'])}` {m.get('msg', '')}")
+            shot = m.get('screenshot')
+            if shot and os.path.exists(shot):
+                rel = os.path.relpath(shot, os.path.dirname(events_path))
+                lines.append(f"- `{_fmt_ts(m['ts'])}` {m.get('msg', '')} — ![screenshot]({rel})")
+            else:
+                lines.append(f"- `{_fmt_ts(m['ts'])}` {m.get('msg', '')}")
         lines.append("")
 
     lines.append("## Run-over-run comparison\n")
@@ -332,7 +337,9 @@ def build_claude_digest(run_dir, summary, meta, incident_files, repeat_loops, co
 
     if summary['progress']:
         prog = summary['progress']
-        stuck = " ⚠️ STUCK (backlog not shrinking)" if prog['reading_count'] > 1 and not prog['moving'] else ""
+        stuck = (" ⚠️ STUCK (backlog not shrinking)"
+                 if prog['reading_count'] > 1 and not prog['moving'] and (prog['first_remaining'] or 0) > 0
+                 else "")
         lines.append(f"Catalog backlog: {prog['first_remaining']}→{prog['last_remaining']}, "
                       f"generated {prog['generated_session']} this session{stuck}\n")
 
@@ -379,6 +386,13 @@ def build_claude_digest(run_dir, summary, meta, incident_files, repeat_loops, co
                 continue
             seen.add(m['bug_id'])
             lines.append(f"- **{m['bug_id']}**: {m['explanation']}")
+        lines.append("")
+
+    if summary['markers']:
+        lines.append("## User action markers\n")
+        for m in summary['markers']:
+            shot = f" — screenshot: `{m['screenshot']}`" if m.get('screenshot') else ""
+            lines.append(f"- `{_fmt_ts(m['ts'])}` {m.get('msg', '')}{shot}")
         lines.append("")
 
     lines.append(f"Full report: `{os.path.join(run_dir, 'report.md')}`")
