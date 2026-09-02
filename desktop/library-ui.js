@@ -275,6 +275,20 @@
       case 'catalog_stack': return Promise.resolve({ stacked: 0 });
       case 'catalog_thumbnails': return Promise.resolve({ generated: 0, has_more: false });
       case 'catalog_focus': return Promise.resolve({ scored: 0 });
+      // ?libhqstuck=1 simulates the exact failure mode that once froze the whole app: a RAW
+      // whose camera can NEVER get a DCP LUT baked (no bundled/disk profile) reports the SAME
+      // pending_raw_sample every single call — hqOfflineDrainLoop (library-ui.js) must detect
+      // this and stop retrying, not spin forever. peek_raw_camera is deliberately left unmocked
+      // (falls through to the default rejection below) so hqOfflineTryBakeCameraFor's bake
+      // attempt genuinely fails every time, exactly like a real unsupported camera would.
+      case 'catalog_hq_offline': {
+        if (/[?&]libhqstuck=1/.test(location.search)) {
+          return Promise.resolve({ generated: 0, evicted: 0, skipped_no_lut: 1, target_total: 1, pending_raw_sample: '/test/AllPhotos/IMG_STUCK.RW2' });
+        }
+        return Promise.resolve({ generated: 0, evicted: 0, skipped_no_lut: 0, target_total: 0, pending_raw_sample: null });
+      }
+      case 'catalog_hq_offline_list': return Promise.resolve([]);
+      case 'catalog_hq_offline_set_active': return Promise.resolve();
       // One synthetic corrupt entry so the report popover is screenshot-verifiable too.
       case 'catalog_verify': return Promise.resolve({ checked: 20, ok: 19, changed: 0, corrupt: [{ id: 3, name: 'IMG_1003.RW2', path: '/test/AllPhotos/IMG_1003.RW2' }] });
       case 'catalog_keywords': {
@@ -1607,6 +1621,7 @@
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
+    window.__libHqOfflineDrain = () => hqOfflineDrainLoop();
   }
   // Rows kept mounted beyond the viewport in each direction. This used to be a flat 2, which is
   // enough to avoid a visible GAP while scrolling but nowhere near enough to avoid the far more
@@ -6149,22 +6164,39 @@
     _hqOfflineDraining = true;
     if (!LIBTEST) invoke('catalog_hq_offline_set_active', { active: true }).catch(() => {});
     try {
-      let bakedThisRound = new Set();
-      for (;;) {
+      // ⚠️ Caused a real freeze, live: the old exit condition treated a non-null
+      // pending_raw_sample as "still working" unconditionally — a camera that can NEVER get a
+      // LUT baked (unsupported camera, no bundled or disk-installed profile) reported the SAME
+      // path every round forever, so this loop never terminated. `triedBake` tracks every path
+      // baking has already been attempted for (success or failure); once a path comes back a
+      // SECOND time, it's genuinely stuck for this session, not "still in progress" — it stops
+      // counting toward "more work to do". `MAX_ITERS` is a hard, unconditional backstop on top
+      // of that logic, not a substitute for it — defense in depth against the next bug like this.
+      const triedBake = new Set();
+      const stuck = new Set();
+      const MAX_ITERS = 300; // >= the 200-photo target, generous margin for eviction rounds too
+      for (let i = 0; i < MAX_ITERS; i++) {
         let r;
         try {
           r = await invoke('catalog_hq_offline');
         } catch (e) { console.error('catalog_hq_offline', e); break; }
         if (!r) break;
-        if (r.pending_raw_sample && !bakedThisRound.has(r.pending_raw_sample)) {
-          bakedThisRound.add(r.pending_raw_sample); // never retry the SAME file twice in one loop — a genuine decode failure must not spin forever
-          await hqOfflineTryBakeCameraFor(r.pending_raw_sample);
+        let stillPending = !!r.pending_raw_sample && !stuck.has(r.pending_raw_sample);
+        if (stillPending) {
+          if (!triedBake.has(r.pending_raw_sample)) {
+            triedBake.add(r.pending_raw_sample);
+            await hqOfflineTryBakeCameraFor(r.pending_raw_sample);
+          } else {
+            // Already tried once and it's back again — baking didn't help. Stop counting it.
+            stuck.add(r.pending_raw_sample);
+            stillPending = false;
+          }
         }
         if ((r.generated || 0) > 0 || (r.evicted || 0) > 0) {
           await refreshHqOfflineIndex();
         }
-        // Caught up: nothing generated, nothing evicted, and no camera still needs baking.
-        if ((r.generated || 0) === 0 && (r.evicted || 0) === 0 && !r.pending_raw_sample) break;
+        // Caught up: nothing generated, nothing evicted, nothing still genuinely pending.
+        if ((r.generated || 0) === 0 && (r.evicted || 0) === 0 && !stillPending) break;
         await new Promise((resolve) => setTimeout(resolve, 400)); // real gap between heavy full-res decodes
       }
     } finally {

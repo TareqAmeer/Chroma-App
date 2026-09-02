@@ -317,6 +317,34 @@ for (const [label, hangParam] of [['one', 'IMG_1003'], ['every', 'all']]) {
   await p.close();
 }
 
+// Regression guard for a REAL freeze this session: hqOfflineDrainLoop's old exit condition
+// treated a non-null pending_raw_sample as "still working" unconditionally, so a RAW whose
+// camera can never get a DCP LUT baked (no bundled/disk profile — confirmed live: the process
+// sat at 454% CPU for 14+ minutes, sustained, never blocked) reported the SAME stuck path every
+// single call and the loop never terminated. ?libhqstuck=1 (library-ui.js's libtestInvoke mock)
+// simulates exactly that: catalog_hq_offline always returns the same pending_raw_sample, and
+// peek_raw_camera is deliberately left unmocked so the bake retry genuinely fails every time,
+// same as a real unsupported camera would. The fix must detect "tried once, still stuck" and
+// stop — this asserts the drain loop actually RETURNS within a bounded time, not that it merely
+// "looks right" by inspection.
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=5&libhqstuck=1`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForFunction(() => typeof window.__libHqOfflineDrain === 'function', {timeout: 15000});
+  const t0 = Date.now();
+  const BUDGET_MS = 20000; // generous: real gaps are 400ms/iter, a stuck camera should resolve in 2 rounds, not 300 iterations
+  const finished = await p.evaluate((budget) => Promise.race([
+    window.__libHqOfflineDrain().then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), budget)),
+  ]), BUDGET_MS).catch(() => null);
+  const elapsedMs = Date.now() - t0;
+  const ok = finished === true && elapsedMs < BUDGET_MS;
+  console.log(`hq_offline drain terminates on a permanently-stuck camera: ${finished === true ? 'returned' : 'STILL RUNNING'} after ${elapsedMs}ms (<${BUDGET_MS}ms)  ${ok?'PASS':'FAIL'}`);
+  if(!ok) failures.push(`hqOfflineDrainLoop did not terminate against a permanently-stuck camera within ${BUDGET_MS}ms — this is the exact bug class that froze the app live`);
+  await p.close();
+}
+
 await b.close();server.close();
 console.log('-'.repeat(58));
 if(failures.length){console.error('RESULT: FAIL');failures.forEach(f=>console.error('  '+f));process.exit(1);}

@@ -4901,33 +4901,51 @@ fn hq_offline_target_set(conn: &Connection) -> Result<std::collections::HashMap<
     Ok(out)
 }
 
+/// Cheap, metadata-only camera identification — the SAME call `peek_raw_camera` (main.rs) makes,
+/// no demosaic. ⚠️ Load-bearing for hq_offline_run: this must run BEFORE any decode is attempted,
+/// or every retry of a photo whose camera has no persisted LUT pays a full multi-second-to-15s
+/// demosaic for nothing — measured live: this was the actual cause of a real freeze (454% CPU,
+/// sustained, an app-wide stall), because the OLD code decoded FIRST and only checked LUT
+/// availability after, so a camera that could never get a LUT baked turned every drain-loop
+/// iteration into a full decode, forever.
+fn peek_raw_make(bytes: &[u8]) -> Option<String> {
+    let source = rawler::rawsource::RawSource::new_from_slice(bytes);
+    let decoder = rawler::get_decoder(&source).ok()?;
+    let md = decoder.raw_metadata(&source, &rawler::decoders::RawDecodeParams::default()).ok()?;
+    Some(md.make.clone())
+}
+
+/// Whether a persisted, well-formed DCP LUT is available for this RAW's camera — checked BEFORE
+/// `hq_offline_decode_raw` is ever called, so a camera with no LUT yet is skipped in milliseconds
+/// (one metadata peek), not one full demosaic per retry. Returns the validated `(lut, n)` on
+/// success so the caller never has to re-derive `n` a second time.
+fn hq_offline_lut_for(bytes: &[u8]) -> Option<(Vec<f32>, usize)> {
+    let make = peek_raw_make(bytes)?;
+    let lut_key = dcp_lut_key_for_make(&make)?;
+    let lut = load_persisted_dcp_lut(&lut_key)?;
+    let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
+    if n < 2 || n * n * n * 3 != lut.len() {
+        return None; // corrupt/truncated persisted LUT — treat as absent, never crash on it
+    }
+    Some((lut, n))
+}
+
 /// Decodes ONE RAW photo to full resolution with DCP-accurate color, mirroring decode_raw_v2's
 /// own default parameters exactly (main.rs) — Fast-tier native NR, standard PPG demosaic, no
 /// auto-lens (opt-in, no per-photo state available here), full (non-"fast") quality — so this
-/// looks like what opening the same RAW normally would, not a degraded stand-in. Returns `Ok(None)`
-/// (a SKIP, not an error) when no DCP LUT has been persisted yet for this camera — see
-/// `dcp_lut_key_for_make`'s doc comment for why that's an expected, retriable state rather than a
-/// failure.
-fn hq_offline_decode_raw(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
+/// looks like what opening the same RAW normally would, not a degraded stand-in. Callers MUST
+/// have already confirmed a LUT exists via `hq_offline_lut_for` — this function pays for the
+/// expensive demosaic unconditionally, on the assumption it will actually be used.
+fn hq_offline_decode_raw(bytes: &[u8], lut: &[f32], n: usize) -> Result<Vec<u8>, String> {
     let decoded = crate::raw_decode::decode_rw2_bytes(bytes, false, crate::raw_decode::NrTier::Fast, "", false, None)?;
-    let Some(lut_key) = dcp_lut_key_for_make(&decoded.make) else {
-        return Ok(None);
-    };
-    let Some(lut) = load_persisted_dcp_lut(&lut_key) else {
-        return Ok(None);
-    };
-    let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
-    if n < 2 || n * n * n * 3 != lut.len() {
-        return Ok(None); // corrupt/truncated persisted LUT — treat as absent, never crash on it
-    }
-    let rgba = crate::raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?;
+    let rgba = crate::raw_decode::apply_lut_rgba(&decoded.rgb16, lut, n)?;
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("hq_offline: RGBA buffer size mismatch")?;
     let mut out = std::io::Cursor::new(Vec::new());
     image::DynamicImage::ImageRgba8(img)
         .to_rgb8()
         .write_to(&mut out, image::ImageFormat::Jpeg)
         .map_err(|e| format!("hq_offline jpeg encode: {e}"))?;
-    Ok(Some(out.into_inner()))
+    Ok(out.into_inner())
 }
 
 /// One batch per call — eviction first (cheap, do it every time so space is reclaimed promptly),
@@ -4968,7 +4986,12 @@ pub fn hq_offline_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress),
         .map(|(id, (mtime, reason))| (*id, *mtime, reason.clone()))
         .collect();
     to_generate.sort_by_key(|(id, _, _)| *id); // deterministic order, mainly for test reproducibility
-    const BATCH: usize = 4; // full decode is heavy — a small batch keeps this call's own latency bounded for pacing/cancel
+    // 1, not 4: this whole call holds the CatalogState WRITER lock for its duration (the caller,
+    // catalog_hq_offline, locks conn before calling in) — every full decode inside that window
+    // blocks every other catalog write (ratings, sidecar saves, scans) app-wide. A future pass
+    // could restructure this to decode OUTSIDE the lock and only take it for the brief SQL read/
+    // write, but bounding worst-case lock-hold time to ONE decode is the safe minimum for now.
+    const BATCH: usize = 1;
     to_generate.truncate(BATCH);
     if to_generate.is_empty() {
         progress(ScanProgress { phase: "hq_offline".into(), done: 0, total: 0, current: String::new() });
@@ -4995,8 +5018,14 @@ pub fn hq_offline_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress),
         let abs = abs_path(&last_path, is_local != 0, &rel_path);
         let is_raw = kind == "raw";
         let (out_ext, is_copy, bytes): (String, bool, Option<Vec<u8>>) = if is_raw {
-            match std::fs::read(&abs).ok().and_then(|b| hq_offline_decode_raw(&b).ok()).flatten() {
-                Some(b) => ("jpg".to_string(), false, Some(b)),
+            let Some(raw_bytes) = std::fs::read(&abs).ok() else { continue };
+            // ⚠️ Cheap metadata peek FIRST — only pay for the full demosaic once a LUT is
+            // confirmed to exist. See hq_offline_lut_for's doc comment for the freeze this fixes.
+            match hq_offline_lut_for(&raw_bytes) {
+                Some((lut, n)) => match hq_offline_decode_raw(&raw_bytes, &lut, n) {
+                    Ok(b) => ("jpg".to_string(), false, Some(b)),
+                    Err(_) => continue, // a real decode failure (corrupt file, etc.) — not retried via pending_raw_sample, that's for missing LUTs only
+                },
                 None => {
                     result.skipped_no_lut += 1;
                     if result.pending_raw_sample.is_none() {
