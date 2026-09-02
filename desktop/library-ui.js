@@ -336,6 +336,40 @@
         window.__libtestPeople = (window.__libtestPeople || []).filter((x) => x.id !== args.personId);
         return Promise.resolve();
       }
+      // Review mode (screen C) mocks — face_ids are synthesized deterministically from the
+      // person id so the mock needs no separate face store: person 3 (33 faces) -> ids 300..332.
+      case 'catalog_unnamed_clusters': {
+        return Promise.resolve((window.__libtestPeople || []).filter((p) => p.auto).map((p) => ({
+          person_id: p.id,
+          cover_face_id: p.cover_face_id,
+          face_count: p.face_count,
+          face_ids: Array.from({ length: Math.min(p.face_count, 16) }, (_, i) => p.id * 100 + i),
+        })));
+      }
+      case 'catalog_confirm_person': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) p.auto = false;
+        return Promise.resolve();
+      }
+      case 'catalog_split_faces': {
+        // Mock doesn't track individual faces, so it only needs to make "into an existing
+        // person" and "back to Unnamed" distinguishable enough for the UI flow to be testable.
+        if (args.intoId) {
+          const into = (window.__libtestPeople || []).find((x) => x.id === args.intoId);
+          if (into) { into.face_count += (args.faceIds || []).length; into.auto = false; }
+        }
+        return Promise.resolve(args.intoId || 0);
+      }
+      case 'catalog_set_person_ignored': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p && args.ignored) window.__libtestPeople = (window.__libtestPeople || []).filter((x) => x.id !== args.personId);
+        return Promise.resolve();
+      }
+      case 'catalog_set_person_kind': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) p.kind = args.kind;
+        return Promise.resolve();
+      }
       case 'catalog_clip_embed': return Promise.resolve({ embedded: 0 });
       case 'catalog_clip_tags': {
         // R10: fixed fake suggestions so the Info panel's "Suggested" section is exercisable
@@ -719,6 +753,27 @@
     /* Named list scrolls internally so Folders/Keywords never move as the count grows — the
        flat "Person 1..Person 40" flood this replaces (CLAUDE.md people-pets plan, failure 14). */
     .lib-people-scroll{max-height:150px;overflow-y:auto;margin:0 -4px;padding:0 4px}
+    /* Review mode (people-pets wireframes screen C) — one unnamed cluster at a time, full-
+       viewport, keyboard-driven. z-index above #lib-overlay's 4000, same pattern as
+       #lib-quicklook (lazily created, appended to body, .on toggles display). */
+    #lib-review{position:fixed;inset:0;z-index:4500;background:rgba(10,10,10,.94);display:none;
+      flex-direction:column;color:var(--txt);font-family:var(--sans)}
+    #lib-review.on{display:flex}
+    .lib-review-top{display:flex;align-items:center;gap:10px;padding:12px 18px;
+      border-bottom:1px solid var(--bdr);font-size:12px;color:var(--mut)}
+    .lib-review-body{flex:1;overflow:auto;padding:18px;max-width:900px;margin:0 auto;width:100%}
+    .lib-review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-bottom:16px}
+    .lib-review-face{position:relative;border-radius:8px;overflow:hidden;background:var(--sur2);
+      border:2px solid transparent;aspect-ratio:1;cursor:pointer}
+    .lib-review-face.sel{border-color:var(--acc)}
+    .lib-review-face.desel{opacity:.35}
+    .lib-review-face img{width:100%;height:100%;object-fit:cover;visibility:hidden}
+    .lib-review-face img.loaded{visibility:visible}
+    .lib-review-foot{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--bdr)}
+    #lib-review-name{flex:1;background:var(--sur2);border:1px solid var(--acc);border-radius:8px;
+      color:var(--txt);padding:9px 12px;font:500 14px var(--sans);min-width:0}
+    .lib-review-kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--bdr);border-radius:4px;
+      padding:1px 5px;background:var(--sur2);color:var(--mut)}
     #lib-main{overflow:auto;padding:16px}
     /* List mode's sticky header (#lib-list-head, top:0 below) vs #lib-main's own padding: a
        padded overflow:auto container only masks scrolled-behind content within its padding band
@@ -5624,7 +5679,175 @@
       row.oncontextmenu = (e) => { e.preventDefault(); showPersonMenu(e, id); };
     });
     const reviewRow = host.querySelector('[data-people-review]');
-    if (reviewRow) reviewRow.onclick = () => toast('Review mode is coming next — see the wireframes for the planned flow.');
+    if (reviewRow) reviewRow.onclick = () => openReviewFaces();
+  }
+
+  // ── Review mode (people-pets wireframes screen C) ──────────────────────────────────────────
+  // One unnamed cluster at a time, full-viewport, keyboard-driven — the answer to CLAUDE.md
+  // failures #2/#3/#6/#7: unclustered/unnamed faces were computed then thrown away, there was no
+  // confirm/reject step, and naming was one person at a time through a right-click modal.
+  const reviewState = { clusters: [], idx: 0, deselected: new Set() };
+  function reviewEl() {
+    let el = document.getElementById('lib-review');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'lib-review';
+    el.innerHTML = `
+      <div class="lib-review-top">
+        <span>Review faces</span>
+        <span id="lib-review-pos" style="margin-left:6px"></span>
+        <span style="margin-left:auto;cursor:pointer" id="lib-review-close">Esc to exit</span>
+      </div>
+      <div class="lib-review-body">
+        <div class="lib-review-grid" id="lib-review-grid"></div>
+        <div class="lib-review-foot">
+          <input id="lib-review-name" placeholder="Name this person or pet…" list="lib-review-names" autocomplete="off">
+          <datalist id="lib-review-names"></datalist>
+          <span class="lib-btn" id="lib-review-confirm">Name &amp; next</span>
+          <span class="lib-btn" id="lib-review-ignore">Ignore</span>
+          <span class="lib-btn" id="lib-review-skip">Skip</span>
+        </div>
+        <div style="padding:0 18px 4px;display:flex;gap:14px;flex-wrap:wrap">
+          <span class="lib-review-kbd">↵</span><span class="mut" style="font-size:11px">Name &amp; next</span>
+          <span class="lib-review-kbd">X</span><span class="mut" style="font-size:11px">Ignore</span>
+          <span class="lib-review-kbd">Space</span><span class="mut" style="font-size:11px">Toggle face (excluded faces return to Unnamed)</span>
+          <span class="lib-review-kbd">→</span><span class="mut" style="font-size:11px">Skip</span>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    el.querySelector('#lib-review-close').onclick = closeReviewFaces;
+    el.querySelector('#lib-review-confirm').onclick = reviewConfirmCurrent;
+    el.querySelector('#lib-review-ignore').onclick = reviewIgnoreCurrent;
+    el.querySelector('#lib-review-skip').onclick = () => reviewGoTo(reviewState.idx + 1);
+    // ⚠️ Bound directly on the input, not just relied on via document-level bubbling below —
+    // the input carries a `list=` (datalist) attribute, and at least one Chromium build was
+    // observed swallowing the keydown entirely while its autocomplete popup was open, so Enter
+    // never reached the document listener. Binding here means it fires regardless.
+    el.querySelector('#lib-review-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); reviewConfirmCurrent(); }
+    });
+    return el;
+  }
+  async function openReviewFaces() {
+    let clusters;
+    try { clusters = await invoke('catalog_unnamed_clusters'); }
+    catch (err) { toast(humanizeErr('load faces to review', err), 'err'); return; }
+    if (!clusters || !clusters.length) { toast('No unnamed faces to review'); return; }
+    reviewState.clusters = clusters;
+    reviewState.idx = 0;
+    const el = reviewEl();
+    el.classList.add('on');
+    const datalist = el.querySelector('#lib-review-names');
+    datalist.innerHTML = peopleList.filter((p) => !p.auto).map((p) => `<option value="${esc(p.name)}">`).join('');
+    reviewRenderCurrent();
+  }
+  function closeReviewFaces() {
+    const el = document.getElementById('lib-review');
+    if (el) el.classList.remove('on');
+    reviewState.clusters = [];
+  }
+  function reviewGoTo(idx) {
+    if (idx >= reviewState.clusters.length) { closeReviewFaces(); refreshPeople(); toast('All caught up — no more faces to review', true); return; }
+    reviewState.idx = idx;
+    reviewRenderCurrent();
+  }
+  function reviewRenderCurrent() {
+    const c = reviewState.clusters[reviewState.idx];
+    if (!c) { reviewGoTo(reviewState.idx + 1); return; }
+    reviewState.deselected = new Set();
+    document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} faces`;
+    const nameInput = document.getElementById('lib-review-name');
+    nameInput.value = '';
+    setTimeout(() => nameInput.focus(), 0);
+    const grid = document.getElementById('lib-review-grid');
+    grid.innerHTML = c.face_ids.map((fid) => `<div class="lib-review-face sel" data-face-id="${fid}"><img alt=""></div>`).join('');
+    grid.querySelectorAll('.lib-review-face').forEach((cell) => {
+      const fid = parseInt(cell.dataset.faceId, 10);
+      loadFaceCrop(fid, cell.querySelector('img'));
+      cell.onclick = () => {
+        if (reviewState.deselected.has(fid)) reviewState.deselected.delete(fid);
+        else reviewState.deselected.add(fid);
+        cell.classList.toggle('desel', reviewState.deselected.has(fid));
+        cell.classList.toggle('sel', !reviewState.deselected.has(fid));
+      };
+    });
+  }
+  async function reviewConfirmCurrent() {
+    const c = reviewState.clusters[reviewState.idx];
+    if (!c) return;
+    const name = document.getElementById('lib-review-name').value.trim();
+    if (!name) { toast('Type a name first'); return; }
+    const selectedIds = c.face_ids.filter((id) => !reviewState.deselected.has(id));
+    const excludedIds = c.face_ids.filter((id) => reviewState.deselected.has(id));
+    try {
+      const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
+      if (excludedIds.length) await invoke('catalog_split_faces', { faceIds: excludedIds, intoId: null, intoName: null });
+      if (existing) {
+        // Move the confirmed faces into the existing person and confirm them there.
+        await invoke('catalog_split_faces', { faceIds: selectedIds, intoId: existing.id, intoName: null });
+        await invoke('catalog_confirm_person', { personId: existing.id, faceIds: selectedIds });
+      } else {
+        await invoke('catalog_rename_person', { personId: c.person_id, name });
+        await invoke('catalog_confirm_person', { personId: c.person_id, faceIds: selectedIds.length ? selectedIds : null });
+      }
+      await refreshPeople();
+      toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"`, true);
+      reviewGoTo(reviewState.idx + 1);
+    } catch (err) { toast(humanizeErr('confirm this person', err), 'err'); }
+  }
+  async function reviewIgnoreCurrent() {
+    const c = reviewState.clusters[reviewState.idx];
+    if (!c) return;
+    try {
+      await invoke('catalog_set_person_ignored', { personId: c.person_id, ignored: true });
+      await refreshPeople();
+      reviewGoTo(reviewState.idx + 1);
+    } catch (err) { toast(humanizeErr('ignore this person', err), 'err'); }
+  }
+  document.addEventListener('keydown', (e) => {
+    const el = document.getElementById('lib-review');
+    if (!el || !el.classList.contains('on')) return;
+    if (e.key === 'Escape') { closeReviewFaces(); return; }
+    const t = e.target;
+    const inField = t && t.closest && t.closest('input,textarea');
+    if (e.key === 'Enter' && inField) { e.preventDefault(); reviewConfirmCurrent(); return; }
+    if (inField) return;
+    if (e.key.toLowerCase() === 'x') { reviewIgnoreCurrent(); return; }
+    if (e.key === 'ArrowRight') { reviewGoTo(reviewState.idx + 1); return; }
+  });
+  /// Visual multi-candidate picker (people-pets wireframes screen D) — replaces the old
+  /// "retype a name from this newline list" merge flow (failure #8), which failed outright on
+  /// any typo and had no picker at all. Reuses `.lib-coll-row`/`.lib-face-ava` so a candidate
+  /// row looks exactly like its sidebar row, face crop included. Resolves to the chosen
+  /// PersonNode, or null if dismissed.
+  function pickPersonModal(title, candidates) {
+    return new Promise((resolve) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);'
+        + 'display:flex;align-items:center;justify-content:center';
+      const sorted = candidates.slice().sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
+      wrap.innerHTML = `<div style="background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;
+          padding:14px;min-width:260px;max-width:340px;max-height:70vh;overflow:auto;box-shadow:var(--lift-2)">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">${esc(title)}</div>
+        <div id="lib-pick-rows"></div>
+        <div class="lib-coll-row" data-pick-cancel style="opacity:.6;margin-top:6px">Cancel</div>
+      </div>`;
+      const rows = wrap.querySelector('#lib-pick-rows');
+      sorted.forEach((c) => {
+        const row = document.createElement('div');
+        row.className = 'lib-coll-row';
+        row.innerHTML = `${faceAvaHtml(c)}<span class="lib-coll-lb">${esc(c.name)}</span><span class="lib-coll-count">${c.face_count || ''}</span>`;
+        row.onclick = () => { wrap.remove(); resolve(c); };
+        rows.appendChild(row);
+        const ava = row.querySelector('.lib-face-ava[data-face-id]');
+        const img = ava && ava.querySelector('img');
+        const faceId = ava && parseInt(ava.dataset.faceId, 10);
+        if (img && Number.isFinite(faceId)) loadFaceCrop(faceId, img);
+      });
+      wrap.querySelector('[data-pick-cancel]').onclick = () => { wrap.remove(); resolve(null); };
+      wrap.onclick = (e) => { if (e.target === wrap) { wrap.remove(); resolve(null); } };
+      document.body.appendChild(wrap);
+    });
   }
   function showPersonMenu(e, id) {
     const p = peopleList.find((x) => x.id === id);
@@ -5639,16 +5862,26 @@
       ['Merge into…', async () => {
         const others = peopleList.filter((x) => x.id !== id);
         if (!others.length) { toast('No other people to merge into'); return; }
-        const name = await window.askTextModal('Merge into which person?', others.map((x) => '· ' + x.name).join('\n'), '');
-        if (!name) return;
-        const target = others.find((x) => x.name.toLowerCase() === name.toLowerCase());
-        if (!target) { toast('No person with that name', 'err'); return; }
+        const target = await pickPersonModal(`Merge "${p.name}" into…`, others);
+        if (!target) return;
         try {
           await invoke('catalog_merge_people', { fromId: id, intoId: target.id });
           if (state.catalogScope === `person:${id}`) await openCatalogView(`person:${target.id}`);
           await refreshPeople();
           toast(`Merged "${p.name}" into "${target.name}"`, true);
         } catch (err) { toast(humanizeErr('merge these people', err), 'err'); }
+      }],
+      [p.kind === 'pet' ? 'Mark as Person' : 'Mark as Pet', async () => {
+        try { await invoke('catalog_set_person_kind', { personId: id, kind: p.kind === 'pet' ? 'person' : 'pet' }); await refreshPeople(); }
+        catch (err) { toast(humanizeErr('change person/pet', err), 'err'); }
+      }],
+      ['Ignore (stop suggesting)', async () => {
+        try {
+          await invoke('catalog_set_person_ignored', { personId: id, ignored: true });
+          if (state.catalogScope === `person:${id}`) { state.source = 'folder'; state.entries = []; renderGrid(); }
+          await refreshPeople();
+          toast(`Ignored "${p.name}"`, true);
+        } catch (err) { toast(humanizeErr('ignore this person', err), 'err'); }
       }],
       [`Delete "${p.name}"`, async () => {
         if (!await window.confirmModal(`Delete "${p.name}"?\n\nTheir photos stay exactly where they are — only this person's grouping is removed. A future face scan may re-group them.`, 'Delete')) return;

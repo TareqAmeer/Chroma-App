@@ -520,6 +520,16 @@ body.diag-on .diag-only{display:flex}
 .fx-exif-row:first-child{border-top:none}
 .fx-exif-row .fx-exif-lb{color:var(--mut);flex-shrink:0}
 .fx-exif-row .fx-exif-val{color:var(--txt);text-align:right;word-break:break-word;min-width:0}
+/* People & Pets (fxRenderPeoplePanel) — face chips inside the Info section, matching the
+   Library Info panel's own vocabulary: solid chip = confirmed, dashed = detected-but-unassigned. */
+.fx-people-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;border-top:1px solid var(--bdr)}
+.fx-people-row:first-child{border-top:none}
+.fx-people-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 3px;border-radius:999px;
+  background:var(--sur2);border:1px solid var(--bdr);font-size:11px;color:var(--txt);cursor:pointer}
+.fx-people-chip.unnamed{background:transparent;border-style:dashed;color:var(--mut)}
+.fx-people-ava{width:18px;height:18px;border-radius:50%;flex:0 0 auto;overflow:hidden;background:var(--sur);position:relative}
+.fx-people-ava img{width:100%;height:100%;object-fit:cover;visibility:hidden}
+.fx-people-ava img.loaded{visibility:visible}
 /* Deskbar center title: filename + a status suffix that is a spinner while a decode is in
    flight and "W × H" once loaded (RapidRAW-style). Hidden (empty) until a photo is open. */
 /* ⚠️ The centre title must CLIP, not spill. #db-title-status was flex-shrink:0 inside a
@@ -1976,6 +1986,11 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="info">
         <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6" id="fx-info"></div>
+        <!-- People & Pets (people-pets wireframes screen I) — deliberately lives HERE, not as
+             its own rail section: it's a fact about the photo, not a grading control, same
+             reasoning as EXIF sitting right below it. `fx-people` is populated by
+             fxRenderPeoplePanel(), called from showExif()'s one choke point. -->
+        <div id="fx-people"></div>
         <div id="fx-exif"></div>
       </div>
     </div>
@@ -4345,7 +4360,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-01a';
+const BUILD='2026-09-02a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -15275,8 +15290,70 @@ function _videoInfoRows(it){
     +row('Size',fmtSize(it.fileSize))
     +row('File Format',it.ext?it.ext.toUpperCase():'');
 }
+// People & Pets in the Info panel (people-pets wireframes screen I) — desktop-only
+// (window.__TAURI__), same gate the Subjects panel already uses, since `catalog_faces_for_path`
+// is a Tauri command with no browser/web-build equivalent. Deliberately lives here rather than
+// as its own rail section: it's a fact about the current photo, exactly like the EXIF block it
+// sits beside, not a grading control. `_fxPeoplePathToken` guards against the redundant
+// catalog_faces_for_path round trips showExif's several call sites would otherwise fire on every
+// zoom/pan re-render of the SAME photo — only a genuine photo change re-queries.
+let _fxPeoplePathToken='';
+async function fxRenderPeoplePanel(){
+  const el=document.getElementById('fx-people');if(!el)return;
+  if(!window.__TAURI__){el.innerHTML='';return;}
+  const it=fxImages[fxCurIdx]||fxImages[0];
+  const path=it&&it.path;
+  if(!path){el.innerHTML='';_fxPeoplePathToken='';return;}
+  if(path===_fxPeoplePathToken)return; // same photo already rendered — a zoom/pan re-render, not a photo change
+  _fxPeoplePathToken=path;
+  let faces;
+  try{faces=await window.__TAURI__.core.invoke('catalog_faces_for_path',{path});}
+  catch(e){el.innerHTML='';return;}
+  if(_fxPeoplePathToken!==path)return; // superseded by a newer photo before this resolved
+  if(!faces||!faces.length){el.innerHTML='';return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const chips=faces.map(f=>{
+    const named=!!f.name;
+    const label=named?esc(f.name):'Who is this?';
+    return `<span class="fx-people-chip${named?'':' unnamed'}" data-face-id="${f.face_id}" data-person-id="${f.person_id||''}">`+
+      `<span class="fx-people-ava" data-face-id="${f.face_id}"><img alt=""></span>${label}</span>`;
+  }).join('');
+  el.innerHTML=`<div class="fx-people-row">${chips}</div>`;
+  el.querySelectorAll('.fx-people-ava[data-face-id]').forEach(ava=>{
+    const fid=parseInt(ava.dataset.faceId,10);
+    const img=ava.querySelector('img');
+    if(!Number.isFinite(fid))return;
+    window.__TAURI__.core.invoke('catalog_face_crop',{faceId:fid}).then(buf=>{
+      const url=URL.createObjectURL(new Blob([buf],{type:'image/jpeg'}));
+      img.src=url;img.classList.add('loaded');img.onload=()=>URL.revokeObjectURL(url);
+    }).catch(()=>{});
+  });
+  el.querySelectorAll('.fx-people-chip[data-face-id]').forEach(chip=>{
+    chip.onclick=async()=>{
+      const fid=parseInt(chip.dataset.faceId,10);
+      const current=chip.textContent.trim();
+      const name=await window.askTextModal(chip.classList.contains('unnamed')?'Who is this?':'Rename',
+        '',chip.classList.contains('unnamed')?'':current);
+      if(!name)return;
+      try{
+        // ⚠️ catalog_split_faces ALWAYS creates a new person when given into_name — it doesn't
+        // check for an existing match (that's the review-mode picker's job in library-ui.js,
+        // which has its own peopleList to search). This prompt has no such list, so it must look
+        // one up itself here, or naming a face after someone who already exists would silently
+        // create a duplicate person instead of merging into them.
+        const people=await window.__TAURI__.core.invoke('catalog_people').catch(()=>[]);
+        const existing=(people||[]).find(p=>!p.auto&&p.name.toLowerCase()===name.toLowerCase());
+        await window.__TAURI__.core.invoke('catalog_split_faces',
+          existing?{faceIds:[fid],intoId:existing.id,intoName:null}:{faceIds:[fid],intoId:null,intoName:name});
+        _fxPeoplePathToken=''; // force a re-query — this photo's faces just changed
+        fxRenderPeoplePanel();
+      }catch(e){if(typeof toast==='function')toast('Could not name this face','err');}
+    };
+  });
+}
 function showExif(exif){
   const el=document.getElementById('fx-exif');if(!el)return;
+  if(typeof fxRenderPeoplePanel==='function')fxRenderPeoplePanel();
   // ⚠️ A video has no EXIF, so this used to return early and the Info panel showed nothing at all
   // for a clip — no duration, codec, frame rate or colour space, even though the demuxer had all
   // of it. Video gets its own block built from the item's own probe data.

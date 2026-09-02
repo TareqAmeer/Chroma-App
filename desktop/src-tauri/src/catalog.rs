@@ -2137,6 +2137,65 @@ pub fn catalog_photo_faces(state: tauri::State<CatalogState>, photo_id: i64) -> 
     Ok(rows)
 }
 
+/// One face, with whatever naming state it has — the shape the EDITOR's Info panel and the
+/// Library's Info panel both need (people-pets wireframes screens F/I: "People & Pets in this
+/// photo"). `catalog_photo_faces` above only ever returned bare boxes and was never enough to
+/// render a name chip. `face_id` is included so the panel can drive `catalog_face_crop`,
+/// `catalog_confirm_person`, `catalog_split_faces` etc directly from what this returns.
+#[derive(Serialize, Clone)]
+pub struct PhotoFaceInfo {
+    pub face_id: i64,
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    pub person_id: Option<i64>,
+    pub name: Option<String>,
+    pub kind: Option<String>,
+    pub confirmed: bool,
+}
+
+/// The editor has only a file PATH (it's not always looking at a catalogued photo — a bare
+/// `file://` open, a folder never registered as a root), so this resolves via
+/// `find_photo_by_abs_path` rather than taking a `photo_id` directly. An unresolved path (or one
+/// this machine never ran a face scan against) returns an empty list, not an error — "no people
+/// data yet" is a normal, common state, not a failure.
+#[tauri::command]
+pub fn catalog_faces_for_path(state: tauri::State<CatalogState>, path: String) -> Result<Vec<PhotoFaceInfo>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    faces_for_path_run(&conn, &path)
+}
+
+fn faces_for_path_run(conn: &Connection, path: &str) -> Result<Vec<PhotoFaceInfo>, String> {
+    let Some(photo_id) = find_photo_by_abs_path(conn, path) else { return Ok(Vec::new()) };
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.x0, f.y0, f.x1, f.y1, f.person_id, p.name, p.kind, f.confirmed
+             FROM photo_faces f LEFT JOIN people p ON p.id = f.person_id
+             WHERE f.photo_id = ?1 ORDER BY f.score DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![photo_id], |r| {
+            let confirmed: i64 = r.get(8)?;
+            Ok(PhotoFaceInfo {
+                face_id: r.get(0)?,
+                x0: r.get(1)?,
+                y0: r.get(2)?,
+                x1: r.get(3)?,
+                y1: r.get(4)?,
+                person_id: r.get(5)?,
+                name: r.get(6)?,
+                kind: r.get(7)?,
+                confirmed: confirmed != 0,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
 /// Crops a face out of its photo's existing cached thumbnail, for the People &amp; Pets sidebar
 /// and review UI — the piece the frontend has never had (see CLAUDE.md's people-tagging plan:
 /// `PersonNode.cover_face_id` and this face's own box were always available, nothing ever
@@ -6494,6 +6553,59 @@ mod tests {
             .unwrap();
         assert_eq!(pid_after, Some(person_id), "a confirmed face's person_id must never move on re-cluster");
         assert_eq!(confirmed_after, 1, "confirming a face must survive a re-cluster");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    // The editor only has a file PATH, never a photo_id — this is the shape its Info panel
+    // (people-pets wireframes screen I) needs: resolve path -> photo_id -> faces, joined with
+    // whatever naming state each face already has.
+    fn faces_for_path_resolves_and_joins_person_names() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("faces_for_path");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let photo_id: i64 = conn.query_row("SELECT id FROM photos LIMIT 1", [], |r| r.get(0)).unwrap();
+
+        conn.execute(
+            "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps) VALUES (?1,0.1,0.2,0.3,0.4,0.9,'[]')",
+            params![photo_id],
+        )
+        .unwrap();
+        let face_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO people (name, cover_face_id, created, auto, kind) VALUES ('Sofia', ?1, 0, 0, 'person')",
+            params![face_id],
+        )
+        .unwrap();
+        let person_id = conn.last_insert_rowid();
+        conn.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 1 WHERE id = ?2", params![person_id, face_id]).unwrap();
+        // A second, still-unnamed face on the same photo — must come back with name:None, not error.
+        conn.execute(
+            "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps) VALUES (?1,0.5,0.5,0.7,0.7,0.8,'[]')",
+            params![photo_id],
+        )
+        .unwrap();
+
+        // Canonicalized, matching what `find_photo_by_abs_path`/`upsert_volume` compare against
+        // internally (see `add_root_run`'s own comment on `/var` -> `/private/var`-style symlinks
+        // — `/tmp` has the identical issue on macOS, and a non-canonical path here would silently
+        // fail to resolve, which is exactly the class of bug this test exists to catch).
+        let abs_path = std::fs::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
+        let faces = faces_for_path_run(&conn, &abs_path).unwrap();
+        assert_eq!(faces.len(), 2);
+        let named = faces.iter().find(|f| f.face_id == face_id).unwrap();
+        assert_eq!(named.name.as_deref(), Some("Sofia"));
+        assert_eq!(named.kind.as_deref(), Some("person"));
+        assert!(named.confirmed);
+        let unnamed = faces.iter().find(|f| f.face_id != face_id).unwrap();
+        assert!(unnamed.name.is_none());
+        assert!(!unnamed.confirmed);
+
+        assert!(faces_for_path_run(&conn, "/no/such/path.jpg").unwrap().is_empty(), "an unresolved path must return empty, not an error");
 
         std::fs::remove_dir_all(&dir).ok();
     }
