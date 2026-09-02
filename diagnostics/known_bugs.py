@@ -25,6 +25,10 @@ PATTERNS = [
     (re.compile(r'LINK FAILED', re.I), 'shader-link-failed',
      "Pairs with the quiet-shader-bug class above — a program failed to link and the "
      "feature it drives will look switched off rather than erroring visibly."),
+    (re.compile(r'native_panic'), 'native-panic',
+     "A Rust panic was caught by the native ring buffer (diag.rs's panic hook) — previously "
+     "invisible outside a terminal entirely. Very likely the direct cause of a crash/restart "
+     "near this timestamp; check the message for the panicking function and file:line."),
 ]
 
 REPEAT_LOOP_WINDOW_S = 30.0
@@ -59,7 +63,7 @@ def detect_repeat_loops(events, window_s=REPEAT_LOOP_WINDOW_S, threshold=REPEAT_
     class of bug: no single line looks wrong, but the same one repeating
     without progress is the tell.
     """
-    candidates = [e for e in events if e.get('category') == 'error']
+    candidates = [e for e in events if e.get('category') in ('error', 'native_log')]
     buckets = defaultdict(list)
     for e in candidates:
         key = (e.get('kind'), (e.get('msg') or '')[:80])

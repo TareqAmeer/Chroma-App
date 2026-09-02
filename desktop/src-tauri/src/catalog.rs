@@ -194,7 +194,7 @@ impl CatalogState {
         let path = catalog_db_path();
         let conn = open_and_migrate(&path)
             .or_else(|e| {
-                eprintln!("catalog: open failed ({e}), starting fresh");
+                crate::diag::log("error", format!("catalog: open failed ({e}), starting fresh"));
                 let aside = path.with_extension(format!("corrupt-{}.db", now_secs()));
                 let _ = std::fs::rename(&path, &aside);
                 open_and_migrate(&path)
@@ -209,7 +209,7 @@ impl CatalogState {
                     // Vanishingly unlikely (the same path was just opened successfully above),
                     // but if it happens, degrade to in-memory rather than fail startup — see
                     // the in-memory branch below for why that's always safe.
-                    eprintln!("catalog: could not open a second (read) connection ({e}), read queries will share the writer's lock this session");
+                    crate::diag::log("warn", format!("catalog: could not open a second (read) connection ({e}), read queries will share the writer's lock this session"));
                     let c = Connection::open_in_memory().expect("in-memory sqlite must open");
                     migrate(&c).expect("migrate an in-memory sqlite must succeed");
                     c
@@ -217,7 +217,7 @@ impl CatalogState {
                 (conn, read_conn)
             }
             None => {
-                eprintln!("catalog: fresh file open also failed, falling back to an in-memory catalog for this session");
+                crate::diag::log("error", "catalog: fresh file open also failed, falling back to an in-memory catalog for this session");
                 // ⚠️ Deliberately NOT two separate in-memory connections — `:memory:` databases
                 // are private per-connection, so a second `open_in_memory()` call here would be
                 // a DIFFERENT, empty database that never sees any write the first one makes.
@@ -5251,7 +5251,8 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
             (thumbnail_select_batch(&conn)?, thumbnail_remaining(&conn))
         };
         if batch.is_empty() {
-            eprintln!("[bg] catalog_thumbnails: no candidates (remaining={remaining}) -> done");
+            crate::diag::record_thumb_progress(0, remaining);
+            crate::diag::log("info", format!("[bg] catalog_thumbnails: no candidates (remaining={remaining}) -> done"));
             let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
             return Ok(result);
         }
@@ -5266,7 +5267,8 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
         }
         result.remaining = remaining.saturating_sub(result.generated as u64);
         result.has_more = batch_len == 32;
-        eprintln!("[bg] catalog_thumbnails: batch={batch_len} generated={} remaining={} has_more={}", result.generated, result.remaining, result.has_more);
+        crate::diag::record_thumb_progress(result.generated as u64, result.remaining);
+        crate::diag::log("info", format!("[bg] catalog_thumbnails: batch={batch_len} generated={} remaining={} has_more={}", result.generated, result.remaining, result.has_more));
         let _ = app.emit("catalog-scan", ScanProgress { phase: "thumb".into(), done: result.generated, total: remaining as usize, current: String::new() });
         Ok(result)
     })

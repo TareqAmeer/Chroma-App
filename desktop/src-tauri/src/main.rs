@@ -49,6 +49,7 @@ mod subject;
 mod ingest;
 mod catalog;
 mod dcp_store;
+mod diag;
 mod merge;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
@@ -1853,6 +1854,9 @@ async fn oauth_loopback_flow(auth_url_template: String) -> Result<OAuthResult, S
 }
 
 fn main() {
+    // First statement in main() on purpose — catches panics as early as possible.
+    // See diag.rs: there was no panic::set_hook anywhere in this codebase before.
+    diag::install_panic_hook();
     // Printed unconditionally, BEFORE anything else, straight to the terminal `npm run dev`
     // (or `cargo run`) runs in — no JS round-trip needed, so it's visible even if the webview
     // never loads. Compare against native_build_tag()'s value: if they differ (or this line
@@ -2080,7 +2084,8 @@ fn main() {
             stream_open,
             stream_write,
             stream_close,
-            lr_downloads_dir
+            lr_downloads_dir,
+            diag::diag_native_state
         ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
         // on every single response, including the very first navigation — see the Cargo.toml

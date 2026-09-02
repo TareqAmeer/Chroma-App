@@ -4394,7 +4394,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-02a';
+const BUILD='2026-09-02b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -20189,6 +20189,78 @@ if(window.__TAURI__){
   window.__TAURI__.core.invoke('native_build_tag').then(tag=>{
     log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit (⌘Q) and relaunch, not just reload`,'info');
   }).catch(()=>{});
+}
+// Native diagnostics bridge — desktop/diagnostics/README.md's original design needed a
+// manual paste into Safari's Web Inspector every session to see JS errors/IPC timing at
+// all, which in practice meant real sessions ran with zero visibility until someone
+// remembered. This runs automatically for every native session instead: it buffers
+// errors/IPC calls/config state and periodically writes them (via the same
+// write_file_bytes command fxHdrProbe already uses, so no new file-write surface) to a
+// fixed path the diagnostics tool polls. Entirely inert in the browser/Pages build
+// (gated on window.__TAURI__) and costs nothing when nothing is watching the file.
+if(window.__TAURI__&&window.__TAURI__.core){
+  (()=>{
+    const DIAG_PATH='/tmp/chromasmith_diag_state.json';
+    let diagErrors=[],diagIpc=[],lastWrite=0;
+    const diagSnap=()=>{try{return window.getUISnapshot?window.getUISnapshot():null}catch(_){return null}};
+    // Library-only localStorage state (desktop/library-ui.js's own keys — same origin, so
+    // readable here regardless of which page is currently on screen). This is what makes a
+    // wiped `chromasmith_lib_root` (a real incident: clearing WebKit's data store loses it)
+    // diagnosable from a report instead of by hand from source.
+    const configSnap=()=>{
+      try{
+        return {
+          libRoot: localStorage.getItem('chromasmith_lib_root')||null,
+          libLastFolder: localStorage.getItem('chromasmith_lib_last_folder')||null,
+          libLastPath: localStorage.getItem('chromasmith_lib_last_path')||null,
+          bgPaused: localStorage.getItem('chromasmith_bg_paused')==='1',
+        };
+      }catch(_){return null}
+    };
+    window.addEventListener('error',e=>{
+      diagErrors.push({t:Date.now(),k:'error',msg:e.message,src:e.filename+':'+e.lineno,snap:diagSnap()});
+      if(diagErrors.length>50)diagErrors.shift();
+      writeDiag();
+    });
+    window.addEventListener('unhandledrejection',e=>{
+      diagErrors.push({t:Date.now(),k:'rejection',msg:String(e.reason),snap:diagSnap()});
+      if(diagErrors.length>50)diagErrors.shift();
+      writeDiag();
+    });
+    const oe=console.error;
+    console.error=(...a)=>{
+      diagErrors.push({t:Date.now(),k:'console.error',msg:a.map(String).join(' '),snap:diagSnap()});
+      if(diagErrors.length>50)diagErrors.shift();
+      writeDiag();
+      oe(...a);
+    };
+    if(window.__TAURI__.core.invoke){
+      const origInvoke=window.__TAURI__.core.invoke;
+      window.__TAURI__.core.invoke=function(cmd,args){
+        if(cmd==='write_file_bytes'||cmd==='diag_native_state')return origInvoke.call(this,cmd,args);
+        const t0=performance.now();
+        return origInvoke.call(this,cmd,args).then(
+          r=>{diagIpc.push({t:Date.now(),cmd,ms:Math.round(performance.now()-t0)});if(diagIpc.length>100)diagIpc.shift();return r;},
+          err=>{diagIpc.push({t:Date.now(),cmd,ms:Math.round(performance.now()-t0),err:String(err)});if(diagIpc.length>100)diagIpc.shift();throw err;}
+        );
+      };
+    }
+    async function writeDiag(){
+      const now=Date.now();
+      if(now-lastWrite<1000)return; // debounce an error burst; the 5s interval still catches it
+      lastWrite=now;
+      try{
+        let native=null;
+        try{native=await window.__TAURI__.core.invoke('diag_native_state');}catch(_){}
+        const payload={t:now,errors:diagErrors,ipc:diagIpc,state:diagSnap(),config:configSnap(),native};
+        const json=JSON.stringify(payload);
+        const b64=btoa(unescape(encodeURIComponent(json)));
+        await window.__TAURI__.core.invoke('write_file_bytes',{path:DIAG_PATH,dataB64:b64});
+        diagErrors=[];diagIpc=[];
+      }catch(_){}
+    }
+    setInterval(writeDiag,5000);
+  })();
 }
 // Tap-to-select chip row mirroring a plain <select> (kept in the DOM, hidden, as the
 // existing state store so session/snapshot code that reads/writes its .value is untouched).

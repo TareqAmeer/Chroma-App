@@ -15,12 +15,14 @@ from process_metrics import sample as sample_process, prime_cpu_percent, Process
 from freeze_detector import FreezeDetector
 from log_capture import LogStreamCapture, RelaunchCapture
 from js_relay import JsRelay, PASTE_SNIPPET
+from native_bridge import NativeBridgePoller, DIAG_PATH
 import sample_capture
 import run_meta
 
 BUNDLE_ID = 'com.tareq.chromasmith'
 PROCESS_POLL_S = 1.0
 FREEZE_POLL_S = 3.0
+NATIVE_BRIDGE_POLL_S = 2.0
 
 ACTIVE_RUN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports', '.active_run')
 
@@ -49,18 +51,6 @@ class Session:
         os.makedirs(self.samples_dir, exist_ok=True)
         self._events_file = open(self.events_path, 'a')
 
-        meta = run_meta.capture()
-        with open(os.path.join(self.run_dir, 'meta.json'), 'w') as f:
-            json.dump(meta, f, indent=2)
-        self._write_event({'ts': time.time(), 'category': 'meta', **meta})
-        print(f"Repo: {meta['branch']}@{meta['commit_short']}"
-              f"{' (dirty: ' + str(len(meta['dirty_files'])) + ' files)' if meta['dirty_files'] else ''}"
-              f"  BUILD={meta['build_stamp']}")
-
-        os.makedirs(os.path.dirname(ACTIVE_RUN_FILE), exist_ok=True)
-        with open(ACTIVE_RUN_FILE, 'w') as f:
-            f.write(self.run_dir)
-
         if self.relaunch:
             print("--relaunch: spawning the app binary directly for guaranteed stderr capture.")
             log_cap = RelaunchCapture(self._write_event)
@@ -81,11 +71,35 @@ class Session:
             log_cap = LogStreamCapture(self._write_event)
             log_cap.start()
 
+        # app_path may be the .app BUNDLE directory (from find_chromasmith_pid's real-app
+        # check) whose own mtime does not track the executable inside it — resolve to the
+        # actual binary file for a meaningful staleness comparison.
+        if self.app_path and self.app_path.endswith('.app'):
+            binary_path = os.path.join(self.app_path, 'Contents', 'MacOS', 'chromasmith')
+        else:
+            binary_path = self.app_path
+        meta = run_meta.capture(binary_path=binary_path)
+        with open(os.path.join(self.run_dir, 'meta.json'), 'w') as f:
+            json.dump(meta, f, indent=2)
+        self._write_event({'ts': time.time(), 'category': 'meta', **meta})
+        print(f"Repo: {meta['branch']}@{meta['commit_short']}"
+              f"{' (dirty: ' + str(len(meta['dirty_files'])) + ' files)' if meta['dirty_files'] else ''}"
+              f"  BUILD={meta['build_stamp']}")
+        if meta['binary_stale']:
+            print("⚠️  Running binary looks OLDER than HEAD's commit — "
+                  "a full quit (⌘Q) + rebuild + relaunch may be needed before a native fix applies.")
+
+        os.makedirs(os.path.dirname(ACTIVE_RUN_FILE), exist_ok=True)
+        with open(ACTIVE_RUN_FILE, 'w') as f:
+            f.write(self.run_dir)
+
         print(f"Watching pid {self.pid} ({self.app_path or 'unknown bundle'})")
         print(f"Run dir: {self.run_dir}")
         print()
-        print("Paste this once into Safari's Web Inspector console")
-        print("(Develop > Chromasmith > the page) to capture JS-side errors:")
+        print("Native sessions (window.__TAURI__) now capture JS errors, IPC timing, "
+              "config state and the native log ring buffer AUTOMATICALLY — no paste needed.")
+        print("Fallback for a browser/Pages session, or a stale binary predating this bridge —")
+        print("paste once into Safari's Web Inspector console (Develop > Chromasmith > the page):")
         print()
         print(PASTE_SNIPPET)
         print()
@@ -95,6 +109,8 @@ class Session:
 
         relay = JsRelay(self._write_event)
         relay.start()
+
+        native_bridge = NativeBridgePoller(self._write_event)
 
         freeze = FreezeDetector(BUNDLE_ID)
 
@@ -106,6 +122,7 @@ class Session:
         start = time.time()
         next_process_poll = start
         next_freeze_poll = start
+        next_native_poll = start
         exit_reason = 'duration elapsed'
 
         try:
@@ -124,6 +141,10 @@ class Session:
                         print("\nApp process exited — ending session early.")
                         exit_reason = 'process exited'
                         break
+
+                if now >= next_native_poll:
+                    next_native_poll = now + NATIVE_BRIDGE_POLL_S
+                    native_bridge.poll()
 
                 if now >= next_freeze_poll:
                     next_freeze_poll = now + FREEZE_POLL_S
@@ -155,6 +176,11 @@ class Session:
             exit_reason = 'interrupted'
 
         print(f"\n\nSession ended ({exit_reason}).")
+        if not native_bridge.seen_any:
+            print(f"Note: never saw the native diagnostics bridge write {DIAG_PATH} — either "
+                  "the app is running a binary older than this feature, or window.__TAURI__ "
+                  "wasn't present (a browser/Pages session). JS-error/IPC visibility for this "
+                  "run relies on the manual Web Inspector paste, if you did it.")
         relay.stop()
         log_cap.stop()
         self._events_file.close()
