@@ -2196,6 +2196,98 @@ fn faces_for_path_run(conn: &Connection, path: &str) -> Result<Vec<PhotoFaceInfo
     Ok(rows)
 }
 
+/// Bridges a PerSAM subject match (`subject.rs` — "remember this dog, find it again", desktop
+/// editor's AI-mask panel) into the SAME `people`/`photo_faces` tables the human-face pipeline
+/// uses, so a taught pet shows up in the ordinary sidebar/review-mode/Info-panel UI instead of
+/// being stranded in `subjects.json` + `localStorage` with its own separate vocabulary (people-
+/// pets wireframes screen I). Deliberately NOT a merge of the two STORES — `subjects.json` keeps
+/// being the source of truth for prototypes/matching (that's a completely different, embedding-
+/// free method with its own measured ~77-80% recall, see subject.rs's own module doc) — this only
+/// records the OUTCOME of a confirmed/taught sighting as an ordinary catalog row.
+///
+/// `x0,y0,x1,y1` is a small box AROUND the point PerSAM located (or the scribbled region for a
+/// fresh "teach"), in the same 0..1 fractional convention as `FaceBox` — there is no real face
+/// box for a pet, so the caller derives one (see `_subjBoxAroundPoint` in chromasmith-22.html).
+/// One row per (photo, person): a repeat sighting of the same pet in the same photo UPDATES
+/// its existing row rather than accumulating duplicates.
+#[tauri::command]
+pub fn catalog_record_pet_sighting(
+    state: tauri::State<CatalogState>,
+    path: String,
+    name: String,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    confirmed: bool,
+) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    record_pet_sighting_run(&conn, &path, &name, x0, y0, x1, y1, confirmed)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_pet_sighting_run(
+    conn: &Connection,
+    path: &str,
+    name: &str,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    confirmed: bool,
+) -> Result<(), String> {
+    let Some(photo_id) = find_photo_by_abs_path(conn, path) else {
+        return Err(format!("{path} is not in the catalog yet — open it through the Library first"));
+    };
+    let now = now_secs() as i64;
+    let person_id: i64 = match conn
+        .query_row("SELECT id FROM people WHERE name = ?1 AND kind = 'pet'", params![name], |r| r.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?
+    {
+        Some(id) => id,
+        None => {
+            conn.execute(
+                "INSERT INTO people (name, cover_face_id, created, auto, kind) VALUES (?1, NULL, ?2, 0, 'pet')",
+                params![name, now],
+            )
+            .map_err(|e| e.to_string())?;
+            conn.last_insert_rowid()
+        }
+    };
+    let existing_face: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM photo_faces WHERE photo_id = ?1 AND person_id = ?2",
+            params![photo_id, person_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let confirmed_i = confirmed as i64;
+    match existing_face {
+        Some(fid) => {
+            conn.execute(
+                "UPDATE photo_faces SET x0=?1, y0=?2, x1=?3, y1=?4, confirmed=?5 WHERE id=?6",
+                params![x0, y0, x1, y1, confirmed_i, fid],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, person_id, confirmed)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 1.0, '[]', ?6, ?7)",
+                params![photo_id, x0, y0, x1, y1, person_id, confirmed_i],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    // A sighting is exactly the "the user has touched this" signal that protects the person
+    // from `cluster_run`'s wholesale auto-person cleanup — irrelevant for a pet today (nothing
+    // auto-clusters pets yet) but keeps this person consistent with every other named row.
+    conn.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Crops a face out of its photo's existing cached thumbnail, for the People &amp; Pets sidebar
 /// and review UI — the piece the frontend has never had (see CLAUDE.md's people-tagging plan:
 /// `PersonNode.cover_face_id` and this face's own box were always available, nothing ever
@@ -6606,6 +6698,40 @@ mod tests {
         assert!(!unnamed.confirmed);
 
         assert!(faces_for_path_run(&conn, "/no/such/path.jpg").unwrap().is_empty(), "an unresolved path must return empty, not an error");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    // Bridges subject.rs's PerSAM pets into the ordinary people/photo_faces tables — a "Yes,
+    // that's Juno" confirm in the editor must show up in the same sidebar/review UI a human
+    // face does, not stay stranded in subjects.json + localStorage.
+    fn pet_sighting_creates_a_pet_person_and_is_idempotent_per_photo() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("pet_sighting");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let abs_path = std::fs::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
+
+        record_pet_sighting_run(&conn, &abs_path, "Juno", 0.1, 0.2, 0.3, 0.4, true).unwrap();
+        let (kind, auto): (String, i64) = conn.query_row("SELECT kind, auto FROM people WHERE name = 'Juno'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(kind, "pet");
+        assert_eq!(auto, 0, "a sighting must count as user-touched, same as a rename");
+
+        let faces = faces_for_path_run(&conn, &abs_path).unwrap();
+        assert_eq!(faces.len(), 1);
+        assert_eq!(faces[0].name.as_deref(), Some("Juno"));
+        assert_eq!(faces[0].kind.as_deref(), Some("pet"));
+        assert!(faces[0].confirmed);
+
+        // A SECOND sighting of the SAME pet in the SAME photo must update the one row, not add
+        // a duplicate — otherwise re-confirming a pet across editor sessions would pile up rows.
+        record_pet_sighting_run(&conn, &abs_path, "Juno", 0.5, 0.5, 0.6, 0.6, true).unwrap();
+        let faces2 = faces_for_path_run(&conn, &abs_path).unwrap();
+        assert_eq!(faces2.len(), 1, "a repeat sighting of the same pet in the same photo must update, not duplicate");
+        assert!((faces2[0].x0 - 0.5).abs() < 1e-6, "the box must be updated to the newer sighting");
 
         std::fs::remove_dir_all(&dir).ok();
     }

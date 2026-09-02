@@ -11410,6 +11410,7 @@ async function subjTeach(idx){
     _subjSaveThumb(id,refId,m);   // before the await — m.px/FX.cv are still this photo's
     const s=await _samFramedInvoke('subject_learn',{id,name,token,refId,refLabel},raster);
     await subjRefresh();
+    _subjRecordSighting(name,m,true); // teaching FROM a photo is itself a confirmed sighting in it
     const n=(s.refs||[]).length;
     // Catch a bad reference at TEACH time rather than only after later Finds go wrong. Real
     // "preview before commit" would need a second round trip to score the prototype before
@@ -11440,6 +11441,42 @@ let _subjMinScore=0;
 try{_subjMinScore=parseFloat(localStorage.getItem('cs.subjMinScore')||'0')||0;}catch(e){}
 function subjSetMinScore(v){_subjMinScore=parseFloat(v)||0;try{localStorage.setItem('cs.subjMinScore',String(_subjMinScore));}catch(e){}mskRebuild();}
 let _subjLowConfPending=null;
+// Bridges a PerSAM subject (subject.rs — "remember this dog") into the catalog's ordinary
+// people/photo_faces tables (catalog_record_pet_sighting), so a taught/confirmed pet shows up in
+// the same sidebar/review-mode/Info-panel UI a human face does (people-pets wireframes screen I)
+// instead of being stranded in subjects.json + localStorage with its own vocabulary. The two
+// STORES stay separate on purpose — subjects.json keeps being the source of truth for matching,
+// this only records the OUTCOME. Silently no-ops off-desktop or when the photo isn't catalogued
+// yet (the same "open it through the Library first" gap every catalog-backed feature here has).
+function _subjMaskBBox(px,w,h){
+  let minX=w,minY=h,maxX=-1,maxY=-1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if(px[y*w+x]>16){ // small threshold — a raster mask isn't strictly binary at its edge
+      if(x<minX)minX=x;if(x>maxX)maxX=x;
+      if(y<minY)minY=y;if(y>maxY)maxY=y;
+    }
+  }
+  if(maxX<minX||maxY<minY)return null;
+  return{x0:minX/w,y0:minY/h,x1:(maxX+1)/w,y1:(maxY+1)/h};
+}
+async function _subjRecordSighting(name,m,confirmed){
+  if(!window.__TAURI__||!m||!m.px||!m.mtW||!m.mtH)return;
+  const box=_subjMaskBBox(m.px,m.mtW,m.mtH);
+  if(!box)return;
+  const item=(typeof curItem==='function')?curItem():null;
+  const path=item&&item.path;
+  if(!path)return;
+  try{
+    await window.__TAURI__.core.invoke('catalog_record_pet_sighting',
+      {path,name,x0:box.x0,y0:box.y0,x1:box.x1,y1:box.y1,confirmed});
+  }catch(e){
+    // Never surfaced as an error toast — this is a best-effort bridge into a second system, not
+    // the primary action the user just took (teaching/confirming the subject itself already
+    // succeeded). The common, expected cause is simply "this photo was opened directly, not
+    // through the Library" (find_photo_by_abs_path finds nothing), which is a normal state.
+    log('Could not record this sighting in the People & Pets catalog — '+(e&&e.message||e),'warn');
+  }
+}
 /// Installs a subject_locate result as the given mask's raster — shared by subjFind's normal path
 /// and subjApplyLowConf's "use it anyway" path, so the two can't drift on what "applying a Find"
 /// actually does.
@@ -12095,6 +12132,7 @@ function subjFindConfirm(wasOk){
   if(!m||!m._subjPending)return;
   const{subjId,subjName}=m._subjPending;
   _subjFindStatsRecord(subjId,wasOk);
+  if(wasOk)_subjRecordSighting(subjName,m,true);
   delete m._subjPending;
   if(!wasOk)toast(`Noted — check ${subjName}'s references (⋯ menu) if this keeps happening`,true);
   mskRebuild();

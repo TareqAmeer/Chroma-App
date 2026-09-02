@@ -1999,6 +1999,7 @@ fn main() {
             catalog::catalog_faces_scan,
             catalog::catalog_photo_faces,
             catalog::catalog_faces_for_path,
+            catalog::catalog_record_pet_sighting,
             catalog::catalog_face_crop,
             catalog::catalog_embed_faces,
             catalog::catalog_cluster_faces,

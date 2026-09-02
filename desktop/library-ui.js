@@ -748,6 +748,10 @@
     .lib-face-ava{width:20px;height:20px;border-radius:50%;flex:0 0 auto;overflow:hidden;
       background:var(--sur2);border:1px solid var(--bdr);position:relative}
     .lib-face-ava.unnamed{border-style:dashed;border-color:var(--mut)}
+    /* Pet vs person is a border-colour distinction, not a glyph — no emoji/unicode icons in
+       desktop chrome (CLAUDE.md §3b). --acc2 is otherwise used for "the other" accent role. */
+    .lib-face-ava.pet{border-color:var(--acc2)}
+    .lib-face-ava.pet.unnamed{border-color:var(--acc2);opacity:.75}
     .lib-face-ava img{width:100%;height:100%;object-fit:cover;visibility:hidden}
     .lib-face-ava img.loaded{visibility:visible}
     /* Named list scrolls internally so Folders/Keywords never move as the count grows — the
@@ -2985,6 +2989,14 @@
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     state.dupeClusters.clear(); state.dupeClusterSizes.clear();
     await renderGrid();
+    // The bulk catalog phases (thumbnails/focus/hash) wait for THIS generation's own interactive
+    // decode queue to settle before they're allowed to start competing for the same CPU pools —
+    // see catalogRegisterFolder's doc comment for why firstPaintReady() has to be called here,
+    // after renderGrid() has actually built the queue, and not any earlier.
+    if (_catalogBgPending) {
+      _catalogBgPending = false;
+      firstPaintReady(15000).then(() => catalogRunBackgroundPhases());
+    }
     const libMain = document.getElementById('lib-main');
     if (libMain) libMain.scrollTop = scrollByFolder.get(path) || 0;
     if (typeof renderCollections === 'function') renderCollections(); // drop stale collection/album highlight
@@ -5629,7 +5641,9 @@
     }).catch(() => {});
   }
   function faceAvaHtml(person, size) {
-    const cls = person.auto ? 'lib-face-ava unnamed' : 'lib-face-ava';
+    let cls = 'lib-face-ava';
+    if (person.kind === 'pet') cls += ' pet';
+    if (person.auto) cls += ' unnamed';
     const style = size ? ` style="width:${size}px;height:${size}px"` : '';
     return `<span class="${cls}"${style} data-face-id="${person.cover_face_id ?? ''}"><img alt=""></span>`;
   }
@@ -5955,6 +5969,19 @@
   // collapse returns the SAME root id for those), while still triggering a real scan — cheap,
   // thanks to walk-skip, for anything already walked and unchanged — for a genuinely new root.
   const _catalogScannedRoots = new Set();
+  // ⚠️ Set (not fired) here, deliberately. This used to call catalogRunBackgroundPhases()
+  // directly, fire-and-forget, the MOMENT catalog_scan resolved — which is BEFORE openFolder has
+  // even called renderGrid(), let alone before the first screenful's interactive thumbnails have
+  // decoded. The bulk thumbnail/focus/hash pass (decode_batch_pool + the writer-lock chain) then
+  // raced the interactive get_thumbnail_or_offline calls for the exact same CPU cores for the
+  // entire first-paint window — confirmed live: fixing ONLY the readiness gate (firstPaintReady,
+  // below) without ALSO fixing this made no visible difference on the real 57k-photo library,
+  // because the gate's own bounded wait kept timing out against real contention it did nothing to
+  // remove. openFolder flips this flag into an actual firstPaintReady().then(...) call, once
+  // AFTER its own renderGrid() has run and the queue this generation's decode work sits in
+  // actually exists — calling firstPaintReady() from here instead would just resolve instantly
+  // (nothing queued yet) and be no fix at all.
+  let _catalogBgPending = false;
   function catalogRegisterFolder(path) {
     return invoke('catalog_add_root', { path, kind: null })
       .then((root) => {
@@ -5963,7 +5990,7 @@
         if (needsScan) _catalogScannedRoots.add(root.id);
         const scanPromise = needsScan ? invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true) : Promise.resolve(false);
         return scanPromise.then((scanned) => {
-          if (scanned) { refreshCatalogCounts(); catalogRunBackgroundPhases(); }
+          if (scanned) { refreshCatalogCounts(); _catalogBgPending = true; }
           return { volumeId: root.volume_id, relDir: root.requested_rel_path };
         });
       })
