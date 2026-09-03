@@ -2048,6 +2048,179 @@ pub fn sidecar_run(
     Ok(result)
 }
 
+/// Same batch shape as `metadata_run` above, but re-locks `state.conn` fresh each batch instead
+/// of holding one guard for the whole (potentially minutes-long, first-scan) sweep — see
+/// `verify_run_scoped`'s doc comment for the exact class of bug this avoids. `metadata_run`
+/// itself is kept for the test suite (small in-memory DBs, single connection).
+pub fn metadata_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<MetadataResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let mut result = MetadataResult::default();
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        let batch: Vec<(i64, String, i64)> = {
+            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND (p.meta_mtime IS NULL OR p.meta_mtime != p.mtime)
+                     LIMIT 512"
+                )
+                .map_err(|e| e.to_string())?;
+            let raw: Vec<(i64, Option<String>, i64)> = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            raw.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect()
+        };
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "metadata".into(), done: result.read, total: result.read + batch.len(), current: String::new() });
+        pacer.start_chunk();
+        let read: Vec<(i64, i64, crate::library::PhotoMeta, Option<VideoDate>)> = batch
+            .par_iter()
+            .map(|(id, abs, mtime)| {
+                let ext = Path::new(abs).extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                let video_date = if matches!(ext.as_str(), "mp4" | "mov" | "m4v") { video_capture_date(abs) } else { None };
+                (*id, *mtime, crate::library::read_meta_public(abs), video_date)
+            })
+            .collect();
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            for (id, mtime, meta, video_date) in &read {
+                let (captured, cap_y, cap_m, cap_d) = if let Some(vd) = video_date {
+                    (Some(vd.captured), Some(vd.y), Some(vd.m), Some(vd.d))
+                } else {
+                    meta.date
+                        .as_deref()
+                        .and_then(parse_exif_datetime)
+                        .map(|(s, y, mo, d)| (Some(s), Some(y), Some(mo), Some(d)))
+                        .unwrap_or((None, None, None, None))
+                };
+                let shutter_sec = meta.shutter.as_deref().and_then(shutter_to_sec);
+                let aperture_f = meta.aperture.as_deref().and_then(leading_float);
+                let focal_mm = meta.focal_len.as_deref().and_then(leading_float);
+                tx.execute(
+                    "UPDATE photos SET
+                        camera = ?1, make = ?2, model = ?3, lens = ?4, iso = ?5,
+                        shutter = ?6, shutter_sec = ?7, aperture = ?8, aperture_f = ?9,
+                        focal = ?10, focal_mm = ?11,
+                        captured = ?12, cap_y = ?13, cap_m = ?14, cap_d = ?15,
+                        meta_mtime = ?16
+                     WHERE id = ?17",
+                    params![
+                        meta.camera, meta.make, meta.model, meta.lens, meta.iso,
+                        meta.shutter, shutter_sec, meta.aperture, aperture_f,
+                        meta.focal_len, focal_mm,
+                        captured, cap_y, cap_m, cap_d,
+                        mtime, id,
+                    ]
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        result.read += read.len();
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.read, total: result.read, current: String::new() });
+    Ok(result)
+}
+
+/// Same batch shape as `sidecar_run` above, re-locking per batch — see `metadata_run_scoped`.
+pub fn sidecar_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<SidecarResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let mut result = SidecarResult::default();
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        let batch: Vec<(i64, String, i64)> = {
+            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.sidecar_mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND p.sidecar_mtime != p.sidecar_parsed_mtime
+                     LIMIT 512"
+                )
+                .map_err(|e| e.to_string())?;
+            let raw: Vec<(i64, Option<String>, i64)> = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let sidecar_mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, sidecar_mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            raw.into_iter().filter_map(|(id, abs, sm)| abs.map(|a| (id, a, sm))).collect()
+        };
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "sidecar".into(), done: result.read, total: result.read + batch.len(), current: String::new() });
+        pacer.start_chunk();
+        let read: Vec<(i64, i64, crate::library::Sidecar)> = batch
+            .par_iter()
+            .map(|(id, abs, sidecar_mtime)| (*id, *sidecar_mtime, crate::library::get_sidecar(abs.clone())))
+            .collect();
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            for (id, sidecar_mtime, sc) in &read {
+                tx.execute(
+                    "UPDATE photos SET rating = ?1, label = ?2, edited = ?3, favorite = ?4, sidecar_parsed_mtime = ?5 WHERE id = ?6",
+                    params![sc.rating, sc.label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id]
+                )
+                .map_err(|e| e.to_string())?;
+                tx.execute("DELETE FROM photo_keywords WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+                for kw in &sc.keywords {
+                    let kw_id = upsert_keyword_path(&tx, kw)?;
+                    tx.execute("INSERT OR IGNORE INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![id, kw_id])
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        result.read += read.len();
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.read, total: result.read, current: String::new() });
+    Ok(result)
+}
+
 // ⚠️ These catalog_* commands are the ones that actually walk/hash/embed/cluster a whole
 // library, so they are the ones that must never run on Tauri's main/IPC thread. In Tauri 2 a
 // plain sync `#[tauri::command]` is invoked ON the calling thread, not dispatched to a worker
@@ -2064,9 +2237,15 @@ pub async fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>) -> Resu
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
         let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
-        let result = scan_run(&conn, volume_id, &mut emit, &state.cancel)?;
+        // scan_run needs one held connection for its whole walk (scan_gen must stay consistent
+        // from the first row read to the final "mark absent" sweep — see its own doc comment on
+        // why re-locking mid-walk would be a correctness risk, not just a perf one), but it's a
+        // directory walk + stat, not a per-file content read, so it's the cheap phase here.
+        let result = {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            scan_run(&conn, volume_id, &mut emit, &state.cancel)?
+        };
         // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
         // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
         // catalog, with no extra round trips from JS.
@@ -2076,8 +2255,15 @@ pub async fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>) -> Resu
         // chaining it into the scan that fires on every ordinary folder-open would make routine
         // browsing noticeably slower on a large archive. It runs as its own explicit/background
         // pass (catalog_hash) instead.
-        metadata_run(&conn, &mut emit, &state.cancel)?;
-        sidecar_run(&conn, &mut emit, &state.cancel)?;
+        //
+        // ⚠️ metadata_run_scoped/sidecar_run_scoped, NOT metadata_run/sidecar_run — the plain
+        // versions hold one connection guard for their WHOLE sweep (documented at up to 5-7
+        // minutes on a real archive's first scan), blocking every other catalog write the entire
+        // time. The _scoped versions re-lock per batch instead — see verify_run_scoped's doc
+        // comment for the incident that made this worth auditing across every scan phase, not
+        // just the one a user happened to report first.
+        metadata_run_scoped(&state, &mut emit, &state.cancel)?;
+        sidecar_run_scoped(&state, &mut emit, &state.cancel)?;
         Ok(result)
     })
     .await
@@ -2166,14 +2352,82 @@ pub fn hash_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cance
     Ok(result)
 }
 
+/// Same content-hash baseline sweep as `hash_run` above, but re-locks `state.conn` fresh EACH
+/// batch instead of holding one guard across the whole (potentially very long, first-import)
+/// operation — see `verify_run_scoped`'s doc comment for the exact class of bug this avoids
+/// (this function's inner batch logic was already correctly rayon-parallelized and chunk-
+/// committed; only the OUTER lock scope needed fixing, unlike verify_run which needed both).
+pub fn hash_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<HashResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let mut result = HashResult::default();
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        let batch: Vec<(i64, String, i64)> = {
+            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND (p.content_hash IS NULL OR p.hashed_at != p.mtime)
+                     LIMIT 64"
+                )
+                .map_err(|e| e.to_string())?;
+            let raw: Vec<(i64, Option<String>, i64)> = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            raw.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect()
+        };
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "hash".into(), done: result.hashed, total: result.hashed + batch.len(), current: String::new() });
+        pacer.start_chunk();
+
+        let hashed: Vec<(i64, i64, Option<String>)> = batch.par_iter().map(|(id, abs, mtime)| (*id, *mtime, blake3_hex(abs))).collect();
+
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            for (id, mtime, hash) in &hashed {
+                let Some(hash) = hash else { continue }; // unreadable right now — leave unhashed, retried next pass
+                tx.execute("UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3", params![hash, mtime, id])
+                    .map_err(|e| e.to_string())?;
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        result.hashed += hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.hashed, total: result.hashed, current: String::new() });
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn catalog_hash(app: tauri::AppHandle) -> Result<HashResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        hash_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+        hash_run_scoped(&state, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
     })
     .await
     .map_err(|e| format!("catalog_hash task panicked: {e}"))?
@@ -4294,14 +4548,131 @@ pub fn verify_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), can
     Ok(result)
 }
 
+/// One row's worth of `verify_run`'s per-photo logic, factored out so it can run OFF the DB
+/// connection entirely (pure filesystem + hashing, no `conn` needed) — see `verify_run_scoped`.
+enum VerifyOutcome {
+    Ok,
+    Skipped,
+    Corrupt(VerifyEntry),
+    Changed { id: i64, fresh_hash: String, current_mtime: i64 }
+}
+fn verify_one(row: &(i64, String, String, i64, i64, String, String, bool)) -> VerifyOutcome {
+    let (id, name, rel_path, _stored_mtime, hashed_at, stored_hash, last_path, is_local) = row;
+    if !is_local && !Path::new(last_path).is_dir() {
+        return VerifyOutcome::Skipped; // offline — can't verify what isn't reachable
+    }
+    let abs = abs_path(last_path, *is_local, rel_path);
+    let Ok(current_meta) = std::fs::metadata(&abs) else { return VerifyOutcome::Skipped }; // gone since present was set
+    let current_mtime = current_meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(*hashed_at);
+    let Some(fresh_hash) = blake3_hex(&abs) else { return VerifyOutcome::Skipped };
+
+    if &fresh_hash == stored_hash {
+        return VerifyOutcome::Ok;
+    }
+    if current_mtime == *hashed_at {
+        // Content differs, mtime does not — this is what corruption looks like.
+        VerifyOutcome::Corrupt(VerifyEntry { id: *id, name: name.clone(), path: abs })
+    } else {
+        // A legitimate edit hash_run hasn't caught up to yet — re-baseline, don't report it.
+        VerifyOutcome::Changed { id: *id, fresh_hash, current_mtime }
+    }
+}
+
+/// Same corruption-detection sweep as `verify_run` above, but structured for the LIVE app rather
+/// than the test suite's small in-memory databases: `verify_run` holds ONE `&Connection` for its
+/// entire single-threaded run, which for a real library is a full-file BLAKE3 hash over tens of
+/// thousands of photos — confirmed live to run for 20+ CPU-minutes and counting on a 57k-photo
+/// library, the whole time holding CatalogState's single writer Mutex and blocking every other
+/// catalog write (rating, favoriting, importing), exactly the class of bug already fixed for the
+/// AI-stack phases (see CatalogState::ai_worker's doc comment) but never applied here since this
+/// function had never been looked at before a user reported the app "stuck" right after clicking
+/// Verify. Reads the row list once (short read_conn lock), hashes in rayon-parallel chunks with
+/// NO lock held at all (blake3_hex touches only the filesystem), and only re-locks `conn`
+/// briefly per chunk to apply the small number of "changed" re-baseline writes.
+pub fn verify_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<VerifyResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let rows: Vec<(i64, String, String, i64, i64, String, String, bool)> = {
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.name, p.rel_path, p.mtime, p.hashed_at, p.content_hash, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.content_hash IS NOT NULL",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                let is_local: i64 = r.get(7)?;
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, is_local != 0))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        rows
+    };
+
+    let total = rows.len();
+    let mut result = VerifyResult::default();
+    const CHUNK: usize = 16;
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    let mut done = 0usize;
+    for chunk in rows.chunks(CHUNK) {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        pacer.start_chunk();
+        let outcomes: Vec<VerifyOutcome> = chunk.par_iter().map(verify_one).collect();
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            for outcome in outcomes {
+                match outcome {
+                    VerifyOutcome::Ok => result.ok += 1,
+                    VerifyOutcome::Skipped => {}
+                    VerifyOutcome::Corrupt(entry) => result.corrupt.push(entry),
+                    VerifyOutcome::Changed { id, fresh_hash, current_mtime } => {
+                        let _ = conn.execute(
+                            "UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3",
+                            params![fresh_hash, current_mtime, id]
+                        );
+                        result.changed += 1;
+                    }
+                }
+            }
+        }
+        done += chunk.len();
+        progress(ScanProgress { phase: "verify".into(), done, total, current: String::new() });
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    result.checked = done;
+    if done == total {
+        // Only stamp verified_at when the sweep actually finished (not cancelled partway) —
+        // matches verify_run's own all-or-nothing semantics above.
+        let now = now_secs() as i64;
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let _ = conn.execute("UPDATE photos SET verified_at = ?1 WHERE present = 1 AND content_hash IS NOT NULL", params![now]);
+    }
+    progress(ScanProgress { phase: "done".into(), done, total, current: String::new() });
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn catalog_verify(app: tauri::AppHandle) -> Result<VerifyResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        verify_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+        verify_run_scoped(&state, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
     })
     .await
     .map_err(|e| format!("catalog_verify task panicked: {e}"))?
@@ -5746,6 +6117,12 @@ pub struct FocusResult {
 /// will have one by the time this loop next runs, since thumbnail_run always runs first in the
 /// pipeline (see main.rs's chained-scan ordering).
 pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<FocusResult, String> {
+    // ⚠️ Still holds `conn` for its whole (chunked, resumable) sweep like the pre-fix
+    // verify_run/hash_run did — not restructured to the short-lock-per-batch shape yet (lower
+    // priority: reads already-generated thumbnail JPEGs, not full source files, so its per-item
+    // cost is smaller). QoS-marked in the meantime so it can't starve the UI thread even though
+    // it can still block other catalog writes for its full duration.
+    crate::bgwork::mark_current_thread_background();
     let mut result = FocusResult::default();
     loop {
         if cancel.load(Ordering::Relaxed) {
@@ -6056,6 +6433,12 @@ pub async fn catalog_rebuild(app: tauri::AppHandle) -> Result<ScanResult, String
 }
 
 pub fn rebuild_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ScanResult, String> {
+    // ⚠️ Deliberately NOT re-locked per batch like verify_run_scoped/hash_run_scoped — this wipes
+    // the whole catalog first (DELETE FROM photos/roots/volumes below), so a re-lock mid-rebuild
+    // would let some OTHER command observe the catalog in that wiped, half-rebuilt state, which
+    // is a correctness risk worse than the perf one. Rare, explicit, user-initiated ("rebuild
+    // catalog from scratch") — QoS-marked so it can't starve the UI thread while it runs.
+    crate::bgwork::mark_current_thread_background();
     // Capture every root's absolute path + kind BEFORE wiping (volumes/roots are about to be
     // deleted too — this is what we re-derive from, since there is nothing else to derive it
     // from once the tables are empty).
@@ -6224,6 +6607,10 @@ fn link_via_export_history(
 /// once, unlike a per-row metadata read. Still cheap: only rows with `stack_id IS NULL` are
 /// even considered, so a fully-stacked archive costs one empty query on every later run.
 pub fn stack_run(conn: &Connection, cancel: &AtomicBool) -> Result<StackResult, String> {
+    // ⚠️ Same note as focus_run — still holds `conn` for its whole run, QoS-marked as a stopgap
+    // rather than restructured, since burst-stack grouping is metadata comparison (cheap) not a
+    // per-file content read.
+    crate::bgwork::mark_current_thread_background();
     let mut result = StackResult::default();
     // Rule 1 first — it's authoritative (the app's own record of what it wrote where), so
     // anything it links must not then be re-evaluated by the heuristic rules 2/3 below. Those
