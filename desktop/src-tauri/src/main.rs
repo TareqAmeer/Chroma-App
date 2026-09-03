@@ -2203,6 +2203,16 @@ fn main() {
         .setup(|app| {
             let handle = app.handle();
 
+            // The window opened smaller than the screen on every launch, for two separate
+            // reasons that both land here (tauri_plugin_window_state has already restored by
+            // the time .setup runs):
+            //   1. A fresh profile has no saved state at all, so tauri.conf.json's fixed
+            //      1440x900 is what you get regardless of how big the display actually is.
+            //   2. A saved state can no longer FIT the current monitor — measured on this
+            //      machine: 2844x1584 physical saved at y=50, i.e. the full framebuffer height
+            //      but offset below the menu bar, so it overhangs the work area's bottom and
+            //      macOS silently shrinks it to fit rather than moving it up. Reconnecting a
+            //      display, or changing the scaled resolution, produces the same mismatch.
             // ⚠️ Quit-blocking while the offline full-res cache is actively generating — the
             // user's own explicit ask: closing mid-generation with no warning would silently
             // strand the hot-100-edited/hot-100-added set half-built, with no indication anything
@@ -2525,6 +2535,55 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building Chromasmith")
         .run(|app_handle, event| {
+            // The window opened smaller than the screen on every launch, for two separate
+            // reasons:
+            //   1. A fresh profile has no saved state, so tauri.conf.json's fixed 1440x900 is
+            //      what you get however big the display actually is (now also "maximized": true
+            //      there, which covers the first launch before any state exists).
+            //   2. A saved state that no longer matches the screen just restores forever.
+            //      Measured here: 1422x792 restored into a 1440x792 work area — full height,
+            //      flush left, 18pt short of the right edge, every single launch.
+            // ⚠️ This MUST run on Ready, not in .setup(). tauri-plugin-window-state restores in
+            // its own `.on_window_ready()` hook, which fires AFTER setup — a maximize() in setup
+            // is applied and then silently overwritten by the restore, which is exactly what the
+            // first version of this fix did (verified: window still came back 1422 wide).
+            if matches!(event, tauri::RunEvent::Ready) {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    const FILL: f64 = 0.9;
+                    let fills = (|| -> Option<bool> {
+                        let monitor = window.current_monitor().ok()??;
+                        // ⚠️ work_area(), NOT size(): size() is the whole panel, so a genuinely
+                        // maximized 1584px-tall window measures 0.88 of an 1800px monitor and
+                        // would be judged "deliberately small" every launch. The work area
+                        // already excludes the menu bar and the Dock.
+                        let area = monitor.work_area().size;
+                        let size = window.outer_size().ok()?;
+                        Some(
+                            f64::from(size.width) >= f64::from(area.width) * FILL
+                                && f64::from(size.height) >= f64::from(area.height) * FILL,
+                        )
+                    })();
+                    // The test is "does it FILL the work area", not "does it FIT inside it": at
+                    // 98.75% of the available width it fits perfectly, so a fits-inside test
+                    // leaves the gap there forever. Near-full is drift and gets snapped to exact
+                    // full; a window genuinely smaller than FILL is a deliberate choice and is
+                    // restored untouched, which is the point of persisting state at all.
+                    // `None` (monitor unreadable) maximizes too — a full-screen window is a safer
+                    // failure mode than an arbitrary one we could not verify.
+                    // ⚠️ Set the frame explicitly rather than calling maximize(). On macOS
+                    // maximize() is NSWindow's `zoom:`, whose "standard frame" AppKit computes
+                    // itself — measured here, it left the window 1422 wide against a 1440-wide
+                    // work area, i.e. it does NOT mean "fill the screen" and did not fix this.
+                    // Writing work_area straight to position+size is deterministic.
+                    if fills != Some(false) {
+                        if let Ok(Some(monitor)) = window.current_monitor() {
+                            let wa = *monitor.work_area();
+                            let _ = window.set_position(wa.position);
+                            let _ = window.set_size(wa.size);
+                        }
+                    }
+                }
+            }
             // macOS Launch-Services "open this document" — the actual mechanism behind Finder's
             // "Open With", and (once tauri.conf.json's fileAssociations register Chromasmith as
             // an editor) Lightroom's "Edit In" handoff. Fires both on a cold launch WITH a file

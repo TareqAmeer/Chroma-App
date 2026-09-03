@@ -15,6 +15,7 @@
         "url": "cs://localhost/index.html",
         "width": 1440,
         "height": 900,
+        "maximized": true,
         "minWidth": 900,
         "minHeight": 600,
         "titleBarStyle": "Overlay",
