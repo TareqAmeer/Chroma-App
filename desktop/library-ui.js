@@ -7668,13 +7668,11 @@
         };
       }
       // Row (label/count — anywhere but the chevron, which already stopped its own
-      // propagation): the actual "load these photos" action. Also EXPANDS (never collapses) the
-      // node so picking a year still reveals its months as a convenience, but that expansion is
-      // free — it's a re-render from data already in hand, not a second query — and collapsing
-      // stays the chevron's job alone so selecting a date can never surprise-close the tree.
+      // propagation): the actual "load these photos" action, nothing else. Expansion is the
+      // chevron's job alone — clicking a year to load it must not also reveal its months, or
+      // every date click grows the tree whether or not that's what was wanted.
       row.onclick = (e) => {
         e.stopPropagation();
-        if (toggleKey) dateExpanded.add(toggleKey);
         openCatalogView(row.dataset.dateScope);
       };
     });
