@@ -66,6 +66,8 @@ def build_summary(events):
     native_log_count = len([e for e in events if e.get('category') == 'native_log'])
     ipc = [e for e in events if e.get('category') == 'ipc']
     markers = [e for e in events if e.get('category') == 'marker']
+    child_events = [e for e in events if e.get('category') == 'child_process']
+    child_stalls = [e for e in child_events if e.get('kind') == 'possible_stall']
 
     freeze_pairs = []
     pending_start = None
@@ -102,6 +104,8 @@ def build_summary(events):
         'ipc': ipc,
         'slow_ipc': slow_ipc,
         'markers': markers,
+        'child_events': child_events,
+        'child_stalls': child_stalls,
         'memory': memory,
         'config': config,
         'progress': progress,
@@ -268,6 +272,16 @@ def render_markdown(summary, events_path, meta, incident_files, repeat_loops, co
             lines.append(f"- **{m['bug_id']}**: {m['explanation']}")
         lines.append("")
 
+    if summary['child_events']:
+        lines.append("## Child processes\n")
+        for e in summary['child_events']:
+            if e.get('kind') == 'possible_stall':
+                pipe_note = " ⚠️ **looks like a blocked pipe write**" if e.get('looks_like_pipe_block') else ""
+                lines.append(f"- `{_fmt_ts(e['ts'])}` **STALL** {e.get('cmd')} (pid {e.get('pid')}){pipe_note}")
+            else:
+                lines.append(f"- `{_fmt_ts(e['ts'])}` {e.get('msg', '')}")
+        lines.append("")
+
     if summary['markers']:
         lines.append("## User action markers\n")
         for m in summary['markers']:
@@ -386,6 +400,14 @@ def build_claude_digest(run_dir, summary, meta, incident_files, repeat_loops, co
                 continue
             seen.add(m['bug_id'])
             lines.append(f"- **{m['bug_id']}**: {m['explanation']}")
+        lines.append("")
+
+    if summary['child_stalls']:
+        lines.append("## Child process stalls\n")
+        for e in summary['child_stalls']:
+            pipe_note = " ⚠️ PIPE-BLOCKED" if e.get('looks_like_pipe_block') else ""
+            lines.append(f"- `{_fmt_ts(e['ts'])}` {e.get('cmd')} (pid {e.get('pid')}){pipe_note}: "
+                          f"{e.get('stack_summary') or 'no stack captured'}")
         lines.append("")
 
     if summary['markers']:

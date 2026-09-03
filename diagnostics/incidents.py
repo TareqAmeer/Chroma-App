@@ -13,15 +13,21 @@ import os
 import known_bugs
 import source_context
 import symbolicate
+from child_watch import STALL_WINDOW_S
 
 WINDOW_S = 5.0
-ANCHOR_CATEGORIES = ('freeze', 'error')
+ANCHOR_CATEGORIES = ('freeze', 'error', 'child_process')
 
 
 def _is_anchor(e):
     if e.get('category') == 'error':
         return True
     if e.get('category') == 'freeze' and e.get('kind') == 'start':
+        return True
+    # A hung/deadlocked child (child_watch.py) is exactly as report-worthy as a freeze —
+    # the main app's own AppleEvent responsiveness stays healthy the whole time, so this is
+    # the only anchor that would ever catch it.
+    if e.get('category') == 'child_process' and e.get('kind') == 'possible_stall':
         return True
     return False
 
@@ -142,12 +148,27 @@ def severity_score(incident):
         score += (end.get('duration_s', 1) if end else 1) * 10
     score += len(incident['related_errors']) * 2
     score += len(incident['bug_matches']) * 5
+    for a in incident['anchors']:
+        if a.get('category') == 'child_process' and a.get('kind') == 'possible_stall':
+            score += 20 if a.get('looks_like_pipe_block') else 10
     return score
 
 
 def render_incident_markdown(incident, idx):
     lines = [f"# Incident {idx}", ""]
     lines.append(f"Window: {_fmt_ts(incident['ts_start'])} – {_fmt_ts(incident['ts_end'])}\n")
+
+    stall_anchors = [a for a in incident['anchors']
+                      if a.get('category') == 'child_process' and a.get('kind') == 'possible_stall']
+    for a in stall_anchors:
+        pipe_note = " ⚠️ **looks like a blocked pipe write**" if a.get('looks_like_pipe_block') else ""
+        lines.append(f"## Child process stall — {a.get('cmd')} (pid {a.get('pid')}){pipe_note}")
+        lines.append(f"Idle for {STALL_WINDOW_S:.0f}s+, {a.get('pipe_fd_count')} open pipe fd(s)")
+        if a.get('stack_summary'):
+            lines.append(f"Stack: `{a['stack_summary']}`")
+        if a.get('sample_path'):
+            lines.append(f"Raw stack sample: `{a['sample_path']}`")
+        lines.append("")
 
     if incident['freeze_detail']:
         fd = incident['freeze_detail']

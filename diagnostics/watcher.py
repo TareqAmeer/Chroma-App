@@ -17,6 +17,7 @@ from log_capture import LogStreamCapture, RelaunchCapture
 from js_relay import JsRelay, PASTE_SNIPPET
 from native_bridge import NativeBridgePoller, DIAG_PATH
 from log_file import LogFileTailer, LOG_PATH
+from child_watch import ChildProcessWatcher
 import sample_capture
 import run_meta
 
@@ -25,6 +26,7 @@ PROCESS_POLL_S = 1.0
 FREEZE_POLL_S = 3.0
 NATIVE_BRIDGE_POLL_S = 2.0
 LOG_FILE_POLL_S = 2.0
+CHILD_POLL_S = 3.0
 
 ACTIVE_RUN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports', '.active_run')
 
@@ -115,6 +117,7 @@ class Session:
 
         native_bridge = NativeBridgePoller(self._write_event)
         log_file_tail = LogFileTailer(self._write_event)
+        child_watch = ChildProcessWatcher(self._write_event, self.samples_dir)
 
         freeze = FreezeDetector(BUNDLE_ID)
 
@@ -128,6 +131,7 @@ class Session:
         next_freeze_poll = start
         next_native_poll = start
         next_logfile_poll = start
+        next_child_poll = start
         exit_reason = 'duration elapsed'
 
         try:
@@ -154,6 +158,10 @@ class Session:
                 if now >= next_logfile_poll:
                     next_logfile_poll = now + LOG_FILE_POLL_S
                     log_file_tail.poll()
+
+                if now >= next_child_poll:
+                    next_child_poll = now + CHILD_POLL_S
+                    child_watch.poll(self.pid)
 
                 if now >= next_freeze_poll:
                     next_freeze_poll = now + FREEZE_POLL_S

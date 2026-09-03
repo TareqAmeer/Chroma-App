@@ -29,6 +29,12 @@ PATTERNS = [
      "A Rust panic was caught by diag.rs's panic hook (this codebase's first — previously "
      "invisible outside a terminal entirely). Very likely the direct cause of a crash/restart "
      "near this timestamp; check the message for the panicking function and file:line."),
+    (re.compile(r'looks like a blocked pipe write'), 'child-pipe-deadlock',
+     "A child process (e.g. a --*-worker subprocess) is idle with an open pipe fd AND its own "
+     "stack sample shows write/writev at the top — the standard 'blocked writing to a full, "
+     "undrained stdout/stderr pipe' deadlock. Fix: drain the pipe continuously (read in a "
+     "loop/thread as the child writes) rather than only after it exits, or don't pipe "
+     "stdout/stderr at all if nothing needs to capture it."),
 ]
 
 REPEAT_LOOP_WINDOW_S = 30.0
