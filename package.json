@@ -1,7 +1,7 @@
 {
   "name": "chromasmith",
   "version": "1.0.0",
-  "description": "Chromasmith \u2014 offline film-emulation photo editor (iOS shell wraps the single-file web app)",
+  "description": "Chromasmith — offline film-emulation photo editor (iOS shell wraps the single-file web app)",
   "private": true,
   "scripts": {
     "postinstall": "patch-package",
@@ -15,6 +15,9 @@
     "mask:test": "node test/mask_raster.mjs",
     "ui:test": "node test/ui_audit.mjs",
     "ui:baseline": "node test/ui_audit.mjs --baseline",
+    "visual:test": "node test/visual_baseline.mjs",
+    "visual:baseline": "node test/visual_baseline.mjs --baseline",
+    "visual:scorecard": "node test/visual_scorecard.mjs",
     "perf:test": "node test/perf_bench.mjs",
     "perf:baseline": "node test/perf_bench.mjs --baseline",
     "scorecard": "if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 calib/export_scorecard.py; else python3 calib/export_scorecard.py; fi",
@@ -31,6 +34,8 @@
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
     "patch-package": "^8.0.1",
-    "playwright": "^1.48.0"
+    "pixelmatch": "^7.2.0",
+    "playwright": "^1.48.0",
+    "pngjs": "^7.0.0"
   }
 }
