@@ -24,6 +24,7 @@ import time
 
 import sample_capture
 import symbolicate
+import pipe_dtrace
 
 STALL_CPU_THRESHOLD = 1.0    # % — below this counts as "not doing visible work"
 STALL_WINDOW_S = 20.0        # how long CPU must stay low before flagging a stall
@@ -88,9 +89,10 @@ def pipe_fd_count(pid):
 
 
 class ChildProcessWatcher:
-    def __init__(self, on_event, samples_dir):
+    def __init__(self, on_event, samples_dir, use_dtrace=False):
         self.on_event = on_event
         self.samples_dir = samples_dir
+        self.use_dtrace = use_dtrace
         self._known = {}  # pid -> {'cmd', 'low_cpu_since', 'flagged'}
 
     def poll(self, main_pid):
@@ -142,16 +144,27 @@ class ChildProcessWatcher:
             fds and fds > 0 and stack_summary
             and any(w in stack_summary.lower() for w in ('write', 'writev', 'fwrite'))
         )
+
+        dtrace_confirmed = None
+        if self.use_dtrace:
+            # Direct confirmation instead of the heuristic above — see pipe_dtrace.py's own
+            # header for why this is opt-in (needs sudo) rather than the default.
+            dtrace_confirmed = pipe_dtrace.confirm_blocked_write(pid)
+            if dtrace_confirmed:
+                looks_like_pipe_block = True
         msg = (f"child process {info['cmd']} (pid {pid}) idle for {STALL_WINDOW_S:.0f}s+ "
                f"with {fds if fds is not None else '?'} open pipe fd(s)")
         if stack_summary:
             msg += f"; stack: {stack_summary}"
-        if looks_like_pipe_block:
+        if dtrace_confirmed is True:
+            msg += " — dtrace CONFIRMED it is currently inside write()"
+        elif looks_like_pipe_block:
             msg += " — looks like a blocked pipe write (see diagnostics/README.md)"
 
         self.on_event({
             'ts': now, 'category': 'child_process', 'kind': 'possible_stall',
             'pid': pid, 'cmd': info['cmd'], 'pipe_fd_count': fds,
             'stack_summary': stack_summary, 'sample_path': sample_path,
-            'looks_like_pipe_block': looks_like_pipe_block, 'msg': msg,
+            'looks_like_pipe_block': looks_like_pipe_block,
+            'dtrace_confirmed': dtrace_confirmed, 'msg': msg,
         })

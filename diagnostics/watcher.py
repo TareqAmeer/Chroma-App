@@ -32,10 +32,11 @@ ACTIVE_RUN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'repo
 
 
 class Session:
-    def __init__(self, duration_s, relaunch=False, use_spindump=False, run_dir=None):
+    def __init__(self, duration_s, relaunch=False, use_spindump=False, use_dtrace=False, run_dir=None):
         self.duration_s = duration_s
         self.relaunch = relaunch
         self.use_spindump = use_spindump
+        self.use_dtrace = use_dtrace
         self.run_dir = run_dir
         self.samples_dir = os.path.join(run_dir, 'samples')
         self.events_path = os.path.join(run_dir, 'events.jsonl')
@@ -117,7 +118,7 @@ class Session:
 
         native_bridge = NativeBridgePoller(self._write_event)
         log_file_tail = LogFileTailer(self._write_event)
-        child_watch = ChildProcessWatcher(self._write_event, self.samples_dir)
+        child_watch = ChildProcessWatcher(self._write_event, self.samples_dir, use_dtrace=self.use_dtrace)
 
         freeze = FreezeDetector(BUNDLE_ID)
 

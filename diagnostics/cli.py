@@ -39,6 +39,7 @@ def cmd_start(args):
         duration_s=args.duration,
         relaunch=args.relaunch,
         use_spindump=args.use_spindump,
+        use_dtrace=args.use_dtrace,
         run_dir=run_dir,
     )
     rc = session.run()
@@ -106,6 +107,10 @@ def main():
     p_start.add_argument('--use-spindump', action='store_true',
                           help='Escalate to spindump (may prompt for sudo) if `sample` fails to '
                                'capture a hung process')
+    p_start.add_argument('--use-dtrace', action='store_true',
+                          help='When a child process stall is suspected, confirm it instantly via '
+                               'a short dtrace probe (needs sudo) instead of relying only on the '
+                               'CPU-idle-then-stack-sample heuristic — see pipe_dtrace.py')
     p_start.set_defaults(func=cmd_start)
 
     p_report = sub.add_parser('report', help='Re-render a report from a saved run')

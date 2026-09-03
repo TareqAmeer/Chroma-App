@@ -75,7 +75,20 @@ goes to `/tmp/chromasmith_diag_autostart.log` if you want to confirm it fired.
 | **Catalog indexing progress** | `diag.rs` tracks thumbnail-generation backlog/generated counters at their one existing computation site in `catalog_thumbnails` (catalog.rs) — first/last readings and whether the backlog is actually shrinking | `report.md` "Catalog indexing progress" section |
 | **Stale-deploy detection** | the running binary's own mtime (resolved via the same process lookup that finds the PID) compared against HEAD's commit time, captured immediately at session start — independent of the native bridge, so it works even against an old binary | `report.md`/`for_claude.md` header, plus a terminal warning at session start |
 | **Real window screenshots** | `cli.py mark` captures the app's actual window via `screencapture -l <windowID>` — a composited capture from the window server's own buffer (works regardless of focus/overlap), where the window ID comes from a tiny `swift` script (no CGWindowID API is reachable from AppleScript or this machine's Python 3.8) — deliberately not full computer-use screen sharing, a separate consent path | `report.md`/`for_claude.md` "User action markers", inline in the markdown |
-| **Hung/deadlocked child processes** | `child_watch.py` discovers every descendant of the watched PID (`pgrep -P`, recursive) — invisible to the freeze detector, which only pings the main app's AppleEvent responsiveness and stays healthy even when a background child (e.g. a `--face-scan-worker` subprocess) is fully deadlocked. A child idle (near-0% CPU) for 20s+ triggers a `sample` stack capture on THAT pid plus an `lsof` pipe-fd count; verified live against a real reproduction of "child blocked writing to a full, undrained stdout/stderr pipe" — the stack came back `_io_FileIO_write -> _Py_write_impl -> write (in libsystem_kernel.dylib)`, a direct confirmation, not an inference | `report.md` "Child processes" section, incident bundles (a stall is an anchor, same as a freeze), known-bug-class match |
+| **Hung/deadlocked child processes** | `child_watch.py` discovers every descendant of the watched PID (`pgrep -P`, recursive) — invisible to the freeze detector, which only pings the main app's AppleEvent responsiveness and stays healthy even when a background child (e.g. a `--face-scan-worker` subprocess) is fully deadlocked. A child idle (near-0% CPU) for 20s+ triggers a `sample` stack capture on THAT pid plus an `lsof` pipe-fd count; verified live against a real reproduction of "child blocked writing to a full, undrained stdout/stderr pipe" — the stack came back `_io_FileIO_write -> _Py_write_impl -> write (in libsystem_kernel.dylib)`, a direct confirmation, not an inference. `--use-dtrace` upgrades this to an instant syscall-level confirmation instead of waiting out the idle window — see the alternatives-considered table below for why that's opt-in rather than the default | `report.md` "Child processes" section, incident bundles (a stall is an anchor, same as a freeze), known-bug-class match |
+
+### Detecting a hung/deadlocked child — alternatives considered
+
+Four ways to detect a child blocked writing to a full pipe were compared, three tested live
+against a real reproduction (a parent piping a child's stdout without ever reading it) before
+picking a default — not just implemented and then rationalized:
+
+| approach | verdict |
+|---|---|
+| **dtrace** watching `syscall::write:entry/return` for the pid | Would catch the block the INSTANT it happens — no polling delay. Tested live: SIP does NOT block tracing this app or its own workers (SIP only restricts Apple's own system binaries), but dtrace still requires root regardless — `dtrace -n '...'` without sudo fails immediately with "DTrace requires additional privileges", and this environment has no passwordless sudo. Can't be the always-on default; offered as `--use-dtrace` (same sudo tradeoff as `--use-spindump`) for instant confirmation instead of waiting out the 20s heuristic below. |
+| **macOS `ps -o stat,wchan`** (the D-state equivalent that works on Linux) | Tested live against the same reproduction: `STAT=SN WCHAN=-` — no signal distinguishing a process blocked in `write()` from any other idle sleep. Ruled out; this is a real macOS/Linux `ps` capability gap, not a lookup mistake. |
+| **Heartbeat** (the child periodically reports "I'm alive and at step N") | The standard production pattern (systemd watchdog, supervisord, k8s liveness probes) and the most robust — but it requires instrumenting the CHILD's own code, which is an app change, not something an external diagnostic tool can retrofit onto an arbitrary future child it doesn't control the source of. Worth doing IN the app itself for a specific known-risky worker; out of scope here. |
+| **CPU-idle heuristic + `lsof` pipe-fd count + `sample` stack capture** (what's implemented, default) | No privilege needed, degrades gracefully, and the `sample` stack trace is a DIRECT read of the blocked thread's own call stack, not an inference — verified live: it came back `_io_FileIO_write -> _Py_write_impl -> write (in libsystem_kernel.dylib)` on the same reproduction the other options were tested against. Detection is delayed by up to `STALL_WINDOW_S` (20s) vs. dtrace's instant catch — worth it for running without ever prompting for sudo. |
 
 ## Making sense of a run (beyond the raw event log)
 
@@ -115,6 +128,11 @@ goes to `/tmp/chromasmith_diag_autostart.log` if you want to confirm it fired.
 - `--use-spindump` — if a freeze is detected but `sample` fails to capture it
   (a process wedged badly enough that even `sample`'s own AppleEvent-adjacent
   calls don't respond), escalate to `spindump` (may prompt for `sudo`).
+- `--use-dtrace` — when a child-process stall is suspected (`child_watch.py`),
+  confirm it INSTANTLY via a short dtrace probe watching that pid's
+  `write()`/`writev()` calls (may prompt for `sudo`), instead of relying only
+  on the default CPU-idle-then-stack-sample heuristic. See "Detecting a
+  hung/deadlocked child" below for why this is opt-in, not the default.
 
 ## Output layout
 
