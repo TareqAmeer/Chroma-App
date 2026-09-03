@@ -2414,9 +2414,12 @@ pub fn faces_run(
 }
 
 /// CLI entrypoint for the face-scan worker process (see CatalogState::ai_worker's doc comment
-/// for why this exists as a separate process). See run_ai_worker for the shared parent-side
-/// machinery this pairs with.
-pub fn run_face_scan_worker(db_path: &Path) -> i32 {
+/// for why this exists as a separate process). `photo_ids` is `None` for a full-library scan or
+/// `Some` for a scoped one ("Find faces in selection" has NO size cap — a "select all" on a huge
+/// folder is exactly as unbounded as the sidebar's whole-library button, which is why this is a
+/// parameter here rather than the worker always assuming None the way the first version of this
+/// did). See run_ai_worker for the shared parent-side machinery this pairs with.
+pub fn run_face_scan_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
     crate::bgwork::mark_current_thread_background();
     let conn = match open_and_migrate(db_path) {
         Ok(c) => c,
@@ -2426,7 +2429,7 @@ pub fn run_face_scan_worker(db_path: &Path) -> i32 {
         }
     };
     let cancel = AtomicBool::new(false);
-    match faces_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+    match faces_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
         Ok(r) => {
             println!("DONE scanned={} faces_found={}", r.scanned, r.faces_found);
             0
@@ -2439,8 +2442,8 @@ pub fn run_face_scan_worker(db_path: &Path) -> i32 {
 }
 
 /// CLI entrypoint for the pet-detection worker process — mirrors run_face_scan_worker exactly,
-/// see its doc comment.
-pub fn run_pets_scan_worker(db_path: &Path) -> i32 {
+/// see its doc comment (including the `photo_ids` scoping note).
+pub fn run_pets_scan_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
     crate::bgwork::mark_current_thread_background();
     let conn = match open_and_migrate(db_path) {
         Ok(c) => c,
@@ -2450,7 +2453,7 @@ pub fn run_pets_scan_worker(db_path: &Path) -> i32 {
         }
     };
     let cancel = AtomicBool::new(false);
-    match pets_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+    match pets_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
         Ok(r) => {
             println!("DONE scanned={} pets_found={}", r.scanned, r.pets_found);
             0
@@ -2463,7 +2466,7 @@ pub fn run_pets_scan_worker(db_path: &Path) -> i32 {
 }
 
 /// CLI entrypoint for the face-embedding (ArcFace) worker process — mirrors run_face_scan_worker.
-pub fn run_embed_faces_worker(db_path: &Path) -> i32 {
+pub fn run_embed_faces_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
     crate::bgwork::mark_current_thread_background();
     let conn = match open_and_migrate(db_path) {
         Ok(c) => c,
@@ -2473,7 +2476,7 @@ pub fn run_embed_faces_worker(db_path: &Path) -> i32 {
         }
     };
     let cancel = AtomicBool::new(false);
-    match embed_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+    match embed_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
         Ok(r) => {
             println!("DONE embedded={}", r.embedded);
             0
@@ -2486,7 +2489,7 @@ pub fn run_embed_faces_worker(db_path: &Path) -> i32 {
 }
 
 /// CLI entrypoint for the CLIP-embedding worker process — mirrors run_face_scan_worker.
-pub fn run_clip_embed_worker(db_path: &Path) -> i32 {
+pub fn run_clip_embed_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
     crate::bgwork::mark_current_thread_background();
     let conn = match open_and_migrate(db_path) {
         Ok(c) => c,
@@ -2496,7 +2499,7 @@ pub fn run_clip_embed_worker(db_path: &Path) -> i32 {
         }
     };
     let cancel = AtomicBool::new(false);
-    match clip_embed_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+    match clip_embed_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
         Ok(r) => {
             println!("DONE embedded={}", r.embedded);
             0
@@ -2525,14 +2528,28 @@ fn run_ai_worker(
     app: &tauri::AppHandle,
     state: &tauri::State<CatalogState>,
     subcommand: &'static str,
-    phase: &'static str
+    phase: &'static str,
+    photo_ids: Option<&[i64]>
 ) -> Result<std::collections::HashMap<String, usize>, String> {
     use tauri::Emitter;
     let db_path = catalog_db_path();
     let exe = std::env::current_exe().map_err(|e| format!("could not resolve current executable: {e}"))?;
-    let mut child = std::process::Command::new(&exe)
-        .arg(subcommand)
-        .arg(&db_path)
+    // Scoped calls ("Find faces in selection" has NO size cap — see run_face_scan_worker's doc
+    // comment) pass their ids via a temp file rather than as a raw CLI arg: comma-joining tens of
+    // thousands of i64s is still under macOS's ARG_MAX in practice, but a file has no such ceiling
+    // to worry about at all, and is trivial to read back with a plain line-per-id format.
+    let ids_file = photo_ids.filter(|ids| !ids.is_empty()).map(|ids| {
+        let path = std::env::temp_dir().join(format!("chromasmith_scan_ids_{}_{}.txt", std::process::id(), now_secs()));
+        let text = ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join("\n");
+        let _ = std::fs::write(&path, text);
+        path
+    });
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.arg(subcommand).arg(&db_path);
+    if let Some(f) = &ids_file {
+        cmd.arg(f);
+    }
+    let mut child = cmd
         .stdout(std::process::Stdio::piped())
         // ⚠️ NOT piped. A piped-but-undrained stderr is a classic Unix subprocess deadlock: the
         // OS pipe buffer (~64KB) fills once the worker logs enough (this app's RAW decode path
@@ -2600,6 +2617,9 @@ fn run_ai_worker(
     if let Some(mut child) = child {
         let _ = child.wait();
     }
+    if let Some(f) = &ids_file {
+        let _ = std::fs::remove_file(f);
+    }
     let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
     Ok(kv)
 }
@@ -2611,13 +2631,17 @@ pub async fn catalog_faces_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
 
-        // Scoped selections ("Find faces in selection") stay in-process: small, bounded, fast —
-        // spinning up a whole OS process for a handful of photos isn't worth the latency, and
-        // the Mutex-starvation problem the worker exists to avoid only bites on a scan long
-        // enough to matter (many minutes across a whole library). Same for every other phase
-        // below (pets/embed/clip) — see CatalogState::ai_worker's doc comment.
-        if photo_ids.is_none() && catalog_db_path().is_file() {
-            let kv = run_ai_worker(&app, &state, "--face-scan-worker", "faces")?;
+        // ⚠️ Routed through the worker regardless of scope — NOT just when photo_ids is None.
+        // "Find faces in selection" has no size cap (any n>=1, including a `select all` on a huge
+        // folder — see the context-menu item's own comment), so a "scoped calls are always small"
+        // assumption was wrong: it left this exact Mutex-holding, non-QoS'd bug reachable from
+        // that menu item after the unscoped path was already fixed, confirmed live (onnxruntime
+        // actively computing inside the MAIN process, not a child, while the app was reported
+        // stuck). Falls back to in-process only when there's no real on-disk catalog to hand a
+        // child (CatalogState::new's in-memory fallback) — a child reading a different, empty
+        // in-memory-only database would just silently scan nothing.
+        if catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--face-scan-worker", "faces", photo_ids.as_deref())?;
             return Ok(FacesResult { scanned: kv.get("scanned").copied().unwrap_or(0), faces_found: kv.get("faces_found").copied().unwrap_or(0) });
         }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
@@ -2795,8 +2819,8 @@ pub async fn catalog_pets_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
-        if photo_ids.is_none() && catalog_db_path().is_file() {
-            let kv = run_ai_worker(&app, &state, "--pets-scan-worker", "pets")?;
+        if catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--pets-scan-worker", "pets", photo_ids.as_deref())?;
             return Ok(PetsResult { scanned: kv.get("scanned").copied().unwrap_or(0), pets_found: kv.get("pets_found").copied().unwrap_or(0) });
         }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
@@ -3239,8 +3263,8 @@ pub async fn catalog_embed_faces(app: tauri::AppHandle, photo_ids: Option<Vec<i6
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
-        if photo_ids.is_none() && catalog_db_path().is_file() {
-            let kv = run_ai_worker(&app, &state, "--embed-faces-worker", "embed")?;
+        if catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--embed-faces-worker", "embed", photo_ids.as_deref())?;
             return Ok(EmbedResult { embedded: kv.get("embedded").copied().unwrap_or(0) });
         }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
@@ -4082,8 +4106,8 @@ pub async fn catalog_clip_embed(app: tauri::AppHandle, photo_ids: Option<Vec<i64
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
-        if photo_ids.is_none() && catalog_db_path().is_file() {
-            let kv = run_ai_worker(&app, &state, "--clip-embed-worker", "clip")?;
+        if catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--clip-embed-worker", "clip", photo_ids.as_deref())?;
             return Ok(ClipEmbedResult { embedded: kv.get("embedded").copied().unwrap_or(0) });
         }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;

@@ -1914,7 +1914,8 @@ fn main() {
     // exits before any of that is constructed below.
     let args: Vec<String> = std::env::args().collect();
     let worker_flag = args.get(1).map(String::as_str);
-    let worker_fn: Option<fn(&std::path::Path) -> i32> = match worker_flag {
+    type WorkerFn = fn(&std::path::Path, Option<&[i64]>) -> i32;
+    let worker_fn: Option<WorkerFn> = match worker_flag {
         Some("--face-scan-worker") => Some(catalog::run_face_scan_worker),
         Some("--pets-scan-worker") => Some(catalog::run_pets_scan_worker),
         Some("--embed-faces-worker") => Some(catalog::run_embed_faces_worker),
@@ -1926,7 +1927,14 @@ fn main() {
             eprintln!("{} requires a catalog.db path argument", worker_flag.unwrap());
             std::process::exit(1);
         };
-        std::process::exit(worker_fn(std::path::Path::new(db_path)));
+        // An optional 3rd arg is a path to a newline-separated file of photo ids — a scoped
+        // scan (catalog.rs's run_ai_worker writes this for "Find faces in selection", which has
+        // no size cap and is exactly as unbounded as an unscoped scan for a large selection).
+        // Absent means a full-library scan, matching every worker fn's `None` behavior.
+        let photo_ids: Option<Vec<i64>> = args.get(3).and_then(|f| std::fs::read_to_string(f).ok()).map(|text| {
+            text.lines().filter_map(|l| l.trim().parse().ok()).collect()
+        });
+        std::process::exit(worker_fn(std::path::Path::new(db_path), photo_ids.as_deref()));
     }
     // ⚠️ The rayon cap above only bounds RAYON's own worker threads. Every `#[tauri::command]
     // async fn` that does heavy per-file work (decode_raw_v2, get_thumbnail, catalog_scan's whole
