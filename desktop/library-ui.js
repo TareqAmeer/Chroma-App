@@ -505,7 +505,7 @@
             missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7',
             sharpness: blurry ? 20 : 400, blurry,
             // Matches catalog_counts' mock pending rule (id % 3 === 0) so the sidebar count and
-            // the "Not indexed" filtered grid can never visibly disagree under ?libtest=1.
+            // the "Not face-scanned" filtered grid can never visibly disagree under ?libtest=1.
             faces_scanned: i % 3 !== 0,
             stack_n: isStackLeader ? 3 : 0, thumb_path: isStackLeader ? '/test/AllPhotos/Exports/IMG_1001-v2.jpg' : null });
         }
@@ -1201,8 +1201,8 @@
           </select>
           <select id="lib-faces-filter" title="Filter by face-indexing status">
             <option value="all">All photos</option>
-            <option value="indexed">Indexed</option>
-            <option value="pending">Not indexed</option>
+            <option value="indexed">Face-scanned</option>
+            <option value="pending">Not face-scanned</option>
           </select>
           <select id="lib-rating-filter" title="Filter by star rating">
             <option value="all">Any rating</option>
@@ -6035,7 +6035,7 @@
     // driven by the SAME faces_scanned_at predicate faces_run itself uses (catalog_counts).
     const facesPendingRow = catalogCounts.faces_pending ? `
       <div class="lib-coll-row${state.source === 'catalog' && state.facesFilter === 'pending' ? ' on' : ''}" data-faces-pending="1" title="Photos not yet scanned for faces">
-        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not indexed</span>
+        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not face-scanned</span>
         <span class="lib-coll-count">${catalogCounts.faces_pending}</span>
       </div>` : '';
     return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' ? ' on' : ''}" data-catalog="all">
@@ -6365,7 +6365,14 @@
   let _activityStallTimer = null;
   const ACTIVITY_STALL_MS = 25000;
   function _activityStallTick() {
-    if (!activity.visible || activity.stage === 'done') { _activityStalled = false; return; }
+    // total===0 means we've never learned how much work (if any) actually exists — a
+    // full-library face scan primes the pill with total:0 and only gets a real number once
+    // its first progress event fires. If there's genuinely nothing to scan, that first event
+    // never comes and total stays 0 through the whole (possibly slow, model-loading) chain of
+    // awaits, so treating silence there as a stall would flag "Not responding…" on a perfectly
+    // idle library instead of just finishing as done. Only stall-check once we KNOW there's
+    // real outstanding work (total>0, e.g. a scoped "Find faces in selection" scan).
+    if (!activity.visible || activity.stage === 'done' || !activity.total) { _activityStalled = false; return; }
     const stalledNow = _activityLastProgressAt && (Date.now() - _activityLastProgressAt) > ACTIVITY_STALL_MS;
     if (stalledNow !== _activityStalled) { _activityStalled = stalledNow; renderActivity(); }
   }
