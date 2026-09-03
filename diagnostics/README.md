@@ -32,6 +32,17 @@ If a `start` session is active, each of these also logs into that run's
 `events.jsonl` — so a deep-dive number taken mid-session still shows up in
 `report.md`/incidents later, instead of living only in your terminal scrollback.
 
+`inspect` and `db` are terse by default (compact lines / first 10 rows) — the
+full detail is always ALSO written to a file, `--full` prints it inline. This
+matches two things the Claude Code community consistently recommends for
+keeping debugging fast and cheap on tokens: filter raw output down to the
+error/key fields before it reaches the model instead of pasting full dumps,
+and (for a genuinely large investigation) run the raw digging in a subagent —
+its own isolated context reads the noisy output, only a short summary comes
+back to the main conversation. `report --for-claude` already does the second
+half of that for a full session; these three commands are the equivalent for
+a single deep-dive number.
+
 ## Setup (once)
 
 ```bash

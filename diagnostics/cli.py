@@ -114,7 +114,11 @@ def _active_run_dir():
 
 def cmd_inspect(args):
     """Exact live numbers right now — the deep-dive counterpart to `report`'s
-    aggregate summary. Works with or without an active `start` session."""
+    aggregate summary. Terse by default (one line per process, no padded
+    table) since this output is meant to be read by an LLM as often as a
+    human — a full table costs real context tokens for no extra signal
+    over a compact line. `--full` prints the padded table; the full table
+    is always ALSO written to a file either way, so nothing is lost."""
     import find_process
     import inspect as inspect_mod  # shadows stdlib inspect on purpose within this function only
     try:
@@ -122,17 +126,31 @@ def cmd_inspect(args):
     except find_process.ProcessNotFound as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    print(f"Inspecting pid {pid} ({app_path or 'unknown bundle'}) — main + every descendant\n")
     rows = inspect_mod.snapshot(pid)
-    print(inspect_mod.render_table(rows))
 
     run_dir = _active_run_dir()
+    out_dir = os.path.join(run_dir, 'snapshots') if run_dir else '/tmp'
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"inspect_{int(time.time())}.txt")
+    with open(out_path, 'w') as f:
+        f.write(inspect_mod.render_table(rows) + '\n')
+
+    if args.full:
+        print(f"pid {pid} ({app_path or 'unknown bundle'}) — main + every descendant\n")
+        print(inspect_mod.render_table(rows))
+    else:
+        print(f"{len(rows)} process(es) — full table: {out_path}")
+        for r in rows:
+            cpu = f"{r['cpu_percent']:.0f}%" if r['cpu_percent'] is not None else '?'
+            rss = f"{r['rss_mb']:.0f}MB" if r['rss_mb'] is not None else '?'
+            cmd = (r['cmd'] or '?').rsplit('/', 1)[-1][:30]
+            print(f"  {r['pid']} {r['role']:<5} {cmd:<30} cpu={cpu:<5} rss={rss:<8} threads={r['threads']}")
+
     if run_dir:
         events_path = os.path.join(run_dir, 'events.jsonl')
         with open(events_path, 'a') as f:
             for ev in inspect_mod.snapshot_events(rows):
                 f.write(json.dumps(ev) + '\n')
-        print(f"\n(also logged to {os.path.basename(run_dir)})")
     return 0
 
 
@@ -176,15 +194,23 @@ def cmd_sample(args):
     return 0
 
 
-def _print_db_table(cols, rows):
+def _print_db_table(cols, rows, limit=None, out_path=None):
     if not rows:
         print("(no rows)")
         return
-    widths = [max(len(str(c)), *(len(str(r[i])) for r in rows)) for i, c in enumerate(cols)]
+    if out_path:
+        with open(out_path, 'w') as f:
+            f.write('\t'.join(cols) + '\n')
+            for r in rows:
+                f.write('\t'.join(str(v) for v in r) + '\n')
+    shown = rows if limit is None else rows[:limit]
+    widths = [max(len(str(c)), *(len(str(r[i])) for r in shown)) for i, c in enumerate(cols)]
     print('  '.join(str(c).ljust(w) for c, w in zip(cols, widths)))
     print('  '.join('-' * w for w in widths))
-    for r in rows:
+    for r in shown:
         print('  '.join(str(v).ljust(w) for v, w in zip(r, widths)))
+    if limit is not None and len(rows) > limit:
+        print(f"... {len(rows) - limit} more row(s) — --full to show all, or see {out_path}")
 
 
 def cmd_db(args):
@@ -219,7 +245,12 @@ def cmd_db(args):
         print(f"query failed: {e}", file=sys.stderr)
         return 1
 
-    _print_db_table(cols, rows)
+    run_dir = _active_run_dir()
+    out_dir = os.path.join(run_dir, 'db_queries') if run_dir else '/tmp'
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"query_{int(time.time())}.tsv")
+    limit = None if args.full else 10
+    _print_db_table(cols, rows, limit=limit, out_path=out_path)
     return 0
 
 
@@ -255,6 +286,7 @@ def main():
     p_mark.set_defaults(func=cmd_mark)
 
     p_inspect = sub.add_parser('inspect', help='Exact live process-tree snapshot right now (CPU/RSS/threads/FDs)')
+    p_inspect.add_argument('--full', action='store_true', help='Print the padded table (default: compact lines)')
     p_inspect.set_defaults(func=cmd_inspect)
 
     p_sample = sub.add_parser('sample', help='Capture a stack sample right now, no waiting for a freeze')
@@ -266,6 +298,7 @@ def main():
     p_db.add_argument('query', nargs='?', help='A canned query name (see --list)')
     p_db.add_argument('--sql', help='Raw SELECT/WITH query against catalog.db')
     p_db.add_argument('--list', action='store_true', help='List canned query names')
+    p_db.add_argument('--full', action='store_true', help='Print all rows (default: first 10)')
     p_db.set_defaults(func=cmd_db)
 
     args = parser.parse_args()
