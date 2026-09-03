@@ -186,7 +186,11 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 #dz-fx-img:not(.loaded):hover{background:rgba(212,144,58,.12)}
 #dz-fx-img:not(.loaded) .dz-ic,#dz-fx-img:not(.loaded) .dz-lb{color:var(--acc)}
 #panel-fx .dz-ic{font-size:16px}
-.fx-ctrl-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.fx-ctrl-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:6px}
+.fx-ctrl-chev{display:inline-flex;flex-shrink:0;transform:rotate(0deg);transition:transform var(--dur-1) var(--ease);margin-right:2px}
+.fx-ctrl.fx-sec-collapsed .fx-ctrl-chev{transform:rotate(-90deg)}
+.fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:10px;border-bottom:1px solid var(--bdr)}
+.fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
 .fx-toggle{width:32px;height:18px;border-radius:9px;background:var(--bdr);position:relative;cursor:pointer;transition:background .18s ease;flex-shrink:0;box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
 .fx-toggle.on{background:var(--acc);box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
 .fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .18s cubic-bezier(.34,1.4,.64,1);box-shadow:0 1px 2px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.06)}
@@ -20348,6 +20352,29 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
   b.innerHTML=icon('reset',14);
   b.onclick=(e)=>{e.stopPropagation();fxResetSection(title.parentElement);};
   title.appendChild(b);
+});
+// Sidebar sections collapse independently of their on/off state (a section can be OFF and
+// expanded, or ON and collapsed) — clicking the header (anywhere but the toggle/reset controls)
+// folds its body away. Persisted per-section in localStorage, same pattern as _mskGroupOpen.
+let _fxSecCollapsed={};
+try{const c=JSON.parse(localStorage.getItem('chromasmith_fx_sec_collapsed')||'null');if(c)_fxSecCollapsed=c;}catch(e){}
+function fxSecToggle(card){
+  const key=card.dataset.fxsec;if(!key)return;
+  const open=card.classList.toggle('fx-sec-collapsed');
+  _fxSecCollapsed[key]=open;
+  try{localStorage.setItem('chromasmith_fx_sec_collapsed',JSON.stringify(_fxSecCollapsed));}catch(e){}
+}
+document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
+  const title=card.querySelector(':scope > .fx-ctrl-title');
+  if(!title)return;
+  const chev=document.createElement('span');
+  chev.className='fx-ctrl-chev';chev.innerHTML=icon('chevron',14);
+  title.insertBefore(chev,title.firstChild);
+  if(_fxSecCollapsed[card.dataset.fxsec])card.classList.add('fx-sec-collapsed');
+  title.addEventListener('click',(e)=>{
+    if(e.target.closest('.fx-toggle,.fx-ctrl-title-reset,.fx-toggle-lb,button,input,select'))return;
+    fxSecToggle(card);
+  });
 });
 // Mirror #btn-fx-export's disabled state onto the bottom-pinned #fx-fab-export duplicate — an
 // observer instead of touching every one of the several places that toggle the real button, so
