@@ -1472,6 +1472,29 @@ pub fn set_sidecar(
     edited: bool,
     recipe: Option<String>,
     favorite: Option<bool>,
+    catalog_state: tauri::State<crate::catalog::CatalogState>,
+) -> Result<(), String> {
+    // ⚠️ try_lock, not lock: a blocking lock here would stall a rating/flag CLICK for the entire
+    // duration of a running catalog scan, which holds this same connection for a full walk —
+    // this write is a nice-to-have freshness sync, not something worth making the UI wait on.
+    let catalog_conn = catalog_state.conn.try_lock().ok();
+    set_sidecar_run(path, rating, label, edited, recipe, favorite, catalog_conn.as_deref())
+}
+
+/// Split out of the `#[tauri::command]` wrapper so every existing sidecar-writing test (there
+/// were already a dozen, none of which have any reason to care about catalog sync) keeps
+/// working without having to stand up a `tauri::State` — same reasoning as query_run/
+/// catalog_query. `catalog_conn: None` (what every such test now passes) simply skips the
+/// catalog write-through below; the real command wrapper above is the only caller that ever
+/// passes `Some`.
+pub fn set_sidecar_run(
+    path: String,
+    rating: i32,
+    label: String,
+    edited: bool,
+    recipe: Option<String>,
+    favorite: Option<bool>,
+    catalog_conn: Option<&rusqlite::Connection>,
 ) -> Result<(), String> {
     let existing = get_sidecar(path.clone());
     let recipe = recipe.unwrap_or_else(|| existing.recipe.clone());
@@ -1505,6 +1528,15 @@ pub fn set_sidecar(
     registry_set("favorites", &path, favorite);
     registry_set("flagged", &path, label == "Green");
     registry_set("rejected", &path, label == "Red");
+    // Keeps the catalog's own rating/label/edited/favorite columns from going stale the moment
+    // the user changes any of them — see sync_sidecar_fields_run's own doc comment for why this
+    // has to happen HERE (synchronously, on every write) rather than waiting for the next scan.
+    // `None` (a lock miss, or a test that never had a catalog connection to begin with) just
+    // skips this — the sidecar file itself (already written above) stays the real source of
+    // truth, and the next scan's own sidecar-sync pass catches up regardless.
+    if let Some(conn) = catalog_conn {
+        crate::catalog::sync_sidecar_fields_run(conn, &path, rating, &label, edited, favorite);
+    }
     Ok(())
 }
 
@@ -2660,7 +2692,7 @@ mod version_tests {
     #[test]
     fn virtual_copies_round_trip_and_stay_independent() {
         let path = scratch("rt");
-        set_sidecar(path.clone(), 3, "Green".into(), true, Some("RECIPE_A".into()), Some(true)).unwrap();
+        set_sidecar_run(path.clone(), 3, "Green".into(), true, Some("RECIPE_A".into()), Some(true), None).unwrap();
 
         // A photo that has never been copied carries NO versions — it must look exactly like one
         // written before this feature existed.
@@ -2677,7 +2709,7 @@ mod version_tests {
         assert_eq!(sc.versions[1].recipe, "RECIPE_A", "a copy branches from where you were");
 
         // Editing writes to the ACTIVE version only.
-        set_sidecar(path.clone(), 3, "Green".into(), true, Some("RECIPE_B".into()), None).unwrap();
+        set_sidecar_run(path.clone(), 3, "Green".into(), true, Some("RECIPE_B".into()), None, None).unwrap();
         let sc = get_sidecar(path.clone());
         assert_eq!(sc.versions[1].recipe, "RECIPE_B");
         assert_eq!(sc.versions[0].recipe, "RECIPE_A", "editing a copy must not touch the original");
@@ -2701,7 +2733,7 @@ mod version_tests {
     #[test]
     fn deleting_down_to_one_collapses_the_list() {
         let path = scratch("del");
-        set_sidecar(path.clone(), 0, String::new(), true, Some("BASE".into()), None).unwrap();
+        set_sidecar_run(path.clone(), 0, String::new(), true, Some("BASE".into()), None, None).unwrap();
         sidecar_add_version(path.clone(), "B".into()).unwrap();
         sidecar_add_version(path.clone(), "C".into()).unwrap();
         assert_eq!(get_sidecar(path.clone()).versions.len(), 3);
@@ -2752,7 +2784,7 @@ mod version_tests {
     #[test]
     fn reset_edit_is_undoable_exactly_once() {
         let path = scratch("reset_undo");
-        set_sidecar(path.clone(), 3, "Green".into(), true, Some("ORIGRECIPE".into()), None).unwrap();
+        set_sidecar_run(path.clone(), 3, "Green".into(), true, Some("ORIGRECIPE".into()), None, None).unwrap();
 
         // Nothing to undo before any reset has happened.
         assert!(undo_reset_edit(path.clone()).is_err(), "undo with an empty buffer must error, not no-op silently");
@@ -2790,13 +2822,13 @@ mod version_tests {
     #[test]
     fn a_real_edit_after_a_reset_clears_the_undo_buffer() {
         let path = scratch("reset_then_edit");
-        set_sidecar(path.clone(), 0, String::new(), true, Some("A".into()), None).unwrap();
+        set_sidecar_run(path.clone(), 0, String::new(), true, Some("A".into()), None, None).unwrap();
         reset_edit(path.clone()).unwrap();
         assert!(get_sidecar(path.clone()).last_reset_recipe.is_some());
 
         // A genuine new edit (non-empty recipe, edited:true) supersedes the discarded recipe —
         // restoring it afterwards would silently throw away the new work.
-        set_sidecar(path.clone(), 0, String::new(), true, Some("B".into()), None).unwrap();
+        set_sidecar_run(path.clone(), 0, String::new(), true, Some("B".into()), None, None).unwrap();
         let sc = get_sidecar(path.clone());
         assert_eq!(sc.recipe, "B");
         assert!(sc.last_reset_recipe.is_none(), "a real edit must clear the pending undo buffer");
@@ -3212,7 +3244,7 @@ mod sidecar_preservation_tests {
 "#;
         std::fs::write(sidecar_path(&path), foreign).unwrap();
 
-        set_sidecar(path.clone(), 4, "Green".into(), true, Some("RECIPE_X".into()), Some(true)).unwrap();
+        set_sidecar_run(path.clone(), 4, "Green".into(), true, Some("RECIPE_X".into()), Some(true), None).unwrap();
 
         let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
         assert!(text.contains(r#"crs:Exposure2012="+0.35""#), "foreign attribute lost:\n{text}");
@@ -3234,8 +3266,8 @@ mod sidecar_preservation_tests {
     #[test]
     fn a_chromasmith_only_sidecar_round_trips_on_a_second_write() {
         let path = scratch("own");
-        set_sidecar(path.clone(), 2, "Red".into(), false, Some("A".into()), Some(false)).unwrap();
-        set_sidecar(path.clone(), 5, "".into(), true, Some("B".into()), Some(true)).unwrap();
+        set_sidecar_run(path.clone(), 2, "Red".into(), false, Some("A".into()), Some(false), None).unwrap();
+        set_sidecar_run(path.clone(), 5, "".into(), true, Some("B".into()), Some(true), None).unwrap();
         let sc = get_sidecar(path.clone());
         assert_eq!(sc.rating, 5);
         assert_eq!(sc.label, "", "label must be CLEARED, not left as the stale 'Red'");
@@ -3250,8 +3282,8 @@ mod sidecar_preservation_tests {
     #[test]
     fn clearing_a_field_removes_its_attribute_not_just_skips_it() {
         let path = scratch("clear");
-        set_sidecar(path.clone(), 3, "Star".into(), true, Some("R".into()), Some(true)).unwrap();
-        set_sidecar(path.clone(), 0, "".into(), false, Some("".into()), Some(false)).unwrap();
+        set_sidecar_run(path.clone(), 3, "Star".into(), true, Some("R".into()), Some(true), None).unwrap();
+        set_sidecar_run(path.clone(), 0, "".into(), false, Some("".into()), Some(false), None).unwrap();
         let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
         assert!(!text.contains("xmp:Label="), "cleared label attribute must be removed:\n{text}");
         assert!(!text.contains("chromasmith:Edited="), "cleared edited attribute must be removed:\n{text}");
@@ -3267,7 +3299,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn no_existing_sidecar_falls_back_to_the_plain_template() {
         let path = scratch("none");
-        set_sidecar(path.clone(), 3, "".into(), false, None, None).unwrap();
+        set_sidecar_run(path.clone(), 3, "".into(), false, None, None, None).unwrap();
         let sc = get_sidecar(path);
         assert_eq!(sc.rating, 3);
     }
@@ -3279,7 +3311,7 @@ mod sidecar_preservation_tests {
     fn an_unparseable_existing_sidecar_falls_back_safely() {
         let path = scratch("corrupt");
         std::fs::write(sidecar_path(&path), b"not xml at all").unwrap();
-        let res = set_sidecar(path.clone(), 2, "".into(), false, None, None);
+        let res = set_sidecar_run(path.clone(), 2, "".into(), false, None, None, None);
         assert!(res.is_ok());
         let sc = get_sidecar(path);
         assert_eq!(sc.rating, 2);
@@ -3460,7 +3492,7 @@ mod sidecar_preservation_tests {
     fn set_sidecar_preserves_existing_keywords() {
         let path = scratch("keywords-survive-rating");
         set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
-        set_sidecar(path.clone(), 3, "Green".into(), false, None, None).unwrap();
+        set_sidecar_run(path.clone(), 3, "Green".into(), false, None, None, None).unwrap();
         let sc = get_sidecar(path);
         assert_eq!(sc.keywords, vec!["Travel".to_string()]);
     }

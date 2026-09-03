@@ -299,7 +299,7 @@ Everything is in one file. Key pieces:
      once referenced `s2lp` above its definition and blacked the whole pipeline.
   2. **emit pass** — computes the halation/bloom *emission* map from the graded image.
   3. **blur passes** — per-channel Gaussian blur of the emission (σ_R ≫ σ_G ≫ σ_B).
-  4. **comp pass** — screen-blends bloom+halation, then **grain** (value-noise, see docs/calibration.md’s grain model section), then
+  4. **comp pass** — screen-blends bloom+halation, then **grain** (value-noise, see calib/CLAUDE.md’s grain model section), then
      **film artifacts** (procedural dust/hairs + wobbling vertical scratches + warm light leak;
      image-relative coords + a stable seed `fxState.artSeed`/Reshuffle so preview==export, and
      tile renders are byte-identical), then (if a Print profile is selected) a 2nd 3D LUT
@@ -428,9 +428,10 @@ All in the `:root` block at the top of the `<style>`. **Use the tokens; don't re
 These cover work that touches a specific subsystem — load the relevant one instead of
 carrying it in every turn:
 
-- **[docs/calibration.md](docs/calibration.md)** — halation/bloom emission model science,
-  `calib/` tooling, the grain model, Fujify Fujifilm-look recreation, chart zone geometry.
-  Load before tuning any `FXR.CAL.*` constant. See also skill `chromasmith-calib`.
+- **[calib/CLAUDE.md](calib/CLAUDE.md)** — halation/bloom emission model science, `calib/`
+  tooling, the grain model, Fujify Fujifilm-look recreation, chart zone geometry. Auto-loads
+  when working inside `calib/`; load before tuning any `FXR.CAL.*` constant. See also skill
+  `chromasmith-calib`.
 - **[docs/skin-tone.md](docs/skin-tone.md)** — the Skin Tone mask: Oklab-based contractive
   colour operator, segmentation-first design, panel layout, auto-seeded samples, named
   subjects. Load before touching `mskRebuild`, `skinUniformity()`, `colRangeWeight()`, or the
@@ -519,6 +520,6 @@ Learned the hard/expensive way:
 
 ## 7. Zone geometry & full calibration walkthrough
 
-See [docs/calibration.md](docs/calibration.md) for chart zone pixel coordinates and the
+See [calib/CLAUDE.md](calib/CLAUDE.md) for chart zone pixel coordinates and the
 full halation/grain/Fujify calibration method.
 

@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 16;
+const SCHEMA_VERSION: i64 = 17;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -723,6 +723,16 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_faces_scanned_at ON photos(faces_scanned_at)", [])?;
     }
 
+    // v16 -> v17: query_run gained rating/favorite/edited/label filters, made safe by
+    // set_sidecar now calling sync_sidecar_fields_run on every write (see that function's own
+    // doc comment) instead of leaving those four columns to go stale until the next full scan.
+    if version < 17 {
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_rating   ON photos(rating)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_favorite ON photos(favorite)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_edited   ON photos(edited)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_label    ON photos(label)", [])?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -842,6 +852,56 @@ fn abs_path(vol_last_path: &str, is_local: bool, rel_path: &str) -> String {
     } else {
         format!("{vol_last_path}/{rel_path}")
     }
+}
+
+/// The exact inverse of `abs_path`, tried against every known volume (there's normally one
+/// `is_local` row and a handful of external ones, so this is a handful of string compares, not a
+/// table scan). Used by `sync_sidecar_fields_run` to turn the absolute path `set_sidecar` is
+/// called with back into the (volume_id, rel_path) key `photos` is actually keyed on.
+fn find_photo_by_abs_path(conn: &Connection, path: &str) -> rusqlite::Result<Option<i64>> {
+    let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes")?;
+    let volumes: Vec<(i64, String, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<Result<_, _>>()?;
+    for (volume_id, last_path, is_local) in volumes {
+        let rel_path = if is_local != 0 {
+            path.strip_prefix('/')
+        } else {
+            path.strip_prefix(&last_path).and_then(|s| s.strip_prefix('/'))
+        };
+        let Some(rel_path) = rel_path else { continue };
+        let found: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
+                params![volume_id, rel_path],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if found.is_some() {
+            return Ok(found);
+        }
+    }
+    Ok(None)
+}
+
+/// Keeps `photos.rating/label/edited/favorite` in sync with the sidecar the instant the user
+/// changes them, so a server-side filter on those columns (query_run's rating/favorite/edited,
+/// once added) can never show stale results relative to what `set_sidecar` just wrote — the
+/// specific failure mode CatalogQuery's own doc comment on those fields used to rule them out
+/// for: a rating/flag/edit changed in this running session, filtered on before the next full
+/// library scan re-parses the sidecar.
+/// ⚠️ Best-effort and silent on "not found": a photo edited via a view that never went through
+/// catalog_query (Recents/Exported/an un-registered folder) legitimately has no catalog row yet
+/// — that is not an error, just nothing to keep in sync.
+pub fn sync_sidecar_fields_run(conn: &Connection, path: &str, rating: i32, label: &str, edited: bool, favorite: bool) {
+    let Ok(Some(photo_id)) = find_photo_by_abs_path(conn, path) else { return };
+    // Same raw value a rescan's own sidecar sync writes (see the "UPDATE photos SET rating..."
+    // site in scan_run) — no extra clamping here, or this path and a rescan could disagree on
+    // what a -1 (rejected) rating means for the exact same photo.
+    let _ = conn.execute(
+        "UPDATE photos SET rating = ?1, label = ?2, edited = ?3, favorite = ?4 WHERE id = ?5",
+        params![rating, label, edited as i64, favorite as i64, photo_id],
+    );
 }
 
 #[tauri::command]
@@ -4885,14 +4945,27 @@ pub struct CatalogQuery {
     /// value can never disagree the way they did before this field existed.
     #[serde(default)]
     pub faces: Option<String>,
-    /// ⚠️ Deliberately NOT added here: rating/favorite/edited. Those columns are written back
-    /// to the DB only when a sidecar is re-parsed during a scan (see the two
-    /// `UPDATE photos SET rating = ..., favorite = ..., edited = ...` sites), not synchronously
-    /// when the user changes a rating/flag/edit in this running session — the live source of
-    /// truth for those three is `state.sidecars` in the frontend. Filtering on the DB copy here
-    /// would silently show STALE results for anything touched since the last scan, which is a
-    /// worse bug than the one this migration fixes. They stay client-side (`passesFilters`)
-    /// until a write-through path exists.
+    /// "N or more", except 0 which means exactly unrated — same convention passesFilters' own
+    /// ratingFilter uses client-side, kept identical so a rating filter behaves the same whether
+    /// or not the current view happens to be paged.
+    #[serde(default)]
+    pub rating: Option<i32>,
+    #[serde(default)]
+    pub favorite: Option<bool>,
+    #[serde(default)]
+    pub edited: Option<bool>,
+    /// "Red" | "Green" — the flag/pick label, same values `set_sidecar`'s own `label` uses.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// ⚠️ rating/favorite/edited/label were NOT safe to add here until `set_sidecar`
+    /// (library.rs) started calling `sync_sidecar_fields_run` on every write: before that, these
+    /// four columns were only refreshed when a sidecar was re-parsed during a full scan, so
+    /// filtering on the DB copy would have shown STALE results for anything touched in the
+    /// current session — worse than the bug this migration fixes. Now that write path keeps them
+    /// live, so they're as safe as camera/lens/iso above. `passesFilters` still re-checks them
+    /// client-side too (from `state.sidecars`, which updates even faster — no round trip) —
+    /// harmless double-filtering, not a second source of truth, since both read the same
+    /// underlying edit.
     /// Pagination: fetch a page starting after this many matching rows (in the query's own
     /// ORDER BY), rather than the whole filtered set in one call — see openCatalogView's
     /// incremental-fetch loop. `None`/0 is page one.
@@ -4923,7 +4996,8 @@ impl Default for CatalogQuery {
         CatalogQuery {
             kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None,
             no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None,
-            folder: None, camera: None, lens: None, iso: None, faces: None, offset: None,
+            folder: None, camera: None, lens: None, iso: None, faces: None,
+            rating: None, favorite: None, edited: None, label: None, offset: None,
         }
     }
 }
@@ -5035,6 +5109,27 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 "indexed" => where_parts.push("p.kind != 'video' AND p.faces_scanned_at IS NOT NULL AND p.faces_scanned_at = p.mtime".to_string()),
                 _ => {}
             }
+        }
+        if let Some(r) = q.rating {
+            // Mirrors passesFilters' own "N or more, except 0 which means exactly unrated".
+            if r == 0 {
+                where_parts.push("p.rating = 0".to_string());
+            } else {
+                where_parts.push(format!("p.rating >= ?{}", values.len() + 1));
+                values.push(Box::new(r));
+            }
+        }
+        if let Some(fav) = q.favorite {
+            where_parts.push(format!("p.favorite = ?{}", values.len() + 1));
+            values.push(Box::new(fav as i64));
+        }
+        if let Some(ed) = q.edited {
+            where_parts.push(format!("p.edited = ?{}", values.len() + 1));
+            values.push(Box::new(ed as i64));
+        }
+        if let Some(l) = &q.label {
+            where_parts.push(format!("p.label = ?{}", values.len() + 1));
+            values.push(Box::new(l.clone()));
         }
         // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
         // March" cross-year view in this design), so they're only applied once year is set.
@@ -6465,7 +6560,11 @@ pub fn apply_queued_edit_run(conn: &Connection, id: i64) -> Result<(), String> {
         .map_err(|e| format!("queued edit {id} not found: {e}"))?;
     let path = abs_path(&last_path, is_local, &rel_path);
     let existing = crate::library::get_sidecar(path.clone());
-    crate::library::set_sidecar(path, existing.rating, existing.label, true, Some(recipe), Some(existing.favorite))?;
+    // `Some(conn)`, not None: this function already holds the catalog connection, so a replayed
+    // edit can sync its (unchanged) rating/label/favorite back into the row it just read them
+    // from — cheap and correct, unlike the plain `set_sidecar` command's try_lock (there, a
+    // second lock on the SAME connection isn't available; here, it already IS the same one).
+    crate::library::set_sidecar_run(path, existing.rating, existing.label, true, Some(recipe), Some(existing.favorite), Some(conn))?;
     conn.execute("DELETE FROM offline_edit_queue WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -7481,7 +7580,7 @@ mod tests {
         let cancel = AtomicBool::new(false);
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
 
-        crate::library::set_sidecar(photo_path.clone(), 4, "Green".into(), true, None, Some(true)).unwrap();
+        crate::library::set_sidecar_run(photo_path.clone(), 4, "Green".into(), true, None, Some(true), None).unwrap();
         // The sidecar now exists on disk with a real mtime, but the DB row's own sidecar_mtime
         // is still whatever the scan above saw (0, since the sidecar didn't exist yet) — a
         // rescan is what notices the sidecar appeared, exactly like a real edit-then-reopen.
@@ -7519,7 +7618,7 @@ mod tests {
         let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
         let cancel = AtomicBool::new(false);
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
-        crate::library::set_sidecar(photo_path.clone(), 5, "Red".into(), false, None, None).unwrap();
+        crate::library::set_sidecar_run(photo_path.clone(), 5, "Red".into(), false, None, None, None).unwrap();
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
         sidecar_run(&conn, &mut |_| {}, &cancel).unwrap();
         let rating: i64 = conn.query_row("SELECT rating FROM photos WHERE name = 'a.jpg'", [], |r| r.get(0)).unwrap();
@@ -8828,8 +8927,8 @@ mod tests {
         std::fs::write(dir.join("b.jpg"), b"y").unwrap();
         let a_path = dir.join("a.jpg").to_string_lossy().into_owned();
         let b_path = dir.join("b.jpg").to_string_lossy().into_owned();
-        crate::library::set_sidecar(a_path.clone(), 5, "Green".into(), true, None, Some(true)).unwrap();
-        crate::library::set_sidecar(b_path.clone(), 2, "Red".into(), false, None, None).unwrap();
+        crate::library::set_sidecar_run(a_path.clone(), 5, "Green".into(), true, None, Some(true), None).unwrap();
+        crate::library::set_sidecar_run(b_path.clone(), 2, "Red".into(), false, None, None, None).unwrap();
 
         let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
         let cancel = AtomicBool::new(false);

@@ -1686,12 +1686,20 @@
   // Album/Exported/Lightroom-cloud views never set this and keep their existing, unpaged,
   // client-side-filtered behavior untouched.
   function catalogFilterFields() {
+    // rating/favorite/edited/label are safe here because set_sidecar (library.rs) now writes
+    // them into the catalog the instant the user changes a rating/flag/edit — see
+    // CatalogQuery's own doc comment on sync_sidecar_fields_run for why that write-through is
+    // what makes this different from just reading the DB's (previously stale) copy.
     return {
       kind: state.typeFilter !== 'all' ? state.typeFilter : null,
       camera: state.cameraFilter !== 'all' ? state.cameraFilter : null,
       lens: state.lensFilter !== 'all' ? state.lensFilter : null,
       iso: state.isoFilter !== 'all' && state.isoFilter ? parseInt(state.isoFilter, 10) : null,
       faces: state.facesFilter !== 'all' ? state.facesFilter : null,
+      rating: state.ratingFilter !== 'all' ? parseInt(state.ratingFilter, 10) : null,
+      favorite: state.tagFilter === 'favorite' ? true : null,
+      edited: state.tagFilter === 'edited' ? true : (state.tagFilter === 'noedited' ? false : null),
+      label: state.tagFilter === 'red' ? 'Red' : (state.tagFilter === 'green' ? 'Green' : null),
     };
   }
   /// Re-issues the current catalog-backed view's base query at the given offset and appends the
@@ -1699,14 +1707,18 @@
   /// length) and is NOT used for offset 0 — that first page is always fetched by the view-opening
   /// function itself (openCatalogView/openFolder), which also has to do view-specific setup
   /// (skeleton, empty-state message, stack-expansion splicing) a bare append must not repeat.
+  /// Returns true if a page was successfully fetched (whether or not more remain after it),
+  /// false if nothing happened (wrong view, already loading, or a transient failure) — the
+  /// distinction selectAllCatalogEntries needs to tell "reached the end" apart from "network
+  /// hiccup, stop looping" without spinning forever on the latter.
   async function loadMoreCatalogEntries() {
     // The source check guards against a stale _catalogPaged/_catalogBaseQuery surviving a
     // switch to a non-catalog view (album/exported/Lightroom) that never resets them —
     // those views' own open functions don't set _catalogPaged themselves, so this is the one
     // place that has to know which sources are actually catalog_query-backed.
-    if (state.source !== 'catalog' && state.source !== 'folder') return;
-    if (!state._catalogPaged || !state._catalogCapped || state._catalogLoadingMore) return;
-    if (!state._catalogBaseQuery) return;
+    if (state.source !== 'catalog' && state.source !== 'folder') return false;
+    if (!state._catalogPaged || !state._catalogCapped || state._catalogLoadingMore) return false;
+    if (!state._catalogBaseQuery) return false;
     state._catalogLoadingMore = true;
     try {
       const q = { ...state._catalogBaseQuery, offset: state.entries.length };
@@ -1718,12 +1730,37 @@
       state._catalogTotal = page.total;
       state._catalogCapped = page.capped;
       renderGrid();
+      return true;
     } catch (e) {
       // Best-effort: leave capped as-is so the next scroll-near-end retries rather than
       // silently giving up on the rest of the library after one transient failure.
+      return false;
     } finally {
       state._catalogLoadingMore = false;
     }
+  }
+  /// ⌘A must mean "every photo the current filter matches," not "every photo loaded so far" —
+  /// paging only fetches on scroll, so on a library bigger than one page, plain
+  /// `state.entries.filter(passesFilters)` silently stopped at CATALOG_PAGE_SIZE (the exact
+  /// regression this exists to fix: select-all capped at 4,000 the moment paging shipped).
+  /// Pulls in every remaining page first, THEN selects — same data source virtUpdate's own
+  /// scroll-triggered loadMoreCatalogEntries uses, just driven eagerly instead of by scrolling.
+  async function selectAllCatalogEntries() {
+    if (state._catalogPaged) {
+      if (state._catalogCapped && typeof toast === 'function') {
+        toast(`Loading all ${state._catalogTotal || ''} photos to select…`);
+      }
+      while (state._catalogCapped) {
+        const ok = await loadMoreCatalogEntries();
+        if (!ok) {
+          if (typeof toast === 'function') toast('Could not load the rest of the library — selection may be incomplete', false);
+          break;
+        }
+      }
+    }
+    const all = sortEntries(state.entries.filter(passesFilters));
+    state.selected = new Set(all.map((en) => en.path));
+    updateCardSelClasses();
   }
   /// Filters that moved server-side (type/camera/lens/iso/faces) now need a full re-fetch from
   /// offset 0 on change, not a re-filter of whatever partial array happens to be in memory — a
@@ -5155,9 +5192,7 @@
     // shortcut here is unmodified).
     if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && !e.altKey && state.source !== 'lr' && state.viewMode !== 'compare') {
       e.preventDefault();
-      const all = sortEntries(state.entries.filter(passesFilters));
-      state.selected = new Set(all.map((en) => en.path));
-      updateCardSelClasses();
+      selectAllCatalogEntries();
       return;
     }
     // Copy/Paste/Reset/Undo/Export/Duplicate — keyboard shortcuts backing the context menu's
@@ -5295,7 +5330,7 @@
   overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-faces-filter').onchange = (e) => { state.facesFilter = e.target.value; applyCatalogFilterChange(); };
-  overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; applyCatalogFilterChange(); };
   if (!STARS_ENABLED) {
     // Sort option and list column are the two surfaces that are pure markup rather than a
     // starsHtml() call, so they need removing explicitly or the grid offers a sort by a value
