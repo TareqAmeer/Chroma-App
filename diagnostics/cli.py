@@ -5,6 +5,14 @@ Entrypoint for Chromasmith's live diagnostic tool.
   python3 diagnostics/cli.py start [--duration 15m] [--relaunch] [--use-spindump]
   python3 diagnostics/cli.py report [--run <timestamp>] [--for-claude]
   python3 diagnostics/cli.py mark "clicked Export"
+  python3 diagnostics/cli.py inspect                    # exact live process-tree snapshot
+  python3 diagnostics/cli.py sample [--pid PID]          # stack sample right now
+  python3 diagnostics/cli.py db pending-thumbs           # exact catalog.db row state
+  python3 diagnostics/cli.py db --sql "SELECT ..."       # or --list for canned queries
+
+inspect/sample/db work standalone (no `start` session needed) for the "give me
+exact numbers now" deep-dive — `start`'s report.md is the aggregate-summary
+triage layer on top of the same underlying data.
 
 See diagnostics/README.md for the full walkthrough.
 """
@@ -94,6 +102,127 @@ def cmd_mark(args):
     return 0
 
 
+def _active_run_dir():
+    if not os.path.exists(ACTIVE_RUN_FILE):
+        return None
+    with open(ACTIVE_RUN_FILE) as f:
+        run_dir = f.read().strip()
+    if run_dir and os.path.exists(os.path.join(run_dir, 'events.jsonl')):
+        return run_dir
+    return None
+
+
+def cmd_inspect(args):
+    """Exact live numbers right now — the deep-dive counterpart to `report`'s
+    aggregate summary. Works with or without an active `start` session."""
+    import find_process
+    import inspect as inspect_mod  # shadows stdlib inspect on purpose within this function only
+    try:
+        pid, app_path = find_process.find_chromasmith_pid()
+    except find_process.ProcessNotFound as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"Inspecting pid {pid} ({app_path or 'unknown bundle'}) — main + every descendant\n")
+    rows = inspect_mod.snapshot(pid)
+    print(inspect_mod.render_table(rows))
+
+    run_dir = _active_run_dir()
+    if run_dir:
+        events_path = os.path.join(run_dir, 'events.jsonl')
+        with open(events_path, 'a') as f:
+            for ev in inspect_mod.snapshot_events(rows):
+                f.write(json.dumps(ev) + '\n')
+        print(f"\n(also logged to {os.path.basename(run_dir)})")
+    return 0
+
+
+def cmd_sample(args):
+    """Capture a stack sample of a pid RIGHT NOW — no waiting for the freeze
+    detector to trip. Defaults to the app's own main pid."""
+    import sample_capture
+    import symbolicate
+    import find_process
+
+    pid = args.pid
+    if pid is None:
+        try:
+            pid, _ = find_process.find_chromasmith_pid()
+        except find_process.ProcessNotFound as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+
+    run_dir = _active_run_dir()
+    out_dir = os.path.join(run_dir, 'samples') if run_dir else '/tmp'
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"manual_sample_{pid}_{int(time.time())}.sample.txt")
+
+    print(f"Sampling pid {pid} for {args.seconds}s...")
+    ok = sample_capture.capture_sample(pid, out_path, seconds=args.seconds)
+    if not ok:
+        print("sample failed (process gone, or `sample` unavailable)", file=sys.stderr)
+        return 1
+
+    print(f"Raw sample: {out_path}")
+    summary = symbolicate.summarize(out_path)
+    if summary:
+        print(f"Deepest frames: {summary}")
+
+    if run_dir:
+        event = {'ts': time.time(), 'category': 'manual_sample', 'pid': pid,
+                  'path': out_path, 'stack_summary': summary}
+        with open(os.path.join(run_dir, 'events.jsonl'), 'a') as f:
+            f.write(json.dumps(event) + '\n')
+        print(f"(also logged to {os.path.basename(run_dir)})")
+    return 0
+
+
+def _print_db_table(cols, rows):
+    if not rows:
+        print("(no rows)")
+        return
+    widths = [max(len(str(c)), *(len(str(r[i])) for r in rows)) for i, c in enumerate(cols)]
+    print('  '.join(str(c).ljust(w) for c, w in zip(cols, widths)))
+    print('  '.join('-' * w for w in widths))
+    for r in rows:
+        print('  '.join(str(v).ljust(w) for v, w in zip(r, widths)))
+
+
+def cmd_db(args):
+    """Exact catalog.db row state, read-only — the sqlite3-one-liner
+    replacement. `--list` shows the canned queries; `--sql` is the escape hatch."""
+    import db as db_mod
+
+    if args.list:
+        for name, (desc, _) in db_mod.CANNED.items():
+            print(f"{name:<20} {desc}")
+        return 0
+
+    try:
+        if args.sql:
+            cols, rows = db_mod.run_sql(args.sql)
+        elif args.query:
+            if args.query not in db_mod.CANNED:
+                print(f"Unknown canned query '{args.query}'. --list to see options.", file=sys.stderr)
+                return 1
+            _, sql = db_mod.CANNED[args.query]
+            cols, rows = db_mod.run_sql(sql)
+        else:
+            print("Pass a canned query name, --sql, or --list. See --help.", file=sys.stderr)
+            return 1
+    except FileNotFoundError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    except (ValueError,) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:  # sqlite3.Error et al — surface it plainly, don't swallow
+        print(f"query failed: {e}", file=sys.stderr)
+        return 1
+
+    _print_db_table(cols, rows)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -124,6 +253,20 @@ def main():
     p_mark.add_argument('--no-screenshot', action='store_true',
                          help="Don't capture the app window (screenshot is automatic by default)")
     p_mark.set_defaults(func=cmd_mark)
+
+    p_inspect = sub.add_parser('inspect', help='Exact live process-tree snapshot right now (CPU/RSS/threads/FDs)')
+    p_inspect.set_defaults(func=cmd_inspect)
+
+    p_sample = sub.add_parser('sample', help='Capture a stack sample right now, no waiting for a freeze')
+    p_sample.add_argument('--pid', type=int, default=None, help='Defaults to the app\'s own main pid')
+    p_sample.add_argument('--seconds', type=int, default=3, help='Sample duration (default: 3)')
+    p_sample.set_defaults(func=cmd_sample)
+
+    p_db = sub.add_parser('db', help='Exact catalog.db row state, read-only')
+    p_db.add_argument('query', nargs='?', help='A canned query name (see --list)')
+    p_db.add_argument('--sql', help='Raw SELECT/WITH query against catalog.db')
+    p_db.add_argument('--list', action='store_true', help='List canned query names')
+    p_db.set_defaults(func=cmd_db)
 
     args = parser.parse_args()
     sys.exit(args.func(args))

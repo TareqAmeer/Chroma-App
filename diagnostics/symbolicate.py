@@ -9,7 +9,13 @@ symbolication, so callers should still link to the raw file for full detail.
 import re
 
 FRAME_RE = re.compile(
-    r'^(?P<indent>\s*)\d+\s+(?P<frame>.+?)(?:\s+\+\s+\d+)?(?:\s+\[0x[0-9a-fA-F]+\])?\s*$'
+    # Verified against real `sample` output (not the earlier hand-written fixture): frame
+    # lines are prefixed with a run of "+" characters, one per ancestor already printed once
+    # ("+ 1338 start ..." then "+   1338 ??? ..." etc, `+` count/spacing growing with depth) —
+    # `[\s+]*` absorbs that prefix so it doesn't break the match, and relative depth ordering
+    # (used by _deepest_frames below) still holds since deeper frames have strictly more chars.
+    r'^(?P<indent>[\s+]*)\d+\s+(?P<frame>.+?)(?:\s+\+\s+(?:0x[0-9a-fA-F]+|\d+))?'
+    r'(?:\s+\[0x[0-9a-fA-F]+\])?\s*$'
 )
 # Real `sample` thread headers look like "  2823 Thread_50331648   DispatchQueue: ..." —
 # the frame count comes BEFORE the Thread_ token, not after.
@@ -44,6 +50,13 @@ def _deepest_frames(block_text, top_n=3):
         frame = m.group('frame').strip()
         if not frame or frame.startswith('Binary Images'):
             continue
+        # "???  (in chromasmith)  load address 0x...  offset 0x..." — the release binary
+        # ships without symbols (cargo build's `-C strip=symbols`), so every frame actually
+        # inside chromasmith's own code is unsymbolicated. The "load address ..." tail adds
+        # nothing readable; keep just "??? (in <binary>)" so it's still visibly distinct from
+        # a real resolved frame, not silently dropped (a stuck-in-our-own-code stall would
+        # otherwise vanish from the summary instead of reading as "unresolved but present").
+        frame = re.sub(r'\s+load address 0x[0-9a-fA-F]+.*$', '', frame)
         frames.append((indent, frame))
     if not frames:
         return []

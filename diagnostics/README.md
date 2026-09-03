@@ -11,6 +11,27 @@ tool is for what those structurally can't see: real WKWebView timing, the real
 catalog on real hardware, a bug that only shows up 20 minutes into actual
 clicking.
 
+## Two layers: triage vs. deep-dive
+
+`start`/`report` give an aggregate, end-of-session summary — good for "is
+something actually wrong" (ruled out a backend hang once by showing "0
+freezes, 0 errors" during a real bug that turned out to be frontend-side).
+For the deep-dive moment that used to mean reaching straight for `ps`/
+`sample`/`sqlite3` instead, three commands give exact numbers immediately,
+no session required:
+
+```bash
+python3 diagnostics/cli.py inspect              # live CPU/RSS/threads/FDs, main + every child
+python3 diagnostics/cli.py sample [--pid PID]   # stack sample right now, symbolicated
+python3 diagnostics/cli.py db pending-thumbs    # exact catalog.db row state, read-only
+python3 diagnostics/cli.py db --list            # see all canned db queries
+python3 diagnostics/cli.py db --sql "SELECT ..." # raw read-only escape hatch
+```
+
+If a `start` session is active, each of these also logs into that run's
+`events.jsonl` — so a deep-dive number taken mid-session still shows up in
+`report.md`/incidents later, instead of living only in your terminal scrollback.
+
 ## Setup (once)
 
 ```bash

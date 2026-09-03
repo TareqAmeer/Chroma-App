@@ -18,13 +18,29 @@ class ProcessGone(RuntimeError):
     pass
 
 
-def sample(pid):
-    """Return a dict of current process metrics for pid, or raise ProcessGone."""
+def sample(pid, cpu_interval=None):
+    """
+    Return a dict of current process metrics for pid, or raise ProcessGone.
+
+    cpu_interval=None (default, used by the polling watcher loop) assumes the
+    caller already primed a baseline via prime_cpu_percent — cheap, but reads
+    0.0 on a truly first call. Pass a small positive interval (e.g. 0.1) for
+    an ACCURATE single-shot read with no prior baseline — inspect.py's whole
+    point is exact numbers on demand, so it can't rely on priming from a loop
+    that was never running.
+    """
     if psutil is not None:
         try:
             p = psutil.Process(pid)
+            # A real interval must be OUTSIDE oneshot() — verified live: oneshot() batches
+            # attribute reads under an instantaneous-snapshot assumption, which silently
+            # breaks cpu_percent's need to sleep and diff two real time-separated reads
+            # (interval=0.1 read 0.0% inside oneshot() against a process `ps` showed at
+            # 217% CPU; the identical call outside oneshot() correctly read 291%).
+            cpu = p.cpu_percent(interval=cpu_interval) if cpu_interval else None
             with p.oneshot():
-                cpu = p.cpu_percent(interval=None)
+                if cpu is None:
+                    cpu = p.cpu_percent(interval=None)
                 mem = p.memory_info()
                 threads = p.num_threads()
                 try:
