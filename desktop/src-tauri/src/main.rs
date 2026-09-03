@@ -1859,22 +1859,6 @@ fn main() {
     // See diag.rs: there was no panic::set_hook anywhere in this codebase before.
     diag::install_panic_hook();
 
-    // Hidden headless CLI mode: the SAME compiled binary, re-invoked as a child process by
-    // catalog.rs's run_faces_scan_via_worker to run a full-library face scan in a separate OS
-    // process (see CatalogState::face_worker's doc comment for why — the short version: it stops
-    // an unscoped face scan from holding the main app's single writer-connection Mutex for the
-    // scan's entire multi-minute duration, which was blocking every OTHER catalog write and is a
-    // real, separate contributor to "the app is stuck" beyond CPU usage alone). Must be checked
-    // and exited on BEFORE any Tauri/webview setup below — this path never touches GUI state.
-    let args: Vec<String> = std::env::args().collect();
-    if args.get(1).map(String::as_str) == Some("--face-scan-worker") {
-        let Some(db_path) = args.get(2) else {
-            eprintln!("--face-scan-worker requires a catalog.db path argument");
-            std::process::exit(1);
-        };
-        std::process::exit(catalog::run_face_scan_worker(std::path::Path::new(db_path)));
-    }
-
     // Printed unconditionally, BEFORE anything else, straight to the terminal `npm run dev`
     // (or `cargo run`) runs in — no JS round-trip needed, so it's visible even if the webview
     // never loads. Compare against native_build_tag()'s value: if they differ (or this line
@@ -1912,6 +1896,37 @@ fn main() {
         .build_global()
     {
         eprintln!("rayon: could not cap the global pool at {workers} threads ({e}) — proceeding with rayon's own default sizing");
+    }
+
+    // Hidden headless CLI mode: the SAME compiled binary, re-invoked as a child process by
+    // catalog.rs's run_ai_worker to run one AI-stack phase (face detect/embed, pet detect, CLIP
+    // embed) in a separate OS process — see CatalogState::ai_worker's doc comment for why (short
+    // version: it stops an unscoped scan from holding the main app's single writer-connection
+    // Mutex for the scan's entire multi-minute duration, which blocks every OTHER catalog write,
+    // and a separate process gets scheduled independently of the UI thread by the OS).
+    //
+    // ⚠️ Checked AFTER the rayon cap+QoS setup above, not before — an earlier version of this
+    // dispatch ran first and `std::process::exit`ed before that setup ever ran, which meant every
+    // worker process was silently running its OWN `.par_iter()` calls (faces_run, pets_run,
+    // embed_run, clip_embed_run all use rayon internally) at rayon's UNCAPPED, UN-QoS'd default —
+    // exactly the oversubscription this whole mechanism exists to prevent, just moved into the
+    // child process instead of fixed. Never touches Tauri/webview state either way — this path
+    // exits before any of that is constructed below.
+    let args: Vec<String> = std::env::args().collect();
+    let worker_flag = args.get(1).map(String::as_str);
+    let worker_fn: Option<fn(&std::path::Path) -> i32> = match worker_flag {
+        Some("--face-scan-worker") => Some(catalog::run_face_scan_worker),
+        Some("--pets-scan-worker") => Some(catalog::run_pets_scan_worker),
+        Some("--embed-faces-worker") => Some(catalog::run_embed_faces_worker),
+        Some("--clip-embed-worker") => Some(catalog::run_clip_embed_worker),
+        _ => None
+    };
+    if let Some(worker_fn) = worker_fn {
+        let Some(db_path) = args.get(2) else {
+            eprintln!("{} requires a catalog.db path argument", worker_flag.unwrap());
+            std::process::exit(1);
+        };
+        std::process::exit(worker_fn(std::path::Path::new(db_path)));
     }
     // ⚠️ The rayon cap above only bounds RAYON's own worker threads. Every `#[tauri::command]
     // async fn` that does heavy per-file work (decode_raw_v2, get_thumbnail, catalog_scan's whole
@@ -2198,10 +2213,10 @@ fn main() {
                             let _ = handle_for_close.emit("hq-offline-quit-blocked", ());
                         } else {
                             // The close is actually proceeding — make sure the face-scan worker
-                            // child (CatalogState::face_worker) doesn't outlive this process as an
+                            // child (CatalogState::ai_worker) doesn't outlive this process as an
                             // orphan. Safe to kill unconditionally, same reasoning as
                             // catalog_scan_cancel: it resumes correctly next launch.
-                            catalog::kill_face_worker(&state);
+                            catalog::kill_ai_worker(&state);
                         }
                     }
                 });

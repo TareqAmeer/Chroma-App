@@ -178,15 +178,22 @@ pub struct CatalogState {
     /// window-close handler to decide whether to block quitting with the "still caching, wait or
     /// cancel?" prompt the user asked for.
     pub hq_offline_active: AtomicBool,
-    /// The child process running a full-library face scan (see run_face_scan_worker), if one is
-    /// currently active. A full unscoped scan is routed to a SEPARATE OS process — not just a
-    /// spawn_blocking thread — specifically so it stops holding `conn`'s Mutex for the scan's
-    /// entire (potentially many-minute) duration: every other catalog WRITE (rating a photo,
-    /// favoriting, importing) shares that one Mutex and was blocking on it for as long as an
-    /// unscoped face scan ran, which is a real, separate contributor to "the app is stuck" beyond
-    /// raw CPU usage. The worker opens its OWN connection to the same on-disk WAL database, so it
-    /// only ever holds a lock for one small per-chunk commit, matching read_conn's own reasoning.
-    pub face_worker: Mutex<Option<std::process::Child>>,
+    /// The child process running the CURRENTLY ACTIVE AI-stack phase (see run_ai_worker), if any.
+    /// One slot, not one per phase: `runFindFaces` (library-ui.js) chains face-detect → face-embed
+    /// → cluster → pet-detect → CLIP-embed strictly SEQUENTIALLY via separate awaited `invoke()`
+    /// calls, so at most one of these ever runs at a time. An unscoped run of ANY of these four
+    /// (face detect, face embed, pet detect, CLIP embed — cluster is cheap pure math over already-
+    /// embedded vectors and stays in-process) is routed to a SEPARATE OS process — not just a
+    /// spawn_blocking thread — specifically so it stops holding `conn`'s Mutex for its entire
+    /// (potentially many-minute) duration: every other catalog WRITE (rating a photo, favoriting,
+    /// importing, thumbnail generation) shares that one Mutex and was blocking on it for as long
+    /// as whichever phase was running, which is a real, separate contributor to "the app is stuck"
+    /// beyond raw CPU usage — confirmed live: a report of "stopped responding while scanning for
+    /// faces" turned out to be `catalog_pets_scan`/`catalog_embed_faces`/`catalog_clip_embed`
+    /// running in-process, not the face-DETECT phase this file's isolation work started with.
+    /// The worker opens its OWN connection to the same on-disk WAL database, so it only ever holds
+    /// a lock for one small per-chunk commit, matching read_conn's own reasoning.
+    pub ai_worker: Mutex<Option<std::process::Child>>,
 }
 
 impl CatalogState {
@@ -246,7 +253,7 @@ impl CatalogState {
             read_conn: Mutex::new(read_conn),
             cancel: AtomicBool::new(false),
             hq_offline_active: AtomicBool::new(false),
-            face_worker: Mutex::new(None)
+            ai_worker: Mutex::new(None)
         }
     }
 }
@@ -2406,17 +2413,9 @@ pub fn faces_run(
     Ok(result)
 }
 
-/// CLI entrypoint for the face-scan worker process (see CatalogState::face_worker's doc comment
-/// for why this exists as a separate process rather than another spawn_blocking task). Dispatched
-/// from main() BEFORE any Tauri/webview setup — this must stay a plain headless CLI path, never
-/// touching GUI state. Opens its OWN connection to the same on-disk catalog (WAL mode + the
-/// existing 5s busy_timeout already handle two processes writing to it — see open_and_migrate's
-/// comment), runs exactly one full unscoped pass (faces_run's own internal loop already drains
-/// the whole library), and reports progress over stdout as plain lines the parent parses — no new
-/// IPC mechanism needed since it's just a pipe the parent already owns via Command::spawn.
-///
-/// Cancellation is NOT a flag this process checks — see kill_face_worker's doc: the parent kills
-/// this process outright, which is safe because faces_run commits one small chunk at a time.
+/// CLI entrypoint for the face-scan worker process (see CatalogState::ai_worker's doc comment
+/// for why this exists as a separate process). See run_ai_worker for the shared parent-side
+/// machinery this pairs with.
 pub fn run_face_scan_worker(db_path: &Path) -> i32 {
     crate::bgwork::mark_current_thread_background();
     let conn = match open_and_migrate(db_path) {
@@ -2427,8 +2426,7 @@ pub fn run_face_scan_worker(db_path: &Path) -> i32 {
         }
     };
     let cancel = AtomicBool::new(false);
-    let result = faces_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel);
-    match result {
+    match faces_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
         Ok(r) => {
             println!("DONE scanned={} faces_found={}", r.scanned, r.faces_found);
             0
@@ -2440,41 +2438,100 @@ pub fn run_face_scan_worker(db_path: &Path) -> i32 {
     }
 }
 
-#[tauri::command]
-pub async fn catalog_faces_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<FacesResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        use tauri::{Emitter, Manager};
-        let state = app.state::<CatalogState>();
-        state.cancel.store(false, Ordering::Relaxed);
-
-        // Scoped selections ("Find faces in selection") stay in-process: small, bounded, fast —
-        // spinning up a whole OS process for a handful of photos isn't worth the latency, and
-        // the Mutex-starvation problem the worker exists to avoid only bites on a scan long
-        // enough to matter (many minutes across a whole library).
-        if photo_ids.is_none() {
-            return run_faces_scan_via_worker(&app, &state);
+/// CLI entrypoint for the pet-detection worker process — mirrors run_face_scan_worker exactly,
+/// see its doc comment.
+pub fn run_pets_scan_worker(db_path: &Path) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("pets-scan worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
         }
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        faces_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
-    })
-    .await
-    .map_err(|e| format!("catalog_faces_scan task panicked: {e}"))?
+    };
+    let cancel = AtomicBool::new(false);
+    match pets_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+        Ok(r) => {
+            println!("DONE scanned={} pets_found={}", r.scanned, r.pets_found);
+            0
+        }
+        Err(e) => {
+            eprintln!("pets-scan worker: {e}");
+            1
+        }
+    }
 }
 
-/// Runs a full-library face scan in a separate process and relays its progress. Falls back to
-/// the ordinary in-process path if there's no real on-disk catalog to hand the child (the
-/// in-memory fallback from CatalogState::new's doc comment) — a child process reading a
-/// different, empty in-memory-only database would just silently scan nothing.
-fn run_faces_scan_via_worker(app: &tauri::AppHandle, state: &tauri::State<CatalogState>) -> Result<FacesResult, String> {
+/// CLI entrypoint for the face-embedding (ArcFace) worker process — mirrors run_face_scan_worker.
+pub fn run_embed_faces_worker(db_path: &Path) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("embed-faces worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let cancel = AtomicBool::new(false);
+    match embed_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+        Ok(r) => {
+            println!("DONE embedded={}", r.embedded);
+            0
+        }
+        Err(e) => {
+            eprintln!("embed-faces worker: {e}");
+            1
+        }
+    }
+}
+
+/// CLI entrypoint for the CLIP-embedding worker process — mirrors run_face_scan_worker.
+pub fn run_clip_embed_worker(db_path: &Path) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("clip-embed worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let cancel = AtomicBool::new(false);
+    match clip_embed_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+        Ok(r) => {
+            println!("DONE embedded={}", r.embedded);
+            0
+        }
+        Err(e) => {
+            eprintln!("clip-embed worker: {e}");
+            1
+        }
+    }
+}
+
+/// Shared parent-side machinery for EVERY unscoped AI-stack phase (face detect, face embed, pet
+/// detect, CLIP embed — see CatalogState::ai_worker's doc comment for why they're isolated at
+/// all). Spawns `chromasmith <subcommand> <db_path>`, relays its `PROGRESS done total` lines as
+/// `catalog-scan` events tagged with `phase`, and returns the `key=value` pairs parsed from its
+/// final `DONE ...` line — each caller decodes those into its own Result struct, since
+/// FacesResult/PetsResult/EmbedResult/ClipEmbedResult all have different field names.
+///
+/// ⚠️ Reads the child's stdout on a background thread and consumes it via `recv_timeout`, NOT a
+/// plain blocking read loop — this exact shape (piped stdout, undrained-until-EOF) already
+/// deadlocked once here (see the stderr comment below) for a reason that wasn't anticipated in
+/// advance. If the worker goes silent for WATCHDOG straight, this thread kills it and moves on
+/// instead of hanging forever, whatever the actual cause turns out to be — a backstop, not a
+/// substitute for having understood the failure the first time.
+fn run_ai_worker(
+    app: &tauri::AppHandle,
+    state: &tauri::State<CatalogState>,
+    subcommand: &'static str,
+    phase: &'static str
+) -> Result<std::collections::HashMap<String, usize>, String> {
     use tauri::Emitter;
     let db_path = catalog_db_path();
-    if !db_path.is_file() {
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        return faces_run(&conn, None, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel);
-    }
     let exe = std::env::current_exe().map_err(|e| format!("could not resolve current executable: {e}"))?;
     let mut child = std::process::Command::new(&exe)
-        .arg("--face-scan-worker")
+        .arg(subcommand)
         .arg(&db_path)
         .stdout(std::process::Stdio::piped())
         // ⚠️ NOT piped. A piped-but-undrained stderr is a classic Unix subprocess deadlock: the
@@ -2482,28 +2539,19 @@ fn run_faces_scan_via_worker(app: &tauri::AppHandle, state: &tauri::State<Catalo
         // alone can produce hundreds of WARN lines — see main.rs's own logger comment), the child
         // blocks on its next write, and this thread blocks forever reading stdout lines that will
         // now never come — both idle, the JS promise never resolves, and the UI reads as
-        // permanently "working" with ~0% CPU. Caught by re-checking this fix live: DB progress
-        // had stalled at 34,680 pending with the process genuinely idle, not spinning. `inherit`
-        // needs no draining — it shares the parent's own stderr fd directly, same as every other
-        // `eprintln!` in this codebase already relies on.
+        // permanently "working" with ~0% CPU. Caught by re-checking this fix live against the
+        // face-detect worker before this generic helper existed: DB progress had stalled with the
+        // process genuinely idle, not spinning. `inherit` needs no draining — it shares the
+        // parent's own stderr fd directly, same as every other `eprintln!` in this codebase.
         .stderr(std::process::Stdio::inherit())
         .spawn()
-        .map_err(|e| format!("could not start face-scan worker: {e}"))?;
+        .map_err(|e| format!("could not start {subcommand} worker: {e}"))?;
 
     let stdout = child.stdout.take();
-    *state.face_worker.lock().map_err(|e| e.to_string())? = Some(child);
+    *state.ai_worker.lock().map_err(|e| e.to_string())? = Some(child);
 
-    // ⚠️ Deliberately NOT a plain blocking `for line in BufReader::lines()` here. The stderr-pipe
-    // deadlock this function already had once (see the .stderr(inherit()) comment above) is proof
-    // this exact call site can hang for a reason nobody anticipated — a plain blocking read loop
-    // has no way to notice that and would just wait forever again under some OTHER cause. Reading
-    // on a separate thread and consuming via `recv_timeout` bounds the wait: if the worker goes
-    // silent for WATCHDOG straight, THIS thread kills it and moves on instead of hanging, no
-    // matter what actually went wrong on the worker's side. This is a backstop, not a substitute
-    // for understanding the real failure — it exists precisely because "I reasoned out the cause"
-    // was already wrong once for this same code path.
     const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(120);
-    let mut result = FacesResult::default();
+    let mut kv = std::collections::HashMap::new();
     if let Some(stdout) = stdout {
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         std::thread::spawn(move || {
@@ -2523,21 +2571,21 @@ fn run_faces_scan_via_worker(app: &tauri::AppHandle, state: &tauri::State<Catalo
                     if let Some(rest) = line.strip_prefix("PROGRESS ") {
                         let mut parts = rest.split_whitespace();
                         if let (Some(done), Some(total)) = (parts.next().and_then(|s| s.parse().ok()), parts.next().and_then(|s| s.parse().ok())) {
-                            let _ = app.emit("catalog-scan", ScanProgress { phase: "faces".into(), done, total, current: String::new() });
+                            let _ = app.emit("catalog-scan", ScanProgress { phase: phase.into(), done, total, current: String::new() });
                         }
                     } else if let Some(rest) = line.strip_prefix("DONE ") {
-                        for kv in rest.split_whitespace() {
-                            if let Some(n) = kv.strip_prefix("scanned=").and_then(|s| s.parse().ok()) {
-                                result.scanned = n;
-                            } else if let Some(n) = kv.strip_prefix("faces_found=").and_then(|s| s.parse().ok()) {
-                                result.faces_found = n;
+                        for pair in rest.split_whitespace() {
+                            if let Some((k, v)) = pair.split_once('=') {
+                                if let Ok(n) = v.parse() {
+                                    kv.insert(k.to_string(), n);
+                                }
                             }
                         }
                     }
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    eprintln!("face-scan worker: no output for {}s — treating as hung and killing it", WATCHDOG.as_secs());
-                    kill_face_worker(state);
+                    eprintln!("{subcommand}: no output for {}s — treating as hung and killing it", WATCHDOG.as_secs());
+                    kill_ai_worker(state);
                     break;
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break // normal EOF
@@ -2548,12 +2596,35 @@ fn run_faces_scan_via_worker(app: &tauri::AppHandle, state: &tauri::State<Catalo
     // Take (not just read) the slot: if it's already None, catalog_scan_cancel/pause already
     // killed and reaped this child, and calling wait() again here would be a benign no-op at
     // best — but there's nothing left to wait on either way.
-    let child = state.face_worker.lock().map_err(|e| e.to_string())?.take();
+    let child = state.ai_worker.lock().map_err(|e| e.to_string())?.take();
     if let Some(mut child) = child {
         let _ = child.wait();
     }
-    let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
-    Ok(result)
+    let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
+    Ok(kv)
+}
+
+#[tauri::command]
+pub async fn catalog_faces_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<FacesResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+
+        // Scoped selections ("Find faces in selection") stay in-process: small, bounded, fast —
+        // spinning up a whole OS process for a handful of photos isn't worth the latency, and
+        // the Mutex-starvation problem the worker exists to avoid only bites on a scan long
+        // enough to matter (many minutes across a whole library). Same for every other phase
+        // below (pets/embed/clip) — see CatalogState::ai_worker's doc comment.
+        if photo_ids.is_none() && catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--face-scan-worker", "faces")?;
+            return Ok(FacesResult { scanned: kv.get("scanned").copied().unwrap_or(0), faces_found: kv.get("faces_found").copied().unwrap_or(0) });
+        }
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        faces_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_faces_scan task panicked: {e}"))?
 }
 
 // ── Pet detection (people-pets wireframes screen P) — see petdetect.rs for the model/decode.
@@ -2724,6 +2795,10 @@ pub async fn catalog_pets_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
+        if photo_ids.is_none() && catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--pets-scan-worker", "pets")?;
+            return Ok(PetsResult { scanned: kv.get("scanned").copied().unwrap_or(0), pets_found: kv.get("pets_found").copied().unwrap_or(0) });
+        }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         pets_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
     })
@@ -3164,6 +3239,10 @@ pub async fn catalog_embed_faces(app: tauri::AppHandle, photo_ids: Option<Vec<i6
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
+        if photo_ids.is_none() && catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--embed-faces-worker", "embed")?;
+            return Ok(EmbedResult { embedded: kv.get("embedded").copied().unwrap_or(0) });
+        }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
     })
@@ -4003,6 +4082,10 @@ pub async fn catalog_clip_embed(app: tauri::AppHandle, photo_ids: Option<Vec<i64
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
+        if photo_ids.is_none() && catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--clip-embed-worker", "clip")?;
+            return Ok(ClipEmbedResult { embedded: kv.get("embedded").copied().unwrap_or(0) });
+        }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         clip_embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
     })
@@ -4203,17 +4286,17 @@ pub async fn catalog_verify(app: tauri::AppHandle) -> Result<VerifyResult, Strin
 #[tauri::command]
 pub fn catalog_scan_cancel(state: tauri::State<CatalogState>) {
     state.cancel.store(true, Ordering::Relaxed);
-    kill_face_worker(&state);
+    kill_ai_worker(&state);
 }
 
-/// The face-scan worker (see CatalogState::face_worker) has no in-process cancel flag to check —
+/// The face-scan worker (see CatalogState::ai_worker) has no in-process cancel flag to check —
 /// it's a separate OS process, so the only way to stop it mid-scan is to kill it. Safe to do at
 /// any point: it commits one small chunk-of-4 transaction at a time (see faces_run), so the
 /// worst case is losing whatever chunk was in flight, not corrupting anything — WAL mode is
 /// crash-safe by design. It resumes correctly next time it's started, driven entirely by
 /// faces_scanned_at, exactly like recovering from an ordinary crash or force-quit.
-pub(crate) fn kill_face_worker(state: &CatalogState) {
-    if let Ok(mut slot) = state.face_worker.lock() {
+pub(crate) fn kill_ai_worker(state: &CatalogState) {
+    if let Ok(mut slot) = state.ai_worker.lock() {
         if let Some(mut child) = slot.take() {
             let _ = child.kill();
             let _ = child.wait();
@@ -4245,9 +4328,9 @@ pub fn catalog_bg_set_paused(paused: bool, state: tauri::State<CatalogState>) {
     // static flag, so "pause" has to mean the same abrupt-but-safe kill catalog_scan_cancel uses
     // — otherwise clicking Pause would visibly do nothing to CPU usage while a face scan is the
     // thing actually running, defeating the whole point of "reclaim the machine now". It resumes
-    // correctly (see kill_face_worker's doc) whenever the frontend next asks for a face scan.
+    // correctly (see kill_ai_worker's doc) whenever the frontend next asks for a face scan.
     if paused {
-        kill_face_worker(&state);
+        kill_ai_worker(&state);
     }
 }
 
