@@ -2477,7 +2477,16 @@ fn run_faces_scan_via_worker(app: &tauri::AppHandle, state: &tauri::State<Catalo
         .arg("--face-scan-worker")
         .arg(&db_path)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        // ⚠️ NOT piped. A piped-but-undrained stderr is a classic Unix subprocess deadlock: the
+        // OS pipe buffer (~64KB) fills once the worker logs enough (this app's RAW decode path
+        // alone can produce hundreds of WARN lines — see main.rs's own logger comment), the child
+        // blocks on its next write, and this thread blocks forever reading stdout lines that will
+        // now never come — both idle, the JS promise never resolves, and the UI reads as
+        // permanently "working" with ~0% CPU. Caught by re-checking this fix live: DB progress
+        // had stalled at 34,680 pending with the process genuinely idle, not spinning. `inherit`
+        // needs no draining — it shares the parent's own stderr fd directly, same as every other
+        // `eprintln!` in this codebase already relies on.
+        .stderr(std::process::Stdio::inherit())
         .spawn()
         .map_err(|e| format!("could not start face-scan worker: {e}"))?;
 
