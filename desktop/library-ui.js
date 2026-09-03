@@ -7799,12 +7799,13 @@
     const main = document.getElementById('lib-main');
     if (!main || main._marqueeWired) return;
     main._marqueeWired = true;
-    let box = null, sx = 0, sy = 0, add = false, active = false, scroller = null, sTop0 = 0;
+    let box = null, sx = 0, sy = 0, add = false, active = false, scroller = null, sTop0 = 0, bgDown = false;
     main.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if (e.target.closest('.lib-card')) return;       // a card handles its own click
       if (e.target.closest('#lib-list-head')) return;
       sx = e.clientX; sy = e.clientY; add = e.shiftKey; active = false;
+      bgDown = true;
       const gridEl = document.getElementById('lib-grid');
       scroller = gridEl && gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
         ? gridEl.parentElement : (gridEl && gridEl.closest('#lib-overlay')) || document.documentElement;
@@ -7852,6 +7853,17 @@
       });
     });
     document.addEventListener('pointerup', () => {
+      // A plain click (no drag) that started on empty grid background clears the selection —
+      // clicking away from the photos is the expected way to deselect, same as most file
+      // browsers/galleries. Only fires when the pointerdown itself began off any card (bgDown)
+      // and never crossed the 5px drag threshold (active stayed false, i.e. no marquee box was
+      // ever drawn) and wasn't a shift-click (add), which is for extending a selection, not
+      // clearing it.
+      if (bgDown && !active && !add) {
+        if (state.source === 'lr') { lrState.selected.clear(); document.querySelectorAll('#lib-grid .lib-card[data-lr-id]').forEach((c) => c.classList.remove('multi')); }
+        else { state.selected.clear(); updateCardSelClasses(); }
+      }
+      bgDown = false;
       sx = sy = 0; scroller = null;
       if (box) { box.remove(); box = null; active = false; }
     });
