@@ -735,8 +735,9 @@
     #lib-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 12px 8px}
     #lib-filters #lib-search{flex:1 1 160px;min-width:120px}
     #lib-filters select{flex:0 1 auto;width:auto;min-width:0}
-    /* Filters popover: was 7 wrapping selects in a row (real complaint — see the comment above
-       #lib-filters), collapsed to one button + a floating panel. The badge shows how many of
+    /* Filters button: was 7 wrapping selects in the toolbar row (real complaint — see the
+       comment above #lib-filters), collapsed to one button + a slide-out panel
+       (#lib-filters-panel, styled further down near its markup). The badge shows how many of
        the 7 aren't at their default "all" value, so it's clear at a glance whether anything is
        filtered without opening the panel. */
     .lib-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px}
@@ -746,18 +747,7 @@
     #lib-filters-badge{display:none;margin-left:5px;background:var(--acc);color:#1a1208;font-size:9px;
       font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4}
     #lib-filters-badge.on{display:inline-block}
-    /* ⚠️ Anchored to the button's RIGHT edge, not its left. The Filters button is the last item
-       in a right-aligned row, so a left-anchored popover grew off the side of the window with no
-       gap and its contents were clipped. right:0 makes it open leftward from the trigger, which
-       keeps it inside the viewport at any window width; max-width stops a long camera/lens name
-       pushing it back out again. */
-    #lib-filters-pop{display:none;position:absolute;top:calc(100% + 4px);right:0;left:auto;z-index:30;
-      flex-direction:column;gap:6px;min-width:190px;max-width:min(280px,calc(100vw - 24px));padding:8px;background:var(--glass-bg);
-      -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
-      border:1px solid var(--bdr);border-radius:8px;box-shadow:var(--lift-2)}
-    #lib-filters-pop.on{display:flex}
-    #lib-filters-pop select{width:100%}
-    #lib-filters-clear{align-self:flex-end;font-size:11px}
+    #lib-filters-clear{font-size:11px}
     #lib-filter-chips{flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px}
     .lib-chip{display:flex;align-items:center;gap:4px;background:var(--sur2);border:1px solid var(--bdr);
       border-radius:12px;padding:2px 4px 2px 8px;font-size:10px;color:var(--txt)}
@@ -777,6 +767,10 @@
     .lib-coll-row.on .lib-coll-count{color:var(--acc)}
     .lib-coll-sep{height:1px;background:var(--bdr);margin:8px 2px}
     .lib-coll-heading{font-size:11px;font-weight:600;letter-spacing:0;color:var(--mut);padding:2px 8px 6px}
+    .lib-sec-h{display:flex;align-items:center;gap:4px;cursor:pointer;border-radius:6px;margin:0 -2px;padding:4px 8px}
+    .lib-sec-h:hover{background:var(--sur2)}
+    .lib-sec-h .lib-tree-chev{color:var(--mut);opacity:.7}
+    .lib-sec-h .lib-coll-count{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
     /* People & Pets — face avatar in place of the generic .lib-coll-ic user glyph (people-pets
        wireframes screen A). 20px circle, filled lazily from catalog_face_crop (an <img> so a
        failed/never-scanned crop just shows the empty background rather than a broken-image icon
@@ -888,13 +882,33 @@
     .lib-act-stage-n{margin-left:auto;font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums}
     .lib-act-bar{height:3px;background:var(--bdr);border-radius:2px;overflow:hidden;margin:1px 0 2px 17px}
     .lib-act-bar > div{height:100%;background:var(--acc)}
-    #lib-viewbar{display:flex;align-items:center;gap:8px;padding:0 12px 8px;flex-wrap:wrap}
-    #lib-viewbar select,#lib-viewbar input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
-      border-radius:7px;padding:5px 7px;font-size:11px}
-    #lib-viewbar .lib-seg{display:flex;border:1px solid var(--bdr);border-radius:7px;overflow:hidden}
-    #lib-viewbar .lib-seg button{background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer}
-    #lib-viewbar .lib-seg button.on{background:var(--acc);color:#000}
-    #lib-viewbar .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
+    /* Item 24 (unified progress): other concurrently-running jobs, queued behind whichever one
+       currently owns the pill — a badge when collapsed, a short list when expanded. */
+    .lib-act-queued-badge{background:var(--acc);color:#1a1208;font-size:9px;font-weight:700;
+      border-radius:8px;padding:1px 5px;line-height:1.4;margin-left:2px}
+    .lib-act-queued{border-top:1px solid var(--bdr);padding:5px 11px 7px}
+    #lib-viewbar{display:none}
+    .lib-seg{display:flex;border:1px solid var(--bdr);border-radius:7px;overflow:hidden}
+    .lib-seg button{background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer}
+    .lib-seg button.on{background:var(--acc);color:#000}
+    /* Slide-out filters/display panel (scenario C of the toolbar wireframe review): shares
+       #lib-main's own grid cell via an EXPLICIT grid-row/grid-column — not auto-placed, so it
+       can't fall into the mis-stacking class of bug the pinned-row comment above warns about —
+       and slides over the grid from the right on a transform, not a display toggle, so it never
+       fights the same "an inline style always wins the cascade" trap #lib-filters-pop hit. */
+    #lib-filters-panel{grid-row:5;justify-self:end;align-self:stretch;position:relative;
+      width:280px;max-width:82vw;background:var(--bg);border-left:1px solid var(--bdr);z-index:15;
+      overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;
+      box-shadow:-10px 0 24px -14px rgba(0,0,0,.5);transform:translateX(105%);transition:transform .18s ease}
+    #lib-filters-panel.open{transform:translateX(0)}
+    #lib-overlay.full #lib-filters-panel{grid-row:4;grid-column:2}
+    #lib-filters-panel select,#lib-filters-panel input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
+      border-radius:7px;padding:5px 7px;font-size:11px;width:100%}
+    #lib-filters-panel .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
+    #lib-filters-panel-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600}
+    #lib-filters-panel-close{cursor:pointer;color:var(--mut);display:inline-flex}
+    #lib-filters-panel-close:hover{color:var(--txt)}
+    .lib-fp-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-top:6px}
     /* Reject/Pick still ride the sidecar's "label" field ("Red"/"Green") and get a frame
        highlight on the thumbnail — this is the reject/pick indicator, not a colour-label system. */
     .lib-card.lbl-red .lib-thumb-wrap{box-shadow:0 0 0 2px #e05252}
@@ -1090,7 +1104,8 @@
     body.deskx #lib-overlay:not(.full) #lib-top{grid-row:1}
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
     body.deskx #lib-overlay:not(.full) #lib-filters,body.deskx #lib-overlay:not(.full) #lib-side,
-    body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar{display:none}
+    body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar,
+    body.deskx #lib-overlay:not(.full) #lib-filters-panel{display:none}
     /* padding-top 22px (not the tighter horizontal 8px/6px): #lib-overlay already sits below the
        fixed deskbar (top:44px above), so this is the ONLY breathing room between the deskbar and
        the folder/cloud/history icons — 8px read as flush against the bar. Matches the same 22px
@@ -1161,78 +1176,18 @@
       <button class="lib-btn lib-btn-icon" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',17)}</button>
       <button class="lib-btn lib-btn-icon" id="lib-expand" title="Full-window view — G">${ic('fit',17)}</button>
     </div>
+    <!-- Slim toolbar (wireframe review item 28, scenario C): search, view mode and sort are the
+         everyday controls and stay on one row; everything else — subfolders, the 8 filter
+         selects, and the display options that used to fill a whole second row — moved into the
+         slide-out #lib-filters-panel below, opened from the Filters button's badge count. -->
     <div id="lib-filters">
       <input id="lib-search" placeholder="Search filename… (Enter for AI search)" />
       <button class="lib-btn lib-btn-icon" id="lib-clip-search" title="Search photos by description, e.g. \"a dog on a beach\" — press Enter in the search box, or click this">${ic('search', 15)}</button>
-      <select id="lib-source" title="Photo source">
-        <option value="folder">This folder</option>
-        <option value="edited">All Edited</option>
-      </select>
-      <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
-        <input type="checkbox" id="lib-subfolders">Subfolders</label>
-      <div id="lib-filters-btn-wrap">
-        <button class="lib-btn" id="lib-filters-btn" title="Filter by type, camera, lens, ISO, duplicates, sync status or tag/rating">Filters<span id="lib-filters-badge"></span></button>
-        <div id="lib-filters-pop">
-          <select id="lib-type-filter" title="Filter by file type">
-            <option value="all">All types</option>
-            <option value="raw">RAW</option><option value="jpeg">JPEG</option>
-            <option value="png">PNG</option><option value="tiff">TIFF</option>
-            <!-- heic/webp/hdr/other added alongside the format-widening work: kind_of() (Rust,
-                 library.rs → formats::media_kind) has always emitted "heic" for iPhone photos —
-                 there was no option here to reach it, so HEIC files were listable but never
-                 filterable. "other" covers the desktop-only decode_image_v1 formats
-                 (TGA/DDS/QOI/FF/PNM*/JXL) plus GIF/BMP/ICO/AVIF, none of which had a bucket of
-                 their own. -->
-            <option value="heic">HEIC</option><option value="webp">WebP</option>
-            <option value="hdr">HDR/EXR</option><option value="other">Other</option>
-            <option value="video">Video</option>
-          </select>
-          <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
-          <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
-          <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select>
-          <select id="lib-dupe-filter" title="Filter by duplicate status">
-            <option value="all">All photos</option>
-            <option value="dupes">Duplicates only</option>
-          </select>
-          <select id="lib-synced-filter" title="Filter by Google Photos sync status">
-            <option value="all">All photos</option>
-            <option value="synced">Synced to Google Photos</option>
-            <option value="notsynced">Not synced</option>
-          </select>
-          <select id="lib-faces-filter" title="Filter by face-indexing status">
-            <option value="all">All photos</option>
-            <option value="indexed">Face-scanned</option>
-            <option value="pending">Not face-scanned</option>
-          </select>
-          <select id="lib-rating-filter" title="Filter by star rating">
-            <option value="all">Any rating</option>
-            <option value="0">Unrated</option>
-            <option value="1">★1+</option>
-            <option value="2">★2+</option>
-            <option value="3">★3+</option>
-            <option value="4">★4+</option>
-            <option value="5">★5</option>
-          </select>
-          <select id="lib-tag-filter" title="Filter by tag">
-            <option value="all">All tags</option>
-            <option value="red">Rejected (X)</option>
-            <option value="green">Picked (flag)</option>
-            <option value="edited">Edited</option>
-            <option value="noedited">Not edited</option>
-            <option value="favorite">Favorites</option>
-          </select>
-          <button class="lib-btn" id="lib-filters-clear">Clear all</button>
-        </div>
-      </div>
-      <div id="lib-filter-chips"></div>
-    </div>
-    <div id="lib-viewbar">
       <div class="lib-seg" id="lib-viewmode-seg">
         <button data-v="grid" title="Grid view">▦</button>
         <button data-v="list" title="List view">${ic('log',15)}</button>
         <button data-v="compare" title="Compare two photos/looks side by side — C">⇹</button>
       </div>
-      <button class="lib-btn" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to).">${ic('image',15)}</button>
       <select id="lib-sort" title="Sort by">
         <option value="name">Name</option>
         <option value="mtime">Date modified</option>
@@ -1247,6 +1202,88 @@
         <option value="editedts">Date edited</option>
       </select>
       <button class="lib-btn" id="lib-sort-dir" title="Reverse sort order">↑</button>
+      <div id="lib-filters-btn-wrap">
+        <button class="lib-btn" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters, and display options">Filters<span id="lib-filters-badge"></span></button>
+      </div>
+      <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
+      <div id="lib-filter-chips"></div>
+    </div>
+    <!-- Retired: its three controls moved into the slim row above and its display options moved
+         into #lib-filters-panel below. Kept as an empty, always-hidden 6th grid child rather than
+         removed outright, so the #lib-overlay grid's pinned row numbering (see the comment on
+         that rule) never has to be renumbered. -->
+    <div id="lib-viewbar"></div>
+    <div id="lib-filters-panel">
+      <div id="lib-filters-panel-head">
+        <span>Filters &amp; display</span>
+        <span id="lib-filters-panel-close" title="Close">${ic('close', 15)}</span>
+      </div>
+      <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
+        <input type="checkbox" id="lib-subfolders">Subfolders</label>
+      <select id="lib-source" title="Photo source">
+        <option value="folder">This folder</option>
+        <option value="edited">All Edited</option>
+      </select>
+      <select id="lib-type-filter" title="Filter by file type">
+        <option value="all">All types</option>
+        <option value="raw">RAW</option><option value="jpeg">JPEG</option>
+        <option value="png">PNG</option><option value="tiff">TIFF</option>
+        <!-- heic/webp/hdr/other added alongside the format-widening work: kind_of() (Rust,
+             library.rs → formats::media_kind) has always emitted "heic" for iPhone photos —
+             there was no option here to reach it, so HEIC files were listable but never
+             filterable. "other" covers the desktop-only decode_image_v1 formats
+             (TGA/DDS/QOI/FF/PNM*/JXL) plus GIF/BMP/ICO/AVIF, none of which had a bucket of
+             their own. -->
+        <option value="heic">HEIC</option><option value="webp">WebP</option>
+        <option value="hdr">HDR/EXR</option><option value="other">Other</option>
+        <option value="video">Video</option>
+      </select>
+      <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
+      <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
+      <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select>
+      <select id="lib-dupe-filter" title="Filter by duplicate status">
+        <option value="all">All photos</option>
+        <option value="dupes">Duplicates only</option>
+      </select>
+      <select id="lib-synced-filter" title="Filter by Google Photos sync status">
+        <option value="all">All photos</option>
+        <option value="synced">Synced to Google Photos</option>
+        <option value="notsynced">Not synced</option>
+      </select>
+      <select id="lib-faces-filter" title="Filter by face-indexing status">
+        <option value="all">All photos</option>
+        <option value="indexed">Face-scanned</option>
+        <option value="pending">Not face-scanned</option>
+      </select>
+      <!-- Own wrapper, deliberately: syncFilterUI() hides _rf.closest('label') || _rf.parentElement
+           when STARS_ENABLED is false (it is, unconditionally, in production today), so this
+           select's PARENT must be a dedicated element it alone owns — otherwise that hide call
+           takes out whatever else shares the parent. It used to share #lib-filters-pop with
+           seven other filters and #lib-filters-panel now, either of which this would have
+           hidden in full; this wrapper is what makes STARS_ENABLED=false actually mean "hide
+           just the rating filter" rather than "hide whichever container it happens to sit in". -->
+      <div id="lib-rating-filter-wrap">
+        <select id="lib-rating-filter" title="Filter by star rating">
+          <option value="all">Any rating</option>
+          <option value="0">Unrated</option>
+          <option value="1">★1+</option>
+          <option value="2">★2+</option>
+          <option value="3">★3+</option>
+          <option value="4">★4+</option>
+          <option value="5">★5</option>
+        </select>
+      </div>
+      <select id="lib-tag-filter" title="Filter by tag">
+        <option value="all">All tags</option>
+        <option value="red">Rejected (X)</option>
+        <option value="green">Picked (flag)</option>
+        <option value="edited">Edited</option>
+        <option value="noedited">Not edited</option>
+        <option value="favorite">Favorites</option>
+      </select>
+      <button class="lib-btn" id="lib-filters-clear">Clear all</button>
+      <div class="lib-fp-label">Display</div>
+      <button class="lib-btn" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to).">${ic('image',15)} Real aspect ratio</button>
       <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option></select>
       <select id="lib-metadisp" title="Show metadata on cards">
         <option value="off">Metadata: Off</option>
@@ -1259,7 +1296,6 @@
       <div class="lib-thumbsize" id="lib-thumbsize-wrap">
         <span>Size</span><input type="range" id="lib-thumbsize" min="90" max="320" step="10">
       </div>
-      <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
     </div>
     <div id="lib-side"><div id="lib-collections"></div><div id="lib-tree"></div></div>
     <div id="lib-main">
@@ -3607,6 +3643,124 @@
     return files;
   }
 
+  // ── Shared edit-recipe actions ───────────────────────────────────────────────────────────
+  // Extracted so the context menu (buildPathsMenu, below) and the grid keyboard shortcuts (the
+  // document keydown handler further down) call exactly one implementation each — a keyboard-
+  // only copy would drift from the menu's the moment either changed.
+  async function libCopyEdit(paths) {
+    if (!paths.length) return;
+    const sc = await getSidecar(paths[0]);
+    window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
+    toast('Edit copied', true);
+  }
+  async function libPasteEdit(paths) {
+    const recipe = window.__copiedRecipe;
+    if (!paths.length || !recipe) return;
+    await Promise.all(paths.map(async (p) => {
+      const cur = await getSidecar(p);
+      const updated = { ...cur, edited: true, recipe };
+      state.sidecars.set(p, updated);
+      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
+      markCardEdited(p);
+      if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
+    }));
+  }
+  async function libResetEdit(paths) {
+    if (!paths.length) return;
+    const n = paths.length;
+    const label = n > 1 ? `${n} photos` : 'this photo';
+    if (!await window.confirmModal(`Reset edit${n > 1 ? 's' : ''} on ${label}? You can undo this from the same menu, until the next edit or reset.`, 'Reset')) return;
+    await Promise.all(paths.map(async (p) => {
+      const cur = await getSidecar(p);
+      try {
+        const updated = await invoke('reset_edit', { path: p });
+        state.sidecars.set(p, updated);
+      } catch (e) { sidecarWriteFailed(p, cur, e); return; }
+      const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
+      const badge = card && card.querySelector('.lib-edited-badge');
+      if (badge) badge.remove();
+      if (p === state.openedPath) { openInEditor(p); }
+    }));
+    toast(n > 1 ? `Reset ${n} photos — Undo last reset is in this menu` : 'Reset edit — Undo last reset is in this menu');
+  }
+  async function libUndoLastReset(paths) {
+    const restorable = paths.filter((p) => (state.sidecars.get(p) || {}).last_reset_recipe);
+    if (!restorable.length) return;
+    await Promise.all(restorable.map(async (p) => {
+      const cur = await getSidecar(p);
+      let updated;
+      try {
+        updated = await invoke('undo_reset_edit', { path: p });
+        state.sidecars.set(p, updated);
+      } catch (e) { sidecarWriteFailed(p, cur, e); return; }
+      if (updated.edited) markCardEdited(p);
+      if (p === state.openedPath) { openInEditor(p); }
+    }));
+    toast(restorable.length > 1 ? `Restored ${restorable.length} photos' edits` : 'Restored the edit');
+  }
+  async function libDuplicatePaths(paths) {
+    if (!paths.length) return;
+    for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
+    await refreshView();
+  }
+  async function libDeletePaths(paths) {
+    if (!paths.length) return;
+    const n = paths.length;
+    const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
+    if (!await window.confirmModal(`Move ${label} to the Trash?`, 'Move to Trash')) return;
+    const trashed = [];
+    for (const p of paths) {
+      try {
+        await invoke('trash_file', { path: p });
+        state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p);
+        trashed.push(p);
+      }
+      catch (e) { console.error('trash_file', p, e); toast('Could not delete ' + baseName(p)); }
+    }
+    if (trashed.length) invoke('catalog_note_deleted', { paths: trashed }).catch((e) => console.error('catalog_note_deleted', e));
+    state.selected.clear();
+    await refreshView();
+  }
+  async function libExportPaths(paths) {
+    if (!paths.length) return;
+    const n = paths.length;
+    const files = await readPathsAsFiles(paths);
+    if (!files.length) return;
+    const okPaths = files.okPaths || paths;
+    state.openedPath = '';
+    window.chromasmithSourcePath = null;
+    state.openedPaths = okPaths;
+    await loadFXImages(files);
+    try {
+      const firstSc = await getSidecar(okPaths[0]);
+      if (firstSc.recipe) {
+        applyUISnapshot(snapshotFromB64(firstSc.recipe));
+        if (typeof applyRawDefaults === 'function') applyRawDefaults();
+      }
+    } catch (e) { console.error('seed shared FX for batch export', e); }
+    for (let i = 0; i < okPaths.length; i++) {
+      const sc = await getSidecar(okPaths[i]);
+      if (!sc.recipe || !fxImages[i]) continue;
+      try {
+        const snap = snapshotFromB64(sc.recipe);
+        if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
+        if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
+        if (snap.adjustIndependent && snap.sliders) {
+          const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; });
+          fxImages[i].adjustOverride = v;
+        }
+      } catch (e) { console.error('restore recipe', e); }
+    }
+    setExportScope(n > 1 ? 'all' : 'current');
+    await exportFX();
+  }
+  // Same target-resolution order the grid's own kbTargets() (further down) uses — duplicated
+  // rather than shared because it's needed before kbTargets' own `const` declaration runs
+  // (temporal dead zone) on every keydown.
+  function cmKbTargets() {
+    return state.selected.size ? [...state.selected] : (state._kbCursor ? [state._kbCursor] : (state.openedPath ? [state.openedPath] : []));
+  }
+
   let ctxMenu = null;
   function closeContextMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
   document.addEventListener('click', closeContextMenu);
@@ -3630,17 +3784,50 @@
     ctxMenu = document.createElement('div');
     ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
       'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:180px;box-shadow:var(--lift-2)';
-    const item = (label, fn) => {
+    // mkItem is the base row builder, targeting whatever container is passed (the top-level
+    // menu, or a submenu's own popout) — a leaf row optionally shows a right-aligned keyboard
+    // shortcut hint, same flex layout the wireframe review settled on.
+    const mkItem = (container, label, fn, shortcut) => {
       const el = document.createElement('div');
-      el.textContent = label;
-      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px';
+      el.innerHTML = `<span>${label}</span>` + (shortcut ? `<span style="font-family:var(--mono);font-size:10px;color:var(--mut);white-space:nowrap">${shortcut}</span>` : '');
       el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
       el.onmouseleave = () => { el.style.background = ''; };
       el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
-      ctxMenu.appendChild(el);
+      container.appendChild(el);
       return el;
     };
-    const sep = () => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0'; ctxMenu.appendChild(s); };
+    const item = (label, fn, shortcut) => mkItem(ctxMenu, label, fn, shortcut);
+    const sep = (container = ctxMenu) => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0'; container.appendChild(s); };
+    // Nested submenu (grouping pass, wireframe item 27): related actions collapse behind one
+    // hover-revealed row instead of ~20 flat entries. Opens to the right on hover, with a small
+    // close delay so crossing the gap between the row and its popout doesn't dismiss it, and
+    // flips to the left if it would run off the right edge of the screen.
+    const submenu = (label) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:default;display:flex;justify-content:space-between;align-items:center;gap:14px;position:relative';
+      row.innerHTML = `<span>${label}</span><span style="color:var(--mut);font-size:10px">▸</span>`;
+      const pop = document.createElement('div');
+      pop.style.cssText = 'position:absolute;left:100%;top:-5px;margin-left:4px;display:none;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:8px;padding:4px;min-width:190px;box-shadow:var(--lift-2);z-index:1';
+      row.appendChild(pop);
+      let closeT;
+      const openPop = () => {
+        clearTimeout(closeT);
+        ctxMenu.querySelectorAll(':scope > div > div[data-cs-pop]').forEach((p) => { if (p !== pop) p.style.display = 'none'; });
+        pop.style.display = 'block';
+        pop.dataset.csPop = '1';
+        row.style.background = 'var(--bdr)';
+        const r = pop.getBoundingClientRect();
+        if (r.right > window.innerWidth - 8) { pop.style.left = 'auto'; pop.style.right = '100%'; pop.style.marginLeft = '0'; pop.style.marginRight = '4px'; }
+      };
+      const scheduleClose = () => { closeT = setTimeout(() => { pop.style.display = 'none'; }, 180); };
+      row.onmouseenter = openPop;
+      row.onmouseleave = () => { row.style.background = ''; scheduleClose(); };
+      pop.onmouseenter = () => clearTimeout(closeT);
+      pop.onmouseleave = scheduleClose;
+      ctxMenu.appendChild(row);
+      return { row, pop, subItem: (label2, fn2, shortcut2) => mkItem(pop, label2, fn2, shortcut2), subSep: () => sep(pop) };
+    };
     if (opts.includeOpen) {
       item(`Edit ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
         if (n <= 1) { await openInEditor(paths[0]); return; }
@@ -3648,9 +3835,6 @@
       });
       sep();
     }
-    item('Reject (X)', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))));
-    item('Pick (flag)', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))));
-    item('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))));
     // Only offered while actually looking at Needs review — elsewhere it's a confusing no-op
     // (dismissing a photo that was never flagged does nothing visible), and "blurry" itself
     // stays true either way; this only ever hides it from THIS specific review list.
@@ -3662,204 +3846,54 @@
           refreshView();
         } catch (e) { toast(humanizeErr('dismiss from review', e), 'err'); }
       });
+      sep();
     }
-    sep();
-    item('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
-    // ── Get Info (Bug #2 fix): the Info panel (renderInfoPanel) was fully built and functional
-    // but had no discoverable trigger anywhere in the UI — only an undiscoverable 'i'/'I' keydown
-    // shortcut (itself duplicated, with a second copy gated on state.source==='lr' that never
-    // fired for local photos) and a dead `window.__libInfo` nobody called. Right-click → Get Info
-    // is the conventional macOS/Lightroom entry point. Targets the first (or only) selected
-    // photo via `_kbCursor`, same as the keyboard shortcut, so the panel shows THIS photo rather
-    // than whatever was focused before the right-click.
-    item('Get Info', () => { state._kbCursor = paths[0]; window.__libInfo(true); });
-    // ── HDR merge / focus stack (ROADMAP R12) — same "select several, run a batch action" UX
-    // as Reset edit above. Both write an ordinary new PNG next to the first selected photo
-    // (merge.rs's merge_output_path) and refresh the grid so it shows up as a normal library
-    // photo, not a special file type. Dimmed (not hidden — §10.13's lesson: a permanently
-    // hidden control is a permanently unaudited one) below 2 selected, since a merge needs at
-    // least 2 source photos.
-    const mergeHdrItem = item('Merge exposures (HDR)…', async () => {
-      toast(`Merging ${n} exposures…`);
-      try {
-        const outPath = await invoke('merge_hdr_photos', { paths });
-        toast('HDR merge saved — added to library');
-        refreshView();
-        openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('merge exposures', e), 'err'); }
-    });
-    const mergeFocusItem = item('Focus stack…', async () => {
-      toast(`Stacking ${n} photos…`);
-      try {
-        const outPath = await invoke('merge_focus_photos', { paths });
-        toast('Focus stack saved — added to library');
-        refreshView();
-        openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('focus stack', e), 'err'); }
-    });
-    // ── Astro stacking (ROADMAP R13 part 2) — same batch-action shape as HDR/focus above,
-    // reusing merge.rs's translation-only aligner + a new per-pixel mean/median blend.
-    const mergeAstroItem = item('Astro stack…', async () => {
-      const mode = await astroStackModeModal();
-      if (!mode) return;
-      toast(`Stacking ${n} photos (${mode})…`);
-      try {
-        const outPath = await invoke('merge_astro_photos', { paths, mode });
-        toast('Astro stack saved — added to library');
-        refreshView();
-        openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('astro stack', e), 'err'); }
-    });
-    // ── Panorama (ROADMAP R13 part 3) — SCOPED to exactly 2 photos (see merge.rs's `pano`
-    // module doc for why: a real similarity-transform aligner, validated on a known synthetic
-    // transform, but not full feature-matching stitching — 3+ photos would need pairwise
-    // chaining this pass didn't build). Only enabled at exactly 2 selected, not just >=2.
-    const mergePanoItem = item('Stitch panorama (2 photos)…', async () => {
-      toast('Stitching panorama…');
-      try {
-        const outPath = await invoke('merge_panorama_photos', { paths });
-        toast('Panorama saved — added to library');
-        refreshView();
-        openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('stitch panorama', e), 'err'); }
-    });
-    // ── Collage (ROADMAP R13 part 1) — pure client-side canvas compositing, no alignment.
-    const collageItem = item('Create collage…', () => createCollage(paths));
-    // ── Scoped face/CLIP analysis (N4) — the sidebar's People search icon
-    // ("Analyze photos — find faces and enable AI search") always scans the WHOLE library,
-    // which stalled for hours on a 49,802-photo library. This scopes the exact same
-    // faces_run → embed_run → cluster_run → clip_embed_run chain (runFindFaces) to just the
-    // selected photos. Valid for any n>=1 (the menu only opens with a selection), so — unlike
-    // the merge/pano items above — there's nothing to dim.
-    item(`Find faces in selection${n > 1 ? ` (${n})` : ''}`, async () => {
-      // Paths → ids: state.entries already carries `.id` alongside `.path` for everything
-      // currently shown in the grid (the same field catalog_query/expandStack/photoIds results
-      // use elsewhere), so no new lookup command is needed — just match on path.
-      const byPath = new Map(state.entries.map((e) => [e.path, e.id]));
-      const ids = paths.map((p) => byPath.get(p)).filter((id) => id != null);
-      if (!ids.length) { toast('Could not resolve the selected photos', 'err'); return; }
-      await runFindFaces(ids);
-    });
-    if (n < 2) {
-      mergeHdrItem.style.opacity = '.4'; mergeHdrItem.style.pointerEvents = 'none';
-      mergeFocusItem.style.opacity = '.4'; mergeFocusItem.style.pointerEvents = 'none';
-      mergeAstroItem.style.opacity = '.4'; mergeAstroItem.style.pointerEvents = 'none';
-      collageItem.style.opacity = '.4'; collageItem.style.pointerEvents = 'none';
-    }
-    if (n !== 2) { mergePanoItem.style.opacity = '.4'; mergePanoItem.style.pointerEvents = 'none'; }
-    sep();
-    item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
-      const files = await readPathsAsFiles(paths);
-      if (!files.length) return;
-      // ⚠️ Use the paths that actually survived readPathsAsFiles, in the SAME order as `files`/
-      // `fxImages` below — indexing the original (pre-filter) `paths` desyncs the moment any one
-      // photo fails to read (a missing/locked file mid-selection), so photo A's saved crop/masks
-      // land on photo B's render, or a batch export comes out empty/wrong. See readPathsAsFiles'
-      // own comment.
-      const okPaths = files.okPaths || paths;
-      state.openedPath = '';
-    window.chromasmithSourcePath = null;
-      state.openedPaths = okPaths;
-      await loadFXImages(files);
-      // Seed the SHARED FX state (LUT/grain/halation/curves/HSL/adjustments — everything
-      // getFXParams() reads off the DOM) from the first selected photo's own saved recipe.
-      // Exporting straight from the Library grid (no photo currently open in this session)
-      // used to leave the shared sliders at whatever stale/default state the app happened to
-      // be in, so a cold batch export rendered every photo through an unedited pipeline —
-      // geometry/masks/adjustOverride (restored per-photo below) survived, but the actual
-      // look did not. One seed only: applying it per-photo would let the LAST photo's saved
-      // FX silently overwrite every other photo's render (that's why the loop below stays
-      // geom/masks/adjustOverride-only).
-      try {
-        const firstSc = await getSidecar(okPaths[0]);
-        if (firstSc.recipe) {
-          applyUISnapshot(snapshotFromB64(firstSc.recipe));
-          if (typeof applyRawDefaults === 'function') applyRawDefaults();
-        }
-      } catch (e) { console.error('seed shared FX for batch export', e); }
-      // Restore each photo's own saved CROP/MASKS/independent-ADJUST before exporting (all
-      // three are per-photo — see chromasmith-22.html's geomApplyToAll/mskCopyToAll/
-      // adjToggleScope).
-      for (let i = 0; i < okPaths.length; i++) {
-        const sc = await getSidecar(okPaths[i]);
-        if (!sc.recipe || !fxImages[i]) continue;
-        try {
-          const snap = snapshotFromB64(sc.recipe);
-          if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
-          if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
-          if (snap.adjustIndependent && snap.sliders) {
-            const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; });
-            fxImages[i].adjustOverride = v;
-          }
-        } catch (e) { console.error('restore recipe', e); }
-      }
-      setExportScope(n > 1 ? 'all' : 'current');
-      await exportFX();
-    });
-    const resetItem = item('Reset edit', async () => {
-      // Undoable now (see undoResetItem below), but only ONE level and only until the next real
-      // edit or the next reset overwrites the buffer — confirm anyway, matching the in-editor
-      // "Reset all" (fxResetAll) which already does. This context-menu path could still wipe
-      // edits on several selected photos at once with a single misclick, and closing the app
-      // between now and using the undo item is fine (the buffer lives in the .xmp sidecar, not
-      // in-memory) but forgetting about it is still a real way to lose the edit for good.
-      // confirmModal, never window.confirm — see its own comment in chromasmith-22.html: an
-      // unimplemented WKUIDelegate confirm panel makes window.confirm() return false with NO
-      // dialog shown, so this ALWAYS took the early return in the packaged desktop app — "Reset
-      // edit" from the Library context menu silently did nothing, every time.
-      const label = n > 1 ? `${n} photos` : 'this photo';
-      if (!await window.confirmModal(`Reset edit${n > 1 ? 's' : ''} on ${label}? You can undo this from the same menu, until the next edit or reset.`, 'Reset')) return;
-      // reset_edit (library.rs) captures the discarded recipe/edited state into the sidecar's
-      // own one-slot undo buffer and clears the active recipe in ONE atomic read-modify-write —
-      // it replaces the old direct set_sidecar(...,edited:false,recipe:'') call, which had no
-      // way to remember what it just threw away.
-      await Promise.all(paths.map(async (p) => {
-        const cur = await getSidecar(p);
-        try {
-          const updated = await invoke('reset_edit', { path: p });
+
+    // ── Rate & flag ▸ — Reject/Pick/Clear flag, matching the grid's own X/P/U keys.
+    const rateMenu = submenu('Rate &amp; flag');
+    rateMenu.subItem('Reject', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))), 'X');
+    rateMenu.subItem('Pick', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))), 'P');
+    rateMenu.subItem('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))), 'U');
+
+    // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
+    // rather than the file itself.
+    const verMenu = submenu('Versions &amp; edit');
+    verMenu.subItem('Copy edit', () => libCopyEdit(paths), '⌘⇧C');
+    const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), '⌘⇧V');
+    // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
+    // of all-or-nothing — e.g. paste just the grain+halation without also overwriting the LUT.
+    // chromasmithPasteEditSelective (chromasmith-22.html) shows the category picker and hands
+    // back one MERGED snapshot (current state + only the checked categories from the copy).
+    // Selective paste writes its own merged recipe via the same per-path write loop
+    // libPasteEdit uses, since libPasteEdit itself always reads window.__copiedRecipe verbatim
+    // and every other caller (menu + keyboard) wants exactly that behavior.
+    const pasteSelRow = verMenu.subItem('Paste edit (selective)…', async () => {
+      if (typeof window.chromasmithPasteEditSelective !== 'function') return;
+      window.chromasmithPasteEditSelective(window.__copiedRecipe, async (merged) => {
+        const recipe = snapshotToB64(merged);
+        await Promise.all(paths.map(async (p) => {
+          const cur = await getSidecar(p);
+          const updated = { ...cur, edited: true, recipe };
           state.sidecars.set(p, updated);
-        } catch (e) { sidecarWriteFailed(p, cur, e); return; }
-        const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
-        const badge = card && card.querySelector('.lib-edited-badge');
-        if (badge) badge.remove();
-        if (p === state.openedPath) { openInEditor(p); } // re-open to fall back to RAW defaults
-      }));
-      toast(n > 1 ? `Reset ${n} photos — Undo last reset is in this menu` : 'Reset edit — Undo last reset is in this menu');
+          await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
+          markCardEdited(p);
+          if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); } catch (e) { console.error('paste edit (selective)', e); } }
+        }));
+      });
     });
-    if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
-    // ── Undo last reset: a plain context-menu item (not a toast action — toast() is a shared,
-    // action-less pill used everywhere in the app, and giving it buttons for one caller would
-    // change its behavior for all of them) mirroring resetItem's own conditional-dimming pattern
-    // just above. Enabled only when at least one selected photo actually has a pending buffer —
-    // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
-    // reset can be partially undone: reset 3, then export 1, then undo the other 2).
-    const undoResetItem = item('Undo last reset', async () => {
-      const restorable = paths.filter((p) => (state.sidecars.get(p) || {}).last_reset_recipe);
-      await Promise.all(restorable.map(async (p) => {
-        const cur = await getSidecar(p);
-        let updated;
-        try {
-          updated = await invoke('undo_reset_edit', { path: p });
-          state.sidecars.set(p, updated);
-        } catch (e) { sidecarWriteFailed(p, cur, e); return; }
-        if (updated.edited) markCardEdited(p);
-        if (p === state.openedPath) { openInEditor(p); }
-      }));
-      toast(restorable.length > 1 ? `Restored ${restorable.length} photos' edits` : 'Restored the edit');
-    });
-    if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
-      undoResetItem.style.opacity = '.4';
-      undoResetItem.style.pointerEvents = 'none';
+    if (!window.__copiedRecipe) {
+      pasteRow.style.opacity = '.4'; pasteRow.style.pointerEvents = 'none';
+      pasteSelRow.style.opacity = '.4'; pasteSelRow.style.pointerEvents = 'none';
     }
-    sep();
     // ── Virtual copies: a second set of edits over the SAME file (no pixels duplicated).
     // Single selection only — "make a virtual copy of these 40 photos" is a different feature
     // with a different confirmation, and quietly doing it to a whole selection is not it.
     if (n === 1) {
+      verMenu.subSep();
       const vcPath = paths[0];
       const vsc = state.sidecars.get(vcPath) || {};
       const vers = vsc.versions || [];
-      item(vers.length ? `New virtual copy… (${vers.length} versions)` : 'New virtual copy…', async () => {
+      verMenu.subItem(vers.length ? `New virtual copy… (${vers.length} versions)` : 'New virtual copy…', async () => {
         // askTextModal (a global from chromasmith-22.html), never window.prompt: prompt() is a
         // silent no-op under the Tauri/WKWebView shell — and this file ONLY runs there, so the
         // row appeared to do nothing at all. Fall back to prompt() only if the host page somehow
@@ -3878,9 +3912,9 @@
         } catch (e) { toast('Could not create a virtual copy — ' + (e.message || e), false); }
       });
       // Switching versions is the common action once copies exist, so each gets its own row
-      // rather than hiding behind a submenu.
+      // rather than hiding behind yet another submenu.
       vers.forEach((v, i) => {
-        const row = item(`${i === vsc.active ? '● ' : '○ '}${v.name}`, async () => {
+        const row = verMenu.subItem(`${i === vsc.active ? '● ' : '○ '}${v.name}`, async () => {
           try {
             const sc = await invoke('sidecar_set_active_version', { path: vcPath, index: i });
             state.sidecars.set(vcPath, sc);
@@ -3890,7 +3924,7 @@
         });
         row.oncontextmenu = async (ev) => {
           ev.preventDefault(); ev.stopPropagation();
-          // confirmModal, never window.confirm — see the "Reset edit" comment above.
+          // confirmModal, never window.confirm — see the "Reset edit" comment below.
           if (!await window.confirmModal(`Delete version "${v.name}"? This cannot be undone.`, 'Delete')) return;
           try {
             const sc = await invoke('sidecar_delete_version', { path: vcPath, index: i });
@@ -3900,66 +3934,122 @@
         };
         row.title = 'Switch to this version — right-click to delete it';
       });
-      sep();
     }
-    item('Copy edit', async () => {
-      const sc = await getSidecar(paths[0]);
-      window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
-      toast('Edit copied', true);
-    });
-    const pasteAllToPaths = async (recipe) => {
-      await Promise.all(paths.map(async (p) => {
-        const cur = await getSidecar(p);
-        const updated = { ...cur, edited: true, recipe };
-        state.sidecars.set(p, updated);
-        await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
-        markCardEdited(p);
-        if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
-      }));
-    };
-    const pasteItem = item('Paste edit', () => pasteAllToPaths(window.__copiedRecipe));
-    // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
-    // of all-or-nothing — e.g. paste just the grain+halation without also overwriting the LUT.
-    // chromasmithPasteEditSelective (chromasmith-22.html) shows the category picker and hands
-    // back one MERGED snapshot (current state + only the checked categories from the copy).
-    const pasteSelItem = item('Paste edit (selective)…', () => {
-      if (typeof window.chromasmithPasteEditSelective !== 'function') return;
-      window.chromasmithPasteEditSelective(window.__copiedRecipe, (merged) => pasteAllToPaths(snapshotToB64(merged)));
-    });
-    if (!window.__copiedRecipe) {
-      pasteItem.style.opacity = '.4'; pasteItem.style.pointerEvents = 'none';
-      pasteSelItem.style.opacity = '.4'; pasteSelItem.style.pointerEvents = 'none';
+    verMenu.subSep();
+    // Undoable now (see "Undo last reset" below), but only ONE level and only until the next
+    // real edit or the next reset overwrites the buffer — confirm anyway, matching the in-editor
+    // "Reset all" (fxResetAll) which already does. This context-menu path could still wipe edits
+    // on several selected photos at once with a single misclick, and closing the app between now
+    // and using the undo item is fine (the buffer lives in the .xmp sidecar, not in-memory) but
+    // forgetting about it is still a real way to lose the edit for good.
+    const resetItem = verMenu.subItem('Reset edit', () => libResetEdit(paths), '⌘⇧R');
+    if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
+    // Enabled only when at least one selected photo actually has a pending buffer —
+    // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
+    // reset can be partially undone: reset 3, then export 1, then undo the other 2).
+    const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), '⌘Z');
+    if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
+      undoResetItem.style.opacity = '.4';
+      undoResetItem.style.pointerEvents = 'none';
     }
+
+    // ── Merge into ▸ — HDR/focus/astro/panorama/collage (ROADMAP R12/R13). Each writes an
+    // ordinary new PNG next to the first selected photo (merge.rs's merge_output_path) and
+    // refreshes the grid so it shows up as a normal library photo, not a special file type.
+    // Dimmed (not hidden — §10.13's lesson: a permanently hidden control is a permanently
+    // unaudited one) below the photo count each merge needs.
+    const mergeMenu = submenu('Merge into');
+    const mergeHdrItem = mergeMenu.subItem('Merge exposures (HDR)…', async () => {
+      toast(`Merging ${n} exposures…`);
+      try {
+        const outPath = await invoke('merge_hdr_photos', { paths });
+        toast('HDR merge saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('merge exposures', e), 'err'); }
+    });
+    const mergeFocusItem = mergeMenu.subItem('Focus stack…', async () => {
+      toast(`Stacking ${n} photos…`);
+      try {
+        const outPath = await invoke('merge_focus_photos', { paths });
+        toast('Focus stack saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('focus stack', e), 'err'); }
+    });
+    // ── Astro stacking (ROADMAP R13 part 2) — same batch-action shape as HDR/focus above,
+    // reusing merge.rs's translation-only aligner + a new per-pixel mean/median blend.
+    const mergeAstroItem = mergeMenu.subItem('Astro stack…', async () => {
+      const mode = await astroStackModeModal();
+      if (!mode) return;
+      toast(`Stacking ${n} photos (${mode})…`);
+      try {
+        const outPath = await invoke('merge_astro_photos', { paths, mode });
+        toast('Astro stack saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('astro stack', e), 'err'); }
+    });
+    // ── Panorama (ROADMAP R13 part 3) — SCOPED to exactly 2 photos (see merge.rs's `pano`
+    // module doc for why: a real similarity-transform aligner, validated on a known synthetic
+    // transform, but not full feature-matching stitching — 3+ photos would need pairwise
+    // chaining this pass didn't build). Only enabled at exactly 2 selected, not just >=2.
+    const mergePanoItem = mergeMenu.subItem('Stitch panorama (2 photos)…', async () => {
+      toast('Stitching panorama…');
+      try {
+        const outPath = await invoke('merge_panorama_photos', { paths });
+        toast('Panorama saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { toast(humanizeErr('stitch panorama', e), 'err'); }
+    });
+    // ── Collage (ROADMAP R13 part 1) — pure client-side canvas compositing, no alignment.
+    const collageItem = mergeMenu.subItem('Create collage…', () => createCollage(paths));
+    if (n < 2) {
+      mergeHdrItem.style.opacity = '.4'; mergeHdrItem.style.pointerEvents = 'none';
+      mergeFocusItem.style.opacity = '.4'; mergeFocusItem.style.pointerEvents = 'none';
+      mergeAstroItem.style.opacity = '.4'; mergeAstroItem.style.pointerEvents = 'none';
+      collageItem.style.opacity = '.4'; collageItem.style.pointerEvents = 'none';
+    }
+    if (n !== 2) { mergePanoItem.style.opacity = '.4'; mergePanoItem.style.pointerEvents = 'none'; }
+
+    // ── File ▸ — actions about the file on disk rather than its recipe.
+    const fileMenu = submenu('File');
+    fileMenu.subItem('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
+    // ── Get Info (Bug #2 fix): the Info panel (renderInfoPanel) was fully built and functional
+    // but had no discoverable trigger anywhere in the UI — only an undiscoverable 'i'/'I' keydown
+    // shortcut (itself duplicated, with a second copy gated on state.source==='lr' that never
+    // fired for local photos) and a dead `window.__libInfo` nobody called. Right-click → File →
+    // Get Info is the conventional macOS/Lightroom entry point. Targets the first (or only)
+    // selected photo via `_kbCursor`, same as the keyboard shortcut, so the panel shows THIS
+    // photo rather than whatever was focused before the right-click.
+    fileMenu.subItem('Get Info', () => { state._kbCursor = paths[0]; window.__libInfo(true); }, 'I');
+    fileMenu.subItem(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDuplicatePaths(paths), '⌘D');
+
     sep();
-    item(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
-      for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
-      await refreshView();
+    // ── Scoped face/CLIP analysis (N4) — the sidebar's People search icon
+    // ("Analyze photos — find faces and enable AI search") always scans the WHOLE library,
+    // which stalled for hours on a 49,802-photo library. This scopes the exact same
+    // faces_run → embed_run → cluster_run → clip_embed_run chain (runFindFaces) to just the
+    // selected photos. Valid for any n>=1 (the menu only opens with a selection), so — unlike
+    // the merge/pano items above — there's nothing to dim.
+    item(`Find faces in selection${n > 1 ? ` (${n})` : ''}`, async () => {
+      // Paths → ids: state.entries already carries `.id` alongside `.path` for everything
+      // currently shown in the grid (the same field catalog_query/expandStack/photoIds results
+      // use elsewhere), so no new lookup command is needed — just match on path.
+      const byPath = new Map(state.entries.map((e) => [e.path, e.id]));
+      const ids = paths.map((p) => byPath.get(p)).filter((id) => id != null);
+      if (!ids.length) { toast('Could not resolve the selected photos', 'err'); return; }
+      await runFindFaces(ids);
     });
-    // Was prefixed with a 🗑️ emoji — every other row in this same menu (Reject, Pick, Edit,
-    // Duplicate) is plain text, and CLAUDE.md §3b is explicit: no emoji in desktop chrome, they
-    // render per-platform and never match this menu's own stroke-icon language.
-    item(`Delete ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
-      const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
-      // confirmModal, never window.confirm — see the "Reset edit" comment above. This one is the
-      // sharpest case: it silently returning false meant "Move to Trash" from the Library
-      // context menu did not just fail to ask — it never moved a single photo, ever.
-      if (!await window.confirmModal(`Move ${label} to the Trash?`, 'Move to Trash')) return;
-      const trashed = [];
-      for (const p of paths) {
-        try {
-          await invoke('trash_file', { path: p });
-          state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p);
-          trashed.push(p);
-        }
-        catch (e) { console.error('trash_file', p, e); toast('Could not delete ' + baseName(p)); }
-      }
-      // Best-effort, and only for what actually made it to Trash — a catalog row lagging behind
-      // by one scan is harmless; trashing a file that's still shown as present is what actually
-      // confuses a user. Never blocks on this: the real, recoverable action already happened.
-      if (trashed.length) invoke('catalog_note_deleted', { paths: trashed }).catch((e) => console.error('catalog_note_deleted', e));
-      state.selected.clear();
-      await refreshView();
-    });
+    item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), () => libExportPaths(paths), '⌘E');
+    sep();
+    // Was prefixed with a 🗑️ emoji — every other row in this same menu is plain text, and
+    // CLAUDE.md §3b is explicit: no emoji in desktop chrome, they render per-platform and never
+    // match this menu's own stroke-icon language. Kept alone at the top level, never nested —
+    // the one destructive action here is never a hover away from an accidental click.
+    const deleteItem = item(`Delete ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDeletePaths(paths), '⌫');
+    deleteItem.style.color = 'var(--danger, #e5484d)';
     document.body.appendChild(ctxMenu);
     const { innerWidth: vw, innerHeight: vh } = window;
     const r = ctxMenu.getBoundingClientRect();
@@ -4977,6 +5067,22 @@
       updateCardSelClasses();
       return;
     }
+    // Copy/Paste/Reset/Undo/Export/Duplicate — keyboard shortcuts backing the context menu's
+    // grouped "Versions & edit"/"File" items (wireframe review item 27), borrowing Lightroom
+    // Classic's own bindings (⌘⇧C/⌘⇧V/⌘⇧R/⌘E) where one exists, plus ⌘Z for the one undo concept
+    // the Library grid has today and ⌘D matching Finder's Duplicate. Same guard as ⌘A above —
+    // meaningless in the LR cloud view or mid-compare — and every target comes from
+    // cmKbTargets() (selection → keyboard cursor → the open photo), the same resolution the
+    // context menu uses when it opens from a right-click instead of a key.
+    if (state.source !== 'lr' && state.viewMode !== 'compare' && (e.metaKey || e.ctrlKey) && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'c' && e.shiftKey) { e.preventDefault(); libCopyEdit(cmKbTargets()); return; }
+      if (k === 'v' && e.shiftKey) { e.preventDefault(); libPasteEdit(cmKbTargets()); return; }
+      if (k === 'r' && e.shiftKey) { e.preventDefault(); libResetEdit(cmKbTargets()); return; }
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); libUndoLastReset(cmKbTargets()); return; }
+      if (k === 'e' && !e.shiftKey) { e.preventDefault(); libExportPaths(cmKbTargets()); return; }
+      if (k === 'd' && !e.shiftKey) { e.preventDefault(); libDuplicatePaths(cmKbTargets()); return; }
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     // Cloud album view: state.entries still holds the previous FOLDER's files — arrows/Enter/
     // X/P/U would act on invisible photos (Enter even opened one; X/P wrote its sidecar).
@@ -5063,11 +5169,20 @@
     }
     if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
     if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
+    // Clear flag — the context menu's "Rate & flag ▸" submenu has always documented U for this
+    // (the comment right above this block already says "X/P/U"), and Quick Look/Compare both
+    // bind it, but the main grid never did. Added alongside the U-labeled menu item above rather
+    // than leaving the menu's own shortcut hint pointing at a key that did nothing.
+    if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
     if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
+    // Move to Trash — backs the "File ▸" context menu's Delete row. Bare Delete/Backspace,
+    // same convention Photos.app and Finder use; the confirm dialog inside libDeletePaths is
+    // what keeps a stray keypress from being destructive.
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); libDeletePaths(kbTargets()); return; }
   });
-  // Shared by the Filters popover's "Clear all" button AND the empty-grid "Clear filters" link
+  // Shared by the Filters panel's "Clear all" button AND the empty-grid "Clear filters" link
   // (renderGrid's no-matches state) — one place so the two can't drift on what "clear" means.
   // Also resets the search box: a search term hiding every photo is as much a "filter" to a
   // user staring at an empty grid as the dropdowns are.
@@ -5103,7 +5218,7 @@
     // invisible dropdown is worse than either.
     if (!STARS_ENABLED) { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = 'none'; }
   }
-  // ── Filters popover: toggle button, active-filter chips, clear-all ──────────────────────
+  // ── Filters panel: toggle button, active-filter chips, clear-all ──────────────────────
   const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter'];
   function syncFilterUI() {
     const chipsEl = document.getElementById('lib-filter-chips');
@@ -5126,21 +5241,20 @@
     });
   }
   const filtersBtn = overlay.querySelector('#lib-filters-btn');
-  const filtersPop = overlay.querySelector('#lib-filters-pop');
-  // ⚠️ `filtersPop` picks up an inline `style="display:none"` before this ever runs (some earlier
-  // pass — layout measurement, a stale saved-view restore, or the initial no-flash render — sets
-  // it directly), and an inline style always wins over the `#lib-filters-pop.on{display:flex}`
-  // stylesheet rule no matter what class is toggled. That left the button visibly doing nothing:
-  // the class flipped to "on" every click, the popover just never painted. Clear the inline
-  // property explicitly instead of relying on the class alone to win the cascade.
+  const filtersPanel = overlay.querySelector('#lib-filters-panel');
+  // A slide (transform), not a display toggle, so this can't repeat #lib-filters-pop's old
+  // "an inline style always wins the cascade" trap — there's no inline display for anything
+  // else to clobber, only the .open class the two handlers below ever touch.
   filtersBtn.onclick = (e) => {
     e.stopPropagation();
-    const willOpen = !filtersPop.classList.contains('on');
-    filtersPop.classList.toggle('on', willOpen);
-    filtersPop.style.display = willOpen ? '' : 'none';
+    filtersPanel.classList.toggle('open');
+  };
+  overlay.querySelector('#lib-filters-panel-close').onclick = (e) => {
+    e.stopPropagation();
+    filtersPanel.classList.remove('open');
   };
   document.addEventListener('click', (e) => {
-    if (filtersPop.classList.contains('on') && !filtersPop.contains(e.target) && e.target !== filtersBtn) { filtersPop.classList.remove('on'); filtersPop.style.display = 'none'; }
+    if (filtersPanel.classList.contains('open') && !filtersPanel.contains(e.target) && e.target !== filtersBtn) filtersPanel.classList.remove('open');
   });
   overlay.querySelector('#lib-filters-clear').onclick = () => clearAllLibFilters();
   const aspectToggleBtn = overlay.querySelector('#lib-aspect-toggle');
@@ -5372,6 +5486,33 @@
   // miss entirely below the filesystem folder tree, so the slow path got used for a job the fast
   // one already did better. Still a plain toggle; closing it sticks for the session.
   const dateExpanded = new Set(['__root__']);
+
+  // ── Collapsible top-level sidebar sections (Collections/Albums/People/Devices/Cloud/Folders)
+  // — the sidebar used to stack all of these with no way to close any of them, so on an average
+  // window the folder tree (what gets used most) started below the fold. One open/closed Set,
+  // persisted so a closed section stays closed across restarts, same shape as dateExpanded/
+  // kwExpanded above but keyed by section name rather than a tree node. Collections and Folders
+  // start open (the two everyday jumping-off points); the rest start closed.
+  const SIDEBAR_SEC_KEY = 'chromasmith_lib_sec_open_v1';
+  const SIDEBAR_SEC_DEFAULT = ['collections', 'folders'];
+  let sidebarSecOpen;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SIDEBAR_SEC_KEY));
+    sidebarSecOpen = new Set(Array.isArray(saved) ? saved : SIDEBAR_SEC_DEFAULT);
+  } catch (e) { sidebarSecOpen = new Set(SIDEBAR_SEC_DEFAULT); }
+  function saveSidebarSecOpen() {
+    try { localStorage.setItem(SIDEBAR_SEC_KEY, JSON.stringify([...sidebarSecOpen])); } catch (e) { /* quota — session-only fallback */ }
+  }
+  // Renders a heading as a disclosure row; `bodyHtml` is included only when open, matching the
+  // existing dateExpanded/kwExpanded convention elsewhere in this file (conditional inclusion,
+  // not a CSS display:none toggle) so a collapsed section costs nothing to keep in the DOM.
+  function sidebarSection(key, label, bodyHtml, opts = {}) {
+    const open = sidebarSecOpen.has(key);
+    const count = opts.count != null && opts.count !== '' ? `<span class="lib-coll-count">${opts.count}</span>` : '';
+    return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}">
+        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>${label}</span>${count}
+      </div>${open ? bodyHtml : ''}`;
+  }
 
   let keywordTree = []; // flat KeywordNode list from catalog_keywords — nested client-side, same as dateCounts
   const kwExpanded = new Set(); // keyed by keyword id (a stable primary key, unlike a path a rename would change)
@@ -5752,8 +5893,8 @@
     const scanLabel = 'Analyze photos — find faces and enable AI search';
     const scanGlyph = `<span id="lib-people-scan" title="${scanLabel}" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span>`;
     if (!peopleList.length) {
-      return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People &amp; Pets${scanGlyph}</div>`
-        + `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`;
+      return '<div class="lib-coll-sep"></div>' + sidebarSection('people', `People &amp; Pets${scanGlyph}`,
+        `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`);
     }
     const named = peopleList.filter((p) => !p.auto).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
     const unnamedCount = peopleList.filter((p) => p.auto).reduce((n, p) => n + (p.face_count || 0), 0);
@@ -5771,8 +5912,7 @@
         <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
         <span class="lib-coll-count">${unnamedCount || ''}</span>
       </div>`;
-    return `<div class="lib-coll-sep"></div><div class="lib-coll-heading">People &amp; Pets${scanGlyph}</div>`
-      + namedRows + unnamedRow;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('people', `People &amp; Pets${scanGlyph}`, namedRows + unnamedRow);
   }
   function wirePeopleRows(host) {
     const scanBtn = host.querySelector('#lib-people-scan');
@@ -6415,8 +6555,21 @@
     // pill itself (a bar under inline text needs its own block) — sits directly under the pill.
     const collapsedBar = !activity.expanded && activity.stage !== 'done' && activity.total
       ? `<div class="lib-act-bar" style="position:absolute;left:0;right:0;top:100%;margin:2px 0 0"><div style="width:${pct}%"></div></div>` : '';
+    // Other jobs queued behind this one (item 24: one tray for every progress bar) — a compact
+    // label+percent row each, appended into whichever popover branch below actually renders.
+    // Visible as a "+N" badge even collapsed, so "something else is running" doesn't require
+    // opening the pill to discover.
+    const queuedEntries = [..._activityQueue.entries()];
+    const queuedBadge = queuedEntries.length ? `<span class="lib-act-queued-badge" title="${queuedEntries.length} more job${queuedEntries.length > 1 ? 's' : ''} running">+${queuedEntries.length}</span>` : '';
+    const queuedHtml = queuedEntries.length
+      ? `<div class="lib-act-queued">` + queuedEntries.map(([qKind, q]) => {
+          const qPct = q.total ? Math.round(((q.done || 0) / q.total) * 100) : null;
+          const qLabel = q.label || (qKind.charAt(0).toUpperCase() + qKind.slice(1));
+          return `<div class="lib-act-stage"><span style="width:12px;display:inline-block;text-align:center">›</span><span>${esc(qLabel)}</span><span class="lib-act-stage-n">${qPct != null ? `${q.done} of ${q.total}` : ''}</span></div>`;
+        }).join('') + `</div>`
+      : '';
     let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative${_activityStalled ? ';color:var(--red,#e5484d)' : ''}">
-      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${!_activityStalled && activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${collapsedBar}`;
+      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${!_activityStalled && activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${queuedBadge}${collapsedBar}`;
     if (activity.expanded && isGenericJob) {
       const bar = activity.stage !== 'done' && activity.total
         ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
@@ -6425,7 +6578,7 @@
           <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : _activityStalled ? 'Cancel' : (activity.cancelFn ? 'Cancel' : '')}</span></div>
         <div class="lib-act-pop-body">
           <div class="lib-act-stage active"><span style="width:12px;display:inline-block;text-align:center">${activity.stage === 'done' ? '✓' : '›'}</span><span>${esc(activity.current || activity.label || 'Working')}</span><span class="lib-act-stage-n">${activity.stage === 'done' ? '' : (activity.total ? `${activity.done} of ${activity.total}` : '')}</span></div>${bar}
-        </div></div>`;
+        </div>${queuedHtml}</div>`;
     } else if (activity.expanded) {
       const stages = STAGE_ORDER.filter((s) => s === 'copy' ? activity.kind === 'import' : activity.kind === 'catalog');
       const activeIdx = stages.indexOf(activity.stage);
@@ -6461,6 +6614,7 @@
             + (activity.failed.length > 8 ? `<div style="font-size:10px;color:var(--mut)">…and ${activity.failed.length - 8} more</div>` : '')
             + `</div>`
           : '')
+        + queuedHtml
         + `</div>`;
     }
     html += `</span>`;
@@ -6471,9 +6625,9 @@
     // come before it), but .lib-act-pop's CSS was a plain right:0 — meaning "align the popover's
     // right edge to the pill's right edge", i.e. extend LEFTWARD from a pill that's often close
     // to x=0. A 260px-wide popover from a pill near the left edge runs straight off the left side
-    // of the window — reported live, not hypothetical. #lib-filters-pop's right:0 is safe because
-    // its own trigger button is anchored at the far right of its row; this pill has no such
-    // guarantee, so it needs a real viewport clamp instead of a fixed-corner CSS assumption.
+    // of the window — reported live, not hypothetical. #lib-filters-panel's right:0 is safe
+    // because its own trigger button is anchored at the far right of its row; this pill has no
+    // such guarantee, so it needs a real viewport clamp instead of a fixed-corner CSS assumption.
     const pop = pill && pill.querySelector('.lib-act-pop');
     if (pop) {
       const pr = pill.getBoundingClientRect();
@@ -6503,7 +6657,25 @@
     }
   }
 
+  // Wireframe review item 24 (unified progress): activity used to be ONE slot — a second
+  // concurrent job (export running while faces are still indexing, say) simply overwrote
+  // whatever the pill was already showing, so the earlier job's progress silently vanished
+  // from view even though it kept running. _activityQueue holds any job that arrives while a
+  // DIFFERENT kind already owns the visible pill, keyed by kind, so it can still be seen (as a
+  // compact row in the expanded popover) and is promoted into the full pill — stall-watchdog,
+  // cancel button and all — the moment the current one clears. Same-kind updates (the
+  // overwhelmingly common case: one scan reporting its own repeated progress) are completely
+  // unaffected — they still go straight to `activity` exactly as before.
+  const _activityQueue = new Map(); // kind -> last patch, for kinds waiting behind the visible one
   function activityUpdate(kind, patch) {
+    const isDone = patch && patch.stage === 'done';
+    if (activity.visible && activity.stage !== 'done' && activity.kind && activity.kind !== kind) {
+      // A different job already owns the pill — queue this one instead of clobbering it.
+      if (isDone) _activityQueue.delete(kind);
+      else _activityQueue.set(kind, { ...(_activityQueue.get(kind) || {}), ...patch });
+      renderActivity();
+      return;
+    }
     if (_activityClearTimer) { clearTimeout(_activityClearTimer); _activityClearTimer = null; }
     // Any real event landing — regardless of whether done/total actually moved — is proof the
     // pipeline is alive, so it always resets the stall clock and clears a stalled state.
@@ -6521,7 +6693,20 @@
       // saw. A clean finish clears itself after a few seconds so it doesn't linger forever.
       const hasFailures = kind === 'import' && activity.failed && activity.failed.length;
       if (!hasFailures) {
-        _activityClearTimer = setTimeout(() => { activity.visible = false; renderActivity(); }, 8000);
+        _activityClearTimer = setTimeout(() => {
+          activity.visible = false;
+          // Promote whichever queued job has been waiting longest (Map preserves insertion
+          // order) into the now-empty primary slot, so it picks up full stall/cancel tracking
+          // instead of staying a second-class queued row forever.
+          const next = _activityQueue.entries().next();
+          if (!next.done) {
+            const [nextKind, nextPatch] = next.value;
+            _activityQueue.delete(nextKind);
+            activityUpdate(nextKind, nextPatch);
+          } else {
+            renderActivity();
+          }
+        }, 8000);
       }
     }
   }
@@ -6822,7 +7007,7 @@
       <div class="lib-coll-row lib-card-row" data-card-pick="1" title="Import from any folder — a card reader without DCIM, or an existing external drive">
         <span class="lib-coll-ic">${FOLDER_PICK_SVG}</span><span class="lib-coll-lb">Choose folder…</span>
       </div>`;
-    return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Devices</div>' + rows + pickRow;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('devices', 'Devices', rows + pickRow);
   }
 
   const IMPORT_PREFS_KEY = 'cs.import.prefs.v1';
@@ -7187,7 +7372,7 @@
           <span class="lib-coll-lb">${String(a.name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>
         </div>`).join('');
     }
-    return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Cloud</div>' + rows;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('cloud', 'Cloud', rows);
   }
   async function lrConnectAndLoad() {
     if (!window.lrCloud || lrState.loading) return; // in-flight guard: double-click fired two OAuth flows
@@ -7451,9 +7636,9 @@
         <span class="lib-coll-ic">${ALBUM_SVG}</span><span class="lib-coll-lb">${esc2(a.name)}</span>
         <span class="lib-coll-count">${a.paths.length || ''}</span>
       </div>`).join('');
-    return '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Albums'
-      + `<span id="lib-album-new" title="New album" style="float:right;cursor:pointer;padding:0 4px">+</span>`
-      + '</div>' + (rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No albums yet</div>');
+    const newBtn = `<span id="lib-album-new" title="New album" style="float:right;cursor:pointer;padding:0 4px">+</span>`;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('albums', `Albums${newBtn}`,
+      rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No albums yet</div>');
   }
   const ALBUM_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2"/></svg>';
   async function refreshAlbums() {
@@ -7615,11 +7800,28 @@
   function renderCollections() {
     const host = document.getElementById('lib-collections');
     if (!host) return;
-    host.innerHTML = catalogSectionHtml() + '<div class="lib-coll-heading">Collections</div>' + COLLECTIONS.map((c) => `
+    const collectionsBody = COLLECTIONS.map((c) => `
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
-      </div>`).join('') + albumsSectionHtml() + keywordsSectionHtml() + peopleSectionHtml() + devicesSectionHtml() + cloudSectionHtml() + '<div class="lib-coll-sep"></div><div class="lib-coll-heading">Folders</div>';
+      </div>`).join('');
+    host.innerHTML = catalogSectionHtml() + sidebarSection('collections', 'Collections', collectionsBody)
+      + albumsSectionHtml() + keywordsSectionHtml() + peopleSectionHtml() + devicesSectionHtml() + cloudSectionHtml()
+      + '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '');
+    // The actual folder tree renders into the SIBLING #lib-tree node (renderTree(), elsewhere in
+    // this file) rather than into #lib-collections, so "Folders" collapsing hides that sibling
+    // directly instead of trying to fold tree markup into this function's own innerHTML.
+    const treeEl = document.getElementById('lib-tree');
+    if (treeEl) treeEl.style.display = sidebarSecOpen.has('folders') ? '' : 'none';
+    host.querySelectorAll('[data-sec-toggle]').forEach((row) => {
+      row.onclick = (e) => {
+        e.stopPropagation();
+        const key = row.dataset.secToggle;
+        if (sidebarSecOpen.has(key)) sidebarSecOpen.delete(key); else sidebarSecOpen.add(key);
+        saveSidebarSecOpen();
+        renderCollections();
+      };
+    });
     wireAlbumRows(host);
     wirePeopleRows(host);
     host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {

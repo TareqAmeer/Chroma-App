@@ -540,8 +540,16 @@ body.diag-on .diag-only{display:flex}
    container the flex row had already squeezed to ~25px, so "512 x 384 - PNG" painted straight
    over the tool cluster to its right. overflow:hidden on the container plus a shrinkable status
    makes it truncate instead; the filename keeps priority over the dimensions. */
+/* Centered on the BAR, not on the gap between the two side clusters — it used to be two
+   flex:1 spacers either side of the title, which centers it relative to whatever space is left
+   over once both clusters take their own width. The two clusters are rarely the same width
+   (the left one is 2-4 icons, the right one carries the tool rail + Export), so the title
+   visibly sat left-of-center every time — the exact "feels too far left" report this fixes.
+   position:absolute against #fx-deskbar's own sticky/fixed positioning centers it on the bar
+   itself regardless of what either side weighs. */
 #fx-deskbar-title{display:flex;align-items:center;gap:8px;min-width:0;max-width:40vw;overflow:hidden;
-  font-family:var(--sans);font-size:var(--fs-2);color:var(--txt);white-space:nowrap}
+  font-family:var(--sans);font-size:var(--fs-2);color:var(--txt);white-space:nowrap;
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none}
 #db-title-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
 #db-title-status{color:var(--mut);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Below this the bar has no room for a centre title at all — the tools matter more. */
@@ -1322,14 +1330,16 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
     <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
     <button class="fx-db fx-db-icon" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
     <button class="fx-db fx-db-icon" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
-    <button class="fx-db fx-db-icon" onclick="fxResetAll()" title="Reset all edits"><span class="fx-db-ic" id="db-reset"></span></button>
     <div style="position:relative;display:inline-flex" id="db-history-wrap">
       <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleHistoryPopover()" title="Exported versions of this photo (Library-only)" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
       <div id="fx-history-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:220px;max-height:280px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
     </div>
-    <div style="flex:1"></div>
+    <!-- The title used to need two flex:1 spacers to center itself in the space left over
+         between the two clusters — now redundant, it positions off #fx-deskbar directly (see
+         #fx-deskbar-title's own comment). "Reset all edits" moved into the ⋯ overflow menu
+         (ovfBuild()) — the one genuinely rare, semi-destructive action in the always-visible
+         cluster; Undo/Redo already cover the common "I changed my mind" case. -->
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
-    <div style="flex:1"></div>
     <div id="fx-deskbar-tools"></div>
     <div id="fx-overflow">
       <button class="fx-db fx-db-icon" onclick="ovfToggle(event)" title="More — other tools &amp; settings"><span class="fx-db-ic" id="db-more"></span></button>
@@ -19708,6 +19718,10 @@ function ovfBuild(){
   if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Library (L)</button>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();toggleTheme()">Light / dark theme</button>';
   h+='<div class="fx-ovf-sep"></div>';
+  // Moved off the always-visible deskbar (top-bar decluttering pass) — the one semi-destructive
+  // action in that cluster, and the least frequently reached for next to Undo/Redo/Export.
+  h+='<button class="fx-ovf-item" onclick="ovfClose();fxResetAll()">Reset all edits</button>';
+  h+='<div class="fx-ovf-sep"></div>';
   // This is the desktop shell's ONLY menu (the web header and tabs are hidden under deskx), and
   // four of its rows were developer utilities — Clear image cache, Diagnostics log, Diagnostics
   // section, and a dim `build …` stamp. They all live in About now, one row instead of four.
@@ -20393,7 +20407,7 @@ document.querySelectorAll('.fx-fields[id^="ff-"]').forEach(ff=>{
 });
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
- set('db-undo','undo');set('db-redo','redo');set('db-reset','reset');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');
+ set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');
  set('hdr-info','info'); // header About button (the old 'hdr-log' diagnostics button moved into it)
  // Empty-state add button: ICONS.plus at 34px, replacing the U+FF0B FULLWIDTH PLUS glyph.
  {const ab=document.getElementById('fx-add-btn');if(ab)ab.innerHTML=icon('plus',34);}
