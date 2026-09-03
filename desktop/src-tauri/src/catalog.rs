@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -712,6 +712,15 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         if !has_col("photos", "face_scan_fail_count")? {
             conn.execute("ALTER TABLE photos ADD COLUMN face_scan_fail_count INTEGER NOT NULL DEFAULT 0", [])?;
         }
+    }
+
+    // v15 -> v16: query_run gained camera/lens/iso/faces filters (previously applied only in
+    // the frontend, over whatever slice of the library the 50k-row query cap happened to
+    // include — the "sidebar says 23,315, grid says 16,172" mismatch). camera/lens/iso already
+    // had indexes; faces_scanned_at did not, and "not face-scanned" is exactly the query this
+    // was built to answer, over a full 57k-row library.
+    if version < 16 {
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_faces_scanned_at ON photos(faces_scanned_at)", [])?;
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -4862,6 +4871,33 @@ pub struct CatalogQuery {
     /// `is_ancestor_rel`'s own segment-aware prefix rule, not a bare string prefix — see below).
     #[serde(default)]
     pub folder: Option<FolderScope>,
+    /// EXIF fields, moved server-side because they're immutable once ingested — camera/lens/iso
+    /// never change after a scan, unlike rating/favorite/edited below, so there is no staleness
+    /// risk in filtering on the stored column directly.
+    #[serde(default)]
+    pub camera: Option<String>,
+    #[serde(default)]
+    pub lens: Option<String>,
+    #[serde(default)]
+    pub iso: Option<i64>,
+    /// "indexed" | "pending" — mirrors catalog_counts' faces_scanned/faces_pending predicate
+    /// exactly (see that function's own comment) so a sidebar count and a grid filtered by this
+    /// value can never disagree the way they did before this field existed.
+    #[serde(default)]
+    pub faces: Option<String>,
+    /// ⚠️ Deliberately NOT added here: rating/favorite/edited. Those columns are written back
+    /// to the DB only when a sidecar is re-parsed during a scan (see the two
+    /// `UPDATE photos SET rating = ..., favorite = ..., edited = ...` sites), not synchronously
+    /// when the user changes a rating/flag/edit in this running session — the live source of
+    /// truth for those three is `state.sidecars` in the frontend. Filtering on the DB copy here
+    /// would silently show STALE results for anything touched since the last scan, which is a
+    /// worse bug than the one this migration fixes. They stay client-side (`passesFilters`)
+    /// until a write-through path exists.
+    /// Pagination: fetch a page starting after this many matching rows (in the query's own
+    /// ORDER BY), rather than the whole filtered set in one call — see openCatalogView's
+    /// incremental-fetch loop. `None`/0 is page one.
+    #[serde(default)]
+    pub offset: Option<u32>,
 }
 fn default_true() -> bool {
     true
@@ -4887,7 +4923,7 @@ impl Default for CatalogQuery {
         CatalogQuery {
             kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None,
             no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None,
-            folder: None,
+            folder: None, camera: None, lens: None, iso: None, faces: None, offset: None,
         }
     }
 }
@@ -4903,6 +4939,7 @@ pub fn catalog_query(q: CatalogQuery, state: tauri::State<CatalogState>) -> Resu
 
 pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, String> {
     let limit = q.limit.unwrap_or(QUERY_LIMIT_CAP).min(QUERY_LIMIT_CAP);
+    let offset = q.offset.unwrap_or(0);
 
     // Bound parameters throughout — `kind`/`text` are frontend-supplied strings and string-
     // interpolating them into SQL would be a real injection surface even though today's only
@@ -4971,6 +5008,32 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             if !t.is_empty() {
                 where_parts.push(format!("p.name_lc LIKE ?{}", values.len() + 1));
                 values.push(Box::new(format!("%{}%", t.to_lowercase())));
+            }
+        }
+        if let Some(c) = &q.camera {
+            if c != "all" {
+                where_parts.push(format!("p.camera = ?{}", values.len() + 1));
+                values.push(Box::new(c.clone()));
+            }
+        }
+        if let Some(l) = &q.lens {
+            if l != "all" {
+                where_parts.push(format!("p.lens = ?{}", values.len() + 1));
+                values.push(Box::new(l.clone()));
+            }
+        }
+        if let Some(iso) = q.iso {
+            where_parts.push(format!("p.iso = ?{}", values.len() + 1));
+            values.push(Box::new(iso));
+        }
+        if let Some(f) = &q.faces {
+            // Same predicate as catalog_counts' faces_pending/faces_scanned, and the same
+            // kind != 'video' exclusion (a video can never carry faces_scanned_at, so without
+            // this every video would count as permanently "pending").
+            match f.as_str() {
+                "pending" => where_parts.push("p.kind != 'video' AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)".to_string()),
+                "indexed" => where_parts.push("p.kind != 'video' AND p.faces_scanned_at IS NOT NULL AND p.faces_scanned_at = p.mtime".to_string()),
+                _ => {}
             }
         }
         // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
@@ -5061,7 +5124,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {where_clause}
          {order_by}
-         LIMIT {limit}"
+         LIMIT {limit} OFFSET {offset}"
     );
 
     let expanding = q.expand_stack.is_some();
@@ -5128,20 +5191,32 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         .map_err(|e| e.to_string())?;
 
     if !q.include_offline {
-        // A page-level filter, not a query-level one: `total`/`capped` still describe the SQL
-        // result before this, which slightly overstates the true count when offline entries
-        // exist. Acceptable at this stage — this module doesn't yet track a volume's online
-        // state IN the database (that lands with the mount-poll work), so there is no cheap
-        // SQL-side way to exclude it up front without a per-row filesystem stat inside COUNT(*).
+        // A page-level filter, not a query-level one: `total` still describes the SQL result
+        // before this, which slightly overstates the true count when offline entries exist.
+        // Acceptable at this stage — this module doesn't yet track a volume's online state IN
+        // the database (that lands with the mount-poll work), so there is no cheap SQL-side way
+        // to exclude it up front without a per-row filesystem stat inside COUNT(*).
         entries.retain(|e| !e.offline);
     }
-    Ok(CatalogPage { total: total as u64, capped: total as u64 > limit as u64, entries })
+    // `capped`: true when THIS page didn't reach the end of the filtered set — i.e. there is
+    // more to fetch at the next offset. Distinct from "the whole result exceeds one page's
+    // limit": with paging, that's the normal, expected case on every page but the last one.
+    let capped = (offset as u64) + (entries.len() as u64) < total as u64;
+    Ok(CatalogPage { total: total as u64, capped, entries })
 }
 
 #[tauri::command]
 pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collections::HashMap<String, u64>, String> {
     // Read-only — the dedicated read connection, so this never waits behind a running scan.
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    catalog_counts_run(&conn)
+}
+
+/// Split out of catalog_counts for the same reason query_run is split from catalog_query: a
+/// plain `&Connection` is testable without standing up a `tauri::State`, which is what lets
+/// `query_run_faces_filter_matches_catalog_counts_predicate_exactly` assert the two functions
+/// agree instead of just trusting they were written to match.
+pub fn catalog_counts_run(conn: &Connection) -> Result<std::collections::HashMap<String, u64>, String> {
     let mut m = std::collections::HashMap::new();
     let all: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("all".to_string(), all as u64);
@@ -9424,6 +9499,102 @@ mod tests {
 
         let empty_page = query_run(&conn, CatalogQuery { photo_ids: Some(vec![]), ..Default::default() }).unwrap();
         assert!(empty_page.entries.is_empty(), "an empty id list must return nothing, not fall through to every photo");
+    }
+
+    /// The bug this whole migration exists to fix: the sidebar's faces_pending count
+    /// (catalog_counts) and a grid filtered to the same thing (query_run with faces:"pending")
+    /// must agree — before this, "faces" wasn't a query_run filter at all, so the grid could only
+    /// approximate it by re-filtering whatever the (capped) unfiltered fetch happened to include.
+    #[test]
+    fn query_run_faces_filter_matches_catalog_counts_predicate_exactly() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        // a: never scanned (NULL). b: scanned, but the file changed since (stale). c: scanned and
+        // current. Video d: must NEVER count as pending — faces_run excludes video entirely.
+        let rows = [
+            ("a.jpg", "jpeg", 100i64, None),
+            ("b.jpg", "jpeg", 200i64, Some(150i64)),
+            ("c.jpg", "jpeg", 300i64, Some(300i64)),
+            ("d.mp4", "video", 400i64, None),
+        ];
+        for (name, kind, mtime, scanned_at) in rows {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, faces_scanned_at, added, present)
+                 VALUES (?1, ?2, '', ?2, ?2, 'x', ?3, 10, ?4, ?5, 0, 1)",
+                params![vid, name, kind, mtime, scanned_at],
+            ).unwrap();
+        }
+        let counts = catalog_counts_run(&conn).unwrap();
+        let pending = query_run(&conn, CatalogQuery { faces: Some("pending".into()), ..Default::default() }).unwrap();
+        let indexed = query_run(&conn, CatalogQuery { faces: Some("indexed".into()), ..Default::default() }).unwrap();
+        assert_eq!(pending.total, counts["faces_pending"], "query_run(faces:pending) must match catalog_counts' faces_pending exactly");
+        assert_eq!(indexed.total, counts["faces_scanned"], "query_run(faces:indexed) must match catalog_counts' faces_scanned exactly");
+        let mut pending_names: Vec<_> = pending.entries.iter().map(|e| e.name.clone()).collect();
+        pending_names.sort();
+        assert_eq!(pending_names, vec!["a.jpg", "b.jpg"], "never-scanned and stale-scanned must both count as pending; the video must not");
+        assert_eq!(indexed.entries.len(), 1);
+        assert_eq!(indexed.entries[0].name, "c.jpg");
+    }
+
+    /// camera/lens/iso are immutable EXIF fields written once at scan time (unlike
+    /// rating/favorite/edited, deliberately NOT added to query_run — see CatalogQuery's own doc
+    /// comment on why those stay client-side), so they're safe to filter on server-side.
+    #[test]
+    fn query_run_camera_lens_iso_filters() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, camera, lens, iso, added, present)
+             VALUES (?1, 'a.jpg', '', 'a.jpg', 'a.jpg', 'jpg', 'jpeg', 10, 0, 'DC-S9', 'Lumix 24mm', 200, 0, 1)",
+            params![vid],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, camera, lens, iso, added, present)
+             VALUES (?1, 'b.jpg', '', 'b.jpg', 'b.jpg', 'jpg', 'jpeg', 10, 0, 'DC-S5', 'Lumix 50mm', 800, 0, 1)",
+            params![vid],
+        ).unwrap();
+        let by_camera = query_run(&conn, CatalogQuery { camera: Some("DC-S9".into()), ..Default::default() }).unwrap();
+        assert_eq!(by_camera.entries.len(), 1);
+        assert_eq!(by_camera.entries[0].name, "a.jpg");
+        let by_lens = query_run(&conn, CatalogQuery { lens: Some("Lumix 50mm".into()), ..Default::default() }).unwrap();
+        assert_eq!(by_lens.entries.len(), 1);
+        assert_eq!(by_lens.entries[0].name, "b.jpg");
+        let by_iso = query_run(&conn, CatalogQuery { iso: Some(200), ..Default::default() }).unwrap();
+        assert_eq!(by_iso.entries.len(), 1);
+        assert_eq!(by_iso.entries[0].name, "a.jpg");
+    }
+
+    /// The paging behavior that replaces the old flat 50,000-row cap: offset continues the SAME
+    /// ORDER BY with no gaps and no duplicates, `total` is the true filtered count regardless of
+    /// page size, and `capped` is only true while there is more left to fetch — false on the
+    /// final page, which is what tells the frontend's loadMoreCatalogEntries to stop asking.
+    #[test]
+    fn query_run_paging_covers_every_row_exactly_once() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        for i in 0..25 {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+                 VALUES (?1, ?2, '', ?2, ?2, 'jpg', 'jpeg', 10, ?3, 0, 1)",
+                params![vid, format!("p{i:02}.jpg"), i],
+            ).unwrap();
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut offset = 0u32;
+        let mut pages = 0;
+        loop {
+            let page = query_run(&conn, CatalogQuery { limit: Some(10), offset: Some(offset), ..Default::default() }).unwrap();
+            assert_eq!(page.total, 25);
+            pages += 1;
+            assert!(pages <= 10, "must terminate — a capped page that never turns false would loop forever in the real frontend");
+            for e in &page.entries {
+                assert!(seen.insert(e.id), "row {} returned on more than one page — offset must not skip or repeat", e.id);
+            }
+            offset += page.entries.len() as u32;
+            if !page.capped { break; }
+        }
+        assert_eq!(seen.len(), 25, "every row must be reachable across pages");
+        assert_eq!(pages, 3, "25 rows at a page size of 10 must take exactly 3 pages (10, 10, 5)");
     }
 
     // ── Cache budget ─────────────────────────────────────────────────────────────────────────

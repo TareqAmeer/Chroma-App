@@ -1671,6 +1671,72 @@
   // Folder size at which the grid switches to windowed rendering. Chosen off the measurement in
   // renderGrid's comment: 200 files is comfortable, 1,000 is heavy, 5,000 does not load.
   const VIRT_MIN = 400;
+  // ── Catalog paging ───────────────────────────────────────────────────────────────────────
+  // Replaces the old "fetch up to 50,000 rows in one shot" behavior. That cap was a blanket
+  // memory guard with no relation to what's actually visible (the grid only ever mounts a
+  // screenful of DOM cards — see VIRT_MIN above), and once a library crossed it silently, every
+  // client-side count/select-all/filter result was quietly computed over a partial library
+  // with no indication anything was missing. A real library-wide view now fetches in pages of
+  // CATALOG_PAGE_SIZE and grows `state.entries` as the user actually scrolls toward the end of
+  // what's loaded — `virtUpdate`'s own near-the-end check below is what triggers the next page.
+  const CATALOG_PAGE_SIZE = 4000;
+  // Any view backed by catalog_query (All Photos / By Date / a registered folder / a keyword or
+  // person scope) sets `state._catalogPaged = true` and `state._catalogBaseQuery` to the query
+  // shape (minus offset) so a filter change or a scroll-triggered "load more" can re-issue it.
+  // Album/Exported/Lightroom-cloud views never set this and keep their existing, unpaged,
+  // client-side-filtered behavior untouched.
+  function catalogFilterFields() {
+    return {
+      kind: state.typeFilter !== 'all' ? state.typeFilter : null,
+      camera: state.cameraFilter !== 'all' ? state.cameraFilter : null,
+      lens: state.lensFilter !== 'all' ? state.lensFilter : null,
+      iso: state.isoFilter !== 'all' && state.isoFilter ? parseInt(state.isoFilter, 10) : null,
+      faces: state.facesFilter !== 'all' ? state.facesFilter : null,
+    };
+  }
+  /// Re-issues the current catalog-backed view's base query at the given offset and appends the
+  /// result to state.entries. Used both for scroll-triggered "load more" (offset = current
+  /// length) and is NOT used for offset 0 — that first page is always fetched by the view-opening
+  /// function itself (openCatalogView/openFolder), which also has to do view-specific setup
+  /// (skeleton, empty-state message, stack-expansion splicing) a bare append must not repeat.
+  async function loadMoreCatalogEntries() {
+    // The source check guards against a stale _catalogPaged/_catalogBaseQuery surviving a
+    // switch to a non-catalog view (album/exported/Lightroom) that never resets them —
+    // those views' own open functions don't set _catalogPaged themselves, so this is the one
+    // place that has to know which sources are actually catalog_query-backed.
+    if (state.source !== 'catalog' && state.source !== 'folder') return;
+    if (!state._catalogPaged || !state._catalogCapped || state._catalogLoadingMore) return;
+    if (!state._catalogBaseQuery) return;
+    state._catalogLoadingMore = true;
+    try {
+      const q = { ...state._catalogBaseQuery, offset: state.entries.length };
+      const page = await invoke('catalog_query', { q });
+      // Same offline-filtering note as query_run's own: entries already excludes offline rows
+      // when includeOffline was false, so simple concatenation is correct — nothing to dedupe,
+      // since OFFSET always continues the same ORDER BY the first page used.
+      state.entries = state.entries.concat(page.entries);
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
+      renderGrid();
+    } catch (e) {
+      // Best-effort: leave capped as-is so the next scroll-near-end retries rather than
+      // silently giving up on the rest of the library after one transient failure.
+    } finally {
+      state._catalogLoadingMore = false;
+    }
+  }
+  /// Filters that moved server-side (type/camera/lens/iso/faces) now need a full re-fetch from
+  /// offset 0 on change, not a re-filter of whatever partial array happens to be in memory — a
+  /// changed camera filter must not keep operating on the previous filter's truncated page.
+  /// Everything NOT backed by catalog_query (albums, exported, Lightroom cloud) is untouched by
+  /// this and keeps the old client-side-only renderGrid() behavior.
+  function applyCatalogFilterChange() {
+    if (state._catalogPaged) {
+      if (state.source === 'catalog') { openCatalogView(state.catalogScope); return; }
+      if (state.source === 'folder' && state.currentFolder) { openFolder(state.currentFolder); return; }
+    }
+    renderGrid();
+  }
   // Test hook: the grid probe needs the measured metrics, which are otherwise closure-local.
   // ⚠️ Bug #2: this was declared ONLY inside `if (LIBTEST)` below, so `window.__libInfo` was
   // undefined in the real packaged app — a "dead public API nobody calls" not because nothing
@@ -1750,6 +1816,12 @@
     const lastRow = Math.min(totalRows - 1, Math.ceil((viewTop + viewH) / m.rowH) + over);
     if (!force && state._virtRange && state._virtRange[0] === firstRow && state._virtRange[1] === lastRow) return;
     state._virtRange = [firstRow, lastRow];
+    // Within 3 rows of the end of what's actually been FETCHED (not just what's been scrolled
+    // past — `all`/`totalRows` are state._virtAll, which is only as long as state.entries):
+    // fetch the next page now, before the user reaches a visible "ran out of photos" edge.
+    // Fire-and-forget: loadMoreCatalogEntries has its own re-entrancy guard, and virtUpdate
+    // itself must stay synchronous (it runs inside the scroll rAF callback).
+    if (lastRow >= totalRows - 3) loadMoreCatalogEntries();
     const from = firstRow * m.cols, to = Math.min(all.length, (lastRow + 1) * m.cols);
     renderCards(gridEl, all.slice(from, to), all, false, {
       offset: from,
@@ -3074,12 +3146,20 @@
       window._lastCatalogRegisterPromise = regPromise;
       const reg = await regPromise;
       if (reg) {
-        const page = await invoke('catalog_query', { q: { folder: { volumeId: reg.volumeId, relDir: reg.relDir, recursive: state.includeSubfolders } } });
+        const q = { folder: { volumeId: reg.volumeId, relDir: reg.relDir, recursive: state.includeSubfolders },
+          limit: CATALOG_PAGE_SIZE, offset: 0, ...catalogFilterFields() };
+        const page = await invoke('catalog_query', { q });
         entries = page.entries;
+        state._catalogPaged = true;
+        state._catalogBaseQuery = { ...q, offset: undefined };
+        state._catalogTotal = page.total;
+        state._catalogCapped = page.capped;
       } else {
         // Fallback only: the catalog couldn't register this folder (e.g. a permissions error a
         // plain read_dir would also hit) — fall back to the live walk so the grid still shows
-        // something rather than nothing.
+        // something rather than nothing. Not catalog-backed, so paging/server-side filters don't
+        // apply here — same as albums/exported/Lightroom below.
+        state._catalogPaged = false;
         if (state.includeSubfolders) {
           entries = await listDirRecursive(path);
         } else {
@@ -5206,15 +5286,15 @@
     const searchEl = document.getElementById('lib-search');
     if (searchEl) searchEl.value = '';
     state.search = '';
-    renderGrid();
+    applyCatalogFilterChange();
   }
-  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; renderGrid(); };
-  overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; renderGrid(); };
-  overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; renderGrid(); };
-  overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; applyCatalogFilterChange(); };
   overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
-  overlay.querySelector('#lib-faces-filter').onchange = (e) => { state.facesFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-faces-filter').onchange = (e) => { state.facesFilter = e.target.value; applyCatalogFilterChange(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
   if (!STARS_ENABLED) {
     // Sort option and list column are the two surfaces that are pure markup rather than a
@@ -6931,10 +7011,19 @@
       const dateParts = scope && scope.startsWith('date:') ? scope.slice(5).split(':').map(Number) : null;
       const kwPath = scope && scope.startsWith('kw:') ? scope.slice(3) : null;
       const personId = scope && scope.startsWith('person:') ? parseInt(scope.slice(7), 10) : null;
-      const q = { kind: null, text: null, includeOffline: true, limit: null,
+      const q = { text: null, includeOffline: true, limit: CATALOG_PAGE_SIZE, offset: 0,
         year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
-        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [], personId };
+        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [], personId,
+        ...catalogFilterFields() };
       page = await invoke('catalog_query', { q });
+      // Base shape for loadMoreCatalogEntries's later pages — offset is overwritten there per
+      // call, everything else must stay identical to this page's own query or a "load more"
+      // could silently start answering a different question than the page the user is looking
+      // at (e.g. missing the faces/camera filter that produced what's on screen already).
+      state._catalogPaged = true;
+      state._catalogBaseQuery = { ...q, offset: undefined };
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
     } catch (e) {
       grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
       return;
@@ -7899,13 +7988,17 @@
     const facesPendingRow = host.querySelector('[data-faces-pending]');
     if (facesPendingRow) {
       facesPendingRow.onclick = async () => {
-        // "All photos" scope + the client-side faces filter, same combination the filter-chip
-        // dropdown produces — not a new backend query scope, so it can never disagree with what
-        // the dropdown itself would show for the identical filter.
-        await openCatalogView('all');
+        // "All photos" scope + the faces filter, same combination the filter-chip dropdown
+        // produces — not a new backend query scope, so it can never disagree with what the
+        // dropdown itself would show for the identical filter.
+        // ⚠️ The filter MUST be set before openCatalogView runs, not after: openCatalogView
+        // reads state.facesFilter into the query it sends (catalogFilterFields()), so setting
+        // it afterward and calling plain renderGrid() would client-side-filter whatever partial
+        // page "all" happened to fetch — the exact "sidebar count vs grid count" mismatch this
+        // filter exists to fix, reintroduced at its own entry point.
         state.facesFilter = 'pending';
         syncFilterControls();
-        renderGrid();
+        await openCatalogView('all');
       };
     }
     const freeUpRow = host.querySelector('[data-cache-free]');
