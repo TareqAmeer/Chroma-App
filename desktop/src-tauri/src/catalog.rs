@@ -4014,6 +4014,11 @@ pub struct CatalogEntry {
     pub volume: String,
     pub sharpness: Option<f64>,
     pub blurry: bool,
+    /// True once faces_run has scanned this photo at its CURRENT mtime — mirrors the exact
+    /// "up to date" predicate faces_run itself uses to decide what's still pending (see
+    /// catalog_counts' faces_scanned/faces_pending, which this field must stay consistent
+    /// with). Always false for videos, which faces_run never processes.
+    pub faces_scanned: bool,
     /// >1 when this row represents a stack (RAW + its exports) rather than a single photo.
     /// 0 or 1 means "no badge" — both an unstacked photo and a stack that's shrunk to just its
     /// leader render identically to the frontend, deliberately.
@@ -4285,7 +4290,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
                 (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
                  ORDER BY p2.mtime DESC LIMIT 1),
-                p.stack_id
+                p.stack_id, p.faces_scanned_at
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {where_clause}
          {order_by}
@@ -4320,6 +4325,8 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let stack_n: i64 = r.get(12)?;
             let newest_deriv_rel: Option<String> = r.get(13)?;
             let stack_id: Option<i64> = r.get(14)?;
+            let faces_scanned_at: Option<i64> = r.get(15)?;
+            let is_photo = kind != "video";
             let online = is_local != 0 || {
                 let mut cache = online_cache.borrow_mut();
                 *cache.entry(last_path.clone()).or_insert_with(|| Path::new(&last_path).is_dir())
@@ -4340,6 +4347,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 volume: label,
                 sharpness,
                 blurry: blurry != 0,
+                faces_scanned: is_photo && faces_scanned_at.map_or(false, |t| t == mtime),
                 // While expanded, only the LEADER row (id == stack_id) still carries a real
                 // stack_n — that's what lets the frontend keep a "collapse" badge visible on it
                 // instead of stranding the user with no way back. Every derivative member gets 0
@@ -4377,6 +4385,21 @@ pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collecti
     // result from catalog_clip_search was ambiguous between those two very different situations.
     let clip_scanned: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND clip_embedding IS NOT NULL", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("clip_scanned".to_string(), clip_scanned as u64);
+    // Mirrors the exact predicate faces_run uses to build its work queue (see the
+    // "faces_scanned_at IS NULL OR faces_scanned_at != mtime" clause above) so "not indexed" in
+    // the UI can never drift from what the backend actually considers pending. Videos are
+    // excluded from face scanning entirely (kind != 'video'), so they're excluded here too —
+    // otherwise every video would show up as permanently "not indexed".
+    let faces_pending: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (faces_scanned_at IS NULL OR faces_scanned_at != mtime)",
+        [], |r| r.get(0)
+    ).map_err(|e| e.to_string())?;
+    m.insert("faces_pending".to_string(), faces_pending as u64);
+    let faces_scanned: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND faces_scanned_at IS NOT NULL AND faces_scanned_at = mtime",
+        [], |r| r.get(0)
+    ).map_err(|e| e.to_string())?;
+    m.insert("faces_scanned".to_string(), faces_scanned as u64);
     Ok(m)
 }
 
