@@ -51,6 +51,7 @@ mod catalog;
 mod dcp_store;
 mod diag;
 mod merge;
+mod bgwork;
 
 /// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
 // The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files for
@@ -1857,6 +1858,23 @@ fn main() {
     // First statement in main() on purpose — catches panics as early as possible.
     // See diag.rs: there was no panic::set_hook anywhere in this codebase before.
     diag::install_panic_hook();
+
+    // Hidden headless CLI mode: the SAME compiled binary, re-invoked as a child process by
+    // catalog.rs's run_faces_scan_via_worker to run a full-library face scan in a separate OS
+    // process (see CatalogState::face_worker's doc comment for why — the short version: it stops
+    // an unscoped face scan from holding the main app's single writer-connection Mutex for the
+    // scan's entire multi-minute duration, which was blocking every OTHER catalog write and is a
+    // real, separate contributor to "the app is stuck" beyond CPU usage alone). Must be checked
+    // and exited on BEFORE any Tauri/webview setup below — this path never touches GUI state.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--face-scan-worker") {
+        let Some(db_path) = args.get(2) else {
+            eprintln!("--face-scan-worker requires a catalog.db path argument");
+            std::process::exit(1);
+        };
+        std::process::exit(catalog::run_face_scan_worker(std::path::Path::new(db_path)));
+    }
+
     // Printed unconditionally, BEFORE anything else, straight to the terminal `npm run dev`
     // (or `cargo run`) runs in — no JS round-trip needed, so it's visible even if the webview
     // never loads. Compare against native_build_tag()'s value: if they differ (or this line
@@ -1881,7 +1899,18 @@ fn main() {
     // speed-ups; revisit with real measurements if background passes end up feeling slow.
     let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
     let workers = (cores.saturating_sub(2)).max(2);
-    if let Err(e) = rayon::ThreadPoolBuilder::new().num_threads(workers).build_global() {
+    // QoS (see bgwork.rs) is layered ON TOP of the count cap below, not instead of it — a
+    // thread-count cap only bounds concurrency, it can't stop a background thread from being
+    // scheduled ahead of the UI thread when both happen to be runnable at once. Marking every
+    // rayon worker `.utility` QoS as it starts means the OS scheduler itself prefers the UI
+    // thread under contention, the same mechanism Photos.app/Lightroom-class apps rely on for
+    // background indexing — researched before adding another thread-count tweak on top of the
+    // ones already here, since repeatedly tightening counts alone was treating the symptom.
+    if let Err(e) = rayon::ThreadPoolBuilder::new()
+        .num_threads(workers)
+        .start_handler(|_| bgwork::mark_current_thread_background())
+        .build_global()
+    {
         eprintln!("rayon: could not cap the global pool at {workers} threads ({e}) — proceeding with rayon's own default sizing");
     }
     // ⚠️ The rayon cap above only bounds RAYON's own worker threads. Every `#[tauri::command]
@@ -2167,6 +2196,12 @@ fn main() {
                         if state.hq_offline_active.load(std::sync::atomic::Ordering::Relaxed) {
                             api.prevent_close();
                             let _ = handle_for_close.emit("hq-offline-quit-blocked", ());
+                        } else {
+                            // The close is actually proceeding — make sure the face-scan worker
+                            // child (CatalogState::face_worker) doesn't outlive this process as an
+                            // orphan. Safe to kill unconditionally, same reasoning as
+                            // catalog_scan_cancel: it resumes correctly next launch.
+                            catalog::kill_face_worker(&state);
                         }
                     }
                 });

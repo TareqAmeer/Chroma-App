@@ -146,7 +146,7 @@ pub(crate) fn dcp_lut_key_for_make(make: &str) -> Option<String> {
     dcp_manifest_read().get(&make_lower).cloned()
 }
 
-fn catalog_db_path() -> PathBuf {
+pub(crate) fn catalog_db_path() -> PathBuf {
     catalog_dir().join("catalog.db")
 }
 
@@ -178,6 +178,15 @@ pub struct CatalogState {
     /// window-close handler to decide whether to block quitting with the "still caching, wait or
     /// cancel?" prompt the user asked for.
     pub hq_offline_active: AtomicBool,
+    /// The child process running a full-library face scan (see run_face_scan_worker), if one is
+    /// currently active. A full unscoped scan is routed to a SEPARATE OS process — not just a
+    /// spawn_blocking thread — specifically so it stops holding `conn`'s Mutex for the scan's
+    /// entire (potentially many-minute) duration: every other catalog WRITE (rating a photo,
+    /// favoriting, importing) shares that one Mutex and was blocking on it for as long as an
+    /// unscoped face scan ran, which is a real, separate contributor to "the app is stuck" beyond
+    /// raw CPU usage. The worker opens its OWN connection to the same on-disk WAL database, so it
+    /// only ever holds a lock for one small per-chunk commit, matching read_conn's own reasoning.
+    pub face_worker: Mutex<Option<std::process::Child>>,
 }
 
 impl CatalogState {
@@ -232,11 +241,17 @@ impl CatalogState {
                 (c1, c2)
             }
         };
-        CatalogState { conn: Mutex::new(conn), read_conn: Mutex::new(read_conn), cancel: AtomicBool::new(false), hq_offline_active: AtomicBool::new(false) }
+        CatalogState {
+            conn: Mutex::new(conn),
+            read_conn: Mutex::new(read_conn),
+            cancel: AtomicBool::new(false),
+            hq_offline_active: AtomicBool::new(false),
+            face_worker: Mutex::new(None)
+        }
     }
 }
 
-fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
+pub(crate) fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
@@ -2179,7 +2194,14 @@ pub fn faces_run(
     progress: &mut dyn FnMut(ScanProgress),
     cancel: &AtomicBool
 ) -> Result<FacesResult, String> {
+    // This runs on a tauri::async_runtime::spawn_blocking thread (see catalog_faces_scan below),
+    // never the UI thread — mark it low-priority so the OS scheduler prefers the UI thread under
+    // contention. See bgwork.rs for why this matters beyond the existing thread-COUNT caps.
+    crate::bgwork::mark_current_thread_background();
     let mut result = FacesResult::default();
+    // ~1s/chunk of CHUNK=4 is a generous baseline for SCRFD's fixed 640x640 inference (serialized
+    // behind its session Mutex, ~150-250ms each) plus decode — see bgwork::ChunkPacer's doc.
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(1));
     // Scoped selections (a context-menu "Find faces in selection") are already bounded to the
     // photos the user picked — a single pass over exactly those ids, no LIMIT/loop-until-empty
     // (that machinery exists only to chunk an unbounded library-wide scan). Unscoped (`None`)
@@ -2274,12 +2296,24 @@ pub fn faces_run(
         // the face_scan_fail_count migration comment for the incident this fixes.
         const MAX_FAIL_ATTEMPTS: i64 = 3;
         for chunk in batch.chunks(CHUNK) {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            // System-state throttling (bgwork::throttle_pause): pause under thermal pressure or
+            // low-power mode instead of grinding ahead at full speed regardless of what the rest
+            // of the machine needs right now — checked once per chunk (cheap) rather than per
+            // photo.
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
+            pacer.start_chunk();
             let part: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
                     let (id, abs, mtime) = (*id, abs.clone(), *mtime);
                     let (tx_done, rx_done) = std::sync::mpsc::channel();
                     std::thread::spawn(move || {
+                        crate::bgwork::mark_current_thread_background();
                         let faces = crate::library::decode_rgb8_capped(&abs, DECODE_LONG_EDGE)
                             .ok()
                             .and_then(|(rgb, w, h)| crate::scrfd::detect(&rgb, w, h).ok().map(|faces| (faces, w, h)))
@@ -2354,6 +2388,14 @@ pub fn faces_run(
             }
             tx.commit().map_err(|e| e.to_string())?;
             progress(ScanProgress { phase: "faces".into(), done: result.scanned, total: base_scanned + total_in_batch, current: String::new() });
+            // Adaptive backoff (bgwork::ChunkPacer): a chunk that ran unexpectedly slow is
+            // itself evidence of system contention, whatever the root cause — back off
+            // proportionally rather than immediately hammering the next chunk. A no-op on a
+            // healthy scan (chunks finishing within the baseline sleep for zero time).
+            let pause = pacer.end_chunk();
+            if pause > std::time::Duration::ZERO {
+                std::thread::sleep(pause);
+            }
         }
 
         if scoped {
@@ -2364,17 +2406,114 @@ pub fn faces_run(
     Ok(result)
 }
 
+/// CLI entrypoint for the face-scan worker process (see CatalogState::face_worker's doc comment
+/// for why this exists as a separate process rather than another spawn_blocking task). Dispatched
+/// from main() BEFORE any Tauri/webview setup — this must stay a plain headless CLI path, never
+/// touching GUI state. Opens its OWN connection to the same on-disk catalog (WAL mode + the
+/// existing 5s busy_timeout already handle two processes writing to it — see open_and_migrate's
+/// comment), runs exactly one full unscoped pass (faces_run's own internal loop already drains
+/// the whole library), and reports progress over stdout as plain lines the parent parses — no new
+/// IPC mechanism needed since it's just a pipe the parent already owns via Command::spawn.
+///
+/// Cancellation is NOT a flag this process checks — see kill_face_worker's doc: the parent kills
+/// this process outright, which is safe because faces_run commits one small chunk at a time.
+pub fn run_face_scan_worker(db_path: &Path) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("face-scan worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let cancel = AtomicBool::new(false);
+    let result = faces_run(&conn, None, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel);
+    match result {
+        Ok(r) => {
+            println!("DONE scanned={} faces_found={}", r.scanned, r.faces_found);
+            0
+        }
+        Err(e) => {
+            eprintln!("face-scan worker: {e}");
+            1
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn catalog_faces_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<FacesResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
+
+        // Scoped selections ("Find faces in selection") stay in-process: small, bounded, fast —
+        // spinning up a whole OS process for a handful of photos isn't worth the latency, and
+        // the Mutex-starvation problem the worker exists to avoid only bites on a scan long
+        // enough to matter (many minutes across a whole library).
+        if photo_ids.is_none() {
+            return run_faces_scan_via_worker(&app, &state);
+        }
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         faces_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
     })
     .await
     .map_err(|e| format!("catalog_faces_scan task panicked: {e}"))?
+}
+
+/// Runs a full-library face scan in a separate process and relays its progress. Falls back to
+/// the ordinary in-process path if there's no real on-disk catalog to hand the child (the
+/// in-memory fallback from CatalogState::new's doc comment) — a child process reading a
+/// different, empty in-memory-only database would just silently scan nothing.
+fn run_faces_scan_via_worker(app: &tauri::AppHandle, state: &tauri::State<CatalogState>) -> Result<FacesResult, String> {
+    use tauri::Emitter;
+    let db_path = catalog_db_path();
+    if !db_path.is_file() {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        return faces_run(&conn, None, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel);
+    }
+    let exe = std::env::current_exe().map_err(|e| format!("could not resolve current executable: {e}"))?;
+    let mut child = std::process::Command::new(&exe)
+        .arg("--face-scan-worker")
+        .arg(&db_path)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("could not start face-scan worker: {e}"))?;
+
+    let stdout = child.stdout.take();
+    *state.face_worker.lock().map_err(|e| e.to_string())? = Some(child);
+
+    let mut result = FacesResult::default();
+    if let Some(stdout) = stdout {
+        use std::io::{BufRead, BufReader};
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some(rest) = line.strip_prefix("PROGRESS ") {
+                let mut parts = rest.split_whitespace();
+                if let (Some(done), Some(total)) = (parts.next().and_then(|s| s.parse().ok()), parts.next().and_then(|s| s.parse().ok())) {
+                    let _ = app.emit("catalog-scan", ScanProgress { phase: "faces".into(), done, total, current: String::new() });
+                }
+            } else if let Some(rest) = line.strip_prefix("DONE ") {
+                for kv in rest.split_whitespace() {
+                    if let Some(n) = kv.strip_prefix("scanned=").and_then(|s| s.parse().ok()) {
+                        result.scanned = n;
+                    } else if let Some(n) = kv.strip_prefix("faces_found=").and_then(|s| s.parse().ok()) {
+                        result.faces_found = n;
+                    }
+                }
+            }
+        }
+    }
+
+    // Take (not just read) the slot: if it's already None, catalog_scan_cancel/pause already
+    // killed and reaped this child, and calling wait() again here would be a benign no-op at
+    // best — but there's nothing left to wait on either way.
+    let child = state.face_worker.lock().map_err(|e| e.to_string())?.take();
+    if let Some(mut child) = child {
+        let _ = child.wait();
+    }
+    let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
+    Ok(result)
 }
 
 // ── Pet detection (people-pets wireframes screen P) — see petdetect.rs for the model/decode.
@@ -4024,6 +4163,22 @@ pub async fn catalog_verify(app: tauri::AppHandle) -> Result<VerifyResult, Strin
 #[tauri::command]
 pub fn catalog_scan_cancel(state: tauri::State<CatalogState>) {
     state.cancel.store(true, Ordering::Relaxed);
+    kill_face_worker(&state);
+}
+
+/// The face-scan worker (see CatalogState::face_worker) has no in-process cancel flag to check —
+/// it's a separate OS process, so the only way to stop it mid-scan is to kill it. Safe to do at
+/// any point: it commits one small chunk-of-4 transaction at a time (see faces_run), so the
+/// worst case is losing whatever chunk was in flight, not corrupting anything — WAL mode is
+/// crash-safe by design. It resumes correctly next time it's started, driven entirely by
+/// faces_scanned_at, exactly like recovering from an ordinary crash or force-quit.
+pub(crate) fn kill_face_worker(state: &CatalogState) {
+    if let Ok(mut slot) = state.face_worker.lock() {
+        if let Some(mut child) = slot.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
 }
 
 /// Clears the cancel flag at the START of a paced multi-batch drain (catalog_thumbnails,
@@ -4043,8 +4198,17 @@ pub fn catalog_cancel_reset(state: tauri::State<CatalogState>) {
 static BG_PAUSED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
-pub fn catalog_bg_set_paused(paused: bool) {
+pub fn catalog_bg_set_paused(paused: bool, state: tauri::State<CatalogState>) {
     BG_PAUSED.store(paused, Ordering::Relaxed);
+    // Every OTHER paced background loop already checks bg_is_paused() cooperatively between
+    // batches. The face-scan worker is a separate OS process with no way to see that in-process
+    // static flag, so "pause" has to mean the same abrupt-but-safe kill catalog_scan_cancel uses
+    // — otherwise clicking Pause would visibly do nothing to CPU usage while a face scan is the
+    // thing actually running, defeating the whole point of "reclaim the machine now". It resumes
+    // correctly (see kill_face_worker's doc) whenever the frontend next asks for a face scan.
+    if paused {
+        kill_face_worker(&state);
+    }
 }
 
 #[tauri::command]
