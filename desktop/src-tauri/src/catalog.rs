@@ -2573,7 +2573,19 @@ pub fn faces_run(
                 .map(|(id, abs, mtime)| {
                     let (id, abs, mtime) = (*id, abs.clone(), *mtime);
                     let (tx_done, rx_done) = std::sync::mpsc::channel();
-                    std::thread::spawn(move || {
+                    // ⚠️ decode_batch_pool() (a FIXED-size pool), NOT std::thread::spawn. A raw
+                    // spawn per photo has no upper bound: recv_timeout below stops WAITING on a
+                    // slow photo after 30s, but the spawned thread itself keeps running to
+                    // completion regardless — on a scoped scan with many consecutive slow/stuck
+                    // photos, those abandoned threads never get cleaned up and pile up without
+                    // limit. Confirmed live: a real scoped run (20k photos) stalled at "4 done"
+                    // for minutes with the app pegged at 100%+ CPU and 71 live threads on the
+                    // worker process — real work, but a growing pile of orphaned decode threads
+                    // all competing for the same handful of physical cores, extending every
+                    // SUBSEQUENT photo's wall time too and compounding into an apparent hang. A
+                    // fixed-size pool bounds concurrent decode work to its own worker count no
+                    // matter how many photos individually time out.
+                    decode_batch_pool().spawn(move || {
                         crate::bgwork::mark_current_thread_background();
                         let faces = crate::library::decode_rgb8_capped(&abs, DECODE_LONG_EDGE)
                             .ok()
