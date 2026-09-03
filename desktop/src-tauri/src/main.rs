@@ -2072,6 +2072,8 @@ fn main() {
             library::collection_counts,
             library::touch_recent,
             library::backfill_edited_registry,
+            library::rescan_edited_registry_recursive,
+            library::cancel_registry_rescan,
             library::phash_batch,
             library::registry_set_cmd,
             library::registry_set_many,

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Extension lists live in formats.rs (the single source of truth, mirrored against
@@ -2237,11 +2238,61 @@ pub fn touch_recent(path: String) {
     registry_write("recents", &list);
 }
 
+/// Scans ONE folder (non-recursive) for `.xmp` sidecars and registers any edited/favorited/
+/// flagged/rejected photo not already tracked in the relevant collection(s) — a sidecar can
+/// match more than one (e.g. edited AND favorited). Shared by `backfill_edited_registry`
+/// (root + recents only) and `rescan_edited_registry_recursive` (whole tree) so the two never
+/// drift on what counts as a match.
+fn scan_folder_for_registry(
+    folder: &str,
+    edited: &mut Vec<String>,
+    favorites: &mut Vec<String>,
+    flagged: &mut Vec<String>,
+    rejected: &mut Vec<String>,
+) -> usize {
+    let mut added = 0usize;
+    let Ok(rd) = std::fs::read_dir(folder) else { return 0 };
+    for entry in rd.flatten() {
+        let p = entry.path();
+        if p.extension().and_then(|e| e.to_str()) != Some("xmp") {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&p) else { continue };
+        let is_edited = xmp_get(&text, "chromasmith:Edited").as_deref() == Some("True");
+        let is_favorite = xmp_get(&text, "chromasmith:Favorite").as_deref() == Some("True");
+        let label = xmp_get(&text, "xmp:Label").unwrap_or_default();
+        let is_flagged = label == "Green";
+        let is_rejected = label == "Red";
+        if !(is_edited || is_favorite || is_flagged || is_rejected) {
+            continue;
+        }
+        let photo = p.with_extension(""); // best-effort; sidecar_path() is <photo>.xmp exactly
+        // Try every image extension the sidecar could belong to (with_extension("") strips
+        // the .xmp but the photo's real extension is unknown from the sidecar name alone).
+        for ext in crate::formats::all_image_exts() {
+            let candidate = photo.with_extension(ext);
+            if candidate.exists() {
+                let s = candidate.to_string_lossy().into_owned();
+                let mut matched = false;
+                if is_edited && !edited.iter().any(|p2| p2 == &s) { edited.push(s.clone()); matched = true; }
+                if is_favorite && !favorites.iter().any(|p2| p2 == &s) { favorites.push(s.clone()); matched = true; }
+                if is_flagged && !flagged.iter().any(|p2| p2 == &s) { flagged.push(s.clone()); matched = true; }
+                if is_rejected && !rejected.iter().any(|p2| p2 == &s) { rejected.push(s); matched = true; }
+                if matched { added += 1; }
+                break;
+            }
+        }
+    }
+    added
+}
+
 /// One-time backfill for photos edited/favorited/flagged/rejected before their registries
 /// existed: scan a set of known folders (recents + the given root) for `.xmp` sidecars and
-/// register any not already tracked in the relevant collection(s) — a sidecar can match more
-/// than one (e.g. edited AND favorited). Cheap (text scan, no image decode); called once by
-/// the frontend on first Library open per session, not on every folder browse.
+/// register any not already tracked in the relevant collection(s). Cheap (text scan, no image
+/// decode); called once by the frontend on first Library open per session, not on every folder
+/// browse. ⚠️ NON-recursive — a photo whose sidecar was edited (by this app or externally) in a
+/// SUBFOLDER never opened directly, and not in `recents`, is invisible to this scan. See
+/// `rescan_edited_registry_recursive` for the whole-tree version.
 #[tauri::command]
 pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
     let mut edited = registry_read("edited");
@@ -2250,38 +2301,7 @@ pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
     let mut rejected = registry_read("rejected");
     let mut added = 0usize;
     for folder in folders {
-        let Ok(rd) = std::fs::read_dir(&folder) else { continue };
-        for entry in rd.flatten() {
-            let p = entry.path();
-            if p.extension().and_then(|e| e.to_str()) != Some("xmp") {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(&p) else { continue };
-            let is_edited = xmp_get(&text, "chromasmith:Edited").as_deref() == Some("True");
-            let is_favorite = xmp_get(&text, "chromasmith:Favorite").as_deref() == Some("True");
-            let label = xmp_get(&text, "xmp:Label").unwrap_or_default();
-            let is_flagged = label == "Green";
-            let is_rejected = label == "Red";
-            if !(is_edited || is_favorite || is_flagged || is_rejected) {
-                continue;
-            }
-            let photo = p.with_extension(""); // best-effort; sidecar_path() is <photo>.xmp exactly
-            // Try every image extension the sidecar could belong to (with_extension("") strips
-            // the .xmp but the photo's real extension is unknown from the sidecar name alone).
-            for ext in crate::formats::all_image_exts() {
-                let candidate = photo.with_extension(ext);
-                if candidate.exists() {
-                    let s = candidate.to_string_lossy().into_owned();
-                    let mut matched = false;
-                    if is_edited && !edited.iter().any(|p2| p2 == &s) { edited.push(s.clone()); matched = true; }
-                    if is_favorite && !favorites.iter().any(|p2| p2 == &s) { favorites.push(s.clone()); matched = true; }
-                    if is_flagged && !flagged.iter().any(|p2| p2 == &s) { flagged.push(s.clone()); matched = true; }
-                    if is_rejected && !rejected.iter().any(|p2| p2 == &s) { rejected.push(s); matched = true; }
-                    if matched { added += 1; }
-                    break;
-                }
-            }
-        }
+        added += scan_folder_for_registry(&folder, &mut edited, &mut favorites, &mut flagged, &mut rejected);
     }
     if added > 0 {
         registry_write("edited", &edited);
@@ -2290,6 +2310,132 @@ pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
         registry_write("rejected", &rejected);
     }
     added
+}
+
+/// Cancel flag + progress payload for `rescan_edited_registry_recursive`. A SEPARATE flag from
+/// `CatalogState.cancel` (catalog.rs) — this scan has no DB/AppState of its own, and reusing an
+/// unrelated subsystem's cancel flag would let a catalog scan's cancel button silently abort an
+/// in-flight registry rescan or vice versa.
+static REGISTRY_RESCAN_CANCEL: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn cancel_registry_rescan() {
+    REGISTRY_RESCAN_CANCEL.store(true, Ordering::Relaxed);
+}
+
+#[derive(Clone, Serialize)]
+pub struct RegistryRescanProgress {
+    pub folders_scanned: usize,
+    pub added: usize,
+    pub done: bool,
+    pub cancelled: bool,
+}
+
+/// Recursively rebuilds the edited/favorites/flagged/rejected registries against every
+/// subfolder under `root` — the whole-library counterpart to `backfill_edited_registry`, which
+/// only ever sees the root folder plus whatever's in `recents`. Exists because a sidecar edited
+/// by an external tool (or by this app, in a subfolder never individually opened) never reaches
+/// those registries otherwise, which silently undercounts smart collections like "Flagged"
+/// relative to what a plain folder browse (which reads sidecars live, per file) shows.
+///
+/// ⚠️ Safety for a large library (tens of thousands of files), matching the pattern every other
+/// expensive scan in this codebase uses (see `catalog_scan`/`catalog_hash`):
+/// - Runs on `spawn_blocking`, off the async executor and off the UI thread — a slow scan makes
+///   the rescan itself slow, never the rest of the app unresponsive.
+/// - Checks `REGISTRY_RESCAN_CANCEL` between every folder, so a user-triggered Cancel actually
+///   stops it promptly instead of running to completion regardless.
+/// - Emits `registry-rescan` progress at most every 200 folders (not per-folder — the same
+///   IPC-flooding trap `catalog_scan`'s progress emission already avoids elsewhere in this
+///   crate), so the frontend can show real progress on a 50k+ file library without the event
+///   traffic itself becoming a cost.
+/// - Only text-scans `.xmp` files (no image decode, no thumbnail generation) — the same cheap
+///   operation `backfill_edited_registry` already does, just walked recursively — so CPU cost
+///   per file stays trivial even at library scale.
+/// - Iterative (an explicit stack), not recursive function calls, so a very deep folder tree
+///   can't blow the stack.
+///
+/// Dotfolders are skipped, matching `list_dir`'s convention of hiding dotfiles/dotfolders.
+/// Returns the number of NEWLY-registered photo entries (an existing entry re-scanned isn't
+/// counted again).
+///
+/// The actual walk lives in `rescan_registries_recursive_inner` below, kept free of `AppHandle`/
+/// `emit` so it's directly unit-testable (no live Tauri app needed) — this command is just that
+/// function wired to `spawn_blocking` + throttled event emission.
+fn rescan_registries_recursive_inner(
+    root: &str,
+    cancel: &AtomicBool,
+    on_progress: &mut dyn FnMut(usize, usize, bool, bool), // (folders_scanned, added, done, cancelled)
+) -> Result<usize, String> {
+    cancel.store(false, Ordering::Relaxed);
+
+    let root_path = std::path::Path::new(root);
+    if !root_path.is_dir() {
+        return Err(format!("not a folder: {root}"));
+    }
+    let mut edited = registry_read("edited");
+    let mut favorites = registry_read("favorites");
+    let mut flagged = registry_read("flagged");
+    let mut rejected = registry_read("rejected");
+    let mut added = 0usize;
+    let mut folders_scanned = 0usize;
+    let mut cancelled = false;
+
+    let mut stack: Vec<std::path::PathBuf> = vec![root_path.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        if cancel.load(Ordering::Relaxed) {
+            cancelled = true;
+            break;
+        }
+
+        let dir_str = dir.to_string_lossy().into_owned();
+        added += scan_folder_for_registry(&dir_str, &mut edited, &mut favorites, &mut flagged, &mut rejected);
+        folders_scanned += 1;
+        on_progress(folders_scanned, added, false, false);
+
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for entry in rd.flatten() {
+            let p = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or_else(|_| p.is_dir());
+            if is_dir {
+                stack.push(p);
+            }
+        }
+    }
+
+    // Persist whatever was found even on cancel — a partial rescan is still strictly more
+    // correct than the un-rescanned state, and re-running later just picks up where a full scan
+    // would have found more, since already-registered entries are skipped as no-ops.
+    if added > 0 {
+        registry_write("edited", &edited);
+        registry_write("favorites", &favorites);
+        registry_write("flagged", &flagged);
+        registry_write("rejected", &rejected);
+    }
+
+    on_progress(folders_scanned, added, true, cancelled);
+    Ok(added)
+}
+
+#[tauri::command]
+pub async fn rescan_edited_registry_recursive(app: tauri::AppHandle, root: String) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Emitter;
+        let mut last_emit = 0usize;
+        rescan_registries_recursive_inner(&root, &REGISTRY_RESCAN_CANCEL, &mut |folders_scanned, added, done, cancelled| {
+            // Throttle: only every 200 folders, or the final call — never per-folder (the
+            // IPC-flooding trap catalog-scan's own progress emission already avoids).
+            if done || folders_scanned - last_emit >= 200 {
+                last_emit = folders_scanned;
+                let _ = app.emit("registry-rescan", RegistryRescanProgress { folders_scanned, added, done, cancelled });
+            }
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Duplicates a photo (and its .xmp sidecar, if any) alongside the original with a
@@ -2797,6 +2943,104 @@ pub fn album_set_order(id: String, paths: Vec<String>) -> Result<(), String> {
     a.paths = next;
     a.updated = now_secs();
     albums_write(&all)
+}
+
+#[cfg(test)]
+mod registry_rescan_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("cs_registry_rescan_{}_{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // ⚠️ Deliberately does NOT call registry_read/registry_write/backfill_edited_registry/
+    // rescan_registries_recursive_inner — those hit this machine's REAL cache_dir() (there is no
+    // test-injectable override), so a test calling them would read/write the developer's actual
+    // flagged/favorites/edited/rejected registry files. scan_folder_for_registry itself is pure
+    // (the four Vec<String> collections are passed in by the caller, never touching disk), so it
+    // alone is what's safe to exercise directly.
+
+    #[test]
+    fn scan_folder_matches_green_flag_and_favorite_independently() {
+        let dir = scratch("basic");
+        std::fs::write(dir.join("pick.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("pick.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+        std::fs::write(dir.join("fav.jpg"), b"y").unwrap();
+        std::fs::write(dir.join("fav.xmp"), br#"<x><rdf:Description chromasmith:Favorite="True"/></x>"#).unwrap();
+        std::fs::write(dir.join("plain.jpg"), b"z").unwrap();
+        std::fs::write(dir.join("plain.xmp"), br#"<x><rdf:Description xmp:Rating="0"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let added = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(added, 2, "only pick.jpg and fav.jpg should register — plain.jpg matches nothing");
+        assert!(flagged.iter().any(|p| p.ends_with("pick.jpg")));
+        assert!(favorites.iter().any(|p| p.ends_with("fav.jpg")));
+        assert!(edited.is_empty());
+        assert!(rejected.is_empty());
+    }
+
+    /// The RAW+JPEG-sibling case that mattered in practice: sidecar_path() replaces the
+    /// extension (with_extension), so a RAW and its JPEG sibling share ONE .xmp file. Both must
+    /// resolve back to a real photo path when scanning — this pins that with_extension's
+    /// extension-guessing loop (crate::formats::all_image_exts()) finds whichever sibling
+    /// actually exists on disk, given only the shared sidecar's stem.
+    #[test]
+    fn scan_folder_resolves_shared_sidecar_to_existing_sibling() {
+        let dir = scratch("raw_jpeg_sibling");
+        // Lowercase extension deliberately — `all_image_exts()` tries each candidate extension
+        // exactly as listed (lowercase), and `Path::exists()` only resolves a case MISMATCH on a
+        // case-INSENSITIVE filesystem, which isn't guaranteed (this test's own tmp dir turned
+        // out to be case-sensitive when first written with an uppercase extension). Matching
+        // case here tests the actual matching logic, not incidental OS/filesystem behavior.
+        std::fs::write(dir.join("__tm4224.rw2"), b"raw").unwrap();
+        // Deliberately no __tm4224.jpg on disk — only the RAW sibling exists here.
+        std::fs::write(dir.join("__tm4224.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let added = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(added, 1);
+        assert!(flagged.iter().any(|p| p.ends_with("__tm4224.rw2")));
+        let _ = (edited, favorites, rejected);
+    }
+
+    /// A sidecar whose photo doesn't exist under ANY known extension must be skipped rather than
+    /// registering a path to a nonexistent file — an orphaned .xmp (photo since deleted/moved)
+    /// shouldn't poison the flagged/favorites/edited/rejected collections with dead entries.
+    #[test]
+    fn scan_folder_skips_orphaned_sidecar() {
+        let dir = scratch("orphan");
+        std::fs::write(dir.join("gone.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let added = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(added, 0);
+        assert!(flagged.is_empty());
+        let _ = (edited, favorites, rejected);
+    }
+
+    /// Re-scanning a folder whose entries are already present in the collections must add
+    /// nothing new — this is what makes re-running a rescan (or resuming after a cancel) safe
+    /// and idempotent rather than accumulating duplicate entries on every run.
+    #[test]
+    fn scan_folder_is_idempotent_on_already_registered_entries() {
+        let dir = scratch("idempotent");
+        std::fs::write(dir.join("pick.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("pick.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let first = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+        let second = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(first, 1);
+        assert_eq!(second, 0, "already-registered entry must not be re-added or double-counted");
+        assert_eq!(flagged.len(), 1);
+    }
 }
 
 #[cfg(test)]

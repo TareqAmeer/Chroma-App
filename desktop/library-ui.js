@@ -5507,7 +5507,7 @@
   // kwExpanded above but keyed by section name rather than a tree node. Collections and Folders
   // start open (the two everyday jumping-off points); the rest start closed.
   const SIDEBAR_SEC_KEY = 'chromasmith_lib_sec_open_v1';
-  const SIDEBAR_SEC_DEFAULT = ['collections', 'folders'];
+  const SIDEBAR_SEC_DEFAULT = ['collections', 'folders', 'drives'];
   let sidebarSecOpen;
   try {
     const saved = JSON.parse(localStorage.getItem(SIDEBAR_SEC_KEY));
@@ -5706,6 +5706,9 @@
       </div>
       <div class="lib-coll-row" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Find duplicates…</span>
+      </div>
+      <div class="lib-coll-row" data-rescan-flags="1" style="cursor:pointer" title="The Flagged/Favorites/Edited/Rejected smart collections only see .xmp sidecars in folders you've opened or that are in Recents — a sidecar changed elsewhere (by this app in a subfolder you've never browsed, or by an external tool) can be invisible to them even though a plain folder browse shows it correctly. This walks the WHOLE library once to catch up.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Rescan flags…</span>
       </div>`;
   }
 
@@ -5757,6 +5760,32 @@
     document.getElementById('lib-verify-close').onclick = () => menu.remove();
   }
 
+  /// Manual, on-demand — see the "Rescan flags…" row's title text for why this exists
+  /// (backfill_edited_registry only ever sees the root + Recents, not the whole tree). Progress
+  /// arrives via the 'registry-rescan' event listener (wireActivityListeners), which also calls
+  /// renderCollectionCounts() and shows the completion toast — this function only kicks it off
+  /// and surfaces immediate errors (e.g. no folder open yet).
+  async function runRescanFlags() {
+    if (!state.root) {
+      toast('Open a library folder first');
+      return;
+    }
+    activityUpdate('registry-rescan', {
+      label: 'Rescanning library flags…',
+      stage: 'scanning',
+      done: 0,
+      total: 0,
+      current: '',
+      cancelFn: () => { invoke('cancel_registry_rescan').catch(() => {}); },
+    });
+    try {
+      await invoke('rescan_edited_registry_recursive', { root: state.root });
+    } catch (e) {
+      activityUpdate('registry-rescan', { stage: 'done' });
+      toast(humanizeErr('rescan the library', e), 'err');
+    }
+  }
+
   function drivesSectionHtml() {
     // "This Mac" itself is always online and isn't the thing this section exists to show —
     // only external volumes (an SSD that may or may not currently be plugged in) are worth a
@@ -5771,7 +5800,7 @@
       </div>`).join('');
     const cacheRow = cacheUsageRowHtml();
     if (!rows && !cacheRow) return '';
-    return `<div class="lib-coll-heading">Drives</div>${rows}${cacheRow}<div class="lib-coll-sep"></div>`;
+    return sidebarSection('drives', 'Drives', rows + cacheRow) + '<div class="lib-coll-sep"></div>';
   }
 
   /// Nests the flat (y,m,d,n) rows catalog_date_counts returns into a Year › Month › Day tree
@@ -6799,6 +6828,30 @@
       const p = ev.payload || {};
       const done = p.total && p.done >= p.total ? p.total : p.done;
       activityUpdate('import', { stage: p.total && done >= p.total ? 'done' : 'copy', done, total: p.total || 0, current: p.current || '' });
+    }).catch(() => {});
+    // rescan_edited_registry_recursive (library.rs) — throttled progress (every 200 folders,
+    // not per-folder, matching catalog-scan's own IPC-flooding guard) while it walks the whole
+    // library rebuilding the flagged/favorites/edited/rejected registries. Total folder count
+    // isn't known ahead of time, so this shows an indeterminate "N folders scanned" count rather
+    // than a percentage — same shape merge.rs's job-progress jobs use for the same reason.
+    window.__TAURI__.event.listen('registry-rescan', (ev) => {
+      const p = ev.payload || {};
+      activityUpdate('registry-rescan', {
+        label: 'Rescanning library flags…',
+        stage: p.done ? 'done' : 'scanning',
+        done: p.folders_scanned || 0,
+        total: 0,
+        current: `${p.added || 0} newly registered`,
+        cancelFn: p.done ? undefined : () => { invoke('cancel_registry_rescan').catch(() => {}); },
+      });
+      if (p.done) {
+        renderCollectionCounts();
+        if (typeof toast === 'function') {
+          toast(p.cancelled
+            ? `Rescan cancelled — ${p.added} newly registered so far`
+            : `Rescan complete — ${p.added} newly registered`, true);
+        }
+      }
     }).catch(() => {});
     // N3.2: the generic lane for anything that isn't a catalog scan or a card import — today
     // that's merge.rs's HDR/focus/astro/panorama commands (main.rs emits this alongside them,
@@ -7861,6 +7914,8 @@
     if (verifyRow) verifyRow.onclick = () => runVerifyLibrary();
     const findDupesRow = host.querySelector('[data-find-duplicates]');
     if (findDupesRow) findDupesRow.onclick = () => runDupeDetectionOnDemand();
+    const rescanFlagsRow = host.querySelector('[data-rescan-flags]');
+    if (rescanFlagsRow) rescanFlagsRow.onclick = () => runRescanFlags();
     // "By Date" root row: toggles the whole tree open/closed, same gesture the real folder
     // tree's own root uses, but never navigates on its own (a bare "By Date" click isn't a
     // filterable scope — unlike every row inside it).
