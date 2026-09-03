@@ -1902,7 +1902,20 @@
       // or every job is silently dropped here (this was the "thumbnails never load" bug: the
       // pump ran synchronously while cards were still detached, so isConnected was false for
       // every single job and _thumbActive never even incremented).
-      if (job.gen !== _thumbGen || !job.imgEl.isConnected) continue; // grid was rebuilt — skip
+      if (job.gen !== _thumbGen || !job.imgEl.isConnected) {
+        // ⚠️ This job is never going to run — its card is gone (scrolled off a virtualized grid
+        // before its turn, or a whole re-render/generation bump). It's already spliced out of
+        // _thumbQueue above, so if it's also not counted as "settled" here, _thumbDoneCount can
+        // never reach _thumbTotalCount and "Loading photos… N/M" (updateThumbProgress) sticks at
+        // whatever N was when the last card that DID load happened to be the last one counted —
+        // confirmed live: a real session showed "Loading photos… 703/1214" frozen for minutes
+        // with the app otherwise completely idle (0% CPU, no backend work in flight). Counting a
+        // dropped job as done is the correct fix, not a workaround: from this readout's own
+        // perspective, "will never complete" and "completed" both mean "nothing left to wait for".
+        _thumbDoneCount++;
+        updateThumbProgress();
+        continue;
+      }
       _thumbActive++;
       if (job.isVideo) _thumbActiveVideo++;
       updateThumbProgress();
@@ -6505,14 +6518,17 @@
   let _activityStallTimer = null;
   const ACTIVITY_STALL_MS = 25000;
   function _activityStallTick() {
-    // total===0 means we've never learned how much work (if any) actually exists — a
-    // full-library face scan primes the pill with total:0 and only gets a real number once
-    // its first progress event fires. If there's genuinely nothing to scan, that first event
-    // never comes and total stays 0 through the whole (possibly slow, model-loading) chain of
-    // awaits, so treating silence there as a stall would flag "Not responding…" on a perfectly
-    // idle library instead of just finishing as done. Only stall-check once we KNOW there's
-    // real outstanding work (total>0, e.g. a scoped "Find faces in selection" scan).
-    if (!activity.visible || activity.stage === 'done' || !activity.total) { _activityStalled = false; return; }
+    // ⚠️ Previously skipped entirely while total===0, reasoning that a full-library scan primes
+    // the pill at total:0 and "if there's genuinely nothing to scan, that first event never
+    // comes" — but every phase in this chain (faces_run's worker, and catalog_cluster_faces
+    // right after it) DOES always settle, either with a real progress event or a final `done`
+    // one, even for an empty scan. So total staying 0 past ACTIVITY_STALL_MS isn't proof of "an
+    // idle library, nothing to report" — it's equally consistent with the whole chain being
+    // genuinely wedged (e.g. blocked forever on a lock elsewhere), which is exactly what this
+    // watchdog exists to catch. Confirmed live: a real session showed the pill stuck on
+    // "Working…" indefinitely with the backend at 0% CPU and no worker process running — a dead
+    // chain, not a slow one — and this exemption was the reason it never got flagged as stalled.
+    if (!activity.visible || activity.stage === 'done') { _activityStalled = false; return; }
     const stalledNow = _activityLastProgressAt && (Date.now() - _activityLastProgressAt) > ACTIVITY_STALL_MS;
     if (stalledNow !== _activityStalled) { _activityStalled = stalledNow; renderActivity(); }
   }
