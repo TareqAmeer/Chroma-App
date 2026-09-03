@@ -21,7 +21,7 @@
 // 640x640 square, then `(pixel - 127.5) / 128.0` per channel, matching insightface's own
 // `input_mean=127.5, input_std=128.0` — see vendor/scrfd/README.md for the source citation.
 
-use crate::sam::{create_session, input, run_session, SamSession};
+use crate::sam::{input, ort_handle, run_session, SamSession};
 use std::sync::{Mutex, OnceLock};
 
 static MODEL_BYTES: &[u8] = include_bytes!("../vendor/scrfd/scrfd_500m_bnkps.onnx");
@@ -34,9 +34,41 @@ const STD: f32 = 128.0;
 const SCORE_THRESH: f32 = 0.5;
 const NMS_THRESH: f32 = 0.4;
 
+// ⚠️ `faces_run` (catalog.rs) drives this from a `par_iter` batch over already-rayon-capped
+// worker threads (main.rs leaves 2 cores free for the UI). SCRFD's session sits behind a single
+// global `Mutex`, so those par_iter calls actually SERIALIZE on inference — but with no thread
+// cap, ONNX Runtime's own intra-op pool defaults to using every core for that one inference call
+// anyway, which is exactly the double-parallelism main.rs's rayon cap was trying to avoid: a
+// background face scan pegging every core and starving the UI thread, measured live during a
+// stuck-scan report (238-394% CPU, zero DB progress for 80s+ straight). Capped low (2) rather
+// than to 1: SCRFD's 640x640 input is small and fixed-size regardless of source photo
+// resolution, so there's little to gain from more intra-op threads per call, but the outer
+// par_iter is where real throughput should come from.
+const INTRA_OP_THREADS: i32 = 2;
+
+fn create_session_capped(bytes: &'static [u8]) -> Result<SamSession, String> {
+    let h = ort_handle()?;
+    unsafe {
+        let mut opts: *mut ort_sys::OrtSessionOptions = std::ptr::null_mut();
+        crate::sam::check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
+        if let Err(e) = crate::sam::check(h.api, ((*h.api).SetIntraOpNumThreads)(opts, INTRA_OP_THREADS), "SetIntraOpNumThreads") {
+            eprintln!("scrfd: SetIntraOpNumThreads failed (continuing with ORT default): {e}");
+        }
+        let mut session: *mut ort_sys::OrtSession = std::ptr::null_mut();
+        let res = crate::sam::check(
+            h.api,
+            ((*h.api).CreateSessionFromArray)(h.env, bytes.as_ptr() as *const _, bytes.len(), opts, &mut session),
+            "CreateSessionFromArray"
+        );
+        ((*h.api).ReleaseSessionOptions)(opts);
+        res?;
+        Ok(SamSession(session))
+    }
+}
+
 fn session() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
-    S.get_or_init(|| create_session(MODEL_BYTES).map(Mutex::new)).as_ref().map_err(|e| e.clone())
+    S.get_or_init(|| create_session_capped(MODEL_BYTES).map(Mutex::new)).as_ref().map_err(|e| e.clone())
 }
 
 /// One detected face, in the ORIGINAL image's pixel coordinates (the letterbox scale/offset is

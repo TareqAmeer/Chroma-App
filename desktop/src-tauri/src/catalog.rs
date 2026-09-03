@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 14;
+const SCHEMA_VERSION: i64 = 15;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -670,6 +670,26 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             );
             ",
         )?;
+    }
+
+    // A photo that permanently fails to decode/detect (corrupt file, pathological dimensions,
+    // an unsupported codec quirk) used to be left with faces_scanned_at NULL forever — "retried
+    // next pass" — with no bound on how many passes that could be. Once every OTHER photo in the
+    // library finished, `faces_run`'s unscoped LIMIT-32 batch query (no ORDER BY, no exclusion of
+    // known-bad rows) kept re-selecting exactly the same doomed photos on every single pass,
+    // spinning the AI stack's onnx inference forever with zero DB progress — confirmed live via
+    // diagnostics/cli.py (238-394% CPU, faces_scanned_at count unchanged across 80s) after a user
+    // report of the app "getting completely stuck" during a face scan. `face_scan_fail_count`
+    // lets faces_run give up on a photo after a few failed attempts (mark it scanned with zero
+    // faces) instead of retrying it every pass forever.
+    if version < 15 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "face_scan_fail_count")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN face_scan_fail_count INTEGER NOT NULL DEFAULT 0", [])?;
+        }
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -2236,53 +2256,106 @@ pub fn faces_run(
         // reads as "stuck at 0%" for the whole batch, which is exactly the reported bug — the
         // batch itself was too coarse a progress granularity, not just the walk phase's known
         // total:0 case. CHUNK=4 gives real incremental ticks while keeping each chunk parallel.
+        //
+        // ⚠️ Committing per CHUNK (not once at the end of the whole 32-photo batch) is load-
+        // bearing, not just nicer progress: if a later chunk hits a photo that hangs (see the
+        // per-photo timeout below), earlier chunks' already-computed results used to sit
+        // uncommitted in memory for the whole batch instead of being saved immediately.
         const DECODE_LONG_EDGE: u32 = 1600;
         const CHUNK: usize = 4;
-        let mut detected: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = Vec::with_capacity(total_in_batch);
+        // A single pathological photo (corrupt file, a decoder edge case) must never be able to
+        // hang the whole scan forever. Each photo's decode+detect runs on its own OS thread with
+        // a hard wall-clock budget; a photo that blows through it is treated exactly like a
+        // decode failure (left unscanned, counted against face_scan_fail_count below) rather than
+        // stalling every other chunk and photo behind it indefinitely.
+        const PER_PHOTO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+        // After this many failed/timed-out attempts, give up on a photo permanently (mark it
+        // scanned with zero faces) instead of re-selecting it on every future pass forever — see
+        // the face_scan_fail_count migration comment for the incident this fixes.
+        const MAX_FAIL_ATTEMPTS: i64 = 3;
         for chunk in batch.chunks(CHUNK) {
-            let mut part: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = chunk
+            let part: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
-                    let faces = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
-                        .ok()
-                        .and_then(|(rgb, w, h)| crate::scrfd::detect(&rgb, w, h).ok().map(|faces| (faces, w, h)))
-                        .map(|(faces, w, h)| {
-                            faces
-                                .into_iter()
-                                .map(|f| crate::scrfd::Face {
-                                    x0: f.x0 / w as f32,
-                                    y0: f.y0 / h as f32,
-                                    x1: f.x1 / w as f32,
-                                    y1: f.y1 / h as f32,
-                                    score: f.score,
-                                    kps: f.kps.map(|(x, y)| (x / w as f32, y / h as f32))
-                                })
-                                .collect()
-                        });
-                    (*id, *mtime, faces)
+                    let (id, abs, mtime) = (*id, abs.clone(), *mtime);
+                    let (tx_done, rx_done) = std::sync::mpsc::channel();
+                    std::thread::spawn(move || {
+                        let faces = crate::library::decode_rgb8_capped(&abs, DECODE_LONG_EDGE)
+                            .ok()
+                            .and_then(|(rgb, w, h)| crate::scrfd::detect(&rgb, w, h).ok().map(|faces| (faces, w, h)))
+                            .map(|(faces, w, h)| {
+                                faces
+                                    .into_iter()
+                                    .map(|f| crate::scrfd::Face {
+                                        x0: f.x0 / w as f32,
+                                        y0: f.y0 / h as f32,
+                                        x1: f.x1 / w as f32,
+                                        y1: f.y1 / h as f32,
+                                        score: f.score,
+                                        kps: f.kps.map(|(x, y)| (x / w as f32, y / h as f32))
+                                    })
+                                    .collect()
+                            });
+                        // If the receiver already gave up (timeout), this send just fails and is
+                        // ignored — the thread still exits on its own once decode/detect returns,
+                        // it's just no longer waited on.
+                        let _ = tx_done.send(faces);
+                    });
+                    let faces = rx_done.recv_timeout(PER_PHOTO_TIMEOUT).unwrap_or(None);
+                    (id, mtime, faces)
                 })
                 .collect();
-            detected.append(&mut part);
-            progress(ScanProgress { phase: "faces".into(), done: base_scanned + detected.len(), total: base_scanned + total_in_batch, current: String::new() });
+
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            for (id, mtime, faces) in &part {
+                match faces {
+                    Some(faces) => {
+                        tx.execute("DELETE FROM photo_faces WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+                        for f in faces {
+                            let kps_json = serde_json::to_string(&f.kps).map_err(|e| e.to_string())?;
+                            tx.execute(
+                                "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                                params![id, f.x0, f.y0, f.x1, f.y1, f.score, kps_json]
+                            )
+                            .map_err(|e| e.to_string())?;
+                        }
+                        result.faces_found += faces.len();
+                        tx.execute(
+                            "UPDATE photos SET faces_scanned_at = ?1, face_scan_fail_count = 0 WHERE id = ?2",
+                            params![mtime, id]
+                        )
+                        .map_err(|e| e.to_string())?;
+                        result.scanned += 1;
+                    }
+                    None => {
+                        // Unreadable / timed out. Bump the fail count; after MAX_FAIL_ATTEMPTS,
+                        // give up permanently (mark scanned with zero faces) so this photo stops
+                        // being re-selected by every future pass's LIMIT-32 query — that
+                        // re-selection-forever is exactly what turned one bad photo into an
+                        // unkillable, CPU-pegging scan.
+                        let fail_count: i64 = tx
+                            .query_row("SELECT face_scan_fail_count FROM photos WHERE id = ?1", params![id], |r| r.get(0))
+                            .unwrap_or(0)
+                            + 1;
+                        if fail_count >= MAX_FAIL_ATTEMPTS {
+                            tx.execute("DELETE FROM photo_faces WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+                            tx.execute(
+                                "UPDATE photos SET faces_scanned_at = ?1, face_scan_fail_count = ?2 WHERE id = ?3",
+                                params![mtime, fail_count, id]
+                            )
+                            .map_err(|e| e.to_string())?;
+                            result.scanned += 1;
+                        } else {
+                            tx.execute("UPDATE photos SET face_scan_fail_count = ?1 WHERE id = ?2", params![fail_count, id])
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+            progress(ScanProgress { phase: "faces".into(), done: result.scanned, total: base_scanned + total_in_batch, current: String::new() });
         }
 
-        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-        for (id, mtime, faces) in &detected {
-            let Some(faces) = faces else { continue }; // unreadable right now — leave unscanned, retried next pass
-            tx.execute("DELETE FROM photo_faces WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
-            for f in faces {
-                let kps_json = serde_json::to_string(&f.kps).map_err(|e| e.to_string())?;
-                tx.execute(
-                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    params![id, f.x0, f.y0, f.x1, f.y1, f.score, kps_json]
-                )
-                .map_err(|e| e.to_string())?;
-            }
-            result.faces_found += faces.len();
-            tx.execute("UPDATE photos SET faces_scanned_at = ?1 WHERE id = ?2", params![mtime, id]).map_err(|e| e.to_string())?;
-        }
-        tx.commit().map_err(|e| e.to_string())?;
-        result.scanned += detected.iter().filter(|(_, _, f)| f.is_some()).count();
         if scoped {
             break; // one bounded batch over the exact requested ids — never loop-until-empty
         }
