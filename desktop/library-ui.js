@@ -233,7 +233,10 @@
       }
       case 'catalog_counts': {
         const N = /[?&]libcat=1/.test(location.search) ? Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10)) : 0;
-        return Promise.resolve({ all: N, blurry: N ? Math.max(1, Math.floor(N / 5)) : 0 });
+        // Pending = every third photo (id % 3 === 0), matching the synthetic entries' own
+        // faces_scanned rule below — a real, verifiable count rather than an arbitrary fraction.
+        const pending = N ? Array.from({ length: N }, (_, i) => i + 1).filter((id) => id % 3 === 0).length : 0;
+        return Promise.resolve({ all: N, blurry: N ? Math.max(1, Math.floor(N / 5)) : 0, faces_pending: pending, faces_scanned: N - pending });
       }
       case 'catalog_date_counts': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ days: [], no_date: 0 });
@@ -501,6 +504,9 @@
             is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
             missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7',
             sharpness: blurry ? 20 : 400, blurry,
+            // Matches catalog_counts' mock pending rule (id % 3 === 0) so the sidebar count and
+            // the "Not indexed" filtered grid can never visibly disagree under ?libtest=1.
+            faces_scanned: i % 3 !== 0,
             stack_n: isStackLeader ? 3 : 0, thumb_path: isStackLeader ? '/test/AllPhotos/Exports/IMG_1001-v2.jpg' : null });
         }
         return Promise.resolve({ total: n, capped: false, entries });
@@ -619,6 +625,7 @@
     isoFilter: 'all',
     dupeFilter: 'all',     // 'all' | 'dupes'
     syncedFilter: 'all',   // 'all' | 'synced' | 'notsynced'
+    facesFilter: 'all',    // 'all' | 'indexed' | 'pending' — face-indexing status (entry.facesScanned)
     showInfo: false,       // metadata panel for the focused photo (I) — see renderInfoPanel
     tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
     // ⚠️ This existed in the saved-views capture list and the filter-id map before the feature
@@ -1191,6 +1198,11 @@
             <option value="all">All photos</option>
             <option value="synced">Synced to Google Photos</option>
             <option value="notsynced">Not synced</option>
+          </select>
+          <select id="lib-faces-filter" title="Filter by face-indexing status">
+            <option value="all">All photos</option>
+            <option value="indexed">Indexed</option>
+            <option value="pending">Not indexed</option>
           </select>
           <select id="lib-rating-filter" title="Filter by star rating">
             <option value="all">Any rating</option>
@@ -3154,6 +3166,8 @@
     if (state.dupeFilter === 'dupes' && !state.dupeClusters.has(entry.path)) return false;
     if (state.syncedFilter === 'synced' && !state.syncedPaths.has(entry.path)) return false;
     if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
+    if (state.facesFilter === 'indexed' && !entry.faces_scanned) return false;
+    if (state.facesFilter === 'pending' && entry.faces_scanned) return false;
     if (state.search && !entry.name.toLowerCase().includes(state.search)) return false;
     // "N or more", except '0' which means exactly unrated — the two useful questions.
     if (state.ratingFilter !== 'all') {
@@ -4640,7 +4654,7 @@
   // cloned from `state`, so a future unrelated state field can never silently become part of a
   // saved view (and so an old saved view stays readable when one is added).
   const VIEW_FIELDS = ['typeFilter','cameraFilter','lensFilter','isoFilter','dupeFilter',
-                       'syncedFilter','tagFilter','ratingFilter','search','sortBy','sortDir',
+                       'syncedFilter','facesFilter','tagFilter','ratingFilter','search','sortBy','sortDir',
                        'viewMode','thumbSize'];
   function loadViews() {
     try { const v = JSON.parse(localStorage.getItem(LS_VIEWS) || '[]'); return Array.isArray(v) ? v : []; }
@@ -4678,6 +4692,7 @@
     const map = { 'lib-type-filter': 'typeFilter', 'lib-camera-filter': 'cameraFilter',
                   'lib-lens-filter': 'lensFilter', 'lib-iso-filter': 'isoFilter',
                   'lib-dupe-filter': 'dupeFilter', 'lib-synced-filter': 'syncedFilter',
+                  'lib-faces-filter': 'facesFilter',
                   'lib-tag-filter': 'tagFilter', 'lib-rating-filter': 'ratingFilter',
                   'lib-sort': 'sortBy' };
     Object.entries(map).forEach(([id, key]) => {
@@ -5059,7 +5074,7 @@
   function clearAllLibFilters() {
     FILTER_SELECT_IDS.forEach((id) => { const sel = document.getElementById(id); if (sel) sel.value = 'all'; });
     state.typeFilter = 'all'; state.cameraFilter = 'all'; state.lensFilter = 'all'; state.isoFilter = 'all';
-    state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all';
+    state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all'; state.facesFilter = 'all';
     const searchEl = document.getElementById('lib-search');
     if (searchEl) searchEl.value = '';
     state.search = '';
@@ -5071,6 +5086,7 @@
   overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-faces-filter').onchange = (e) => { state.facesFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; renderGrid(); };
   if (!STARS_ENABLED) {
     // Sort option and list column are the two surfaces that are pure markup rather than a
@@ -5088,7 +5104,7 @@
     if (!STARS_ENABLED) { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = 'none'; }
   }
   // ── Filters popover: toggle button, active-filter chips, clear-all ──────────────────────
-  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-tag-filter', 'lib-rating-filter'];
+  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter'];
   function syncFilterUI() {
     const chipsEl = document.getElementById('lib-filter-chips');
     const badgeEl = document.getElementById('lib-filters-badge');
@@ -6013,10 +6029,19 @@
         <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs review</span>
         <span class="lib-coll-count">${catalogCounts.blurry}</span>
       </div>` : '';
+    // Same "only appears once it's actually true of something" rule as reviewRow above — an
+    // always-visible "0 pending" row would just be noise on a fully-indexed library. Answers
+    // "which photos have/haven't been face-scanned" (the sidebar had no answer to this before),
+    // driven by the SAME faces_scanned_at predicate faces_run itself uses (catalog_counts).
+    const facesPendingRow = catalogCounts.faces_pending ? `
+      <div class="lib-coll-row${state.source === 'catalog' && state.facesFilter === 'pending' ? ' on' : ''}" data-faces-pending="1" title="Photos not yet scanned for faces">
+        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not indexed</span>
+        <span class="lib-coll-count">${catalogCounts.faces_pending}</span>
+      </div>` : '';
     return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' ? ' on' : ''}" data-catalog="all">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
-      </div>${reviewRow}
+      </div>${reviewRow}${facesPendingRow}
       <div class="lib-tree-node" id="lib-date-tree">
         <div class="lib-tree-row" data-date-tree-toggle="1">
           <span class="lib-tree-chev${dateExpanded.has('__root__') ? ' open' : ''}">${ic('chevron', 11)}</span>
@@ -6332,6 +6357,18 @@
   const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed', 'clip'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
+  // Stall watchdog: distinguishes "still working" from "stopped working" — before this, a
+  // wedged native call or crashed worker looked IDENTICAL to a healthy long-running scan,
+  // because the pill only ever reflected the last event it got, never how long ago that was.
+  let _activityLastProgressAt = 0;
+  let _activityStalled = false;
+  let _activityStallTimer = null;
+  const ACTIVITY_STALL_MS = 25000;
+  function _activityStallTick() {
+    if (!activity.visible || activity.stage === 'done') { _activityStalled = false; return; }
+    const stalledNow = _activityLastProgressAt && (Date.now() - _activityLastProgressAt) > ACTIVITY_STALL_MS;
+    if (stalledNow !== _activityStalled) { _activityStalled = stalledNow; renderActivity(); }
+  }
 
   function activityFrac() {
     if (activity.kind === 'import' && activity.total) return activity.done / activity.total;
@@ -6355,7 +6392,9 @@
     // cancel command — unifying the SCHEMA (kind/stage/done/total/current + one visible place)
     // without forcing every job through the catalog-scan-shaped stage list it doesn't have.
     const isGenericJob = activity.kind !== 'import' && activity.kind !== 'catalog';
-    const label = isGenericJob
+    const label = _activityStalled
+      ? 'Not responding…'
+      : isGenericJob
       ? (activity.stage === 'done' ? (activity.label || 'Job') + ' done' : (activity.label || 'Working') + '…')
       : activity.stage === 'done'
       ? (activity.kind === 'import' ? 'Imported' : 'Indexed') + (activity.total ? ` ${activity.total}` : '')
@@ -6369,14 +6408,14 @@
     // pill itself (a bar under inline text needs its own block) — sits directly under the pill.
     const collapsedBar = !activity.expanded && activity.stage !== 'done' && activity.total
       ? `<div class="lib-act-bar" style="position:absolute;left:0;right:0;top:100%;margin:2px 0 0"><div style="width:${pct}%"></div></div>` : '';
-    let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative">
-      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${collapsedBar}`;
+    let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative${_activityStalled ? ';color:var(--red,#e5484d)' : ''}">
+      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${!_activityStalled && activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${collapsedBar}`;
     if (activity.expanded && isGenericJob) {
       const bar = activity.stage !== 'done' && activity.total
         ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
       html += `<div class="lib-act-pop" onclick="event.stopPropagation()">
         <div class="lib-act-pop-head"><span>${esc(activity.label || 'Job')}</span>
-          <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : (activity.cancelFn ? 'Cancel' : '')}</span></div>
+          <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : _activityStalled ? 'Cancel' : (activity.cancelFn ? 'Cancel' : '')}</span></div>
         <div class="lib-act-pop-body">
           <div class="lib-act-stage active"><span style="width:12px;display:inline-block;text-align:center">${activity.stage === 'done' ? '✓' : '›'}</span><span>${esc(activity.current || activity.label || 'Working')}</span><span class="lib-act-stage-n">${activity.stage === 'done' ? '' : (activity.total ? `${activity.done} of ${activity.total}` : '')}</span></div>${bar}
         </div></div>`;
@@ -6386,9 +6425,14 @@
       html += `<div class="lib-act-pop" onclick="event.stopPropagation()">
         <div class="lib-act-pop-head"><span>${activity.stage === 'done'
             ? (activity.kind === 'import' ? 'Imported' : 'Indexed')
+            : _activityStalled
+            ? (activity.kind === 'import' ? 'Import not responding' : 'Indexing not responding')
             : (activity.kind === 'import' ? 'Importing' : 'Indexing library')}</span>
           <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : 'Cancel'}</span></div>
         <div class="lib-act-pop-body">`
+        + (_activityStalled
+          ? `<div style="padding:8px 11px;font-size:11px;color:var(--mut)">No progress for over 25s — this may be stuck. You can wait, or cancel and it will resume where it left off.</div>`
+          : '')
         + stages.map((s, i) => {
           const cls = activity.stage === 'done' || i < activeIdx ? '' : i === activeIdx ? 'active' : '';
           const icon = activity.stage === 'done' || i < activeIdx ? '✓' : i === activeIdx ? '›' : '·';
@@ -6454,9 +6498,17 @@
 
   function activityUpdate(kind, patch) {
     if (_activityClearTimer) { clearTimeout(_activityClearTimer); _activityClearTimer = null; }
+    // Any real event landing — regardless of whether done/total actually moved — is proof the
+    // pipeline is alive, so it always resets the stall clock and clears a stalled state.
+    _activityLastProgressAt = Date.now();
+    _activityStalled = false;
     activity = { ...activity, kind, visible: true, ...patch };
+    if (activity.visible && activity.stage !== 'done' && !_activityStallTimer) {
+      _activityStallTimer = setInterval(_activityStallTick, 5000);
+    }
     renderActivity();
     if (activity.stage === 'done') {
+      if (_activityStallTimer) { clearInterval(_activityStallTimer); _activityStallTimer = null; }
       // Failures (a nonempty failure list on the import side) don't auto-clear — the whole
       // point of surfacing this at all is so "3 files failed" isn't something only the console
       // saw. A clean finish clears itself after a few seconds so it doesn't linger forever.
@@ -6519,7 +6571,19 @@
     if (!window.__TAURI__ || !window.__TAURI__.event) return; // LIBTEST's mock listen() is a harmless no-op
     window.__TAURI__.event.listen('catalog-scan', (ev) => {
       const p = ev.payload || {};
-      activityUpdate('catalog', { stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
+      // ⚠️ CONFIRMED root cause of the panel showing "0%" while remaining genuinely dropped:
+      // catalog_thumbnails (catalog.rs) ALSO emits a raw catalog-scan event for phase:'thumb'
+      // with done=result.generated (~20-32, one batch) and total=remaining (~40,000, the whole
+      // backlog) — 32/40000 rounds to 0%. That event and drainCatalogThumbnails' own
+      // activityUpdate call (library-ui.js, which correctly accumulates done across the whole
+      // session) both write the SAME 'thumb' stage on every single batch, racing each other —
+      // whichever the browser's event queue delivers last wins the display, so it flickered
+      // between the two. drainCatalogThumbnails already owns this stage's display authoritatively
+      // (it fires right after the same invoke() this event is a byproduct of), so the raw event
+      // is skipped here rather than fixed to agree with it — one writer, not two kept in sync.
+      if (p.phase !== 'thumb') {
+        activityUpdate('catalog', { stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
+      }
       updateBootSplashProgress(p);
       if (p.phase === 'done') refreshCatalogCounts();
     }).catch(() => {});
@@ -7554,6 +7618,18 @@
     host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
     });
+    const facesPendingRow = host.querySelector('[data-faces-pending]');
+    if (facesPendingRow) {
+      facesPendingRow.onclick = async () => {
+        // "All photos" scope + the client-side faces filter, same combination the filter-chip
+        // dropdown produces — not a new backend query scope, so it can never disagree with what
+        // the dropdown itself would show for the identical filter.
+        await openCatalogView('all');
+        state.facesFilter = 'pending';
+        syncFilterControls();
+        renderGrid();
+      };
+    }
     const freeUpRow = host.querySelector('[data-cache-free]');
     if (freeUpRow) freeUpRow.onclick = (e) => showCacheMenu(e);
     const verifyRow = host.querySelector('[data-verify-library]');
@@ -7716,12 +7792,16 @@
     const main = document.getElementById('lib-main');
     if (!main || main._marqueeWired) return;
     main._marqueeWired = true;
-    let box = null, sx = 0, sy = 0, add = false, active = false;
+    let box = null, sx = 0, sy = 0, add = false, active = false, scroller = null, sTop0 = 0;
     main.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if (e.target.closest('.lib-card')) return;       // a card handles its own click
       if (e.target.closest('#lib-list-head')) return;
       sx = e.clientX; sy = e.clientY; add = e.shiftKey; active = false;
+      const gridEl = document.getElementById('lib-grid');
+      scroller = gridEl && gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
+        ? gridEl.parentElement : (gridEl && gridEl.closest('#lib-overlay')) || document.documentElement;
+      sTop0 = scroller.scrollTop || 0;
     });
     document.addEventListener('pointermove', (e) => {
       if (sx === 0 && sy === 0) return;
@@ -7735,12 +7815,28 @@
         document.body.appendChild(box);
         if (!add) { if (state.source === 'lr') { lrState.selected.clear(); } else { state.selected.clear(); } }
       }
-      const x0 = Math.min(sx, e.clientX), y0 = Math.min(sy, e.clientY), x1 = Math.max(sx, e.clientX), y1 = Math.max(sy, e.clientY);
+      // Compare in SCROLL-INVARIANT ("content") Y coordinates, not raw viewport clientY. The box
+      // is drawn `position:fixed` (anchored to the viewport, which is right — it shouldn't grow
+      // just because the page scrolled), but a plain clientY hit-test against getBoundingClientRect
+      // was comparing the box's fixed screen position against cards whose screen position moves
+      // every time the grid scrolls: a row already inside the box, scrolled out from under it by a
+      // wheel scroll mid-drag (no mouse movement needed to observe this — it just needed one more
+      // pointermove to re-evaluate), read as "no longer hit" and got deselected, even though the
+      // user never shrank the rectangle. Adding the current scrollTop to both sides cancels the
+      // scroll delta: `clientY + scrollTop` for a fixed piece of content stays constant as the
+      // container scrolls (clientY drops by exactly as much as scrollTop rises).
+      const sTopNow = scroller ? (scroller.scrollTop || 0) : 0;
+      const cy0 = sy + sTop0, cy1 = e.clientY + sTopNow;
+      const x0 = Math.min(sx, e.clientX), y0Content = Math.min(cy0, cy1), x1 = Math.max(sx, e.clientX), y1Content = Math.max(cy0, cy1);
+      // Screen-space box for drawing: convert the content-space bounds back using the CURRENT
+      // scrollTop so the visible rectangle still tracks the mouse correctly on screen.
+      const y0 = y0Content - sTopNow, y1 = y1Content - sTopNow;
       box.style.left = x0 + 'px'; box.style.top = y0 + 'px'; box.style.width = (x1 - x0) + 'px'; box.style.height = (y1 - y0) + 'px';
       const cloud = state.source === 'lr';
       document.querySelectorAll('#lib-grid .lib-card').forEach((c) => {
         const r = c.getBoundingClientRect();
-        const hit = r.left < x1 && r.right > x0 && r.top < y1 && r.bottom > y0;
+        const rTop = r.top + sTopNow, rBottom = r.bottom + sTopNow;
+        const hit = r.left < x1 && r.right > x0 && rTop < y1Content && rBottom > y0Content;
         const key = cloud ? c.dataset.lrId : c.dataset.path;
         if (!key) return;
         const set = cloud ? lrState.selected : state.selected;
@@ -7749,7 +7845,7 @@
       });
     });
     document.addEventListener('pointerup', () => {
-      sx = sy = 0;
+      sx = sy = 0; scroller = null;
       if (box) { box.remove(); box = null; active = false; }
     });
   }
