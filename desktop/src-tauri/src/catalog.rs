@@ -2493,23 +2493,54 @@ fn run_faces_scan_via_worker(app: &tauri::AppHandle, state: &tauri::State<Catalo
     let stdout = child.stdout.take();
     *state.face_worker.lock().map_err(|e| e.to_string())? = Some(child);
 
+    // ⚠️ Deliberately NOT a plain blocking `for line in BufReader::lines()` here. The stderr-pipe
+    // deadlock this function already had once (see the .stderr(inherit()) comment above) is proof
+    // this exact call site can hang for a reason nobody anticipated — a plain blocking read loop
+    // has no way to notice that and would just wait forever again under some OTHER cause. Reading
+    // on a separate thread and consuming via `recv_timeout` bounds the wait: if the worker goes
+    // silent for WATCHDOG straight, THIS thread kills it and moves on instead of hanging, no
+    // matter what actually went wrong on the worker's side. This is a backstop, not a substitute
+    // for understanding the real failure — it exists precisely because "I reasoned out the cause"
+    // was already wrong once for this same code path.
+    const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(120);
     let mut result = FacesResult::default();
     if let Some(stdout) = stdout {
-        use std::io::{BufRead, BufReader};
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if let Some(rest) = line.strip_prefix("PROGRESS ") {
-                let mut parts = rest.split_whitespace();
-                if let (Some(done), Some(total)) = (parts.next().and_then(|s| s.parse().ok()), parts.next().and_then(|s| s.parse().ok())) {
-                    let _ = app.emit("catalog-scan", ScanProgress { phase: "faces".into(), done, total, current: String::new() });
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if tx.send(line).is_err() {
+                    break; // receiver gave up (watchdog fired) — nothing left to do here
                 }
-            } else if let Some(rest) = line.strip_prefix("DONE ") {
-                for kv in rest.split_whitespace() {
-                    if let Some(n) = kv.strip_prefix("scanned=").and_then(|s| s.parse().ok()) {
-                        result.scanned = n;
-                    } else if let Some(n) = kv.strip_prefix("faces_found=").and_then(|s| s.parse().ok()) {
-                        result.faces_found = n;
+            }
+            // tx drops here either way, which is what lets the loop below tell "worker went
+            // quiet forever" (RecvTimeoutError::Timeout) apart from "worker finished normally"
+            // (RecvTimeoutError::Disconnected, once every already-sent line is drained).
+        });
+        loop {
+            match rx.recv_timeout(WATCHDOG) {
+                Ok(line) => {
+                    if let Some(rest) = line.strip_prefix("PROGRESS ") {
+                        let mut parts = rest.split_whitespace();
+                        if let (Some(done), Some(total)) = (parts.next().and_then(|s| s.parse().ok()), parts.next().and_then(|s| s.parse().ok())) {
+                            let _ = app.emit("catalog-scan", ScanProgress { phase: "faces".into(), done, total, current: String::new() });
+                        }
+                    } else if let Some(rest) = line.strip_prefix("DONE ") {
+                        for kv in rest.split_whitespace() {
+                            if let Some(n) = kv.strip_prefix("scanned=").and_then(|s| s.parse().ok()) {
+                                result.scanned = n;
+                            } else if let Some(n) = kv.strip_prefix("faces_found=").and_then(|s| s.parse().ok()) {
+                                result.faces_found = n;
+                            }
+                        }
                     }
                 }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    eprintln!("face-scan worker: no output for {}s — treating as hung and killing it", WATCHDOG.as_secs());
+                    kill_face_worker(state);
+                    break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break // normal EOF
             }
         }
     }
