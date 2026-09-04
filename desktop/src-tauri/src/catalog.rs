@@ -854,36 +854,6 @@ fn abs_path(vol_last_path: &str, is_local: bool, rel_path: &str) -> String {
     }
 }
 
-/// The exact inverse of `abs_path`, tried against every known volume (there's normally one
-/// `is_local` row and a handful of external ones, so this is a handful of string compares, not a
-/// table scan). Used by `sync_sidecar_fields_run` to turn the absolute path `set_sidecar` is
-/// called with back into the (volume_id, rel_path) key `photos` is actually keyed on.
-fn find_photo_by_abs_path(conn: &Connection, path: &str) -> rusqlite::Result<Option<i64>> {
-    let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes")?;
-    let volumes: Vec<(i64, String, i64)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-        .collect::<Result<_, _>>()?;
-    for (volume_id, last_path, is_local) in volumes {
-        let rel_path = if is_local != 0 {
-            path.strip_prefix('/')
-        } else {
-            path.strip_prefix(&last_path).and_then(|s| s.strip_prefix('/'))
-        };
-        let Some(rel_path) = rel_path else { continue };
-        let found: Option<i64> = conn
-            .query_row(
-                "SELECT id FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
-                params![volume_id, rel_path],
-                |r| r.get(0),
-            )
-            .optional()?;
-        if found.is_some() {
-            return Ok(found);
-        }
-    }
-    Ok(None)
-}
-
 /// Keeps `photos.rating/label/edited/favorite` in sync with the sidecar the instant the user
 /// changes them, so a server-side filter on those columns (query_run's rating/favorite/edited,
 /// once added) can never show stale results relative to what `set_sidecar` just wrote — the
@@ -894,7 +864,7 @@ fn find_photo_by_abs_path(conn: &Connection, path: &str) -> rusqlite::Result<Opt
 /// catalog_query (Recents/Exported/an un-registered folder) legitimately has no catalog row yet
 /// — that is not an error, just nothing to keep in sync.
 pub fn sync_sidecar_fields_run(conn: &Connection, path: &str, rating: i32, label: &str, edited: bool, favorite: bool) {
-    let Ok(Some(photo_id)) = find_photo_by_abs_path(conn, path) else { return };
+    let Some(photo_id) = find_photo_by_abs_path(conn, path) else { return };
     // Same raw value a rescan's own sidecar sync writes (see the "UPDATE photos SET rating..."
     // site in scan_run) — no extra clamping here, or this path and a rescan could disagree on
     // what a -1 (rejected) rating means for the exact same photo.
@@ -2599,6 +2569,7 @@ pub fn faces_run(
         }
         let total_in_batch = batch.len();
         let base_scanned = result.scanned;
+        let mut attempted_in_batch: usize = 0;
         progress(ScanProgress { phase: "faces".into(), done: base_scanned, total: base_scanned + total_in_batch, current: String::new() });
 
         // Chunked rather than one par_iter over the whole batch: progress() can only be called
@@ -2683,6 +2654,16 @@ pub fn faces_run(
                 .collect();
 
             let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            // `attempted_in_batch` — NOT `result.scanned` — is what progress() reports as `done`.
+            // `result.scanned` only advances on a SUCCESS or a terminal give-up (fail_count hits
+            // MAX_FAIL_ATTEMPTS below), so a run of photos that fail detection but haven't hit the
+            // cap yet (fail_count 1 or 2) used to leave `done` frozen for as long as that run
+            // lasted — real, CPU-heavy work with a progress pill that looked stuck. Confirmed
+            // live: a scoped scan's `face_scan_fail_count` distribution climbing (1→2 for dozens
+            // of photos every ~15s, worker at 215% CPU) while `faces_scanned_at`'s done count
+            // stayed completely flat. `attempted_in_batch` counts every photo this chunk actually
+            // processed, pass or fail, so the pill always reflects real throughput.
+            attempted_in_batch += part.len();
             for (id, mtime, faces) in &part {
                 match faces {
                     Some(faces) => {
@@ -2729,7 +2710,7 @@ pub fn faces_run(
                 }
             }
             tx.commit().map_err(|e| e.to_string())?;
-            progress(ScanProgress { phase: "faces".into(), done: result.scanned, total: base_scanned + total_in_batch, current: String::new() });
+            progress(ScanProgress { phase: "faces".into(), done: base_scanned + attempted_in_batch, total: base_scanned + total_in_batch, current: String::new() });
             // Adaptive backoff (bgwork::ChunkPacer): a chunk that ran unexpectedly slow is
             // itself evidence of system contention, whatever the root cause — back off
             // proportionally rather than immediately hammering the next chunk. A no-op on a

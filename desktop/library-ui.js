@@ -6660,7 +6660,18 @@
   let _activityLastProgressAt = 0;
   let _activityStalled = false;
   let _activityStallTimer = null;
-  const ACTIVITY_STALL_MS = 25000;
+  // ⚠️ Must stay comfortably above the WORST-CASE gap between two real progress events, not the
+  // typical one. faces_run (catalog.rs) reports progress once per CHUNK of 4 photos, each photo
+  // individually bounded by a 30s timeout — but the decode work runs on decode_batch_pool, which
+  // on an 8-core machine sizes itself to only 3 workers ((cores-2)/2). CHUNK=4 into a 3-worker
+  // pool means the 4th photo queues behind the first 3, so a chunk with multiple genuinely slow
+  // photos can take up to ~2x the per-photo timeout (~60s) before the NEXT progress event fires —
+  // confirmed live: the pill showed "Not responding…" while faces_scanned_at was demonstrably
+  // climbing steadily in the database the whole time (verified via direct sqlite queries over a
+  // 6-minute window with zero stalls). 25s was tuned before the per-photo timeout/chunking
+  // existed and was never revisited when that landed — this is 90s specifically to clear the
+  // ~60s worst case with real margin, not just enough to paper over one measurement.
+  const ACTIVITY_STALL_MS = 90000;
   function _activityStallTick() {
     // ⚠️ Previously skipped entirely while total===0, reasoning that a full-library scan primes
     // the pill at total:0 and "if there's genuinely nothing to scan, that first event never
