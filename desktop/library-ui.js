@@ -649,6 +649,8 @@
     metaDisplay: localStorage.getItem('chromasmith_lib_metadisp') || 'off', // 'off'|'hover'|'always'
     showTitle: localStorage.getItem('chromasmith_lib_showtitle') !== '0',
     gridAspect: localStorage.getItem('chromasmith_lib_gridaspect') === '1', // item 31: real aspect ratio vs square-crop thumbnails
+    hideIcons: localStorage.getItem('chromasmith_lib_hideicons') === '1', // View menu: hide flag/badge icons drawn over photos
+    zeroGap: localStorage.getItem('chromasmith_lib_zerogap') === '1',     // View menu: Lightroom-style zero-gap grid
     // Matches Lightroom's "Include Photos from Subfolders" — list_dir is deliberately one level
     // only (see its own doc comment), so a folder tree built by date (2026/08/22, 2026/08/23...)
     // showed nothing when the PARENT folder was selected, only when a leaf was. Real reported
@@ -913,7 +915,20 @@
        highlight on the thumbnail — this is the reject/pick indicator, not a colour-label system. */
     .lib-card.lbl-red .lib-thumb-wrap{box-shadow:0 0 0 2px #e05252}
     .lib-card.lbl-green .lib-thumb-wrap{box-shadow:0 0 0 2px #5cb85c}
+    /* Rejected photos read as "set aside", not just outlined red — dim the whole card so a
+       rejected pass is visually distinct from a normal browse at a glance. Selection/hover still
+       overrides via specificity below since .sel/.multi/:hover come after in cascade order. */
+    .lib-card.lbl-red{opacity:.45}
+    .lib-card.lbl-red:hover,.lib-card.lbl-red.sel,.lib-card.lbl-red.multi{opacity:1}
+    /* View menu: "Hide photo icons" — flags/badges are useful while culling, noise once you're
+       just browsing. Stars are a rating, not a status icon, so they stay. */
+    #lib-overlay.lib-hide-icons .lib-flags,#lib-overlay.lib-hide-icons .lib-raw-badge,
+    #lib-overlay.lib-hide-icons .lib-video-badge,#lib-overlay.lib-hide-icons .lib-dupe-badge,
+    #lib-overlay.lib-hide-icons .lib-synced-badge,#lib-overlay.lib-hide-icons .lib-stack-badge,
+    #lib-overlay.lib-hide-icons .lib-strip-flag,#lib-overlay.lib-hide-icons .lib-offline-badge{display:none!important}
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
+    /* View menu: "No spacing between photos" — a la Lightroom's zero-gutter grid. */
+    #lib-grid.lib-zero-gap{gap:0}
     #lib-grid.lib-dragover{outline:2px dashed var(--acc2);outline-offset:-6px;border-radius:8px}
     .lib-coll-row.lib-coll-dragover{outline:2px dashed var(--acc2);outline-offset:-2px;background:var(--sur2)}
     /* Real table: header row (#lib-list-head) and every .lib-card in list mode share this exact
@@ -1292,6 +1307,12 @@
       </select>
       <label class="lib-btn" id="lib-showtitle-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer">
         <input type="checkbox" id="lib-showtitle" style="margin:0"><span>Show title</span>
+      </label>
+      <label class="lib-btn" id="lib-hideicons-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer" title="Hide the flag/RAW/video/duplicate/sync badges drawn over each thumbnail">
+        <input type="checkbox" id="lib-hideicons" style="margin:0"><span>Hide photo icons</span>
+      </label>
+      <label class="lib-btn" id="lib-zerogap-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer" title="No spacing between photos, like Lightroom">
+        <input type="checkbox" id="lib-zerogap" style="margin:0"><span>No spacing</span>
       </label>
       <div class="lib-thumbsize" id="lib-thumbsize-wrap">
         <span>Size</span><input type="range" id="lib-thumbsize" min="90" max="320" step="10">
@@ -4336,7 +4357,10 @@
         const stripFlag = sc.label === 'Red' ? `<span class="lib-strip-flag" style="background:#e05252"></span>`
           : sc.label === 'Green' ? `<span class="lib-strip-flag" style="background:#5cb85c"></span>` : '';
         const escName = String(entry.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-        const stripInfo = `<div class="lib-strip-info"><span class="lib-strip-name">${escName}</span>${stripFlag}</div>`;
+        // The photo currently open in the Editor shows no name here — it's the one photo whose
+        // filename the user already knows (it's the one on screen), and surfacing it in the
+        // Library grid too just duplicated chrome.
+        const stripInfo = `<div class="lib-strip-info">${entry.path === state.openedPath ? '' : `<span class="lib-strip-name">${escName}</span>`}${stripFlag}</div>`;
         card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}
             <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
           </div>
@@ -4346,7 +4370,7 @@
           ${dupeBadge}
           ${syncedBadge}
           ${offlineBadge}
-          ${state.showTitle ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}
+          ${state.showTitle && entry.path !== state.openedPath ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}
           ${stripInfo}`;
       }
       frag.appendChild(card);
@@ -5451,6 +5475,22 @@
   const showTitleChk = overlay.querySelector('#lib-showtitle');
   showTitleChk.checked = state.showTitle;
   showTitleChk.onchange = (e) => { state.showTitle = e.target.checked; localStorage.setItem('chromasmith_lib_showtitle', state.showTitle ? '1' : '0'); renderGrid(); };
+  const hideIconsChk = overlay.querySelector('#lib-hideicons');
+  hideIconsChk.checked = state.hideIcons;
+  overlay.classList.toggle('lib-hide-icons', state.hideIcons);
+  hideIconsChk.onchange = (e) => {
+    state.hideIcons = e.target.checked;
+    localStorage.setItem('chromasmith_lib_hideicons', state.hideIcons ? '1' : '0');
+    overlay.classList.toggle('lib-hide-icons', state.hideIcons);
+  };
+  const zeroGapChk = overlay.querySelector('#lib-zerogap');
+  zeroGapChk.checked = state.zeroGap;
+  if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
+  zeroGapChk.onchange = (e) => {
+    state.zeroGap = e.target.checked;
+    localStorage.setItem('chromasmith_lib_zerogap', state.zeroGap ? '1' : '0');
+    if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
+  };
 
   // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
   // #lib-sort-dir button — reusing their own handlers keeps grid view and list view unable to
@@ -5915,7 +5955,7 @@
       </div>`).join('');
     const cacheRow = cacheUsageRowHtml();
     if (!rows && !cacheRow) return '';
-    return sidebarSection('drives', 'Drives', rows + cacheRow) + '<div class="lib-coll-sep"></div>';
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('drives', 'Drives', rows + cacheRow);
   }
 
   /// Nests the flat (y,m,d,n) rows catalog_date_counts returns into a Year › Month › Day tree
@@ -6014,7 +6054,10 @@
           <span>Keywords</span>
         </div>
         ${kwExpanded.has('__root__') ? `<div class="lib-tree-children">${renderLevel('__root__')}</div>` : ''}
-      </div><div class="lib-coll-sep"></div>`;
+      </div>`;
+    // No trailing separator of its own — the next section (People & Pets) supplies its own
+    // leading one. This used to double up into two adjacent dividers whenever both a keyword
+    // tree AND named people existed (notes §2.3.14, "duplicated separators").
   }
 
   /// Loads one person's face crop lazily via `catalog_face_crop` and fades it into the given
@@ -6335,10 +6378,22 @@
         <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not face-scanned</span>
         <span class="lib-coll-count">${catalogCounts.faces_pending}</span>
       </div>` : '';
-    return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' ? ' on' : ''}" data-catalog="all">
+    // RAW/Videos: quick-access shortcuts onto the existing type-filter mechanism (lib-type-filter)
+    // rather than a new backend scope — always shown (unlike reviewRow/facesPendingRow, there's
+    // no catalog_counts field to gate on without a Rust change, and "0 RAW files" is still a
+    // useful thing to see rather than noise).
+    const rawShortcutRow = `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'raw' ? ' on' : ''}" data-type-shortcut="raw" title="All RAW files">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">RAW</span>
+      </div>`;
+    const videosShortcutRow = `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'video' ? ' on' : ''}" data-type-shortcut="video" title="All video clips">
+        <span class="lib-coll-ic">${ic('video', 14)}</span><span class="lib-coll-lb">Videos</span>
+      </div>`;
+    return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
-      </div>${reviewRow}${facesPendingRow}
+      </div>${reviewRow}${facesPendingRow}${rawShortcutRow}${videosShortcutRow}
       <div class="lib-tree-node" id="lib-date-tree">
         <div class="lib-tree-row" data-date-tree-toggle="1">
           <span class="lib-tree-chev${dateExpanded.has('__root__') ? ' open' : ''}">${ic('chevron', 11)}</span>
@@ -6346,8 +6401,10 @@
           <span>By Date</span>
         </div>
         ${dateExpanded.has('__root__') ? `<div class="lib-tree-children">${dateTreeHtml()}</div>` : ''}
-      </div>
-      <div class="lib-coll-sep"></div>${drivesSectionHtml()}`;
+      </div>`;
+    // Note: Drives used to render immediately here. It's now placed by renderCollections()'s own
+    // assembly order (see the sidebar reorder comment there) rather than baked into this
+    // function's return value, so section order can change in one place.
   }
 
   /// Registers `path` with the catalog and — at most once per COVERING ROOT per session — runs
@@ -8009,9 +8066,15 @@
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
       </div>`).join('');
-    host.innerHTML = catalogSectionHtml() + sidebarSection('collections', 'Collections', collectionsBody)
-      + albumsSectionHtml() + keywordsSectionHtml() + peopleSectionHtml() + devicesSectionHtml() + cloudSectionHtml()
-      + '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '');
+    // Sidebar section order (notes §2.3.9): All Photos/Dates (catalogSectionHtml) → Collections
+    // → People & Pets → Albums → Drives → Devices → Folders → Cloud. Each section function
+    // supplies its OWN leading separator (or none, if it has nothing to show), so reordering
+    // here never produces a doubled or missing divider between two adjacent sections.
+    host.innerHTML = catalogSectionHtml()
+      + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
+      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml()
+      + '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '')
+      + cloudSectionHtml();
     // The actual folder tree renders into the SIBLING #lib-tree node (renderTree(), elsewhere in
     // this file) rather than into #lib-collections, so "Folders" collapsing hides that sibling
     // directly instead of trying to fold tree markup into this function's own innerHTML.
@@ -8030,6 +8093,17 @@
     wirePeopleRows(host);
     host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
+      // "All Photos" doubles as a clear-all-filters shortcut on a second click — matches the
+      // sidebar's other "click again to reset" gestures and gives filters an escape hatch that
+      // doesn't require opening the Filters panel.
+      if (row.dataset.catalog === 'all') row.ondblclick = () => clearAllLibFilters();
+    });
+    host.querySelectorAll('.lib-coll-row[data-type-shortcut]').forEach((row) => {
+      row.onclick = async () => {
+        state.typeFilter = row.dataset.typeShortcut;
+        syncFilterControls();
+        await openCatalogView('all');
+      };
     });
     const facesPendingRow = host.querySelector('[data-faces-pending]');
     if (facesPendingRow) {
