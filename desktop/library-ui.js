@@ -718,7 +718,7 @@
        collapsed the whole photo grid). :not(.full) scoping keeps the two modes from crossing. */
     #lib-overlay.tree-collapsed:not(.full){grid-template-rows:auto auto auto 0 1fr 28px}
     #lib-overlay.tree-collapsed #lib-side{display:none}
-    #lib-tree-toggle.on{border-color:var(--acc);color:var(--acc)}
+    #lib-tree-toggle.on{border-color:var(--acc2);color:var(--acc2)}
     @keyframes lib-lr-slide{from{transform:translateX(-100%)}to{transform:translateX(350%)}}
     #lib-lr-chip{display:none;align-items:center;gap:6px;margin-left:auto;font-size:10px;color:var(--ok,#59c98a)}
     #lib-lr-chip .lib-lr-signout{color:var(--mut);cursor:pointer;text-decoration:underline}
@@ -745,8 +745,31 @@
     .lib-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px}
     .lib-btn svg{display:block;flex:0 0 auto}
     .lib-btn-icon{width:30px;height:30px;padding:0}
+    /* Design-import reskin: pill-shaped chrome buttons (Sidebar/Sort/Filters) — everywhere else
+       stays the existing 8px-radius rect (.lib-btn's own rule further down), matching the
+       wireframe's split between .pillbtn (sort/filters/allfx/export) and .iconbtn (utility). */
+    .lib-pill{border-radius:9999px!important;background:transparent;padding:0 14px;height:30px}
+    .lib-pill:hover{background:var(--sur2)}
+    .lib-pill.active{background:rgba(74,157,220,.14);border-color:var(--acc2)!important;color:var(--acc2)}
     #lib-filters-btn-wrap{position:relative}
-    #lib-filters-badge{display:none;margin-left:5px;background:var(--acc);color:#1a1208;font-size:9px;
+    /* Top-bar flag row (design-import wireframe) — hairline-bracketed group, matching the
+       wireframe's .flagrow, so it reads as one control cluster distinct from the icon buttons
+       either side of it. */
+    .lib-flagrow{display:flex;align-items:center;gap:2px;border-left:1px solid var(--bdr);
+      border-right:1px solid var(--bdr);padding:0 8px;flex:none}
+    #lib-flag-reject svg{stroke:#e5484d}
+    #lib-flag-pick.on svg,#lib-flag-pick svg{stroke:#46a758}
+    #lib-flag-fav.on svg,#lib-flag-fav svg{stroke:#ff9b42}
+    #lib-flag-pick.on,#lib-flag-fav.on{background:var(--sur2)}
+    /* Pill search bar — icon + input in one hairline capsule, matching the wireframe's .search. */
+    .lib-search-wrap{flex:1 1 160px;min-width:120px;max-width:320px;height:32px;border-radius:9999px;
+      border:1px solid var(--bdr);background:var(--sur2);display:flex;align-items:center;gap:8px;
+      padding:0 14px;overflow:hidden}
+    .lib-search-wrap svg{flex:none;stroke:var(--mut)}
+    .lib-search-wrap input{border:none;background:none;outline:none;flex:1;min-width:0;color:var(--txt);
+      font:13px var(--sans)}
+    .lib-search-wrap input::placeholder{color:var(--mut)}
+    #lib-filters-badge{display:none;margin-left:5px;background:var(--acc2);color:#fff;font-size:9px;
       font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4}
     #lib-filters-badge.on{display:inline-block}
     #lib-filters-clear{font-size:11px}
@@ -754,21 +777,23 @@
     .lib-chip{display:flex;align-items:center;gap:4px;background:var(--sur2);border:1px solid var(--bdr);
       border-radius:12px;padding:2px 4px 2px 8px;font-size:10px;color:var(--txt)}
     .lib-chip-x{cursor:pointer;opacity:.6;font-size:11px;line-height:1;padding:0 2px}
-    .lib-chip-x:hover{opacity:1;color:var(--acc)}
+    .lib-chip-x:hover{opacity:1;color:var(--acc2)}
     #lib-side{overflow:auto;padding:8px 12px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr)}
     /* DRK-style smart collections, above the folder tree in the same #lib-side scroll box. */
     .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;
       font-size:12px;color:var(--txt)}
     .lib-coll-row:hover{background:var(--sur2)}
-    .lib-coll-row.on{background:rgba(212,144,58,.14);color:var(--acc)}
+    .lib-coll-row.on{background:rgba(74,157,220,.16);color:var(--acc2)}
     .lib-coll-row.offline{cursor:default}
     .lib-coll-row.offline:hover{background:transparent}
     .lib-coll-ic{display:inline-flex;flex-shrink:0;color:inherit}
     .lib-coll-lb{flex:1}
     .lib-coll-count{font-family:var(--mono);font-size:10px;color:var(--mut)}
-    .lib-coll-row.on .lib-coll-count{color:var(--acc)}
+    .lib-coll-row.on .lib-coll-count{color:var(--acc2)}
     .lib-coll-sep{height:1px;background:var(--bdr);margin:8px 2px}
-    .lib-coll-heading{font-size:11px;font-weight:600;letter-spacing:0;color:var(--mut);padding:2px 8px 6px}
+    /* Design-import reskin: uppercase, letter-spaced eyebrow — matches the wireframe's .sec-head
+       (10px/.08em) rather than the old plain 11px label. */
+    .lib-coll-heading{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);padding:8px 8px 4px}
     .lib-sec-h{display:flex;align-items:center;gap:4px;cursor:pointer;border-radius:6px;margin:0 -2px;padding:4px 8px}
     .lib-sec-h:hover{background:var(--sur2)}
     .lib-sec-h .lib-tree-chev{color:var(--mut);opacity:.7}
@@ -803,12 +828,12 @@
     .lib-review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-bottom:16px}
     .lib-review-face{position:relative;border-radius:8px;overflow:hidden;background:var(--sur2);
       border:2px solid transparent;aspect-ratio:1;cursor:pointer}
-    .lib-review-face.sel{border-color:var(--acc)}
+    .lib-review-face.sel{border-color:var(--acc2)}
     .lib-review-face.desel{opacity:.35}
     .lib-review-face img{width:100%;height:100%;object-fit:cover;visibility:hidden}
     .lib-review-face img.loaded{visibility:visible}
     .lib-review-foot{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--bdr)}
-    #lib-review-name{flex:1;background:var(--sur2);border:1px solid var(--acc);border-radius:8px;
+    #lib-review-name{flex:1;background:var(--sur2);border:1px solid var(--acc2);border-radius:8px;
       color:var(--txt);padding:9px 12px;font:500 14px var(--sans);min-width:0}
     .lib-review-kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--bdr);border-radius:4px;
       padding:1px 5px;background:var(--sur2);color:var(--mut)}
@@ -829,7 +854,7 @@
     .lib-btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
       padding:5px 10px;font-size:12px;cursor:pointer}
     .lib-btn:hover{background:var(--bdr)}
-    .lib-btn.on{background:var(--acc);color:#000;border-color:var(--acc)}
+    .lib-btn.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
     .lib-btn.on.disabled-note{background:var(--sur2);color:var(--mut);border-color:var(--bdr)}
     #lib-aspect-toggle{padding:5px 8px;margin-left:6px}
     /* Info panel keyword chips (renderInfoPanel) — the leaf name only, full path in the tooltip
@@ -844,7 +869,7 @@
        .lib-kw-chip — same 28px-floor exemption ui_audit.mjs already grants that chip class. */
     .lib-kw-suggest-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:9px;
       background:transparent;border:1px dashed var(--bdr);font-size:10px;color:var(--mut);cursor:pointer}
-    .lib-kw-suggest-chip:hover{color:var(--txt);border-color:var(--acc)}
+    .lib-kw-suggest-chip:hover{color:var(--txt);border-color:var(--acc2)}
     .lib-kw-suggest-chip-add{opacity:.7;font-size:11px;line-height:1}
     /* Quick Look (Space bar) — a full-viewport overlay, never part of the editor's own DOM,
        so it stays trivially cheap to open/close: no shader, no canvas, just an <img>. */
@@ -867,9 +892,9 @@
        silent subsystems. Collapsed pill in the status bar; click expands a small popover. ── */
     .lib-act-pill{display:flex;align-items:center;gap:6px;background:var(--sur2);border:1px solid var(--bdr);
       border-radius:999px;padding:3px 9px 3px 5px;cursor:pointer;font-size:11px;color:var(--txt)}
-    .lib-act-pill:hover{border-color:var(--acc)}
+    .lib-act-pill:hover{border-color:var(--acc2)}
     .lib-act-ring{width:13px;height:13px;border-radius:50%;flex:0 0 auto;
-      background:conic-gradient(var(--acc) var(--p,0%),var(--bdr) 0)}
+      background:conic-gradient(var(--acc2) var(--p,0%),var(--bdr) 0)}
     .lib-act-ring::after{content:'';position:absolute}
     .lib-act-pop{position:absolute;bottom:28px;right:0;background:var(--sur2);border:1px solid var(--bdr);
       border-radius:10px;width:260px;box-shadow:var(--lift-2,0 12px 30px -12px rgba(0,0,0,.6));z-index:20;
@@ -883,16 +908,21 @@
     .lib-act-stage.active{color:var(--txt)}
     .lib-act-stage-n{margin-left:auto;font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums}
     .lib-act-bar{height:3px;background:var(--bdr);border-radius:2px;overflow:hidden;margin:1px 0 2px 17px}
-    .lib-act-bar > div{height:100%;background:var(--acc)}
+    .lib-act-bar > div{height:100%;background:var(--acc2)}
     /* Item 24 (unified progress): other concurrently-running jobs, queued behind whichever one
        currently owns the pill — a badge when collapsed, a short list when expanded. */
-    .lib-act-queued-badge{background:var(--acc);color:#1a1208;font-size:9px;font-weight:700;
+    .lib-act-queued-badge{background:var(--acc2);color:#fff;font-size:9px;font-weight:700;
       border-radius:8px;padding:1px 5px;line-height:1.4;margin-left:2px}
     .lib-act-queued{border-top:1px solid var(--bdr);padding:5px 11px 7px}
     #lib-viewbar{display:none}
-    .lib-seg{display:flex;border:1px solid var(--bdr);border-radius:7px;overflow:hidden}
-    .lib-seg button{background:var(--sur2);border:none;color:var(--txt);font-size:11px;padding:5px 9px;cursor:pointer}
-    .lib-seg button.on{background:var(--acc);color:#000}
+    /* Design-import reskin: a neutral segmented toggle (background shift only, no brand fill) —
+       matches the wireframe's .viewtoggle, where the active state is "which one is pressed", not
+       "which one is the accent colour". */
+    .lib-seg{display:flex;border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden}
+    .lib-seg button{background:transparent;border:none;color:var(--mut);font-size:11px;padding:6px 9px;cursor:pointer}
+    .lib-seg button+button{border-left:1px solid var(--bdr)}
+    .lib-seg button:hover{background:var(--sur2)}
+    .lib-seg button.on{background:var(--sur2);color:var(--txt)}
     /* Slide-out filters/display panel (scenario C of the toolbar wireframe review): shares
        #lib-main's own grid cell via an EXPLICIT grid-row/grid-column — not auto-placed, so it
        can't fall into the mis-stacking class of bug the pinned-row comment above warns about —
@@ -943,11 +973,11 @@
     /* Drag to resize the column; double-click resets it. Sits on the cell's right edge, just
        outside the visible text, with a generous invisible hit-area (the visible line is thin). */
     .lib-col-resize{position:absolute;top:0;bottom:0;right:-6px;width:12px;cursor:col-resize;z-index:2}
-    .lib-col-resize:hover{background:linear-gradient(to right,transparent 5px,var(--acc) 5px,var(--acc) 7px,transparent 7px)}
+    .lib-col-resize:hover{background:linear-gradient(to right,transparent 5px,var(--acc2) 5px,var(--acc2) 7px,transparent 7px)}
     .lib-lh-cell:hover{color:var(--txt)}
     .lib-lh-cell.lib-lh-thumb,.lib-lh-cell.lib-lh-flags{cursor:default}
     .lib-lh-cell.lib-lh-flags:hover{color:var(--mut)}
-    .lib-lh-cell.sorted{color:var(--acc)}
+    .lib-lh-cell.sorted{color:var(--acc2)}
     .lib-lh-cell.sorted::after{content:' ▲';font-size:8px}
     .lib-lh-cell.sorted.desc::after{content:' ▼'}
     #lib-grid.list-view{display:flex;flex-direction:column;gap:2px}
@@ -962,17 +992,19 @@
       font-size:10px;font-family:var(--sans);padding:3px 5px;line-height:1.3;
       pointer-events:none;opacity:0}
     .lib-card:hover .lib-meta-strip.hover-mode,.lib-meta-strip.always-mode{opacity:1}
-    .lib-thumb-wrap{position:relative}
-    .lib-card{background:transparent;border:none;border-radius:8px;overflow:hidden;
-      cursor:pointer;position:relative;box-shadow:none;transition:box-shadow .15s ease,transform .1s ease}
-    .lib-card:hover{transform:translateY(-1px);box-shadow:0 0 0 1px var(--bdr)}
-    .lib-card.sel{box-shadow:0 0 0 2px var(--acc)}
+    /* Design-import reskin: a hairline ring on every thumbnail (wireframe's .card) instead of a
+       borderless flat tile — reads as a card even before hover/selection kicks in. */
+    .lib-thumb-wrap{position:relative;box-shadow:inset 0 0 0 1px var(--bdr)}
+    .lib-card{background:transparent;border:none;border-radius:0;overflow:hidden;
+      cursor:pointer;position:relative;box-shadow:none;transition:box-shadow .15s ease}
+    .lib-card:hover .lib-thumb-wrap{box-shadow:inset 0 0 0 1px var(--acc2)}
+    .lib-card.sel{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.multi{box-shadow:0 0 0 2px var(--acc2)}
-    .lib-card.sel.multi{box-shadow:0 0 0 2px var(--acc),0 0 0 4px var(--acc2)}
+    .lib-card.sel.multi{box-shadow:0 0 0 2px var(--acc2),0 0 0 4px var(--acc2)}
     .lib-card.flag-red{box-shadow:0 0 0 2px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
     .lib-card.flag-green{box-shadow:0 0 0 2px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
-    .lib-card.flag-red.sel{box-shadow:0 0 0 1px var(--acc),0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
-    .lib-card.flag-green.sel{box-shadow:0 0 0 1px var(--acc),0 0 0 3px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
+    .lib-card.flag-red.sel{box-shadow:0 0 0 1px var(--acc2),0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
+    .lib-card.flag-green.sel{box-shadow:0 0 0 1px var(--acc2),0 0 0 3px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
     /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
        photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
@@ -1088,7 +1120,7 @@
       border-radius:5px;cursor:pointer;opacity:.6}
     .lib-cmp-chrome .lib-flag.on,.lib-cmp-chrome .lib-flag:hover{opacity:1;background:var(--bdr)}
     #lib-compare-bar{display:flex;align-items:center;gap:8px;padding:2px 4px;font-size:11px;color:var(--mut)}
-    .lib-cmp-pane.cmp-focus{outline:2px solid var(--acc);outline-offset:-2px;border-radius:6px}
+    .lib-cmp-pane.cmp-focus{outline:2px solid var(--acc2);outline-offset:-2px;border-radius:6px}
     #lib-compare-bar button{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
     #lib-empty{color:var(--mut);font-size:12px;padding:30px 10px;text-align:center}
@@ -1184,7 +1216,7 @@
   overlay.innerHTML = `
     <div id="lib-top">
       <span class="lib-title">Library</span>
-      <button class="lib-btn" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)">${ic('log',15)}<span>Sidebar</span></button>
+      <button class="lib-btn lib-pill" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)">${ic('log',15)}<span>Sidebar</span></button>
       <button class="lib-btn lib-btn-icon" id="lib-pick" title="Choose root folder">${ic('library',17)}</button>
       <button class="lib-btn lib-btn-icon" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',17)}</button>
       <button class="lib-btn lib-btn-icon" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',17)}</button>
@@ -1196,12 +1228,23 @@
          selects, and the display options that used to fill a whole second row — moved into the
          slide-out #lib-filters-panel below, opened from the Filters button's badge count. -->
     <div id="lib-filters">
-      <input id="lib-search" placeholder="Search filename… (Enter for AI search)" />
+      <div class="lib-search-wrap">
+        ${ic('search', 14)}
+        <input id="lib-search" placeholder="Search filename… (Enter for AI search)" />
+      </div>
       <button class="lib-btn lib-btn-icon" id="lib-clip-search" title="Search photos by description, e.g. \"a dog on a beach\" — press Enter in the search box, or click this">${ic('search', 15)}</button>
       <div class="lib-seg" id="lib-viewmode-seg">
         <button data-v="grid" title="Grid view">▦</button>
         <button data-v="list" title="List view">${ic('log',15)}</button>
         <button data-v="compare" title="Compare two photos/looks side by side — C">⇹</button>
+      </div>
+      <!-- Flag row (design-import wireframe): rates whichever photo is open in the Editor, or the
+           first of a multi-selection — same window.chromasmithToggle*() bridge the Editor's own
+           top-bar flag buttons already use, so the two stay in sync automatically. -->
+      <div class="lib-flagrow" id="lib-flagrow">
+        <button class="lib-btn lib-btn-icon" id="lib-flag-reject" title="Reject">${ic('close',15)}</button>
+        <button class="lib-btn lib-btn-icon" id="lib-flag-pick" title="Pick">${ic('flagGreen',15)}</button>
+        <button class="lib-btn lib-btn-icon" id="lib-flag-fav" title="Favorite">${ic('heart',15)}</button>
       </div>
       <select id="lib-sort" title="Sort by">
         <option value="name">Name</option>
@@ -1216,9 +1259,9 @@
         <option value="rating">Rating</option>
         <option value="editedts">Date edited</option>
       </select>
-      <button class="lib-btn" id="lib-sort-dir" title="Reverse sort order">↑</button>
+      <button class="lib-btn lib-pill" id="lib-sort-dir" title="Reverse sort order">↑</button>
       <div id="lib-filters-btn-wrap">
-        <button class="lib-btn" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters, and display options">Filters<span id="lib-filters-badge"></span></button>
+        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters, and display options">Filters<span id="lib-filters-badge"></span></button>
       </div>
       <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
       <div id="lib-filter-chips"></div>
@@ -2571,6 +2614,7 @@
         }
       }
       state.openedPath = path;
+      if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
       if (!LIBTEST) { try { localStorage.setItem(LS_LAST_PATH, path); } catch (e) {} }
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -3447,6 +3491,7 @@
         await loadFXImages([file]);
         window.chromasmithEditInPath = path;
         state.openedPath = path;
+        if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
         window.chromasmithSourcePath = path;
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -5392,6 +5437,23 @@
       };
     });
   }
+  // Top-bar flag row (design-import wireframe) — rates state.openedPath via the same bridge
+  // functions the Editor's own top-bar flag buttons use (window.chromasmithToggleFlag/Favorite),
+  // so a click here and a click there can never disagree about the current photo's flag.
+  const syncLibFlagRow = () => {
+    const reject = overlay.querySelector('#lib-flag-reject');
+    const pick = overlay.querySelector('#lib-flag-pick');
+    const fav = overlay.querySelector('#lib-flag-fav');
+    if (!reject || !pick || !fav) return;
+    const label = typeof window.chromasmithOpenedFlag === 'function' ? window.chromasmithOpenedFlag() : '';
+    const favorite = typeof window.chromasmithOpenedFavorite === 'function' ? window.chromasmithOpenedFavorite() : false;
+    reject.classList.toggle('on', label === 'Red');
+    pick.classList.toggle('on', label === 'Green');
+    fav.classList.toggle('on', !!favorite);
+  };
+  overlay.querySelector('#lib-flag-reject').onclick = async () => { await window.chromasmithToggleFlag('Red'); syncLibFlagRow(); };
+  overlay.querySelector('#lib-flag-pick').onclick = async () => { await window.chromasmithToggleFlag('Green'); syncLibFlagRow(); };
+  overlay.querySelector('#lib-flag-fav').onclick = async () => { await window.chromasmithToggleFavorite(); syncLibFlagRow(); };
   const filtersBtn = overlay.querySelector('#lib-filters-btn');
   const filtersPanel = overlay.querySelector('#lib-filters-panel');
   // A slide (transform), not a display toggle, so this can't repeat #lib-filters-pop's old
@@ -5400,6 +5462,7 @@
   filtersBtn.onclick = (e) => {
     e.stopPropagation();
     filtersPanel.classList.toggle('open');
+    filtersBtn.classList.toggle('active', filtersPanel.classList.contains('open'));
   };
   overlay.querySelector('#lib-filters-panel-close').onclick = (e) => {
     e.stopPropagation();
