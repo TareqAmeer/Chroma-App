@@ -1,57 +1,70 @@
-# Handover — UI_SPEC.md implementation
+# Handover — wireframe fidelity pass (Library + Editor)
 
-## Plan file
-`/Users/tareqameer/.claude/plans/use-the-claude-design-mcp-memoized-abelson.md` — full gap
-analysis + step order. Read this first.
+## Status
+Library: 71 → 15 mismatches (`node test/wireframe_diff.mjs`).
+Editor: 130 → 57 mismatches (`node test/editor_wireframe_diff.mjs`).
+Every fix this session verified via the tools' own repair-loop recheck (resolved/persisting/new
+against the previous run) — zero regressions shipped.
 
-## Status: steps 1-8 all DONE. Only step 9 (final verification pass) remains.
+## Key decisions made this session (don't re-litigate without asking again)
+- Library base font-size: **16px** (matches the wireframe literally, not the design-system
+  readme's stated 17px).
+- Editor: **switched app-wide to SF Pro Text** (embedded as base64 OTF, ~12MB — file is now
+  15.5MB). No variable SF Pro font exists in this repo; explicit decision was to accept the
+  size increase rather than slim it down.
+- Editor base font-size: **16px app-wide** (not scoped — chromasmith-22.html has no equivalent
+  to the Library's `#lib-overlay` scoping boundary).
+- Editor color palette: **replaced with the wireframe's literal DS hex values app-wide**
+  (--bg/--sur/--sur2/--bdr/--txt/--mut). `--acc`/`--acc2`/`--ok`/`--err` (brand/semantic colors)
+  were explicitly left untouched — out of DS scope.
+- Two button colors are *intentionally different* between the two apps' wireframes — don't
+  "fix" one to match the other:
+  - Library's Export button: always Slate Blue, never swaps in dark mode.
+  - Editor's Export button: Mist Blue (`#61a0af`), replacing the app's amber `--acc` brand color.
+- Library grid card background/hairline: **always the light parchment plate** (`#f5f5f7` /
+  `#e0e0e0`), even in dark mode — matches the wireframe's own lack of a dark override for `.card`.
+- Editor tool rail: **kept the extra "Image"/"Crop" items** (12 vs wireframe's 10) — explicit
+  decision not to relocate those tools just to match item count.
+- Grid card size (154px vs wireframe's 181px): **not a bug** — it's the user-configurable
+  thumbnail-size default (140px, persisted via localStorage), confirmed already working as
+  intended.
 
-**Step 7 (Editor token pass) — scope corrected**: audited `#fx-toolrail`/`.fx-panel`
-(chromasmith-22.html) and `#lib-overlay:not(.full)` (library-ui.js) for raw hex — both clean,
-already using each app's own working token scheme with a complete dark/light remap. Did NOT
-rename to the DS tokens' own names (`--surface-tile-1` etc.) — that would mean importing the
-whole DS light/dark remap into chromasmith-22.html for two zones only, high risk for zero
-visual gain. Don't redo this as a full DS-token import unless explicitly asked.
+## Real infrastructure gotcha found this session
+`test/wireframe_diff.mjs` serves `desktop/dist/`, a **built, staged copy** — editing
+`desktop/library-ui.js` directly does nothing until you run `bash build-desktop.sh`. Two fix
+attempts silently showed "0 resolved" before this was caught. Always rebuild before re-running
+the Library diff tool. (The Editor tool serves `chromasmith-22.html` directly — no build step.)
 
-**Step 8 (Editor right-click context menu) — scope corrected**: the plan's original "L10348 /
-Transform panel" pointer was stale (that's now an unrelated background-color picker). The real
-target — and what UI_SPEC.md's own text (L98-101) actually describes — is `buildPathsMenu` in
-`desktop/library-ui.js`, already shared between Library grid right-clicks and the editor's own
-right-click on its open photo. "Rate" and "Export" already existed; added the two real gaps:
-- **Rotate & flip**: dimmed unless exactly one CURRENTLY OPEN photo is targeted (geometry is
-  live per-photo editor state, no sidecar-only path exists) — reuses `geomRotate`/`geomFlip`,
-  same functions step 6's Tools menu calls.
-- **Add to album**: lists existing albums + "New album…", via `album_add`/`album_create` — the
-  sidebar's drag-and-drop was previously the ONLY way to add a photo to an album at all.
+## Remaining known items (deferred, not forgotten)
+**Library (~15 mismatches):**
+- Topbar height (52 vs 61px) — likely intentional macOS traffic-light clearance padding, not
+  confirmed either way.
+- Sidebar height (820 vs 811px) — minor, low-value to chase.
+- Rest are 0-width-border-side computed-style artifacts (confirmed via `borderWidth` matching
+  at 0 on both sides in the tool's own report) — invisible in practice.
 
-**Verified** across steps 4-8: `node --check` on every inline script block, `node
-test/export_harness.mjs` (18/18 clean, no GLSL errors), `npm run lib:test` PASS (run after each
-step), and browser-preview walkthroughs of every change (logo in both apps, theme migration via
-localStorage inspection, Tools menu open/close/toggle, full context menu render + Rotate&flip
-dimming). BUILD stamp is `2026-09-07c`. **None of this has been run through
-`bash desktop/install-app.sh` on the real installed app yet** — that's part of step 9.
+**Editor (~57 mismatches):**
+- Topbar/rail/panel height (48 vs 44, 826 vs 856) — not yet investigated for root cause.
+- Undo/redo/history cluster: wireframe wraps them in one bordered box (`.undogrp`); the app has
+  them as separate flat buttons. Real structural difference, deferred — needs a wrapper `<div>`
+  added around existing buttons, low risk but not done yet.
+- Zoom control height/border-radius, a few more 0-width-border artifacts.
+- The "status bar has no real Editor equivalent" pair — acknowledged placeholder, not a real bug
+  (the Editor topbar doubles as the deskbar; there's no separate statusbar zone to compare).
+- `[dark]`/`[light]` rail order note is expected now (Image/Crop kept on purpose).
 
-Scratchpad preview servers in `.claude/launch.json` from this session: `chroma-desktop3` (port
-8794, `/tmp/cs-desktop-verify3` — staged `desktop/dist/` + fresh `library-ui.js`) and
-`chroma-editor` (port 8795, `/tmp/cs-editor-verify` — `chromasmith-22.html` staged as
-`index.html` + `vendor/` + `coi-serviceworker.min.js`). Re-copy the edited file into the staged
-dir before each preview if you pick these back up — the servers serve the STAGED copy, not the
-repo file live. Future sessions should add their own numbered variant rather than reusing a
-stale scratchpad path from a prior session.
-
-## Next: Step 9 — final verification pass
-Per the plan's own checklist:
-1. `?libtest=1` browser harness + direct Editor load, side-by-side against
-   `chromasmith-design/project/*.html`.
-2. `node test/wireframe_diff.mjs`, `python3 calib/wireframe_diff.py` (regression guards).
-3. `npm run lib:test` + `npm test` (full suite, not just lib:test).
-4. `bash desktop/install-app.sh` + a real installed-app screenshot before calling the whole
-   UI_SPEC pass done — every verification so far has been against staged copies in a browser
-   preview, never the actual Tauri desktop app.
-
-Worth a final skim of `chromasmith-design/project/UI_SPEC.md` end-to-end before declaring done,
-in case there's a zone the plan's original gap-analysis missed entirely (steps 3, 6, 7, and 8 in
-this session each turned out to need a real correction against the plan's own wording — the
-plan was written before enough of the actual code/spec had been read closely).
+## Verification commands
+```bash
+bash build-desktop.sh              # REQUIRED before re-running the Library diff after any
+                                    # library-ui.js edit — dist/ is a stale copy otherwise
+node test/wireframe_diff.mjs       # Library — writes test/output/wireframe_diff_report.json
+node test/editor_wireframe_diff.mjs # Editor — writes test/output/editor_wireframe_diff_report.json
+node test/check_change_scope.mjs <expected-file>   # confirms a fix touched only what it should
+npm run lib:test && node test/export_harness.mjs   # regression guards, run after any CSS/token change
+```
+Pre-commit hook (`githooks/pre-commit`, `core.hooksPath` already set) blocks commits to
+`desktop/library-ui.js`/`chromasmith-22.html` unless the matching diff tool has run since the
+file last changed — `touch .git/.wireframe_diff_ok` / `.git/.editor_wireframe_diff_ok` to
+acknowledge a reviewed run.
 
 ## Type `/clear` now, then start the next session by asking to read `HANDOVER.md`.
