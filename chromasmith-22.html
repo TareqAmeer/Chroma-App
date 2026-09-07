@@ -957,6 +957,17 @@ body.deskx #fx-overflow{display:inline-flex}
 .fx-ovf-item:hover{background:var(--sur2)}
 .fx-ovf-item.dim{color:var(--mut);cursor:default}
 .fx-ovf-sep{height:1px;background:var(--bdr);margin:4px 2px}
+/* Tools menu (deskbar) — spec's "Tools menu (icon list dropdown, docked right)": rotate/flip,
+   gamut warning, copy/paste edit settings, reset photo. Reuses the ⋯ overflow menu's own
+   item/separator classes and open/close idiom rather than a second dropdown implementation. */
+#fx-tools{display:none;position:relative}
+body.deskx #fx-tools{display:inline-flex}
+#fx-tools-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:220px;
+  background:var(--glass-bg);
+  border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
+#fx-tools-menu.on{display:block}
+.fx-ovf-item .fx-ovf-check{margin-left:auto;visibility:hidden;color:var(--acc)}
+.fx-ovf-item.on .fx-ovf-check{visibility:visible}
 /* ── LIGHT THEME ──────────────────────────────────────────────────────────────────────────────
    This used to be 3 lines overriding 6 tokens — --bg/--sur/--sur2/--bdr/--txt/--mut, the surface
    greyscale only. Nothing here touched --acc/--acc2/--ok/--err or --lift-1/--lift-2, so toggling
@@ -1347,6 +1358,10 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
          cluster; Undo/Redo already cover the common "I changed my mind" case. -->
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
     <div id="fx-deskbar-tools"></div>
+    <div id="fx-tools">
+      <button class="fx-db fx-db-icon" onclick="toolsToggle(event)" title="Tools — rotate, flip, gamut warning, copy/paste edit settings, reset photo"><span class="fx-db-ic" id="db-tools"></span></button>
+      <div id="fx-tools-menu"></div>
+    </div>
     <div id="fx-overflow">
       <button class="fx-db fx-db-icon" onclick="ovfToggle(event)" title="More — other tools &amp; settings"><span class="fx-db-ic" id="db-more"></span></button>
       <div id="fx-overflow-menu"></div>
@@ -19742,6 +19757,35 @@ function ovfToggle(e){
   ovfBuild();m.classList.add('on');
 }
 document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-overflow'))ovfClose();});
+// Deskbar Tools menu — spec's "Tools menu (icon list dropdown, docked right)": rotate/flip,
+// gamut warning, copy/paste edit settings, reset photo. Every action here already exists as a
+// standalone function (geomRotate/geomFlip: crop/rotate row; toggleGamutWarn: fx-preview-tools;
+// chromasmithMenuCopyEdit/PasteEdit + fxResetAll: native Photo menu, desktop-native.js) — this
+// is a second, always-reachable entry point onto the SAME functions, not a new implementation.
+function toolsBuild(){
+  const m=document.getElementById('fx-tools-menu');if(!m)return;
+  const chk='<svg class="fx-ovf-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  let h='';
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();geomRotate(90)">${icon('rotateRight',16)}<span>Rotate 90° CW</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();geomRotate(-90)">${icon('rotateLeft',16)}<span>Rotate 90° CCW</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();geomFlip('h')">${icon('flipH',16)}<span>Flip horizontal</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();geomFlip('v')">${icon('flipV',16)}<span>Flip vertical</span></button>`;
+  h+='<div class="fx-ovf-sep"></div>';
+  h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="toolsClose();toggleGamutWarn()"><span>Gamut warning</span>${chk}</button>`;
+  h+='<div class="fx-ovf-sep"></div>';
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();window.chromasmithMenuCopyEdit&&window.chromasmithMenuCopyEdit()">${icon('copy',16)}<span>Copy edit settings</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();window.chromasmithMenuPasteEdit&&window.chromasmithMenuPasteEdit()">${icon('paste',16)}<span>Paste edit settings</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();fxResetAll()">${icon('reset',16)}<span>Reset photo</span></button>`;
+  m.innerHTML=h;
+}
+function toolsClose(){const m=document.getElementById('fx-tools-menu');if(m)m.classList.remove('on');}
+function toolsToggle(e){
+  if(e)e.stopPropagation();
+  const m=document.getElementById('fx-tools-menu');if(!m)return;
+  if(m.classList.contains('on')){toolsClose();return;}
+  ovfClose();toolsBuild();m.classList.add('on');
+}
+document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-tools'))toolsClose();});
 // Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).
 const _SVG=(p,sz)=>`<svg viewBox="0 0 24 24" width="${sz||20}" height="${sz||20}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const ICONS={
@@ -19757,6 +19801,9 @@ const ICONS={
  looks:'<path d="M5 3v4M3 5h4"/><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"/>',
  // Item 8's gamut-warning preview toggle (fx-preview-tools, next to the histogram/scope button).
  gamut:'<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.5v.01"/>',
+ // Deskbar Tools menu (rotate/flip/gamut warning/copy-paste edit/reset) — same wrench glyph as
+ // the UI_SPEC wireframe's #btn-tools.
+ tools:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/>',
  adjust:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
  nr:'<path d="M12 3c4 5 7 8.5 7 12a7 7 0 1 1-14 0c0-3.5 3-7 7-12z"/>',
  curves:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M6 18c6 0 6-12 12-12"/>',
@@ -19790,6 +19837,8 @@ const ICONS={
  heart:'<path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z" fill="currentColor" stroke="none"/>',
  history:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
  copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+ // Deskbar Tools menu's "Paste edit settings" — clipboard glyph pairs with `copy` above.
+ paste:'<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
  // ── Added so no emoji or unicode glyph is left in the desktop chrome ──────────────────────────
  // The bar previously mixed three icon systems at once: these stroke SVGs, an EMOJI (🗂) for the
  // library, and five 24x24 unicode glyphs (○ ⇔ ▾ ⏱ ▦) set at 9px. Emoji render per-platform and
@@ -20419,7 +20468,7 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  {const ab=document.getElementById('fx-add-btn');if(ab)ab.innerHTML=icon('plus',34);}
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
- set('db-lib-ic','library');set('db-more','more');set('ic-before','compare');set('ic-split','split');
+ set('db-lib-ic','library');set('db-more','more');set('db-tools','tools');set('ic-before','compare');set('ic-split','split');
  set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-gamut','gamut');set('ic-ah-clear','close');
  set('ic-zoomout','zoomOut');set('ic-zoomin','zoomIn');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
