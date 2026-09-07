@@ -1045,6 +1045,7 @@
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
     .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
+    .lib-tree-row .dayname{color:var(--mut);font-weight:400}
     .lib-tree-row:hover{background:var(--sur2)}
     .lib-tree-row.on{background:var(--bdr)}
     .lib-tree-chev{width:14px;flex:0 0 14px;display:inline-flex;align-items:center;justify-content:center;opacity:.6;
@@ -6437,7 +6438,11 @@
             html += '<div class="lib-tree-children">';
             const sortedDays = mData.days.slice().sort((a, b) => b.d - a.d);
             for (const dRow of sortedDays) {
-              html += row(`date:${y}:${m}:${dRow.d}`, '', dRow.d, dRow.n, false, false);
+              // Weekday suffix ("6 · Sun") — Library View.html:306-307's `.dayname` span, missing
+              // here until the wireframe-diff repair loop flagged it (diffDayRowWeekday).
+              const weekday = new Date(y, m - 1, dRow.d).toLocaleDateString('en-US', { weekday: 'short' });
+              const dayLabel = `${dRow.d} <span class="dayname">· ${weekday}</span>`;
+              html += row(`date:${y}:${m}:${dRow.d}`, '', dayLabel, dRow.n, false, false);
             }
             html += '</div>';
           }
@@ -6808,25 +6813,33 @@
         <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not face-scanned</span>
         <span class="lib-coll-count">${catalogCounts.faces_pending}</span>
       </div>` : '';
-    // RAW/Videos: quick-access shortcuts onto the existing type-filter mechanism (lib-type-filter)
-    // rather than a new backend scope — always shown (unlike reviewRow/facesPendingRow, there's
-    // no catalog_counts field to gate on without a Rust change, and "0 RAW files" is still a
-    // useful thing to see rather than noise).
-    const rawShortcutRow = `
-      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'raw' ? ' on' : ''}" data-type-shortcut="raw" title="All RAW files">
-        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">RAW</span>
-      </div>`;
-    const videosShortcutRow = `
-      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'video' ? ' on' : ''}" data-type-shortcut="video" title="All video clips">
-        <span class="lib-coll-ic">${ic('video', 14)}</span><span class="lib-coll-lb">Videos</span>
-      </div>`;
     return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
-      </div>${reviewRow}${facesPendingRow}${rawShortcutRow}${videosShortcutRow}`;
+      </div>${reviewRow}${facesPendingRow}`;
     // Note: Drives used to render immediately here. It's now placed by renderCollections()'s own
     // assembly order (see the sidebar reorder comment there) rather than baked into this
     // function's return value, so section order can change in one place.
+    // Note: RAW/Videos used to render here too (as data-type-shortcut rows) — moved into the
+    // Collections section body (renderCollections()) to match Library View.html:331-332, which
+    // puts them as the LAST two rows inside Collections, not as siblings of "All Photos".
+  }
+
+  // RAW/Videos: quick-access shortcuts onto the existing type-filter mechanism (lib-type-filter)
+  // rather than a new backend scope — always shown (unlike reviewRow/facesPendingRow, there's
+  // no catalog_counts field to gate on without a Rust change, and "0 RAW files" is still a
+  // useful thing to see rather than noise). Per Library View.html:331-332, these are the last
+  // two rows INSIDE Collections, not top-level rows next to All Photos.
+  function rawVideoShortcutRows() {
+    const raw = `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'raw' ? ' on' : ''}" data-type-shortcut="raw" title="All RAW files">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">Raw</span>
+      </div>`;
+    const video = `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'video' ? ' on' : ''}" data-type-shortcut="video" title="All video clips">
+        <span class="lib-coll-ic">${ic('video', 14)}</span><span class="lib-coll-lb">Videos</span>
+      </div>`;
+    return raw + video;
   }
 
   // "By Date" — its own top-level section (UI_SPEC.md zone: sidebar tree, wireframe order
@@ -8501,13 +8514,19 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
-      </div>`).join('');
+      </div>`).join('') + rawVideoShortcutRows();
     // Sidebar section order (UI_SPEC.md wireframe order): All Photos (catalogSectionHtml) →
     // By Date (dateSectionHtml, its own top-level section) → Collections → People & Pets →
     // Albums → Drives → Devices → Folders → Cloud. Each section function supplies its OWN
     // leading separator (or none, if it has nothing to show), so reordering here never
     // produces a doubled or missing divider between two adjacent sections.
-    host.innerHTML = catalogSectionHtml() + dateSectionHtml()
+    // The wireframe's `.sec+.sec{border-top}` rule (Library View.html:135) puts a separator
+    // between EVERY adjacent top-level section, including All Photos -> By Date — this one was
+    // missing (only Collections/Folders got an explicit lib-coll-sep) until the wireframe diff
+    // tooling's structural audit flagged it. dateSectionHtml() can return '' (no dates yet), so
+    // the separator is conditional on it — else a bare divider would dangle before Collections.
+    const dateHtml = dateSectionHtml();
+    host.innerHTML = catalogSectionHtml() + (dateHtml ? '<div class="lib-coll-sep"></div>' + dateHtml : '')
       + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
       + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml()
       + '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '')
