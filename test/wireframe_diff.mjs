@@ -71,6 +71,43 @@ async function extract(page, selectorMap) {
   }, { selectorMap, PROPS });
 }
 
+// Structural DOM signature per pair: descendant tag+class shape and own text, independent of
+// computed style. Catches what extract() above cannot — a missing/extra child node (e.g. a
+// `<span class="dayname">`), not just a wrong colour/size on an element both sides do have.
+// This is the gap that let the day-of-week label and card-filename mismatches through a
+// style-only diff undetected.
+async function extractStructure(page, selectorMap) {
+  return page.evaluate(({ selectorMap }) => {
+    const sig = (el) => {
+      if (!el) return null;
+      const descendants = Array.from(el.querySelectorAll('*'))
+        .map((d) => `${d.tagName.toLowerCase()}${d.className && typeof d.className === 'string' ? '.' + d.className.trim().split(/\s+/).join('.') : ''}`)
+        .sort();
+      const ownText = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      return { childCount: el.children.length, descendantCount: descendants.length, descendants, ownText };
+    };
+    const out = {};
+    for (const [key, sel] of Object.entries(selectorMap)) out[key] = sig(document.querySelector(sel));
+    return out;
+  }, { selectorMap });
+}
+
+// Content-based, not class-name-based: the app's markup uses its own `.lib-*` class names
+// throughout, so comparing literal class strings between wireframe and app false-positives on
+// every element (tried and reverted, see the call site's comment). Comparing rendered TEXT
+// content for a specific expected substring is robust to that renaming and still catches a
+// genuinely dropped concept, like the day row's "· Sun" weekday suffix.
+function diffDayRowWeekday(theme, w, a) {
+  const out = [];
+  if (!w || !a) return out;
+  const wHasWeekday = /·\s*(Sun|Mon|Tue|Wed|Thu|Fri|Sat)/i.test(w.ownText);
+  const aHasWeekday = /·\s*(Sun|Mon|Tue|Wed|Thu|Fri|Sat)/i.test(a.ownText);
+  if (wHasWeekday && !aHasWeekday) {
+    out.push(`[${theme}] By Date day row: wireframe shows a weekday suffix ("${w.ownText}"), app does not ("${a.ownText}")`);
+  }
+  return out;
+}
+
 const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 let mismatches = [];
 let missing = [];
@@ -79,7 +116,13 @@ for (const theme of ['dark', 'light']) {
   const wf = await b.newPage({ viewport: VIEWPORT });
   await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Library%20View.html`, { waitUntil: 'load' });
   if (theme === 'dark') await wf.evaluate(() => document.getElementById('app').classList.add('dark'));
-  const wfStyles = await extract(wf, Object.fromEntries(Object.keys(PAIRS).map((k) => [k, k])));
+  const wfSelMap = Object.fromEntries(Object.keys(PAIRS).map((k) => [k, k]));
+  const wfStyles = await extract(wf, wfSelMap);
+  // The By Date tree is real JS, not a static image — its day rows (`.row.sub`) are expanded by
+  // DEFAULT here (`.date-group.collapsed` is the toggled-OFF state, confirmed by reading the
+  // wireframe's own CSS/JS rather than assuming), so no click is needed to see the "· Sun"
+  // weekday suffix. Verify this assumption stays true if the wireframe file ever changes.
+  const wfDayRow = await extractStructure(wf, { dayrow: '.row.sub' });
   await wf.screenshot({ path: `test/output/wireframe_${theme}.png`, fullPage: false });
   await wf.close();
 
@@ -98,6 +141,22 @@ for (const theme of ['dark', 'light']) {
   await app.waitForTimeout(200);
   const appSel = Object.fromEntries(Object.entries(PAIRS).map(([wfSel, [appSelector]]) => [wfSel, appSelector]));
   const appStyles = await extract(app, appSel);
+  // Expand the app's own By Date tree the same way a user would (click the toggle), rather than
+  // assuming its default state — this is the app equivalent of the wireframe expand-check above.
+  const hasDateSection = await app.evaluate(() => !!document.querySelector('[data-date-tree-toggle]'));
+  if (!hasDateSection) {
+    console.log(`[${theme}] WARNING: By Date section did not render in ?libtest=1 (dateCounts.days` +
+      ' is empty in the mock) — the day-row weekday check is SKIPPED, not passing, this run.');
+  }
+  await app.evaluate(() => document.querySelector('[data-date-tree-toggle]')?.click());
+  await app.waitForTimeout(150);
+  await app.evaluate(() => document.querySelectorAll('[data-chev-toggle]').forEach((c) => c.click()));
+  await app.waitForTimeout(150);
+  // A day (leaf) row still carries `data-date-toggle=""` (empty — see dateTreeHtml's `row()`),
+  // so it must be matched by the empty value, not by the attribute's absence.
+  const appDayRow = hasDateSection
+    ? await extractStructure(app, { dayrow: '.lib-tree-row[data-date-toggle=""]:not([data-date-scope="date-nodate"])' })
+    : { dayrow: null };
   await app.screenshot({ path: `test/output/app_${theme}.png`, fullPage: false });
   await app.close();
 
@@ -108,7 +167,15 @@ for (const theme of ['dark', 'light']) {
     for (const p of PROPS) {
       if (!near(w[p], a[p])) mismatches.push(`[${theme}] ${label}: ${p} — wireframe "${w[p]}" vs app "${a[p]}"`);
     }
+    // NOTE: a raw class-name structural diff was tried here and dropped — the app's markup uses
+    // its own `.lib-*`-prefixed class names throughout, so a naive descendant-class comparison
+    // flags nearly every element as "missing" even where the visual/semantic equivalent exists
+    // under a different name (PAIRS above is exactly the hand-built map for that reason). Only
+    // the day-row check below is targeted enough (both sides mapped, checking for a genuinely
+    // absent CONCEPT — a weekday suffix — not a differently-named class) to be worth keeping.
   }
+  if (appDayRow.dayrow) mismatches.push(...diffDayRowWeekday(theme, wfDayRow.dayrow, appDayRow.dayrow));
+  else missing.push(`[${theme}] By Date day row — could not check (By Date section did not render in the harness)`);
 }
 await b.close();
 server.close();

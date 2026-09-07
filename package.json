@@ -4,7 +4,7 @@
   "description": "Chromasmith — offline film-emulation photo editor (iOS shell wraps the single-file web app)",
   "private": true,
   "scripts": {
-    "postinstall": "patch-package",
+    "postinstall": "patch-package && git config core.hooksPath githooks || true",
     "build:www": "./build-ios.sh",
     "sync": "./build-ios.sh && npx cap sync ios",
     "export:test": "node test/export_harness.mjs",
