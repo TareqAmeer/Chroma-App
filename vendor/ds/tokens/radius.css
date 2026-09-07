@@ -1,0 +1,15 @@
+:root{
+--radius-none:0px;
+--radius-xs:5px;
+--radius-sm:8px;
+--radius-md:11px;
+--radius-lg:18px;
+--radius-pill:9999px;
+--radius-full:9999px;
+
+--radius-tile:var(--radius-none);
+--radius-card:var(--radius-lg);
+--radius-action:var(--radius-pill);
+--radius-utility:var(--radius-sm);
+--radius-image-inline:var(--radius-sm);
+}

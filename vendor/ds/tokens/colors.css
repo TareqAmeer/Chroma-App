@@ -1,0 +1,68 @@
+:root{
+/* ── Brand blues (from the Chromasmith palette) ───────────────────────── */
+--blue-slate:#224455;      /* deep slate blue — primary */
+--blue-slate-focus:#2a5468;/* focus-ring sibling */
+--blue-slate-press:#1a3644;/* pressed fill */
+--blue-mist:#61a0af;       /* dusty teal-blue — accent / on-dark link */
+--blue-mist-soft:#e3edf0;  /* 12% mist over white — selected wash */
+
+/* ── Palette semantics ────────────────────────────────────────────────── */
+--red-oxide:#870f13;       /* destructive / error */
+--green-pine:#214e1d;      /* success / "saved" */
+--orange-ember:#ff9b42;    /* warning, highlight, film-grade marker */
+
+/* ── Ink ──────────────────────────────────────────────────────────────── */
+--ink:#1d1d1f;
+--ink-muted-80:#333333;
+--ink-muted-48:#7a7a7a;
+--ink-on-dark:#ffffff;
+--ink-on-dark-muted:#cccccc;
+
+/* ── Surfaces ─────────────────────────────────────────────────────────── */
+--canvas:#ffffff;
+--canvas-parchment:#f5f5f7;
+--canvas-linen:#f0edee;    /* palette off-white — warm alt canvas */
+--surface-pearl:#fafafc;
+--surface-tile-1:#272729;
+--surface-tile-2:#2a2a2c;
+--surface-tile-3:#252527;
+--surface-black:#000000;
+--surface-chip-translucent:#d2d2d7;
+--surface-chip-alpha:rgba(210,210,215,.64);
+
+/* ── Hairlines ────────────────────────────────────────────────────────── */
+--divider-soft:#f0f0f0;
+--hairline:#e0e0e0;
+--hairline-alpha:rgba(0,0,0,.08);
+
+/* ── Semantic aliases ─────────────────────────────────────────────────── */
+--primary:var(--blue-slate);
+--primary-focus:var(--blue-slate-focus);
+--primary-active:var(--blue-slate-press);
+--primary-on-dark:var(--blue-mist);
+--accent:var(--blue-mist);
+--on-primary:#ffffff;
+--on-dark:#ffffff;
+
+--text-body:var(--ink);
+--text-strong:var(--ink);
+--text-muted:var(--ink-muted-48);
+--text-secondary:var(--ink-muted-80);
+--text-on-dark:var(--ink-on-dark);
+--text-on-dark-muted:var(--ink-on-dark-muted);
+--text-link:var(--primary);
+--text-link-on-dark:var(--primary-on-dark);
+
+--surface-page:var(--canvas);
+--surface-alt:var(--canvas-parchment);
+--surface-card:var(--canvas);
+--surface-ghost:var(--surface-pearl);
+--surface-inverse:var(--surface-tile-1);
+
+--border-card:var(--hairline);
+--border-soft:var(--divider-soft);
+
+--state-danger:var(--red-oxide);
+--state-success:var(--green-pine);
+--state-warning:var(--orange-ember);
+}

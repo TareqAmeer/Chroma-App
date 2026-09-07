@@ -681,7 +681,50 @@
   // takeover mode still uses position:fixed below — that's a deliberate full-screen
   // replacement of the editor, not a coexistence case, so overlap can't apply there either.
   const DOCK_W = 356;
-  style.textContent = `
+  // Design-system tokens + SF Pro faces, transplanted from chromasmith-design/project/_ds/
+  // (vendor/ds/ is the runtime copy — see build-desktop.sh, which already `cp -R vendor`).
+  // Declared as custom properties scoped to #lib-overlay itself (not :root) so they become
+  // this app's own properties rather than a separate stylesheet dependency, matching
+  // chromasmith-22.html's own single-file @font-face convention (CLAUDE.md §3b) — except these
+  // are loaded from relative vendor/ files, not base64, because desktop/dist/ is a real
+  // multi-file bundle (unlike the offline single-file web app) and 8 SF Pro weights would add
+  // ~17MB of base64 text to a JS file re-parsed on every launch. Only the four non-italic
+  // weights the wireframe actually sets (300/400/600/700) are vendored — no italic anywhere
+  // in Library View.html.
+  const DS_FONTS = `
+    @font-face{font-family:"SF Pro Display";font-style:normal;font-weight:300;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Display-Light.otf") format("opentype")}
+    @font-face{font-family:"SF Pro Display";font-style:normal;font-weight:400;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Display-Regular.otf") format("opentype")}
+    @font-face{font-family:"SF Pro Display";font-style:normal;font-weight:600;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Display-Semibold.otf") format("opentype")}
+    @font-face{font-family:"SF Pro Display";font-style:normal;font-weight:700;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Display-Bold.otf") format("opentype")}
+    @font-face{font-family:"SF Pro Text";font-style:normal;font-weight:300;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Text-Light.otf") format("opentype")}
+    @font-face{font-family:"SF Pro Text";font-style:normal;font-weight:400;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Text-Regular.otf") format("opentype")}
+    @font-face{font-family:"SF Pro Text";font-style:normal;font-weight:600;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Text-Semibold.otf") format("opentype")}
+    @font-face{font-family:"SF Pro Text";font-style:normal;font-weight:700;font-display:swap;src:url("vendor/ds/fonts/SF-Pro-Text-Bold.otf") format("opentype")}
+    #lib-overlay{
+      --blue-slate:#224455;--blue-slate-focus:#2a5468;--blue-slate-press:#1a3644;
+      --blue-mist:#61a0af;--blue-mist-soft:#e3edf0;
+      --red-oxide:#870f13;--green-pine:#214e1d;--orange-ember:#ff9b42;
+      --ink:#1d1d1f;--ink-muted-80:#333333;--ink-muted-48:#7a7a7a;
+      --ink-on-dark:#ffffff;--ink-on-dark-muted:#cccccc;
+      --canvas:#ffffff;--canvas-parchment:#f5f5f7;--canvas-linen:#f0edee;
+      --surface-pearl:#fafafc;--surface-tile-1:#272729;--surface-tile-2:#2a2a2c;--surface-tile-3:#252527;
+      --surface-black:#000000;--surface-chip-translucent:#d2d2d7;--surface-chip-alpha:rgba(210,210,215,.64);
+      --divider-soft:#f0f0f0;--hairline:#e0e0e0;--hairline-alpha:rgba(0,0,0,.08);
+      --primary:var(--blue-slate);--primary-focus:var(--blue-slate-focus);--primary-active:var(--blue-slate-press);
+      --primary-on-dark:var(--blue-mist);--accent:var(--blue-mist);--on-primary:#ffffff;--on-dark:#ffffff;
+      --surface-alt:var(--canvas-parchment);--surface-ghost:var(--surface-pearl);--surface-inverse:var(--surface-tile-1);
+      --state-danger:var(--red-oxide);--state-success:var(--green-pine);--state-warning:var(--orange-ember);
+      --font-display:"SF Pro Display",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+      --font-text:"SF Pro Text",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+      --weight-light:300;--weight-regular:400;--weight-semibold:600;--weight-bold:700;
+      --space-xxs:4px;--space-xs:8px;--space-sm:12px;--space-md:17px;--space-lg:24px;--space-xl:32px;
+      --radius-none:0px;--radius-xs:5px;--radius-sm:8px;--radius-md:11px;--radius-lg:18px;--radius-pill:9999px;--radius-full:9999px;
+      --shadow-product:rgba(0,0,0,.22) 3px 5px 30px 0;
+      --ring-hairline:inset 0 0 0 1px var(--hairline-alpha);--focus-ring:0 0 0 2px var(--primary-focus);
+      --ease-standard:cubic-bezier(.4,0,.6,1);--duration-press:120ms;--duration-fade:300ms;
+    }
+  `;
+  style.textContent = DS_FONTS + `
     /* overflow:hidden — nothing (grid blowout, an oversized top bar) can ever paint past this
        column into the editor preview, whatever mode/width it's in. */
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;overflow:hidden;
