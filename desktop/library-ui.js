@@ -5803,12 +5803,22 @@
   // Theme: dark is the default (Library View.html's own default state + Tareq's call), .lib-light
   // is the alternate — see the #lib-overlay / #lib-overlay.lib-light token remap in the injected
   // <style> above, which is what makes this one class flip every existing rule's palette.
-  state.libTheme = localStorage.getItem('chromasmith_lib_theme') || 'dark';
+  // Shares 'csTheme' with the Editor (chromasmith-22.html L4467/L20124) rather than its own key —
+  // both apps live in the same page/localStorage, and 'chromasmith_lib_theme' used to drift out of
+  // sync with the Editor's own toggle since they were two independent keys for one visual setting.
+  // One-time migration: an existing legacy value wins over the Editor's default so switching to
+  // the shared key doesn't silently flip anyone's already-chosen Library theme.
+  try {
+    const legacy = localStorage.getItem('chromasmith_lib_theme');
+    if (legacy && !localStorage.getItem('csTheme')) localStorage.setItem('csTheme', legacy);
+    if (legacy) localStorage.removeItem('chromasmith_lib_theme');
+  } catch {}
+  state.libTheme = localStorage.getItem('csTheme') || 'dark';
   overlay.classList.toggle('lib-light', state.libTheme === 'light');
   viewMenu.querySelectorAll('.opt[data-theme]').forEach((opt) => {
     opt.onclick = () => {
       state.libTheme = opt.dataset.theme;
-      localStorage.setItem('chromasmith_lib_theme', state.libTheme);
+      localStorage.setItem('csTheme', state.libTheme);
       overlay.classList.toggle('lib-light', state.libTheme === 'light');
       syncViewMenuChecks();
     };
