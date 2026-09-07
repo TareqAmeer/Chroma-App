@@ -1,0 +1,1133 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chromasmith — Visual User Flow Diagram</title>
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/colors.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/typography.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/radius.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/elevation.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  :root {
+    --ds-slate: #224455;
+    --ds-slate-focus: #2a5468;
+    --ds-mist: #61A0AF;
+    --ds-mist-soft: rgba(97, 160, 175, 0.16);
+    --ds-linen: #F0EDEE;
+    --ds-parchment: #F5F5F7;
+    --ds-dark-tile: #1C1C1E;
+    --ds-dark-surface: #272729;
+    --ds-ink: #1D1D1F;
+    --ds-ink-muted: #7A7A7A;
+    --ds-border: rgba(0, 0, 0, 0.08);
+    --ds-border-dark: rgba(255, 255, 255, 0.12);
+    --ds-pine: #214E1D;
+    --ds-ember: #FF9B42;
+    --ds-oxide: #870F13;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    background-color: var(--ds-parchment);
+    color: var(--ds-ink);
+    min-height: 100vh;
+    padding: 36px 32px 64px;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: auto;
+  }
+
+  /* Header */
+  .flow-header {
+    max-width: 1400px;
+    margin: 0 auto 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    border-bottom: 1px solid var(--ds-border);
+    padding-bottom: 24px;
+  }
+  .brand-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .brand-logo {
+    height: 32px;
+    width: auto;
+    display: block;
+  }
+  .flow-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--ds-slate);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 9999px;
+  }
+  .header-meta h1 {
+    font-family: "SF Pro Display", -apple-system, sans-serif;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ds-ink);
+    margin-top: 4px;
+  }
+  .header-meta p {
+    font-size: 14px;
+    color: var(--ds-ink-muted);
+    margin-top: 2px;
+  }
+
+  /* Legend & Interactive Filter Bar */
+  .legend-bar {
+    max-width: 1400px;
+    margin: 0 auto 28px;
+    background: #fff;
+    border: 1px solid var(--ds-border);
+    border-radius: 12px;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .legend-items {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--ds-ink);
+  }
+  .legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .dot.splash { background: var(--ds-ember); }
+  .dot.catalog { background: var(--ds-mist); }
+  .dot.editor { background: var(--ds-slate); }
+  .dot.export { background: var(--ds-pine); }
+  .dot.branch { background: #8E8E93; }
+
+  .legend-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .view-btn {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--ds-border);
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .view-btn:hover { background: var(--ds-parchment); }
+  .view-btn.active {
+    background: var(--ds-slate);
+    color: #fff;
+    border-color: var(--ds-slate);
+  }
+
+  /* Flow Canvas Container */
+  .canvas-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    position: relative;
+    padding: 20px 0 40px;
+  }
+
+  /* SVG Connections Overlay */
+  .flow-connectors {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .connector-line {
+    fill: none;
+    stroke: var(--ds-slate);
+    stroke-width: 2px;
+    stroke-linecap: round;
+    stroke-dasharray: 6 4;
+    animation: dashflow 30s linear infinite;
+    opacity: 0.6;
+  }
+  .connector-line.solid {
+    stroke-dasharray: none;
+    opacity: 0.85;
+  }
+  .connector-line.branch {
+    stroke: #8E8E93;
+    stroke-dasharray: 4 4;
+  }
+  @keyframes dashflow {
+    to { stroke-dashoffset: -200; }
+  }
+
+  /* Grid Layout of Flow Steps */
+  .flow-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 32px;
+    align-items: start;
+  }
+
+  /* Flow Column */
+  .flow-col {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .stage-badge {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ds-slate);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--ds-slate);
+  }
+  .stage-badge.secondary {
+    color: #8E8E93;
+    border-color: #D1D1D6;
+  }
+
+  /* Step Card */
+  .flow-card {
+    background: #fff;
+    border: 1px solid var(--ds-border);
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.04);
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .flow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(34, 68, 85, 0.12);
+    border-color: var(--ds-mist);
+  }
+  .flow-card.active {
+    border: 2px solid var(--ds-slate);
+    box-shadow: 0 8px 26px rgba(34, 68, 85, 0.18);
+  }
+
+  /* Card Header */
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .step-index {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--ds-linen);
+    color: var(--ds-slate);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+  }
+  .step-meta {
+    flex: 1;
+  }
+  .step-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ds-ink);
+    line-height: 1.3;
+  }
+  .step-type {
+    font-size: 11px;
+    color: var(--ds-ink-muted);
+    margin-top: 2px;
+    display: block;
+  }
+
+  /* Miniature Screen Mockup */
+  .mockup-frame {
+    background: var(--ds-parchment);
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 8px;
+    height: 110px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+  .mockup-frame.dark {
+    background: var(--ds-dark-tile);
+    color: #fff;
+  }
+
+  /* Mini UI Elements inside mockups */
+  .mini-topbar {
+    height: 14px;
+    background: rgba(0,0,0,0.06);
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    gap: 4px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  .dark .mini-topbar {
+    background: #111;
+    border-color: rgba(255,255,255,0.08);
+  }
+  .mini-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #bbb;
+  }
+  .dark .mini-dot { background: #555; }
+  .mini-body {
+    flex: 1;
+    display: flex;
+    padding: 8px;
+    gap: 6px;
+  }
+
+  /* Mockup Variations */
+  /* 1. Splash */
+  .mockup-splash {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #15181b;
+  }
+  .splash-logo-line {
+    width: 60px;
+    height: 12px;
+    background: #fff;
+    border-radius: 3px;
+    opacity: 0.9;
+  }
+  .splash-bar {
+    width: 45px;
+    height: 3px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .splash-bar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 60%;
+    background: var(--ds-mist);
+  }
+
+  /* 2. Library Grid */
+  .mini-sidebar {
+    width: 25%;
+    background: rgba(0,0,0,0.04);
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .mini-sidebar-line {
+    height: 3px;
+    background: #ccd;
+    border-radius: 2px;
+  }
+  .mini-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+  .mini-cell {
+    background: #e2e2e4;
+    border-radius: 3px;
+    aspect-ratio: 1;
+  }
+  .mini-cell.selected {
+    outline: 1.5px solid var(--ds-slate);
+    background: #d4e0e4;
+  }
+
+  /* 3. Ingestion Modal */
+  .mini-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mini-modal {
+    width: 75%;
+    height: 75%;
+    background: #fff;
+    border-radius: 5px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mini-modal-header {
+    height: 6px;
+    width: 40%;
+    background: var(--ds-slate);
+    border-radius: 2px;
+  }
+  .mini-modal-body {
+    flex: 1;
+    background: var(--ds-parchment);
+    border-radius: 3px;
+  }
+
+  /* 4. Develop / Editor */
+  .mini-develop-wrap {
+    flex: 1;
+    display: flex;
+    gap: 4px;
+  }
+  .mini-photo-canvas {
+    flex: 1;
+    background: #000;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mini-film-plate {
+    width: 50px;
+    height: 34px;
+    background: #2a3439;
+    border: 1px solid #444;
+  }
+  .mini-inspector {
+    width: 28%;
+    background: #25282a;
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mini-slider-line {
+    height: 3px;
+    background: #444;
+    border-radius: 2px;
+    position: relative;
+  }
+  .mini-slider-line::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 50%;
+    height: 100%;
+    background: var(--ds-mist);
+  }
+
+  /* 5. Export Dialog */
+  .mini-export-sheet {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mini-export-box {
+    width: 80%;
+    background: #fff;
+    border-radius: 5px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mini-btn {
+    height: 8px;
+    width: 32px;
+    background: var(--ds-slate);
+    border-radius: 2px;
+    align-self: flex-end;
+  }
+
+  /* Card Features & Triggers */
+  .feature-list {
+    list-style: none;
+    font-size: 12px;
+    color: #444;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 12px;
+  }
+  .feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .feature-list li::before {
+    content: "•";
+    color: var(--ds-slate);
+    font-weight: bold;
+  }
+
+  /* Trigger Badge */
+  .trigger-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--ds-parchment);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--ds-slate);
+    font-weight: 500;
+  }
+  .trigger-key {
+    background: #fff;
+    border: 1px solid #d0d0d5;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  /* Decision Branch Box */
+  .branch-card {
+    background: #fdfdfd;
+    border: 1px dashed #B0B0B8;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 12px;
+  }
+  .branch-title {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ds-slate);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .branch-desc {
+    color: var(--ds-ink-muted);
+    font-size: 11px;
+    line-height: 1.4;
+    margin-bottom: 8px;
+  }
+  .branch-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .branch-tag {
+    font-size: 10px;
+    background: #EDEDF0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #444;
+  }
+
+  /* Detail Drawer / Inspection Panel */
+  .flow-detail-drawer {
+    max-width: 1400px;
+    margin: 32px auto 0;
+    background: #fff;
+    border: 1px solid var(--ds-border);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 28px;
+  }
+  .drawer-col h3 {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ds-slate);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .drawer-col p, .drawer-col ul {
+    font-size: 13px;
+    color: #444;
+    line-height: 1.5;
+  }
+  .drawer-col ul {
+    padding-left: 18px;
+    margin-top: 8px;
+  }
+  .spec-table {
+    width: 100%;
+    font-size: 12px;
+    border-collapse: collapse;
+    margin-top: 6px;
+  }
+  .spec-table td {
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  .spec-table td:first-child {
+    color: var(--ds-ink-muted);
+    width: 40%;
+  }
+  .spec-table td:last-child {
+    font-weight: 500;
+    color: var(--ds-ink);
+  }
+
+  @media (max-width: 1180px) {
+    .flow-grid {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+    .flow-connectors { display: none; }
+  }
+</style>
+<style type="text/css"></style></head>
+<body>
+
+  <!-- Top Header -->
+  <header class="flow-header">
+    <div class="brand-group">
+      <div class="flow-badge">User Architecture</div>
+      <div class="header-meta">
+        <h1>Chromasmith Core User Journey</h1>
+        <p>End-to-end visual interaction flow from cold startup to calibrated photo delivery.</p>
+      </div>
+    </div>
+    <div>
+      <span style="font-size: 12px; color: var(--ds-ink-muted);">Version 1.0 · macOS Apple HIG Aligned</span>
+    </div>
+  </header>
+
+  <!-- Interactive Controls & Legend -->
+  <div class="legend-bar">
+    <div class="legend-items">
+      <span style="font-weight: 600;">Journey Stages:</span>
+      <div class="legend-pill"><span class="dot splash"></span> 01. Launch &amp; Sync</div>
+      <div class="legend-pill"><span class="dot catalog"></span> 02. Ingest &amp; Culling</div>
+      <div class="legend-pill"><span class="dot editor"></span> 03. Develop &amp; Emulate</div>
+      <div class="legend-pill"><span class="dot branch"></span> 04. Batch &amp; Sync</div>
+      <div class="legend-pill"><span class="dot export"></span> 05. Export &amp; Delivery</div>
+    </div>
+    <div class="legend-actions">
+      <button class="view-btn active" id="btn-all-flows">Complete Journey</button>
+      <button class="view-btn" id="btn-primary-flow">Happy Path</button>
+      <button class="view-btn" id="btn-batch-flow">Batch Recipes</button>
+    </div>
+  </div>
+
+  <!-- Visual Workflow Diagram Canvas -->
+  <div class="canvas-container">
+    
+    <!-- SVG Connection Lines -->
+    <svg class="flow-connectors" id="svg-connectors">
+      <!-- 1 -> 2 -->
+      <path d="M 270 180 L 295 180 L 295 180 L 315 180" class="connector-line solid"></path>
+      <!-- 2 -> 3 -->
+      <path d="M 570 180 L 610 180" class="connector-line solid"></path>
+      <!-- 3 -> 4 -->
+      <path d="M 870 180 L 910 180" class="connector-line solid"></path>
+      <!-- 4 -> 5 -->
+      <path d="M 1170 180 L 1210 180" class="connector-line solid"></path>
+      
+      <!-- Branch: 2 (Library) to 2b (Import Modal) -->
+      <path d="M 440 260 L 440 330" class="connector-line branch"></path>
+      <!-- Branch: 4 (Develop) to 4b (Batch Recipe) -->
+      <path d="M 1040 320 L 1040 370" class="connector-line branch"></path>
+    </svg>
+
+    <!-- Main Grid Columns -->
+    <div class="flow-grid">
+
+      <!-- STAGE 1: Splash & Cataloging -->
+      <div class="flow-col">
+        <div class="stage-badge">01 · Launch &amp; Cache</div>
+
+        <div class="flow-card active" data-step="splash">
+          <div class="card-top">
+            <div class="step-index">1</div>
+            <div class="step-meta">
+              <div class="step-title">Splash &amp; Indexer</div>
+              <span class="step-type">System State · Auto</span>
+            </div>
+          </div>
+          <div class="mockup-frame dark">
+            <div class="mockup-splash">
+              <div class="splash-logo-line"></div>
+              <div class="splash-bar"></div>
+              <span style="font-size: 8px; color: #888; font-family: monospace; margin-top: 4px;">Syncing 4,000 raws...</span>
+            </div>
+          </div>
+          <ul class="feature-list">
+            <li>Zero-wait cached catalog launch</li>
+            <li>Background SQLite index verification</li>
+            <li>External drive connectivity check</li>
+          </ul>
+          <div class="trigger-action">
+            <span>Next: Immediate Entry</span>
+            <span class="trigger-key">Auto</span>
+          </div>
+        </div>
+
+        <div class="branch-card">
+          <div class="branch-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><polyline points="21 3 21 9 15 9"></polyline></svg>
+            Drive Detection
+          </div>
+          <div class="branch-desc">If external SSD is absent, library displays cached preview proxies with reconnection prompt.</div>
+          <div class="branch-tags">
+            <span class="branch-tag">Offline Proxy</span>
+            <span class="branch-tag">Auto-relink</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- STAGE 2: Library & Culling -->
+      <div class="flow-col">
+        <div class="stage-badge">02 · Contact Sheet</div>
+
+        <div class="flow-card active" data-step="library">
+          <div class="card-top">
+            <div class="step-index">2</div>
+            <div class="step-meta">
+              <div class="step-title">Library View</div>
+              <span class="step-type">Master Workspace</span>
+            </div>
+          </div>
+          <div class="mockup-frame">
+            <div class="mini-topbar">
+              <div class="mini-dot"></div><div class="mini-dot"></div>
+            </div>
+            <div class="mini-body">
+              <div class="mini-sidebar">
+                <div class="mini-sidebar-line" style="width:70%;"></div>
+                <div class="mini-sidebar-line" style="width:90%;"></div>
+                <div class="mini-sidebar-line" style="width:60%;"></div>
+              </div>
+              <div class="mini-grid">
+                <div class="mini-cell"></div>
+                <div class="mini-cell selected"></div>
+                <div class="mini-cell"></div>
+                <div class="mini-cell"></div>
+                <div class="mini-cell"></div>
+                <div class="mini-cell"></div>
+              </div>
+            </div>
+          </div>
+          <ul class="feature-list">
+            <li>High-density grid / table views</li>
+            <li>Keyboard triage: Pick, Reject, Fav</li>
+            <li>Date, camera, and ISO facets</li>
+          </ul>
+          <div class="trigger-action">
+            <span>Double Click or Key</span>
+            <span class="trigger-key">Return / D</span>
+          </div>
+        </div>
+
+        <!-- Secondary Modal Step -->
+        <div class="flow-card" data-step="import">
+          <div class="card-top">
+            <div class="step-index">2b</div>
+            <div class="step-meta">
+              <div class="step-title">Ingestion Sheet</div>
+              <span class="step-type">Action · Modal Dialog</span>
+            </div>
+          </div>
+          <div class="mockup-frame">
+            <div class="mini-modal-overlay">
+              <div class="mini-modal">
+                <div class="mini-modal-header"></div>
+                <div class="mini-modal-body"></div>
+              </div>
+            </div>
+          </div>
+          <ul class="feature-list">
+            <li>In-place indexing vs file copy</li>
+            <li>Initial film stock look assignment</li>
+            <li>EXIF / Copyright injection</li>
+          </ul>
+          <div class="trigger-action">
+            <span>Trigger from Toolbar</span>
+            <span class="trigger-key">⌘ + I</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- STAGE 3: Editor / Develop -->
+      <div class="flow-col">
+        <div class="stage-badge">03 · Develop Engine</div>
+
+        <div class="flow-card active" data-step="develop">
+          <div class="card-top">
+            <div class="step-index">3</div>
+            <div class="step-meta">
+              <div class="step-title">Develop View</div>
+              <span class="step-type">Single Photo Studio</span>
+            </div>
+          </div>
+          <div class="mockup-frame dark">
+            <div class="mini-topbar">
+              <div class="mini-dot"></div><div class="mini-dot"></div>
+            </div>
+            <div class="mini-body">
+              <div class="mini-develop-wrap">
+                <div class="mini-photo-canvas">
+                  <div class="mini-film-plate"></div>
+                </div>
+                <div class="mini-inspector">
+                  <div class="mini-slider-line"></div>
+                  <div class="mini-slider-line"></div>
+                  <div style="height:14px; background:#333; border-radius:2px;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <ul class="feature-list">
+            <li>Film stocks (Portra, Ektar, Tri-X)</li>
+            <li>Subtle halation &amp; optical grain curves</li>
+            <li>Custom 3D LUT loader (.cube)</li>
+          </ul>
+          <div class="trigger-action">
+            <span>Toggle Compare View</span>
+            <span class="trigger-key">\ (Before/After)</span>
+          </div>
+        </div>
+
+        <div class="branch-card">
+          <div class="branch-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+            Selective Masking
+          </div>
+          <div class="branch-desc">Sub-tier panel for subject segmentation, linear gradients, and film gate borders.</div>
+          <div class="branch-tags">
+            <span class="branch-tag">Radial Mask</span>
+            <span class="branch-tag">Grain Falloff</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- STAGE 4: Batch Management -->
+      <div class="flow-col">
+        <div class="stage-badge secondary">04 · Roll Management</div>
+
+        <div class="flow-card" data-step="batch">
+          <div class="card-top">
+            <div class="step-index">4</div>
+            <div class="step-meta">
+              <div class="step-title">Recipe Sync</div>
+              <span class="step-type">Multi-Asset Workflow</span>
+            </div>
+          </div>
+          <div class="mockup-frame dark">
+            <div style="flex:1; display:flex; flex-direction:column; padding:8px; gap:4px; justify-content:center;">
+              <div style="height:12px; width:70%; background:var(--ds-slate); border-radius:3px;"></div>
+              <div style="display:flex; gap:4px; margin-top:4px;">
+                <div style="flex:1; height:36px; background:#252528; border-radius:3px;"></div>
+                <div style="flex:1; height:36px; background:#252528; border:1px solid var(--ds-mist); border-radius:3px;"></div>
+                <div style="flex:1; height:36px; background:#252528; border:1px solid var(--ds-mist); border-radius:3px;"></div>
+              </div>
+            </div>
+          </div>
+          <ul class="feature-list">
+            <li>Sync recipe across selected shoot</li>
+            <li>Exclude crop &amp; local spot heals</li>
+            <li>Save custom stock as User Preset</li>
+          </ul>
+          <div class="trigger-action">
+            <span>Copy &amp; Sync Settings</span>
+            <span class="trigger-key">⇧ + ⌘ + C / V</span>
+          </div>
+        </div>
+
+        <div class="branch-card">
+          <div class="branch-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Film Packs Store
+          </div>
+          <div class="branch-desc">Direct in-app store route for purchasing authentic archival emulation packs.</div>
+          <div class="branch-tags">
+            <span class="branch-tag">Perpetual</span>
+            <span class="branch-tag">Instant Unlock</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- STAGE 5: Export & Delivery -->
+      <div class="flow-col">
+        <div class="stage-badge">05 · Delivery</div>
+
+        <div class="flow-card active" data-step="export">
+          <div class="card-top">
+            <div class="step-index">5</div>
+            <div class="step-meta">
+              <div class="step-title">Export Sheet</div>
+              <span class="step-type">Final Production</span>
+            </div>
+          </div>
+          <div class="mockup-frame">
+            <div class="mini-export-sheet">
+              <div class="mini-export-box">
+                <div style="height:6px; width:50%; background:#888; border-radius:2px;"></div>
+                <div style="height:4px; width:90%; background:#ccc; border-radius:2px;"></div>
+                <div class="mini-btn"></div>
+              </div>
+            </div>
+          </div>
+          <ul class="feature-list">
+            <li>Format: JPEG, TIFF 16-bit, ProRAW</li>
+            <li>Color Space: sRGB, Display P3, AdobeRGB</li>
+            <li>3D LUT export (.cube 33pt / 65pt)</li>
+          </ul>
+          <div class="trigger-action">
+            <span>Export Photos</span>
+            <span class="trigger-key">⌘ + E</span>
+          </div>
+        </div>
+
+        <div class="branch-card" style="border-color: var(--ds-pine); background: rgba(33, 78, 29, 0.04);">
+          <div class="branch-title" style="color: var(--ds-pine);">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Output Complete
+          </div>
+          <div class="branch-desc">Delivery files written to disk; status bar indicators update catalog sync status automatically.</div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Detailed Inspector Panel for Selected Step -->
+  <div class="flow-detail-drawer" id="detail-drawer">
+    <div class="drawer-col">
+      <h3 id="drawer-title">Active Scenario: Develop View</h3>
+      <p id="drawer-desc">The primary single-photo darkroom workstation where physical film characteristics are computed onto digital RAW sensors.</p>
+      <table class="spec-table">
+        <tbody><tr>
+          <td>Screen ID</td>
+          <td id="drawer-id">develop-master</td>
+        </tr>
+        <tr>
+          <td>UI Modality</td>
+          <td id="drawer-modal">Split Pane + Floating Filmstrip</td>
+        </tr>
+        <tr>
+          <td>Primary Palette</td>
+          <td id="drawer-theme">Darkroom (#1C1C1E / #224455)</td>
+        </tr>
+      </tbody></table>
+    </div>
+
+    <div class="drawer-col">
+      <h3>Key Interactive Triggers</h3>
+      <ul id="drawer-triggers">
+        <li><strong>Left / Right Arrows:</strong> Rapid filmstrip switching</li>
+        <li><strong>Spacebar:</strong> Quick 100% pixel loupe zoom</li>
+        <li><strong>\ (Backslash):</strong> Instant before / after split preview</li>
+        <li><strong>⌘ + C:</strong> Copy current film stock grading recipe</li>
+      </ul>
+    </div>
+
+    <div class="drawer-col">
+      <h3>Wireframe Implementation Target</h3>
+      <p>This flow connects directly into the <strong>Develop View.dc.html</strong> component currently staged on your canvas, completing the pipeline with:</p>
+      <ul>
+        <li>Interactive Ingestion Sheet Modal</li>
+        <li>LUT &amp; Grain Sub-panels</li>
+        <li>Unified Export Configuration Popover</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const stepDetails = {
+      splash: {
+        title: "01 · Splash & Indexer",
+        desc: "Cold start initialization. Scans local raw index databases, establishes hardware GPU acceleration for the color science engine, and validates catalog caches.",
+        id: "splash-screen",
+        modal: "Bordered Window Frame",
+        theme: "Dark Slate (#15181B)",
+        triggers: [
+          "Automatic transition once database cache verification completes (<600ms)",
+          "Prompts for external volume if primary library lives on disconnected SSD",
+          "Esc: Quit application"
+        ]
+      },
+      library: {
+        title: "02 · Library & Contact Sheet",
+        desc: "The asset hub. Provides fluid responsive grid scaling, date-grouped collections, smart culling flags, and metadata overlays.",
+        id: "library-view",
+        modal: "Full Workspace Window",
+        theme: "Apple Light Canvas (#F5F5F7)",
+        triggers: [
+          "Return / Double Click: Enter Develop View with selected photo",
+          "P / X / U: Mark photo as Pick, Reject, or Unflagged",
+          "Cmd + I: Open Ingestion Sheet dialog",
+          "1 to 5: Numerical star ratings"
+        ]
+      },
+      import: {
+        title: "02b · Ingestion Sheet Modal",
+        desc: "Import manager enabling photographers to choose between referencing files in-place or organizing them into structured catalog folders.",
+        id: "modal-import",
+        modal: "Modal Sheet (Apple HIG)",
+        theme: "System Modal Light",
+        triggers: [
+          "Drag & drop folder or SD card onto dropzone",
+          "Option to auto-apply a default film stock (e.g., Kodak Portra 400) upon import",
+          "Enter: Begin parallelized background import"
+        ]
+      },
+      develop: {
+        title: "03 · Develop & Emulation Engine",
+        desc: "Chromasmith's core workstation: applying real-time spectral response curves, film stock profiles, measured halation, and 3D LUTs directly to RAW sensor bayer data.",
+        id: "develop-view",
+        modal: "Full Workstation (Focus Mode)",
+        theme: "True Dark Tile (#1C1C1E / True Black #000)",
+        triggers: [
+          "\\ (Backslash): Toggle split before-and-after view",
+          "Up / Down arrow keys: Step through Film stock presets",
+          "Strength slider: Dial look intensity from 0% to 150%",
+          "Cmd + E: Forward straight to Export Sheet"
+        ]
+      },
+      batch: {
+        title: "04 · Recipe Sync & Roll Manager",
+        desc: "Batch processing pipeline to replicate consistent film grading across an entire photographic series or shoot day.",
+        id: "batch-sync-drawer",
+        modal: "Bottom Drawer / Inspector Overlay",
+        theme: "Dark Tile (#272729)",
+        triggers: [
+          "Shift + Click: Multi-select roll in bottom filmstrip",
+          "Cmd + Shift + V: Paste recipe with selective parameter checkboxes",
+          "Option + Drag: Apply look to adjacent photo sequence"
+        ]
+      },
+      export: {
+        title: "05 · Export & Delivery Sheet",
+        desc: "Color space conversion, bit-depth packaging, custom watermark embedding, and professional .cube 3D LUT export for cinematographers and colorists.",
+        id: "modal-export",
+        modal: "Modal Sheet / Overlay",
+        theme: "Light Canvas with Slate Blue Accents",
+        triggers: [
+          "Cmd + E: Open export configuration sheet",
+          "Dropdown: Select Color Space (sRGB, P3, AdobeRGB)",
+          "Enter: Execute non-blocking background queue"
+        ]
+      }
+    };
+
+    const cards = document.querySelectorAll('.flow-card');
+    cards.forEach(card => {
+      card.addEventListener('click', () => {
+        cards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        const step = card.dataset.step;
+        if (stepDetails[step]) {
+          const d = stepDetails[step];
+          document.getElementById('drawer-title').textContent = d.title;
+          document.getElementById('drawer-desc').textContent = d.desc;
+          document.getElementById('drawer-id').textContent = d.id;
+          document.getElementById('drawer-modal').textContent = d.modal;
+          document.getElementById('drawer-theme').textContent = d.theme;
+          
+          const ul = document.getElementById('drawer-triggers');
+          ul.innerHTML = '';
+          d.triggers.forEach(t => {
+            const li = document.createElement('li');
+            li.textContent = t;
+            ul.appendChild(li);
+          });
+        }
+      });
+    });
+
+    // Filtering controls
+    const btnAll = document.getElementById('btn-all-flows');
+    const btnPrimary = document.getElementById('btn-primary-flow');
+    const btnBatch = document.getElementById('btn-batch-flow');
+
+    btnAll.onclick = () => {
+      [btnAll, btnPrimary, btnBatch].forEach(b => b.classList.remove('active'));
+      btnAll.classList.add('active');
+      document.querySelectorAll('.flow-card, .branch-card').forEach(el => el.style.opacity = '1');
+    };
+
+    btnPrimary.onclick = () => {
+      [btnAll, btnPrimary, btnBatch].forEach(b => b.classList.remove('active'));
+      btnPrimary.classList.add('active');
+      document.querySelectorAll('.flow-card').forEach(el => {
+        const isHappy = ['splash', 'library', 'develop', 'export'].includes(el.dataset.step);
+        el.style.opacity = isHappy ? '1' : '0.25';
+      });
+      document.querySelectorAll('.branch-card').forEach(el => el.style.opacity = '0.25');
+    };
+
+    btnBatch.onclick = () => {
+      [btnAll, btnPrimary, btnBatch].forEach(b => b.classList.remove('active'));
+      btnBatch.classList.add('active');
+      document.querySelectorAll('.flow-card').forEach(el => {
+        const isBatch = ['library', 'develop', 'batch', 'export'].includes(el.dataset.step);
+        el.style.opacity = isBatch ? '1' : '0.25';
+      });
+      document.querySelectorAll('.branch-card').forEach(el => el.style.opacity = '0.8');
+    };
+  </script>
+
+
+</body></html>
