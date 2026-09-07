@@ -1,70 +1,63 @@
-# Handover — wireframe fidelity pass (Library + Editor)
+# Handover — wireframe fidelity pass, part 2 (structural inventory)
 
-## Status
-Library: 71 → 15 mismatches (`node test/wireframe_diff.mjs`).
-Editor: 130 → 57 mismatches (`node test/editor_wireframe_diff.mjs`).
-Every fix this session verified via the tools' own repair-loop recheck (resolved/persisting/new
-against the previous run) — zero regressions shipped.
+## What changed this session
+Replaced the old "check, not a search" wireframe_diff.mjs approach's blind spot with
+`test/wireframe_inventory.mjs` — a real structural diff (extras/missing/counts/geometry/font
+sizes), gated for real in `githooks/pre-commit` (exit code, not a `touch`-able stamp file).
+Raw findings: 75 → 29. `test/wireframe_accepted.json` holds deliberate divergences (Drives
+block, Keywords section, Albums "+", no-date bucket, mock people/album/device names) — each
+one an explicit user decision, not a guess.
 
-## Key decisions made this session (don't re-litigate without asking again)
-- Library base font-size: **16px** (matches the wireframe literally, not the design-system
-  readme's stated 17px).
-- Editor: **switched app-wide to SF Pro Text** (embedded as base64 OTF, ~12MB — file is now
-  15.5MB). No variable SF Pro font exists in this repo; explicit decision was to accept the
-  size increase rather than slim it down.
-- Editor base font-size: **16px app-wide** (not scoped — chromasmith-22.html has no equivalent
-  to the Library's `#lib-overlay` scoping boundary).
-- Editor color palette: **replaced with the wireframe's literal DS hex values app-wide**
-  (--bg/--sur/--sur2/--bdr/--txt/--mut). `--acc`/`--acc2`/`--ok`/`--err` (brand/semantic colors)
-  were explicitly left untouched — out of DS scope.
-- Two button colors are *intentionally different* between the two apps' wireframes — don't
-  "fix" one to match the other:
-  - Library's Export button: always Slate Blue, never swaps in dark mode.
-  - Editor's Export button: Mist Blue (`#61a0af`), replacing the app's amber `--acc` brand color.
-- Library grid card background/hairline: **always the light parchment plate** (`#f5f5f7` /
-  `#e0e0e0`), even in dark mode — matches the wireframe's own lack of a dark override for `.card`.
-- Editor tool rail: **kept the extra "Image"/"Crop" items** (12 vs wireframe's 10) — explicit
-  decision not to relocate those tools just to match item count.
-- Grid card size (154px vs wireframe's 181px): **not a bug** — it's the user-configurable
-  thumbnail-size default (140px, persisted via localStorage), confirmed already working as
-  intended.
+Fixed this session: Needs Review / Not-Face-Scanned nested under Collections (was siblings of
+All Photos), their label casing, "By date" casing, sort-pill default (date, not name), and a
+missing logo-gap spacer between the logo and search pill.
 
-## Real infrastructure gotcha found this session
-`test/wireframe_diff.mjs` serves `desktop/dist/`, a **built, staged copy** — editing
-`desktop/library-ui.js` directly does nothing until you run `bash build-desktop.sh`. Two fix
-attempts silently showed "0 resolved" before this was caught. Always rebuild before re-running
-the Library diff tool. (The Editor tool serves `chromasmith-22.html` directly — no build step.)
+**Near-miss bug, now guarded against**: a backtick inside a CSS comment (inside library-ui.js's
+HTML template literal) silently truncated the template and crashed the whole Library UI at
+boot ("gap is not defined", no visible syntax error) — the exact bug class CLAUDE.md warns
+about for GLSL comments, just in a different file. Comment now warns explicitly; **always
+rebuild + run `node test/wireframe_inventory.mjs` after ANY library-ui.js edit**, even a
+comment-only one.
 
-## Remaining known items (deferred, not forgotten)
-**Library (~15 mismatches):**
-- Topbar height (52 vs 61px) — likely intentional macOS traffic-light clearance padding, not
-  confirmed either way.
-- Sidebar height (820 vs 811px) — minor, low-value to chase.
-- Rest are 0-width-border-side computed-style artifacts (confirmed via `borderWidth` matching
-  at 0 on both sides in the tool's own report) — invisible in practice.
+## Remaining findings (29 raw, un-allowlisted — real, not yet fixed)
+**Topbar:**
+- Search placeholder text differs from wireframe ("Search filename… (Enter for AI search)" vs
+  "Search name, keyword, or filter") — app's wording documents a real AI-search behavior the
+  wireframe doesn't have; needs a call on whether to reconcile wording or allowlist.
+- Duplicate-looking search icon: `lib-clip-search-btn` (CLIP/AI search) reuses the plain search
+  glyph — a real, distinct feature, but should probably get its own icon (e.g. sparkle) instead
+  of visually duplicating the search icon next to it.
+- View toggle has 3 buttons (Grid/List/Compare) vs wireframe's 2 (Grid/Table) — Compare is a
+  real feature; likely allowlist, needs a user decision.
+- Logo-gap spacer landed but only closes ~33px of the original 193px offset — the flex-basis
+  may need tuning against the real (non-mock) topbar button set.
+- Filters is a `<select>` dropdown vs the wireframe's chip row — larger, deferred UI change.
 
-**Editor (~57 mismatches):**
-- Topbar/rail/panel height (48 vs 44, 826 vs 856) — not yet investigated for root cause.
-- Undo/redo/history cluster: wireframe wraps them in one bordered box (`.undogrp`); the app has
-  them as separate flat buttons. Real structural difference, deferred — needs a wrapper `<div>`
-  added around existing buttons, low risk but not done yet.
-- Zoom control height/border-radius, a few more 0-width-border artifacts.
-- The "status bar has no real Editor equivalent" pair — acknowledged placeholder, not a real bug
-  (the Editor topbar doubles as the deskbar; there's no separate statusbar zone to compare).
-- `[dark]`/`[light]` rail order note is expected now (Image/Crop kept on purpose).
+**Sidebar:**
+- "March" (a date-tree month label) still MISSING — date-tree month rows may not be rendering
+  in the ?libtest mock, or dateExpanded needs the month-level toggle opened before comparing.
+  Needs investigation, not yet root-caused.
+- Font-size distribution still doesn't match (10px/13px/16px counts) — likely the sidebar's
+  base-font decision from the PREVIOUS session (16px) bleeding into rows the wireframe sets at
+  13px; needs a pass through the CSS cascade, not a one-line fix.
 
-## Verification commands
+**Statusbar:**
+- No sync-spinner icon / "Syncing catalog files…" text — real feature gap (need
+  `catalog_scan`/background-sync status surfaced there) or explicit "not building this now"
+  allowlist decision.
+
+## Next steps
+1. Investigate "March" missing (likely a date-tree expand-state issue in the inventory harness,
+   not a real UI bug — check `dateExpanded` before asserting).
+2. User decision needed on: search placeholder wording, duplicate search-icon glyph, 3rd
+   view-toggle button (Compare), filters-as-dropdown-vs-chips, statusbar sync indicator.
+3. Re-run `bash build-desktop.sh && node test/wireframe_inventory.mjs` after each fix; commit
+   allowlist additions with a `reason` field, never silently.
+4. Editor wireframe pass (`test/editor_wireframe_diff.mjs`) still only regression-gated against
+   its own ~57-item backlog from the PREVIOUS session — that backlog itself is still open.
+
+## Verification
 ```bash
-bash build-desktop.sh              # REQUIRED before re-running the Library diff after any
-                                    # library-ui.js edit — dist/ is a stale copy otherwise
-node test/wireframe_diff.mjs       # Library — writes test/output/wireframe_diff_report.json
-node test/editor_wireframe_diff.mjs # Editor — writes test/output/editor_wireframe_diff_report.json
-node test/check_change_scope.mjs <expected-file>   # confirms a fix touched only what it should
-npm run lib:test && node test/export_harness.mjs   # regression guards, run after any CSS/token change
+bash build-desktop.sh && node test/wireframe_inventory.mjs   # Library — must be 0 new regressions
+node test/editor_wireframe_diff.mjs                          # Editor — must be 0 new regressions
 ```
-Pre-commit hook (`githooks/pre-commit`, `core.hooksPath` already set) blocks commits to
-`desktop/library-ui.js`/`chromasmith-22.html` unless the matching diff tool has run since the
-file last changed — `touch .git/.wireframe_diff_ok` / `.git/.editor_wireframe_diff_ok` to
-acknowledge a reviewed run.
-
-## Type `/clear` now, then start the next session by asking to read `HANDOVER.md`.
