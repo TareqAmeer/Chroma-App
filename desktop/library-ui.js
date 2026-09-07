@@ -4264,6 +4264,23 @@
     rateMenu.subItem('Pick', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))), 'P');
     rateMenu.subItem('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))), 'U');
 
+    // ── Rotate & flip ▸ — reuses the SAME geomRotate/geomFlip (chromasmith-22.html) the Tools
+    // menu and crop panel already call; geometry is per-photo, LIVE editor state (curItem().geom),
+    // not something a closed photo's sidecar can carry on its own without first being opened and
+    // given a full recipe snapshot. Scoped to exactly one CURRENTLY OPEN photo for that reason —
+    // dimmed rather than hidden otherwise, same "don't hide, dim" convention as the merge/paste
+    // rows below (§10.13: a permanently hidden control is a permanently unaudited one).
+    const rotFlipMenu = submenu('Rotate &amp; flip');
+    const rotFlipUsable = n === 1 && paths[0] === state.openedPath && typeof window.geomRotate === 'function';
+    const rotCwItem = rotFlipMenu.subItem('Rotate 90° CW', () => window.geomRotate(90));
+    const rotCcwItem = rotFlipMenu.subItem('Rotate 90° CCW', () => window.geomRotate(-90));
+    const flipHItem = rotFlipMenu.subItem('Flip horizontal', () => window.geomFlip('h'));
+    const flipVItem = rotFlipMenu.subItem('Flip vertical', () => window.geomFlip('v'));
+    if (!rotFlipUsable) {
+      [rotCwItem, rotCcwItem, flipHItem, flipVItem].forEach((el) => { el.style.opacity = '.4'; el.style.pointerEvents = 'none'; });
+      rotFlipMenu.row.title = 'Open this photo in the editor first — rotation is live editor state, not yet stored per unopened photo.';
+    }
+
     // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
     // rather than the file itself.
     const verMenu = submenu('Versions &amp; edit');
@@ -4421,6 +4438,30 @@
       collageItem.style.opacity = '.4'; collageItem.style.pointerEvents = 'none';
     }
     if (n !== 2) { mergePanoItem.style.opacity = '.4'; mergePanoItem.style.pointerEvents = 'none'; }
+
+    // ── Add to album ▸ — UI_SPEC's context-menu shape names this as one of the 4 top-level
+    // groups; until now albums were reachable only by dragging a card onto the sidebar row
+    // (wireAlbumRows' ondrop, above) with no menu equivalent for a right-click or keyboard flow.
+    // Lists existing albums (each via the same album_add path the drag-drop uses) plus a "New
+    // album…" row that creates one and adds the selection to it in the same action.
+    const albumMenu = submenu('Add to album');
+    const addToAlbum = async (id, name) => {
+      const added = await invoke('album_add', { id, paths }).catch((e) => { toast(humanizeErr('add to the album', e), 'err'); return 0; });
+      await refreshAlbums();
+      const dup = n - added;
+      toast(added ? `${added} added to "${name}"${dup ? `, ${dup} already there` : ''}` : `Already in "${name}"`, true);
+    };
+    _albums.forEach((a) => albumMenu.subItem(a.name, () => addToAlbum(a.id, a.name)));
+    if (_albums.length) albumMenu.subSep();
+    albumMenu.subItem('New album…', async () => {
+      const name = await window.askTextModal('Album name', '', '');
+      if (!name) return;
+      try {
+        const al = await invoke('album_create', { name });
+        await refreshAlbums();
+        await addToAlbum(al.id, al.name);
+      } catch (e) { toast(humanizeErr('create the album', e), 'err'); }
+    });
 
     // ── File ▸ — actions about the file on disk rather than its recipe.
     const fileMenu = submenu('File');
