@@ -647,7 +647,9 @@
     sortBy: localStorage.getItem('chromasmith_lib_sort') || 'name',       // name|mtime|iso|shutter|aperture|focal|edited
     sortDir: localStorage.getItem('chromasmith_lib_sortdir') || 'asc',    // 'asc' | 'desc'
     metaDisplay: localStorage.getItem('chromasmith_lib_metadisp') || 'off', // 'off'|'hover'|'always'
-    showTitle: localStorage.getItem('chromasmith_lib_showtitle') !== '0',
+    // Default OFF (Library View.html's cards never show a filename) — per explicit decision.
+    // An existing user's own stored '0'/'1' choice is still respected either way.
+    showTitle: localStorage.getItem('chromasmith_lib_showtitle') === '1',
     gridAspect: localStorage.getItem('chromasmith_lib_gridaspect') === '1', // item 31: real aspect ratio vs square-crop thumbnails
     hideIcons: localStorage.getItem('chromasmith_lib_hideicons') === '1', // View menu: hide flag/badge icons drawn over photos
     zeroGap: localStorage.getItem('chromasmith_lib_zerogap') === '1',     // View menu: Lightroom-style zero-gap grid

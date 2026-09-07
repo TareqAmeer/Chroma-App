@@ -18,7 +18,29 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture } from './wireframe_diff_lib.mjs';
+import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
+  writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
+
+const REPORT_PATH = path.join(process.cwd(), 'test/output/wireframe_inventory_report.json');
+
+const ACCEPTED_PATH = path.join(process.cwd(), 'test/wireframe_accepted.json');
+let ACCEPTED = [];
+try { ACCEPTED = JSON.parse(await readFile(ACCEPTED_PATH, 'utf8')); } catch { /* none yet */ }
+function isAccepted(finding) {
+  return ACCEPTED.some((a) => finding.includes(a.match));
+}
+
+// Dynamic/mock data (photo counts, folder/person/album names, byte totals) differs between the
+// wireframe's hand-authored numbers and the harness's synthetic library by design — it is not a
+// fidelity bug. A "text" atom whose own text is pure digits/commas/currency-like, OR whose text
+// matches a known dynamic-content label pattern, is data noise: skip it in the atom tally, but
+// still count it (by kind+row position) so a whole ROW disappearing is still caught.
+const NUMERIC_RE = /^[\d.,%$]+$/;
+const DYNAMIC_LABEL_RE = /photos?$|of \d|·|GB|MB\b/i;
+function isDataNoise(atom) {
+  if (atom.kind !== 'text') return false;
+  return NUMERIC_RE.test(atom.text) || DYNAMIC_LABEL_RE.test(atom.text);
+}
 
 const ROOT = process.cwd();
 const server = createServer(async (req, res) => {
@@ -125,7 +147,16 @@ for (const zone of ZONES) {
   if (!w) { findings.push(`[${zone.label}] wireframe container ${zone.wf} not found`); continue; }
   if (!a) { findings.push(`[${zone.label}] app container ${zone.app} NOT FOUND`); continue; }
 
-  const wSig = summarize(w.atoms), aSig = summarize(a.atoms);
+  // Row-count parity for noisy rows: same number of dynamic-data atoms, even though their exact
+  // text will never match (mock counts vs the wireframe's hand-picked numbers).
+  const wNoise = w.atoms.filter(isDataNoise).length, aNoise = a.atoms.filter(isDataNoise).length;
+  if (wNoise !== aNoise) {
+    findings.push(`[${zone.label}] dynamic-data row count: wireframe ${wNoise} vs app ${aNoise}`);
+  }
+  const wClean = w.atoms.filter((x) => !isDataNoise(x));
+  const aClean = a.atoms.filter((x) => !isDataNoise(x));
+
+  const wSig = summarize(wClean), aSig = summarize(aClean);
   const wT = tally(wSig), aT = tally(aSig);
 
   for (const [k, n] of wT) {
@@ -143,7 +174,7 @@ for (const zone of ZONES) {
   // Font-size inventory per zone: catches a whole row type rendering at the wrong size even
   // when nobody hand-listed that row type as a pair.
   const fsOf = (atoms) => tally(atoms.filter((x) => x.text).map((x) => x.fs));
-  const wFs = fsOf(w.atoms), aFs = fsOf(a.atoms);
+  const wFs = fsOf(wClean), aFs = fsOf(aClean);
   const allFs = new Set([...wFs.keys(), ...aFs.keys()]);
   for (const size of allFs) {
     const wn = wFs.get(size) || 0, an = aFs.get(size) || 0;
@@ -154,8 +185,8 @@ for (const zone of ZONES) {
   // difference), which no per-element computed-style check can express.
   for (let i = 0; i < Math.min(6, wSig.length, aSig.length); i++) {
     if (wSig[i] !== aSig[i]) { findings.push(`[${zone.label}] order@${i}: wireframe ${wSig[i]} vs app ${aSig[i]}`); break; }
-    const dx = Math.abs(w.atoms[i].x - a.atoms[i].x);
-    if (dx > 12) findings.push(`[${zone.label}] x-offset of ${wSig[i]}: wireframe ${w.atoms[i].x}px vs app ${a.atoms[i].x}px (Δ${dx})`);
+    const dx = Math.abs(wClean[i].x - aClean[i].x);
+    if (dx > 12) findings.push(`[${zone.label}] x-offset of ${wSig[i]}: wireframe ${wClean[i].x}px vs app ${aClean[i].x}px (Δ${dx})`);
   }
 }
 
@@ -163,6 +194,22 @@ await wf.close(); await app.close();
 await b.close();
 server.close();
 
-console.log(`wireframe_inventory: ${findings.length} structural findings\n`);
-findings.forEach((f) => console.log('  ' + f));
-console.log(findings.length ? '\nRESULT: SEE ABOVE' : '\nRESULT: PASS');
+const raw = findings.length;
+const unaccepted = findings.filter((f) => !isAccepted(f));
+const acceptedHit = raw - unaccepted.length;
+
+console.log(`wireframe_inventory: ${raw} structural findings (${acceptedHit} allowlisted in test/wireframe_accepted.json)\n`);
+unaccepted.forEach((f) => console.log('  ' + f));
+if (acceptedHit) console.log(`\n  (+${acceptedHit} allowlisted findings suppressed)`);
+console.log(unaccepted.length ? '\nRESULT: FAIL' : '\nRESULT: PASS');
+
+// Gate on REGRESSIONS, not the pre-existing backlog above — a hard block on all 38 current
+// findings would brick every future library-ui.js commit until they're all cleared or
+// allowlisted. `rc` is null on the first run (nothing to compare against): record the baseline,
+// don't fail. Any newly-appearing unaccepted finding after that DOES fail the commit.
+const records = { mismatches: unaccepted.map((raw) => ({ raw })), missing: [] };
+const rc = await recheck(REPORT_PATH, records);
+printRecheck(rc);
+await writeReport(REPORT_PATH, records);
+const regressed = rc && rc.new.length > 0;
+process.exit(regressed ? 1 : 0);

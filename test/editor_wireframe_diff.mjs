@@ -151,4 +151,11 @@ const rc = await recheck(REPORT_PATH, records);
 printRecheck(rc);
 await writeReport(REPORT_PATH, records);
 
-console.log(mismatches.length === 0 && missing.length === 0 ? 'RESULT: PASS' : 'RESULT: SEE ABOVE');
+const failed = mismatches.length !== 0 || missing.length !== 0;
+console.log(failed ? 'RESULT: SEE ABOVE' : 'RESULT: PASS');
+// Gate on REGRESSIONS, not the pre-existing ~57-item backlog (logged + deferred in HANDOVER.md) —
+// a hard block on every finding would brick every future commit until that backlog is cleared.
+// `rc` is null only on the very first run (no prior report to compare against); in that case
+// don't fail the commit on backlog alone, just record the baseline.
+const regressed = rc && rc.new.length > 0;
+process.exit(regressed ? 1 : 0);

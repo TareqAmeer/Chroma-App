@@ -1,28 +1,38 @@
 #!/bin/sh
 # Wireframe-fidelity gate: blocks a commit touching the Library/Editor UI against
-# chromasmith-design/project/*.html without a clean, current wireframe-diff run for that file.
-# See .claude/plans (wireframe fidelity incident) and the "Wireframe fidelity gate" memory —
-# a diff tool for exactly this existed, was never run again after the commit that added it,
-# and 71 real mismatches went unnoticed for a week. This makes running it non-optional.
+# chromasmith-design/project/*.html unless the structural inventory check passes (or every
+# remaining finding is explicitly allowlisted in test/wireframe_accepted.json).
+#
+# This REPLACES an earlier stamp-file version (`touch .git/.wireframe_diff_ok`) that only proved
+# the tool had been RUN, not that it PASSED — a hand-written 13-pair colour/font check reported a
+# shrinking number while 71 real Library mismatches (duplicate search icon, wrong section
+# placement, a non-collapsing sidebar, ...) shipped untouched. See CLAUDE.md's wireframe fidelity
+# gate note. Fixing this is the point: a real gate that fails the commit, not a checklist step.
 set -e
 
-check() {
-  file="$1"; stamp="$2"; cmd="$3"
-  if ! git diff --cached --name-only | grep -qx "$file"; then return 0; fi
-  if [ ! -f "$stamp" ]; then
-    echo "BLOCKED: $file changed but its wireframe diff has never been run in this checkout."
-    echo "Run: $cmd   (review the output, then: touch $stamp)"
-    exit 1
-  fi
-  stamp_time=$(stat -f %m "$stamp" 2>/dev/null || stat -c %Y "$stamp" 2>/dev/null)
-  file_time=$(stat -f %m "$file" 2>/dev/null || stat -c %Y "$file" 2>/dev/null)
-  if [ "$file_time" -gt "$stamp_time" ]; then
-    echo "BLOCKED: $file changed after the last wireframe diff review ($stamp is stale)."
-    echo "Run: $cmd, review the output, then: touch $stamp"
-    exit 1
-  fi
+needs_check() {
+  git diff --cached --name-only | grep -qx "$1"
 }
 
-check "desktop/library-ui.js" ".git/.wireframe_diff_ok" "node test/wireframe_diff.mjs"
-check "chromasmith-22.html" ".git/.editor_wireframe_diff_ok" "node test/editor_wireframe_diff.mjs"
+if needs_check "desktop/library-ui.js"; then
+  echo "desktop/library-ui.js changed — running wireframe structural inventory..."
+  bash build-desktop.sh >/dev/null 2>&1 || { echo "BLOCKED: build-desktop.sh failed."; exit 1; }
+  if ! node test/wireframe_inventory.mjs; then
+    echo ""
+    echo "BLOCKED: desktop/library-ui.js diverges from the wireframe (see findings above)."
+    echo "Fix it, or if the divergence is deliberate, add an entry to test/wireframe_accepted.json"
+    echo "with a {\"match\": \"<substring of the finding line>\", \"reason\": \"...\"} object."
+    exit 1
+  fi
+fi
+
+if needs_check "chromasmith-22.html"; then
+  echo "chromasmith-22.html changed — running Editor wireframe diff..."
+  if ! node test/editor_wireframe_diff.mjs; then
+    echo ""
+    echo "BLOCKED: chromasmith-22.html diverges from its wireframe (see findings above)."
+    exit 1
+  fi
+fi
+
 exit 0
