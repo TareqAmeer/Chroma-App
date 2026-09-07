@@ -6831,29 +6831,37 @@
     setTimeout(() => document.addEventListener('mousedown', close), 0);
   }
 
-  function catalogSectionHtml() {
-    // "Needs review" only appears once something is actually flagged — an empty row promising
-    // a feature with nothing behind it reads as broken, not reassuring. Never auto-hides once a
-    // photo is fixed/deleted/dismissed from it though: it's driven by catalogCounts.blurry like
-    // every other row here, so it just goes away on its own once the count returns to 0.
-    const reviewRow = catalogCounts.blurry ? `
+  // "Needs review" only appears once something is actually flagged — an empty row promising
+  // a feature with nothing behind it reads as broken, not reassuring. Never auto-hides once a
+  // photo is fixed/deleted/dismissed from it though: it's driven by catalogCounts.blurry like
+  // every other row here, so it just goes away on its own once the count returns to 0.
+  // Per Library View.html's Collections group (Recents…Synced, then Needs Review /
+  // Not-Face-Scanned, then Raw/Videos), these live INSIDE Collections, not as siblings of
+  // "All Photos" above it — moved there by renderCollections()'s own assembly order below.
+  function reviewRowHtml() {
+    return catalogCounts.blurry ? `
       <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'blurry' ? ' on' : ''}" data-catalog="blurry" title="Photos flagged as possibly out of focus — review, never auto-deleted">
-        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs review</span>
+        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs Review</span>
         <span class="lib-coll-count">${catalogCounts.blurry}</span>
       </div>` : '';
-    // Same "only appears once it's actually true of something" rule as reviewRow above — an
-    // always-visible "0 pending" row would just be noise on a fully-indexed library. Answers
-    // "which photos have/haven't been face-scanned" (the sidebar had no answer to this before),
-    // driven by the SAME faces_scanned_at predicate faces_run itself uses (catalog_counts).
-    const facesPendingRow = catalogCounts.faces_pending ? `
+  }
+  // Same "only appears once it's actually true of something" rule as reviewRowHtml above — an
+  // always-visible "0 pending" row would just be noise on a fully-indexed library. Answers
+  // "which photos have/haven't been face-scanned" (the sidebar had no answer to this before),
+  // driven by the SAME faces_scanned_at predicate faces_run itself uses (catalog_counts).
+  function facesPendingRowHtml() {
+    return catalogCounts.faces_pending ? `
       <div class="lib-coll-row${state.source === 'catalog' && state.facesFilter === 'pending' ? ' on' : ''}" data-faces-pending="1" title="Photos not yet scanned for faces">
-        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not face-scanned</span>
+        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not Face-Scanned</span>
         <span class="lib-coll-count">${catalogCounts.faces_pending}</span>
       </div>` : '';
+  }
+
+  function catalogSectionHtml() {
     return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
-      </div>${reviewRow}${facesPendingRow}`;
+      </div>`;
     // Note: Drives used to render immediately here. It's now placed by renderCollections()'s own
     // assembly order (see the sidebar reorder comment there) rather than baked into this
     // function's return value, so section order can change in one place.
@@ -6889,7 +6897,7 @@
     if (!dateCounts.days.length && !dateCounts.no_date) return '';
     const open = dateExpanded.has('__root__');
     return `<div class="lib-coll-heading lib-sec-h" data-date-tree-toggle="1">
-        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>By Date</span>
+        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>By date</span>
       </div>${open ? `<div class="lib-tree-children">${dateTreeHtml()}</div>` : ''}`;
   }
 
@@ -8551,7 +8559,7 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
-      </div>`).join('') + rawVideoShortcutRows();
+      </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + rawVideoShortcutRows();
     // Sidebar section order (UI_SPEC.md wireframe order): All Photos (catalogSectionHtml) →
     // By Date (dateSectionHtml, its own top-level section) → Collections → People & Pets →
     // Albums → Drives → Devices → Folders → Cloud. Each section function supplies its OWN

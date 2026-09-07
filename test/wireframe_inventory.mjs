@@ -37,9 +37,18 @@ function isAccepted(finding) {
 // still count it (by kind+row position) so a whole ROW disappearing is still caught.
 const NUMERIC_RE = /^[\d.,%$]+$/;
 const DYNAMIC_LABEL_RE = /photos?$|of \d|·|GB|MB\b/i;
+// Sample PEOPLE/ALBUM/DEVICE names are also dynamic mock data — the wireframe hardcodes its own
+// arbitrary examples (Sarah, Portfolio, iPhone, ...) and the app's ?libtest mock uses a different
+// arbitrary set (Dogs 2026, Archive T7, ...). Comparing them by exact text will never match on
+// either side; what matters is that a person/album/device ROW renders at all (caught by the
+// dynamic-data row-count check below), not which name it happens to carry.
+const NOISE_LABELS = new Set([
+  'Sarah', 'Buddy (Dog)', 'Summer Trip', 'Portfolio', 'External SSD', 'iPhone', 'Client Work',
+  'Archive T7', 'Old LaCie', 'This Mac', 'Dogs 2026', 'Travel', 'Film scans',
+]);
 function isDataNoise(atom) {
   if (atom.kind !== 'text') return false;
-  return NUMERIC_RE.test(atom.text) || DYNAMIC_LABEL_RE.test(atom.text);
+  return NUMERIC_RE.test(atom.text) || DYNAMIC_LABEL_RE.test(atom.text) || NOISE_LABELS.has(atom.text);
 }
 
 const ROOT = process.cwd();
@@ -132,7 +141,10 @@ await settleForCapture(wf);
 
 const app = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
 app.on('pageerror', (e) => console.log('[pageerror]', e.message));
-await app.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=60`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+// `libcat=1` turns on the catalog-feature mocks (date tree, Needs Review / Not-Face-Scanned
+// counts, People/Albums/Devices names, Drives) — without it those sections render structurally
+// empty and every one of their rows reads as a false "MISSING" finding here.
+await app.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libcat=1&libn=60`, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await app.waitForTimeout(2500);
 await app.evaluate(() => {
   document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });

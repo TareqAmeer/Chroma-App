@@ -1,1 +1,9 @@
-[]
+[
+  { "match": "EXTRA   1x  text:\"+\"", "reason": "Albums \"+\" (new album) button — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep." },
+  { "match": "text:\"Free up space…\"", "reason": "Drives-management block — real app feature (storage/library maintenance), not in the wireframe mock. User decision 2026-09-07: keep." },
+  { "match": "text:\"Verify library…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
+  { "match": "text:\"Find duplicates…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
+  { "match": "text:\"Rescan flags…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
+  { "match": "text:\"Keywords\"", "reason": "Keywords sidebar section — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep." },
+  { "match": "text:\"No date\"", "reason": "Date-tree bucket for photos with no EXIF date — a real completeness feature the wireframe's fixed sample data has no need for." }
+]
