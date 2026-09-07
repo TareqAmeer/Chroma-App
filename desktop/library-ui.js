@@ -723,6 +723,34 @@
       --ring-hairline:inset 0 0 0 1px var(--hairline-alpha);--focus-ring:0 0 0 2px var(--primary-focus);
       --ease-standard:cubic-bezier(.4,0,.6,1);--duration-press:120ms;--duration-fade:300ms;
     }
+    /* Re-map the Library's PRE-EXISTING theme vars (--bg/--sur/--sur2/--bdr/--txt/--mut/--acc2/--r
+       — used across the hundreds of rules below, from before this design-system import) onto the
+       DS tokens above, scoped to #lib-overlay so it wins over whatever chromasmith-22.html's own
+       body.light/dark cascade would otherwise supply. This is the single change that makes every
+       EXISTING Library rule follow the wireframe's own dark/light palette and its dark-mode accent
+       swap (blue-slate -> blue-mist, Library View.html:18-36) with no per-rule edits anywhere else.
+       Dark is the DEFAULT (unclassed) state per Tareq's decision; .lib-light is the alternate,
+       toggled from the gear menu's Appearance group and persisted (see LIB_THEME below). */
+    #lib-overlay{
+      --bg:var(--surface-tile-1);--sur:var(--surface-tile-2);--sur2:var(--surface-tile-2);
+      --bdr:rgba(255,255,255,.14);--txt:var(--ink-on-dark);--mut:var(--ink-on-dark-muted);
+      --acc2:var(--blue-mist);--acc:var(--blue-mist);--r:var(--radius-sm);
+      --canvas:var(--surface-tile-1);--surface-alt:var(--surface-tile-2);
+      --ink:var(--ink-on-dark);--ink-muted-80:var(--ink-on-dark);--ink-muted-48:var(--ink-on-dark-muted);
+      --hairline:rgba(255,255,255,.14);--hairline-alpha:rgba(255,255,255,.14);
+      --primary:var(--blue-mist);--primary-focus:var(--blue-mist);--primary-on-dark:var(--blue-mist);
+      --blue-mist-soft:rgba(97,160,175,.22);
+    }
+    #lib-overlay.lib-light{
+      --bg:#ffffff;--sur:var(--canvas-parchment);--sur2:var(--canvas-parchment);
+      --bdr:var(--hairline);--txt:var(--ink);--mut:var(--ink-muted-48);
+      --acc2:var(--blue-slate);--acc:var(--blue-slate);
+      --canvas:#ffffff;--surface-alt:var(--canvas-parchment);
+      --ink:#1d1d1f;--ink-muted-80:#333333;--ink-muted-48:#7a7a7a;
+      --hairline:#e0e0e0;--hairline-alpha:rgba(0,0,0,.08);
+      --primary:var(--blue-slate);--primary-focus:var(--blue-slate-focus);--primary-on-dark:var(--blue-mist);
+      --blue-mist-soft:#e3edf0;
+    }
   `;
   style.textContent = DS_FONTS + `
     /* overflow:hidden — nothing (grid blowout, an oversized top bar) can ever paint past this
@@ -731,8 +759,12 @@
       background:var(--bg);display:none;border-right:1px solid var(--bdr);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
-      font-family:var(--sans);transition:width .15s ease;}
+      font-family:var(--font-text);transition:width .15s ease;}
     #lib-overlay.on{display:grid}
+    /* Buttons/inputs/selects don't inherit font-family by default in browsers (UA stylesheets
+       give them their own system font) — without this every .lib-btn/input/select silently fell
+       back to Arial instead of the SF Pro Text just declared on #lib-overlay above. */
+    #lib-overlay button,#lib-overlay input,#lib-overlay select,#lib-overlay textarea{font-family:inherit}
     /* 6 children = 6 tracks (top, filters, viewbar, side, main, bottom) — and each child is
        PINNED to its row so a future DOM insertion can never silently shift everything again
        (auto-placement has mis-stacked this panel twice). */
@@ -771,44 +803,85 @@
        body.deskx .fx-layout / body.lib-docked rules for the reserved column width. */
     body.deskx #lib-overlay:not(.full){grid-column:1;position:static;top:auto;left:auto;bottom:auto;height:100%}
     body.deskx #lib-overlay.full{position:fixed} /* full takeover: back to covering everything */
-    #lib-top{display:flex;align-items:center;gap:8px;padding:34px 12px 6px;-webkit-app-region:drag}
-    #lib-top button{-webkit-app-region:no-drag}
-    #lib-top .lib-title{font-weight:600;font-size:14px;margin-right:auto}
-    /* Single wrapping toolbar row, not a 2-column grid — the "wall of filters" complaint was
-       largely this stacking into 3+ visual rows above an otherwise-empty-looking grid. Search
-       gets first claim on width (flex-grow); every select shrinks to its content. */
+    /* Unified top bar — transplanted from Library View.html's .topbar. One wrapping flex row
+       holding everything (logo/search/viewtoggle/zoom/flags/sort/filters/allfx/export/gear);
+       under DOCK_W (356px) or the narrow deskx filmstrip it wraps/collapses to icon-only via
+       .lbl{display:none} rather than overlapping (design-project CLAUDE.md's layout rule). */
+    #lib-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:34px 12px 6px;-webkit-app-region:drag;
+      border-bottom:1px solid var(--bdr)}
+    #lib-top button,#lib-top input,#lib-top select{-webkit-app-region:no-drag}
+    .lib-logo{display:flex;align-items:center;flex:0 0 auto}
+    .lib-title{font-family:var(--font-display);font-weight:var(--weight-semibold);font-size:14px;letter-spacing:-.374px;color:var(--txt)}
+    .lib-spacer{flex:1 1 8px;min-width:0}
+    /* under DOCK_W the bar has no room for text labels — icon-only, same collapse strategy as
+       the wireframe's own .topbar.compact. */
+    #lib-overlay:not(.full) #lib-top .lbl{display:none}
+    #lib-overlay:not(.full) #lib-top .lib-btn-export,#lib-overlay:not(.full) #lib-top .lib-pill{padding:0;width:30px;justify-content:center}
+    /* Retired: every real toolbar control moved into #lib-top above or the gear's View menu
+       (see the comment on its markup) — only the Lightroom-connected chip and active-filter
+       chip list remain, shown only when non-empty (both start empty/hidden). */
     #lib-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 12px 8px}
-    #lib-filters #lib-search{flex:1 1 160px;min-width:120px}
-    #lib-filters select{flex:0 1 auto;width:auto;min-width:0}
-    /* Filters button: was 7 wrapping selects in the toolbar row (real complaint — see the
-       comment above #lib-filters), collapsed to one button + a slide-out panel
-       (#lib-filters-panel, styled further down near its markup). The badge shows how many of
-       the 7 aren't at their default "all" value, so it's clear at a glance whether anything is
-       filtered without opening the panel. */
     .lib-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px}
     .lib-btn svg{display:block;flex:0 0 auto}
-    .lib-btn-icon{width:30px;height:30px;padding:0}
+    .lib-btn.lib-btn-icon{width:30px;height:30px;padding:0}
     /* Design-import reskin: pill-shaped chrome buttons (Sidebar/Sort/Filters) — everywhere else
        stays the existing 8px-radius rect (.lib-btn's own rule further down), matching the
        wireframe's split between .pillbtn (sort/filters/allfx/export) and .iconbtn (utility). */
-    .lib-pill{border-radius:9999px!important;background:transparent;padding:0 14px;height:30px}
-    .lib-pill:hover{background:var(--sur2)}
-    .lib-pill.active{background:rgba(74,157,220,.14);border-color:var(--acc2)!important;color:var(--acc2)}
+    .lib-btn.lib-pill{border-radius:9999px!important;background:transparent;padding:0 14px;height:30px}
+    .lib-btn.lib-pill:hover{background:var(--sur2)}
+    .lib-btn.lib-pill.active{background:rgba(74,157,220,.14);border-color:var(--acc2)!important;color:var(--acc2)}
     #lib-filters-btn-wrap{position:relative}
     /* Top-bar flag row (design-import wireframe) — hairline-bracketed group, matching the
        wireframe's .flagrow, so it reads as one control cluster distinct from the icon buttons
        either side of it. */
     .lib-flagrow{display:flex;align-items:center;gap:2px;border-left:1px solid var(--bdr);
       border-right:1px solid var(--bdr);padding:0 8px;flex:none}
+    .lib-flagrow .lib-btn-icon{width:28px!important;height:28px!important}
     #lib-flag-reject svg{stroke:#e5484d}
     #lib-flag-pick.on svg,#lib-flag-pick svg{stroke:#46a758}
     #lib-flag-fav.on svg,#lib-flag-fav svg{stroke:#ff9b42}
     #lib-flag-pick.on,#lib-flag-fav.on{background:var(--sur2)}
+    /* View toggle (grid/list/compare) — transplanted from the wireframe's .viewtoggle: bordered
+       28x28 segments, active = surface-alt fill, not an accent fill (design import reskin). */
+    .lib-viewtoggle{border-radius:var(--r)}
+    .lib-viewtoggle button{width:28px;height:28px;padding:0}
+    /* Zoom slider — transplanted from the wireframe's .zoomrow. */
+    .lib-zoomrow{display:flex;align-items:center;gap:8px;flex:0 1 90px;min-width:60px;color:var(--mut)}
+    .lib-zoomrow svg{flex:none}
+    .lib-zoomrow input[type=range]{width:100%;min-width:50px;accent-color:var(--acc2)}
+    #lib-overlay:not(.full) .lib-zoomrow{display:none}
+    /* Primary filled Export button — transplanted from the wireframe's .btn-export. */
+    .lib-btn.lib-btn-export{background:var(--primary);border-color:var(--primary);color:var(--on-primary,#fff);
+      font-weight:var(--weight-semibold);border-radius:9999px!important;height:30px}
+    .lib-btn.lib-btn-export:hover{background:var(--primary-focus);border-color:var(--primary-focus)}
+    .lib-btn.lib-btn-export svg{stroke:#fff}
+    /* Sort/View popovers — transplanted verbatim from the wireframe's .menu/.opt/.grp-label. */
+    .lib-menu{position:absolute;top:36px;right:0;width:230px;background:var(--bg);border:1px solid var(--bdr);
+      border-radius:var(--r);box-shadow:0 3px 30px rgba(0,0,0,.35);padding:6px;z-index:4600;display:none;
+      max-height:80vh;overflow-y:auto}
+    .lib-menu.open{display:block}
+    .lib-menu .grp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);padding:8px 8px 4px;font-weight:var(--weight-semibold)}
+    .lib-menu .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;
+      border-radius:5px;font-size:13px;cursor:pointer;color:var(--txt);width:100%;text-align:left;
+      background:none;border:none;font-family:var(--sans)}
+    .lib-menu .opt:hover,.lib-menu button.opt-action:hover{background:var(--sur2)}
+    .lib-menu button.opt-action{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;
+      font-size:13px;color:var(--txt);width:100%;justify-content:flex-start;background:none;border:none}
+    .lib-menu .opt-check{accent-color:var(--acc2)}
+    .lib-menu .opt.sel::after{content:'';width:6px;height:6px;border-radius:50%;background:var(--acc2);flex:none}
+    .lib-menu .opt-check-svg{visibility:hidden;stroke:var(--acc2);flex:none}
+    .lib-menu button.opt-toggle.on .opt-check-svg{visibility:visible}
+    .lib-menu hr{border:none;border-top:1px solid var(--bdr);margin:6px 2px}
+    #lib-sort-dir::after{content:'↑'}
+    #lib-sort-dir[data-dir="desc"]::after{content:'↓'}
     /* Pill search bar — icon + input in one hairline capsule, matching the wireframe's .search. */
-    .lib-search-wrap{flex:1 1 160px;min-width:120px;max-width:320px;height:32px;border-radius:9999px;
+    .lib-search-wrap{flex:1 1 160px;min-width:70px;max-width:300px;height:32px;border-radius:9999px;
       border:1px solid var(--bdr);background:var(--sur2);display:flex;align-items:center;gap:8px;
-      padding:0 14px;overflow:hidden}
+      padding:0 6px 0 14px;overflow:hidden}
     .lib-search-wrap svg{flex:none;stroke:var(--mut)}
+    .lib-clip-search-btn{width:22px;height:22px;padding:0;border:none;background:none;flex:none}
+    .lib-clip-search-btn svg{stroke:var(--mut)}
+    .lib-clip-search-btn:hover svg{stroke:var(--txt)}
     .lib-search-wrap input{border:none;background:none;outline:none;flex:1;min-width:0;color:var(--txt);
       font:13px var(--sans)}
     .lib-search-wrap input::placeholder{color:var(--mut)}
@@ -821,26 +894,53 @@
       border-radius:12px;padding:2px 4px 2px 8px;font-size:10px;color:var(--txt)}
     .lib-chip-x{cursor:pointer;opacity:.6;font-size:11px;line-height:1;padding:0 2px}
     .lib-chip-x:hover{opacity:1;color:var(--acc2)}
-    #lib-side{overflow:auto;padding:8px 12px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr)}
-    /* DRK-style smart collections, above the folder tree in the same #lib-side scroll box. */
-    .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;
-      font-size:12px;color:var(--txt)}
+    /* #lib-side: a top BAND above the grid in the narrow docked panel (too narrow for a real
+       left column — the existing, correct collapse for that width), and the wireframe's real
+       232px LEFT COLUMN once .full gives it room (grid-column:1;grid-row:2/5 rule earlier in
+       this file already does the column switch — this just supplies the wireframe's own fill/
+       border/width values for that column). */
+    #lib-side{overflow:auto;padding:12px 0 8px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);
+      background:var(--sur);position:relative}
+    #lib-overlay.full #lib-side{width:var(--lib-side-w,232px);min-width:150px;max-width:420px;
+      padding:12px 0 8px;border-bottom:none}
+    .lib-side-resizer{display:none;position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:10}
+    .lib-side-resizer:hover,.lib-side-resizer.active{background:rgba(97,160,175,.25)}
+    #lib-overlay.full .lib-side-resizer{display:block}
+    .lib-side-tabs{display:none;gap:4px;padding:0 12px 12px}
+    #lib-overlay.full .lib-side-tabs{display:flex}
+    .lib-side-tab{flex:1;height:28px;border-radius:var(--r);font-size:12px;font-weight:var(--weight-semibold);
+      display:flex;align-items:center;justify-content:center;border:1px solid transparent;color:var(--mut);
+      background:none;cursor:pointer}
+    .lib-side-tab.on{background:var(--bg);border-color:var(--bdr);color:var(--txt)}
+    /* Collections/tree rows — transplanted from the wireframe's .row/.row.sel: 20px left inset,
+       13px, selected = the mist-blue wash + primary text/icon (dark mode swaps to the translucent
+       accent wash per the token remap above, matching Library View.html's .app.dark .row.sel). */
+    .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 20px;border-radius:var(--radius-xs,5px);
+      cursor:pointer;font-size:13px;color:var(--txt)}
     .lib-coll-row:hover{background:var(--sur2)}
-    .lib-coll-row.on{background:rgba(74,157,220,.16);color:var(--acc2)}
+    .lib-coll-row.on{background:var(--blue-mist-soft);color:var(--primary);font-weight:var(--weight-semibold)}
+    .lib-coll-row.on .lib-coll-ic{color:var(--primary)}
+    /* Dark mode's selected row is NOT accent-coloured text — Library View.html:25 keeps it white
+       and marks the selection with an inset left bar instead (light mode uses coloured text with
+       no bar — Library View.html's plain, unqualified .row.sel rule). */
+    #lib-overlay:not(.lib-light) .lib-coll-row.on{color:var(--ink-on-dark);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
+    #lib-overlay:not(.lib-light) .lib-coll-row.on .lib-coll-ic,
+    #lib-overlay:not(.lib-light) .lib-coll-row.on .lib-coll-count{color:var(--ink-on-dark)}
     .lib-coll-row.offline{cursor:default}
     .lib-coll-row.offline:hover{background:transparent}
     .lib-coll-ic{display:inline-flex;flex-shrink:0;color:inherit}
     .lib-coll-lb{flex:1}
-    .lib-coll-count{font-family:var(--mono);font-size:10px;color:var(--mut)}
-    .lib-coll-row.on .lib-coll-count{color:var(--acc2)}
-    .lib-coll-sep{height:1px;background:var(--bdr);margin:8px 2px}
-    /* Design-import reskin: uppercase, letter-spaced eyebrow — matches the wireframe's .sec-head
-       (10px/.08em) rather than the old plain 11px label. */
-    .lib-coll-heading{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);padding:8px 8px 4px}
-    .lib-sec-h{display:flex;align-items:center;gap:4px;cursor:pointer;border-radius:6px;margin:0 -2px;padding:4px 8px}
+    .lib-coll-count{font-family:var(--sans);font-size:11px;color:var(--mut)}
+    .lib-coll-row.on .lib-coll-count{color:var(--primary);font-weight:var(--weight-semibold)}
+    .lib-coll-sep{height:1px;background:var(--bdr);margin:6px 0 0;padding-top:6px}
+    /* Section eyebrow — transplanted from the wireframe's .sec-head: 10px uppercase, .08em. */
+    .lib-coll-heading{font-size:10px;font-weight:var(--weight-semibold);letter-spacing:.08em;text-transform:uppercase;
+      color:var(--mut);padding:6px 8px}
+    .lib-sec-h{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;border-radius:var(--radius-xs,5px);
+      margin:0 8px;padding:6px 8px}
     .lib-sec-h:hover{background:var(--sur2)}
     .lib-sec-h .lib-tree-chev{color:var(--mut);opacity:.7}
-    .lib-sec-h .lib-coll-count{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
+    .lib-sec-h .lib-coll-count{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--mut)}
     /* People & Pets — face avatar in place of the generic .lib-coll-ic user glyph (people-pets
        wireframes screen A). 20px circle, filled lazily from catalog_face_crop (an <img> so a
        failed/never-scanned crop just shows the empty background rather than a broken-image icon
@@ -1257,66 +1357,116 @@
   const overlay = document.createElement('div');
   overlay.id = 'lib-overlay';
   overlay.innerHTML = `
+    <!-- Top bar, transplanted from chromasmith-design/project/Library View.html's .topbar:
+         logo -> search -> view toggle -> zoom -> flag row -> sort -> filters -> spacer ->
+         All FX -> Export -> gear. Everything the wireframe's bar has no room for (folder
+         picker, Google Photos import, recent folders, Get Info, full-window toggle, sidebar
+         show/hide, display options, theme) relocates into the gear's View menu below, per
+         Tareq's own call on where displaced controls go. -->
     <div id="lib-top">
-      <span class="lib-title">Library</span>
-      <button class="lib-btn lib-pill" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)">${ic('log',15)}<span>Sidebar</span></button>
-      <button class="lib-btn lib-btn-icon" id="lib-pick" title="Choose root folder">${ic('library',17)}</button>
-      <button class="lib-btn lib-btn-icon" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',17)}</button>
-      <button class="lib-btn lib-btn-icon" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',17)}</button>
-      <button class="lib-btn lib-btn-icon" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',17)}</button>
-      <button class="lib-btn lib-btn-icon" id="lib-expand" title="Full-window view — G">${ic('fit',17)}</button>
-    </div>
-    <!-- Slim toolbar (wireframe review item 28, scenario C): search, view mode and sort are the
-         everyday controls and stay on one row; everything else — subfolders, the 8 filter
-         selects, and the display options that used to fill a whole second row — moved into the
-         slide-out #lib-filters-panel below, opened from the Filters button's badge count. -->
-    <div id="lib-filters">
+      <div class="lib-logo"><span class="lib-title">Chromasmith</span></div>
       <div class="lib-search-wrap">
         ${ic('search', 14)}
         <input id="lib-search" placeholder="Search filename… (Enter for AI search)" />
+        <button class="lib-btn lib-btn-icon lib-clip-search-btn" id="lib-clip-search" title="Search photos by description, e.g. \"a dog on a beach\" — press Enter in the search box, or click this">${ic('search', 13)}</button>
       </div>
-      <button class="lib-btn lib-btn-icon" id="lib-clip-search" title="Search photos by description, e.g. \"a dog on a beach\" — press Enter in the search box, or click this">${ic('search', 15)}</button>
-      <div class="lib-seg" id="lib-viewmode-seg">
-        <button data-v="grid" title="Grid view">▦</button>
-        <button data-v="list" title="List view">${ic('log',15)}</button>
-        <button data-v="compare" title="Compare two photos/looks side by side — C">⇹</button>
+      <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg">
+        <button data-v="grid" title="Grid view">${ic('crop',14)}</button>
+        <button data-v="list" title="List view">${ic('log',14)}</button>
+        <button data-v="compare" title="Compare two photos/looks side by side — C">${ic('compare',14)}</button>
       </div>
-      <!-- Flag row (design-import wireframe): rates whichever photo is open in the Editor, or the
-           first of a multi-selection — same window.chromasmithToggle*() bridge the Editor's own
-           top-bar flag buttons already use, so the two stay in sync automatically. -->
+      <div class="lib-zoomrow">
+        ${ic('zoomOut',12)}
+        <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size">
+        ${ic('zoomIn',12)}
+      </div>
+      <!-- Flag row: rates whichever photo is open in the Editor, or the first of a multi-
+           selection — same window.chromasmithToggle*() bridge the Editor's own top-bar flag
+           buttons already use, so the two stay in sync automatically. -->
       <div class="lib-flagrow" id="lib-flagrow">
         <button class="lib-btn lib-btn-icon" id="lib-flag-reject" title="Reject">${ic('close',15)}</button>
         <button class="lib-btn lib-btn-icon" id="lib-flag-pick" title="Pick">${ic('flagGreen',15)}</button>
         <button class="lib-btn lib-btn-icon" id="lib-flag-fav" title="Favorite">${ic('heart',15)}</button>
       </div>
-      <select id="lib-sort" title="Sort by">
-        <option value="name">Name</option>
-        <option value="mtime">Date modified</option>
-        <option value="date">Date taken</option>
-        <option value="iso">ISO</option>
-        <option value="shutter">Shutter speed</option>
-        <option value="aperture">Aperture</option>
-        <option value="focal">Focal length</option>
-        <option value="camera">Camera</option>
-        <option value="edited">Edit status</option>
-        <option value="rating">Rating</option>
-        <option value="editedts">Date edited</option>
-      </select>
-      <button class="lib-btn lib-pill" id="lib-sort-dir" title="Reverse sort order">↑</button>
-      <div id="lib-filters-btn-wrap">
-        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters, and display options">Filters<span id="lib-filters-badge"></span></button>
+      <div style="position:relative">
+        <button class="lib-btn lib-pill" id="lib-sort-btn" title="Sort by">${ic('sortAsc',13)}<span class="lbl" id="lib-sort-label">Date taken</span></button>
+        <div class="lib-menu" id="lib-sort-menu">
+          <div class="grp-label">Sort by</div>
+          <select id="lib-sort" style="display:none">
+            <option value="name">Name</option>
+            <option value="mtime">Date modified</option>
+            <option value="date">Date taken</option>
+            <option value="iso">ISO</option>
+            <option value="shutter">Shutter speed</option>
+            <option value="aperture">Aperture</option>
+            <option value="focal">Focal length</option>
+            <option value="camera">Camera</option>
+            <option value="edited">Edit status</option>
+            <option value="rating">Rating</option>
+            <option value="editedts">Date edited</option>
+          </select>
+          <div class="opt" data-sortval="date">Date taken</div>
+          <div class="opt" data-sortval="mtime">Date modified</div>
+          <div class="opt" data-sortval="editedts">Date edited</div>
+          <div class="opt" data-sortval="name">Name</div>
+          <div class="opt" data-sortval="rating">Rating</div>
+          <div class="opt" data-sortval="camera">Camera</div>
+          <hr>
+          <div class="opt" id="lib-sort-dir" data-dir-label="1">Reverse order</div>
+        </div>
       </div>
+      <div id="lib-filters-btn-wrap">
+        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters">Filters<span id="lib-filters-badge"></span></button>
+      </div>
+      <div class="lib-spacer"></div>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo">${ic('looks',14)}<span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E">${ic('export',14)}<span class="lbl">Export</span></button>
+      <div style="position:relative">
+        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings">${ic('adjust',15)}</button>
+        <div class="lib-menu" id="lib-view-menu">
+          <div class="grp-label">Library</div>
+          <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
+          <button class="lib-btn opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
+          <button class="lib-btn opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
+          <button class="lib-btn opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
+          <button class="lib-btn opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
+          <hr>
+          <div class="grp-label">Thumbnails</div>
+          <label class="opt" id="lib-hideicons-wrap"><span>Hide flag &amp; type icons</span><input type="checkbox" id="lib-hideicons" class="opt-check"></label>
+          <label class="opt" id="lib-zerogap-wrap"><span>No spacing between photos</span><input type="checkbox" id="lib-zerogap" class="opt-check"></label>
+          <label class="opt" id="lib-showtitle-wrap"><span>Show title</span><input type="checkbox" id="lib-showtitle" class="opt-check"></label>
+          <hr>
+          <div class="grp-label">Metadata overlay</div>
+          <select id="lib-metadisp" style="display:none">
+            <option value="off">Off</option>
+            <option value="hover">On hover</option>
+            <option value="always">Always on</option>
+          </select>
+          <div class="opt" data-metaval="off">Off</div>
+          <div class="opt" data-metaval="always">Always on</div>
+          <div class="opt" data-metaval="hover">On hover</div>
+          <hr>
+          <div class="grp-label">Panels</div>
+          <button class="lib-btn opt-action opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span><svg class="opt-check-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <hr>
+          <div class="grp-label">Appearance</div>
+          <div class="opt" data-theme="dark">Dark</div>
+          <div class="opt" data-theme="light">Light</div>
+        </div>
+      </div>
+    </div>
+    <!-- Retired: every control this row used to hold moved into #lib-top above or the gear's
+         View menu. Kept as an empty, always-hidden pinned grid child rather than removed
+         outright, so the #lib-overlay grid's pinned row numbering (see the comment on that
+         rule) never has to be renumbered. -->
+    <div id="lib-filters">
       <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
       <div id="lib-filter-chips"></div>
     </div>
-    <!-- Retired: its three controls moved into the slim row above and its display options moved
-         into #lib-filters-panel below. Kept as an empty, always-hidden 6th grid child rather than
-         removed outright, so the #lib-overlay grid's pinned row numbering (see the comment on
-         that rule) never has to be renumbered. -->
     <div id="lib-viewbar"></div>
     <div id="lib-filters-panel">
       <div id="lib-filters-panel-head">
-        <span>Filters &amp; display</span>
+        <span>Filters</span>
         <span id="lib-filters-panel-close" title="Close">${ic('close', 15)}</span>
       </div>
       <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
@@ -1386,25 +1536,18 @@
       <div class="lib-fp-label">Display</div>
       <button class="lib-btn" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to).">${ic('image',15)} Real aspect ratio</button>
       <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option></select>
-      <select id="lib-metadisp" title="Show metadata on cards">
-        <option value="off">Metadata: Off</option>
-        <option value="hover">Metadata: On hover</option>
-        <option value="always">Metadata: Always</option>
-      </select>
-      <label class="lib-btn" id="lib-showtitle-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer">
-        <input type="checkbox" id="lib-showtitle" style="margin:0"><span>Show title</span>
-      </label>
-      <label class="lib-btn" id="lib-hideicons-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer" title="Hide the flag/RAW/video/duplicate/sync badges drawn over each thumbnail">
-        <input type="checkbox" id="lib-hideicons" style="margin:0"><span>Hide photo icons</span>
-      </label>
-      <label class="lib-btn" id="lib-zerogap-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer" title="No spacing between photos, like Lightroom">
-        <input type="checkbox" id="lib-zerogap" style="margin:0"><span>No spacing</span>
-      </label>
-      <div class="lib-thumbsize" id="lib-thumbsize-wrap">
-        <span>Size</span><input type="range" id="lib-thumbsize" min="90" max="320" step="10">
-      </div>
+      <!-- lib-thumbsize (zoom), lib-showtitle/lib-hideicons/lib-zerogap and lib-metadisp all
+           relocated to the top bar / gear View menu above — kept as the single live copy of
+           each id there, not duplicated here. -->
     </div>
-    <div id="lib-side"><div id="lib-collections"></div><div id="lib-tree"></div></div>
+    <div id="lib-side">
+      <div class="lib-side-resizer" id="lib-side-resizer"></div>
+      <div class="lib-side-tabs">
+        <button class="lib-side-tab on" id="lib-side-tab-library">Library</button>
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Develop — not yet available">Develop</button>
+      </div>
+      <div id="lib-collections"></div><div id="lib-tree"></div>
+    </div>
     <div id="lib-main">
       <div id="lib-list-head">
         <div class="lib-lh-cell lib-lh-thumb"></div>
@@ -5566,13 +5709,27 @@
   sortSel.value = state.sortBy;
   sortSel.onchange = (e) => { state.sortBy = e.target.value; localStorage.setItem('chromasmith_lib_sort', state.sortBy); renderGrid(); };
   const sortDirBtn = overlay.querySelector('#lib-sort-dir');
-  function syncSortDirBtn() { sortDirBtn.textContent = state.sortDir === 'desc' ? '↓' : '↑'; }
+  function syncSortDirBtn() { sortDirBtn.dataset.dir = state.sortDir === 'desc' ? 'desc' : 'asc'; }
   syncSortDirBtn();
   sortDirBtn.onclick = () => {
     state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
     localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
     syncSortDirBtn(); renderGrid();
   };
+
+  // ── Sort pill + popover (design transplant: Library View.html's #btn-sort/#sort-menu) ──
+  // sortSel/sortDirBtn above remain the single source of truth; this popover just drives them.
+  const sortBtn = overlay.querySelector('#lib-sort-btn');
+  const sortMenu = overlay.querySelector('#lib-sort-menu');
+  const sortLabelEl = overlay.querySelector('#lib-sort-label');
+  const SORT_LABELS = { name: 'Name', mtime: 'Date modified', date: 'Date taken', camera: 'Camera', rating: 'Rating', editedts: 'Date edited' };
+  function syncSortLabel() { sortLabelEl.textContent = SORT_LABELS[state.sortBy] || sortSel.selectedOptions[0]?.textContent || state.sortBy; }
+  syncSortLabel();
+  sortBtn.onclick = (e) => { sortMenu.classList.toggle('open'); overlay.querySelector('#lib-view-menu')?.classList.remove('open'); e.stopPropagation(); };
+  sortMenu.querySelectorAll('.opt[data-sortval]').forEach((opt) => {
+    opt.onclick = () => { sortSel.value = opt.dataset.sortval; sortSel.onchange({ target: sortSel }); syncSortLabel(); sortMenu.classList.remove('open'); };
+  });
+  document.addEventListener('click', (e) => { if (!sortMenu.contains(e.target) && e.target !== sortBtn) sortMenu.classList.remove('open'); });
 
   const metaSel = overlay.querySelector('#lib-metadisp');
   metaSel.value = state.metaDisplay;
@@ -5597,6 +5754,69 @@
     localStorage.setItem('chromasmith_lib_zerogap', state.zeroGap ? '1' : '0');
     if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
   };
+
+  // ── Gear / View menu popover (design transplant: Library View.html's #btn-view-menu) ──
+  const viewMenuBtn = overlay.querySelector('#lib-view-menu-btn');
+  const viewMenu = overlay.querySelector('#lib-view-menu');
+  viewMenuBtn.onclick = (e) => { viewMenu.classList.toggle('open'); sortMenu.classList.remove('open'); e.stopPropagation(); };
+  document.addEventListener('click', (e) => { if (!viewMenu.contains(e.target) && e.target !== viewMenuBtn) viewMenu.classList.remove('open'); });
+  function syncViewMenuChecks() {
+    viewMenu.querySelectorAll('.opt[data-metaval]').forEach((o) => o.classList.toggle('sel', o.dataset.metaval === state.metaDisplay));
+    viewMenu.querySelectorAll('.opt[data-theme]').forEach((o) => o.classList.toggle('sel', o.dataset.theme === (state.libTheme || 'dark')));
+  }
+  viewMenu.querySelectorAll('.opt[data-metaval]').forEach((opt) => {
+    opt.onclick = () => { metaSel.value = opt.dataset.metaval; metaSel.onchange({ target: metaSel }); syncViewMenuChecks(); };
+  });
+  // Theme: dark is the default (Library View.html's own default state + Tareq's call), .lib-light
+  // is the alternate — see the #lib-overlay / #lib-overlay.lib-light token remap in the injected
+  // <style> above, which is what makes this one class flip every existing rule's palette.
+  state.libTheme = localStorage.getItem('chromasmith_lib_theme') || 'dark';
+  overlay.classList.toggle('lib-light', state.libTheme === 'light');
+  viewMenu.querySelectorAll('.opt[data-theme]').forEach((opt) => {
+    opt.onclick = () => {
+      state.libTheme = opt.dataset.theme;
+      localStorage.setItem('chromasmith_lib_theme', state.libTheme);
+      overlay.classList.toggle('lib-light', state.libTheme === 'light');
+      syncViewMenuChecks();
+    };
+  });
+  syncViewMenuChecks();
+  // Action rows (Choose folder…, Get Info, Full-window view, etc.) close the popover after
+  // firing their own (unrelated, ID-attached) click handler — checkboxes/theme opts stay open
+  // so several can be flipped in one visit, matching the wireframe's own opt vs toggle split.
+  viewMenu.querySelectorAll('.opt-action').forEach((btn) => btn.addEventListener('click', () => viewMenu.classList.remove('open')));
+
+  // ── All FX / Export (design transplant: Library View.html's #btn-allfx/.btn-export) ──
+  // All FX (batch look-apply across a selection) is net-new functionality out of scope for this
+  // visual-match pass (see the plan's Phase 4) — the button is real and placed correctly, but
+  // gives honest feedback rather than silently doing nothing.
+  const allFxBtn = overlay.querySelector('#lib-allfx-btn');
+  if (allFxBtn) allFxBtn.onclick = () => { if (typeof toast === 'function') toast('Batch "All FX" apply is coming soon'); };
+  const exportBtn = overlay.querySelector('#lib-export-btn');
+  if (exportBtn) exportBtn.onclick = () => libExportPaths(cmKbTargets());
+
+  // ── Sidebar drag-resize (design transplant: Library View.html's #resizer) — .full mode only,
+  // where #lib-side is a real left column; a no-op elsewhere since the resizer is display:none. ──
+  const sideEl = overlay.querySelector('#lib-side');
+  const sideResizer = overlay.querySelector('#lib-side-resizer');
+  const savedSideW = parseInt(localStorage.getItem('chromasmith_lib_side_w'), 10);
+  if (savedSideW >= 150 && savedSideW <= 420) sideEl.style.setProperty('--lib-side-w', savedSideW + 'px');
+  let sideResizing = false;
+  sideResizer.addEventListener('mousedown', (e) => { sideResizing = true; sideResizer.classList.add('active'); e.preventDefault(); });
+  window.addEventListener('mousemove', (e) => {
+    if (!sideResizing) return;
+    const w = Math.min(420, Math.max(150, e.clientX - sideEl.getBoundingClientRect().left));
+    sideEl.style.setProperty('--lib-side-w', w + 'px');
+  });
+  window.addEventListener('mouseup', () => {
+    if (!sideResizing) return;
+    sideResizing = false; sideResizer.classList.remove('active');
+    const w = parseInt(getComputedStyle(sideEl).getPropertyValue('--lib-side-w'), 10);
+    if (w) localStorage.setItem('chromasmith_lib_side_w', w);
+  });
+  // Library/Develop tabs — Develop has no distinct mode in this app yet (net-new, out of scope
+  // for this visual-match pass); it says so rather than silently doing nothing.
+  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (typeof toast === 'function') toast('Develop mode is coming soon'); };
 
   // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
   // #lib-sort-dir button — reusing their own handlers keeps grid view and list view unable to

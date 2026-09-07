@@ -1,0 +1,19 @@
+/* Chromasmith webfonts — self-hosted SF Pro, uploaded by the brand owner.
+   Only the four weights in the system's ladder are wired: 300 / 400 / 600 / 700.
+   Weight 500 is deliberately absent from the ladder, so it is not declared. */
+@font-face{font-family:"SF Pro Display";font-style:normal;font-weight:300;font-display:swap;src:url("../fonts/SF-Pro-Display-Light.otf") format("opentype")}
+@font-face{font-family:"SF Pro Display";font-style:italic;font-weight:300;font-display:swap;src:url("../fonts/SF-Pro-Display-LightItalic.otf") format("opentype")}
+@font-face{font-family:"SF Pro Display";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/SF-Pro-Display-Regular.otf") format("opentype")}
+@font-face{font-family:"SF Pro Display";font-style:italic;font-weight:400;font-display:swap;src:url("../fonts/SF-Pro-Display-RegularItalic.otf") format("opentype")}
+@font-face{font-family:"SF Pro Display";font-style:normal;font-weight:600;font-display:swap;src:url("../fonts/SF-Pro-Display-Semibold.otf") format("opentype")}
+@font-face{font-family:"SF Pro Display";font-style:italic;font-weight:600;font-display:swap;src:url("../fonts/SF-Pro-Display-SemiboldItalic.otf") format("opentype")}
+@font-face{font-family:"SF Pro Display";font-style:normal;font-weight:700;font-display:swap;src:url("../fonts/SF-Pro-Display-Bold.otf") format("opentype")}
+@font-face{font-family:"SF Pro Display";font-style:italic;font-weight:700;font-display:swap;src:url("../fonts/SF-Pro-Display-BoldItalic.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:normal;font-weight:300;font-display:swap;src:url("../fonts/SF-Pro-Text-Light.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:italic;font-weight:300;font-display:swap;src:url("../fonts/SF-Pro-Text-LightItalic.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/SF-Pro-Text-Regular.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:italic;font-weight:400;font-display:swap;src:url("../fonts/SF-Pro-Text-RegularItalic.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:normal;font-weight:600;font-display:swap;src:url("../fonts/SF-Pro-Text-Semibold.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:italic;font-weight:600;font-display:swap;src:url("../fonts/SF-Pro-Text-SemiboldItalic.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:normal;font-weight:700;font-display:swap;src:url("../fonts/SF-Pro-Text-Bold.otf") format("opentype")}
+@font-face{font-family:"SF Pro Text";font-style:italic;font-weight:700;font-display:swap;src:url("../fonts/SF-Pro-Text-BoldItalic.otf") format("opentype")}

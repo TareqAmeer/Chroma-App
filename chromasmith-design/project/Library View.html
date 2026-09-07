@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chromasmith — Library</title>
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/colors.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/typography.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/radius.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/elevation.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow-x:auto;overflow-y:auto;font-family:var(--font-text);color:var(--ink);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+a{color:var(--primary)}a:hover{color:var(--primary-focus)}
+.app{display:flex;flex-direction:column;height:100vh;min-width:480px;background:var(--canvas)}
+.app.dark{background:var(--surface-tile-1);color:var(--ink-on-dark)}
+.app.dark .topbar,.app.dark .sidebar,.app.dark .statusbar,.app.dark .filterrow{background:var(--surface-tile-1);border-color:rgba(255,255,255,.12)}
+.app.dark .sidebar{background:var(--surface-tile-2)}
+.app.dark .logo .word,.app.dark .row,.app.dark .sec-head,.app.dark .flabel,.app.dark .pillbtn,.app.dark .tab,.app.dark .statusbar,.app.dark td,.app.dark th{color:var(--ink-on-dark)}
+.app.dark .search,.app.dark .pillbtn,.app.dark .chip,.app.dark .iconbtn,.app.dark .viewtoggle,.app.dark .flagrow,.app.dark .card{border-color:rgba(255,255,255,.14)}
+.app.dark .search{background:rgba(255,255,255,.06)}
+.app.dark .row:hover,.app.dark .tab.active,.app.dark .viewtoggle button.active,.app.dark .pillbtn:hover,.app.dark .chip:hover{background:rgba(255,255,255,.08)}
+.app.dark .row.sel{background:rgba(97,160,175,.22);color:var(--ink-on-dark);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
+.app.dark .row.sel svg{stroke:var(--ink-on-dark)}
+.app.dark .row.sel .rc{color:var(--ink-on-dark)}
+.app.dark .row svg,.app.dark .sec-head svg,.app.dark .chev-mini,.app.dark .viewtoggle svg,.app.dark .zoomrow svg,.app.dark .search svg,.app.dark .pillbtn svg,.app.dark .iconbtn svg,.app.dark .logo .mark svg,.app.dark .rc,.app.dark .dayname{stroke:var(--ink-on-dark-muted);color:var(--ink-on-dark-muted)}
+.app.dark .row svg{stroke:var(--ink-on-dark-muted)}
+.app.dark .card .ph svg{stroke:var(--ink-on-dark-muted)}
+.app.dark .menu svg{stroke:var(--ink-on-dark)}
+.app.dark .menu .check{stroke:var(--primary-on-dark)}
+.app.dark thead th{background:var(--surface-tile-1)}
+.app.dark tbody tr:hover{background:rgba(255,255,255,.06)}
+.app.dark .menu{background:var(--surface-tile-2);border-color:rgba(255,255,255,.14)}
+.app.dark .menu .opt:hover{background:rgba(255,255,255,.08)}
+
+/* ── Top bar ─────────────────────────────────────────────────────── */
+.topbar{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--hairline);background:var(--canvas);min-width:0}
+.logo{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.logo-gap{flex:1 1 24px;min-width:0}
+.logo .mark{width:26px;height:26px;border-radius:var(--radius-sm);background:var(--ink);display:flex;align-items:center;justify-content:center}
+.logo .mark svg{width:14px;height:14px;stroke:#fff}
+.logo .word{font-family:var(--font-display);font-weight:var(--weight-semibold);font-size:15px;letter-spacing:-0.374px}
+
+.search{flex:1 1 160px;min-width:70px;max-width:300px;height:32px;border-radius:var(--radius-pill);border:1px solid var(--hairline);display:flex;align-items:center;gap:8px;padding:0 14px;background:var(--surface-ghost);overflow:hidden}
+.search input{border:none;background:none;outline:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:13px;color:var(--ink);font-family:var(--font-text)}
+.search input::placeholder{color:var(--ink-muted-48)}
+.search svg{width:14px;height:14px;stroke:var(--ink-muted-48);flex:none}
+
+.viewtoggle{display:flex;border:1px solid var(--hairline);border-radius:var(--radius-sm);overflow:hidden;flex:0 0 auto}
+.viewtoggle button{width:28px;height:28px;display:flex;align-items:center;justify-content:center}
+.viewtoggle button.active{background:var(--surface-alt)}
+.viewtoggle button svg{width:14px;height:14px;stroke:var(--ink-muted-80)}
+.viewtoggle button.active svg{stroke:var(--ink)}
+.viewtoggle button+button{border-left:1px solid var(--hairline)}
+
+.zoomrow{display:flex;align-items:center;gap:8px;flex:1 1 30px;min-width:24px}
+.zoomrow svg{width:12px;height:12px;stroke:var(--ink-muted-48);flex:none}
+.zoomrow input[type=range]{width:100%;min-width:24px;max-width:100px;accent-color:var(--primary)}
+.topbar.compact .zoomrow svg{display:none}
+
+.flagrow{display:flex;align-items:center;gap:2px;flex:0 0 auto;border-left:1px solid var(--hairline);border-right:1px solid var(--hairline);padding:0 12px}
+.flagbtn{width:28px;height:28px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center}
+.flagbtn:hover{background:var(--surface-alt)}
+.flagbtn svg{width:15px;height:15px;stroke:var(--ink-muted-80)}
+.flagbtn.reject svg{stroke:var(--state-danger)}
+.flagbtn.pick svg{stroke:var(--state-success)}
+.flagbtn.fav svg{stroke:var(--state-warning)}
+
+.spacer{flex:0 1 8px;min-width:0}
+
+.pillbtn{height:30px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--hairline);display:flex;align-items:center;gap:6px;font-size:13px;flex:none;white-space:nowrap}
+.chip.iconchip{width:26px;height:26px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.chip.iconchip svg{width:13px;height:13px}
+.chip.iconchip.reject svg{stroke:var(--state-danger)}
+.chip.iconchip.pick svg{stroke:var(--primary)}
+.chip.iconchip.fav svg{stroke:var(--state-warning)}
+.chip.iconchip.none svg{stroke:var(--ink-muted-48)}
+.chip.iconchip.sel{background:var(--surface-alt);box-shadow:inset 0 0 0 2px var(--primary)}
+.chip.more-type{display:none}
+.filterrow.types-expanded .chip.more-type{display:inline-flex}
+.topbar.compact #btn-sort .lbl,.topbar.compact #btn-filters .lbl,.topbar.compact #btn-allfx .lbl{display:none}
+.topbar.compact #btn-sort,.topbar.compact #btn-filters,.topbar.compact #btn-allfx{padding:0;width:30px;justify-content:center}
+.topbar.compact .btn-export{padding:0;width:30px;justify-content:center}
+.topbar.compact .btn-export .lbl{display:none}
+.pillbtn svg{width:13px;height:13px;stroke:var(--ink-muted-80)}
+.pillbtn:hover{background:var(--surface-alt)}
+.pillbtn.active{background:var(--blue-mist-soft);border-color:var(--primary);color:var(--primary)}
+.pillbtn.active svg{stroke:var(--primary)}
+
+.btn-export{height:30px;padding:0 16px;border-radius:var(--radius-pill);background:var(--primary);color:#fff;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:var(--weight-semibold);flex:none}
+.btn-export:hover{background:var(--primary-focus)}
+.btn-export svg{width:13px;height:13px;stroke:#fff}
+
+.iconbtn{width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid var(--hairline);display:flex;align-items:center;justify-content:center;flex:none;position:relative}
+.iconbtn:hover{background:var(--surface-alt)}
+.iconbtn svg{width:15px;height:15px;stroke:var(--ink-muted-80)}
+
+/* view menu popover */
+.menu{position:absolute;top:36px;right:0;width:220px;background:var(--canvas);border:1px solid var(--hairline);border-radius:var(--radius-sm);box-shadow:var(--shadow-photo,0 3px 30px rgba(0,0,0,.22));padding:6px;z-index:50;display:none}
+.menu.open{display:block}
+.menu .grp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted-48);padding:8px 8px 4px}
+.menu .opt{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:var(--radius-xs);font-size:13px;cursor:pointer}
+.menu .opt:hover{background:var(--surface-alt)}
+.menu .opt .check{width:14px;height:14px;stroke:var(--primary);visibility:hidden}
+.menu .opt.sel .check{visibility:visible}
+.menu hr{border:none;border-top:1px solid var(--divider-soft);margin:6px 2px}
+
+/* filter row */
+.filterrow{display:none;height:40px;flex:none;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--hairline);overflow-x:auto}
+.filterrow.open{display:flex}
+.filterrow .flabel{font-size:11px;color:var(--ink-muted-48);flex:none}
+.chip{height:26px;padding:0 12px;border-radius:var(--radius-pill);border:1px solid var(--hairline);font-size:12px;flex:none;white-space:nowrap}
+.chip:hover{background:var(--surface-alt)}
+.chip.sel{background:var(--primary);border-color:var(--primary);color:#fff}
+.filterdiv{width:1px;height:20px;background:var(--hairline);flex:none}
+
+/* ── Body ────────────────────────────────────────────────────────── */
+.body{flex:1;min-height:0;display:flex;position:relative}
+
+.sidebar{flex:none;width:232px;min-width:150px;max-width:420px;background:var(--surface-alt);border-right:1px solid var(--hairline);overflow-y:auto;overflow-x:hidden;padding:12px 0 8px;position:relative}
+.sidebar.hidden{width:0!important;min-width:0;border-right:none;overflow:hidden}
+.resizer{position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:10}
+.resizer:hover,.resizer.active{background:rgba(34,68,85,.15)}
+
+.showsidebar{position:absolute;left:8px;top:8px;z-index:20}
+
+.tabs{display:flex;gap:4px;padding:0 12px 12px;flex:none}
+.tab{flex:1;height:28px;border-radius:var(--radius-sm);font-size:12px;font-weight:var(--weight-semibold);display:flex;align-items:center;justify-content:center;border:1px solid transparent}
+.tab.active{background:var(--canvas);border-color:var(--hairline)}
+.tab:not(.active){color:var(--ink-muted-48)}
+
+.sec{padding:2px 8px}
+.sec+.sec{border-top:1px solid var(--divider-soft);margin-top:6px;padding-top:6px}
+.sec-head{display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:10px;font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted-48);cursor:grab;user-select:none}
+.sec-head svg.chev{width:10px;height:10px;stroke:var(--ink-muted-48);transition:transform .15s}
+.sec.collapsed .chev{transform:rotate(-90deg)}
+.sec.collapsed .rowset{display:none}
+.sec.dragging{opacity:.4}
+
+.row{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 20px;border-radius:var(--radius-xs);font-size:13px;cursor:pointer}
+.row:hover{background:rgba(0,0,0,.035)}
+.row.sel{background:var(--blue-mist-soft);color:var(--primary);font-weight:var(--weight-semibold)}
+.row svg{width:14px;height:14px;stroke:var(--ink-muted-80);flex:none}
+.row.sel svg{stroke:var(--primary)}
+.row .rn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .rc{font-size:11px;color:var(--ink-muted-48);flex:none}
+.row.sel .rc{color:var(--primary);font-weight:var(--weight-semibold)}
+#row-allphotos .rc{font-size:13px}
+.row.sub{padding-left:66px}
+.row.datehead{padding-left:20px;font-size:13px}
+.row.monthhead{padding-left:28px;font-size:12px}
+.row.sub{font-size:11px}
+.dayname{color:var(--ink-muted-48);font-weight:var(--weight-regular)}
+.chev-mini{width:9px;height:9px;stroke:var(--ink-muted-48);flex:none;margin-right:4px;transition:transform .15s;cursor:pointer}
+.date-group.collapsed>.date-children{display:none}
+.date-group.collapsed .chev-mini{transform:rotate(-90deg)}
+
+/* ── Grid ────────────────────────────────────────────────────────── */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.grid-wrap{flex:1;overflow-y:auto;padding:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cell,160px),1fr));gap:16px}
+.grid.nospace{gap:1px}
+.card{position:relative;border-radius:0;overflow:hidden;background:var(--surface-alt);aspect-ratio:1/1;cursor:pointer;box-shadow:inset 0 0 0 1px var(--hairline)}
+.grid.original .card{aspect-ratio:auto;height:var(--cell,160px)}
+.card.selected{box-shadow:inset 0 0 0 2px var(--primary)}
+.card.selected::after{content:'';position:absolute;inset:0;background:rgba(34,68,85,.12);pointer-events:none}
+.card .ph{position:absolute;inset:0;background:var(--surface-alt);display:flex;align-items:center;justify-content:center}
+.card .ph svg{width:22px;height:22px;stroke:var(--ink-muted-48);opacity:.5}
+.card .badge{position:absolute;top:6px;left:6px;background:rgba(255,255,255,.85);border-radius:var(--radius-xs);font-size:9px;font-weight:var(--weight-semibold);padding:2px 5px;color:var(--ink)}
+.card .flag{position:absolute;bottom:6px;right:6px;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+.card:hover .flag,.card .flag.set{opacity:1}
+.card .flag svg{width:12px;height:12px;stroke:var(--ink-muted-80)}
+.card .ratebar{position:absolute;right:6px;bottom:6px;display:flex;gap:3px;opacity:0;transition:opacity .15s}
+.card:hover .ratebar,.card .ratebar.has-set{opacity:1}
+.card .ratebar.has-set button:not(.set){display:none}
+.card .ratebar button{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center}
+.card .ratebar svg{width:11px;height:11px;stroke:var(--ink-muted-48)}
+.card .ratebar .reject.set{background:var(--state-danger)}
+.card .ratebar .reject.set svg{stroke:#fff}
+.card .ratebar .pick.set{background:var(--primary)}
+.card .ratebar .pick.set svg{stroke:#fff}
+.card .ratebar .fav.set{background:var(--state-warning)}
+.card .ratebar .fav.set svg{stroke:#fff}
+.card.rejected .ph{filter:brightness(.45) saturate(.7)}
+.grid.hide-overlays .card .badge,.grid.hide-overlays .card .ratebar{display:none}
+.card .meta{position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.55);color:#fff;font-size:9px;padding:2px 6px;border-radius:var(--radius-xs);opacity:0}
+.grid.meta-on .card .meta{opacity:1}
+.grid.meta-hover .card:hover .meta{opacity:1}
+
+.table-wrap{display:none;flex:1;overflow:auto;padding:0 16px}
+.table-wrap.open{display:block}
+.grid-wrap.tablemode{display:none}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{text-align:left;padding:8px;color:var(--ink-muted-48);font-weight:var(--weight-regular);border-bottom:1px solid var(--hairline);position:sticky;top:0;background:var(--canvas)}
+tbody td{padding:8px;border-bottom:1px solid var(--divider-soft)}
+tbody tr:hover{background:var(--surface-alt)}
+.thumb-sm{width:36px;height:36px;border-radius:var(--radius-xs);background:var(--surface-alt);display:inline-block;vertical-align:middle;margin-right:8px;box-shadow:inset 0 0 0 1px var(--hairline)}
+
+/* ── Status bar ──────────────────────────────────────────────────── */
+.statusbar{height:28px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-top:1px solid var(--hairline);background:var(--surface-alt);font-size:11px;color:var(--ink-muted-48)}
+.statusbar .sync{display:flex;align-items:center;gap:6px}
+.statusbar svg{width:11px;height:11px;stroke:var(--ink-muted-48)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<div class="topbar">
+  <div class="logo" style="margin-left:-16px">
+    <img src="assets/chromasmith-logo.png" alt="Chromasmith" style="height:28px;width:auto;display:block">
+  </div>
+  <div class="logo-gap"></div>
+  <div class="search" data-comment-anchor="9c670014c7-div">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="text" placeholder="Search name, keyword, or filter">
+  </div>
+  <div class="viewtoggle">
+    <button class="active" id="btn-grid" title="Thumbnail view"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+    <button id="btn-table" title="Table view"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  </div>
+  <div class="zoomrow">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <input type="range" id="zoom" min="100" max="320" value="160" data-comment-anchor="ebdc6e7176-input">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </div>
+  <div class="flagrow">
+    <button class="flagbtn reject" title="Reject"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    <button class="flagbtn pick" title="Pick"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4a1 1 0 0 1 1-1h13.5a.5.5 0 0 1 .4.8L15 9l4.9 5.2a.5.5 0 0 1-.4.8H6a1 1 0 0 0-1 1v6"/></svg></button>
+    <button class="flagbtn fav" title="Favorite"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z" data-comment-anchor="27b51f2126-polygon"/></svg></button>
+  </div>
+  <div style="position:relative">
+  <button class="pillbtn" id="btn-sort" title="Sort" data-comment-anchor="82d9834728-button">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11M3 12h7M3 17h4M17 4v16m0 0-4-4m4 4 4-4"/></svg>
+    <span class="lbl" id="sort-label">Date taken</span>
+  </button>
+  <div class="menu" id="sort-menu">
+    <div class="grp-label">Sort by</div>
+    <div class="opt sel" data-sort="Date taken"><span>Date taken</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <div class="opt" data-sort="Date added"><span>Date added</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <div class="opt" data-sort="Date edited"><span>Date edited</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <hr>
+    <div class="opt sel" data-sortdir="desc"><span>Newest first</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <div class="opt" data-sortdir="asc"><span>Oldest first</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+  </div>
+  </div>
+  <button class="pillbtn" id="btn-filters" data-comment-anchor="e86096758b-button">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--canvas)"/><circle cx="15" cy="12" r="2" fill="var(--canvas)"/><circle cx="9" cy="18" r="2" fill="var(--canvas)"/></svg>
+    <span class="lbl">Filters</span>
+  </button>
+  <div class="spacer"></div>
+  <button class="pillbtn" id="btn-allfx" data-comment-anchor="7f837dd348-button"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2 8 6l-4 1.5L8 9l1.5 4L11 9l4-1.5L11 6ZM19 14l-1 2.5L15.5 17.5 18 18.5 19 21l1-2.5 2.5-1L20 16.5Z"/></svg><span class="lbl">All FX</span></button>
+  <button class="btn-export"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></svg><span class="lbl">Export</span></button>
+  <div style="position:relative">
+    <button class="iconbtn" id="btn-view-menu" title="View settings"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <div class="menu" id="view-menu" data-comment-anchor="4f5bbacb04-div">
+      <div class="grp-label">Thumbnails</div>
+      <div class="opt sel" data-grp="crop" data-val="square"><span>Square crops</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="opt" data-grp="crop" data-val="original"><span>Original dimensions</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="opt sel" data-grp="spacing" data-val="normal"><span>Normal spacing</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="opt" data-grp="spacing" data-val="none"><span data-comment-anchor="256db7f536-span">No spacing between photos</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="opt" data-toggle="overlays"><span>Hide flag &amp; type icons</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <hr>
+      <div class="grp-label">Metadata overlay</div>
+      <div class="opt sel" data-grp="meta" data-val="off"><span>Off</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="opt" data-grp="meta" data-val="on"><span>Always on</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="opt" data-grp="meta" data-val="hover"><span>On hover</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <hr>
+      <div class="grp-label">Panels</div>
+      <div class="opt sel" data-toggle="sidebar"><span>Show sidebar</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <hr>
+      <div class="grp-label">Appearance</div>
+      <div class="opt sel" data-grp="theme" data-val="light"><span>Light</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="opt" data-grp="theme" data-val="dark"><span>Dark</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<div class="body">
+  <button class="iconbtn showsidebar" id="btn-show-sidebar" style="display:none" title="Show sidebar"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="resizer" id="resizer"></div>
+    <div class="tabs">
+      <button class="tab active">Library</button>
+      <button class="tab">Develop</button>
+    </div>
+
+    <div class="sec" data-sec="allphotos" draggable="true">
+      <div class="row sel" id="row-allphotos" title="Double-click to clear all filters">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+        <span class="rn">All Photos</span><span class="rc">4,000</span>
+      </div>
+    </div>
+
+    <div class="sec" data-sec="bydate" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>By date</div>
+      <div class="rowset">
+        <div class="date-group" data-datelevel="year">
+          <div class="row datehead" data-comment-anchor="841d509feb-div"><svg class="chev-mini" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg><span class="rn">2026</span><span class="rc">3,120</span></div>
+          <div class="date-children">
+            <div class="date-group" data-datelevel="month">
+              <div class="row monthhead"><svg class="chev-mini" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg><span class="rn">March</span><span class="rc">840</span></div>
+              <div class="date-children">
+                <div class="row sub"><span class="rn">6 <span class="dayname">· Sun</span></span><span class="rc">210</span></div>
+                <div class="row sub"><span class="rn">22 <span class="dayname">· Mon</span></span><span class="rc">840</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="date-group" data-datelevel="year">
+          <div class="row datehead"><svg class="chev-mini" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg><span class="rn">2025</span><span class="rc">880</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec" data-sec="collections" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>Collections</div>
+      <div class="rowset">
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg><span class="rn">Recents</span><span class="rc">120</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z" data-comment-anchor="89d9f25aa4-polygon"/></svg><span class="rn">Favorites</span><span class="rc">45</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="rn">Edited</span><span class="rc">310</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg><span class="rn">Exported</span><span class="rc">95</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4a1 1 0 0 1 1-1h13.5a.5.5 0 0 1 .4.8L15 9l4.9 5.2a.5.5 0 0 1-.4.8H6a1 1 0 0 0-1 1v6"/></svg><span class="rn">Flagged</span><span class="rc">12</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg><span class="rn">Rejected</span><span class="rc">2</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="13" height="13" rx="1"/><path d="M9 16v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-2"/></svg><span class="rn">Duplicates</span><span class="rc">8</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg><span class="rn">Synced</span><span class="rc">3,998</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L14.7 3.86a2 2 0 0 0-3.4 0Z"/></svg><span class="rn">Needs Review</span><span class="rc">1</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span class="rn">Not Face-Scanned</span><span class="rc">0</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h.01M10 12h.01"/></svg><span class="rn">Raw</span><span class="rc">1,240</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span class="rn">Videos</span><span class="rc">64</span></div>
+      </div>
+    </div>
+
+    <div class="sec" data-sec="people" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>People &amp; Pets</div>
+      <div class="rowset">
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg><span class="rn">Sarah</span><span class="rc">420</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg><span class="rn">Buddy (Dog)</span><span class="rc">180</span></div>
+      </div>
+    </div>
+
+    <div class="sec" data-sec="albums" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>Albums</div>
+      <div class="rowset">
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.9 19.8 17 13V7a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6l-3.9 6.8a1 1 0 0 0 .9 1.2h15.9a1 1 0 0 0 .9-1.2Z"/></svg><span class="rn">Summer Trip</span><span class="rc">240</span></div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.9 19.8 17 13V7a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6l-3.9 6.8a1 1 0 0 0 .9 1.2h15.9a1 1 0 0 0 .9-1.2Z"/></svg><span class="rn">Portfolio</span><span class="rc">50</span></div>
+      </div>
+    </div>
+
+    <div class="sec" data-sec="drives" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>Drives</div>
+      <div class="rowset"><div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg><span class="rn">External SSD</span><span class="rc">1,200</span></div></div>
+    </div>
+
+    <div class="sec" data-sec="devices" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>Devices</div>
+      <div class="rowset"><div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg><span class="rn">iPhone</span><span class="rc">640</span></div></div>
+    </div>
+
+    <div class="sec" data-sec="folders" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>Folders</div>
+      <div class="rowset"><div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span class="rn">Client Work</span><span class="rc">88</span></div></div>
+    </div>
+
+    <div class="sec" data-sec="cloud" draggable="true">
+      <div class="sec-head"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>Cloud</div>
+      <div class="rowset"><div class="row"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 0 9Z"/></svg><span class="rn">Google Photos</span><span class="rc">2,140</span></div></div>
+    </div>
+
+  </aside>
+
+  <div class="main">
+    <div class="filterrow" id="filter-row" data-comment-anchor="d8d7f0b0b5-div">
+      <span class="flabel" data-comment-anchor="4f39600748-span">Types</span>
+      <button class="chip sel" data-fgrp="type">All</button>
+      <button class="chip" data-fgrp="type" data-comment-anchor="7ea581225d-button">RAW</button>
+      <button class="chip" data-fgrp="type">JPEG</button>
+      <button class="chip" data-fgrp="type">Video</button>
+      <button class="chip" id="btn-types-more" title="More types">…</button>
+      <button class="chip more-type" data-fgrp="type">HEIC</button>
+      <button class="chip more-type" data-fgrp="type">TIFF</button>
+      <button class="chip more-type" data-fgrp="type">PNG</button>
+      <button class="chip more-type" data-fgrp="type">DNG</button>
+      <div class="filterdiv"></div>
+      <span class="flabel">Flags &amp; tags</span>
+      <button class="chip iconchip pick" data-fgrp="flag" title="Flagged" data-comment-anchor="925b403d20-button"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4a1 1 0 0 1 1-1h13.5a.5.5 0 0 1 .4.8L15 9l4.9 5.2a.5.5 0 0 1-.4.8H6a1 1 0 0 0-1 1v6"/></svg></button>
+      <button class="chip iconchip reject" data-fgrp="flag" title="Rejected"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+      <button class="chip iconchip fav" data-fgrp="flag" title="Favorited"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/></svg></button>
+      <button class="chip iconchip none" data-fgrp="flag" title="Unflagged"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="grid-wrap" id="grid-wrap" data-comment-anchor="a85e671b0c-div">
+      <div class="grid" id="grid" style="--cell:160px"></div>
+    </div>
+    <div class="table-wrap" id="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Name</th><th>Type</th><th>Date taken</th><th>Flag</th><th>Size</th></tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="statusbar">
+  <span id="status-count" data-comment-anchor="c165cdeea2-span">4.0k of 4.0k photos</span>
+  <span class="sync"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>Syncing catalog files…</span>
+</div>
+
+</div>
+<script>
+const grid=document.getElementById('grid');
+const N=60;
+let html='';
+for(let i=0;i<N;i++){
+  const flagged=i%7===0;
+  html+='<div class="card" data-i="'+i+'"><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>'+(i%4===0?'<div class="badge">R</div>':'')+'<div class="meta">ƒ/2.8 · 1/250 · ISO 400</div><div class="ratebar'+(flagged?' has-set':'')+'">'
+    +'<button class="reject" data-r="reject"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>'
+    +'<button class="pick'+(flagged?' set':'')+'" data-r="pick"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4a1 1 0 0 1 1-1h13.5a.5.5 0 0 1 .4.8L15 9l4.9 5.2a.5.5 0 0 1-.4.8H6a1 1 0 0 0-1 1v6"/></svg></button>'
+    +'<button class="fav" data-r="fav"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/></svg></button>'
+    +'</div></div>';
+}
+grid.innerHTML=html;
+
+let tbl='';
+for(let i=0;i<N;i++){
+  tbl+='<tr><td><span class="thumb-sm"></span></td><td>IMG_'+(4021+i)+'.CR3</td><td>'+(i%4===0?'RAW':'JPEG')+'</td><td>2026-03-'+String((i%28)+1).padStart(2,'0')+'</td><td>'+(i%7===0?'★':'—')+'</td><td>24.'+i%9+' MB</td></tr>';
+}
+document.getElementById('table-body').innerHTML=tbl;
+
+grid.addEventListener('click',e=>{
+  const rateBtn=e.target.closest('.ratebar button');
+  const card=e.target.closest('.card');
+  if(!card)return;
+  if(rateBtn){
+    rateBtn.classList.toggle('set');
+    const bar=rateBtn.closest('.ratebar');
+    bar.classList.toggle('has-set',!!bar.querySelector('.set'));
+    card.classList.toggle('rejected',bar.querySelector('.reject').classList.contains('set'));
+    e.stopPropagation();return;
+  }
+  if(e.metaKey||e.ctrlKey){card.classList.toggle('selected');return;}
+  if(e.shiftKey){
+    const cards=[...grid.children];
+    const last=grid.querySelector('.card.last-selected')||cards[0];
+    const [a,b]=[cards.indexOf(last),cards.indexOf(card)].sort((x,y)=>x-y);
+    cards.forEach((c,i)=>c.classList.toggle('selected',i>=a&&i<=b));
+    card.classList.add('last-selected');
+    return;
+  }
+  document.querySelectorAll('.card.selected,.card.last-selected').forEach(c=>{c.classList.remove('selected');c.classList.remove('last-selected');});
+  card.classList.add('selected','last-selected');
+});
+
+// prevent any overlap: collapse Filters/All FX/Export to icon-only as the viewport narrows,
+// driven by window width directly (topbar's own scrollWidth==clientWidth once ancestor floors kick in)
+const topbar=document.querySelector('.topbar');
+function fitTopbar(){topbar.classList.toggle('compact',window.innerWidth<1060);}
+window.addEventListener('resize',fitTopbar);
+fitTopbar();
+
+const btnGrid=document.getElementById('btn-grid'),btnTable=document.getElementById('btn-table');
+const gridWrap=document.getElementById('grid-wrap'),tableWrap=document.getElementById('table-wrap');
+btnGrid.onclick=()=>{btnGrid.classList.add('active');btnTable.classList.remove('active');gridWrap.style.display='';tableWrap.classList.remove('open');};
+btnTable.onclick=()=>{btnTable.classList.add('active');btnGrid.classList.remove('active');gridWrap.style.display='none';tableWrap.classList.add('open');};
+
+// zoom
+document.getElementById('zoom').addEventListener('input',e=>{grid.style.setProperty('--cell',e.target.value+'px');});
+
+// sort dropdown
+const btnSort=document.getElementById('btn-sort'),sortMenu=document.getElementById('sort-menu'),sortLabel=document.getElementById('sort-label');
+btnSort.onclick=e=>{sortMenu.classList.toggle('open');e.stopPropagation();};
+document.addEventListener('click',e=>{if(!sortMenu.contains(e.target)&&e.target!==btnSort)sortMenu.classList.remove('open');});
+sortMenu.querySelectorAll('.opt[data-sort]').forEach(opt=>{
+  opt.addEventListener('click',()=>{
+    sortMenu.querySelectorAll('.opt[data-sort]').forEach(o=>o.classList.remove('sel'));
+    opt.classList.add('sel');
+    sortLabel.textContent=opt.dataset.sort;
+  });
+});
+sortMenu.querySelectorAll('.opt[data-sortdir]').forEach(opt=>{
+  opt.addEventListener('click',()=>{
+    sortMenu.querySelectorAll('.opt[data-sortdir]').forEach(o=>o.classList.remove('sel'));
+    opt.classList.add('sel');
+  });
+});
+
+// filter type "more" expand
+document.getElementById('btn-types-more').addEventListener('click',()=>{document.getElementById('filter-row').classList.toggle('types-expanded');});
+
+// date year/month collapse
+document.querySelectorAll('.chev-mini').forEach(chev=>{
+  chev.addEventListener('click',e=>{e.stopPropagation();chev.closest('.date-group').classList.toggle('collapsed');});
+});
+
+// filters row
+const filterRow=document.getElementById('filter-row'),btnFilters=document.getElementById('btn-filters');
+btnFilters.onclick=()=>{filterRow.classList.toggle('open');btnFilters.classList.toggle('active');};
+document.querySelectorAll('.chip').forEach(chip=>{
+  chip.addEventListener('click',()=>{
+    const grp=chip.dataset.fgrp;
+    document.querySelectorAll('.chip[data-fgrp="'+grp+'"]').forEach(c=>c.classList.remove('sel'));
+    chip.classList.add('sel');
+  });
+});
+
+// all photos: double-click clears filters
+document.getElementById('row-allphotos').addEventListener('dblclick',()=>{
+  document.querySelectorAll('.chip.sel').forEach(c=>c.classList.remove('sel'));
+  document.querySelectorAll('.chip[data-fgrp="type"]')[0].classList.add('sel');
+  document.querySelectorAll('.chip[data-fgrp="flag"]').forEach(c=>c.classList.remove('sel'));
+  document.querySelectorAll('.row.sel').forEach(r=>r!==document.getElementById('row-allphotos')&&r.classList.remove('sel'));
+});
+document.querySelectorAll('.sidebar .row').forEach(row=>{
+  row.addEventListener('click',()=>{
+    document.querySelectorAll('.sidebar .row.sel').forEach(r=>r.classList.remove('sel'));
+    row.classList.add('sel');
+  });
+});
+
+// section collapse
+document.querySelectorAll('.sec-head').forEach(h=>{
+  h.addEventListener('click',()=>h.closest('.sec').classList.toggle('collapsed'));
+});
+
+// section drag-reorder
+let dragEl=null;
+document.querySelectorAll('.sec').forEach(sec=>{
+  sec.addEventListener('dragstart',e=>{dragEl=sec;sec.classList.add('dragging');});
+  sec.addEventListener('dragend',()=>{sec.classList.remove('dragging');dragEl=null;});
+  sec.addEventListener('dragover',e=>{
+    e.preventDefault();
+    if(!dragEl||dragEl===sec||sec.dataset.sec==='allphotos')return;
+    const rect=sec.getBoundingClientRect();
+    const after=e.clientY>rect.top+rect.height/2;
+    sec.parentNode.insertBefore(dragEl,after?sec.nextSibling:sec);
+  });
+});
+
+// sidebar resize
+const sidebar=document.getElementById('sidebar'),resizer=document.getElementById('resizer');
+let resizing=false;
+resizer.addEventListener('mousedown',e=>{resizing=true;resizer.classList.add('active');e.preventDefault();});
+window.addEventListener('mousemove',e=>{
+  if(!resizing)return;
+  const rect=sidebar.getBoundingClientRect();
+  const w=e.clientX-rect.left;
+  if(w<120){hideSidebar();resizing=false;resizer.classList.remove('active');return;}
+  sidebar.style.width=Math.min(420,Math.max(150,w))+'px';
+});
+window.addEventListener('mouseup',()=>{resizing=false;resizer.classList.remove('active');});
+
+function hideSidebar(){
+  sidebar.classList.add('hidden');
+  document.getElementById('btn-show-sidebar').style.display='flex';
+  document.querySelectorAll('.menu .opt[data-toggle="sidebar"]').forEach(o=>o.classList.remove('sel'));
+}
+function showSidebar(){
+  sidebar.classList.remove('hidden');
+  sidebar.style.width='232px';
+  document.getElementById('btn-show-sidebar').style.display='none';
+  document.querySelectorAll('.menu .opt[data-toggle="sidebar"]').forEach(o=>o.classList.add('sel'));
+}
+document.getElementById('btn-show-sidebar').onclick=showSidebar;
+
+// view menu
+const viewMenuBtn=document.getElementById('btn-view-menu'),viewMenu=document.getElementById('view-menu');
+viewMenuBtn.onclick=e=>{viewMenu.classList.toggle('open');e.stopPropagation();};
+document.addEventListener('click',e=>{if(!viewMenu.contains(e.target)&&e.target!==viewMenuBtn)viewMenu.classList.remove('open');});
+
+document.querySelectorAll('.menu .opt[data-grp]').forEach(opt=>{
+  opt.addEventListener('click',()=>{
+    const grp=opt.dataset.grp,val=opt.dataset.val;
+    document.querySelectorAll('.menu .opt[data-grp="'+grp+'"]').forEach(o=>o.classList.remove('sel'));
+    opt.classList.add('sel');
+    if(grp==='crop')grid.classList.toggle('original',val==='original');
+    if(grp==='spacing')grid.classList.toggle('nospace',val==='none');
+    if(grp==='theme')document.getElementById('app').classList.toggle('dark',val==='dark');
+    if(grp==='meta'){grid.classList.remove('meta-on','meta-hover');if(val!=='off')grid.classList.add('meta-'+val);}
+  });
+});
+document.querySelectorAll('.menu .opt[data-toggle]').forEach(opt=>{
+  opt.addEventListener('click',()=>{
+    const t=opt.dataset.toggle;
+    if(t==='overlays'){opt.classList.toggle('sel');grid.classList.toggle('hide-overlays',opt.classList.contains('sel'));}
+    if(t==='sidebar'){sidebar.classList.contains('hidden')?showSidebar():hideSidebar();}
+  });
+});
+</script>
+</body>
+</html>

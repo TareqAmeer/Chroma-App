@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chromasmith — Develop</title>
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/colors.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/typography.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/radius.css">
+<link rel="stylesheet" href="_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/elevation.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:auto;font-family:var(--font-text);color:var(--ink-on-dark);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
+.app{display:flex;flex-direction:column;height:100vh;min-width:760px;background:var(--surface-tile-3)}
+.app.light{background:var(--canvas);color:var(--ink)}
+.app.light .topbar,.app.light .filmstrip,.app.light .toolpanel,.app.light .rail,.app.light .statusbar{background:var(--canvas);border-color:var(--hairline)}
+.app.light .canvas-wrap{background:#e8e8ea}
+.app.light .ibtn svg,.app.light .fs-head .lbl,.app.light .fieldlabel,.app.light .rail button,.app.light .tb-title .meta,.app.light .statusbar{color:var(--ink-muted-48)}
+.app.light .ibtn:hover,.app.light .pillbtn:hover,.app.light .rail button:hover{background:var(--surface-alt)}
+.app.light .undogrp,.app.light .pillbtn,.app.light .select-btn,.app.light .preset-filter,.app.light .fs-thumb,.app.light .preset-tile,.app.light .lutrow .ibtn{border-color:var(--hairline)}
+.app.light .select-btn,.app.light .preset-filter,.app.light .fs-thumb,.app.light .preset-tile{background:var(--surface-alt);color:var(--ink)}
+.app.light .fs-tab.active{background:var(--surface-alt);border-color:var(--hairline);color:var(--ink)}
+.app.light .menu{background:#fff;border-color:var(--hairline);color:var(--ink)}
+.app.light .menu .opt:hover{background:var(--surface-alt)}
+.hl{border-color:rgba(255,255,255,.12)!important}
+
+/* ── Top bar ─────────────────────────────────────────────────────── */
+.topbar{height:48px;flex:none;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,.1);background:var(--surface-tile-1)}
+.tb-left,.tb-right{display:flex;align-items:center;gap:6px;min-width:0}
+.tb-right{justify-content:flex-end}
+.tb-title{text-align:center;overflow:hidden}
+.tb-title .fn{font-size:13px;font-weight:var(--weight-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-title .meta{font-size:10px;color:var(--ink-on-dark-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibtn{width:30px;height:30px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex:none}
+.ibtn:hover{background:rgba(255,255,255,.08)}
+.ibtn svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted)}
+.ibtn.disabled{opacity:.35;pointer-events:none}
+.undogrp{display:flex;flex:none;border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-sm);overflow:hidden}
+.undogrp .ibtn{border-radius:0}
+.undogrp .ibtn+.ibtn{border-left:1px solid rgba(255,255,255,.12)}
+.pillbtn{height:28px;padding:0 12px;border-radius:var(--radius-pill);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;gap:6px;font-size:12px;flex:none;white-space:nowrap}
+.pillbtn:hover{background:rgba(255,255,255,.08)}
+.btn-export{height:28px;padding:0 14px;border-radius:var(--radius-pill);background:var(--primary-on-dark);color:#0b1215;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:var(--weight-semibold);flex:none}
+.btn-export:hover{filter:brightness(1.1)}
+.btn-export svg{width:12px;height:12px;stroke:#0b1215}
+.pillbtn svg{width:12px;height:12px;stroke:var(--ink-on-dark-muted)}
+
+.zoomctl{display:flex;align-items:center;gap:6px;position:relative;flex:none}
+.zoomctl input[type=range]{width:90px;accent-color:var(--primary-on-dark)}
+.zoomctl .zpct{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--ink-on-dark-muted);opacity:0;transition:opacity .1s;white-space:nowrap}
+.zoomctl:hover .zpct,.zoomctl.active .zpct{opacity:1}
+
+.menu{position:absolute;top:36px;width:230px;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);box-shadow:0 3px 30px rgba(0,0,0,.4);padding:6px;z-index:60;display:none}
+.menu.open{display:block}
+.menu .grp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);padding:8px 8px 4px}
+.menu .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border-radius:5px;font-size:12px;cursor:pointer}
+.menu .opt:hover{background:rgba(255,255,255,.08)}
+.menu .opt.disabled{opacity:.4;pointer-events:none}
+.menu .opt .check{width:13px;height:13px;stroke:var(--primary-on-dark);visibility:hidden}
+.menu .opt.sel .check{visibility:visible}
+.menu .opt svg.ic{width:13px;height:13px;stroke:var(--ink-on-dark-muted);flex:none}
+.menu hr{border:none;border-top:1px solid rgba(255,255,255,.1);margin:6px 2px}
+.menu .opt .sub-caret{width:11px;height:11px;stroke:var(--ink-on-dark-muted);margin-left:auto}
+
+/* ── Body ────────────────────────────────────────────────────────── */
+.body{flex:1;min-height:0;display:flex;position:relative}
+
+.filmstrip{flex:none;width:150px;min-width:90px;max-width:280px;background:var(--surface-tile-1);border-right:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;position:relative}
+.fs-resizer{position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:10}
+.fs-resizer:hover{background:rgba(97,160,175,.2)}
+.fs-tabs{display:flex;gap:4px;padding:10px 10px 0;flex:none}
+.fs-tab{flex:1;height:28px;border-radius:var(--radius-sm);font-size:12px;font-weight:var(--weight-semibold);display:flex;align-items:center;justify-content:center;border:1px solid transparent;color:var(--ink-on-dark-muted)}
+.fs-tab.active{background:var(--surface-tile-2);border-color:rgba(255,255,255,.14);color:var(--ink-on-dark)}
+.fs-head{display:flex;align-items:center;justify-content:space-between;padding:10px 10px 8px;flex:none}
+.fs-head .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted)}
+.fs-import{position:relative}
+.fs-list{flex:1;overflow-y:auto;padding:0 8px 8px;display:flex;flex-direction:column;gap:6px}
+.fs-thumb{aspect-ratio:1/1;border-radius:5px;background:var(--surface-tile-2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);cursor:pointer;position:relative}
+.fs-thumb.active{box-shadow:inset 0 0 0 2px var(--primary-on-dark)}
+.fs-thumb svg{position:absolute;inset:0;margin:auto;width:16px;height:16px;stroke:var(--ink-on-dark-muted);opacity:.5;top:0;bottom:0;left:0;right:0}
+
+.canvas-wrap{flex:1;min-width:0;background:var(--surface-black);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.canvas-photo{width:min(80%,720px);aspect-ratio:3/2;box-shadow:0 3px 30px rgba(0,0,0,.5);background:#1c1c1e;display:flex;align-items:center;justify-content:center}
+.canvas-photo svg{width:48px;height:48px;stroke:rgba(255,255,255,.25)}
+.ctx-menu{position:fixed;width:220px;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);box-shadow:0 3px 30px rgba(0,0,0,.5);padding:6px;z-index:100;display:none}
+.ctx-menu.open{display:block}
+.ctx-menu .opt{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:5px;font-size:12px;cursor:pointer;position:relative}
+.ctx-menu .opt:hover{background:rgba(255,255,255,.08)}
+.ctx-menu .opt.disabled{opacity:.4;pointer-events:none}
+.ctx-menu .opt svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);flex:none}
+.ctx-menu hr{border:none;border-top:1px solid rgba(255,255,255,.1);margin:6px 2px}
+.ctx-menu .sub{padding-left:24px;display:none;flex-direction:column;gap:2px}
+.ctx-menu .opt.expanded+.sub{display:flex}
+.ctx-menu .caret{margin-left:auto;width:10px;height:10px;stroke:var(--ink-on-dark-muted)}
+
+.toolpanel{flex:none;width:300px;min-width:220px;max-width:440px;background:var(--surface-tile-1);border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;position:relative}
+.tp-resizer{position:absolute;top:0;left:-3px;width:6px;height:100%;cursor:col-resize;z-index:10}
+.tp-resizer:hover{background:rgba(97,160,175,.2)}
+.tp-tabs{display:flex;flex:none;border-bottom:1px solid rgba(255,255,255,.1)}
+.tp-tab{flex:1;height:38px;font-size:12px;color:var(--ink-on-dark-muted);border-bottom:2px solid transparent}
+.tp-tab.active{color:var(--ink-on-dark);border-color:var(--primary-on-dark)}
+.tp-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:16px}
+.tp-panel{display:none;flex-direction:column;gap:16px}
+.tp-panel.active{display:flex}
+.rail{flex:none;width:64px;background:var(--surface-tile-1);border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;align-items:stretch;padding:8px 0;overflow:hidden}
+.rail button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;color:var(--ink-on-dark-muted);font-size:9px;flex:1;min-height:0;justify-content:center}
+.rail.icons-only button span{display:none}
+.rail button svg{width:18px;height:18px;stroke:var(--ink-on-dark-muted);flex:none}
+.rail button.active{color:var(--primary-on-dark)}
+.rail button.active svg{stroke:var(--primary-on-dark)}
+.rail button:hover{background:rgba(255,255,255,.06)}
+.filmstrip.hidden,.toolpanel.hidden{width:0!important;min-width:0;overflow:hidden;border:none}
+.showpanel{position:absolute;top:8px;z-index:20;width:28px;height:28px;border-radius:var(--radius-sm);background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);display:none;align-items:center;justify-content:center}
+.showpanel svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted)}
+#show-filmstrip{left:8px}
+#show-toolpanel{right:8px}
+.history-menu{width:220px;max-height:260px;overflow-y:auto}
+
+.select{position:relative}
+.select-btn{width:100%;height:32px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:12px;gap:6px}
+.select-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.select-btn:hover{background:rgba(255,255,255,.06)}
+.select-btn.disabled{opacity:.4;pointer-events:none}
+.select-btn svg{width:12px;height:12px;stroke:var(--ink-on-dark-muted);flex:none}
+.select .menu{width:100%;top:36px;left:0}
+
+.fieldlabel{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);margin-bottom:6px;display:block}
+.slider-row{display:flex;flex-direction:column;gap:8px}
+.slider-row .sr-top{display:flex;justify-content:space-between;font-size:12px}
+.slider-row .sr-val{color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums}
+.slider-row input[type=range]{width:100%;accent-color:var(--primary-on-dark);height:4px;margin-top:2px}
+.slider-row.disabled{opacity:.4;pointer-events:none}
+
+.autoenhance{height:34px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:var(--weight-semibold)}
+.autoenhance:hover{background:rgba(255,255,255,.08)}
+.autoenhance svg{width:14px;height:14px;stroke:var(--primary-on-dark)}
+
+.presetbox{border:1px solid rgba(255,255,255,.1);border-radius:var(--radius-sm);overflow:hidden}
+.presetbox-head{display:flex;align-items:center;justify-content:flex-end;padding:6px 10px;cursor:pointer}
+.presetbox-head .lbl{display:none}
+.presetbox-head svg{width:12px;height:12px;stroke:var(--ink-on-dark-muted);transition:transform .15s}
+.presetbox.collapsed .presetbox-head svg{transform:rotate(-90deg)}
+.presetbox.collapsed .presetbox-body{display:none}
+.presetbox-body{padding:0 10px 10px;display:flex;flex-direction:column;gap:10px}
+.preset-filter{height:28px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);font-size:11px;padding:0 8px;color:var(--ink-on-dark)}
+.preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:172px;overflow-y:auto}
+.preset-tile{aspect-ratio:1/1;border-radius:5px;background:var(--surface-tile-2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);cursor:pointer;position:relative;display:flex;align-items:flex-end;padding:4px}
+.preset-tile.sel{box-shadow:inset 0 0 0 2px var(--primary-on-dark)}
+.preset-tile span{font-size:9px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.lutrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lutrow .select{flex:1;min-width:120px}
+.lutrow .ibtn{border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);flex:none}
+
+.statusbar{height:26px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-top:1px solid rgba(255,255,255,.1);background:var(--surface-tile-1);font-size:11px;color:var(--ink-on-dark-muted)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<div class="topbar" data-comment-anchor="f9a2251e93-div">
+  <div class="tb-left">
+    <div class="logo" style="display:flex;align-items:center;flex:none;margin-left:-14px;margin-right:16px">
+      <img src="assets/chromasmith-logo.png" alt="Chromasmith" style="height:24px;width:auto;display:block">
+    </div>
+    <button class="ibtn" title="Back to library"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <div class="undogrp">
+      <button class="ibtn disabled" id="btn-undo" title="Undo (hold for history)"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7l-3 3"/></svg></button>
+      <button class="ibtn disabled" id="btn-redo" title="Redo"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-7l3 3"/></svg></button>
+      <div class="menu history-menu" id="history-menu">
+        <div class="grp-label">Edit history</div>
+        <div class="opt sel"><span>Import</span></div>
+        <div class="opt"><span>+30 exposure</span></div>
+        <div class="opt"><span>Portra 400 applied</span></div>
+        <div class="opt"><span>Contrast -15</span></div>
+        <div class="opt"><span>Highlights -22</span></div>
+        <div class="opt"><span>Crop 3:2</span></div>
+        <hr>
+        <div class="grp-label">Export history</div>
+        <div class="opt"><span>Exported · JPEG · Full</span></div>
+      </div>
+    </div>
+    <button class="ibtn" title="Show original"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    <button class="ibtn" title="Full resolution"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="1"/><path d="M8 21h8M12 18v3"/></svg></button>
+  </div>
+  <div class="tb-title">
+    <div class="fn">IMG_0427.RAF</div>
+    <div class="meta">6240 × 4160 · ƒ/2.8 · 1/250 · ISO 400</div>
+  </div>
+  <div class="tb-right">
+    <div class="zoomctl" id="zoomctl">
+      <span class="zpct" id="zoom-pct">100%</span>
+      <input type="range" id="zoom" min="10" max="400" value="100" title="Double-click to reset to 100%">
+    </div>
+    <div style="position:relative">
+      <button class="ibtn" id="btn-tools" title="Tools"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/></svg></button>
+      <div class="menu" id="tools-menu" style="right:0;left:auto">
+        <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg><span>Rotate 90° CW</span></div>
+        <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.64-6.36"/><polyline points="3 3 3 9 9 9"/></svg><span>Rotate 90° CCW</span></div>
+        <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg><span>Flip horizontal</span></div>
+        <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" transform="rotate(90 12 12)"/></svg><span>Flip vertical</span></div>
+        <hr>
+        <div class="opt" data-toggle="gamut"><span>Gamut warning</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <hr>
+        <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="10" height="10" rx="1"/><path d="M5 15V6a1 1 0 0 1 1-1h9"/></svg><span>Copy edit settings</span></div>
+        <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg><span>Paste edit settings</span></div>
+        <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.64-6.36"/><polyline points="3 3 3 9 9 9"/></svg><span>Reset photo</span></div>
+      </div>
+    </div>
+    <button class="pillbtn" id="btn-allfx"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2 8 6l-4 1.5L8 9l1.5 4L11 9l4-1.5L11 6ZM19 14l-1 2.5L15.5 17.5 18 18.5 19 21l1-2.5 2.5-1L20 16.5Z"/></svg>All FX</button>
+    <button class="btn-export disabled" id="btn-export"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></svg>Export</button>
+    <div style="position:relative">
+      <button class="ibtn" id="btn-view-menu" title="View settings"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" data-comment-anchor="2aa66b24ac-path"/></svg></button>
+      <div class="menu" id="view-menu" style="right:0;left:auto">
+        <div class="opt" data-toggle="gamut2"><span>Show gamut warning</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <hr>
+        <div class="grp-label">Appearance</div>
+        <div class="opt sel" data-grp="theme" data-val="dark"><span>Dark</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div class="opt" data-grp="theme" data-val="light"><span>Light</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="body">
+  <button class="showpanel" id="show-filmstrip" title="Show library"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+  <button class="showpanel" id="show-toolpanel" title="Show tools"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg></button>
+  <aside class="filmstrip" id="filmstrip">
+    <div class="fs-resizer" id="fs-resizer"></div>
+    <div class="fs-tabs" data-comment-anchor="907aed2dfd-div">
+      <button class="fs-tab active">Library</button>
+      <button class="fs-tab">Develop</button>
+    </div>
+    <div class="fs-head">
+      <span class="lbl">Photos</span>
+      <div class="fs-import">
+        <button class="ibtn" id="btn-import" title="Import"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></svg></button>
+        <div class="menu" id="import-menu" style="right:0;left:auto;width:180px">
+          <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>Google Photos…</span></div>
+          <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg><span>Lightroom…</span></div>
+          <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg><span>Recent folders</span></div>
+          <hr>
+          <div class="opt"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span>New folder…</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="fs-list" id="fs-list" data-comment-anchor="8ab16a9739-div"></div>
+  </aside>
+
+  <div class="canvas-wrap" id="canvas-wrap">
+    <div class="canvas-photo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+    <div class="ctx-menu" id="ctx-menu">
+      <div class="opt" id="ctx-rate"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4a1 1 0 0 1 1-1h13.5a.5.5 0 0 1 .4.8L15 9l4.9 5.2a.5.5 0 0 1-.4.8H6a1 1 0 0 0-1 1v6"/></svg><span>Rate</span><svg class="caret" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></div>
+      <div class="sub">
+        <div class="opt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4a1 1 0 0 1 1-1h13.5a.5.5 0 0 1 .4.8L15 9l4.9 5.2a.5.5 0 0 1-.4.8H6a1 1 0 0 0-1 1v6"/></svg><span>Flagged</span></div>
+        <div class="opt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg><span>Rejected</span></div>
+        <div class="opt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/></svg><span>Favorite</span></div>
+      </div>
+      <div class="opt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Edit</span></div>
+      <div class="opt" id="ctx-rotateflip"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg><span>Rotate &amp; flip</span><svg class="caret" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></div>
+      <div class="sub">
+        <div class="opt"><span>Rotate 90° CW</span></div>
+        <div class="opt"><span>Rotate 90° CCW</span></div>
+        <div class="opt"><span>Flip horizontal</span></div>
+        <div class="opt"><span>Flip vertical</span></div>
+      </div>
+      <div class="opt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H6a2 2 0 0 0-2 2v3m0 8v3a2 2 0 0 0 2 2h2m8 0h2a2 2 0 0 0 2-2v-3m0-8V5a2 2 0 0 0-2-2h-2"/></svg><span>Merge (beta)</span></div>
+      <div class="opt disabled"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span>Scan photos</span></div>
+      <hr>
+      <div class="opt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.9 19.8 17 13V7a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6l-3.9 6.8a1 1 0 0 0 .9 1.2h15.9a1 1 0 0 0 .9-1.2Z"/></svg><span>Add to album</span><svg class="caret" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></div>
+      <hr>
+      <div class="opt" id="ctx-export"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></svg><span>Export</span><svg class="caret" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></div>
+      <div class="sub">
+        <div class="opt"><span>Quick export</span></div>
+        <div class="opt"><span>Export custom…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="toolpanel" id="toolpanel">
+    <div class="tp-resizer" id="tp-resizer"></div>
+    <div class="tp-tabs" style="display:none">
+      <button class="tp-tab active" data-tab="looks">Looks</button>
+      <button class="tp-tab" data-tab="adjust">Adjust</button>
+    </div>
+    <div class="tp-body" data-comment-anchor="e6c781833b-div">
+
+      <div class="tp-panel active" data-panel="looks">
+        <div>
+          <span class="fieldlabel">Raw profile</span>
+          <div class="select" data-select="rawprofile">
+            <button class="select-btn"><span>Adobe Standard</span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="menu">
+              <div class="opt sel"><span>Adobe Standard</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div class="opt"><span>Camera Neutral</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div class="opt"><span>Camera Vivid</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="fieldlabel">Input</span>
+          <div class="select" data-select="input">
+            <button class="select-btn"><span>sRGB</span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="menu">
+              <div class="opt sel"><span>sRGB</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div class="opt"><span>Adobe RGB</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div class="opt"><span>ProPhoto RGB</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+            </div>
+          </div>
+        </div>
+
+
+
+        <span class="fieldlabel">Presets</span>
+        <div class="presetbox" id="presetbox">
+          <div class="presetbox-head" id="presetbox-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="presetbox-body">
+            <input class="preset-filter" placeholder="Filter presets…">
+            <div class="slider-row disabled" id="strength-row">
+              <div class="sr-top"><span>Strength</span><span class="sr-val" id="strength-val">100%</span></div>
+              <input type="range" id="strength-slider" min="0" max="100" value="100">
+            </div>
+            <div class="preset-grid" id="preset-grid" tabindex="0">
+              <div class="preset-tile" data-p="0"><span>Portra 400</span></div>
+              <div class="preset-tile" data-p="1"><span>Ektar 100</span></div>
+              <div class="preset-tile" data-p="2"><span>Tri-X 400</span></div>
+              <div class="preset-tile" data-p="3"><span>Cinestill 800T</span></div>
+              <div class="preset-tile" data-p="4"><span>Velvia 50</span></div>
+              <div class="preset-tile" data-p="5"><span>Gold 200</span></div>
+              <div class="preset-tile" data-p="6"><span>HP5 Plus</span></div>
+              <div class="preset-tile" data-p="7"><span>Provia 100F</span></div>
+            </div>
+            <div class="lutrow">
+              <div class="select" data-select="lut" style="flex:1">
+                <button class="select-btn"><span data-comment-anchor="c0aeded691-span">No LUT applied</span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+                <div class="menu">
+                  <div class="opt sel"><span>No LUT applied</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+                  <div class="opt"><span>Kodak 2383</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+                </div>
+              </div>
+              <button class="ibtn" title="LUT chart"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+              <button class="ibtn" title="Save to library"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/></svg></button>
+              <button class="ibtn" title="Delete" data-comment-anchor="706cc11228-button"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6"/></svg></button>
+              <button class="ibtn" title="Download .cube"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tp-panel" data-panel="adjust">
+        <button class="autoenhance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2 8 6l-4 1.5L8 9l1.5 4L11 9l4-1.5L11 6ZM19 14l-1 2.5L15.5 17.5 18 18.5 19 21l1-2.5 2.5-1L20 16.5Z"/></svg>Auto-Enhance</button>
+        <div class="slider-row"><div class="sr-top"><span>Exposure</span><span class="sr-val">+0.30</span></div><input type="range" min="-5" max="5" step="0.05" value="0.3"></div>
+        <div class="slider-row"><div class="sr-top"><span>Contrast</span><span class="sr-val">-15</span></div><input type="range" min="-100" max="100" value="-15"></div>
+        <div class="slider-row"><div class="sr-top"><span>Highlights</span><span class="sr-val">-22</span></div><input type="range" min="-100" max="100" value="-22"></div>
+        <div class="slider-row"><div class="sr-top"><span>Shadows</span><span class="sr-val">+18</span></div><input type="range" min="-100" max="100" value="18"></div>
+        <div class="slider-row"><div class="sr-top"><span>Whites</span><span class="sr-val">+6</span></div><input type="range" min="-100" max="100" value="6"></div>
+        <div class="slider-row"><div class="sr-top"><span>Blacks</span><span class="sr-val">-8</span></div><input type="range" min="-100" max="100" value="-8"></div>
+        <div>
+          <span class="fieldlabel">Raw demosaic</span>
+          <div class="select" data-select="demosaic">
+            <button class="select-btn"><span>Standard</span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="menu">
+              <div class="opt sel"><span>Standard</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div class="opt"><span>Sparkle-optimized</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tp-panel" data-panel="crop"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Crop &amp; straighten tools live here.</p></div>
+      <div class="tp-panel" data-panel="detail"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Sharpening &amp; noise reduction live here.</p></div>
+      <div class="tp-panel" data-panel="color"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Color grading tools live here.</p></div>
+      <div class="tp-panel" data-panel="retouch"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Retouch &amp; heal tools live here.</p></div>
+      <div class="tp-panel" data-panel="masks"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Masking tools live here.</p></div>
+      <div class="tp-panel" data-panel="film"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Film emulation tools live here.</p></div>
+      <div class="tp-panel" data-panel="frame"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Frame &amp; border tools live here.</p></div>
+      <div class="tp-panel" data-panel="export"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Export settings live here.</p></div>
+      <div class="tp-panel" data-panel="info"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Photo info &amp; EXIF live here.</p></div>
+
+    </div>
+  </aside>
+
+  <aside class="rail" id="rail" data-comment-anchor="79c18eaa3d-aside">
+    <button class="active" data-tab="looks" title="Looks"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2 8 6l-4 1.5L8 9l1.5 4L11 9l4-1.5L11 6ZM19 14l-1 2.5L15.5 17.5 18 18.5 19 21l1-2.5 2.5-1L20 16.5Z"/></svg><span>Looks</span></button>
+    <button data-tab="adjust" title="Adjust"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg><span>Adjust</span></button>
+    <button data-tab="color" title="Color"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 1 0 0 18 4.5 4.5 0 0 0 0-9 3 3 0 0 1 0-6Z"/></svg><span>Color</span></button>
+    <button data-tab="detail" title="Detail"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span>Detail</span></button>
+    <button data-tab="retouch" title="Retouch"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z"/></svg><span>Retouch</span></button>
+    <button data-tab="masks" title="Masks"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3"><circle cx="12" cy="12" r="9"/></svg><span>Masks</span></button>
+    <button data-tab="film" title="Film"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="7" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="12" x2="22" y2="12"/></svg><span>Film</span></button>
+    <button data-tab="frame" title="Frame"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/></svg><span>Frame</span></button>
+    <button data-tab="export" title="Export"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></svg><span>Export</span></button>
+    <button data-tab="info" title="Info"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span>Info</span></button>
+  </aside>
+</div>
+
+<div class="statusbar">
+  <span>Portra 400 · +30 exposure</span>
+  <span>1 of 4,000</span>
+</div>
+
+</div>
+<script>
+// filmstrip thumbnails
+const fsList=document.getElementById('fs-list');
+let fh='';
+for(let i=0;i<24;i++)fh+='<div class="fs-thumb'+(i===0?' active':'')+'" data-i="'+i+'"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>';
+fsList.innerHTML=fh;
+fsList.addEventListener('click',e=>{
+  const t=e.target.closest('.fs-thumb');if(!t)return;
+  document.querySelectorAll('.fs-thumb.active').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+});
+
+// generic menu open/close (topbar + import)
+function wireMenu(btnId,menuId){
+  const btn=document.getElementById(btnId),menu=document.getElementById(menuId);
+  btn.onclick=e=>{document.querySelectorAll('.menu.open').forEach(m=>m!==menu&&m.classList.remove('open'));menu.classList.toggle('open');e.stopPropagation();};
+}
+wireMenu('btn-tools','tools-menu');
+wireMenu('btn-view-menu','view-menu');
+wireMenu('btn-import','import-menu');
+document.addEventListener('click',e=>{
+  document.querySelectorAll('.menu.open').forEach(m=>{if(!m.contains(e.target)&&!m.previousElementSibling?.contains(e.target)&&e.target!==m.previousElementSibling)m.classList.remove('open');});
+});
+document.querySelectorAll('.menu .opt[data-toggle]').forEach(o=>o.addEventListener('click',()=>o.classList.toggle('sel')));
+document.querySelectorAll('.menu .opt[data-grp="theme"]').forEach(o=>o.addEventListener('click',()=>{
+  document.querySelectorAll('.menu .opt[data-grp="theme"]').forEach(x=>x.classList.remove('sel'));
+  o.classList.add('sel');
+  document.getElementById('app').classList.toggle('light',o.dataset.val==='light');
+}));
+document.querySelectorAll('.fs-tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.fs-tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+}));
+
+// custom selects (Looks/Adjust dropdowns)
+document.querySelectorAll('.select').forEach(sel=>{
+  const btn=sel.querySelector('.select-btn'),menu=sel.querySelector('.menu');
+  btn.addEventListener('click',e=>{document.querySelectorAll('.select .menu.open').forEach(m=>m!==menu&&m.classList.remove('open'));menu.classList.toggle('open');e.stopPropagation();});
+  menu.querySelectorAll('.opt').forEach(opt=>opt.addEventListener('click',()=>{
+    menu.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
+    opt.classList.add('sel');
+    btn.querySelector('span').textContent=opt.querySelector('span').textContent;
+    menu.classList.remove('open');
+  }));
+});
+
+// zoom: dblclick resets, % shows on hover/active
+const zoom=document.getElementById('zoom'),zoomPct=document.getElementById('zoom-pct'),zoomctl=document.getElementById('zoomctl');
+zoom.addEventListener('input',()=>{zoomPct.textContent=zoom.value+'%';});
+zoom.addEventListener('dblclick',()=>{zoom.value=100;zoomPct.textContent='100%';});
+zoom.addEventListener('mousedown',()=>zoomctl.classList.add('active'));
+window.addEventListener('mouseup',()=>zoomctl.classList.remove('active'));
+
+// undo: hold to open history dropdown
+let holdTimer=null;
+const historyMenu=document.getElementById('history-menu');
+document.getElementById('btn-undo').addEventListener('mousedown',()=>{holdTimer=setTimeout(()=>historyMenu.classList.add('open'),450);});
+document.getElementById('btn-undo').addEventListener('mouseup',()=>clearTimeout(holdTimer));
+document.getElementById('btn-undo').addEventListener('mouseleave',()=>clearTimeout(holdTimer));
+document.addEventListener('click',e=>{if(!historyMenu.contains(e.target))historyMenu.classList.remove('open');});
+
+// tool rail
+document.querySelectorAll('#rail button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#rail button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tp-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===btn.dataset.tab));
+  });
+});
+
+
+
+// preset box collapse
+document.getElementById('presetbox-head').addEventListener('click',()=>document.getElementById('presetbox').classList.toggle('collapsed'));
+
+// preset select + strength enable + arrow-key nav
+const presetGrid=document.getElementById('preset-grid'),strengthRow=document.getElementById('strength-row');
+function selectPreset(tile){
+  presetGrid.querySelectorAll('.preset-tile').forEach(t=>t.classList.remove('sel'));
+  tile.classList.add('sel');
+  strengthRow.classList.remove('disabled');
+}
+presetGrid.addEventListener('click',e=>{const t=e.target.closest('.preset-tile');if(t)selectPreset(t);});
+presetGrid.addEventListener('keydown',e=>{
+  const tiles=[...presetGrid.querySelectorAll('.preset-tile')];
+  const cur=presetGrid.querySelector('.preset-tile.sel');
+  let idx=cur?tiles.indexOf(cur):-1;
+  if(e.key==='ArrowRight')idx=Math.min(tiles.length-1,idx+1);
+  else if(e.key==='ArrowLeft')idx=Math.max(0,idx-1);
+  else if(e.key==='ArrowDown')idx=Math.min(tiles.length-1,idx+3);
+  else if(e.key==='ArrowUp')idx=Math.max(0,idx-3);
+  else return;
+  e.preventDefault();selectPreset(tiles[idx]);
+});
+document.getElementById('strength-slider').addEventListener('input',e=>{document.getElementById('strength-val').textContent=e.target.value+'%';});
+
+// right-click context menu on canvas
+const ctxMenu=document.getElementById('ctx-menu');
+document.getElementById('canvas-wrap').addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  ctxMenu.style.left=Math.min(e.clientX,window.innerWidth-230)+'px';
+  ctxMenu.style.top=Math.min(e.clientY,window.innerHeight-360)+'px';
+  ctxMenu.classList.add('open');
+});
+document.addEventListener('click',e=>{if(!ctxMenu.contains(e.target))ctxMenu.classList.remove('open');});
+['ctx-rate','ctx-rotateflip','ctx-export'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',e=>{document.getElementById(id).classList.toggle('expanded');e.stopPropagation();});
+});
+
+// filmstrip resize
+const filmstrip=document.getElementById('filmstrip'),fsResizer=document.getElementById('fs-resizer');
+let fsResizing=false;
+fsResizer.addEventListener('mousedown',e=>{fsResizing=true;filmstrip.style.minWidth='0';e.preventDefault();});
+window.addEventListener('mousemove',e=>{
+  if(!fsResizing)return;
+  const rect=filmstrip.getBoundingClientRect();
+  const w=e.clientX-rect.left;
+  if(w<60){filmstrip.classList.add('hidden');document.getElementById('show-filmstrip').style.display='flex';return;}
+  filmstrip.classList.remove('hidden');
+  document.getElementById('show-filmstrip').style.display='none';
+  filmstrip.style.width=Math.min(280,Math.max(90,w))+'px';
+});
+window.addEventListener('mouseup',()=>fsResizing=false);
+
+// tool panel resize
+const toolpanel=document.getElementById('toolpanel'),tpResizer=document.getElementById('tp-resizer');
+let tpResizing=false;
+tpResizer.addEventListener('mousedown',e=>{tpResizing=true;toolpanel.style.minWidth='0';e.preventDefault();});
+window.addEventListener('mousemove',e=>{
+  if(!tpResizing)return;
+  const rect=toolpanel.getBoundingClientRect();
+  const w=rect.right-e.clientX;
+  if(w<60){toolpanel.classList.add('hidden');document.getElementById('show-toolpanel').style.display='flex';return;}
+  toolpanel.classList.remove('hidden');
+  document.getElementById('show-toolpanel').style.display='none';
+  toolpanel.style.width=Math.min(440,Math.max(220,w))+'px';
+});
+window.addEventListener('mouseup',()=>tpResizing=false);
+
+document.getElementById('show-filmstrip').onclick=()=>{
+  filmstrip.classList.remove('hidden');filmstrip.style.minWidth='90px';filmstrip.style.width='150px';
+  document.getElementById('show-filmstrip').style.display='none';
+};
+document.getElementById('show-toolpanel').onclick=()=>{
+  toolpanel.classList.remove('hidden');toolpanel.style.minWidth='220px';toolpanel.style.width='300px';
+  document.getElementById('show-toolpanel').style.display='none';
+};
+
+// rail: fit all items without scrolling, drop to icon-only if needed
+const rail=document.getElementById('rail');
+function fitRail(){
+  rail.classList.remove('icons-only');
+  if(rail.scrollHeight>rail.clientHeight)rail.classList.add('icons-only');
+}
+window.addEventListener('resize',fitRail);
+fitRail();
+
+// filmstrip Library/Develop tabs (visual only, consistent with Library view)
+document.querySelectorAll('.fs-head .tp-tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.fs-head .tp-tab').forEach(o=>{o.classList.remove('active');o.style.color='var(--ink-on-dark-muted)';});
+    t.classList.add('active');t.style.color='var(--ink-on-dark)';
+  });
+});
+</script>
+</body>
+</html>

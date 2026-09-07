@@ -1,0 +1,47 @@
+:root{
+--font-display:"SF Pro Display",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+--font-text:"SF Pro Text",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+
+/* weight ladder — 500 is deliberately absent */
+--weight-light:300;
+--weight-regular:400;
+--weight-semibold:600;
+--weight-bold:700;
+
+/* hero-display 56/600/1.07/-0.28px */
+--type-hero-size:56px; --type-hero-weight:600; --type-hero-lh:1.07; --type-hero-ls:-0.28px;
+/* display-lg 40/600/1.1/0 */
+--type-display-lg-size:40px; --type-display-lg-weight:600; --type-display-lg-lh:1.1; --type-display-lg-ls:0px;
+/* display-md 34/600/1.47/-0.374px */
+--type-display-md-size:34px; --type-display-md-weight:600; --type-display-md-lh:1.47; --type-display-md-ls:-0.374px;
+/* lead 28/400/1.14/0.196px */
+--type-lead-size:28px; --type-lead-weight:400; --type-lead-lh:1.14; --type-lead-ls:0.196px;
+/* lead-airy 24/300/1.5/0 */
+--type-lead-airy-size:24px; --type-lead-airy-weight:300; --type-lead-airy-lh:1.5; --type-lead-airy-ls:0px;
+/* tagline 21/600/1.19/0.231px */
+--type-tagline-size:21px; --type-tagline-weight:600; --type-tagline-lh:1.19; --type-tagline-ls:0.231px;
+/* body-strong 17/600/1.24/-0.374px */
+--type-body-strong-size:17px; --type-body-strong-weight:600; --type-body-strong-lh:1.24; --type-body-strong-ls:-0.374px;
+/* body 17/400/1.47/-0.374px */
+--type-body-size:17px; --type-body-weight:400; --type-body-lh:1.47; --type-body-ls:-0.374px;
+/* dense-link 17/400/2.41/0 */
+--type-dense-link-size:17px; --type-dense-link-weight:400; --type-dense-link-lh:2.41; --type-dense-link-ls:0px;
+/* caption 14/400/1.43/-0.224px */
+--type-caption-size:14px; --type-caption-weight:400; --type-caption-lh:1.43; --type-caption-ls:-0.224px;
+/* caption-strong 14/600/1.29/-0.224px */
+--type-caption-strong-size:14px; --type-caption-strong-weight:600; --type-caption-strong-lh:1.29; --type-caption-strong-ls:-0.224px;
+/* button-large 18/300/1/0 */
+--type-button-large-size:18px; --type-button-large-weight:300; --type-button-large-lh:1; --type-button-large-ls:0px;
+/* button-utility 14/400/1.29/-0.224px */
+--type-button-utility-size:14px; --type-button-utility-weight:400; --type-button-utility-lh:1.29; --type-button-utility-ls:-0.224px;
+/* fine-print 12/400/1/-0.12px */
+--type-fine-print-size:12px; --type-fine-print-weight:400; --type-fine-print-lh:1; --type-fine-print-ls:-0.12px;
+/* micro-legal 10/400/1.3/-0.08px */
+--type-micro-legal-size:10px; --type-micro-legal-weight:400; --type-micro-legal-lh:1.3; --type-micro-legal-ls:-0.08px;
+/* nav-link 12/400/1/-0.12px */
+--type-nav-link-size:12px; --type-nav-link-weight:400; --type-nav-link-lh:1; --type-nav-link-ls:-0.12px;
+
+/* semantic aliases */
+--text-face-headline:var(--font-display);
+--text-face-ui:var(--font-text);
+}

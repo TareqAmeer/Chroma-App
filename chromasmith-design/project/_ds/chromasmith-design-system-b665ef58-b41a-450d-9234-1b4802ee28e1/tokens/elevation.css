@@ -1,0 +1,18 @@
+:root{
+/* The one shadow in the system — product / photo imagery resting on a surface. */
+--shadow-product:rgba(0,0,0,.22) 3px 5px 30px 0;
+/* Hairline "ring" used instead of elevation on cards and chips. */
+--ring-hairline:inset 0 0 0 1px var(--hairline-alpha);
+--ring-pearl:0 0 0 3px var(--divider-soft);
+--focus-ring:0 0 0 2px var(--primary-focus);
+
+--blur-frosted:saturate(180%) blur(20px); /* @kind other */
+--frosted-fill:rgba(245,245,247,.8);
+--frosted-fill-dark:rgba(39,39,41,.72);
+
+/* Motion: press = scale(0.95); transitions are short and linear-ish. */
+--press-scale:.95; /* @kind other */
+--ease-standard:cubic-bezier(.4,0,.6,1); /* @kind other */
+--duration-press:120ms; /* @kind other */
+--duration-fade:300ms; /* @kind other */
+}
