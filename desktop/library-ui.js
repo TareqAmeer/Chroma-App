@@ -831,7 +831,12 @@
        bug, different file). */
     .lib-logo-gap{flex:1 1 24px;min-width:0}
     .lib-logo-img{height:20px;width:auto;display:block}
-    .lib-spacer{flex:1 1 8px;min-width:0}
+    /* Library View.html's ".spacer" is flex:0 1 8px — NOT growable. All extra topbar width
+       should collect in .lib-logo-gap alone (the wireframe's own logo-gap is the only flex:1
+       item), keeping the right-side button cluster tight instead of splitting the growth
+       between two spacers and dragging both search and the button cluster off the wireframe's
+       positions. */
+    .lib-spacer{flex:0 1 8px;min-width:0}
     /* Icon-only collapse — under DOCK_W it's structural (:not(.full) is always this narrow); in
        .full mode it's driven by the .lib-top-compact class a ResizeObserver toggles below. */
     #lib-overlay:not(.full) #lib-top .lbl,#lib-top.lib-top-compact .lbl{display:none}
@@ -847,6 +852,10 @@
     /* Design-import reskin: pill-shaped chrome buttons (Sidebar/Sort/Filters) — everywhere else
        stays the existing 8px-radius rect (.lib-btn's own rule further down), matching the
        wireframe's split between .pillbtn (sort/filters/allfx/export) and .iconbtn (utility). */
+    /* Library View.html's .pillbtn/.btn-export are both font-size:13px — the base .lib-btn's
+       12px (used by flag/rail/menu buttons that aren't part of this pill family) doesn't apply
+       to these two. */
+    .lib-btn.lib-pill,.lib-btn.lib-btn-export{font-size:13px}
     .lib-btn.lib-pill{border-radius:9999px!important;background:transparent;padding:0 14px;height:30px}
     .lib-btn.lib-pill:hover{background:var(--sur2)}
     /* UI_SPEC.md #1/#9: token-based tint of the one sanctioned interactive accent, not a
@@ -870,7 +879,11 @@
     .lib-viewtoggle{border-radius:var(--r)}
     .lib-viewtoggle button{width:28px;height:28px;padding:0}
     /* Zoom slider — transplanted from the wireframe's .zoomrow. */
-    .lib-zoomrow{display:flex;align-items:center;gap:8px;flex:0 1 90px;min-width:60px;color:var(--mut)}
+    /* Library View.html's .zoomrow is flex:1 1 30px — growable, sharing the topbar's extra width
+       with .lib-logo-gap. This was flex:0 1 90px (non-growable): every extra pixel piled onto
+       logo-gap alone, over-widening it and dragging everything after it (search, view toggle,
+       the whole right-side button cluster) further right than the wireframe's positions. */
+    .lib-zoomrow{display:flex;align-items:center;gap:8px;flex:1 1 30px;min-width:60px;color:var(--mut)}
     .lib-zoomrow svg{flex:none}
     .lib-zoomrow input[type=range]{width:100%;min-width:50px;accent-color:var(--acc2)}
     #lib-overlay:not(.full) .lib-zoomrow{display:none}
@@ -1076,6 +1089,11 @@
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
     .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
+    /* Date-tree size hierarchy — Library View.html's .row.datehead/.monthhead/.sub (13/12/11px).
+       Without an explicit size these inherited the sidebar's 16px base font. */
+    .lib-tree-row-year{font-size:13px}
+    .lib-tree-row-month{font-size:12px}
+    .lib-tree-row-day{font-size:11px}
     .lib-tree-row .dayname{color:var(--mut);font-weight:400}
     .lib-tree-row:hover{background:var(--sur2)}
     .lib-tree-row.on{background:var(--bdr)}
@@ -6465,8 +6483,11 @@
     // toggleKey is the BARE year or "year:month" string dateExpanded is actually keyed by
     // (yOpen/mOpen below read dateExpanded.has(`${y}`) / has(`${y}:${m}`)) — deliberately NOT
     // the same string as `scope` (which is the full "date:..." catalog_query scope).
-    const row = (scope, toggleKey, label, count, hasChildren, open) => `
-      <div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
+    // Library View.html's date-tree hierarchy has a size step per level (.row.datehead 13px,
+    // .row.monthhead 12px, .row.sub/day 11px) — `lvl` picks the matching class so each level
+    // gets its own font-size instead of silently inheriting the sidebar's 16px base font.
+    const row = (scope, toggleKey, label, count, hasChildren, open, lvl) => `
+      <div class="lib-tree-row lib-tree-row-${lvl}${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
         ${hasChildren ? chev(open) : '<span class="lib-tree-chev"></span>'}
         <span style="flex:1">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut)">${count}</span>
       </div>`;
@@ -6474,7 +6495,7 @@
     for (const y of sortedYears) {
       const yOpen = dateExpanded.has(`${y}`);
       const yData = years.get(y);
-      html += row(`date:${y}`, `${y}`, y, yData.n, true, yOpen);
+      html += row(`date:${y}`, `${y}`, y, yData.n, true, yOpen, 'year');
       if (yOpen) {
         html += '<div class="lib-tree-children">';
         const sortedMonths = Array.from(yData.months.keys()).sort((a, b) => b - a);
@@ -6482,7 +6503,7 @@
           const mKey = `${y}:${m}`;
           const mOpen = dateExpanded.has(mKey);
           const mData = yData.months.get(m);
-          html += row(`date:${y}:${m}`, mKey, MONTH_NAMES[m - 1] || m, mData.n, true, mOpen);
+          html += row(`date:${y}:${m}`, mKey, MONTH_NAMES[m - 1] || m, mData.n, true, mOpen, 'month');
           if (mOpen) {
             html += '<div class="lib-tree-children">';
             const sortedDays = mData.days.slice().sort((a, b) => b.d - a.d);
@@ -6491,7 +6512,7 @@
               // here until the wireframe-diff repair loop flagged it (diffDayRowWeekday).
               const weekday = new Date(y, m - 1, dRow.d).toLocaleDateString('en-US', { weekday: 'short' });
               const dayLabel = `${dRow.d} <span class="dayname">· ${weekday}</span>`;
-              html += row(`date:${y}:${m}:${dRow.d}`, '', dayLabel, dRow.n, false, false);
+              html += row(`date:${y}:${m}:${dRow.d}`, '', dayLabel, dRow.n, false, false, 'day');
             }
             html += '</div>';
           }
@@ -6500,7 +6521,7 @@
       }
     }
     if (dateCounts.no_date) {
-      html += row('date-nodate', '', 'No date', dateCounts.no_date, false, false);
+      html += row('date-nodate', '', 'No date', dateCounts.no_date, false, false, 'year');
     }
     return html;
   }
