@@ -778,7 +778,7 @@
        — #lib-side becomes a 230px left column spanning the filters/viewbar/main rows, instead
        of the old horizontal band squeezed above the grid ("top bar only, no sidebar"). The
        docked 356px filmstrip keeps the vertical stacking below — a left column can't fit there. */
-    #lib-overlay.full{width:100vw;grid-template-columns:230px 1fr;grid-template-rows:auto auto auto 1fr 28px}
+    #lib-overlay.full{width:100vw;grid-template-columns:var(--lib-side-w,230px) 1fr;grid-template-rows:auto auto auto 1fr 28px}
     #lib-overlay.full #lib-top{grid-column:1/3;grid-row:1}
     #lib-overlay.full #lib-side{grid-column:1;grid-row:2/5;border-right:1px solid var(--bdr);border-top:none;border-bottom:none}
     #lib-overlay.full #lib-filters{grid-column:2;grid-row:2}
@@ -805,18 +805,21 @@
     body.deskx #lib-overlay.full{position:fixed} /* full takeover: back to covering everything */
     /* Unified top bar — transplanted from Library View.html's .topbar. One wrapping flex row
        holding everything (logo/search/viewtoggle/zoom/flags/sort/filters/allfx/export/gear);
-       under DOCK_W (356px) or the narrow deskx filmstrip it wraps/collapses to icon-only via
-       .lbl{display:none} rather than overlapping (design-project CLAUDE.md's layout rule). */
-    #lib-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:34px 12px 6px;-webkit-app-region:drag;
+       under DOCK_W (356px), a narrowed .full window, or the deskx filmstrip, it STAYS one row
+       and collapses to icon-only instead — never wraps to a second line — exactly like the
+       wireframe's own .topbar.compact (Library View.html's fitTopbar(), driven by measured
+       width, not a hardcoded breakpoint: see the ResizeObserver below for the .full case). */
+    #lib-top{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding:34px 12px 6px;-webkit-app-region:drag;
       border-bottom:1px solid var(--bdr)}
     #lib-top button,#lib-top input,#lib-top select{-webkit-app-region:no-drag}
     .lib-logo{display:flex;align-items:center;flex:0 0 auto}
     .lib-title{font-family:var(--font-display);font-weight:var(--weight-semibold);font-size:14px;letter-spacing:-.374px;color:var(--txt)}
     .lib-spacer{flex:1 1 8px;min-width:0}
-    /* under DOCK_W the bar has no room for text labels — icon-only, same collapse strategy as
-       the wireframe's own .topbar.compact. */
-    #lib-overlay:not(.full) #lib-top .lbl{display:none}
-    #lib-overlay:not(.full) #lib-top .lib-btn-export,#lib-overlay:not(.full) #lib-top .lib-pill{padding:0;width:30px;justify-content:center}
+    /* Icon-only collapse — under DOCK_W it's structural (:not(.full) is always this narrow); in
+       .full mode it's driven by the .lib-top-compact class a ResizeObserver toggles below. */
+    #lib-overlay:not(.full) #lib-top .lbl,#lib-top.lib-top-compact .lbl{display:none}
+    #lib-overlay:not(.full) #lib-top .lib-btn-export,#lib-overlay:not(.full) #lib-top .lib-pill,
+    #lib-top.lib-top-compact .lib-btn-export,#lib-top.lib-top-compact .lib-pill{padding:0;width:30px;justify-content:center}
     /* Retired: every real toolbar control moved into #lib-top above or the gear's View menu
        (see the comment on its markup) — only the Lightroom-connected chip and active-filter
        chip list remain, shown only when non-empty (both start empty/hidden). */
@@ -868,9 +871,12 @@
     .lib-menu button.opt-action{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;
       font-size:13px;color:var(--txt);width:100%;justify-content:flex-start;background:none;border:none}
     .lib-menu .opt-check{accent-color:var(--acc2)}
-    .lib-menu .opt.sel::after{content:'';width:6px;height:6px;border-radius:50%;background:var(--acc2);flex:none}
-    .lib-menu .opt-check-svg{visibility:hidden;stroke:var(--acc2);flex:none}
-    .lib-menu button.opt-toggle.on .opt-check-svg{visibility:visible}
+    /* Checkmark — transplanted from Library View.html's .opt .check: a real SVG per row, shown
+       only on the selected/active one, never a synthesized dot. */
+    .lib-menu .opt .check{visibility:hidden;stroke:var(--primary);flex:none}
+    .lib-menu .opt.sel .check{visibility:visible}
+    .lib-menu button.opt-toggle .check{visibility:hidden;stroke:var(--primary);flex:none}
+    .lib-menu button.opt-toggle.on .check{visibility:visible}
     .lib-menu hr{border:none;border-top:1px solid var(--bdr);margin:6px 2px}
     #lib-sort-dir::after{content:'↑'}
     #lib-sort-dir[data-dir="desc"]::after{content:'↓'}
@@ -880,6 +886,11 @@
       padding:0 6px 0 14px;overflow:hidden}
     .lib-search-wrap svg{flex:none;stroke:var(--mut)}
     .lib-clip-search-btn{width:22px;height:22px;padding:0;border:none;background:none;flex:none}
+    /* Compact: drop the secondary AI-search icon so the pill's shrink budget goes to the actual
+       input instead of a second icon next to it (Enter-to-search still works via the keyboard
+       either way) — otherwise a narrow pill read as two bare search icons with no visible field. */
+    #lib-overlay:not(.full) .lib-clip-search-btn,.lib-top-compact .lib-clip-search-btn{display:none}
+    #lib-overlay:not(.full) .lib-search-wrap,.lib-top-compact .lib-search-wrap{padding-right:0}
     .lib-clip-search-btn svg{stroke:var(--mut)}
     .lib-clip-search-btn:hover svg{stroke:var(--txt)}
     .lib-search-wrap input{border:none;background:none;outline:none;flex:1;min-width:0;color:var(--txt);
@@ -901,8 +912,10 @@
        border/width values for that column). */
     #lib-side{overflow:auto;padding:12px 0 8px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);
       background:var(--sur);position:relative}
-    #lib-overlay.full #lib-side{width:var(--lib-side-w,232px);min-width:150px;max-width:420px;
-      padding:12px 0 8px;border-bottom:none}
+    /* Width itself comes from the .full grid-template-columns rule above (bound to the same
+       --lib-side-w custom property, set on #lib-overlay by the resize handler below) — a grid
+       item's own width can't out-rule its track, so setting width here directly did nothing. */
+    #lib-overlay.full #lib-side{padding:12px 0 8px;border-bottom:none;min-width:0}
     .lib-side-resizer{display:none;position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:10}
     .lib-side-resizer:hover,.lib-side-resizer.active{background:rgba(97,160,175,.25)}
     #lib-overlay.full .lib-side-resizer{display:block}
@@ -1347,11 +1360,18 @@
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px}
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{width:100%;height:auto;object-fit:contain}
     body.deskx #lib-overlay:not(.full) .lib-card{border:none;border-radius:6px}
-    /* the fixed 44px deskbar sits above everything; keep the strip below it */
+    /* the fixed 44px deskbar sits above everything; keep the docked strip below it. .full is a
+       genuine takeover (chromasmith-22.html hides #fx-deskbar via body.lib-full) and reclaims
+       the whole viewport instead — Library's own #lib-top already reserves its own drag/traffic-
+       light space, so two stacked reservations would just leave a dead 44px gap above it. */
     body.deskx #lib-overlay{top:44px;z-index:2500}
-    body.deskx #lib-overlay.full{top:44px}
+    body.deskx #lib-overlay.full{top:0;height:100vh}
   `;
   document.head.appendChild(style);
+
+  // Menu-option checkmark, transplanted verbatim from Library View.html's own .opt .check
+  // markup (a real per-row SVG, shown/hidden by .sel — not a CSS-generated dot).
+  const LIB_CHECK_SVG = '<svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
   // ── DOM scaffold ──────────────────────────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -1405,18 +1425,14 @@
             <option value="rating">Rating</option>
             <option value="editedts">Date edited</option>
           </select>
-          <div class="opt" data-sortval="date">Date taken</div>
-          <div class="opt" data-sortval="mtime">Date modified</div>
-          <div class="opt" data-sortval="editedts">Date edited</div>
-          <div class="opt" data-sortval="name">Name</div>
-          <div class="opt" data-sortval="rating">Rating</div>
-          <div class="opt" data-sortval="camera">Camera</div>
+          ${['date:Date taken', 'mtime:Date modified', 'editedts:Date edited', 'name:Name', 'rating:Rating', 'camera:Camera']
+            .map((s) => { const [v, l] = s.split(':'); return `<div class="opt" data-sortval="${v}"><span>${l}</span>${LIB_CHECK_SVG}</div>`; }).join('')}
           <hr>
-          <div class="opt" id="lib-sort-dir" data-dir-label="1">Reverse order</div>
+          <div class="opt" id="lib-sort-dir" data-dir-label="1"><span>Reverse order</span></div>
         </div>
       </div>
       <div id="lib-filters-btn-wrap">
-        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters">Filters<span id="lib-filters-badge"></span></button>
+        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="9" cy="18" r="2" fill="var(--bg)"/></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
       </div>
       <div class="lib-spacer"></div>
       <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo">${ic('looks',14)}<span class="lbl">All FX</span></button>
@@ -1442,16 +1458,16 @@
             <option value="hover">On hover</option>
             <option value="always">Always on</option>
           </select>
-          <div class="opt" data-metaval="off">Off</div>
-          <div class="opt" data-metaval="always">Always on</div>
-          <div class="opt" data-metaval="hover">On hover</div>
+          <div class="opt" data-metaval="off"><span>Off</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-metaval="always"><span>Always on</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-metaval="hover"><span>On hover</span>${LIB_CHECK_SVG}</div>
           <hr>
           <div class="grp-label">Panels</div>
-          <button class="lib-btn opt-action opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span><svg class="opt-check-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button class="lib-btn opt-action opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span>${LIB_CHECK_SVG}</button>
           <hr>
           <div class="grp-label">Appearance</div>
-          <div class="opt" data-theme="dark">Dark</div>
-          <div class="opt" data-theme="light">Light</div>
+          <div class="opt" data-theme="dark"><span>Dark</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-theme="light"><span>Light</span>${LIB_CHECK_SVG}</div>
         </div>
       </div>
     </div>
@@ -5714,7 +5730,7 @@
   sortDirBtn.onclick = () => {
     state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
     localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
-    syncSortDirBtn(); renderGrid();
+    syncSortDirBtn(); syncSortMenuSel(); renderGrid();
   };
 
   // ── Sort pill + popover (design transplant: Library View.html's #btn-sort/#sort-menu) ──
@@ -5725,9 +5741,15 @@
   const SORT_LABELS = { name: 'Name', mtime: 'Date modified', date: 'Date taken', camera: 'Camera', rating: 'Rating', editedts: 'Date edited' };
   function syncSortLabel() { sortLabelEl.textContent = SORT_LABELS[state.sortBy] || sortSel.selectedOptions[0]?.textContent || state.sortBy; }
   syncSortLabel();
+  function syncSortMenuSel() {
+    sortMenu.querySelectorAll('.opt[data-sortval]').forEach((o) => o.classList.toggle('sel', o.dataset.sortval === state.sortBy));
+    const dirOpt = overlay.querySelector('#lib-sort-dir');
+    if (dirOpt) dirOpt.classList.toggle('sel', state.sortDir === 'desc');
+  }
+  syncSortMenuSel();
   sortBtn.onclick = (e) => { sortMenu.classList.toggle('open'); overlay.querySelector('#lib-view-menu')?.classList.remove('open'); e.stopPropagation(); };
   sortMenu.querySelectorAll('.opt[data-sortval]').forEach((opt) => {
-    opt.onclick = () => { sortSel.value = opt.dataset.sortval; sortSel.onchange({ target: sortSel }); syncSortLabel(); sortMenu.classList.remove('open'); };
+    opt.onclick = () => { sortSel.value = opt.dataset.sortval; sortSel.onchange({ target: sortSel }); syncSortLabel(); syncSortMenuSel(); sortMenu.classList.remove('open'); };
   });
   document.addEventListener('click', (e) => { if (!sortMenu.contains(e.target) && e.target !== sortBtn) sortMenu.classList.remove('open'); });
 
@@ -5795,28 +5817,48 @@
   const exportBtn = overlay.querySelector('#lib-export-btn');
   if (exportBtn) exportBtn.onclick = () => libExportPaths(cmKbTargets());
 
+  // ── Top-bar icon-only collapse in .full mode (Library View.html's fitTopbar()) — stays ONE
+  // row and hides labels instead of wrapping to a second one. Docked (:not(.full)) mode is
+  // always this narrow already (handled structurally by the CSS above); this only has to act
+  // when a .full window is resized down. Measures the bar's own overflow rather than a fixed
+  // window-width breakpoint, since #lib-top's available width also depends on the sidebar's
+  // (user-resizable) column. */
+  const libTop = overlay.querySelector('#lib-top');
+  function syncTopCompact() {
+    if (!overlay.classList.contains('full')) return; // :not(.full) covers itself via CSS
+    libTop.classList.remove('lib-top-compact');
+    if (libTop.scrollWidth > libTop.clientWidth + 1) libTop.classList.add('lib-top-compact');
+  }
+  new ResizeObserver(syncTopCompact).observe(libTop);
+  window.addEventListener('resize', syncTopCompact);
+
   // ── Sidebar drag-resize (design transplant: Library View.html's #resizer) — .full mode only,
-  // where #lib-side is a real left column; a no-op elsewhere since the resizer is display:none. ──
+  // where #lib-side is a real left column; a no-op elsewhere since the resizer is display:none.
+  // --lib-side-w is read by #lib-overlay.full's own grid-template-columns (not by #lib-side's
+  // width — a grid item's width can never override its track), so it MUST be set on `overlay`
+  // itself, not on the sidebar element: a custom property set on a descendant never flows up to
+  // an ancestor's own rule, which is why the resize handle visibly dragged but the column never
+  // actually moved. ──
   const sideEl = overlay.querySelector('#lib-side');
   const sideResizer = overlay.querySelector('#lib-side-resizer');
   const savedSideW = parseInt(localStorage.getItem('chromasmith_lib_side_w'), 10);
-  if (savedSideW >= 150 && savedSideW <= 420) sideEl.style.setProperty('--lib-side-w', savedSideW + 'px');
+  if (savedSideW >= 150 && savedSideW <= 420) overlay.style.setProperty('--lib-side-w', savedSideW + 'px');
   let sideResizing = false;
   sideResizer.addEventListener('mousedown', (e) => { sideResizing = true; sideResizer.classList.add('active'); e.preventDefault(); });
   window.addEventListener('mousemove', (e) => {
     if (!sideResizing) return;
     const w = Math.min(420, Math.max(150, e.clientX - sideEl.getBoundingClientRect().left));
-    sideEl.style.setProperty('--lib-side-w', w + 'px');
+    overlay.style.setProperty('--lib-side-w', w + 'px');
   });
   window.addEventListener('mouseup', () => {
     if (!sideResizing) return;
     sideResizing = false; sideResizer.classList.remove('active');
-    const w = parseInt(getComputedStyle(sideEl).getPropertyValue('--lib-side-w'), 10);
+    const w = parseInt(getComputedStyle(overlay).getPropertyValue('--lib-side-w'), 10);
     if (w) localStorage.setItem('chromasmith_lib_side_w', w);
   });
-  // Library/Develop tabs — Develop has no distinct mode in this app yet (net-new, out of scope
-  // for this visual-match pass); it says so rather than silently doing nothing.
-  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (typeof toast === 'function') toast('Develop mode is coming soon'); };
+  // Library/Develop tabs — Develop just switches back to the editor (the same toggle the
+  // header's own library button / "L" shortcut already uses), not a new mode.
+  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.open) toggleLibrary(); };
 
   // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
   // #lib-sort-dir button — reusing their own handlers keeps grid view and list view unable to

@@ -866,6 +866,11 @@ body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 10
 body.deskx #fx-deskbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:3000;height:var(--deskx-topbar-h);
   margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr);border-radius:0;
   background:var(--glass-bg)}
+/* The full-window Library (library-ui.js's #lib-overlay.full) is a genuine takeover — its own
+   top bar already reserves the same traffic-light drag space #fx-deskbar does — so this editor-
+   only bar (undo/redo, the current photo's title, All FX, Export) would just be a second,
+   redundant toolbar duplicating Library's own Filters/All FX/Export row underneath it. */
+body.lib-full #fx-deskbar{display:none}
 /* The deskbar is INSIDE #panel-fx; on other tabs that panel loses .active (display:none),
    which would take the fixed bar down with it. Keep the panel technically displayed and hide
    its editor content instead, so the top bar (and its ⋯ menu, the only way back) persists. */
@@ -4408,7 +4413,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-03a';
+const BUILD='2026-09-07b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
