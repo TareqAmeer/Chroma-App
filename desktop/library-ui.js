@@ -815,7 +815,7 @@
        wireframe's own .topbar.compact (Library View.html's fitTopbar(), driven by measured
        width, not a hardcoded breakpoint: see the ResizeObserver below for the .full case). */
     #lib-top{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding:34px 12px 6px;-webkit-app-region:drag;
-      background:var(--sur);border-bottom:1px solid var(--bdr)}
+      background:var(--bg);border-bottom:1px solid var(--bdr)}
     #lib-top button,#lib-top input,#lib-top select{-webkit-app-region:no-drag}
     .lib-logo{display:flex;align-items:center;flex:0 0 auto}
     .lib-logo-img{height:20px;width:auto;display:block}
@@ -863,9 +863,14 @@
     .lib-zoomrow input[type=range]{width:100%;min-width:50px;accent-color:var(--acc2)}
     #lib-overlay:not(.full) .lib-zoomrow{display:none}
     /* Primary filled Export button — transplanted from the wireframe's .btn-export. */
-    .lib-btn.lib-btn-export{background:var(--primary);border-color:var(--primary);color:var(--on-primary);
+    /* Library View.html:92's .btn-export always uses --primary (Slate Blue) — no dark-mode
+       override exists for it despite the app's own #lib-overlay dark remap swapping --primary to
+       Mist Blue for everything else. Per explicit decision, this one button stays literal to the
+       wireframe rather than following that general swap. --blue-slate is the un-remapped base
+       token (see the DS token block above), so it can't drift if --primary's own mapping changes. */
+    .lib-btn.lib-btn-export{background:var(--blue-slate);border-color:var(--blue-slate);color:var(--on-primary);
       font-weight:var(--weight-semibold);border-radius:9999px!important;height:30px}
-    .lib-btn.lib-btn-export:hover{background:var(--primary-focus);border-color:var(--primary-focus)}
+    .lib-btn.lib-btn-export:hover{background:var(--blue-slate-focus);border-color:var(--blue-slate-focus)}
     .lib-btn.lib-btn-export svg{stroke:var(--on-primary)}
     /* Sort/View popovers — transplanted verbatim from the wireframe's .menu/.opt/.grp-label. */
     .lib-menu{position:absolute;top:36px;right:0;width:230px;background:var(--bg);border:1px solid var(--bdr);
@@ -891,8 +896,11 @@
     #lib-sort-dir[data-dir="desc"]::after{content:'↓'}
     /* Pill search bar — icon + input in one hairline capsule, matching the wireframe's .search. */
     .lib-search-wrap{flex:1 1 160px;min-width:70px;max-width:300px;height:32px;border-radius:9999px;
-      border:1px solid var(--bdr);background:var(--sur2);display:flex;align-items:center;gap:8px;
+      border:1px solid var(--bdr);background:var(--surface-ghost);display:flex;align-items:center;gap:8px;
       padding:0 6px 0 14px;overflow:hidden}
+    /* Library View.html:23 — dark mode's search pill is a barely-there white tint over the dark
+       topbar, not the light-mode --surface-ghost value (which would look like a bright card). */
+    #lib-overlay:not(.lib-light) .lib-search-wrap{background:rgba(255,255,255,.06)}
     .lib-search-wrap svg{flex:none;stroke:var(--mut)}
     .lib-clip-search-btn{width:22px;height:22px;padding:0;border:none;background:none;flex:none}
     /* Compact: drop the secondary AI-search icon so the pill's shrink budget goes to the actual
@@ -961,7 +969,12 @@
     /* Section eyebrow — transplanted from the wireframe's .sec-head: 10px uppercase, .08em. */
     .lib-coll-heading{font-size:10px;font-weight:var(--weight-semibold);letter-spacing:.08em;text-transform:uppercase;
       color:var(--mut);padding:6px 8px}
-    .lib-sec-h{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;border-radius:var(--radius-xs,5px);
+    /* Library View.html:21 — dark mode's .sec-head text is full white (--ink-on-dark), the same
+       "loud" treatment as row/statusbar text, not the muted grey the light-mode rule above uses. */
+    #lib-overlay:not(.lib-light) .lib-coll-heading{color:var(--txt)}
+    /* Library View.html:136's .sec-head has no border-radius at all (sharp corners) — var(--radius-xs)
+       here was an unrequested rounding. */
+    .lib-sec-h{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;border-radius:0;
       margin:0 8px;padding:6px 8px}
     .lib-sec-h:hover{background:var(--sur2)}
     .lib-sec-h .lib-tree-chev{color:var(--mut);opacity:.7}
@@ -1018,11 +1031,15 @@
        padding/border-bottom already gives the visual gap before the first row, nothing else
        needs to move. (:has() already used elsewhere in this file — same runtime.) */
     #lib-overlay:has(#lib-list-head.on) #lib-main{padding-top:0}
-    #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--sur);border-top:1px solid var(--bdr);font-size:11px;color:var(--mut)}
+    /* Library View.html:202's statusbar background is --surface-alt (canvas-parchment) in LIGHT
+       mode, but the shared dark-mode rule (line 19) puts topbar/sidebar/statusbar/filterrow all
+       on --surface-tile-1 together — two different tokens per theme, not one that happens to
+       match #lib-top's --bg in both. */
+    #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--surface-alt);border-top:1px solid var(--bdr);font-size:11px;color:var(--mut)}
     /* Library View.html:21 — dark mode's statusbar text is full white (--ink-on-dark), not the
        muted grey light mode uses (--ink-muted-48/var(--mut) above) — an intentional asymmetry,
        not a mistake to "fix" into consistency. */
-    #lib-overlay:not(.lib-light) #lib-bottom{color:var(--txt)}
+    #lib-overlay:not(.lib-light) #lib-bottom{color:var(--txt);background:var(--bg)}
     .lib-btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
       padding:5px 10px;font-size:12px;cursor:pointer}
     .lib-btn:hover{background:var(--bdr)}
@@ -1171,7 +1188,12 @@
     .lib-card:hover .lib-meta-strip.hover-mode,.lib-meta-strip.always-mode{opacity:1}
     /* Design-import reskin: a hairline ring on every thumbnail (wireframe's .card) instead of a
        borderless flat tile — reads as a card even before hover/selection kicks in. */
-    .lib-thumb-wrap{position:relative;box-shadow:inset 0 0 0 1px var(--bdr)}
+    /* Same always-light-plate rule as the .lib-thumb-wrap background above: the card's hairline
+       ring (Library View.html:165's --hairline) doesn't get a dark-mode override either, so it
+       stays the light #e0e0e0 value. Can't use var(--hairline) here — that token itself IS
+       remapped to a dark value at #lib-overlay scope (line 740) for everything else; this is the
+       one place that deliberately opts out, so the literal value is the only way to pin it. */
+    .lib-thumb-wrap{position:relative;box-shadow:inset 0 0 0 1px #e0e0e0}
     .lib-card{background:transparent;border:none;border-radius:0;overflow:hidden;
       cursor:pointer;position:relative;box-shadow:none;transition:box-shadow .15s ease}
     .lib-card:hover .lib-thumb-wrap{box-shadow:inset 0 0 0 1px var(--acc2)}
@@ -1185,7 +1207,11 @@
     /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
        photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
-    .lib-thumb-wrap{aspect-ratio:1;background:var(--sur);display:flex;align-items:center;justify-content:center;overflow:hidden}
+    /* Library View.html:165's .card background is --surface-alt with NO dark-mode override —
+       photo cards keep a light parchment mount even in dark mode, like a paper plate under a
+       print, rather than matching the surrounding dark chrome. Per explicit decision, literal to
+       the wireframe rather than theme-following. */
+    .lib-thumb-wrap{aspect-ratio:1;background:var(--canvas-parchment);display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
     /* Item 31: "Aspect ratio" grid mode — real aspect, no crop, ragged-right rows (not edge-to-
        edge justified: that needs a width-fitting layout pass, which is a bigger, riskier project
