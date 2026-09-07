@@ -737,7 +737,7 @@
       --acc2:var(--blue-mist);--acc:var(--blue-mist);--r:var(--radius-sm);
       --canvas:var(--surface-tile-1);--surface-alt:var(--surface-tile-2);
       --ink:var(--ink-on-dark);--ink-muted-80:var(--ink-on-dark);--ink-muted-48:var(--ink-on-dark-muted);
-      --hairline:rgba(255,255,255,.14);--hairline-alpha:rgba(255,255,255,.14);
+      --hairline:rgba(255,255,255,.12);--hairline-alpha:rgba(255,255,255,.12);
       --primary:var(--blue-mist);--primary-focus:var(--blue-mist);--primary-on-dark:var(--blue-mist);
       --blue-mist-soft:rgba(97,160,175,.22);
     }
@@ -832,7 +832,9 @@
        wireframe's split between .pillbtn (sort/filters/allfx/export) and .iconbtn (utility). */
     .lib-btn.lib-pill{border-radius:9999px!important;background:transparent;padding:0 14px;height:30px}
     .lib-btn.lib-pill:hover{background:var(--sur2)}
-    .lib-btn.lib-pill.active{background:rgba(74,157,220,.14);border-color:var(--acc2)!important;color:var(--acc2)}
+    /* UI_SPEC.md #1/#9: token-based tint of the one sanctioned interactive accent, not a
+       leftover hardcoded blue from before the design-system import. */
+    .lib-btn.lib-pill.active{background:var(--blue-mist-soft);border-color:var(--acc2)!important;color:var(--acc2)}
     #lib-filters-btn-wrap{position:relative}
     /* Top-bar flag row (design-import wireframe) — hairline-bracketed group, matching the
        wireframe's .flagrow, so it reads as one control cluster distinct from the icon buttons
@@ -840,9 +842,11 @@
     .lib-flagrow{display:flex;align-items:center;gap:2px;border-left:1px solid var(--bdr);
       border-right:1px solid var(--bdr);padding:0 8px;flex:none}
     .lib-flagrow .lib-btn-icon{width:28px!important;height:28px!important}
-    #lib-flag-reject svg{stroke:#e5484d}
-    #lib-flag-pick.on svg,#lib-flag-pick svg{stroke:#46a758}
-    #lib-flag-fav.on svg,#lib-flag-fav svg{stroke:#ff9b42}
+    /* UI_SPEC.md #1: never a raw hex — the flag/pick/favorite glyphs are the DS's own semantic
+       state tokens (oxide/pine/ember), not the app's pre-existing hand-picked hex triad. */
+    #lib-flag-reject svg{stroke:var(--red-oxide)}
+    #lib-flag-pick.on svg,#lib-flag-pick svg{stroke:var(--green-pine)}
+    #lib-flag-fav.on svg,#lib-flag-fav svg{stroke:var(--orange-ember)}
     #lib-flag-pick.on,#lib-flag-fav.on{background:var(--sur2)}
     /* View toggle (grid/list/compare) — transplanted from the wireframe's .viewtoggle: bordered
        28x28 segments, active = surface-alt fill, not an accent fill (design import reskin). */
@@ -854,10 +858,10 @@
     .lib-zoomrow input[type=range]{width:100%;min-width:50px;accent-color:var(--acc2)}
     #lib-overlay:not(.full) .lib-zoomrow{display:none}
     /* Primary filled Export button — transplanted from the wireframe's .btn-export. */
-    .lib-btn.lib-btn-export{background:var(--primary);border-color:var(--primary);color:var(--on-primary,#fff);
+    .lib-btn.lib-btn-export{background:var(--primary);border-color:var(--primary);color:var(--on-primary);
       font-weight:var(--weight-semibold);border-radius:9999px!important;height:30px}
     .lib-btn.lib-btn-export:hover{background:var(--primary-focus);border-color:var(--primary-focus)}
-    .lib-btn.lib-btn-export svg{stroke:#fff}
+    .lib-btn.lib-btn-export svg{stroke:var(--on-primary)}
     /* Sort/View popovers — transplanted verbatim from the wireframe's .menu/.opt/.grp-label. */
     .lib-menu{position:absolute;top:36px;right:0;width:230px;background:var(--bg);border:1px solid var(--bdr);
       border-radius:var(--r);box-shadow:0 3px 30px rgba(0,0,0,.35);padding:6px;z-index:4600;display:none;
@@ -943,6 +947,9 @@
     .lib-coll-row.offline:hover{background:transparent}
     .lib-coll-ic{display:inline-flex;flex-shrink:0;color:inherit}
     .lib-coll-lb{flex:1}
+    /* UI_SPEC.md sidebar rule: "All Photos" is semibold permanently, selected or not — the one
+       named exception to "no bold on non-selected rows". */
+    .lib-coll-row[data-catalog="all"]{font-weight:var(--weight-semibold)}
     .lib-coll-count{font-family:var(--sans);font-size:11px;color:var(--mut)}
     .lib-coll-row.on .lib-coll-count{color:var(--primary);font-weight:var(--weight-semibold)}
     .lib-coll-sep{height:1px;background:var(--bdr);margin:6px 0 0;padding-top:6px}
@@ -1099,13 +1106,17 @@
     .lib-fp-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-top:6px}
     /* Reject/Pick still ride the sidecar's "label" field ("Red"/"Green") and get a frame
        highlight on the thumbnail — this is the reject/pick indicator, not a colour-label system. */
-    .lib-card.lbl-red .lib-thumb-wrap{box-shadow:0 0 0 2px #e05252}
-    .lib-card.lbl-green .lib-thumb-wrap{box-shadow:0 0 0 2px #5cb85c}
-    /* Rejected photos read as "set aside", not just outlined red — dim the whole card so a
-       rejected pass is visually distinct from a normal browse at a glance. Selection/hover still
-       overrides via specificity below since .sel/.multi/:hover come after in cascade order. */
-    .lib-card.lbl-red{opacity:.45}
-    .lib-card.lbl-red:hover,.lib-card.lbl-red.sel,.lib-card.lbl-red.multi{opacity:1}
+    .lib-card.lbl-red .lib-thumb-wrap{box-shadow:0 0 0 2px var(--red-oxide)}
+    .lib-card.lbl-green .lib-thumb-wrap{box-shadow:0 0 0 2px var(--green-pine)}
+    /* Rejected photos read as "set aside" via a dimming OVERLAY on the thumbnail itself
+       (UI_SPEC.md: surface-black at reduced opacity over the image, "not a CSS filter/hue
+       change") — not a whole-card opacity fade, which also faded the filename/badges the spec
+       says nothing about dimming. Selection/hover still un-dims, same as before. */
+    .lib-card.lbl-red .lib-thumb-wrap{position:relative}
+    .lib-card.lbl-red .lib-thumb-wrap::after{content:'';position:absolute;inset:0;
+      background:var(--surface-black);opacity:.55;pointer-events:none}
+    .lib-card.lbl-red:hover .lib-thumb-wrap::after,.lib-card.lbl-red.sel .lib-thumb-wrap::after,
+    .lib-card.lbl-red.multi .lib-thumb-wrap::after{opacity:0}
     /* View menu: "Hide photo icons" — flags/badges are useful while culling, noise once you're
        just browsing. Stars are a rating, not a status icon, so they stay. */
     #lib-overlay.lib-hide-icons .lib-flags,#lib-overlay.lib-hide-icons .lib-raw-badge,
@@ -1438,7 +1449,7 @@
       <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo">${ic('looks',14)}<span class="lbl">All FX</span></button>
       <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E">${ic('export',14)}<span class="lbl">Export</span></button>
       <div style="position:relative">
-        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings">${ic('adjust',15)}</button>
+        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
         <div class="lib-menu" id="lib-view-menu">
           <div class="grp-label">Library</div>
           <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
@@ -1451,6 +1462,7 @@
           <label class="opt" id="lib-hideicons-wrap"><span>Hide flag &amp; type icons</span><input type="checkbox" id="lib-hideicons" class="opt-check"></label>
           <label class="opt" id="lib-zerogap-wrap"><span>No spacing between photos</span><input type="checkbox" id="lib-zerogap" class="opt-check"></label>
           <label class="opt" id="lib-showtitle-wrap"><span>Show title</span><input type="checkbox" id="lib-showtitle" class="opt-check"></label>
+          <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to).">${ic('image',15)}<span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
           <hr>
           <div class="grp-label">Metadata overlay</div>
           <select id="lib-metadisp" style="display:none">
@@ -1550,7 +1562,6 @@
       </select>
       <button class="lib-btn" id="lib-filters-clear">Clear all</button>
       <div class="lib-fp-label">Display</div>
-      <button class="lib-btn" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to).">${ic('image',15)} Real aspect ratio</button>
       <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option></select>
       <!-- lib-thumbsize (zoom), lib-showtitle/lib-hideicons/lib-zerogap and lib-metadisp all
            relocated to the top bar / gear View menu above — kept as the single live copy of
@@ -6761,18 +6772,24 @@
     return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
-      </div>${reviewRow}${facesPendingRow}${rawShortcutRow}${videosShortcutRow}
-      <div class="lib-tree-node" id="lib-date-tree">
-        <div class="lib-tree-row" data-date-tree-toggle="1">
-          <span class="lib-tree-chev${dateExpanded.has('__root__') ? ' open' : ''}">${ic('chevron', 11)}</span>
-          <span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)">${ic('calendar', 13)}</span>
-          <span>By Date</span>
-        </div>
-        ${dateExpanded.has('__root__') ? `<div class="lib-tree-children">${dateTreeHtml()}</div>` : ''}
-      </div>`;
+      </div>${reviewRow}${facesPendingRow}${rawShortcutRow}${videosShortcutRow}`;
     // Note: Drives used to render immediately here. It's now placed by renderCollections()'s own
     // assembly order (see the sidebar reorder comment there) rather than baked into this
     // function's return value, so section order can change in one place.
+  }
+
+  // "By Date" — its own top-level section (UI_SPEC.md zone: sidebar tree, wireframe order
+  // All Photos → By date → Collections → …), styled with the same sec-head weight as
+  // Collections/People/Albums rather than nested inside catalogSectionHtml's All-Photos block.
+  // Uses its own dateExpanded('__root__') open flag (session-only, not sidebarSecOpen) since
+  // that's the pre-existing mechanism the year/month toggle rows already share — moving it to
+  // sidebarSecOpen would need a migration for no behavioral gain.
+  function dateSectionHtml() {
+    if (!dateCounts.days.length && !dateCounts.no_date) return '';
+    const open = dateExpanded.has('__root__');
+    return `<div class="lib-coll-heading lib-sec-h" data-date-tree-toggle="1">
+        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>By Date</span>
+      </div>${open ? `<div class="lib-tree-children">${dateTreeHtml()}</div>` : ''}`;
   }
 
   /// Registers `path` with the catalog and — at most once per COVERING ROOT per session — runs
@@ -8434,11 +8451,12 @@
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
       </div>`).join('');
-    // Sidebar section order (notes §2.3.9): All Photos/Dates (catalogSectionHtml) → Collections
-    // → People & Pets → Albums → Drives → Devices → Folders → Cloud. Each section function
-    // supplies its OWN leading separator (or none, if it has nothing to show), so reordering
-    // here never produces a doubled or missing divider between two adjacent sections.
-    host.innerHTML = catalogSectionHtml()
+    // Sidebar section order (UI_SPEC.md wireframe order): All Photos (catalogSectionHtml) →
+    // By Date (dateSectionHtml, its own top-level section) → Collections → People & Pets →
+    // Albums → Drives → Devices → Folders → Cloud. Each section function supplies its OWN
+    // leading separator (or none, if it has nothing to show), so reordering here never
+    // produces a doubled or missing divider between two adjacent sections.
+    host.innerHTML = catalogSectionHtml() + dateSectionHtml()
       + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
       + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml()
       + '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '')
