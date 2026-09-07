@@ -759,7 +759,12 @@
       background:var(--bg);display:none;border-right:1px solid var(--bdr);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
-      font-family:var(--font-text);transition:width .15s ease;}
+      font-family:var(--font-text);transition:width .15s ease;
+      /* chromasmith-22.html's body{font-size:14px;line-height:1.5} otherwise cascades in here —
+         the wireframe never sets either explicitly (falls back to the browser default 16px/
+         normal), so this overrides them at the Library's own root, scoped so it never leaks
+         into the Editor. See wireframe_diff.mjs's font-size/lineHeight mismatches. */
+      font-size:16px;line-height:normal;}
     #lib-overlay.on{display:grid}
     /* Buttons/inputs/selects don't inherit font-family by default in browsers (UA stylesheets
        give them their own system font) — without this every .lib-btn/input/select silently fell
@@ -810,7 +815,7 @@
        wireframe's own .topbar.compact (Library View.html's fitTopbar(), driven by measured
        width, not a hardcoded breakpoint: see the ResizeObserver below for the .full case). */
     #lib-top{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding:34px 12px 6px;-webkit-app-region:drag;
-      border-bottom:1px solid var(--bdr)}
+      background:var(--sur);border-bottom:1px solid var(--bdr)}
     #lib-top button,#lib-top input,#lib-top select{-webkit-app-region:no-drag}
     .lib-logo{display:flex;align-items:center;flex:0 0 auto}
     .lib-logo-img{height:20px;width:auto;display:block}
@@ -1013,7 +1018,11 @@
        padding/border-bottom already gives the visual gap before the first row, nothing else
        needs to move. (:has() already used elsewhere in this file — same runtime.) */
     #lib-overlay:has(#lib-list-head.on) #lib-main{padding-top:0}
-    #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid var(--bdr)}
+    #lib-bottom{display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--sur);border-top:1px solid var(--bdr);font-size:11px;color:var(--mut)}
+    /* Library View.html:21 — dark mode's statusbar text is full white (--ink-on-dark), not the
+       muted grey light mode uses (--ink-muted-48/var(--mut) above) — an intentional asymmetry,
+       not a mistake to "fix" into consistency. */
+    #lib-overlay:not(.lib-light) #lib-bottom{color:var(--txt)}
     .lib-btn{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
       padding:5px 10px;font-size:12px;cursor:pointer}
     .lib-btn:hover{background:var(--bdr)}
@@ -1176,7 +1185,7 @@
     /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
        photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
-    .lib-thumb-wrap{aspect-ratio:1;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .lib-thumb-wrap{aspect-ratio:1;background:var(--sur);display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
     /* Item 31: "Aspect ratio" grid mode — real aspect, no crop, ragged-right rows (not edge-to-
        edge justified: that needs a width-fitting layout pass, which is a bigger, riskier project
