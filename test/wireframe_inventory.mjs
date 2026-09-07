@@ -46,9 +46,14 @@ const NOISE_LABELS = new Set([
   'Sarah', 'Buddy (Dog)', 'Summer Trip', 'Portfolio', 'External SSD', 'iPhone', 'Client Work',
   'Archive T7', 'Old LaCie', 'This Mac', 'Dogs 2026', 'Travel', 'Film scans',
 ]);
+// The date-tree's month/day labels are also mock sample data — the wireframe's static "March" and
+// the app's mock catalog_date_counts (August/July/December, whatever the mock happens to cover)
+// are two independent arbitrary samples that will never name the same month. Same reasoning as
+// NOISE_LABELS above: what matters is a month ROW renders (row-count check), not which month.
+const MONTH_RE = /^(January|February|March|April|May|June|July|August|September|October|November|December)$/;
 function isDataNoise(atom) {
   if (atom.kind !== 'text') return false;
-  return NUMERIC_RE.test(atom.text) || DYNAMIC_LABEL_RE.test(atom.text) || NOISE_LABELS.has(atom.text);
+  return NUMERIC_RE.test(atom.text) || DYNAMIC_LABEL_RE.test(atom.text) || NOISE_LABELS.has(atom.text) || MONTH_RE.test(atom.text);
 }
 
 const ROOT = process.cwd();
@@ -150,6 +155,21 @@ await app.evaluate(() => {
   document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });
 });
 await app.evaluate(() => { document.getElementById('lib-overlay')?.classList.add('full'); });
+// The date tree starts with only its root open (dateExpanded = {'__root__'}) — years/months
+// collapse by default, same as the real product. The wireframe's static mock instead shows a
+// year AND its first month pre-expanded (Library View.html:301-304, "2026" -> "March"), so
+// comparing against the app's default-collapsed state produces a false "March MISSING" finding
+// that has nothing to do with real fidelity. Click the same two chevrons a user would, so both
+// sides are compared in the same expanded state.
+await app.evaluate(() => {
+  const chevs = document.querySelectorAll('.lib-tree-row[data-date-scope] [data-chev-toggle]');
+  if (chevs[0]) chevs[0].click();          // expand the newest year
+});
+await app.waitForTimeout(50);
+await app.evaluate(() => {
+  const chevs = document.querySelectorAll('.lib-tree-row[data-date-scope] [data-chev-toggle]');
+  if (chevs[1]) chevs[1].click();          // expand its first (newest) month
+});
 await app.waitForTimeout(400);
 await settleForCapture(app);
 

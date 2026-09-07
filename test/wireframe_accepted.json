@@ -5,5 +5,10 @@
   { "match": "text:\"Find duplicates…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
   { "match": "text:\"Rescan flags…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
   { "match": "text:\"Keywords\"", "reason": "Keywords sidebar section — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep." },
-  { "match": "text:\"No date\"", "reason": "Date-tree bucket for photos with no EXIF date — a real completeness feature the wireframe's fixed sample data has no need for." }
+  { "match": "text:\"No date\"", "reason": "Date-tree bucket for photos with no EXIF date — a real completeness feature the wireframe's fixed sample data has no need for." },
+  { "match": "text:\"Syncing catalog files…\"", "reason": "Statusbar sync-in-progress indicator — needs a real backend signal (catalog_scan progress) to be meaningful, not a quick fix. Deferred by explicit user decision 2026-09-07; build later, not now." },
+  { "match": "[statusbar] MISSING 1x  icon", "reason": "The sync-spinner icon that goes with \"Syncing catalog files…\" — deferred together with that text, see the entry above." },
+  { "match": "[statusbar] dynamic-data row count", "reason": "Downstream of the deferred sync-indicator decision above — the wireframe's row count includes the syncing text/icon this app doesn't render yet." },
+  { "match": "[statusbar] atom count", "reason": "Downstream of the deferred sync-indicator decision above, see \"dynamic-data row count\" entry." },
+  { "match": "[statusbar] font-size 11px", "reason": "Downstream of the deferred sync-indicator decision above — the missing \"Syncing catalog files…\" text was the only 11px atom the wireframe counts here." }
 ]
