@@ -11,7 +11,10 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
+  toRecords, writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
 
+const REPORT_PATH = 'test/output/editor_wireframe_diff_report.json';
 const ROOT = process.cwd();
 const server = createServer(async (req, res) => {
   try {
@@ -74,22 +77,23 @@ async function railLabels(page, railSel) {
   }, railSel);
 }
 
-const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 let mismatches = [];
 let missing = [];
 let notes = [];
 
 for (const theme of ['dark', 'light']) {
-  const wf = await b.newPage({ viewport: VIEWPORT });
+  const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
   await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
   if (theme === 'light') await wf.evaluate(() => document.getElementById('app')?.classList.add('light'));
+  await settleForCapture(wf);
   const wfSelMap = Object.fromEntries(Object.keys(PAIRS).map((k) => [k, k]));
   const wfStyles = await extract(wf, wfSelMap);
   const wfRail = await railLabels(wf, '.rail');
   await wf.screenshot({ path: `test/output/editor_wireframe_${theme}.png`, fullPage: false });
   await wf.close();
 
-  const app = await b.newPage({ viewport: VIEWPORT });
+  const app = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
   app.on('pageerror', (e) => console.log('[pageerror]', e.message));
   await app.goto(`http://127.0.0.1:${port}/chromasmith-22.html?deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await app.waitForTimeout(1500);
@@ -99,6 +103,7 @@ for (const theme of ['dark', 'light']) {
   });
   if (theme === 'light') await app.evaluate(() => { if (typeof toggleTheme === 'function' && !document.body.classList.contains('light')) toggleTheme(); });
   await app.waitForTimeout(200);
+  await settleForCapture(app);
   const appSel = Object.fromEntries(Object.entries(PAIRS).map(([wfSel, [appSelector]]) => [wfSel, appSelector]));
   const appStyles = await extract(app, appSel);
   const appRail = await railLabels(app, '#fx-toolrail');
@@ -140,4 +145,10 @@ console.log(`editor_wireframe_diff: ${mismatches.length} style/order mismatches,
 if (missing.length) { console.log('\nMissing:'); missing.forEach((m) => console.log('  ' + m)); }
 if (mismatches.length) { console.log('\nMismatches:'); mismatches.forEach((m) => console.log('  ' + m)); }
 notes.forEach((n) => console.log(n));
+
+const records = toRecords(mismatches, missing);
+const rc = await recheck(REPORT_PATH, records);
+printRecheck(rc);
+await writeReport(REPORT_PATH, records);
+
 console.log(mismatches.length === 0 && missing.length === 0 ? 'RESULT: PASS' : 'RESULT: SEE ABOVE');

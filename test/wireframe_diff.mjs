@@ -14,6 +14,10 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
+  toRecords, writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
+
+const REPORT_PATH = 'test/output/wireframe_diff_report.json';
 
 const ROOT = process.cwd();
 const server = createServer(async (req, res) => {
@@ -108,14 +112,15 @@ function diffDayRowWeekday(theme, w, a) {
   return out;
 }
 
-const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 let mismatches = [];
 let missing = [];
 
 for (const theme of ['dark', 'light']) {
-  const wf = await b.newPage({ viewport: VIEWPORT });
+  const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
   await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Library%20View.html`, { waitUntil: 'load' });
   if (theme === 'dark') await wf.evaluate(() => document.getElementById('app').classList.add('dark'));
+  await settleForCapture(wf);
   const wfSelMap = Object.fromEntries(Object.keys(PAIRS).map((k) => [k, k]));
   const wfStyles = await extract(wf, wfSelMap);
   // The By Date tree is real JS, not a static image — its day rows (`.row.sub`) are expanded by
@@ -126,10 +131,11 @@ for (const theme of ['dark', 'light']) {
   await wf.screenshot({ path: `test/output/wireframe_${theme}.png`, fullPage: false });
   await wf.close();
 
-  const app = await b.newPage({ viewport: VIEWPORT });
+  const app = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
   app.on('pageerror', (e) => console.log('[pageerror]', e.message));
   await app.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=60`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await app.waitForTimeout(2000);
+  await settleForCapture(app);
   await app.evaluate((light) => {
     document.getElementById('lib-overlay')?.classList.toggle('lib-light', light);
     document.querySelector('.lib-coll-row')?.classList.add('on'); // ensure a .on row exists to sample
@@ -183,4 +189,13 @@ server.close();
 console.log(`wireframe_diff: ${mismatches.length} style mismatches, ${missing.length} missing elements`);
 if (missing.length) { console.log('\nMissing:'); missing.forEach((m) => console.log('  ' + m)); }
 if (mismatches.length) { console.log('\nMismatches:'); mismatches.forEach((m) => console.log('  ' + m)); }
+
+// Repair loop: compare this run's records against the LAST run's saved report before
+// overwriting it, so applying a fix and re-running actually tells you resolved/persisting/new
+// instead of requiring a by-eye diff of two console dumps.
+const records = toRecords(mismatches, missing);
+const rc = await recheck(REPORT_PATH, records);
+printRecheck(rc);
+await writeReport(REPORT_PATH, records);
+
 console.log(mismatches.length === 0 && missing.length === 0 ? 'RESULT: PASS' : 'RESULT: SEE ABOVE');
