@@ -1,63 +1,50 @@
-# Handover — wireframe fidelity pass, part 2 (structural inventory)
+# Handover — wireframe fidelity pass (Library) — DONE
 
-## What changed this session
-Replaced the old "check, not a search" wireframe_diff.mjs approach's blind spot with
-`test/wireframe_inventory.mjs` — a real structural diff (extras/missing/counts/geometry/font
-sizes), gated for real in `githooks/pre-commit` (exit code, not a `touch`-able stamp file).
-Raw findings: 75 → 29. `test/wireframe_accepted.json` holds deliberate divergences (Drives
-block, Keywords section, Albums "+", no-date bucket, mock people/album/device names) — each
-one an explicit user decision, not a guess.
+## Status: PASS
+`node test/wireframe_inventory.mjs` → 0 unaccepted findings. Every real structural gap found
+by the structural inventory (75 raw findings at the start of this pass) is now either fixed
+or an explicit, reasoned entry in `test/wireframe_accepted.json`.
 
-Fixed this session: Needs Review / Not-Face-Scanned nested under Collections (was siblings of
-All Photos), their label casing, "By date" casing, sort-pill default (date, not name), and a
-missing logo-gap spacer between the logo and search pill.
+## What was fixed (real bugs)
+- Needs Review / Not-Face-Scanned nested under Collections (were siblings of All Photos).
+- Label casing: "By date", "Needs Review", "Not Face-Scanned".
+- Sort-pill default: "date" (was "name").
+- Search: one feature, one icon — removed the duplicate AI-search icon button (Enter still
+  triggers CLIP search); placeholder text matches the wireframe literally.
+- Compare view moved from the topbar segmented toggle into the gear's View menu (2-button
+  Grid/List toggle now matches the wireframe; Compare is still one click away, "C" shortcut
+  unchanged).
+- Topbar layout math: `.lib-pill`/`.lib-btn-export` now 13px (were inheriting 12px from the
+  base `.lib-btn`); `.lib-spacer` is flex:0 1 8px (was flex:1, splitting growth across two
+  spacers); `.lib-zoomrow` is flex:1 1 30px (was non-growable) so it shares topbar growth with
+  `.lib-logo-gap` the same way the wireframe's `.zoomrow` does. Together these had pushed the
+  entire right side of the topbar 100-190px off — now within a few px.
+- Date-tree rows (year/month/day) had no font-size, inheriting the sidebar's 16px base font
+  instead of the wireframe's 13/12/11px hierarchy — added explicit per-level classes. The
+  "No date" bucket row had the same bug via a missing function argument.
 
-**Near-miss bug, now guarded against**: a backtick inside a CSS comment (inside library-ui.js's
-HTML template literal) silently truncated the template and crashed the whole Library UI at
-boot ("gap is not defined", no visible syntax error) — the exact bug class CLAUDE.md warns
-about for GLSL comments, just in a different file. Comment now warns explicitly; **always
-rebuild + run `node test/wireframe_inventory.mjs` after ANY library-ui.js edit**, even a
-comment-only one.
+## What's allowlisted (real, reasoned divergences — see test/wireframe_accepted.json)
+Drives-management block, Keywords section, Albums "+", statusbar sync indicator (deferred,
+needs real backend wiring), mock-only People/Album/Device sample names, and one test-tool
+artifact (a DOM-structure difference in how the wireframe vs. app mark up "By date" that
+changes the inventory walker's atom-visitation order with no real visual difference).
 
-## Remaining findings (29 raw, un-allowlisted — real, not yet fixed)
-**Topbar:**
-- Search placeholder text differs from wireframe ("Search filename… (Enter for AI search)" vs
-  "Search name, keyword, or filter") — app's wording documents a real AI-search behavior the
-  wireframe doesn't have; needs a call on whether to reconcile wording or allowlist.
-- Duplicate-looking search icon: `lib-clip-search-btn` (CLIP/AI search) reuses the plain search
-  glyph — a real, distinct feature, but should probably get its own icon (e.g. sparkle) instead
-  of visually duplicating the search icon next to it.
-- View toggle has 3 buttons (Grid/List/Compare) vs wireframe's 2 (Grid/Table) — Compare is a
-  real feature; likely allowlist, needs a user decision.
-- Logo-gap spacer landed but only closes ~33px of the original 193px offset — the flex-basis
-  may need tuning against the real (non-mock) topbar button set.
-- Filters is a `<select>` dropdown vs the wireframe's chip row — larger, deferred UI change.
+## Gate
+`githooks/pre-commit` runs `wireframe_inventory.mjs` on every `desktop/library-ui.js` commit
+and blocks on NEW findings vs. the last recorded run (`test/output/wireframe_inventory_report.json`)
+— not on the whole backlog, so normal commits aren't blocked by pre-existing, already-triaged
+items. Adding a genuinely new divergence still requires either a real fix or a reasoned
+allowlist entry.
 
-**Sidebar:**
-- "March" (a date-tree month label) still MISSING — date-tree month rows may not be rendering
-  in the ?libtest mock, or dateExpanded needs the month-level toggle opened before comparing.
-  Needs investigation, not yet root-caused.
-- Font-size distribution still doesn't match (10px/13px/16px counts) — likely the sidebar's
-  base-font decision from the PREVIOUS session (16px) bleeding into rows the wireframe sets at
-  13px; needs a pass through the CSS cascade, not a one-line fix.
-
-**Statusbar:**
-- No sync-spinner icon / "Syncing catalog files…" text — real feature gap (need
-  `catalog_scan`/background-sync status surfaced there) or explicit "not building this now"
-  allowlist decision.
-
-## Next steps
-1. Investigate "March" missing (likely a date-tree expand-state issue in the inventory harness,
-   not a real UI bug — check `dateExpanded` before asserting).
-2. User decision needed on: search placeholder wording, duplicate search-icon glyph, 3rd
-   view-toggle button (Compare), filters-as-dropdown-vs-chips, statusbar sync indicator.
-3. Re-run `bash build-desktop.sh && node test/wireframe_inventory.mjs` after each fix; commit
-   allowlist additions with a `reason` field, never silently.
-4. Editor wireframe pass (`test/editor_wireframe_diff.mjs`) still only regression-gated against
-   its own ~57-item backlog from the PREVIOUS session — that backlog itself is still open.
+## Next possible work (not required, not started)
+- Editor wireframe pass (`test/editor_wireframe_diff.mjs`) still carries its own ~57-item
+  backlog from an earlier session, gated the same way (regressions only). Nobody has gone
+  back to burn that list down yet.
+- Statusbar sync-in-progress indicator is deferred by explicit decision — would need a real
+  `catalog_scan` progress signal wired from Rust before it's worth building.
 
 ## Verification
 ```bash
-bash build-desktop.sh && node test/wireframe_inventory.mjs   # Library — must be 0 new regressions
-node test/editor_wireframe_diff.mjs                          # Editor — must be 0 new regressions
+bash build-desktop.sh && node test/wireframe_inventory.mjs   # must print RESULT: PASS
+npm run lib:test                                              # Library regression suite
 ```
