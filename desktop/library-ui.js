@@ -839,6 +839,14 @@
        between two spacers and dragging both search and the button cluster off the wireframe's
        positions. */
     .lib-spacer{flex:0 1 8px;min-width:0}
+    /* HANDOVER §8 item #13: syncTopCompact()'s whole detection strategy (below) is
+       scrollWidth > clientWidth — but nothing stopped a button's own .lbl from wrapping onto
+       a second line under squeeze instead of forcing the row wider. A 2-line label absorbs the
+       squeeze silently and never grows scrollWidth past clientWidth, so the compact/icon-only
+       fallback this rule exists to trigger never fired — confirmed: labels visibly wrapped at
+       820px with the fallback never engaging. nowrap forces a genuine horizontal overflow the
+       ResizeObserver can actually detect. */
+    #lib-top .lbl{white-space:nowrap}
     /* Icon-only collapse — under DOCK_W it's structural (:not(.full) is always this narrow); in
        .full mode it's driven by the .lib-top-compact class a ResizeObserver toggles below. */
     #lib-overlay:not(.full) #lib-top .lbl,#lib-top.lib-top-compact .lbl{display:none}
@@ -870,6 +878,9 @@
     .lib-flagrow{display:flex;align-items:center;gap:2px;border-left:1px solid var(--bdr);
       border-right:1px solid var(--bdr);padding:0 8px;flex:none}
     .lib-flagrow .lib-btn-icon{width:28px!important;height:28px!important}
+    /* HANDOVER §8 item #7: the shared .lib-btn base rule gives every button a 1px border; the
+       wireframe's .flagbtn has none at all (hover background only, Library View.html:64-65). */
+    .lib-flagrow .lib-btn-icon{border:none}
     /* UI_SPEC.md #1: never a raw hex — the flag/pick/favorite glyphs are the DS's own semantic
        state tokens (oxide/pine/ember), not the app's pre-existing hand-picked hex triad. */
     #lib-flag-reject svg{stroke:var(--red-oxide)}
@@ -922,7 +933,11 @@
     #lib-sort-dir::after{content:'↑'}
     #lib-sort-dir[data-dir="desc"]::after{content:'↓'}
     /* Pill search bar — icon + input in one hairline capsule, matching the wireframe's .search. */
-    .lib-search-wrap{flex:1 1 160px;min-width:70px;max-width:300px;height:32px;border-radius:9999px;
+    /* HANDOVER §8 item #13: min-width:70px was a floor on the WRAPPER, not the input the user
+       actually types into — icon (14px) + padding (20px) + gap (8px) eat ~42px of that before
+       the input gets anything, so the input itself could shrink to ~28px, well under any usable
+       width. 120px guarantees the input keeps a real ~80px floor of its own. */
+    .lib-search-wrap{flex:1 1 160px;min-width:120px;max-width:300px;height:32px;border-radius:9999px;
       border:1px solid var(--bdr);background:var(--surface-ghost);display:flex;align-items:center;gap:8px;
       padding:0 6px 0 14px;overflow:hidden}
     /* Library View.html:23 — dark mode's search pill is a barely-there white tint over the dark
@@ -947,12 +962,16 @@
        232px LEFT COLUMN once .full gives it room (grid-column:1;grid-row:2/5 rule earlier in
        this file already does the column switch — this just supplies the wireframe's own fill/
        border/width values for that column). */
-    #lib-side{overflow:auto;padding:12px 0 8px;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);
+    /* HANDOVER §8 item #3: right padding was 0, so trailing count numbers sit flush against the
+       sidebar's own edge — exactly where macOS's overlay scrollbar (no CSS anywhere reserves a
+       classic gutter; it paints ON TOP of content on hover/scroll, confirmed by measuring
+       offsetWidth-clientWidth ≈ 0) expands into on hover. 14px clears that. */
+    #lib-side{overflow:auto;padding:12px 14px 8px 0;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);
       background:var(--sur);position:relative}
     /* Width itself comes from the .full grid-template-columns rule above (bound to the same
        --lib-side-w custom property, set on #lib-overlay by the resize handler below) — a grid
        item's own width can't out-rule its track, so setting width here directly did nothing. */
-    #lib-overlay.full #lib-side{padding:12px 0 8px;border-bottom:none;min-width:0}
+    #lib-overlay.full #lib-side{padding:12px 14px 8px 0;border-bottom:none;min-width:0}
     /* HANDOVER §3.8: was right:-3px;width:6px, straddling #lib-side's own right edge — but
        #lib-side is overflow:auto (for the tree's vertical scroll), which clips any part of an
        absolutely-positioned child that overflows its box. Only the ~3px still inside #lib-side
@@ -1001,6 +1020,11 @@
     /* Section eyebrow — transplanted from the wireframe's .sec-head: 10px uppercase, .08em. */
     .lib-coll-heading{font-size:10px;font-weight:var(--weight-semibold);letter-spacing:.08em;text-transform:uppercase;
       color:var(--mut);padding:6px 8px}
+    /* HANDOVER §8 item #5: the folder tree's root row (relocated to sit right after the
+       "Folders" header above, see renderCollections()) otherwise starts at the SAME indent as
+       every other top-level section — it needs to read as a CHILD of "Folders", one step
+       further right, the same way every other section's own body content already is. */
+    #lib-tree{padding-left:14px}
     /* Library View.html:21 — dark mode's .sec-head text is full white (--ink-on-dark), the same
        "loud" treatment as row/statusbar text, not the muted grey the light-mode rule above uses. */
     #lib-overlay:not(.lib-light) .lib-coll-heading{color:var(--txt)}
@@ -1110,7 +1134,14 @@
     .lib-tree-row-day{font-size:11px}
     .lib-tree-row .dayname{color:var(--mut);font-weight:400}
     .lib-tree-row:hover{background:var(--sur2)}
-    .lib-tree-row.on{background:var(--bdr)}
+    /* HANDOVER §8 item #16: was var(--bdr) — a neutral grey overlay, the SAME token :hover
+       above uses. Every other selected sidebar row (.lib-coll-row.on, :983-990) is blue; this
+       one silently wasn't. Mirrors that rule's exact shape, including the dark-mode ink/accent
+       override, rather than inventing a new one. */
+    .lib-tree-row.on{background:var(--blue-mist-soft);color:var(--primary);font-weight:var(--weight-semibold)}
+    #lib-overlay:not(.lib-light) .lib-tree-row.on{color:var(--ink-on-dark);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
+    #lib-overlay:not(.lib-light) .lib-tree-row.on .coll-count{color:var(--ink-on-dark)}
+    .lib-tree-row.on .coll-count{color:var(--primary);font-weight:var(--weight-semibold)}
     .lib-tree-chev{width:14px;flex:0 0 14px;display:inline-flex;align-items:center;justify-content:center;opacity:.6;
       transform:rotate(-90deg);transition:transform .12s ease}
     .lib-tree-chev.open{transform:rotate(0)}
@@ -1292,6 +1323,14 @@
     .lib-flags{display:flex;gap:3px}
     .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity .1s ease}
     .lib-flag.on{opacity:1;filter:none}
+    /* HANDOVER §8 item #9: was opacity:.55/grayscale for the unset flags — always drawn, just
+       dimmed. Wireframe: .ratebar.has-set button:not(.set){display:none} — once a card carries
+       ANY flag, the other two icons are removed entirely, not dimmed. Matches the wireframe's
+       own (slightly unusual) cycle: to switch flags you clear the current one first, which
+       un-hides the row on hover again. Scoped to .lib-flags (grid/list card overlay) only — the
+       TOPBAR's #lib-flagrow is a different, always-three-visible control and must not be hit by
+       this rule. */
+    .lib-flags:has(.lib-flag.on) .lib-flag:not(.on){display:none}
     .lib-thumb-wrap img.thumb-error{opacity:0}
     .lib-thumb-wrap.thumb-broken::after{content:'⚠';position:absolute;top:50%;left:50%;
       transform:translate(-50%,-50%);color:var(--mut);font-size:16px}
@@ -3741,7 +3780,17 @@
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
       .catch((e) => sidecarWriteFailed(path, cur, e));
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite);
+    if (card) {
+      card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite);
+      // HANDOVER §8 item #12: this optimistic patch updated the flag ICONS but never the
+      // card's own lbl-red/lbl-green class — the .lbl-red rule that dims a rejected thumbnail
+      // (UI_SPEC.md's deliberate black-overlay design, :1173-1183) only ever applied correctly
+      // after a full renderGrid() rebuilt card.className from sc.label. A flag click, which
+      // goes through exactly this path, never dimmed anything until the next unrelated re-render.
+      card.classList.remove('lbl-red', 'lbl-green');
+      if (label === 'Red') card.classList.add('lbl-red');
+      else if (label === 'Green') card.classList.add('lbl-green');
+    }
     if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
   }
   // Mirrors setLabel() above but for the favorite heart — same optimistic-update +
@@ -5999,7 +6048,11 @@
   // Action rows (Choose folder…, Get Info, Full-window view, etc.) close the popover after
   // firing their own (unrelated, ID-attached) click handler — checkboxes/theme opts stay open
   // so several can be flipped in one visit, matching the wireframe's own opt vs toggle split.
-  viewMenu.querySelectorAll('.opt-action').forEach((btn) => btn.addEventListener('click', () => viewMenu.classList.remove('open')));
+  // HANDOVER §8 item #21: #lib-tree-toggle/#lib-aspect-toggle carry BOTH `opt-action` and
+  // `opt-toggle` (they're persistent toggles by role, not one-shot actions), and this selector
+  // used to catch them too, wrongly closing the menu on every "Show sidebar"/"Real aspect
+  // ratio" click. `:not(.opt-toggle)` exempts them, same split the checkboxes above already get.
+  viewMenu.querySelectorAll('.opt-action:not(.opt-toggle)').forEach((btn) => btn.addEventListener('click', () => viewMenu.classList.remove('open')));
 
   // ── All FX / Export (design transplant: Library View.html's #btn-allfx/.btn-export) ──
   // All FX (batch look-apply across a selection) is net-new functionality out of scope for this
@@ -6557,6 +6610,13 @@
     // over every path) before the tree even finished opening — on a large library that reads as
     // the whole app freezing just from browsing the tree.
     const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`;
+    // HANDOVER §8 item #4: a leaf's slot used to be a bare empty <span class="lib-tree-chev">
+    // with no children — an empty inline-flex box collapsed to 0 width in practice (measured:
+    // getBoundingClientRect().width 0 vs the CSS rule's own declared 14px), while an expandable
+    // sibling's real chevron rendered at its icon's intrinsic 11px. Same nesting depth, two
+    // different indents. Rendering the SAME chevron markup, just visibility:hidden, guarantees
+    // byte-identical layout regardless of whatever caused the empty span to collapse.
+    const leafChevSlot = `<span class="lib-tree-chev" style="visibility:hidden">${ic('chevron', 11)}</span>`;
     // toggleKey is the BARE year or "year:month" string dateExpanded is actually keyed by
     // (yOpen/mOpen below read dateExpanded.has(`${y}`) / has(`${y}:${m}`)) — deliberately NOT
     // the same string as `scope` (which is the full "date:..." catalog_query scope).
@@ -6565,7 +6625,7 @@
     // gets its own font-size instead of silently inheriting the sidebar's 16px base font.
     const row = (scope, toggleKey, label, count, hasChildren, open, lvl) => `
       <div class="lib-tree-row lib-tree-row-${lvl}${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
-        ${hasChildren ? chev(open) : '<span class="lib-tree-chev"></span>'}
+        ${hasChildren ? chev(open) : leafChevSlot}
         <span style="flex:1">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut)">${count}</span>
       </div>`;
     let html = '';
@@ -6617,6 +6677,13 @@
       byParent.get(key).push(n);
     }
     const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`;
+    // HANDOVER §8 item #4: a leaf's slot used to be a bare empty <span class="lib-tree-chev">
+    // with no children — an empty inline-flex box collapsed to 0 width in practice (measured:
+    // getBoundingClientRect().width 0 vs the CSS rule's own declared 14px), while an expandable
+    // sibling's real chevron rendered at its icon's intrinsic 11px. Same nesting depth, two
+    // different indents. Rendering the SAME chevron markup, just visibility:hidden, guarantees
+    // byte-identical layout regardless of whatever caused the empty span to collapse.
+    const leafChevSlot = `<span class="lib-tree-chev" style="visibility:hidden">${ic('chevron', 11)}</span>`;
     const renderLevel = (parentKey) => {
       const kids = (byParent.get(parentKey) || []).slice().sort((a, b) => a.leaf.localeCompare(b.leaf));
       return kids.map((n) => {
@@ -6624,7 +6691,7 @@
         const open = kwExpanded.has(n.id);
         const scope = `kw:${n.path}`;
         return `<div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-kw-scope="${scope}" data-kw-id="${n.id}" data-kw-toggle="${hasChildren ? n.id : ''}" data-kw-path="${esc(n.path)}">
-            ${hasChildren ? chev(open) : '<span class="lib-tree-chev"></span>'}
+            ${hasChildren ? chev(open) : leafChevSlot}
             <span style="flex:1">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut)">${n.n || ''}</span>
           </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
       }).join('');
@@ -8696,7 +8763,17 @@
     // this file) rather than into #lib-collections, so "Folders" collapsing hides that sibling
     // directly instead of trying to fold tree markup into this function's own innerHTML.
     const treeEl = document.getElementById('lib-tree');
-    if (treeEl) treeEl.style.display = sidebarSecOpen.has('folders') ? '' : 'none';
+    if (treeEl) {
+      treeEl.style.display = sidebarSecOpen.has('folders') ? '' : 'none';
+      // HANDOVER §8 item #5: #lib-tree is a static-template SIBLING of #lib-collections
+      // (`<div id="lib-collections"></div><div id="lib-tree"></div>`), so it always painted
+      // AFTER everything host.innerHTML just wrote above — including Cloud, the LAST section —
+      // regardless of where the "Folders" header actually sits in that sequence. Moved here,
+      // every render, to sit directly after its own header (this node is being RELOCATED, not
+      // recreated, so renderTree()'s own separately-managed content inside it survives).
+      const foldersHeader = host.querySelector('[data-sec-toggle="folders"]');
+      if (foldersHeader) foldersHeader.insertAdjacentElement('afterend', treeEl);
+    }
     host.querySelectorAll('[data-sec-toggle]').forEach((row) => {
       row.onclick = (e) => {
         e.stopPropagation();

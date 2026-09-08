@@ -321,7 +321,11 @@ test.describe('topbar', () => {
     await page.click('#lib-tree-toggle');
     await expect(page.locator('#lib-side')).toBeHidden();
     expect(await ls(page, 'chromasmith_lib_sidebar')).toBe('collapsed');
-    await page.click('#lib-view-menu-btn');
+    // No second #lib-view-menu-btn click here: §8 item #21 fixed #lib-tree-toggle (an
+    // opt-toggle) to correctly leave the gear menu OPEN after use, same as any other toggle
+    // option — so it's still open at this point. Re-clicking the trigger would TOGGLE it
+    // closed instead of opening an already-closed menu, which is exactly what broke this test
+    // once that fix landed.
     await page.click('#lib-tree-toggle');
     await expect(page.locator('#lib-side')).toBeVisible();
     expect(await ls(page, 'chromasmith_lib_sidebar')).toBe('open');

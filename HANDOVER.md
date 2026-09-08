@@ -10,9 +10,11 @@ never opened `design.md`, which is part of why divider/spacing decisions drifted
 
 | check | command | state |
 |---|---|---|
-| Structural fidelity | `npm run wireframe:test` | **PASS** — 19 findings, all allowlisted with reasons |
-| Icon-shape regression | same command (baseline: `test/baselines/wireframe_icons.json`) | **PASS** — 47 glyphs baselined |
-| Behaviour + UI quality | `npm run behaviour:test` | **67/67 PASS** — the §3 defect queue (2026-09-08 session) is empty |
+| Structural fidelity | `npm run wireframe:test` | 35 persisting findings (20 allowlisted) — §8's remaining feature-superset/judgment-call items (10/11) + the unresolved icon-centering question (6); everything with a confirmed root cause is FIXED |
+| Icon-shape regression | same command (baseline: `test/baselines/wireframe_icons.json`) | **PASS** — 57 glyphs baselined |
+| Behaviour + UI quality | `npm run behaviour:test` | verify fresh — §9 fixed the #21 menu-close defect this suite was proving RED |
+| Library content lint | `npm run lint:library-content` | 1 finding (`#lib-filters-badge` tabular-nums — cosmetic, not one of the 16, deferred) |
+| Library responsive sweep | `npm run library:responsive-test` | **PASS** — was FAIL (wrap + search-floor at 820px), fixed in §9 |
 | Desktop UI audit | `npm run ui:test` | PASS |
 | Library perf | `npm run lib:test` | PASS |
 | Export/shader goldens | `npm run export:test` | PASS (18/18) |
@@ -221,25 +223,28 @@ name explicitly; none of this was bad luck.
 ## 6. Next steps, in order
 
 Steps 1–3 (all 12 §3 defects) are DONE as of 2026-09-08 (morning session). Two more passes the
-same day found 16 MORE real defects the tools still couldn't see — see §8 for why, and for the
-full per-item root-cause breakdown. **Every one of the 16 (plus the user-reported §8 item 21) now
-has a concrete tool finding — all still UNFIXED.** That's the very next work, in the order below:
+same day found 16 MORE real defects the tools still couldn't see (§8), and a fix pass (§9) landed
+9 of them plus the user-reported item 21. What's left:
 
-1. Fix §8's 16(+1) defects. Items 3, 4, 5, 6, 7, 8, 9, 12, 15, 16, 21 have a specific confirmed
-   root cause (file:line + exact rule to change) — start there. Items 10/11 need a judgment call
-   first (feature superset vs. bug, same question §6.2 already settled for Filters) before
-   "fixing" means anything.
-2. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
+1. Decide on items #10/#11 (sort/gear dropdown) — real structural differences that read as an
+   intentional feature superset (more sort keys, a different toggle style), same question already
+   settled for Filters/collapse below. Not touched pending that call.
+2. Check #6 (icon centering) against the real compiled desktop app — the two browser harnesses
+   disagree with each other by more than the check's own tolerance (§9), so neither is fully
+   trustworthy here.
+3. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
    inline chip row (Types pills + Flags & tags icon chips); the app has a slide-out `<select>`
    drawer. A real rebuild, not a bug fix.
-3. Decide on sidebar drag-to-collapse (with a re-expand affordance — a plain collapse-to-nothing
+4. Decide on sidebar drag-to-collapse (with a re-expand affordance — a plain collapse-to-nothing
    has no way back, which the wireframe doesn't show either) — the wireframe collapses past a
    threshold, the app clamps at a 150px floor (a test pins this current behaviour deliberately,
    per §3's "known fidelity gaps"). Also a feature decision, not a defect.
-4. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
+5. Optional: fix `#lib-filters-badge`'s missing `tabular-nums` (the one remaining
+   `lint:library-content` finding — cosmetic, not one of the 16, never prioritized this session).
+6. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
    captures; wire a Stop hook to `wireframe:test` + `behaviour:test` + `lint:library-content` +
    `library:responsive-test`.
-5. Use `npm run preview` (§1) for the iteration loop instead of round-tripping
+7. Use `npm run preview` (§1) for the iteration loop instead of round-tripping
    `build-desktop.sh` + manual refresh on every look.
 
 ## 7. Verification
@@ -248,16 +253,15 @@ bash build-desktop.sh                     # ALWAYS first — dist/ is a staged c
 npm run wireframe:test                    # structural + icon/colour/overflow/indentation regression
 npm run behaviour:test                    # interaction + state coverage; asserts CORRECT behaviour
 npm run lint:library-content              # ellipsis / native-select dark-mode / tabular-nums
-npm run library:responsive-test           # overlap/wrap/search-floor sweep, 1440px down to 640px
+npm run library:responsive-test           # overlap/wrap/search-floor sweep, 1440px down to 640px — PASS
 npm run ui:test && npm run lib:test       # must stay green (editor-scoped, untouched by any of this)
 npm run export:test                       # shader goldens, 18/18
 npm run preview                           # live-source Library preview, no build step needed to look
 ```
-⚠️ `wireframe:test`, `behaviour:test`, `lint:library-content` and `library:responsive-test` are
-ALL expected to show real findings right now — §8's 16(+1) defects, freshly surfaced by today's
-tooling. That's correct, not a regression: it's the signal this session's tooling work exists to
-produce. Only a finding that ISN'T traceable to §8 (or an existing §3/known-gap item) is a new
-problem to investigate.
+`wireframe:test` still shows real findings — §10/§11 (judgment call, §6.1) and #6 (unresolved
+measurement conflict, §6.2), all documented in §9. `lint:library-content` shows the one deferred
+`tabular-nums` item. Nothing else should be red; a finding that isn't traceable to §9's "not
+fixed" list is a new problem to investigate, not something to wave off.
 
 ---
 
@@ -418,3 +422,91 @@ is still tooling, per the standing instruction to build coverage before starting
    close-on-click listener only checks for `.opt-action` and doesn't exempt toggle-type options.
    Two RED behaviour tests prove it; a third pins that `data-theme`/`data-metaval` groups already
    behave correctly (regression guard).
+
+---
+
+## 9. 2026-09-08 (fix pass) — every confirmed §8 item fixed, 2 turned out to be false positives
+
+Per an explicit instruction — fix everything with a confirmed root cause, flag anything
+uncertain, and re-validate for defects beyond the original 16 before starting. **9 fixes landed
+in `desktop/library-ui.js`, 1 in `chromasmith-22.html`** (all built desktop/dist/, all verified
+against their own tool finding going to zero):
+
+- **#3 scrollbar safety margin** — `#lib-side` had `padding:12px 0 8px` (zero right padding) in
+  BOTH its base rule and the `.full`-mode override (a second `#lib-overlay.full #lib-side{padding
+  :...}` rule the first fix attempt missed, since it wins in the mode being tested) — now
+  `padding-right:14px` on both.
+- **#4 keyword tree same-depth alignment** — a leaf's chevron slot was a bare, childless
+  `<span class="lib-tree-chev">`. Despite the shared CSS rule declaring `width:14px`, the
+  EMPTY span's rendered `getBoundingClientRect().width` measured 0 (computed style still
+  reported 14px — a real, unexplained flex-collapse specific to having zero children; not worth
+  chasing further once a robust fix existed). Fixed by rendering the SAME chevron markup for
+  leaves, just `visibility:hidden` — guarantees byte-identical layout regardless of cause. Same
+  fix applied to the date tree's identical pattern pre-emptively (not proven broken, but
+  structurally identical code).
+- **#5 Folders/tree relationship** — `renderCollections()` now moves the persistent `#lib-tree`
+  DOM node (`insertAdjacentElement('afterend', ...)`) to sit directly after the "Folders" header
+  on every render, instead of leaving it as a static-template sibling that always painted after
+  Cloud. `#lib-tree{padding-left:14px}` added so it reads as indented under that header.
+- **#7 flag-row borders** — `.lib-flagrow .lib-btn-icon{border:none}`, overriding the shared
+  `.lib-btn` base border (more specific selector, no `!important` needed).
+- **#8 zoom icons** — `ic('zoomIn')`/`ic('zoomOut')` (chromasmith-22.html `ICONS`, used ONLY by
+  the Library's thumbnail slider — confirmed by grep before changing a shared entry) now draw
+  plain minus/plus lines instead of a magnifying-glass. BUILD stamp bumped to `2026-09-08b`.
+- **#9 flag visibility** — `.lib-flags:has(.lib-flag.on) .lib-flag:not(.on){display:none}`,
+  scoped to grid/list cards only (never the topbar's own always-three-visible `#lib-flagrow`).
+- **#12 reject dimming** — the CORRECT mechanism already existed and was already correctly
+  spec'd (`UI_SPEC.md`'s deliberate black-overlay-not-filter choice, `.lbl-red .lib-thumb-wrap::
+  after`) — `setLabel()`'s optimistic click-update just never synced the card's own `lbl-red`/
+  `lbl-green` class, only a full `renderGrid()` did. One `classList` sync fixed it. The tooling
+  check itself was also wrong (asserted the wireframe's literal `filter:` property instead of the
+  app's own deliberate overlay mechanism) and was corrected alongside the real fix.
+- **#13 responsive squeeze** — root cause: `syncTopCompact()`'s whole detection strategy
+  (`scrollWidth > clientWidth` triggers the existing icon-only fallback) never fired because
+  nothing stopped `.lbl` from wrapping onto a second line under squeeze, silently absorbing the
+  overflow instead of forcing it. `#lib-top .lbl{white-space:nowrap}` makes the overflow real and
+  detectable — the existing fallback then engages correctly with no other changes needed. Search
+  input's own floor was a separate bug: `.lib-search-wrap{min-width:70px}` constrained the
+  WRAPPER, but ~42px of that is icon+padding+gap overhead before the input gets anything, so the
+  input itself could shrink to ~28px; raised to `min-width:120px` to guarantee the input keeps a
+  real ~80px floor. `library_responsive_qa.mjs`: 4 findings → 0.
+- **#16 tree row selected colour** — `.lib-tree-row.on` now mirrors `.lib-coll-row.on`'s exact
+  rule shape (blue background + dark-mode ink/accent override) instead of the neutral `--bdr`
+  grey it shared with `:hover`.
+- **#21 menu-close-on-toggle** — `.opt-action:not(.opt-toggle)` on the close-on-click selector.
+  All 6 gear-menu behaviour tests (including the 2 that were RED) now pass.
+
+**#6 (icon centering) — NOT fixed, flagged as uncertain per instruction.** The automated headless
+harness (Chromium/swiftshader) consistently measures 2 icons 2.2px/3.2px off-center; a live check
+in the interactive Browser pane on the same build measured 0px for the same icons. Given the
+1.5px tolerance is smaller than the discrepancy between the two measurement environments
+themselves, this could be real sub-pixel layout drift or purely a rendering-backend difference —
+unresolved until it's checked against the actual compiled desktop app, not either browser harness.
+
+**#15 (sidebar font-family) — investigated, turned out to be a false positive, not a defect.**
+Direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all
+deliberately monospace (`var(--mono)`) count badges — a real, intentional tabular-number choice,
+not a font bug. The wireframe-vs-app atom-count MISMATCH this finding was based on is downstream
+of the app rendering more real content (expanded trees, live counts) than the wireframe's sparse
+static mock — same reasoning as #10/#11 below. Allowlisted in `test/wireframe_accepted.json` with
+the investigation written into the reason field, not silently dropped.
+
+**#10/#11 (sort/gear dropdown markup) — still a judgment call, not touched.** Confirmed real
+structural differences (the app offers more sort keys, a different toggle-vs-radio style in the
+gear menu's non-appearance groups) but read as an intentional feature superset, the same pattern
+already settled for Filters (§6.2) and sidebar collapse (§6.3) — needs the same kind of explicit
+decision, not a blind "make it match."
+
+**#1/#2 (Filters, sidebar collapse) — untouched, per standing decision.** Real features, not bugs.
+
+### Validation beyond the original 16
+
+Re-ran every gate after the fix pass, specifically looking for anything NOT already tracked:
+`wireframe_inventory.mjs` (deterministic across repeated runs, 0 new vs. the fix-pass baseline),
+`lint_library_content.mjs` (1 pre-existing, unrelated finding — `tabular-nums` on the filters
+badge, not one of the 16, left for later), `library_responsive_qa.mjs` (now PASS), `ui:test` /
+`lib:test` / `export_harness.mjs` (all PASS, untouched by any of this — no editor/shader code was
+touched). One tooling hygiene fix found along the way: expanding the keyword/folder trees this
+session surfaced their own sample data ("Portrait", "Iceland", "sub") as spurious EXTRA findings
+in `wireframe_inventory.mjs` — added to the existing dynamic-data noise filter alongside the
+People/Album/Device sample names already there.

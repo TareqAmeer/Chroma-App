@@ -1,4 +1,5 @@
 [
+  { "match": "[sidebar] font-family \"SF Pro Text\"", "reason": "HANDOVER §8 item #15, investigated 2026-09-08: direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all deliberately monospace (var(--mono)) count badges on date/keyword tree rows — a real, intentional choice for tabular-number alignment, not a font bug. The wireframe-vs-app COUNT mismatch is downstream of the app rendering more real content (expanded folder/keyword trees, live counts) than the wireframe's sparse static mock — same superset reasoning as the sort/gear menu entries." },
   { "match": "EXTRA   1x  text:\"+\"", "reason": "Albums \"+\" (new album) button — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep." },
   { "match": "text:\"Free up space…\"", "reason": "Drives-management block — real app feature (storage/library maintenance), not in the wireframe mock. User decision 2026-09-07: keep." },
   { "match": "text:\"Verify library…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },

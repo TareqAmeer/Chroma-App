@@ -322,16 +322,24 @@ try {
   await app.waitForTimeout(150);
   const aCard = await app.evaluate(() => {
     const card = document.querySelector('#lib-grid .lib-card:first-child');
-    const thumb = card.querySelector('.lib-thumb-wrap, img');
+    const thumbWrap = card.querySelector('.lib-thumb-wrap');
     // display:none is the wireframe's actual rule (.ratebar.has-set button:not(.set){display:
     // none}) — an unset flag rendered at reduced opacity instead of removed entirely is exactly
     // the bug, so opacity must NOT be part of this filter (an earlier version used opacity>0.9
     // here, which excluded the dimmed-but-still-drawn flags from the count and silently hid
     // this exact finding).
     const visibleFlags = Array.from(card.querySelectorAll('.lib-flag')).filter((f) => getComputedStyle(f).display !== 'none');
+    // Dimming: the app deliberately uses a black overlay at reduced opacity, NOT a CSS filter —
+    // UI_SPEC.md's own explicit call (library-ui.js:1175-1177, "not a CSS filter/hue change"),
+    // via .lbl-red .lib-thumb-wrap::after{background:var(--surface-black);opacity:.55}. Checked
+    // for the MECHANISM the app actually committed to, not literally the wireframe's filter —
+    // same "intentional superset/different approach" reasoning as the sort/gear menus (§8
+    // items #10/#11), not force-fit to match the wireframe pixel-for-pixel.
+    const after = thumbWrap ? getComputedStyle(thumbWrap, '::after') : null;
+    const dimmed = !!(thumbWrap && card.classList.contains('lbl-red') && after && parseFloat(after.opacity) > 0);
     return {
       rejectedClass: card.classList.contains('rejected'),
-      thumbFilter: thumb ? getComputedStyle(thumb).filter : '(no thumb element)',
+      dimmed,
       visibleFlagCount: visibleFlags.length,
     };
   });
@@ -339,8 +347,8 @@ try {
   if (aCard.visibleFlagCount !== 1) {
     findings.push(`[grid] card flags: after rejecting, wireframe shows exactly 1 flag icon (others display:none via .ratebar.has-set button:not(.set)); app shows ${aCard.visibleFlagCount} fully-visible flag(s) — unset flags should be HIDDEN, not merely dimmed`);
   }
-  if (wCard.rejectedClass && (aCard.thumbFilter === 'none' || aCard.thumbFilter === '')) {
-    findings.push(`[grid] reject dimming: wireframe applies .card.rejected .ph{filter:brightness(.45) saturate(.7)} to the thumbnail; app's thumbnail has no filter applied at all after reject`);
+  if (wCard.rejectedClass && !aCard.dimmed) {
+    findings.push('[grid] reject dimming: wireframe dims a rejected thumbnail; app\'s card has no .lbl-red class or its ::after overlay isn\'t visible after reject — see the app\'s own deliberate overlay mechanism at library-ui.js:1179-1183 (UI_SPEC.md), not the wireframe\'s filter approach');
   }
 } catch (e) { findings.push(`[grid] card-state check errored: ${e.message}`); }
 
