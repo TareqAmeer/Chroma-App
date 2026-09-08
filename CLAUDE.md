@@ -443,6 +443,10 @@ carrying it in every turn:
 - **[docs/video-grading.md](docs/video-grading.md)** — video grading feature (demux/mux,
   per-frame grain seeding, HLG handling, trim/export, audio passthrough). Load before any
   video-related (`fxVideo*`) work.
+- **[HANDOVER_EDITOR.md](HANDOVER_EDITOR.md)** — starting point for Editor-view wireframe
+  alignment: current tooling state (`editor_wireframe_diff.mjs`'s gate, the untriaged seeded
+  backlog, `test/wireframe_checks_lib.mjs`), lessons from the Library pass, and the order of
+  work. Load before starting any Editor-vs-wireframe fidelity work.
 
 ## 6. Process lessons (read before tuning)
 

@@ -20,6 +20,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
   writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
+import { checkRadiusConsistency, checkHeightConsistency, checkFilledControlContrast,
+  checkMenuViewportOverflow, checkIconColorDifferentiation } from './wireframe_checks_lib.mjs';
 
 const REPORT_PATH = path.join(process.cwd(), 'test/output/wireframe_inventory_report.json');
 
@@ -860,168 +862,70 @@ scrollbarFindings.forEach((f) => findings.push(`[sidebar] scrollbar safety margi
   }
 }
 
-// ── Icon COLOUR differentiation — found live 2026-09-08, not by any prior check: the filter
-// chip row's 4 flag icons (pick/reject/favorite/unflagged) all rendered plain white, no tint at
-// all, even though the wireframe deliberately colours each one differently (Library View.html
-// :76-79 — reject=danger, pick=primary, fav=warning, none=muted) to make the four roles tell
-// apart from each other at a glance. No check anywhere compares icon FILL/STROKE colour — the
-// zone loop below only ever looks at font-size/font-family/position, and the icon-shape
-// baseline (--icons-baseline) only records path/circle geometry, never colour. This is the gap.
-//
-// Not a full wireframe-vs-app colour diff (the two apps' icon sets differ throughout by design,
-// same reasoning as the icon-shape baseline) — instead, a SELF-consistency check per side: does
-// this icon family actually use more than one colour? If the wireframe's family is
-// multi-coloured (a deliberate signal) and the app's corresponding family renders every icon in
-// the SAME colour, that's the exact failure mode that shipped here — regardless of which exact
-// hues either side picked (the app is free to reuse its own established colour language, as it
-// did: green-pine/red-oxide/orange-ember instead of the wireframe's primary-blue for "pick").
+// ── Checks #1-5, now shared (test/wireframe_checks_lib.mjs) so editor_wireframe_diff.mjs and
+// any future wireframe page reuse the same mechanisms instead of re-implementing them. Every
+// family/selector below stays page-specific config; the CHECK LOGIC (radius/height/contrast/
+// menu-overflow/icon-colour) is generic. See that file's own header for why it's a separate
+// module from wireframe_diff_lib.mjs (infrastructure vs. check logic).
 const ICON_COLOR_FAMILIES = [
   { label: 'filter-row flag chips', wf: '.filterrow .chip.iconchip svg', app: '.lib-filterrow .lib-iconchip svg' },
   { label: 'topbar flag row', wf: '.flagrow svg', app: '#lib-flagrow svg' },
 ];
-async function distinctStrokeFillColors(page, sel) {
-  return page.evaluate((s) => {
-    const els = Array.from(document.querySelectorAll(s));
-    if (!els.length) return null;
-    const colors = els.map((el) => {
-      const cs = getComputedStyle(el);
-      return (cs.stroke !== 'none' ? cs.stroke : '') + '|' + (cs.fill !== 'none' ? cs.fill : '');
-    });
-    return { count: els.length, distinct: new Set(colors).size };
-  }, sel);
-}
-for (const fam of ICON_COLOR_FAMILIES) {
-  const wCol = await distinctStrokeFillColors(wf, fam.wf);
-  const aCol = await distinctStrokeFillColors(app, fam.app);
-  if (!wCol || !aCol) continue; // one side doesn't have this family right now — not a finding here
-  if (wCol.distinct > 1 && aCol.distinct === 1) {
-    findings.push(`[selfconsist] icon colour: "${fam.label}" — the wireframe uses ${wCol.distinct} distinct icon colours across its ${wCol.count} icons (a deliberate per-role signal) but the app's ${aCol.count} corresponding icons are ALL the same colour — the role distinction (e.g. reject vs pick vs favorite) is invisible`);
-  }
-}
+findings.push(...await checkIconColorDifferentiation(wf, app, ICON_COLOR_FAMILIES));
 
-// ── Check #2: border-radius consistency within a control FAMILY. A family (chips, pills, menu
-// options) sharing one CSS rule should render one border-radius; a per-element override that
-// drifted from its siblings is invisible to every other check here (none of them read
-// border-radius at all). Self-consistency only — no wireframe value needed, majority wins.
 const RADIUS_FAMILIES = [
   { label: 'filter type/text chips', sel: '.lib-filterrow .lib-chip:not(.lib-iconchip)', needsOpen: '#lib-filters-btn' },
   { label: 'filter icon chips', sel: '.lib-filterrow .lib-iconchip', needsOpen: '#lib-filters-btn' },
   { label: 'topbar pills', sel: '#lib-top .lib-pill' },
   { label: 'sort/gear menu options', sel: '.lib-menu .opt, .lib-menu .opt-action', needsOpen: '#lib-view-menu-btn' },
 ];
-for (const fam of RADIUS_FAMILIES) {
-  // Chips in the filter row, and rows inside the gear menu, are display:none until their
-  // trigger is clicked — measuring them closed silently returns nothing and the family is
-  // skipped below the 3-element threshold, which is indistinguishable from "nothing to check".
-  if (fam.needsOpen) { await app.click(fam.needsOpen).catch(() => {}); await app.waitForTimeout(150); }
-  const radii = await app.evaluate((sel) => {
-    return Array.from(document.querySelectorAll(sel))
-      .filter((el) => el.getBoundingClientRect().width > 0)
-      .map((el) => ({ r: getComputedStyle(el).borderRadius, t: (el.textContent || '').trim().slice(0, 16) }));
-  }, fam.sel);
-  if (fam.needsOpen) { await app.click(fam.needsOpen).catch(() => {}); await app.waitForTimeout(100); }
-  if (radii.length < 3) continue; // too small a family to call a "drift" meaningful
-  const tally = {};
-  radii.forEach((x) => { tally[x.r] = (tally[x.r] || 0) + 1; });
-  const keys = Object.keys(tally).sort((a, b) => tally[b] - tally[a]);
-  if (keys.length > 1) {
-    const majority = keys[0];
-    for (const k of keys.slice(1)) {
-      const offenders = radii.filter((x) => x.r === k).map((x) => `"${x.t}"`).join(', ');
-      findings.push(`[selfconsist] border-radius: ${tally[majority]} of ${radii.length} "${fam.label}" use ${majority}, ${tally[k]} use ${k} (${offenders})`);
-    }
-  }
-}
+findings.push(...await checkRadiusConsistency(app, RADIUS_FAMILIES));
 
-// ── Check #3: WCAG text/background contrast on FILLED (selected/accent) controls. The existing
-// [colors] block already checks that a selected row is "blue-family"; it never checks the
-// resulting text is actually READABLE against that fill. A filled pill/chip/button with light
-// text on a light accent (or the reverse) can pass every structural check here and still fail
-// a basic legibility bar.
-function relLuminance(rgb) {
-  const [r, g, b] = [rgb.r, rgb.g, rgb.b].map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-function contrastRatio(a, b) {
-  const [L1, L2] = [relLuminance(a), relLuminance(b)].sort((x, y) => y - x);
-  return (L1 + 0.05) / (L2 + 0.05);
-}
 const FILLED_CONTROLS = [
   { label: '"All" type chip (selected)', sel: '.lib-filterrow .lib-chip[data-fval="all"]', needsOpen: '#lib-filters-btn' },
   { label: 'Export button', sel: '#lib-export-btn' },
 ];
-for (const c of FILLED_CONTROLS) {
-  if (c.needsOpen) { await app.click(c.needsOpen).catch(() => {}); await app.waitForTimeout(150); }
-  const got = await app.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    if (!el || el.getBoundingClientRect().width === 0) return null;
-    const cs = getComputedStyle(el);
-    return { bg: cs.backgroundColor, color: cs.color };
-  }, c.sel);
-  if (c.needsOpen) { await app.click(c.needsOpen).catch(() => {}); await app.waitForTimeout(100); }
-  if (!got) continue;
-  const bg = parseRgb(got.bg), fg = parseRgb(got.color);
-  if (!bg || !fg || bg.a === 0) continue; // transparent background — contrast against it is meaningless here
-  const ratio = contrastRatio(fg, bg);
-  if (ratio < 4.5) {
-    findings.push(`[selfconsist] contrast: ${c.label} — text ${got.color} on background ${got.bg} is ${ratio.toFixed(2)}:1, below WCAG AA's 4.5:1 floor for normal text`);
-  }
-}
+findings.push(...await checkFilledControlContrast(app, FILLED_CONTROLS));
 
-// ── Check #4: an OPEN menu/popover must stay inside the viewport. Nothing anywhere checks this
-// — a menu positioned via `right:0` on a wrapper near the window's right edge, or one that's
-// simply taller than the remaining vertical space, can render partly or fully off-screen with
-// every other check here reporting clean (they only ever measure the menu's OWN atoms, never
-// its position against the viewport).
 const MENUS_TO_CHECK = [
   { label: 'sort menu', trigger: '#lib-sort-btn', menu: '#lib-sort-menu' },
   { label: 'gear menu', trigger: '#lib-view-menu-btn', menu: '#lib-view-menu' },
 ];
-for (const m of MENUS_TO_CHECK) {
-  await app.click(m.trigger).catch(() => {});
-  await app.waitForTimeout(150);
-  const overflow = await app.evaluate(({ sel }) => {
-    const el = document.querySelector(sel);
-    if (!el || getComputedStyle(el).display === 'none') return null;
-    const b = el.getBoundingClientRect();
-    return {
-      right: Math.round(b.right - window.innerWidth),
-      bottom: Math.round(b.bottom - window.innerHeight),
-      left: Math.round(-b.left),
-      top: Math.round(-b.top),
-    };
-  }, { sel: m.menu });
-  await app.click(m.trigger).catch(() => {});
-  await app.waitForTimeout(100);
-  if (!overflow) continue;
-  for (const [edge, amt] of Object.entries(overflow)) {
-    if (amt > 1) findings.push(`[selfconsist] menu overflow: ${m.label} extends ${amt}px past the ${edge} edge of the viewport at ${VIEWPORT.width}x${VIEWPORT.height}`);
-  }
-}
+findings.push(...await checkMenuViewportOverflow(app, MENUS_TO_CHECK, `${VIEWPORT.width}x${VIEWPORT.height}`));
 
-// ── Check #5: control HEIGHT uniformity within one row family — an icon-only button next to a
-// text+icon button in the same toolbar cluster should share a height (this is what made the
-// view-toggle buttons' 28px fixed size matter in the first place, #7); nothing compares height
-// across a family the way border-radius is compared above.
 const HEIGHT_FAMILIES = [
   { label: 'topbar flag row buttons', sel: '#lib-flagrow .lib-btn-icon' },
   { label: 'filter type/text chips', sel: '.lib-filterrow .lib-chip:not(.lib-iconchip)', needsOpen: '#lib-filters-btn' },
   { label: 'filter icon chips', sel: '.lib-filterrow .lib-iconchip', needsOpen: '#lib-filters-btn' },
 ];
-for (const fam of HEIGHT_FAMILIES) {
-  if (fam.needsOpen) { await app.click(fam.needsOpen).catch(() => {}); await app.waitForTimeout(150); }
-  const heights = await app.evaluate((sel) => Array.from(document.querySelectorAll(sel))
-    .filter((el) => el.getBoundingClientRect().width > 0)
-    .map((el) => Math.round(el.getBoundingClientRect().height)), fam.sel);
-  if (fam.needsOpen) { await app.click(fam.needsOpen).catch(() => {}); await app.waitForTimeout(100); }
-  if (heights.length < 3) continue;
-  const uniq = [...new Set(heights)];
-  if (uniq.length > 1) {
-    findings.push(`[selfconsist] height: "${fam.label}" — ${heights.length} controls render at ${uniq.length} different heights (${uniq.join('px, ')}px) instead of sharing one`);
-  }
+findings.push(...await checkHeightConsistency(app, HEIGHT_FAMILIES));
+
+// ── LIGHT THEME PASS — everything above (this whole file, in fact) only ever ran in dark
+// mode. A colour-dependent defect that only shows up in light mode (a token that resolves fine
+// in dark but collapses to near-identical fg/bg in light, an icon tint that was only ever
+// eyeballed in dark) was structurally invisible to every run of this tool until now. Re-runs
+// the colour-sensitive checks — contrast, icon differentiation, hover visibility — in light
+// mode; the full structural/geometry checks above stay dark-only (their own zone/atom
+// comparisons are not theme-dependent the way colour is, and doubling every one of those would
+// roughly double this file's runtime for no proportional gain).
+{
+  await app.evaluate(() => document.getElementById('lib-overlay')?.classList.add('lib-light'));
+  await wf.evaluate(() => document.getElementById('app')?.classList.remove('dark'));
+  await settleForCapture(app);
+  await settleForCapture(wf);
+  const lightFindings = [
+    ...await checkIconColorDifferentiation(wf, app, ICON_COLOR_FAMILIES),
+    ...await checkRadiusConsistency(app, RADIUS_FAMILIES),
+    ...await checkFilledControlContrast(app, FILLED_CONTROLS),
+    ...await checkHeightConsistency(app, HEIGHT_FAMILIES),
+  ];
+  // Keep the [selfconsist] zone tag intact (the allowlist's ZONE_RE only matches [a-z]+, no
+  // colon/hyphen) and mark light-mode findings inside the message body instead.
+  findings.push(...lightFindings.map((f) => f.replace('[selfconsist] ', '[selfconsist] (light theme) ')));
+  await app.evaluate(() => document.getElementById('lib-overlay')?.classList.remove('lib-light'));
+  await wf.evaluate(() => document.getElementById('app')?.classList.add('dark'));
+  await settleForCapture(app);
+  await settleForCapture(wf);
 }
 
 const iconsNow = {};

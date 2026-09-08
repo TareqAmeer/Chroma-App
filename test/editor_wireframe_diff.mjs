@@ -15,6 +15,21 @@ import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapt
   toRecords, writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
 
 const REPORT_PATH = 'test/output/editor_wireframe_diff_report.json';
+// ⚠️ 2026-09-08: this used to gate on REGRESSIONS ONLY — compare against the previous run's
+// report, then overwrite that same report in the same run, so a new defect failed exactly once
+// and read as "persisting" (exit 0) forever after; on a clean checkout the report doesn't exist,
+// recheck() returns null, and it always exited 0. This is the EXACT bug found and fixed in
+// Library's wireframe_inventory.mjs — same root cause, same fix, applied here before Editor
+// alignment work starts so the same "9 fixed" -> "14 more reported" trust collapse can't repeat.
+// The ~59-item backlog this file already had is seeded verbatim (exact string match, not a
+// pattern) into editor_wireframe_accepted.json as explicitly UNTRIAGED — not silently accepted
+// as fine, just not re-litigated by this tooling-only pass. Remove an entry once its item is
+// actually addressed or confirmed intentional.
+let ACCEPTED = [];
+try { ACCEPTED = JSON.parse(await readFile('test/editor_wireframe_accepted.json', 'utf8')); } catch { /* none yet */ }
+function isAccepted(finding) {
+  return ACCEPTED.some((a) => a.exact ? finding === a.match : finding.includes(a.match));
+}
 const ROOT = process.cwd();
 const server = createServer(async (req, res) => {
   try {
@@ -141,9 +156,15 @@ notes.push('  until a real statusbar zone is confirmed to exist or not in the ap
 notes.push('NOTE: ".filmstrip" is mapped to "#lib-overlay" per the plan\'s finding that the wireframe\'s');
 notes.push('  filmstrip IS the docked Library overlay, not a separate #fx-filmstrip element.');
 
-console.log(`editor_wireframe_diff: ${mismatches.length} style/order mismatches, ${missing.length} missing elements`);
-if (missing.length) { console.log('\nMissing:'); missing.forEach((m) => console.log('  ' + m)); }
-if (mismatches.length) { console.log('\nMismatches:'); mismatches.forEach((m) => console.log('  ' + m)); }
+const allFindings = [...missing, ...mismatches];
+const unaccepted = allFindings.filter((f) => !isAccepted(f));
+const acceptedHit = allFindings.length - unaccepted.length;
+console.log(`editor_wireframe_diff: ${mismatches.length} style/order mismatches, ${missing.length} missing elements (${acceptedHit} allowlisted in test/editor_wireframe_accepted.json)`);
+const unaccMissing = missing.filter((f) => !isAccepted(f));
+const unaccMismatches = mismatches.filter((f) => !isAccepted(f));
+if (unaccMissing.length) { console.log('\nMissing:'); unaccMissing.forEach((m) => console.log('  ' + m)); }
+if (unaccMismatches.length) { console.log('\nMismatches:'); unaccMismatches.forEach((m) => console.log('  ' + m)); }
+if (acceptedHit) console.log(`\n  (+${acceptedHit} allowlisted findings suppressed)`);
 notes.forEach((n) => console.log(n));
 
 const records = toRecords(mismatches, missing);
@@ -151,11 +172,6 @@ const rc = await recheck(REPORT_PATH, records);
 printRecheck(rc);
 await writeReport(REPORT_PATH, records);
 
-const failed = mismatches.length !== 0 || missing.length !== 0;
-console.log(failed ? 'RESULT: SEE ABOVE' : 'RESULT: PASS');
-// Gate on REGRESSIONS, not the pre-existing ~57-item backlog (logged + deferred in HANDOVER.md) —
-// a hard block on every finding would brick every future commit until that backlog is cleared.
-// `rc` is null only on the very first run (no prior report to compare against); in that case
-// don't fail the commit on backlog alone, just record the baseline.
-const regressed = rc && rc.new.length > 0;
-process.exit(regressed ? 1 : 0);
+console.log(unaccepted.length ? '\nRESULT: FAIL' : '\nRESULT: PASS');
+// HARD gate: fail on anything not explicitly allowlisted — see the comment on ACCEPTED above.
+process.exit(unaccepted.length ? 1 : 0);
