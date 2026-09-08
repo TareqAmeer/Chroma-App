@@ -47,6 +47,17 @@
     "sidebar#29": "path:M6 9l6 6 6-6",
     "sidebar#30": "path:M6 9l6 6 6-6",
     "sidebar#31": "path:M6 9l6 6 6-6",
-    "sidebar#32": "path:M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"
+    "sidebar#32": "path:M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
+    "sortmenu#0": "path:M20 6 9 17l-5-5",
+    "gearmenu#0": "path:M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+    "gearmenu#1": "path:M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 11.2 3.9 3.9 0 0 0 6.5 19z",
+    "gearmenu#2": "circle:12,12,9|path:M12 7v5l3.5 2",
+    "gearmenu#3": "circle:12,12,9|path:M12 11v5M12 8h.01",
+    "gearmenu#4": "path:M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3",
+    "gearmenu#5": "circle:12,12,9|path:M12 3a9 9 0 0 1 0 18z",
+    "gearmenu#6": "circle:8.5,9,1.5|path:M21 16l-5-5L5 20|rect:3,4,18,16",
+    "gearmenu#7": "path:M20 6 9 17l-5-5",
+    "gearmenu#8": "path:M20 6 9 17l-5-5",
+    "gearmenu#9": "path:M20 6 9 17l-5-5"
   }
 }

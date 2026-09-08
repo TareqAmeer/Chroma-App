@@ -12,6 +12,7 @@
     "video:test": "node test/video_harness.mjs",
     "lint:ai": "node test/lint_ai_origin.mjs",
     "lint:formats": "node test/lint_formats.mjs",
+    "lint:library-content": "node test/lint_library_content.mjs",
     "mask:test": "node test/mask_raster.mjs",
     "wireframe:test": "node test/wireframe_inventory.mjs",
     "wireframe:icons": "node test/wireframe_inventory.mjs --icons-baseline",

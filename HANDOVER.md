@@ -220,25 +220,124 @@ name explicitly; none of this was bad luck.
 
 ## 6. Next steps, in order
 
-Steps 1–3 (all 12 §3 defects) are DONE as of 2026-09-08. What's left:
+Steps 1–3 (all 12 §3 defects) are DONE as of 2026-09-08 (morning session). A second pass the
+same day found 16 MORE real defects the tools still couldn't see — see §8 for why and what was
+built to close that. §8's defects are **diagnosed, tooled, and confirmed by source reading — NOT
+YET FIXED.** That's the very next work, in the order below:
 
-1. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
+1. Fix §8's 16 defects — `npm run wireframe:test` + the new `behaviour:test` cases now surface
+   every one of them concretely (finding text cites the exact CSS rule and file:line to change).
+2. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
    inline chip row (Types pills + Flags & tags icon chips); the app has a slide-out `<select>`
    drawer. A real rebuild, not a bug fix.
-2. Decide on sidebar drag-to-collapse — the wireframe collapses past a threshold, the app clamps
-   at a 150px floor (a test pins this current behaviour deliberately, per §3's "known fidelity
-   gaps"). Also a feature decision, not a defect.
-3. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
-   captures; wire a Stop hook to `wireframe:test` + `behaviour:test`.
-4. Optional: use `npm run preview` (§1) for the next session's iteration loop instead of
-   round-tripping `build-desktop.sh` + manual refresh on every look.
+3. Decide on sidebar drag-to-collapse (with a re-expand affordance — a plain collapse-to-nothing
+   has no way back, which the wireframe doesn't show either) — the wireframe collapses past a
+   threshold, the app clamps at a 150px floor (a test pins this current behaviour deliberately,
+   per §3's "known fidelity gaps"). Also a feature decision, not a defect.
+4. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
+   captures; wire a Stop hook to `wireframe:test` + `behaviour:test` + `lint:library-content`.
+5. Use `npm run preview` (§1) for the iteration loop instead of round-tripping
+   `build-desktop.sh` + manual refresh on every look.
 
 ## 7. Verification
 ```bash
-bash build-desktop.sh                 # ALWAYS first — dist/ is a staged copy (now incremental)
-npm run wireframe:test                # structural + icon regression; must PASS
-npm run behaviour:test                # 67/67 as of 2026-09-08; any failure is new — investigate it
-npm run ui:test && npm run lib:test   # must stay green
-npm run export:test                   # shader goldens, 18/18
-npm run preview                       # live-source Library preview, no build step needed to look
+bash build-desktop.sh                     # ALWAYS first — dist/ is a staged copy (now incremental)
+npm run wireframe:test                    # structural + icon/colour/overflow regression
+npm run behaviour:test                    # interaction + state coverage; asserts CORRECT behaviour
+npm run lint:library-content              # ellipsis / native-select dark-mode / tabular-nums
+npm run ui:test && npm run lib:test       # must stay green
+npm run export:test                       # shader goldens, 18/18
+npm run preview                           # live-source Library preview, no build step needed to look
 ```
+⚠️ `wireframe:test` and `behaviour:test` are BOTH expected to show real findings right now — §8's
+16 defects, freshly surfaced by today's tooling. That's correct, not a regression: it's the
+signal this session's tooling work exists to produce. Only a finding that ISN'T traceable to §8
+(or an existing §3/known-gap item) is a new problem to investigate.
+
+---
+
+## 8. 2026-09-08 (afternoon session) — 16 new defects, and why the tools missed them
+
+The user reported 16 concrete Library issues in one pass — filters, sidebar collapse, a
+scrollbar covering sidebar counts, keyword/photo tree indentation, off-center topbar icons,
+bordered flag chips, wrong zoom icons, all-three-flags-visible-on-a-card instead of just the set
+one, wrong sort/gear dropdown markup, no reject-dimming, a responsive-squeeze rule missing
+entirely, sidebar text wrapping instead of truncating, wrong sidebar font, and hover/selected
+colours not matching the wireframe. **None of them were caught by `wireframe:test`,
+`behaviour:test`, or `ui:test`** despite all three reporting PASS. Root-caused before touching
+anything (an explicit instruction, not a shortcut):
+
+- **`wireframe_inventory.mjs` only ever inventoried 3 static zones** (`#lib-top`, `#lib-side`,
+  `#lib-bottom`). The **photo grid was never a zone at all** — flag-visibility and reject-dimming
+  live entirely outside anything the tool looked at. It also only ever compared atom kind+text
+  tallies, an icon-shape **self**-baseline (drift over time, not "wrong since day one"), and
+  font-**size** — never colour, never font-family, never icon centering, never a **closed
+  menu's contents** (sort/gear dropdowns aren't in the DOM until clicked, and nothing clicked
+  them open before inventorying).
+- **`ui_audit.mjs`** — the tool that *would* catch overlap/wrapping/squeeze — is scoped only to
+  the editor's `.fx-panel` at `?deskx=1`. It has never once looked at the Library, so the
+  responsive-squeeze rule (item 13/14 in the original report) had no gate anywhere.
+- **`wireframe_behaviour.mjs`** asserts DOM state (classes/localStorage), never visual
+  appearance — it can prove a click toggled something, not that the toggle is drawn correctly.
+- **`.claude/skills/wireframe-transplant/SKILL.md`** (gitignored — local only, not in this repo's
+  git history) still named the *retired* `wireframe_diff.mjs`/`calib/wireframe_diff.py` as the
+  regression guard, and its manual-screenshot fallback only enumerated static *regions* ("top
+  bar, sidebar, grid, status bar"), never *states* (hover/selected/open-menu/narrow-viewport/
+  flagged-card) — so even the human fallback never prompted for the states that exposed most of
+  these bugs.
+- **Filters and sidebar-collapse** aren't tooling misses at all — both were already flagged as
+  deliberately-deferred features in §6 the same morning, not defects the tools failed to catch.
+
+Research grounding (not invented from scratch): [Vercel's
+web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) (100 rules /
+17 categories — only ~6 were ever encoded in `behaviour:test`'s `quality` block before today),
+plus general visual-QA-checklist conventions ([Percy](https://percy.io/blog/visual-qa-testing),
+[OverlayQA](https://overlayqa.com/blog/what-is-design-qa/)) and WCAG's own component-state and
+non-text-contrast guidance.
+
+### What was built (all committed, all re-runnable)
+
+- **`wireframe_inventory.mjs`**: added a `grid` zone (seeded with a flagged AND a rejected card,
+  clicked via each side's own click handler rather than simulated hover — headless :hover
+  proved unreliable through a click sequence); menus now opened ONE AT A TIME immediately before
+  their own inventory (batching opens first silently closed the first menu — `sortBtn`/
+  `viewMenuBtn`'s own handlers each close the other); hover/selected colour-state diffing read
+  from the wireframe's OWN computed values (not a hardcoded hex); an overflow/scrollbar-gutter
+  check; icon-centering (icon bbox center vs. its nearest square/circular hit-shape — explicitly
+  NOT exempting `<button>` from the squareness requirement, which is what produced a
+  90+px-off-center false positive on ordinary icon+label menu rows during development); a
+  font-family tally alongside the existing font-size one. Icon-shape baseline re-recorded
+  (`--icons-baseline`) and the grid's own `<img>` thumbnails excluded from it — their `src` is a
+  regenerated blob: URL every run, which is churn, not a shape regression.
+- **`wireframe_behaviour.mjs`**: `#lib-tree-toggle`/`#lib-aspect-toggle` both carry
+  `opt-action opt-toggle` together, and the gear menu's auto-close listener only checks for
+  `.opt-action` — so toggling "Show sidebar" or "Real aspect ratio" wrongly closes the whole
+  menu (the user's own report: "when I open a submenu... and select something, the menu
+  shouldn't disappear"). Two new tests prove it (RED); a third pins that `data-theme`/
+  `data-metaval` groups already behave correctly (GREEN, a regression guard) — plus the new
+  keyword-tree chevron test from the morning session.
+- **`test/lint_library_content.mjs`** (new, `npm run lint:library-content`): source-level checks
+  for a real ellipsis character (never `...`), a native `<select>` with explicit dark-mode
+  `background-color`/`color` (a Windows-only rendering bug otherwise), and
+  `font-variant-numeric:tabular-nums` on live numeric readouts. Currently 1 real finding
+  (`#lib-filters-badge`).
+- **`.claude/skills/wireframe-transplant/SKILL.md`**: Step 3 repointed at the current tools and
+  rewritten to require every STATE above, not just 4 static regions.
+
+### Confirmed root causes (read from source, not guessed — fix targets for step 1 above)
+
+1. **Flag visibility** — `.lib-flag{opacity:.55;filter:grayscale(1)}` / `.on{opacity:1}` renders
+   all three flags always, dimmed; wireframe's `.ratebar.has-set button:not(.set){display:none}`
+   removes the unset ones entirely.
+2. **Reject dimming** — no `.rejected` class or filter exists anywhere in `library-ui.js`;
+   wireframe: `.card.rejected .ph{filter:brightness(.45) saturate(.7)}`.
+3. **Tree-row selected colour** — `.lib-tree-row.on{background:var(--bdr)}` (a light-grey
+   overlay) where `.lib-coll-row.on` correctly uses `var(--blue-mist-soft)`. Same bug family as
+   the morning session's §3.1 separator token miss: the right token exists, just not wired here.
+4. **Menu-stays-open on toggle-click** — `#lib-tree-toggle`/`#lib-aspect-toggle` are
+   `opt-action opt-toggle`; the close-on-click listener (`viewMenu.querySelectorAll('.opt-action')
+   .forEach(...)`) doesn't exempt `.opt-toggle`.
+5. Everything else — icon centering, dropdown markup, responsive squeeze, sidebar font-family,
+   scrollbar-covers-counts — is now caught with a concrete finding line citing the exact
+   selector/rule; read the tool output rather than re-deriving from this summary, which will go
+   stale the moment a fix lands and the finding disappears.

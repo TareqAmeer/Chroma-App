@@ -246,6 +246,35 @@ test.describe('topbar', () => {
     await expect(page.locator('#lib-view-menu')).toHaveClass(/\bopen\b/);
   });
 
+  // KNOWN DEFECT (2026-09-08, user-reported): #lib-tree-toggle and #lib-aspect-toggle both carry
+  // BOTH `opt-action` and `opt-toggle` classes — they're persistent toggles by role, matching the
+  // wireframe's own .opt-toggle semantics (stays open, same as a checkbox), but the auto-close
+  // listener only checks for `.opt-action` (`viewMenu.querySelectorAll('.opt-action').forEach(...
+  // viewMenu.classList.remove('open'))`, library-ui.js) and doesn't exempt `.opt-toggle`, so
+  // toggling "Show sidebar" or "Real aspect ratio" wrongly closes the whole menu — exactly the
+  // wireframe's mock does NOT do for its own .opt-toggle rows. Reported directly by the user
+  // ("when I open a submenu... and select something, the menu shouldn't disappear").
+  for (const toggleId of ['#lib-tree-toggle', '#lib-aspect-toggle']) {
+    test(`gear menu stays open after clicking the ${toggleId} toggle option`, async ({ lib: { page } }) => {
+      await page.click('#lib-view-menu-btn');
+      const btn = page.locator(toggleId);
+      if (await btn.count() === 0 || !(await btn.isVisible())) test.skip(true, `${toggleId} not rendered/visible in this mock state`);
+      await btn.click();
+      await expect(page.locator('#lib-view-menu'), `${toggleId} closed the gear menu — it's an opt-toggle, not an opt-action`).toHaveClass(/\bopen\b/);
+    });
+  }
+
+  test('gear menu Appearance/Metadata-overlay groups stay open on selection', async ({ lib: { page } }) => {
+    // These already work correctly (data-theme/data-metaval handlers never call
+    // viewMenu.classList.remove('open')) — kept as a regression guard alongside the toggle-id
+    // tests above, which cover the actual defect.
+    await page.click('#lib-view-menu-btn');
+    await page.click('#lib-view-menu [data-theme="light"]');
+    await expect(page.locator('#lib-view-menu')).toHaveClass(/\bopen\b/);
+    await page.click('#lib-view-menu [data-metaval="always"]');
+    await expect(page.locator('#lib-view-menu')).toHaveClass(/\bopen\b/);
+  });
+
   test('Hide flag & type icons toggles and persists', async ({ lib: { page } }) => {
     await page.click('#lib-view-menu-btn');
     await page.click('#lib-hideicons');
