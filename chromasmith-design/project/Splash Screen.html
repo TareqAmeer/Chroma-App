@@ -129,6 +129,23 @@ html, body {
   pointer-events: none;
 }
 
+/* Launch transition: fired once loading reaches 100%, not by a user dismiss —
+   same end state as .minimized (fully hidden, non-interactive) but its own
+   slower 400ms ease-out so the reveal of the desktop behind it reads as an
+   intentional "boot complete" moment rather than a snappy UI dismiss. */
+.splash-backdrop.launched {
+  transition: opacity 0.4s ease-out, visibility 0.4s ease-out;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.splash-backdrop.launched .splash-container {
+  transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+  transform: scale(0.97);
+  opacity: 0;
+}
+
 /* Floating Splash Container */
 .splash-container {
   position: relative;
@@ -558,18 +575,43 @@ const steps = [
   { pct: 100, text: "Catalog ready. Launching Chromasmith Workspace..." }
 ];
 
+// Reset the backdrop to its normal, fully-visible state — used before replaying
+// the loading sequence so a previous launch/minimize doesn't leave it hidden.
+function resetSplashVisibility() {
+  clearTimeout(launchTimer);
+  backdrop.classList.remove('launched', 'minimized');
+  restoreBtn.classList.remove('is-visible');
+  restoreBtn.setAttribute('aria-hidden', 'true');
+  restoreBtn.setAttribute('tabindex', '-1');
+}
+
+let launchTimer = null;
+
 function setProgress(idx) {
   const step = steps[idx];
   progressFill.style.width = step.pct + '%';
   statusPct.textContent = step.pct + '%';
   stepLabel.textContent = step.text;
+
+  // Reaching 100% is the real launch trigger — pause briefly on "Catalog ready"
+  // so it's readable, then fade the splash + backdrop out (400ms ease-out,
+  // see .splash-backdrop.launched) to reveal the desktop underneath, exactly
+  // like the current app's boot: the splash never shows a "workspace", it
+  // just steps aside for whatever screen (Library) the app opens to.
+  if (step.pct === 100) {
+    clearTimeout(launchTimer);
+    launchTimer = setTimeout(() => {
+      backdrop.classList.add('launched');
+    }, 550);
+  }
 }
 
-document.getElementById('btn-step-pref').onclick = () => setProgress(1);
-document.getElementById('btn-step-lut').onclick = () => setProgress(2);
+document.getElementById('btn-step-pref').onclick = () => { resetSplashVisibility(); setProgress(1); };
+document.getElementById('btn-step-lut').onclick = () => { resetSplashVisibility(); setProgress(2); };
 document.getElementById('btn-step-ready').onclick = () => setProgress(4);
 
 document.getElementById('btn-replay').onclick = () => {
+  resetSplashVisibility();
   let stepIdx = 0;
   setProgress(stepIdx);
   const interval = setInterval(() => {
