@@ -263,6 +263,23 @@ await app.evaluate(() => {
   if (chevs[1]) chevs[1].click();          // expand its first (newest) month
 });
 await app.waitForTimeout(400);
+// Expand the folder tree's root (one level of children) and the Keyword tree down to its own
+// nested node ("Travel" > "Iceland", seeded by the ?libcat=1 mock at library-ui.js:313-318) —
+// needed for the tree-indentation-consistency check below, which needs at least depth 0/1/2 to
+// find anything to compare. Neither tree is expanded by default.
+await app.evaluate(() => {
+  const folderChev = document.querySelector('#lib-tree [data-chev-toggle]');
+  if (folderChev) folderChev.click();
+});
+await app.waitForTimeout(150);
+// A raw document.querySelector (as used above for the folder tree, which is always present
+// synchronously) races catalog_keywords — the Keywords tree renders empty until that async
+// invoke() resolves, so an immediate querySelector silently finds nothing and the click is
+// skipped. Playwright's own `.click()` auto-waits/retries for the element to exist, which the
+// folder tree doesn't need but this genuinely does.
+await app.click('[data-kw-tree-toggle]', { timeout: 3000 }).catch(() => {});
+await app.click('.lib-tree-row[data-kw-scope] [data-chev-toggle]', { timeout: 3000 }).catch(() => {});
+await app.waitForTimeout(150);
 await settleForCapture(wf);
 await settleForCapture(app);
 
@@ -362,28 +379,141 @@ for (const pair of COLOR_STATE_PAIRS) {
   }
 }
 
-// ── Overflow: no visible content should sit under a scrollbar gutter it doesn't know about.
-// HANDOVER 2026-09-08 item #3: the sidebar's own vertical scrollbar was rendered wide enough to
-// cover the trailing count numbers, because those counts are laid out against the FULL row
-// width rather than the scroll container's actual content-box width (offsetWidth minus the
-// scrollbar's own rendered width).
-const scrollbarFindings = await app.evaluate(() => {
+// ── Overflow: no visible content should sit under a scrollbar an overlay scrollbar can paint
+// over. HANDOVER 2026-09-08 item #3: the sidebar's own vertical scrollbar covers the trailing
+// count numbers.
+//
+// ⚠️ #lib-side has no `::-webkit-scrollbar`/`scrollbar-width`/`scrollbar-gutter` rule anywhere
+// in library-ui.js — confirmed by grep — so it renders the platform's DEFAULT scrollbar, which
+// on macOS (the real app, via WKWebView) is an OVERLAY style: it reserves ~0 box-model width at
+// rest and PAINTS OVER content when the thumb expands on hover/scroll, rather than shrinking the
+// content box the way a classic scrollbar does. A box-model check (offsetWidth - clientWidth,
+// which is how a classic scrollbar would show up) measured ~1px here in Playwright's Chromium —
+// confirming this really is overlay-style rendering, not a reserved gutter — so it can NEVER
+// detect this bug: there is no "gutter" to measure, only paint that happens on top. The correct
+// check is structural instead: does the trailing count element keep a fixed safety margin from
+// the row's own right edge, sized to a typical overlay scrollbar's hover-expanded width
+// (~14-16px on macOS), regardless of whether a scrollbar happens to be actively rendering RIGHT
+// NOW in this particular headless run.
+const OVERLAY_SCROLLBAR_SAFETY_MARGIN = 14; // px
+const scrollbarFindings = await app.evaluate((margin) => {
   const out = [];
   const side = document.getElementById('lib-side');
   if (!side) return out;
-  const scrollbarW = side.offsetWidth - side.clientWidth;
-  if (scrollbarW <= 0) return out; // no visible scrollbar right now (content fits) — nothing to check
-  const rightEdge = side.getBoundingClientRect().right;
+  const sideRight = side.getBoundingClientRect().right;
   for (const el of side.querySelectorAll('.lib-coll-count, .coll-count')) {
     const b = el.getBoundingClientRect();
     if (b.width === 0) continue;
-    if (b.right > rightEdge - scrollbarW) {
-      out.push(`count element "${el.textContent.trim()}" right edge ${Math.round(b.right)} overlaps the ${scrollbarW}px scrollbar gutter (sidebar right edge ${Math.round(rightEdge)})`);
+    const insetFromEdge = sideRight - b.right;
+    if (insetFromEdge < margin) {
+      out.push(`count element "${el.textContent.trim()}" sits only ${Math.round(insetFromEdge)}px from the sidebar's right edge (want >= ${margin}px to clear an overlay scrollbar's hover-expanded width)`);
     }
   }
   return out;
-});
-scrollbarFindings.forEach((f) => findings.push(`[sidebar] scrollbar overlap: ${f}`));
+}, OVERLAY_SCROLLBAR_SAFETY_MARGIN);
+scrollbarFindings.forEach((f) => findings.push(`[sidebar] scrollbar safety margin: ${f}`));
+
+// ── Topbar flag-row borders — HANDOVER 2026-09-08 item #7: the wireframe's .flagbtn has NO
+// border property at all (only border-radius + a hover background); the app's flag buttons
+// inherit `.lib-btn{border:1px solid var(--bdr)}` from the shared base button class, which
+// nothing in `.lib-flagrow .lib-btn-icon` overrides back to none.
+{
+  const flagBorderW = await app.evaluate(() => {
+    const btn = document.querySelector('.lib-flagrow .lib-btn-icon, #lib-flagrow .lib-btn-icon');
+    return btn ? parseFloat(getComputedStyle(btn).borderWidth) : null;
+  });
+  if (flagBorderW != null && flagBorderW > 0) {
+    findings.push(`[topbar] flag row buttons: wireframe's .flagbtn has no border (hover background only); app's flag buttons render a ${flagBorderW}px border (inherited from the shared .lib-btn base rule)`);
+  }
+}
+
+// ── Tree indentation consistency — HANDOVER 2026-09-08 items #4/#5: the wireframe indents by a
+// clean staircase per nesting depth (.row.datehead: 0, .row.monthhead: 28px, .row.sub: 66px —
+// Library View.html:151-153) via padding-left. Checked structurally, not against a literal px
+// value the app is free to differ on (its own row chrome — icons, chevron sizing — differs from
+// the wireframe's), but for INTERNAL consistency: every one of the app's own trees (folder,
+// date, keyword) should indent a deeper row further right than its own parent, and a keyword or
+// folder row's own indent/chevron position should track the SAME depth-to-indent relationship
+// the date tree already uses correctly (the date tree is the one tree with an existing,
+// deliberately-built correct implementation — see HANDOVER's chevron-split fix).
+{
+  const indentFindings = await app.evaluate(() => {
+    const out = [];
+    // For each tree, collect [depth, chevronLeft] pairs by walking .lib-tree-children nesting.
+    // Markup-shape-agnostic on purpose: the folder tree wraps each row in a .lib-tree-node
+    // (buildTreeNode), the keyword tree does not (keywordsSectionHtml emits bare .lib-tree-row +
+    // .lib-tree-children siblings) — depth is computed from how many .lib-tree-children
+    // ancestors a row has, not from assuming either specific wrapper shape.
+    function depthsFor(rootSel) {
+      const root = document.querySelector(rootSel);
+      if (!root) return null;
+      const pairs = [];
+      for (const row of root.querySelectorAll('.lib-tree-row')) {
+        const chev = row.querySelector('.lib-tree-chev');
+        if (!chev || row.getBoundingClientRect().width === 0) continue;
+        let depth = 0, el = row.parentElement;
+        while (el && el !== root) { if (el.classList.contains('lib-tree-children')) depth++; el = el.parentElement; }
+        pairs.push({ depth, x: Math.round(chev.getBoundingClientRect().left) });
+      }
+      return pairs;
+    }
+    const trees = { folder: depthsFor('#lib-tree'), keyword: depthsFor('#lib-keyword-tree') };
+    for (const [name, pairs] of Object.entries(trees)) {
+      if (!pairs || pairs.length < 2) continue;
+      // Group by depth, take the median x per depth, and assert each depth is strictly further
+      // right than the previous — the actual "is this a staircase" question, independent of the
+      // exact px step size.
+      const byDepth = new Map();
+      for (const p of pairs) { if (!byDepth.has(p.depth)) byDepth.set(p.depth, []); byDepth.get(p.depth).push(p.x); }
+      const depths = [...byDepth.keys()].sort((a, b) => a - b);
+      for (let i = 1; i < depths.length; i++) {
+        const prevXs = byDepth.get(depths[i - 1]), curXs = byDepth.get(depths[i]);
+        const prevMed = prevXs.sort((a, b) => a - b)[Math.floor(prevXs.length / 2)];
+        const curMed = curXs.sort((a, b) => a - b)[Math.floor(curXs.length / 2)];
+        if (curMed <= prevMed) {
+          out.push(`${name} tree: depth ${depths[i]} chevron (x=${curMed}) is not further right than depth ${depths[i - 1]} (x=${prevMed}) — not a staircase`);
+        }
+      }
+      // ALIGNMENT within a depth — HANDOVER 2026-09-08 item #4 ("keywords expand button should
+      // be aligned to the rest of the section"): rows at the SAME nesting depth should share the
+      // SAME chevron x, whether or not that particular row happens to have children (a leaf's
+      // empty chevron slot must occupy the same width as an expandable sibling's real chevron,
+      // or the row LABEL that follows it silently drifts out of alignment too). A per-depth
+      // median comparison (above) can't see this — it would average two disagreeing x's away.
+      for (const depth of depths) {
+        const xs = byDepth.get(depth);
+        const min = Math.min(...xs), max = Math.max(...xs);
+        if (max - min > 2) {
+          out.push(`${name} tree: depth ${depth} rows disagree on chevron x (${min}-${max}px, Δ${max - min}) — a leaf's empty chevron slot likely doesn't match an expandable sibling's real chevron width`);
+        }
+      }
+    }
+    return { out, trees };
+  });
+  indentFindings.out.forEach((f) => findings.push(`[sidebar] tree indentation: ${f}`));
+}
+
+// ── Zoom icon meaning — HANDOVER 2026-09-08 item #8: the wireframe's zoom icons are plain
+// minus/plus LINES (Library View.html:224-226, no <circle> at all); the app's ic('zoomIn')/
+// ic('zoomOut') (chromasmith-22.html ICONS) draw a full magnifying-glass metaphor (a <circle>
+// + a diagonal handle) with a tiny +/- inside — a different icon FAMILY, not just a style
+// variation. A blanket wireframe-vs-app icon-shape diff is deliberately not done anywhere else
+// in this file (the two apps use different icon sets on purpose, see the icon-baseline comment
+// above) — this one is hand-curated because the user named it specifically, and "does it draw a
+// circle" is a robust, cheap proxy for "is this a magnifying glass" without needing exact path
+// matching.
+{
+  const zoomIsMagnifier = await app.evaluate(() => {
+    const zoomIcons = Array.from(document.querySelectorAll('#lib-thumbsize')).flatMap((input) => {
+      const wrap = input.closest('.lib-zoomrow');
+      return wrap ? Array.from(wrap.querySelectorAll('svg')) : [];
+    });
+    return zoomIcons.some((svg) => svg.querySelector('circle'));
+  });
+  if (zoomIsMagnifier) {
+    findings.push('[topbar] zoom icons: wireframe uses plain minus/plus lines (no circle); app draws a magnifying-glass (circle+handle) — a different icon metaphor, not just a style difference');
+  }
+}
 
 const iconsNow = {};
 
@@ -401,16 +531,25 @@ async function diffZone(zone) {
     for (const [k, sig] of iconSignatures(zone.label, a.atoms)) iconsNow[k] = sig;
   }
 
+  // The grid zone is excluded from every COUNT-based comparison below (row-count, MISSING/
+  // EXTRA, atom count, font tallies). Both sides gate their flag/rate icons behind opacity:0
+  // until hovered or already .set/.on, and the wireframe's own `i%7===0` pre-flag seed vs. the
+  // app's independent synthetic mock leaves the two sides with a DIFFERENT number of
+  // currently-visible icons for reasons that have nothing to do with fidelity — comparing tallies
+  // here just compares two unrelated random photo samples. The deliberate flag-visibility/
+  // reject-dimming checks above already cover the grid's real, meaningful behaviour; icon
+  // centering below (position-based, not count-based) still runs for it.
+  const wClean = w.atoms.filter((x) => !isDataNoise(x));
+  const aClean = a.atoms.filter((x) => !isDataNoise(x));
+  const wSig = summarize(wClean), aSig = summarize(aClean);
+  if (zone.label !== 'grid') {
   // Row-count parity for noisy rows: same number of dynamic-data atoms, even though their exact
   // text will never match (mock counts vs the wireframe's hand-picked numbers).
   const wNoise = w.atoms.filter(isDataNoise).length, aNoise = a.atoms.filter(isDataNoise).length;
   if (wNoise !== aNoise) {
     findings.push(`[${zone.label}] dynamic-data row count: wireframe ${wNoise} vs app ${aNoise}`);
   }
-  const wClean = w.atoms.filter((x) => !isDataNoise(x));
-  const aClean = a.atoms.filter((x) => !isDataNoise(x));
 
-  const wSig = summarize(wClean), aSig = summarize(aClean);
   const wT = tally(wSig), aT = tally(aSig);
 
   for (const [k, n] of wT) {
@@ -448,20 +587,25 @@ async function diffZone(zone) {
     if (wn !== an) findings.push(`[${zone.label}] font-family "${fam}": wireframe uses it on ${wn} text atom(s), app on ${an}`);
   }
 
+  // Geometry of the first few atoms — catches "search jammed against the logo" (an x-offset
+  // difference), which no per-element computed-style check can express. Also skipped for grid:
+  // "the Nth atom" means nothing when the two sides show different photos in a different order.
+  for (let i = 0; i < Math.min(6, wSig.length, aSig.length); i++) {
+    if (wSig[i] !== aSig[i]) { findings.push(`[${zone.label}] order@${i}: wireframe ${wSig[i]} vs app ${aSig[i]}`); break; }
+    const dx = Math.abs(wClean[i].x - aClean[i].x);
+    if (dx > 12) findings.push(`[${zone.label}] x-offset of ${wSig[i]}: wireframe ${wClean[i].x}px vs app ${aClean[i].x}px (Δ${dx})`);
+  }
+  } // zone.label !== 'grid'
+
   // Icon centering — HANDOVER 2026-09-08 item #6 (topbar icons not centered in their shapes).
+  // Runs for every zone including grid: it's a per-icon POSITION check (icon vs. its own hit-
+  // shape), not a count/order comparison across the two sides, so the grid's differing photo
+  // sample doesn't make it meaningless the way the tallies above are.
   const ICON_CENTER_TOLERANCE = 1.5; // px — sub-pixel rounding noise, not a real miscentering
   for (const icon of aClean.filter((x) => x.kind === 'icon' && x.centerOffset != null)) {
     if (icon.centerOffset > ICON_CENTER_TOLERANCE) {
       findings.push(`[${zone.label}] icon off-center by ${icon.centerOffset}px within its hit-shape (icon#${aClean.indexOf(icon)})`);
     }
-  }
-
-  // Geometry of the first few atoms — catches "search jammed against the logo" (an x-offset
-  // difference), which no per-element computed-style check can express.
-  for (let i = 0; i < Math.min(6, wSig.length, aSig.length); i++) {
-    if (wSig[i] !== aSig[i]) { findings.push(`[${zone.label}] order@${i}: wireframe ${wSig[i]} vs app ${aSig[i]}`); break; }
-    const dx = Math.abs(wClean[i].x - aClean[i].x);
-    if (dx > 12) findings.push(`[${zone.label}] x-offset of ${wSig[i]}: wireframe ${wClean[i].x}px vs app ${aClean[i].x}px (Δ${dx})`);
   }
 }
 

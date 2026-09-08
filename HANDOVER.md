@@ -220,13 +220,16 @@ name explicitly; none of this was bad luck.
 
 ## 6. Next steps, in order
 
-Steps 1–3 (all 12 §3 defects) are DONE as of 2026-09-08 (morning session). A second pass the
-same day found 16 MORE real defects the tools still couldn't see — see §8 for why and what was
-built to close that. §8's defects are **diagnosed, tooled, and confirmed by source reading — NOT
-YET FIXED.** That's the very next work, in the order below:
+Steps 1–3 (all 12 §3 defects) are DONE as of 2026-09-08 (morning session). Two more passes the
+same day found 16 MORE real defects the tools still couldn't see — see §8 for why, and for the
+full per-item root-cause breakdown. **Every one of the 16 (plus the user-reported §8 item 21) now
+has a concrete tool finding — all still UNFIXED.** That's the very next work, in the order below:
 
-1. Fix §8's 16 defects — `npm run wireframe:test` + the new `behaviour:test` cases now surface
-   every one of them concretely (finding text cites the exact CSS rule and file:line to change).
+1. Fix §8's 16(+1) defects. Items 3, 4, 6, 7, 8, 9, 12, 15, 16, 21 have a specific confirmed
+   root cause (file:line + exact rule to change) — start there. Items 10/11 need a judgment call
+   first (feature superset vs. bug, same question §6.2 already settled for Filters) before
+   "fixing" means anything. Item 5 needs a screenshot/pointer before a check can even be built —
+   ask before guessing at it.
 2. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
    inline chip row (Types pills + Flags & tags icon chips); the app has a slide-out `<select>`
    drawer. A real rebuild, not a bug fix.
@@ -235,24 +238,27 @@ YET FIXED.** That's the very next work, in the order below:
    threshold, the app clamps at a 150px floor (a test pins this current behaviour deliberately,
    per §3's "known fidelity gaps"). Also a feature decision, not a defect.
 4. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
-   captures; wire a Stop hook to `wireframe:test` + `behaviour:test` + `lint:library-content`.
+   captures; wire a Stop hook to `wireframe:test` + `behaviour:test` + `lint:library-content` +
+   `library:responsive-test`.
 5. Use `npm run preview` (§1) for the iteration loop instead of round-tripping
    `build-desktop.sh` + manual refresh on every look.
 
 ## 7. Verification
 ```bash
 bash build-desktop.sh                     # ALWAYS first — dist/ is a staged copy (now incremental)
-npm run wireframe:test                    # structural + icon/colour/overflow regression
+npm run wireframe:test                    # structural + icon/colour/overflow/indentation regression
 npm run behaviour:test                    # interaction + state coverage; asserts CORRECT behaviour
 npm run lint:library-content              # ellipsis / native-select dark-mode / tabular-nums
-npm run ui:test && npm run lib:test       # must stay green
+npm run library:responsive-test           # overlap/wrap/search-floor sweep, 1440px down to 640px
+npm run ui:test && npm run lib:test       # must stay green (editor-scoped, untouched by any of this)
 npm run export:test                       # shader goldens, 18/18
 npm run preview                           # live-source Library preview, no build step needed to look
 ```
-⚠️ `wireframe:test` and `behaviour:test` are BOTH expected to show real findings right now — §8's
-16 defects, freshly surfaced by today's tooling. That's correct, not a regression: it's the
-signal this session's tooling work exists to produce. Only a finding that ISN'T traceable to §8
-(or an existing §3/known-gap item) is a new problem to investigate.
+⚠️ `wireframe:test`, `behaviour:test`, `lint:library-content` and `library:responsive-test` are
+ALL expected to show real findings right now — §8's 16(+1) defects, freshly surfaced by today's
+tooling. That's correct, not a regression: it's the signal this session's tooling work exists to
+produce. Only a finding that ISN'T traceable to §8 (or an existing §3/known-gap item) is a new
+problem to investigate.
 
 ---
 
@@ -324,20 +330,86 @@ non-text-contrast guidance.
 - **`.claude/skills/wireframe-transplant/SKILL.md`**: Step 3 repointed at the current tools and
   rewritten to require every STATE above, not just 4 static regions.
 
-### Confirmed root causes (read from source, not guessed — fix targets for step 1 above)
+### Coverage pass 2 (same day, immediately following) — every one of the 16 now has a real check
 
-1. **Flag visibility** — `.lib-flag{opacity:.55;filter:grayscale(1)}` / `.on{opacity:1}` renders
-   all three flags always, dimmed; wireframe's `.ratebar.has-set button:not(.set){display:none}`
-   removes the unset ones entirely.
-2. **Reject dimming** — no `.rejected` class or filter exists anywhere in `library-ui.js`;
+Pass 1 above stopped after diagnosing 4 of 16 and left the rest as either raw unread tool output
+or literally no check at all — see the conversation for the honest breakdown. A second pass
+closed every remaining gap. **All 16 now produce a concrete, source-cited finding** (or, for the
+2 that turned out not to be defects, an explicit note why). None of the 16 are fixed yet — this
+is still tooling, per the standing instruction to build coverage before starting fixes.
+
+1. **Filters** — not a tooling gap. Deliberately deferred feature (§6.2), unchanged.
+2. **Sidebar collapse** — not a tooling gap. Deliberately deferred feature (§6.3), unchanged.
+3. **Scrollbar covers counts** — `#lib-side` has no `::-webkit-scrollbar`/`scrollbar-width`/
+   `scrollbar-gutter` rule anywhere, so it renders the platform DEFAULT scrollbar — an OVERLAY
+   style on macOS (paints over content, reserves ~0 box-model width), confirmed by measuring
+   `offsetWidth - clientWidth` ≈ 1px in Chromium. A box-model overlap check can never catch this
+   (there is no gutter to measure); `wireframe_inventory.mjs` instead asserts a fixed 14px safety
+   margin between each count element and the sidebar's own right edge — currently violated by
+   7-9px on every count. Real fix: either `scrollbar-gutter:stable` (switches to a reserved,
+   non-overlay gutter) or a `margin-right`/`padding-right` safety margin on `.lib-coll-count`.
+4. **Keywords expand-button alignment** — real, but not what "not a staircase" would have shown:
+   depth-to-depth indentation IS a clean staircase in both trees. The actual defect is WITHIN one
+   depth — the keyword tree's depth-1 rows disagree on chevron x by 7px (one has real children so
+   a working chevron, one is a leaf with an empty chevron slot of a different width), so a leaf's
+   label starts 7px off from its expandable sibling's. `wireframe_inventory.mjs` now checks
+   same-depth alignment, not just monotonic staircasing.
+5. **Photos under folders, indentation** — **still unresolved.** I could not confidently identify
+   which sidebar element "photos" refers to from the text description alone (no "Photos" section
+   exists at the sidebar's literal bottom in the current render order — Cloud is last). Needs a
+   screenshot or a direct pointer to the row before a check can be built; noted rather than
+   guessed at.
+6. **Topbar icons not centered** — `wireframe_inventory.mjs`'s icon-centering check (icon bbox
+   center vs. its nearest square/circular hit-shape) finds 2 real cases (2.2px, 3.2px off) in the
+   topbar. Small enough that ICON_CENTER_TOLERANCE=1.5px is worth revisiting once these are fixed
+   — read the live finding for which icons.
+7. **Flag-row borders** — `.lib-btn{border:1px solid var(--bdr)}` is the shared base button rule;
+   nothing in `.lib-flagrow .lib-btn-icon` overrides it back to none. Wireframe's `.flagbtn` has
+   no border property at all (hover background only).
+8. **Zoom icons wrong** — the app's `ic('zoomIn')`/`ic('zoomOut')` (chromasmith-22.html `ICONS`)
+   draw a full magnifying-glass metaphor (circle + diagonal handle + tiny +/-); the wireframe's
+   are plain minus/plus LINES, no circle at all (Library View.html:224-226) — a different icon
+   family, not a style variant. Hand-curated check (icon SHAPE isn't compared wireframe-vs-app
+   anywhere else on purpose — the two icon sets differ throughout by design — but this specific,
+   user-named pair gets a targeted "does it draw a circle" assertion).
+9. **All three flags visible instead of just the set one** — `.lib-flag{opacity:.55;filter:
+   grayscale(1)}` / `.on{opacity:1}` renders all three always, dimmed; wireframe's `.ratebar.
+   has-set button:not(.set){display:none}` removes the unset ones entirely. `wireframe_
+   inventory.mjs`'s grid-zone check clicks reject on a real card and counts `display!=='none'`
+   flags on each side — wireframe:1, app:3.
+10/11. **Sort/gear dropdown markup** — real signal, but read it as a feature-surface question,
+   not literal markup drift: the wireframe's sort menu offers 3 sort keys + a 2-option direction
+   toggle (Library View.html:238-245); the app offers Name/Date modified/Date taken/Camera/Rating
+   + a single "Reverse order" toggle — a superset with a different interaction shape, the same
+   pattern already accepted for Filters. `wireframe_inventory.mjs` now opens both menus (one at a
+   time — see the menu-batching bug note in pass 1) and reports the literal MISSING/EXTRA/
+   font-size/font-family diff; worth a deliberate look before deciding what's a bug vs. an
+   intentional superset, same as Filters/collapse were.
+12. **Reject dimming** — no `.rejected` class or filter exists anywhere in `library-ui.js`;
    wireframe: `.card.rejected .ph{filter:brightness(.45) saturate(.7)}`.
-3. **Tree-row selected colour** — `.lib-tree-row.on{background:var(--bdr)}` (a light-grey
-   overlay) where `.lib-coll-row.on` correctly uses `var(--blue-mist-soft)`. Same bug family as
-   the morning session's §3.1 separator token miss: the right token exists, just not wired here.
-4. **Menu-stays-open on toggle-click** — `#lib-tree-toggle`/`#lib-aspect-toggle` are
-   `opt-action opt-toggle`; the close-on-click listener (`viewMenu.querySelectorAll('.opt-action')
-   .forEach(...)`) doesn't exempt `.opt-toggle`.
-5. Everything else — icon centering, dropdown markup, responsive squeeze, sidebar font-family,
-   scrollbar-covers-counts — is now caught with a concrete finding line citing the exact
-   selector/rule; read the tool output rather than re-deriving from this summary, which will go
-   stale the moment a fix lands and the finding disappears.
+13. **Responsive squeeze rule missing entirely** — confirmed: `ui_audit.mjs`'s sweep has never
+   touched the Library. New `test/library_responsive_qa.mjs` (`npm run library:responsive-test`)
+   sweeps 1440/1024/820/640px, asserting no topbar control-pair overlap, no button label wrapping
+   to 2 lines, and a search-input floor width. At 820px: `#lib-sort-btn` and `#lib-allfx-btn`
+   labels wrap to 2 lines; the search input shrinks to 29px (far under any usable floor). Confirms
+   the rule is entirely missing, not just imperfect.
+14. **Sidebar text should ellipsis-truncate, not wrap** — same new file checks `.lib-coll-lb`/
+   `.rn` elements for `scrollWidth > clientWidth` without `text-overflow:ellipsis` + `white-space:
+   nowrap`; no violation found in the current fixture at the widths tested — either already
+   correct or the fixture's row labels aren't long enough to hit overflow at 640-1440px. Worth
+   re-running with longer synthetic folder/collection names before trusting this is clean.
+15. **Sidebar font wrong** — `wireframe_inventory.mjs`'s new font-family tally shows a real
+   mismatch (22 "SF Pro Text" atoms in the wireframe's sidebar vs. 29 in the app's) — the app is
+   rendering MORE text in a non-SF-Pro fallback than the wireframe's own DS_FONTS declaration
+   should allow. Read the live finding to trace which specific rows.
+16. **Hover=grey / selected=blue behaviour wrong** — confirmed for the tree specifically (folder/
+   date/keyword rows): `.lib-tree-row.on{background:var(--bdr)}` (light-grey overlay) where
+   `.lib-coll-row.on` correctly uses `var(--blue-mist-soft)`. Same bug family as the morning
+   session's §3.1 separator token miss — the right token exists in the file, just not wired to
+   this specific selector. `wireframe_inventory.mjs` reads the wireframe's own computed `.row.sel`
+   colour (not a hardcoded hex) and asserts the app's selected state is blue-family.
+21. **(User-reported, not in the original numbered list) Menu closes on toggle-option click** —
+   `#lib-tree-toggle`/`#lib-aspect-toggle` carry BOTH `opt-action` and `opt-toggle`; the
+   close-on-click listener only checks for `.opt-action` and doesn't exempt toggle-type options.
+   Two RED behaviour tests prove it; a third pins that `data-theme`/`data-metaval` groups already
+   behave correctly (regression guard).

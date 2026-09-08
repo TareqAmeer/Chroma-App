@@ -19,6 +19,7 @@
     "behaviour:test": "playwright test --config=playwright.config.mjs",
     "ui:test": "node test/ui_audit.mjs",
     "ui:baseline": "node test/ui_audit.mjs --baseline",
+    "library:responsive-test": "node test/library_responsive_qa.mjs",
     "visual:test": "node test/visual_baseline.mjs",
     "visual:baseline": "node test/visual_baseline.mjs --baseline",
     "visual:scorecard": "node test/visual_scorecard.mjs",
