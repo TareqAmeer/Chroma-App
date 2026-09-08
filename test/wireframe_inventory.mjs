@@ -872,6 +872,45 @@ scrollbarFindings.forEach((f) => findings.push(`[sidebar] scrollbar safety margi
   }
 }
 
+// ── Icon COLOUR differentiation — found live 2026-09-08, not by any prior check: the filter
+// chip row's 4 flag icons (pick/reject/favorite/unflagged) all rendered plain white, no tint at
+// all, even though the wireframe deliberately colours each one differently (Library View.html
+// :76-79 — reject=danger, pick=primary, fav=warning, none=muted) to make the four roles tell
+// apart from each other at a glance. No check anywhere compares icon FILL/STROKE colour — the
+// zone loop below only ever looks at font-size/font-family/position, and the icon-shape
+// baseline (--icons-baseline) only records path/circle geometry, never colour. This is the gap.
+//
+// Not a full wireframe-vs-app colour diff (the two apps' icon sets differ throughout by design,
+// same reasoning as the icon-shape baseline) — instead, a SELF-consistency check per side: does
+// this icon family actually use more than one colour? If the wireframe's family is
+// multi-coloured (a deliberate signal) and the app's corresponding family renders every icon in
+// the SAME colour, that's the exact failure mode that shipped here — regardless of which exact
+// hues either side picked (the app is free to reuse its own established colour language, as it
+// did: green-pine/red-oxide/orange-ember instead of the wireframe's primary-blue for "pick").
+const ICON_COLOR_FAMILIES = [
+  { label: 'filter-row flag chips', wf: '.filterrow .chip.iconchip svg', app: '.lib-filterrow .lib-iconchip svg' },
+  { label: 'topbar flag row', wf: '.flagrow svg', app: '#lib-flagrow svg' },
+];
+async function distinctStrokeFillColors(page, sel) {
+  return page.evaluate((s) => {
+    const els = Array.from(document.querySelectorAll(s));
+    if (!els.length) return null;
+    const colors = els.map((el) => {
+      const cs = getComputedStyle(el);
+      return (cs.stroke !== 'none' ? cs.stroke : '') + '|' + (cs.fill !== 'none' ? cs.fill : '');
+    });
+    return { count: els.length, distinct: new Set(colors).size };
+  }, sel);
+}
+for (const fam of ICON_COLOR_FAMILIES) {
+  const wCol = await distinctStrokeFillColors(wf, fam.wf);
+  const aCol = await distinctStrokeFillColors(app, fam.app);
+  if (!wCol || !aCol) continue; // one side doesn't have this family right now — not a finding here
+  if (wCol.distinct > 1 && aCol.distinct === 1) {
+    findings.push(`[selfconsist] icon colour: "${fam.label}" — the wireframe uses ${wCol.distinct} distinct icon colours across its ${wCol.count} icons (a deliberate per-role signal) but the app's ${aCol.count} corresponding icons are ALL the same colour — the role distinction (e.g. reject vs pick vs favorite) is invisible`);
+  }
+}
+
 const iconsNow = {};
 
 async function diffZone(zone) {
