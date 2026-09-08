@@ -196,6 +196,27 @@ for (const vp of VIEWPORTS) {
   for (const t of result.noEllipsisTruncation) {
     findings.push({ viewport: vp.label, kind: 'NO_ELLIPSIS', detail: `sidebar row .${t.cls} (sidebar ${result.sideWidth}px wide) GROWS ${t.grew} when given a 60-character label — it wraps instead of truncating (text-overflow:${t.textOverflow}, white-space:${t.whiteSpace})` });
   }
+
+  // ── MENU_OVERFLOW: an open sort/gear menu must stay inside the viewport at every swept
+  // width, not just the 1440px width wireframe_inventory.mjs happens to check. A menu
+  // positioned via `right:0` on its topbar wrapper can clip off the LEFT edge once the wrapper
+  // itself has been pushed close to the window's left side by a squeezed layout — the opposite
+  // direction from what a right-anchored menu's own math naturally guards against.
+  for (const m of [{ id: 'lib-sort-menu', btn: 'lib-sort-btn' }, { id: 'lib-view-menu', btn: 'lib-view-menu-btn' }]) {
+    await page.click('#' + m.btn).catch(() => {});
+    await page.waitForTimeout(120);
+    const box = await page.evaluate((id) => {
+      const el = document.getElementById(id);
+      if (!el || getComputedStyle(el).display === 'none') return null;
+      const b = el.getBoundingClientRect();
+      return { left: Math.round(-b.left), right: Math.round(b.right - window.innerWidth) };
+    }, m.id);
+    await page.click('#' + m.btn).catch(() => {});
+    await page.waitForTimeout(80);
+    if (!box) continue;
+    if (box.left > 1) findings.push({ viewport: vp.label, kind: 'MENU_OVERFLOW', detail: `#${m.id} clips ${box.left}px past the LEFT edge of the viewport` });
+    if (box.right > 1) findings.push({ viewport: vp.label, kind: 'MENU_OVERFLOW', detail: `#${m.id} extends ${box.right}px past the RIGHT edge of the viewport` });
+  }
 }
 
 // ── Second pass: the sidebar dragged to its own narrow floor, at a normal window width. A
@@ -212,6 +233,21 @@ await page.waitForTimeout(200);
   const result = await page.evaluate(`(${AUDIT_FN})()`);
   for (const t of result.noEllipsisTruncation) {
     findings.push({ viewport: '1440x900, sidebar dragged to its 150px floor', kind: 'NO_ELLIPSIS', detail: `sidebar row .${t.cls} GROWS ${t.grew} when given a 60-character label at the narrow sidebar floor` });
+  }
+  // ── SIDEBAR_OVERLAP: at the floor width, the sidebar's own right edge must not extend past
+  // where the main content column (#lib-main) begins — a CSS grid-template-columns var that
+  // doesn't track --lib-side-w exactly (or a stale cached column width) would let the two
+  // regions overlap instead of the grid genuinely narrowing, invisible to every check above
+  // since none of them compare the sidebar against ANYTHING outside itself.
+  const overlap = await page.evaluate(() => {
+    const side = document.getElementById('lib-side');
+    const main = document.getElementById('lib-main');
+    if (!side || !main) return null;
+    const sb = side.getBoundingClientRect(), mb = main.getBoundingClientRect();
+    return Math.round(sb.right - mb.left);
+  });
+  if (overlap != null && overlap > 1) {
+    findings.push({ viewport: '1440x900, sidebar dragged to its 150px floor', kind: 'SIDEBAR_OVERLAP', detail: `#lib-side's right edge sits ${overlap}px INSIDE #lib-main — the grid didn't actually narrow to match --lib-side-w` });
   }
 }
 

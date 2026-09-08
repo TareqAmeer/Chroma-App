@@ -220,6 +220,17 @@ test.describe('topbar', () => {
     await expect(page.locator('#lib-filter-row .lib-chip[data-fgrp="type"][data-fval="all"]')).not.toHaveClass(/lib-sel/);
   });
 
+  test('clicking a chip (not the hidden select) also lights the Filters badge', async ({ lib: { page } }) => {
+    // The badge-lighting test just below drives the hidden <select> directly. The chip row is a
+    // second, separate entry point into the same state — nothing proved a CHIP click reaches the
+    // badge too, only that the select does.
+    await page.click('#lib-filters-btn');
+    await expect(page.locator('#lib-filters-badge')).not.toHaveClass(/\bon\b/);
+    await page.click('#lib-filter-row .lib-chip[data-fgrp="type"][data-fval="raw"]');
+    await expect(page.locator('#lib-filters-badge')).toHaveClass(/\bon\b/);
+    await expect(page.locator('#lib-filters-badge')).toHaveText('1');
+  });
+
   test('a type filter narrows the grid and lights the badge', async ({ lib: { page } }) => {
     await page.click('#lib-filters-btn');
     const before = await page.locator('#lib-grid .lib-card').count();
@@ -628,6 +639,23 @@ test.describe('quality', () => {
     await expect(page.locator('#lib-sort-menu')).not.toHaveClass(/\bopen\b/);
   });
 
+  test('focus stays on a real, visible element after Escape closes a menu', async ({ lib: { page } }) => {
+    // Nothing anywhere checked WHERE focus ends up after a menu closes. A menu that ever moves
+    // focus onto one of its own (now display:none) rows on open would strand keyboard focus on
+    // an invisible element when Escape fires — the next Tab press would silently jump to
+    // whatever the browser falls back to (often document.body), losing the user's place.
+    for (const btn of ['lib-sort-btn', 'lib-view-menu-btn']) {
+      await page.click('#' + btn);
+      await page.keyboard.press('Escape');
+      const info = await page.evaluate(() => {
+        const el = document.activeElement;
+        return { id: el && el.id, visible: !!(el && el.offsetParent), isBody: el === document.body };
+      });
+      expect(info.isBody, `focus fell back to <body> after closing #${btn}'s menu`).toBe(false);
+      expect(info.visible, `focus landed on a hidden element after closing #${btn}'s menu`).toBe(true);
+    }
+  });
+
   test('Escape closes the gear menu', async ({ lib: { page } }) => {
     await page.click('#lib-view-menu-btn');
     await expect(page.locator('#lib-view-menu')).toHaveClass(/\bopen\b/);
@@ -705,6 +733,32 @@ test.describe('quality', () => {
       return [...new Set(out)];
     });
     expect(divRows, 'clickable sidebar rows with no button semantics or role').toEqual([]);
+  });
+
+  test('a sidebar row with role=button actually activates on Enter, not just focus', async ({ lib: { page } }) => {
+    // The previous test only checked that a role/tabindex EXISTS — that proves the row is
+    // reachable and announced correctly, not that it actually DOES anything when a keyboard
+    // user presses Enter on it. A row that gets a role but keeps a click-only handler passes
+    // that test while still being keyboard-dead.
+    const row = page.locator('.lib-coll-row[data-coll="favorites"]');
+    await row.focus();
+    await expect(row).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(row, 'Enter on a role="button" sidebar row did not activate it (no .on class)').toHaveClass(/\bon\b/);
+  });
+
+  test('a selected grid card shows a real visual change, not just a class', async ({ lib: { page } }) => {
+    // A single click adds the card to the multi-select SET (.multi) — .sel is a separate state
+    // (the currently-OPENED photo). Selection state was never checked anywhere: a regression
+    // that stripped its box-shadow rule would leave the class toggling correctly while being
+    // invisible.
+    const card = page.locator('#lib-grid .lib-card').first();
+    const before = await card.evaluate((el) => getComputedStyle(el).boxShadow);
+    await card.click();
+    await expect(card).toHaveClass(/\bmulti\b/);
+    const after = await card.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(after, 'card gained .multi but its box-shadow (the selection ring) did not change').not.toBe(before);
+    expect(after, 'selected card has no box-shadow at all').not.toBe('none');
   });
 
   test('destructive drive actions open a menu rather than acting immediately', async ({ lib: { page } }) => {

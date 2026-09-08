@@ -890,7 +890,15 @@
     .lib-chip{height:26px;padding:0 12px;border-radius:9999px;border:1px solid var(--bdr);
       font-size:12px;flex:none;white-space:nowrap;background:none;color:var(--txt)}
     .lib-chip:hover{background:var(--hover-tint)}
-    .lib-chip.lib-sel{background:var(--acc);border-color:var(--acc);color:#fff}
+    /* Found live by the new WCAG-contrast self-consistency check: white text on --acc
+       (--blue-mist, #61a0af in dark mode) is only 2.93:1, below the 4.5:1 AA floor for normal
+       text. The wireframe's own .chip.sel uses --primary (a dark slate blue, #224455) as its
+       fill, not the light mist accent — but the app's --acc deliberately switches to the
+       LIGHTER blue-mist specifically for dark-mode accents (see #lib-overlay's token block),
+       so swapping the fill colour itself would fight that convention. Using the app's own dark
+       ink (--bg) as the text colour instead of white is the standard fix for "light fill + white
+       text" and keeps the fill colour unchanged. */
+    .lib-chip.lib-sel{background:var(--acc);border-color:var(--acc);color:var(--bg)}
     .lib-chip.lib-iconchip{width:26px;height:26px;padding:0;border-radius:50%;display:flex;
       align-items:center;justify-content:center}
     .lib-chip.lib-iconchip svg{width:13px;height:13px}
