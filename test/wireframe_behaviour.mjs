@@ -358,14 +358,21 @@ test.describe('sidebar', () => {
   });
 
   test('the Develop tab matches its own tooltip', async ({ lib: { page } }) => {
-    // KNOWN DEFECT (HANDOVER #5): the button's title says "Develop — not yet available" but it
-    // is wired to close the Library entirely (library-ui.js:5991). Either the title or the
-    // wiring is wrong. Asserting that a control advertised as unavailable does not silently
-    // perform a major navigation.
-    const title = await page.locator('#lib-side-tab-develop').getAttribute('title');
+    // ⚠️ This test used to put its ONLY expect() inside `if (/not yet available/i.test(title))`.
+    // The title has since become "Switch to Develop", so that branch stopped executing and the
+    // test asserted NOTHING while reporting PASS — it still clicked the button (closing the
+    // Library) with nothing left to observe it. Rewritten so both readings of the title are
+    // asserted: a tab that advertises itself as unavailable must not navigate, and a tab that
+    // advertises a switch must actually perform one. There is no silent third branch.
+    const title = (await page.locator('#lib-side-tab-develop').getAttribute('title')) || '';
+    const claimsUnavailable = /not yet available|coming soon|unavailable/i.test(title);
     await page.click('#lib-side-tab-develop');
-    if (/not yet available/i.test(title || '')) {
-      await expect(page.locator('#lib-overlay'), 'a control labelled "not yet available" closed the Library').toBeVisible();
+    await page.waitForTimeout(300);
+    const stillOpen = await page.locator('#lib-overlay').isVisible();
+    if (claimsUnavailable) {
+      expect(stillOpen, `the Develop tab's title says ${JSON.stringify(title)} but clicking it closed the Library`).toBe(true);
+    } else {
+      expect(stillOpen, `the Develop tab's title says ${JSON.stringify(title)} but clicking it did not leave the Library`).toBe(false);
     }
   });
 
@@ -528,8 +535,14 @@ test.describe('sidebar', () => {
     // discovered at all, see listDirCached) — that call happens whether or not the fix is
     // applied, so it can't distinguish the bug. openFolder() is what's heavy (catalog_add_root +
     // catalog_scan + catalog_query) and what must NOT fire from a chevron click.
+    // The folder tree renders collapsed, so this used to test.skip() every run — reported as a
+    // non-failure and read as coverage that did not exist. wireframe_inventory.mjs already
+    // seeds the same expansion in its own fixture; do it here too, and make an absent tree a
+    // real failure rather than a silent skip (the ?libtest mock always has a root).
+    await page.locator('#lib-tree [data-chev-toggle]').first().click({ timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(250);
     const chev = page.locator('#lib-tree .lib-tree-chev').first();
-    if (await chev.count() === 0) test.skip(true, 'no folder tree rendered (no root set in this mock state)');
+    expect(await chev.count(), 'the folder tree rendered no chevron to test — this check would previously have skipped silently').toBeGreaterThan(0);
     const c0 = await counts(page);
     await chev.click();
     expect((await counts(page)).catalogQuery, 'a folder chevron click must not load the folder').toBe(c0.catalogQuery);
@@ -621,15 +634,26 @@ test.describe('quality', () => {
   test('focused controls show a visible focus indicator', async ({ lib: { page } }) => {
     // "Never outline-none without focus replacement" — check the real focus-visible paint,
     // not just the stylesheet, by focusing the element and reading its computed style.
+    // ⚠️ This used to accept ANY box-shadow as a focus ring, including the decorative ones
+    // .lib-btn already carries at rest — so the disjunction was satisfied without a focus
+    // indicator existing. It now compares each control against its OWN unfocused paint: an
+    // indicator is only real if focusing actually CHANGES the outline or box-shadow. Scope also
+    // widened past #lib-top to the sidebar and the open menus, which were never checked.
     const bare = await page.evaluate(() => {
       const out = [];
-      for (const el of document.querySelectorAll('#lib-top button')) {
+      for (const el of document.querySelectorAll('#lib-top button, #lib-side button, .lib-menu button')) {
         if (!el.offsetParent) continue;
+        el.blur();
+        const before = getComputedStyle(el);
+        const restOutline = `${before.outlineStyle} ${before.outlineWidth} ${before.outlineColor}`;
+        const restShadow = before.boxShadow;
         el.focus();
         const cs = getComputedStyle(el);
-        const hasOutline = cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0;
-        const hasRing = cs.boxShadow !== 'none';
-        if (!hasOutline && !hasRing) out.push(el.id || el.className);
+        const focOutline = `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor}`;
+        const gainedOutline = focOutline !== restOutline && cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0;
+        const gainedShadow = cs.boxShadow !== restShadow && cs.boxShadow !== 'none';
+        if (!gainedOutline && !gainedShadow) out.push(el.id || el.className);
+        el.blur();
       }
       return out;
     });
@@ -670,13 +694,29 @@ test.describe('quality', () => {
   });
 
   test('the app honours prefers-reduced-motion', async ({ lib: { page } }) => {
-    // The fixture already runs with reducedMotion:'reduce'. Any element still carrying a
-    // non-zero transition duration is ignoring the preference.
+    // ⚠️ This test was unfalsifiable by construction. The `lib` fixture calls settleForCapture(),
+    // which injects `*,*::before,*::after{transition-duration:0s!important}` so screenshots are
+    // deterministic — the test then read computed styles and found 0s on everything BECAUSE OF
+    // THE HARNESS, not because the app honours the preference. It could not fail under any app
+    // change. Removing that stylesheet first is what makes the assertion real.
+    // Secondary bug also fixed: the old `!d.startsWith('0s,')` guard excused a multi-value
+    // "0s, 0.15s" — a genuinely animating element — while catching nothing.
+    await page.evaluate(() => {
+      for (const st of document.querySelectorAll('style')) {
+        if (/transition-duration\s*:\s*0s\s*!important/.test(st.textContent || '')) st.remove();
+      }
+    });
+    await page.waitForTimeout(100);
     const animated = await page.evaluate(() => {
       const out = [];
-      for (const el of document.querySelectorAll('#lib-top *, #lib-side *')) {
+      for (const el of document.querySelectorAll('#lib-top *, #lib-side *, .lib-menu *')) {
         const d = getComputedStyle(el).transitionDuration;
-        if (d && d !== '0s' && !d.startsWith('0s,')) out.push((el.className || el.tagName) + ' ' + d);
+        if (!d) continue;
+        // Every value in the list must be zero — "0s, 0.15s" is an animating element.
+        // Chromium under reducedMotion:'reduce' reports 1e-05s (its own forced near-zero), not
+        // a literal 0s — measured, not assumed. Anything at or below a millisecond is the
+        // engine honouring the preference; a real un-guarded transition is 0.1-0.3s.
+        if (d.split(',').some((v) => parseFloat(v) > 0.001)) out.push((el.id || (typeof el.className === 'string' ? el.className : el.tagName) || el.tagName) + ' ' + d);
       }
       return [...new Set(out)].slice(0, 10);
     });

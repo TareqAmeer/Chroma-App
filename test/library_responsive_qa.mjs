@@ -24,10 +24,22 @@ const DUMP_JSON = process.argv.includes('--json');
 // different, dedicated layout), but because "how small can the DESKTOP shell go before it
 // visibly breaks" needs an actual floor, and this repo had none. `deskx=1` and `libtest=1&
 // libcat=1&libn=60` mirror wireframe_inventory.mjs's own fixture so findings are comparable.
+// ⚠️ Sampling four widely-spaced widths let a real defect hide BETWEEN sample points: at 900px
+// the search input measures 76px (below this file's own 80px floor) while at both 1024 and 820
+// it is comfortably wide — the topbar's compact fallback engages somewhere in between, and the
+// worst moment is the width just before it does. Widths are now dense enough around the
+// wireframe's own compact breakpoint (1060, Library View.html:458) to catch that.
 const VIEWPORTS = [
   { w: 1440, h: 900, label: '1440x900 (normal)' },
+  { w: 1200, h: 800, label: '1200x800' },
+  { w: 1100, h: 800, label: '1100x800 (just above the wireframe compact breakpoint)' },
+  { w: 1059, h: 800, label: '1059x800 (wireframe compacts at <1060)' },
   { w: 1024, h: 768, label: '1024x768 (small laptop)' },
+  { w: 960, h: 760, label: '960x760' },
+  { w: 900, h: 760, label: '900x760 (the width the old 4-point sweep skipped)' },
+  { w: 860, h: 720, label: '860x720' },
   { w: 820, h: 700, label: '820x700 (narrow — the squeeze floor)' },
+  { w: 720, h: 700, label: '720x700' },
   { w: 640, h: 700, label: '640x700 (below the floor — must degrade gracefully, not overlap)' },
 ];
 
@@ -60,7 +72,16 @@ const AUDIT_FN = `() => {
   const out = { overlaps: [], wrapped: [], searchWidth: null, noEllipsisTruncation: [] };
   const top = document.getElementById('lib-top');
   if (top) {
-    const visibleKids = Array.from(top.children).filter((el) => {
+    // WARNING: only DIRECT children were compared, so any pair inside a wrapper — the sort pill and
+    // its menu share a position:relative div, and .lib-flagrow/.lib-zoomrow/.lib-seg each group
+    // several controls — could collide entirely invisibly to this check. Descend into wrappers
+    // that hold more than one control and compare the real leaf controls instead.
+    const leaves = (root) => Array.from(root.children).flatMap((el) => {
+      const isControl = /^(BUTTON|INPUT|SELECT|A)$/.test(el.tagName);
+      const kids = Array.from(el.children).filter((k) => k.getBoundingClientRect().width > 0);
+      return (!isControl && kids.length > 1) ? leaves(el) : [el];
+    });
+    const visibleKids = leaves(top).filter((el) => {
       const cs = getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') return false;
       const b = el.getBoundingClientRect();
@@ -72,7 +93,16 @@ const AUDIT_FN = `() => {
         const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
         const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
         if (ix > 1 && iy > 1) {
-          out.overlaps.push([visibleKids[i].id || visibleKids[i].className, visibleKids[j].id || visibleKids[j].className, Math.round(ix)]);
+          // className is an SVGAnimatedString on <svg>, which stringifies to "[object Object]".
+          var nm = function (el) {
+            if (el.id) return '#' + el.id;
+            var t = (el.getAttribute && el.getAttribute('title')) || '';
+            var c = typeof el.className === 'string' ? el.className : (el.getAttribute('class') || '');
+            var lbl = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 18);
+            return (c ? '.' + c.trim().split(/\s+/).join('.') : el.tagName.toLowerCase())
+              + (t ? ' "' + t + '"' : (lbl ? ' "' + lbl + '"' : ''));
+          };
+          out.overlaps.push([nm(visibleKids[i]), nm(visibleKids[j]), Math.round(ix)]);
         }
       }
     }
@@ -83,7 +113,11 @@ const AUDIT_FN = `() => {
       const b = btn.getBoundingClientRect();
       if (b.width === 0 || b.height === 0) continue;
       const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.3;
-      const label = btn.querySelector('.lbl, span');
+      // WARNING: ".lbl, span" took the FIRST span in document order — which on an icon+label button
+      // is often the icon wrapper, so the check measured the icon and never saw the label wrap.
+      // Prefer the explicit .lbl; fall back to the last span that actually holds text.
+      const label = btn.querySelector('.lbl')
+        || [...btn.querySelectorAll('span')].reverse().find((sp) => sp.textContent.trim());
       if (!label) continue;
       const lb = label.getBoundingClientRect();
       if (lb.height > lh * 1.6 && lb.width > 0) {
@@ -95,16 +129,32 @@ const AUDIT_FN = `() => {
   }
   const side = document.getElementById('lib-side');
   if (side) {
-    for (const el of side.querySelectorAll('.lib-coll-lb, .rn, span')) {
-      const b = el.getBoundingClientRect();
-      if (b.width === 0) continue;
-      if (el.scrollWidth > el.clientWidth + 1) {
+    // REWRITTEN. The previous version gated on "scrollWidth > clientWidth", which is only
+    // ever true for an element that ALREADY has the overflow:hidden + white-space:nowrap it was
+    // checking for the absence of. A label that simply WRAPS has scrollWidth === clientWidth, so
+    // the exact defect this was written for could never be seen. (It also looked for ".rn",
+    // a wireframe-only class that does not exist in the app, and bare "span"s whose
+    // clientWidth is 0.) It now PROVES the behaviour: substitute a 60-character label into a
+    // real row and measure whether the row grows taller.
+    const LONG = 'A deliberately long folder name for truncation testing';
+    for (const el of side.querySelectorAll('.lib-coll-lb, .lib-tree-lb')) {
+      const row = el.closest('.lib-coll-row, .lib-tree-row') || el.parentElement;
+      if (!row || row.getBoundingClientRect().width === 0) continue;
+      const before = row.getBoundingClientRect().height;
+      const orig = el.textContent;
+      el.textContent = LONG;
+      const after = row.getBoundingClientRect().height;
+      el.textContent = orig;
+      if (after > before + 2) {
         const cs = getComputedStyle(el);
-        if (cs.textOverflow !== 'ellipsis' || cs.whiteSpace !== 'nowrap') {
-          out.noEllipsisTruncation.push({ text: el.textContent.trim().slice(0, 30), textOverflow: cs.textOverflow, whiteSpace: cs.whiteSpace });
-        }
+        out.noEllipsisTruncation.push({ text: orig.trim().slice(0, 24), cls: el.className,
+          grew: Math.round(before) + 'px -> ' + Math.round(after) + 'px', textOverflow: cs.textOverflow, whiteSpace: cs.whiteSpace });
       }
+      break; // one representative row per class is enough — they share a stylesheet rule
     }
+    // The sidebar can also be dragged narrow independently of the window; a label that fits at
+    // the default 230px may not at the 150px floor. Nothing exercised that path before.
+    out.sideWidth = Math.round(side.getBoundingClientRect().width);
   }
   return out;
 }`;
@@ -138,7 +188,24 @@ for (const vp of VIEWPORTS) {
     findings.push({ viewport: vp.label, kind: 'SEARCH_FLOOR', detail: `search input is ${result.searchWidth}px, below the ${SEARCH_MIN_WIDTH}px usability floor` });
   }
   for (const t of result.noEllipsisTruncation) {
-    findings.push({ viewport: vp.label, kind: 'NO_ELLIPSIS', detail: `sidebar text "${t.text}" overflows its box without ellipsis truncation (text-overflow:${t.textOverflow}, white-space:${t.whiteSpace})` });
+    findings.push({ viewport: vp.label, kind: 'NO_ELLIPSIS', detail: `sidebar row .${t.cls} (sidebar ${result.sideWidth}px wide) GROWS ${t.grew} when given a 60-character label — it wraps instead of truncating (text-overflow:${t.textOverflow}, white-space:${t.whiteSpace})` });
+  }
+}
+
+// ── Second pass: the sidebar dragged to its own narrow floor, at a normal window width. A
+// label that fits the default 230px sidebar can still wrap at 150px, and nothing exercised the
+// resizer before — the sweep only ever shrank the WINDOW.
+await page.setViewportSize({ width: 1440, height: 900 });
+await page.waitForTimeout(150);
+await page.evaluate(() => {
+  const ov = document.getElementById('lib-overlay');
+  if (ov) ov.style.setProperty('--lib-side-w', '150px');
+});
+await page.waitForTimeout(200);
+{
+  const result = await page.evaluate(`(${AUDIT_FN})()`);
+  for (const t of result.noEllipsisTruncation) {
+    findings.push({ viewport: '1440x900, sidebar dragged to its 150px floor', kind: 'NO_ELLIPSIS', detail: `sidebar row .${t.cls} GROWS ${t.grew} when given a 60-character label at the narrow sidebar floor` });
   }
 }
 

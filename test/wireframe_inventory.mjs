@@ -26,8 +26,23 @@ const REPORT_PATH = path.join(process.cwd(), 'test/output/wireframe_inventory_re
 const ACCEPTED_PATH = path.join(process.cwd(), 'test/wireframe_accepted.json');
 let ACCEPTED = [];
 try { ACCEPTED = JSON.parse(await readFile(ACCEPTED_PATH, 'utf8')); } catch { /* none yet */ }
+// ⚠️ Matching is ZONE-QUALIFIED. A bare substring test (what this used to be) let an entry
+// reasoned about ONE zone silence the identical string everywhere: `order@3`, accepted as a
+// walker artifact in the sidebar, was also suppressing it in the topbar, grid, sortmenu and
+// gearmenu. Every finding is emitted as `[zone] ...`; an entry may name the zone it applies to
+// either inside `match` (e.g. "[sidebar] atom count") or in an explicit `zone` field. An entry
+// that does neither is rejected at load time rather than silently going global.
+const ZONE_RE = /^\[([a-z]+)\]/;
+for (const a of ACCEPTED) {
+  const inMatch = ZONE_RE.exec(a.match);
+  if (!a.zone && !inMatch) {
+    console.log(`[allowlist] REJECTED unscoped entry ${JSON.stringify(a.match)} — add a "zone" field`);
+  }
+  a._zone = a.zone || (inMatch ? inMatch[1] : null);
+}
 function isAccepted(finding) {
-  return ACCEPTED.some((a) => finding.includes(a.match));
+  const fz = ZONE_RE.exec(finding);
+  return ACCEPTED.some((a) => a._zone && finding.includes(a.match) && fz && fz[1] === a._zone);
 }
 
 // Dynamic/mock data (photo counts, folder/person/album names, byte totals) differs between the
@@ -371,24 +386,283 @@ await wf.click('.sidebar .row.sub', { timeout: 2000 }).catch(() => {});
 await app.click('.lib-tree-row[data-date-scope]', { timeout: 2000 }).catch(() => {});
 await wf.waitForTimeout(80);
 await app.waitForTimeout(80);
-const COLOR_STATE_PAIRS = [
-  { label: 'sidebar collection row (selected)', wf: '.sidebar .row.sel', app: '.lib-coll-row.on' },
-  { label: 'sidebar tree row (selected)', wf: '.sidebar .row.sel', app: '.lib-tree-row.on' },
-  { label: 'sidebar row (hover)', wf: '.sidebar .row', app: '.lib-coll-row' },
+// ⚠️ Every state below asserts something for EVERY pair. The previous version fetched the
+// hover pair's two colours and then discarded them — the only assertion body was gated on
+// `label.includes('selected')`, so the hover check could never fail and reported as covered.
+// A hover state is not "different by any amount": #6 in the 2026-09-08 report was a hover that
+// DID change (rgba(0,0,0,0) -> rgb(42,42,44)) but only by 3/255 per channel against a
+// rgb(39,39,41) ground, because --sur and --sur2 are both aliased to --surface-tile-2 while the
+// row sits on --surface-tile-1. So the assertion is a MEASURED perceptual delta, benchmarked
+// against the wireframe's own (rgba(255,255,255,.08), ~17/255) — not mere inequality.
+function parseRgb(c) {
+  const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return null;
+  const p = m[1].split(',').map((x) => parseFloat(x));
+  return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+}
+// Flatten a possibly-transparent colour onto a known ground so two states are comparable.
+function over(fg, ground) {
+  if (!fg) return ground;
+  const a = fg.a;
+  return { r: fg.r * a + ground.r * (1 - a), g: fg.g * a + ground.g * (1 - a), b: fg.b * a + ground.b * (1 - a), a: 1 };
+}
+function chanDelta(a, b) {
+  if (!a || !b) return null;
+  return Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b));
+}
+async function stateOf(page, sel, { hover = false } = {}) {
+  const loc = page.locator(sel).first();
+  if (await loc.count() === 0) return null;
+  if (hover) { await loc.hover().catch(() => {}); await page.waitForTimeout(120); }
+  const v = await loc.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    // The row's own ground: nearest ancestor with a non-transparent background.
+    let g = el.parentElement, gbg = 'rgb(0, 0, 0)';
+    while (g) { const b = getComputedStyle(g).backgroundColor;
+      if (b && !/rgba\(0, 0, 0, 0\)|transparent/.test(b)) { gbg = b; break; } g = g.parentElement; }
+    return { bg: cs.backgroundColor, ground: gbg, color: cs.color, weight: cs.fontWeight, shadow: cs.boxShadow };
+  });
+  if (hover) { await page.mouse.move(2, 2); await page.waitForTimeout(60); }
+  return v;
+}
+
+// Nothing carries `.on`/`.sel` in the default mock state — no row is pre-selected — so the
+// selected-state pairs below would silently no-op without this: the tree's date-scope row is
+// already expanded (see the chevron clicks above), so its body is a real click target on both.
+// ⚠️ Clicking the tree row also CLEARS `.on` from the collection row, so the collection-row
+// pair is captured BEFORE that click, not after — the previous version clicked first and then
+// hit `bgOf() === null` on `.lib-coll-row.on`, silently skipping the pair entirely.
+await wf.click('#row-allphotos', { timeout: 2000 }).catch(() => {});
+await app.click('.lib-coll-row', { timeout: 2000 }).catch(() => {});
+await wf.waitForTimeout(80); await app.waitForTimeout(80);
+const collSelWf = await stateOf(wf, '.sidebar .row.sel');
+const collSelApp = await stateOf(app, '.lib-coll-row.on');
+await wf.click('.sidebar .row.sub', { timeout: 2000 }).catch(() => {});
+await app.click('.lib-tree-row[data-date-scope]', { timeout: 2000 }).catch(() => {});
+await wf.waitForTimeout(80); await app.waitForTimeout(80);
+const treeSelWf = await stateOf(wf, '.sidebar .row.sel');
+const treeSelApp = await stateOf(app, '.lib-tree-row.on');
+
+const SELECTED_PAIRS = [
+  { label: 'sidebar collection row (selected)', wf: collSelWf, app: collSelApp, appSel: '.lib-coll-row.on' },
+  { label: 'sidebar tree row (selected)', wf: treeSelWf, app: treeSelApp, appSel: '.lib-tree-row.on' },
 ];
-for (const pair of COLOR_STATE_PAIRS) {
-  const isHover = pair.label.includes('hover');
-  const wBg = await bgOf(wf, pair.wf, { hover: isHover });
-  const aBg = await bgOf(app, pair.app, { hover: isHover });
-  if (wBg === null || aBg === null) continue; // element not present in this mock state — not a finding here, the zone loop above already covers presence
-  // Selected rows must be BLUE-family (the wireframe's --blue-mist-soft / rgba(97,160,175,*)),
-  // never a neutral grey — that distinction is exactly what shipped wrong in .lib-tree-row.on.
-  if (pair.label.includes('selected')) {
-    const aIsBlueish = /rgba?\(\s*(6[0-9]|7[0-9]|8[0-9]|9[0-9])\s*,\s*1[5-9][0-9]\s*,/.test(aBg) || aBg === wBg;
-    if (!aIsBlueish) {
-      findings.push(`[colors] ${pair.label}: wireframe background ${wBg} (blue-family selected state) vs app ${aBg} — app's selected row is not blue`);
+for (const pair of SELECTED_PAIRS) {
+  if (!pair.wf || !pair.app) {
+    // A missing selected state is itself the finding — never a silent skip.
+    findings.push(`[colors] ${pair.label}: could not capture a selected row (${pair.wf ? 'app' : 'wireframe'} side had none) — the selected state may not be reachable`);
+    continue;
+  }
+  const aBg = pair.app.bg, wBg = pair.wf.bg;
+  const aIsBlueish = /rgba?\(\s*(6[0-9]|7[0-9]|8[0-9]|9[0-9])\s*,\s*1[5-9][0-9]\s*,/.test(aBg) || aBg === wBg;
+  if (!aIsBlueish) findings.push(`[colors] ${pair.label}: wireframe background ${wBg} (blue-family selected state) vs app ${aBg} — app's selected row is not blue`);
+  // The wireframe's selected row is not just a background — it also carries an inset left
+  // marker and a distinct ink colour. Neither was ever compared.
+  const wHasMarker = /inset/.test(pair.wf.shadow || '');
+  const aHasMarker = /inset/.test(pair.app.shadow || '');
+  if (wHasMarker && !aHasMarker) findings.push(`[colors] ${pair.label}: wireframe draws an inset selection marker (box-shadow ${pair.wf.shadow}) — app has none`);
+  const wInkShift = pair.wf.color !== (collSelWf && collSelWf.color) ? null : null; // placeholder, ink compared below
+  if (pair.app.color === pair.app.ground) findings.push(`[colors] ${pair.label}: selected-row text colour equals its own background`);
+}
+
+// ── Hover, asserted as a MEASURED delta on every interactive row family ──────
+const HOVER_TARGETS = [
+  { label: 'sidebar collection row', wf: '.sidebar .row:not(.sel)', app: '.lib-coll-row:not(.on)' },
+  { label: 'sidebar tree row', wf: '.sidebar .row.sub:not(.sel)', app: '.lib-tree-row:not(.on)' },
+  { label: 'sidebar section header', wf: '.sidebar .sec-h', app: '#lib-side .lib-sec-h' },
+  { label: 'topbar pill button', wf: '.topbar .pillbtn', app: '#lib-top .lib-pill' },
+  { label: 'topbar icon button', wf: '.topbar .iconbtn', app: '#lib-top .lib-btn-icon' },
+];
+// Anything below this is a hover a user cannot see. Derived from the two real cases: the app's
+// broken 3/255 lift, and the wireframe's own rgba(255,255,255,.08) which lands at ~17/255.
+const HOVER_MIN_DELTA = 8;
+for (const t of HOVER_TARGETS) {
+  const aRest = await stateOf(app, t.app);
+  const aHov = await stateOf(app, t.app, { hover: true });
+  const wRest = await stateOf(wf, t.wf);
+  const wHov = await stateOf(wf, t.wf, { hover: true });
+  if (!aRest || !aHov) { findings.push(`[colors] ${t.label} (hover): app selector ${t.app} matched nothing — hover state unverifiable`); continue; }
+  const ground = parseRgb(aRest.ground);
+  const dApp = chanDelta(over(parseRgb(aRest.bg), ground), over(parseRgb(aHov.bg), ground));
+  const wGround = wRest ? parseRgb(wRest.ground) : null;
+  const dWf = wRest && wHov ? chanDelta(over(parseRgb(wRest.bg), wGround), over(parseRgb(wHov.bg), wGround)) : null;
+  const ref = dWf == null ? '(wireframe reference unavailable)' : `wireframe lifts by ${dWf.toFixed(1)}/255`;
+  if (dApp == null) { findings.push(`[colors] ${t.label} (hover): could not measure app hover colour`); continue; }
+  if (dApp < HOVER_MIN_DELTA) {
+    findings.push(`[colors] ${t.label} (hover): app background lifts by only ${dApp.toFixed(1)}/255 on hover `
+      + `(${aRest.bg} -> ${aHov.bg} over ${aRest.ground}) — below the ${HOVER_MIN_DELTA}/255 visibility floor; ${ref}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SELF-CONSISTENCY CHECKS — these compare the app against ITSELF, not against
+// the wireframe.
+//
+// Why they exist: every check above needs a wireframe counterpart to compare to, so anything
+// the wireframe's static mock never modelled (Keywords section, Raw/Videos rows, the gear
+// menu's checkbox rows, real-aspect-ratio) is structurally invisible to it — which is exactly
+// where the 2026-09-08 reported defects live. A UI can be internally inconsistent without the
+// wireframe having an opinion, and that inconsistency is itself the bug: one section built
+// differently from its five siblings, one row family missing the count all its siblings carry,
+// two "this is on" idioms in one menu, one menu row carrying an icon none of its siblings has.
+// These are written as "N of M siblings do X, the rest don't" so they fire on any FUTURE
+// divergence too, not just the ones already reported.
+
+const selfFindings = await app.evaluate(() => {
+  const out = [];
+  const cs = (el) => getComputedStyle(el);
+  const txt = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim();
+
+  // ── 1. Sidebar section chrome: every collapsible section must be built the same way.
+  // Catches a section that renders its own ad-hoc header instead of going through the shared
+  // section builder (no shared collapse chrome, no persisted open state, no shared heading style).
+  const heads = [...document.querySelectorAll('#lib-side .lib-sec-h, #lib-side [data-kw-tree-toggle], #lib-side [data-date-tree-toggle]')];
+  const shaped = heads.map((h) => ({
+    label: txt(h).slice(0, 24),
+    isSecH: h.classList.contains('lib-sec-h'),
+    hasSecToggle: h.hasAttribute('data-sec-toggle'),
+    role: h.getAttribute('role'), aria: h.hasAttribute('aria-expanded'),
+    fs: cs(h).fontSize, tt: cs(h).textTransform, pad: cs(h).padding,
+  }));
+  const secHCount = shaped.filter((h) => h.isSecH).length;
+  for (const h of shaped) {
+    if (!h.isSecH && secHCount >= 2)
+      out.push(`[selfconsist] sidebar section "${h.label}" is not built with the shared section header (.lib-sec-h) that ${secHCount} sibling sections use — it has its own collapse chrome, heading style and open-state handling`);
+    else if (h.isSecH && !h.hasSecToggle && secHCount >= 2)
+      out.push(`[selfconsist] sidebar section "${h.label}" uses .lib-sec-h but has no data-sec-toggle — its open/closed state is not persisted like its siblings'`);
+    else if (h.isSecH && (!h.role || !h.aria))
+      out.push(`[selfconsist] sidebar section "${h.label}" is missing role/aria-expanded that its sibling section headers carry`);
+  }
+  // Heading typography must be uniform across sections.
+  const fsTally = {};
+  shaped.forEach((h) => { fsTally[h.fs] = (fsTally[h.fs] || 0) + 1; });
+  const fsKeys = Object.keys(fsTally);
+  if (fsKeys.length > 1) {
+    const majority = fsKeys.sort((a, b) => fsTally[b] - fsTally[a])[0];
+    for (const k of fsKeys) if (k !== majority)
+      out.push(`[selfconsist] sidebar section headings disagree on font-size: ${fsTally[majority]} use ${majority}, ${fsTally[k]} use ${k} (${shaped.filter((h) => h.fs === k).map((h) => `"${h.label}"`).join(', ')})`);
+  }
+
+  // ── 2. Count badges: a row family where most siblings carry a count, but some don't — or
+  // carry an EMPTY one. An empty <span class="lib-coll-count"></span> reserves layout and reads
+  // as "zero photos" while meaning "nobody wired a number to this row".
+  // Only rows that SCOPE the grid to a set of photos belong to this family. Action rows
+  // ("Free up space…", "Verify library…") and the storage-summary line share the .lib-coll-row
+  // class for layout but scope nothing, so a missing count on them is correct, not a defect.
+  const collRows = [...document.querySelectorAll('#lib-collections .lib-coll-row')]
+    .filter((r) => r.hasAttribute('data-coll') || r.hasAttribute('data-type-shortcut')
+      || r.hasAttribute('data-catalog-scope') || r.hasAttribute('data-faces-filter')
+      || r.id === 'lib-row-allphotos' || r.querySelector('.lib-coll-count'));
+  const withCount = collRows.filter((r) => r.querySelector('.lib-coll-count'));
+  const nonEmpty = withCount.filter((r) => txt(r.querySelector('.lib-coll-count')).length > 0);
+  if (collRows.length >= 4 && nonEmpty.length >= collRows.length / 2) {
+    for (const r of collRows) {
+      const c = r.querySelector('.lib-coll-count');
+      const label = txt(r).split('\n')[0].slice(0, 24);
+      if (!c) out.push(`[selfconsist] sidebar row "${label}" renders no count element, while ${nonEmpty.length} of ${collRows.length} sibling rows show a count`);
+      else if (!txt(c)) out.push(`[selfconsist] sidebar row "${label}" renders an EMPTY count element — it reserves the layout slot but shows no number`);
     }
   }
+
+  // ── 3. Menu "is-on" idiom: one menu must express selection one way. Mixing a native
+  // <input type=checkbox> with a custom checkmark glyph in the same menu is two visual
+  // languages for the same state.
+  for (const menu of document.querySelectorAll('.lib-menu')) {
+    // ⚠️ `.opt` alone misses the menu's toggle-style rows, which carry `opt-action opt-toggle`
+    // and no `.opt` — including the two rows whose idiom actually diverges.
+    const opts = [...menu.querySelectorAll('.opt, .opt-toggle')];
+    if (opts.length < 3) continue;
+    const idiom = (o) => o.querySelector('input[type=checkbox]') ? 'native-checkbox'
+      : (o.querySelector('svg') ? 'checkmark-glyph' : 'none');
+    const tally = {};
+    opts.forEach((o) => { const i = idiom(o); (tally[i] = tally[i] || []).push(txt(o).slice(0, 26)); });
+    const kinds = Object.keys(tally);
+    if (kinds.length > 1) {
+      const major = kinds.sort((a, b) => tally[b].length - tally[a].length)[0];
+      for (const k of kinds) if (k !== major)
+        out.push(`[selfconsist] #${menu.id}: ${tally[major].length} option rows show their on-state as "${major}" but ${tally[k].length} use "${k}" (${tally[k].map((t) => `"${t}"`).join(', ')}) — two idioms for the same state in one menu`);
+    }
+    // ── 4. A menu row carrying a leading icon none of its siblings has.
+    const leading = opts.map((o) => {
+      const svgs = [...o.querySelectorAll('svg')];
+      // The trailing checkmark glyph is the last svg; anything before it is a leading icon.
+      return { t: txt(o).slice(0, 26), lead: Math.max(0, svgs.length - (idiom(o) === 'checkmark-glyph' ? 1 : 0)) };
+    });
+    const withLead = leading.filter((l) => l.lead > 0);
+    if (withLead.length && withLead.length <= leading.length / 3)
+      out.push(`[selfconsist] #${menu.id}: ${withLead.map((l) => `"${l.t}"`).join(', ')} carry a leading icon that ${leading.length - withLead.length} of ${leading.length} sibling option rows do not`);
+  }
+
+  // ── 5. Icon-only buttons: centering, WITH the CSS that causes it. The pre-existing
+  // icon-centering check reports an offset and nothing else, which is not actionable; the
+  // real cause in this app is a `display:block` + asymmetric padding on a fixed-size box,
+  // which no amount of re-measuring the offset would have revealed.
+  for (const btn of document.querySelectorAll('#lib-top button, #lib-side button, .lib-menu button')) {
+    const svg = btn.querySelector('svg');
+    if (!svg || txt(btn)) continue;                      // icon-only buttons only
+    const bb = btn.getBoundingClientRect(), sb = svg.getBoundingClientRect();
+    if (!bb.width || !sb.width) continue;
+    const dx = (sb.x + sb.width / 2) - (bb.x + bb.width / 2);
+    const dy = (sb.y + sb.height / 2) - (bb.y + bb.height / 2);
+    if (Math.abs(dx) <= 0.75 && Math.abs(dy) <= 0.75) continue;
+    const c = cs(btn);
+    const why = [];
+    if (!/flex|grid/.test(c.display)) why.push(`display:${c.display} (the shared .lib-btn flex centering is being overridden)`);
+    if (/flex|grid/.test(c.display) && c.alignItems !== 'center') why.push(`align-items:${c.alignItems}`);
+    if (/flex|grid/.test(c.display) && c.justifyContent !== 'center') why.push(`justify-content:${c.justifyContent}`);
+    const [pt, pr, pb, pl] = [c.paddingTop, c.paddingRight, c.paddingBottom, c.paddingLeft];
+    if (pt !== pb || pr !== pl) why.push(`asymmetric padding ${pt} ${pr} ${pb} ${pl} inside a fixed ${Math.round(bb.width)}x${Math.round(bb.height)} box`);
+    const name = btn.id ? '#' + btn.id : (btn.getAttribute('title') || btn.getAttribute('aria-label')
+      || `${btn.closest('[id]') ? '#' + btn.closest('[id]').id + ' ' : ''}.${(btn.className || 'button').trim().split(/\s+/).join('.')}`);
+    out.push(`[selfconsist] icon-only button ${name} draws its icon ${dx.toFixed(1)}px right / ${dy.toFixed(1)}px down of centre — ${why.length ? why.join('; ') : 'cause not in display/align/padding, inspect the svg box'}`);
+  }
+
+  // ── 6. Icon SIZE consistency per role. A 14px icon rendering at 20px next to its siblings
+  // is invisible to an atom tally and to a centering check.
+  const roles = [['#lib-top', 'topbar'], ['#lib-side', 'sidebar'], ['.lib-menu', 'menu']];
+  for (const [sel, name] of roles) {
+    const svgs = [...document.querySelectorAll(`${sel} svg`)].filter((v) => v.getBoundingClientRect().width > 0);
+    const tally = {};
+    svgs.forEach((v) => { const b = v.getBoundingClientRect(); const k = `${Math.round(b.width)}x${Math.round(b.height)}`; tally[k] = (tally[k] || 0) + 1; });
+    const keys = Object.keys(tally).sort((a, b) => tally[b] - tally[a]);
+    // Report only true outliers: a size used by a single element while a clear majority shares another.
+    if (keys.length > 2 && tally[keys[0]] >= 4) {
+      for (const k of keys.slice(1)) if (tally[k] === 1)
+        out.push(`[selfconsist] ${name}: one icon renders at ${k} while ${tally[keys[0]]} siblings render at ${keys[0]} — a one-off icon size`);
+    }
+  }
+
+  // ── 7. Text truncation, measured by LINE COUNT, not scrollWidth. The previous attempt
+  // (library_responsive_qa NO_ELLIPSIS) keyed on `scrollWidth > clientWidth`, which can only
+  // ever be true for an element that ALREADY has the overflow:hidden + nowrap it was checking
+  // for the absence of — so a label that simply wraps was invisible to it.
+  for (const el of document.querySelectorAll('#lib-side .lib-coll-lb, #lib-side .lib-tree-lb')) {
+    const c = cs(el);
+    if (c.whiteSpace.startsWith('nowrap') || c.whiteSpace === 'pre') continue;
+    if (c.textOverflow === 'ellipsis' && c.overflow !== 'visible') continue;
+    out.push(`[selfconsist] sidebar label "${txt(el).slice(0, 20)}" (${el.className}) can WRAP: white-space:${c.whiteSpace}, overflow:${c.overflow}, text-overflow:${c.textOverflow} — a long folder/collection/keyword name will grow the row instead of truncating`);
+    break;                                              // one representative finding per class, not one per row
+  }
+
+  return out;
+});
+findings.push(...selfFindings);
+
+// ── 8. Truncation, actually exercised: rename a real sidebar row to a 60-character label and
+// measure whether the row grows. A CSS read alone can be argued with; a measured row-height
+// change cannot. Restores the original text afterwards so no later check sees the mutation.
+const wrapProof = await app.evaluate(() => {
+  const el = document.querySelector('#lib-side .lib-coll-lb');
+  if (!el) return null;
+  const row = el.closest('.lib-coll-row') || el.parentElement;
+  const before = row.getBoundingClientRect().height;
+  const orig = el.textContent;
+  el.textContent = 'A deliberately long folder name for truncation testing purposes';
+  const after = row.getBoundingClientRect().height;
+  el.textContent = orig;
+  return { before, after, label: 'sidebar collection row' };
+});
+if (wrapProof && wrapProof.after > wrapProof.before + 2) {
+  findings.push(`[selfconsist] ${wrapProof.label} GROWS from ${Math.round(wrapProof.before)}px to ${Math.round(wrapProof.after)}px tall when given a 60-character label — measured, not inferred: long names wrap instead of truncating`);
 }
 
 // ── Overflow: no visible content should sit under a scrollbar an overlay scrollbar can paint
@@ -441,9 +715,19 @@ scrollbarFindings.forEach((f) => findings.push(`[sidebar] scrollbar safety margi
     const out = [];
     const tree = document.getElementById('lib-tree');
     const foldersHeader = document.querySelector('[data-sec-toggle="folders"]');
-    if (!tree || !foldersHeader) return out;
+    // ⚠️ These used to be silent early-returns, which is how the defect below shipped: with
+    // #lib-tree absent the whole check no-opped and reported clean. An absent container is not
+    // "nothing to check" — it means the Folders section renders no body at all.
+    if (!foldersHeader) { out.push('the sidebar has no "Folders" section header at all'); return out; }
+    if (!tree) { out.push('#lib-tree does not exist in the DOM — the "Folders" section renders an empty body and no folder tree is reachable'); return out; }
+    if (tree.parentElement && tree.parentElement.id === 'lib-collections') {
+      // renderCollections() rewrites #lib-collections.innerHTML on EVERY render. A #lib-tree
+      // living inside it survives exactly one render and is destroyed by the next.
+      out.push('#lib-tree has been moved INSIDE #lib-collections, whose innerHTML renderCollections() rewrites on every render — the folder tree is destroyed on the next sidebar re-render');
+    }
     const treeRow = tree.querySelector('.lib-tree-row');
-    if (!treeRow || treeRow.getBoundingClientRect().width === 0) return out; // not rendered/expanded right now
+    if (!treeRow) { out.push('#lib-tree exists but contains no tree row — the folder tree rendered nothing'); return out; }
+    if (treeRow.getBoundingClientRect().width === 0) { out.push('#lib-tree\'s root row has zero width — the folder tree is present but not visible'); return out; }
     const cloudHeader = document.querySelector('[data-sec-toggle="cloud"]');
     if (cloudHeader) {
       const treeTop = treeRow.getBoundingClientRect().top;
@@ -463,6 +747,27 @@ scrollbarFindings.forEach((f) => findings.push(`[sidebar] scrollbar safety margi
     return out;
   });
   folderTreeFindings.forEach((f) => findings.push(`[sidebar] Folders/tree relationship: ${f}`));
+}
+
+// ── Sidebar render IDEMPOTENCE. Nothing anywhere checked that rendering the sidebar twice
+// leaves the same DOM. It does not: a node the render function RELOCATES into the container it
+// then rewrites survives one render and is gone after the second, silently and permanently.
+// The check is generic — it re-renders and diffs the set of surviving element ids — so it
+// catches any future node that gets destroyed by a re-render, not only #lib-tree.
+{
+  const idem = await app.evaluate(async () => {
+    const ids = () => [...document.querySelectorAll('#lib-side [id]')].map((e) => e.id).sort();
+    const header = document.querySelector('[data-sec-toggle="collections"]');
+    if (!header) return null;
+    const a = ids();
+    header.click(); await new Promise((r) => setTimeout(r, 250));   // collapse -> re-render
+    header.click(); await new Promise((r) => setTimeout(r, 250));   // expand   -> re-render
+    const b = ids();
+    return { lost: a.filter((i) => !b.includes(i)), gained: b.filter((i) => !a.includes(i)) };
+  });
+  if (idem && idem.lost.length) {
+    findings.push(`[sidebar] re-rendering the sidebar DESTROYS element(s) that were there before: ${idem.lost.map((i) => '#' + i).join(', ')} — they do not come back`);
+  }
 }
 
 // ── Topbar flag-row borders — HANDOVER 2026-09-08 item #7: the wireframe's .flagbtn has NO
@@ -715,13 +1020,18 @@ unaccepted.forEach((f) => console.log('  ' + f));
 if (acceptedHit) console.log(`\n  (+${acceptedHit} allowlisted findings suppressed)`);
 console.log(unaccepted.length ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 
-// Gate on REGRESSIONS, not the pre-existing backlog above — a hard block on all 38 current
-// findings would brick every future library-ui.js commit until they're all cleared or
-// allowlisted. `rc` is null on the first run (nothing to compare against): record the baseline,
-// don't fail. Any newly-appearing unaccepted finding after that DOES fail the commit.
+// ⚠️ HARD GATE. This used to gate on REGRESSIONS ONLY — compare against the previous run, then
+// overwrite that same report in the same run. Two consequences, both of which actually bit:
+//   1. A newly-introduced defect failed EXACTLY ONE run. The run that caught it also wrote it
+//      into the baseline, so every run after that reported it as "persisting" and exited 0.
+//   2. On a clean checkout the report file doesn't exist, `recheck` returns null, and the
+//      script ALWAYS exited 0 — 35 findings and "RESULT: FAIL" on stdout coexisting with a
+//      green exit code, which is how the 14 reported defects shipped under a passing suite.
+// Anything genuinely accepted belongs in test/wireframe_accepted.json with a written reason,
+// where it is visible and zone-scoped — not in a self-refreshing baseline nobody reads.
+// The report is still written, purely as a diff aid for the next run.
 const records = { mismatches: unaccepted.map((raw) => ({ raw })), missing: [] };
 const rc = await recheck(REPORT_PATH, records);
 printRecheck(rc);
 await writeReport(REPORT_PATH, records);
-const regressed = rc && rc.new.length > 0;
-process.exit(regressed ? 1 : 0);
+process.exit(unaccepted.length ? 1 : 0);

@@ -1,22 +1,91 @@
 [
-  { "match": "[sidebar] font-family \"SF Pro Text\"", "reason": "HANDOVER §8 item #15, investigated 2026-09-08: direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all deliberately monospace (var(--mono)) count badges on date/keyword tree rows — a real, intentional choice for tabular-number alignment, not a font bug. The wireframe-vs-app COUNT mismatch is downstream of the app rendering more real content (expanded folder/keyword trees, live counts) than the wireframe's sparse static mock — same superset reasoning as the sort/gear menu entries." },
-  { "match": "EXTRA   1x  text:\"+\"", "reason": "Albums \"+\" (new album) button — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep." },
-  { "match": "text:\"Free up space…\"", "reason": "Drives-management block — real app feature (storage/library maintenance), not in the wireframe mock. User decision 2026-09-07: keep." },
-  { "match": "text:\"Verify library…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
-  { "match": "text:\"Find duplicates…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
-  { "match": "text:\"Rescan flags…\"", "reason": "Drives-management block — see \"Free up space…\" entry above." },
-  { "match": "text:\"Keywords\"", "reason": "Keywords sidebar section — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep." },
-  { "match": "text:\"No date\"", "reason": "Date-tree bucket for photos with no EXIF date — a real completeness feature the wireframe's fixed sample data has no need for." },
-  { "match": "text:\"Syncing catalog files…\"", "reason": "Statusbar sync-in-progress indicator — needs a real backend signal (catalog_scan progress) to be meaningful, not a quick fix. Deferred by explicit user decision 2026-09-07; build later, not now." },
-  { "match": "[statusbar] MISSING 1x  icon", "reason": "The sync-spinner icon that goes with \"Syncing catalog files…\" — deferred together with that text, see the entry above." },
-  { "match": "[statusbar] dynamic-data row count", "reason": "Downstream of the deferred sync-indicator decision above — the wireframe's row count includes the syncing text/icon this app doesn't render yet." },
-  { "match": "[statusbar] atom count", "reason": "Downstream of the deferred sync-indicator decision above, see \"dynamic-data row count\" entry." },
-  { "match": "[statusbar] font-size 11px", "reason": "Downstream of the deferred sync-indicator decision above — the missing \"Syncing catalog files…\" text was the only 11px atom the wireframe counts here." },
-  { "match": "[sidebar] font-size 13px", "reason": "Downstream of already-accepted extras (No date bucket + the 4 Drives-management rows, all 13px) inflating the aggregate count — verified by direct font enumeration, not a real size mismatch on any shared row." },
-  { "match": "[sidebar] font-size 12px", "reason": "Downstream of already-accepted extras (Keywords section heading) inflating the aggregate 12px count by the same reasoning as the 13px entry above." },
-  { "match": "[sidebar] font-size 10px", "reason": "Downstream of already-accepted extras (Drives/Keywords section headings, both 10px sec-heads) inflating the aggregate count by the same reasoning as the 13px entry above." },
-  { "match": "[sidebar] EXTRA   1x  icon", "reason": "One extra icon from the already-accepted Drives-management block rows, each of which carries its own icon." },
-  { "match": "[sidebar] atom count", "reason": "Downstream of the already-accepted Drives/Keywords/No-date extras, each contributing its own icon+text+count atoms." },
-  { "match": "[sidebar] dynamic-data row count", "reason": "The wireframe's People/Albums/Devices sample lists and the app's ?libtest mock are two independently-sized fake datasets — their row counts were never going to match by coincidence (same reasoning as the mock-name noise filter in wireframe_inventory.mjs)." },
-  { "match": "order@3", "reason": "Test-tool artifact, not a real UI difference: the wireframe's \"By date\" text is a bare text node sibling of its chevron <svg> (pushed as one atom for the container, icon found on recursion), while the app wraps both icon and text in their own <span>s (icon visited first, then the text span) — same visual icon-then-label order in both, different atom-visitation order in this walker. Verified live: both render identically." }
+  {
+    "match": "[sidebar] font-family \"SF Pro Text\"",
+    "reason": "HANDOVER §8 item #15, investigated 2026-09-08: direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all deliberately monospace (var(--mono)) count badges on date/keyword tree rows — a real, intentional choice for tabular-number alignment, not a font bug. The wireframe-vs-app COUNT mismatch is downstream of the app rendering more real content (expanded folder/keyword trees, live counts) than the wireframe's sparse static mock — same superset reasoning as the sort/gear menu entries."
+  },
+  {
+    "match": "EXTRA   1x  text:\"+\"",
+    "reason": "Albums \"+\" (new album) button — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  },
+  {
+    "match": "text:\"Free up space…\"",
+    "reason": "Drives-management block — real app feature (storage/library maintenance), not in the wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  },
+  {
+    "match": "text:\"Verify library…\"",
+    "reason": "Drives-management block — see \"Free up space…\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  },
+  {
+    "match": "text:\"Find duplicates…\"",
+    "reason": "Drives-management block — see \"Free up space…\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  },
+  {
+    "match": "text:\"Rescan flags…\"",
+    "reason": "Drives-management block — see \"Free up space…\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  },
+  {
+    "match": "text:\"Keywords\"",
+    "reason": "Keywords sidebar section — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  },
+  {
+    "match": "text:\"No date\"",
+    "reason": "Date-tree bucket for photos with no EXIF date — a real completeness feature the wireframe's fixed sample data has no need for. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  },
+  {
+    "match": "text:\"Syncing catalog files…\"",
+    "reason": "Statusbar sync-in-progress indicator — needs a real backend signal (catalog_scan progress) to be meaningful, not a quick fix. Deferred by explicit user decision 2026-09-07; build later, not now. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "statusbar"
+  },
+  {
+    "match": "[statusbar] MISSING 1x  icon",
+    "reason": "The sync-spinner icon that goes with \"Syncing catalog files…\" — deferred together with that text, see the entry above."
+  },
+  {
+    "match": "[statusbar] dynamic-data row count",
+    "reason": "Downstream of the deferred sync-indicator decision above — the wireframe's row count includes the syncing text/icon this app doesn't render yet."
+  },
+  {
+    "match": "[statusbar] atom count",
+    "reason": "Downstream of the deferred sync-indicator decision above, see \"dynamic-data row count\" entry."
+  },
+  {
+    "match": "[statusbar] font-size 11px",
+    "reason": "Downstream of the deferred sync-indicator decision above — the missing \"Syncing catalog files…\" text was the only 11px atom the wireframe counts here."
+  },
+  {
+    "match": "[sidebar] font-size 13px",
+    "reason": "Downstream of already-accepted extras (No date bucket + the 4 Drives-management rows, all 13px) inflating the aggregate count — verified by direct font enumeration, not a real size mismatch on any shared row."
+  },
+  {
+    "match": "[sidebar] font-size 12px",
+    "reason": "Downstream of already-accepted extras (Keywords section heading) inflating the aggregate 12px count by the same reasoning as the 13px entry above."
+  },
+  {
+    "match": "[sidebar] font-size 10px",
+    "reason": "Downstream of already-accepted extras (Drives/Keywords section headings, both 10px sec-heads) inflating the aggregate count by the same reasoning as the 13px entry above."
+  },
+  {
+    "match": "[sidebar] EXTRA   1x  icon",
+    "reason": "One extra icon from the already-accepted Drives-management block rows, each of which carries its own icon."
+  },
+  {
+    "match": "[sidebar] atom count",
+    "reason": "Downstream of the already-accepted Drives/Keywords/No-date extras, each contributing its own icon+text+count atoms."
+  },
+  {
+    "match": "[sidebar] dynamic-data row count",
+    "reason": "The wireframe's People/Albums/Devices sample lists and the app's ?libtest mock are two independently-sized fake datasets — their row counts were never going to match by coincidence (same reasoning as the mock-name noise filter in wireframe_inventory.mjs)."
+  },
+  {
+    "match": "order@3",
+    "reason": "Test-tool artifact, not a real UI difference: the wireframe's \"By date\" text is a bare text node sibling of its chevron <svg> (pushed as one atom for the container, icon found on recursion), while the app wraps both icon and text in their own <span>s (icon visited first, then the text span) — same visual icon-then-label order in both, different atom-visitation order in this walker. Verified live: both render identically. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "zone": "sidebar"
+  }
 ]
