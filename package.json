@@ -25,7 +25,8 @@
     "perf:baseline": "node test/perf_bench.mjs --baseline",
     "scorecard": "if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 calib/export_scorecard.py; else python3 calib/export_scorecard.py; fi",
     "test": "npm run lint:ai && npm run lint:formats && npm run export:test && npm run scorecard && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test",
-    "lib:test": "node test/library_perf.mjs"
+    "lib:test": "node test/library_perf.mjs",
+    "preview": "node test/preview_server.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",

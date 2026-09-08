@@ -12,15 +12,33 @@ never opened `design.md`, which is part of why divider/spacing decisions drifted
 |---|---|---|
 | Structural fidelity | `npm run wireframe:test` | **PASS** — 19 findings, all allowlisted with reasons |
 | Icon-shape regression | same command (baseline: `test/baselines/wireframe_icons.json`) | **PASS** — 47 glyphs baselined |
-| Behaviour + UI quality | `npm run behaviour:test` | **58 pass / 8 fail — all 8 are real defects, listed in §3** |
+| Behaviour + UI quality | `npm run behaviour:test` | **67/67 PASS** — the §3 defect queue (2026-09-08 session) is empty |
 | Desktop UI audit | `npm run ui:test` | PASS |
 | Library perf | `npm run lib:test` | PASS |
 | Export/shader goldens | `npm run export:test` | PASS (18/18) |
 
-`npm run behaviour:test` is **expected to be red.** Per an explicit decision, it asserts the
-CORRECT behaviour rather than today's, so genuine defects show as failures instead of being
-baked in as "expected". **Every failure must map to a numbered item in §3. A failure that does
-not is a new regression — investigate it, do not add it to the list.**
+`npm run behaviour:test` asserts CORRECT behaviour rather than whatever today's code happens to
+do, so a genuine defect shows as a failure instead of being baked in as "expected". **Any future
+failure that doesn't map to a fresh, deliberately-added test is a real regression — investigate
+it, don't wave it off.**
+
+### Live-source preview (2026-09-08)
+
+`npm run preview` — `test/preview_server.mjs`. Serves the Library from SOURCE (synthesises
+`desktop/dist/index.html` in memory from `chromasmith-22.html` + the two injected `<script>`
+tags, and serves `desktop/library-ui.js`/`desktop-native.js`/`vendor/` straight off disk) with
+file-watch auto-reload. Opens at the same `?libtest=1&libcat=1&libn=60` mock state the behaviour
+suite drives, so what you see in a browser is what the tests exercise. This exists because
+looking at a Library change previously meant `bash build-desktop.sh` + manual refresh every time
+— now it's edit, save, look.
+
+⚠️ It does **not** replace the build. `desktop/dist/` stays the tests' actual source of truth
+(`test/wireframe_behaviour.mjs`, `test/library_perf.mjs`, etc. all read it from disk) — `bash
+build-desktop.sh` is still mandatory before any check. The preview is for the loop in between.
+
+`build-desktop.sh` itself is now incremental — `rsync -a --delete` for `vendor/` instead of
+`rm -rf` + full recopy, so a no-op run costs ~0.3s instead of walking 39MB every time. Output is
+unchanged; only how much gets rewritten to produce it.
 
 ---
 
@@ -56,71 +74,69 @@ re-run afterwards and still pass. On a fresh checkout, run `npx playwright insta
 
 ---
 
-## 3. Confirmed defects — the work queue
+## 3. Defect queue — CLEARED (2026-09-08)
 
-All validated by reading the code (file:line given) and, where marked, **proven by a failing
-test**. None are wireframe-fidelity issues; they are plain bugs.
+All 12 defects below were fixed this session. `npm run behaviour:test` is 67/67 green (66
+original tests + one new keyword-tree chevron test, §3.2). Left in place as a record of what
+each was and where the fix landed — useful if any of these regress.
 
-1. **Sidebar separators render ~7px thick instead of a 1px hairline.** `desktop/library-ui.js:986`
-   ```css
-   .lib-coll-sep{height:1px;background:var(--bdr);margin:6px 0 0;padding-top:6px}
-   ```
-   No `box-sizing:border-box` applies, so `height:1px` + `padding-top:6px` is a 7px box, and
-   `background` paints the whole padding-box. Also the wrong token: the wireframe's
-   `.sec+.sec` (`Library View.html:134-135`) uses `--divider-soft` (`#f0f0f0`), which *is*
-   defined in the app (`library-ui.js:718`) but referenced nowhere.
-   **Fix:** use a real border, and map the token into both theme blocks (near `:718/:744/:751`):
-   ```css
-   .lib-coll-sep{border-top:1px solid var(--divider-soft,var(--bdr));margin-top:6px;padding-top:6px;height:0}
-   ```
-   *Introduced by `cafdb017`; the later "fix three confirmed mismatches" commit only changed
-   which sections get a separator, never this rule — which is why it survived several rounds of
-   "fixed".*
+1. **Sidebar separators rendered ~7px thick instead of a 1px hairline.** ~~`.lib-coll-sep`
+   (`:986`) was `height:1px;background:var(--bdr);padding-top:6px` — no `box-sizing:border-box`,
+   so the box was 7px and `background` painted all of it. Wrong token too.~~ **Fixed:** now
+   `border-top:1px solid var(--divider-soft,var(--bdr));margin-top:6px;padding-top:6px;height:0`,
+   and `--divider-soft` is mapped in both theme blocks (`#lib-overlay` dark default, `.lib-light`).
 
-2. **Folder-tree chevron loads the folder.** `buildTreeNode` (`:3102-3107`) wires one
-   `row.onclick` that toggles expansion *and* calls `openFolder()` *and* re-renders; the chevron
-   has no handler of its own. Peeking at a folder's children triggers a full load — the exact bug
-   the date tree fixed and documented at `:6475-6481`. Keyword-tree rows (`:8707-8735`) have the
-   same shape. **Proven by a failing test** (`listDir` 0 → 1 on a chevron click).
+2. **All three trees' chevrons loaded/navigated instead of just expanding.** `buildTreeNode`
+   (folder tree) and the keyword tree's row handler each wired ONE `onclick` that toggled
+   expansion *and* triggered a full load/navigate; only the date tree had the correct split.
+   **Fixed:** chevron = expand only (`data-chev-toggle`, stops propagation, no load); row body =
+   load/navigate only, no expansion toggle — same contract in all three trees now. The folder-tree
+   regression test now asserts on `catalogQuery` staying flat, not `listDir` (expanding a
+   never-before-seen folder legitimately costs one `list_dir` call to discover its children,
+   before or after the fix — that's not the bug, `openFolder()` firing is).
 
-3. **Get Info can't be closed.** `#lib-info-btn` (`:5430`) always sets `showInfo = true` instead
-   of toggling; only the `I` key (`:5695`) toggles. **Proven by a failing test.**
+3. **Get Info couldn't be closed.** `#lib-info-btn` always set `showInfo = true` instead of
+   toggling. **Fixed:** `window.__libInfo(!state.showInfo)`.
 
-4. **Develop tab contradicts its own tooltip.** `title="Develop — not yet available"` but it is
-   wired (`:5991`) to close the Library. Also `#lib-side-tab-library` has no handler at all and
-   its `on` class is static. **Proven by a failing test.**
+4. **Develop tab contradicted its own tooltip.** `title="Develop — not yet available"` but the
+   click already performs the real navigation (same as the header button / `L` key) — the
+   wiring was correct, the stale title was the lie. **Fixed:** title now says "Switch to
+   Develop"; `#lib-side-tab-library` also got a real (no-op) handler instead of a static class.
 
-5. **Escape closes nothing.** The sort menu, gear menu and filters panel all close on outside
-   click but ignore Escape. **Proven by three failing tests.**
+5. **Escape closed nothing.** The sort menu, gear menu and filters panel each closed on outside
+   click but ignored Escape. **Fixed:** one keydown branch closes whichever is open, placed
+   before the full-window-exit Escape handler so the topmost menu dismisses first.
 
-6. **Sidebar rows are unlabelled clickable `div`s.** Every `[data-coll]`, `[data-catalog]` and
-   `[data-sec-toggle]` row is a `div` with no `role` and no button semantics — invisible to
-   assistive tech and unreachable by keyboard. **Proven by a failing test.**
+6. **Sidebar rows were unlabelled clickable `div`s.** Every `[data-coll]`, `[data-catalog]`,
+   `[data-sec-toggle]` row had no role/keyboard reach. **Fixed:** `role="button" tabindex="0"`
+   at each template site, plus one delegated Enter/Space handler on `#lib-side`.
 
-7. **Destructive-action menu has no role.** `showCacheMenu` (`:8569-8582`) appends a bare
-   inline-styled `div` to `<body>` with no class, id or role. (The confirmation itself is fine —
-   each item goes through `window.confirmModal`.) **Proven by a failing test.**
+7. **Destructive-action menu had no role.** `showCacheMenu`'s popover was a bare styled `div`.
+   **Fixed:** `role="menu"` on the container, `role="menuitem"` + `tabindex="0"` per item.
 
-8. **The sidebar resizer has a ~2px effective hit target.** Its box is 6px (`right:-3px;width:6px`)
-   but hit-testing shows `#lib-side` wins from `box.x+3` and `#lib-main` from `box.x+4`, so only
-   the leftmost ~2px receives the pointer. `ui_audit.mjs` enforces a 28px pointer-target floor
-   elsewhere; this is far under it. Measured, not inferred.
+8. **The sidebar resizer had a ~2px effective hit target**, not the ~3px HANDOVER guessed.
+   Root cause, confirmed via `elementFromPoint`: `#lib-side{overflow:auto}` (needed for the
+   tree's vertical scroll) clips its own child's `right:-3px` overhang — only the portion still
+   inside `#lib-side`'s box was ever hit-testable; the rest fell through to the editor canvas
+   placeholder underneath. **Fixed:** moved the hit box fully inside `#lib-side` (`right:0`, no
+   overhang) and widened it to 11px. No rest-state visual change — the permanent divider line is
+   `#lib-side`'s own `border-right`, not this element.
 
-9. **`clearAllLibFilters()` leaves `state.ratingFilter` stale** (`:5707-5715`) — the `<select>`
-   is reset to `'all'` but the state field is not. *No observable symptom in mock mode, so there
-   is no test for it; it's a code-read finding.*
+9. **`clearAllLibFilters()` left `state.ratingFilter` stale.** **Fixed:** added alongside the
+   other eight fields it already reset.
 
-10. **`syncFilterControls()` calls a function that doesn't exist** (`:5314` → `updateFilterChips()`).
-    `typeof`-guarded, so it's a silent permanent no-op. The real function is `syncFilterUI`.
+10. **`syncFilterControls()` called a nonexistent function** (`updateFilterChips`, silently
+    no-op'd by a `typeof` guard). **Fixed:** calls the real `syncFilterUI`.
 
-11. **Two comments contradict their code.** Search-Enter (`:1459-1463`) claims CLIP fires only
-    when a text match comes up empty — it always fires on non-empty input (`:5813`). The flag row
-    (`:1480-1482`) claims it acts on "the first of a multi-selection" — it reads `state.openedPath`
-    only and ignores selection entirely (`:3734-3755`).
+11. **Two comments contradicted their code.** Search-Enter's comment claimed CLIP only fires on
+    an empty plain-text match (it always fires); the flag row's comment claimed a
+    multi-selection fallback (it reads `state.openedPath` only). **Fixed:** both comments now
+    match the actual, defensible behaviour.
 
-12. **List view is a no-op while docked.** Clicking "list" persists the state and lights the
-    button, but `#lib-grid` never gets `.list-view` because
-    `isList = state.viewMode==='list' && !docked` (`:4604-4605`).
+12. **List view was a no-op while docked.** `renderGrid`'s own `!docked` guard was correct — a
+    table in the 340px strip is unusable — the *button* was what claimed an effect it didn't
+    have. **Fixed:** the list-view button disables itself while docked (title explains why),
+    re-synced whenever full/docked state changes.
 
 ### Known fidelity gaps (not defects — deliberate or unbuilt)
 - **Sidebar drag-to-collapse doesn't exist.** Settled after being an open question for several
@@ -204,21 +220,25 @@ name explicitly; none of this was bad luck.
 
 ## 6. Next steps, in order
 
-1. Fix defects §3.1 (separator) and §3.2 (folder-tree chevron) — highest user-visible impact,
-   both small and well-specified.
-2. Fix §3.3–§3.7 (Get Info toggle, Develop tab, Escape handling, sidebar row semantics, menu
-   role). Each has a failing test that will go green.
-3. Clean up §3.9–§3.12 (code-read findings, no tests).
-4. Decide on the Filters chip-row rebuild and sidebar drag-to-collapse — both are real features,
-   not bugs.
-5. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
+Steps 1–3 (all 12 §3 defects) are DONE as of 2026-09-08. What's left:
+
+1. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
+   inline chip row (Types pills + Flags & tags icon chips); the app has a slide-out `<select>`
+   drawer. A real rebuild, not a bug fix.
+2. Decide on sidebar drag-to-collapse — the wireframe collapses past a threshold, the app clamps
+   at a 150px floor (a test pins this current behaviour deliberately, per §3's "known fidelity
+   gaps"). Also a feature decision, not a defect.
+3. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
    captures; wire a Stop hook to `wireframe:test` + `behaviour:test`.
+4. Optional: use `npm run preview` (§1) for the next session's iteration loop instead of
+   round-tripping `build-desktop.sh` + manual refresh on every look.
 
 ## 7. Verification
 ```bash
-bash build-desktop.sh                 # ALWAYS first — dist/ is a staged copy
+bash build-desktop.sh                 # ALWAYS first — dist/ is a staged copy (now incremental)
 npm run wireframe:test                # structural + icon regression; must PASS
-npm run behaviour:test                # 8 known failures, all in §3; anything else is new
+npm run behaviour:test                # 67/67 as of 2026-09-08; any failure is new — investigate it
 npm run ui:test && npm run lib:test   # must stay green
 npm run export:test                   # shader goldens, 18/18
+npm run preview                       # live-source Library preview, no build step needed to look
 ```

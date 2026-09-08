@@ -8,15 +8,27 @@
 # Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy headers natively
 # (desktop/src-tauri/tauri.conf.json -> app.security.headers), so the shim would be inert
 # (and its self-reload-once logic is simply unneeded weight here).
+#
+# Incremental on purpose: an unconditional `rm -rf desktop/dist` + full recopy was costing a
+# 39MB vendor/ walk + a 15MB HTML write on every single check, which is what made "just look at
+# a Library change" expensive enough that `npm run preview` (test/preview_server.mjs) exists as
+# the actual iteration loop. This script stays the source of truth dist/ is built from — nothing
+# here changes what ends up on disk, only how much gets rewritten to get there.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-rm -rf desktop/dist
 mkdir -p desktop/dist
+# rsync -a --delete mirrors vendor/ (additions, removals, changed files) without touching
+# anything unmodified — a no-op walk on a clean run instead of a full 39MB recopy.
+rsync -a --delete vendor/ desktop/dist/vendor/
+# BSD cp has no -u; rsync gives the same "skip if not newer" behaviour on macOS.
+rsync -a --checksum desktop/desktop-native.js desktop/dist/desktop-native.js
+rsync -a --checksum desktop/library-ui.js desktop/dist/library-ui.js
+
+# index.html is always regenerated from chromasmith-22.html — it's the injection step below
+# that makes it correct, and that step is cheap (one read, one write of a single file), so there
+# is no correctness reason to skip it even when the source hasn't changed.
 cp chromasmith-22.html desktop/dist/index.html
-cp -R vendor desktop/dist/vendor
-cp desktop/desktop-native.js desktop/dist/desktop-native.js
-cp desktop/library-ui.js desktop/dist/library-ui.js
 
 # Inject the native-shell glue scripts right before </body>, WITHOUT touching the source
 # chromasmith-22.html (it stays a platform-agnostic single file for web/iOS). Native-only

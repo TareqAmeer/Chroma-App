@@ -744,12 +744,14 @@
       --canvas:var(--surface-tile-1);--surface-alt:var(--surface-tile-2);
       --ink:var(--ink-on-dark);--ink-muted-80:var(--ink-on-dark);--ink-muted-48:var(--ink-on-dark-muted);
       --hairline:rgba(255,255,255,.12);--hairline-alpha:rgba(255,255,255,.12);
+      --divider-soft:rgba(255,255,255,.12);
       --primary:var(--blue-mist);--primary-focus:var(--blue-mist);--primary-on-dark:var(--blue-mist);
       --blue-mist-soft:rgba(97,160,175,.22);
     }
     #lib-overlay.lib-light{
       --bg:#ffffff;--sur:var(--canvas-parchment);--sur2:var(--canvas-parchment);
       --bdr:var(--hairline);--txt:var(--ink);--mut:var(--ink-muted-48);
+      --divider-soft:#f0f0f0;
       --acc2:var(--blue-slate);--acc:var(--blue-slate);
       --canvas:#ffffff;--surface-alt:var(--canvas-parchment);
       --ink:#1d1d1f;--ink-muted-80:#333333;--ink-muted-48:#7a7a7a;
@@ -951,7 +953,16 @@
        --lib-side-w custom property, set on #lib-overlay by the resize handler below) — a grid
        item's own width can't out-rule its track, so setting width here directly did nothing. */
     #lib-overlay.full #lib-side{padding:12px 0 8px;border-bottom:none;min-width:0}
-    .lib-side-resizer{display:none;position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:10}
+    /* HANDOVER §3.8: was right:-3px;width:6px, straddling #lib-side's own right edge — but
+       #lib-side is overflow:auto (for the tree's vertical scroll), which clips any part of an
+       absolutely-positioned child that overflows its box. Only the ~3px still inside #lib-side
+       was ever hit-testable; the rest fell through to whatever sits behind the sidebar (the
+       editor canvas placeholder, confirmed via elementFromPoint). Moving the hit box fully
+       INSIDE #lib-side (right:0, no overhang) avoids the clip; widening it to 11px (the usual
+       splitter hit-target convention) makes it findable without a pixel-perfect grab. This has
+       no rest-state visual effect — the permanent 1px divider line is #lib-side's own
+       border-right (:796), not this element; the resizer only ever paints on hover/drag. */
+    .lib-side-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
     .lib-side-resizer:hover,.lib-side-resizer.active{background:rgba(97,160,175,.25)}
     #lib-overlay.full .lib-side-resizer{display:block}
     .lib-side-tabs{display:none;gap:4px;padding:0 12px 12px}
@@ -983,7 +994,10 @@
     .lib-coll-row[data-catalog="all"]{font-weight:var(--weight-semibold)}
     .lib-coll-count{font-family:var(--sans);font-size:11px;color:var(--mut)}
     .lib-coll-row.on .lib-coll-count{color:var(--primary);font-weight:var(--weight-semibold)}
-    .lib-coll-sep{height:1px;background:var(--bdr);margin:6px 0 0;padding-top:6px}
+    /* HANDOVER §3.1: was height:1px + padding-top:6px with no box-sizing:border-box, so the
+       painted box was 7px, not 1px — a real border avoids the box-model trap entirely. Also
+       now uses the wireframe's own token (Library View.html:135 .sec+.sec) instead of --bdr. */
+    .lib-coll-sep{border-top:1px solid var(--divider-soft,var(--bdr));margin-top:6px;padding-top:6px;height:0}
     /* Section eyebrow — transplanted from the wireframe's .sec-head: 10px uppercase, .08em. */
     .lib-coll-heading{font-size:10px;font-weight:var(--weight-semibold);letter-spacing:.08em;text-transform:uppercase;
       color:var(--mut);padding:6px 8px}
@@ -1457,10 +1471,12 @@
       <div class="lib-logo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYAAAABUCAYAAACLH+AyAAABdWlDQ1BrQ0dDb2xvclNwYWNlRGlzcGxheVAzAAAokXWQvUvDUBTFT6tS0DqIDh0cMolD1NIKdnFoKxRFMFQFq1OafgltfCQpUnETVyn4H1jBWXCwiFRwcXAQRAcR3Zw6KbhoeN6XVNoi3sfl/Ticc7lcwBtQGSv2AijplpFMxKS11Lrke4OHnlOqZrKooiwK/v276/PR9d5PiFlNu3YQ2U9cl84ul3aeAlN//V3Vn8maGv3f1EGNGRbgkYmVbYsJ3iUeMWgp4qrgvMvHgtMunzuelWSc+JZY0gpqhrhJLKc79HwHl4plrbWD2N6f1VeXxRzqUcxhEyYYilBRgQQF4X/8044/ji1yV2BQLo8CLMpESRETssTz0KFhEjJxCEHqkLhz634PrfvJbW3vFZhtcM4v2tpCAzidoZPV29p4BBgaAG7qTDVUR+qh9uZywPsJMJgChu8os2HmwiF3e38M6Hvh/GMM8B0CdpXzryPO7RqFn4Er/QcXKWq8UwZBywAAAARjSUNQDA0AAW4D4+8AAAB4ZVhJZk1NACoAAAAIAAUBEgADAAAAAQABAAABGgAFAAAAAQAAAEoBGwAFAAAAAQAAAFIBKAADAAAAAQACAACHaQAEAAAAAQAAAFoAAAAAAAAAkAAAAAEAAACQAAAAAQACoAIABAAAAAEAAAGAoAMABAAAAAEAAABUAAAAAH5Cs0cAAAAJcEhZcwAAFiUAABYlAUlSJPAAAAKfaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOnRpZmY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vdGlmZi8xLjAvIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDx0aWZmOlhSZXNvbHV0aW9uPjE0NDwvdGlmZjpYUmVzb2x1dGlvbj4KICAgICAgICAgPHRpZmY6WVJlc29sdXRpb24+MTQ0PC90aWZmOllSZXNvbHV0aW9uPgogICAgICAgICA8dGlmZjpPcmllbnRhdGlvbj4xPC90aWZmOk9yaWVudGF0aW9uPgogICAgICAgICA8dGlmZjpSZXNvbHV0aW9uVW5pdD4yPC90aWZmOlJlc29sdXRpb25Vbml0PgogICAgICAgICA8ZXhpZjpQaXhlbFlEaW1lbnNpb24+MzcyPC9leGlmOlBpeGVsWURpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxYRGltZW5zaW9uPjE3MDA8L2V4aWY6UGl4ZWxYRGltZW5zaW9uPgogICAgICA8L3JkZjpEZXNjcmlwdGlvbj4KICAgPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4KMjNRnQAAQABJREFUeAHtfWeUHcd15n35Tc4zAAYDYJATQRIEcxbELFKkJIpKlijbP7SW9+yxLXuD1z7ePT6yj9aWLO1aXsuWlShpSUskRYlRzAEkCBAgQCJnzGCAyTm/sN93u3tev379ZgaYIYmRqoB53V25vqq+99atW9WBP29YkJbz3AUCASkujgiv57tLA82CgrDE4yHh/fnsgsGAzGsollAoeD5XU3GMxUJSWBw+7zFlnxdirLK+53v/s9/no/85Ds5nl0b1xmLn+cvkAnA8kpZU8Hyvb1rCxfVyfr/5LlDNrUHAIGAQMAjMLgKGAcwuniY3g4BBwCAwRxAISHiO1NRU0yBgEDAI/EYhQI02tW/BQFpUCYefAP6loTukAikF3VcKN++ZKhHlGQbwGzWkTGMMAgaB8xIBpfCoGQg6CX4yFZD+UZGOgZB0DgdlcCwo4za1j4QCUhQTqSlMSlVRSooiKQlDV5PkYogrnxm3E3UxDGDGKJoMDAIGAYPAJAiQboPYBvDTBWK/pzUqbzWF5Eh3RLqGAjI0BoYA4q60HdMCzgCC4BSFYALVhSIrq5NyYf24rKsbl8qCFMIRh5GR50ydYQAzRdCkNwgYBAwCfgiQ8MM/AILeNhiSFw5H5aVjEWnpC4Lgi0Sg/wEpF0r8SoiVoFP9Q5VQQMaTATnRnZJj3WF57khEFpSm5IbGcblh+ajUFCXBBJga7pwZASyB/Opt/AwCBgGDgEFgBgiA8tPCZiwh8vzRmPxiT1yaewIg9iD8/EMYmUNKFfyMmSH8QZ0FwAdhUTAHOoae7gvID3dG5fkjYbnnglG5vnFMYG0s0CadMxMwDEDhNT8GAYOAQWCWEABBJt1u7Rf50VvF8vKxkC72xkH1dYEXEjv3NKmkj6uSdxB7Z58TlwLUF37OHg3yCeYZDKXlTH9Qvr2lQHafCsv9lw5LTTFUSKz6Wc8EjBXQLPW4ycYgYBAwCFgIYLuiHO4KyjdfLpTD3SGV0knQ6ZTwk5rzP4k+1EB8pNSPQEmR+jMQ9/TjDIFp3OnDlPoRj+qkM1At/ccrB2VJVRJMALGY/Cyc2QdwFmCZqAYBg4BBYDIEaK1zBMT/ay8WY5E3JHHoWEC/QZfxD8RciT494Ej86TSMV3ICOGcmYIUywJ2HRtE8mfeh9pD87UtFcrQzKGEmmEhkxZvq1zCAqRAy4QYBg4BBYBoIUEVzZiAgX3+5SJp7RYk/k5GuO0Rds8EzSb0SfCeMfnpPGg7JH6vEjvSvaZSyWzMBi1GQ0nMBOSUtvSH51mslUA0FVE1kxZ/OL62NjDMIGAQMAgaBGSFAQjoCRfy3dxbKkd4g1D6Waidtq3Qs4ZwE3BbRSe3x33nkVUPohwBOEuyYGi2VTll+6u/kYpURxbrAEcwA/uXNAhnForM9wWBGUzrDAKaEyEQwCBgEDAKTIxCCXv6XByLyRnNICmji4zibYFOap+RO+s5f1etT/w8GoUzCZgYaB/c6Y7B0R8oISPItyd9Krzkhby4S8z4aTMm2pqg8dSAG81Jm4FRgsivWGSYLNmEGAYOAQcAgMDkC1L0fh4nnz5T4Ii7orxJo3FqLu3Z6ZQYIc8JxJaHmWgBpvS4A4+oQb4thWMxC4+GHEwpH/mc5/OMzGUYIG80e3ROTkz0hAT+aljMMYFowmUgGAYOAQcAfAdLhhw/EpWckCFJskX5H52/Z+TOdkmnNgDSehJsxnXsSfzIL/lmzAIZZ/6j+YXx15B5wGg+e1jqBeoEJpKVzMCi/2IstxEygmVth+X4NA8iHjPE3CBgEDAJTIEDp/2R/SF7H0Q4R6OIdok4GoKyA9NqmxRoKAs4w/VMKTSqtMbUkm75bxBtBiKrpVf3Dez4iEuMxD4thWP78DUP9s/VEVJr7QtPa5WsYQAY7c2cQMAgYBM4KgSAI7hbo/btGKa1bUjyJdiqJRVv+s009mSkJNmk+yT1vlSHglw+ORG+FWQxC1wcYTBURdf020Wd8xnOclQ9nBUH8CQ6XE3nzZEQ3jTlx/K/GCsgfF+NrEDAIGASmQAC0VkbGA7K9JWrZ4JO6w2VIM+k9CTcPe+MhblYIL0m1DrIj2/6Ma/1zZ4LITKZ/FqknkSczcfLTNPBLU1UEx1nJjpaIjKFuyHASZxaBJwHHBBkEDAIGgfwI6HEPwyE5AZv/MKkynC7kglg7Rzio+Sb0LPFIVCLhiH5+NYS4nAEo4cY9eUEyRQbBHHhUtMUsnNnDBKFnIsSxozGylY9N5NUf92FU7BjMQluxHjDVWT9ThWsh5scgYBAwCBgEshGg+qcJNv/9YzzZ01LrOCK3EmM7+vh4Um667gpZt2yZtHd3S1dvn3T39ElPX78MDA3J0MiojI2NyzhOjkumcKQD1EeU5knXrV/mZq0dqPqHnAL/HbWQozay1EgsNC1DkP5PYYPYwjLMCvSgIPp7nTkN1IuIeTYIGAQMAtNCgEL/yV5I8Cmc3h+g+gUqFUr0lODxqLp7HNyfSCblqks3yM1XXKn58tSe8XRCRkfHpH9gWPr6+6W7t18ZQ093vzz27Mtypq1DVi5bImOIMzA8LO0d3apGIpHnP/t/1mwApeosguohfnCmGXW7kh8iYGRfZw6D84XFeBoEDAIGgakRCEj3CORtEFld4EUCVQGRRFs0Wgl0DKqfWDQm/YODYBBBVQMFogEpjMelKF4oC6prsCErQ6Rf2bZThjEr+Op//bIEwUC6MVP462/+ixw4fFKCPAkOjlI/vwpD9VAkEpaykiIZxSwikUjqlZOE7qGpbHzMDEDBND8GAYOAQeBsEaDufjQBqR+EWNXzXOjVTGjVYzEDPgdxQtxPH3lKXp3/tpSVl0h9XbWqhKIg3ElJqDooFMCpocGojAcT0gZpv7K8VMpB1EOBsNSUVchF61fLnoPHoNMPaRmcBZAJJKAy2rRurXzpsx+XvoFBOdXaJv/y44dluHtIBhOYmVgVytu0D2ANADWy/mdVigDmn6pkRfV9cBZKfAOVG2c4rG8c42kQMAh8sAgoseKP/a6+V6/sRDl+zVVi4Rfg42dJ/pwB6EYuUn27+loEiBo/7cj/O97ZL9ve3gvz0KQ0Ll4gm6+5FGERGRwek69+8/syMjoiNVUVUlRQIF09vbJs8UIl/lQXkehftHaFPPiLZ7BgnFJzT8cKKB6NymfuvkXWLl2q9Wvr75LvPPAIuA6KhRpK6+FTc8vrfVEB2XoppxKwVQ1glVqB0Y4mHwM3U7Mo6tFQadT6bBgCiX+IUyNN5B01yB86OerlVHfm1MNcDQIGgfMDAYdK8dWFJKxki0SA/t7XeaY1Zp4k1HkPSwANIi2aRrmMohoZzAAmSC1uSY/oY6mFqKZBPESkqoZ6/+qqSqiEooghYABDsu/QEej/+1Et0EWoiEirqqrKlPCTASTwb9WyRqmsKJVurBGkseGM+Y+NJ+SGKzbKJevXyhj+8QCI9o4eGQIzIYUN43ygyWnee6kCQqstwhyRaFGRFFRWSEltrRTXzJNCABApLJRQJCJJNCIBEIa6u2SgrU36W1v1fnRgQFLj4xaIFjdQwPx+0omELLphsyy64mpN444TRBmHnnlSTr35ugRwb5xBwCBwHiFgE/l0cZ2kq1aKFNaKJEYl0HdSAl2HQOWGSElnscIJCc6/TqR8OSi1xzyGzKf5JUn1HkF5UytHWKuSCNQ+mAHooWxoixJ/eyagQq1ddyXEbCv+akELI1Dt8LGnZ0B19gUxHt/A4DSYRErm1VTpM38gvmqaNcsb5ZWtOyHsRnRhua66Uj5/70cwUwjKOOJgG5i0dXbJ6AjMkjC7qCzgDGUiG9+bqVvpm2xyT0rcwXBYiqqqpHbVall06aWy4MKLpbxhkRSUlUoQ3C+I4/OseQAAhNkTif1IH8yjTjXLmV1vy4mtb0jb/v0y0NGOcE9HeYpPgQEsuPASufDTX5DECLbBuVw4XiA9x45K0+uvCJmBcQYBg8D5hAAk7pJ6Sa+/T6R6DRXmWrn0KCTd4y9I8NATMGMkQZslR01A9XoJNlyvjCYr1yAE0s79WD0F47HWWrOCvQ+Ur+uKUohKKktybkn9NLyxnmzexWdOAxCNqwRVVeVKrEnsqe4ZGRuTKIg6nUYDAyFxdxzzioJhXLhupbz0+g6NRPXOrTdeKSsWLwbxxxnQcGQyHZ2wFkIbQ5glzC9jSv7l5wKzzgBI/GPFJbJgwwZZf9c9suSaa6Soupr1kxRWqHW3GqZYqZRVaQ3ATwAMoxAMoxizhIaNl8j6j94jx9/YIrsfeVhOgyGkU5jW8MzVPC6VhA0tgOSf2wWCIZQ1OQNxxzf3BgGDwPuEgEXtJLXidpG6i0HoR0kkrMJjRSL07z6Gr6y8BT8fUsX0+dxkoi/pQXI8U9ZEHiSUoKzTdCx+SXlaYmEeypZJxFsSes4KyAx476bBddCA0JFgU2LnTIFx+MxqR0DnqrEeQAZBnX8ykZIohNcNa5ZLYUFMRqE1aaivk7s+fD1yYWkZd6ajS73i0DAtLIMCSb8Ynwn33vmg6o1yFs8g/sU1tbL+7rtl42d/R0rnL1DJ3kuUfXMEmuSS5F50sdJSWXPHndKw6TLZ8ZMfyZGnH5PhznbY1uZnAr75Gk+DgEHgPEUAxCteDp3IOlBJEH83MSMdCEclPQ+MQRmATxOUFuSRbr3qHZ/kM/VKoPrzi5MyrzglTX0w7yS1BxEn4aZZp0X8Sc9I2FFPBIeg46+tqZgomhY/dLqJy2Zo0WhEKqApYT4jI+NyurVdVi1ZLEsWLpD5dTVy9GSz3HXTtbJ43nwZhmBMmhmBAE3X2dUDphHQOs0vAfOYlJ/N4iIw1TTFqNDVX/oDufATn4S0HgRDZ6eem+NMguk5e7jmy/9JKhvqZfu//pMMGSZwboCaVAaB8w4BUESYPuqfeyHVqSfpabQQPz5EHsQyUA7Ll2gJwhkx26W7DoqMDyKpT9rsqOf8RHpdBtX9htoUvgdA+36UxeIsmq+1SqNdUNFbzAAJIpDkqyrKEEYFUlDaobKxlnSZFBu4QLGLywqltLgA/lwPGJWtO9+VlWAApYVFsqKxQY1abrsR6534d+pMu84Y6uvqoAoal87uXlUIrZ8PehxLyXhy8vbPygyAxDpeXg5C/Ydy8b2fwgLFuHBhNp9zVscVLO07S/r3i0/9Plft199zH2aHCdn67W/K+MgQ+hWoGmcQMAjMXQT4Do8NSGC4U9Kl9RbhnGgNCBcpbP8Z6zrh79zA8m/JbRKoWe9ZIyBdgOXMtr+T9FgfqOqskDin0Nwrqnl5/Zg8fQSqZpJ00jMwHWozeKtnAuGGKh7+FWGxtxzSPZTh+AeCDYldKRnbivQk6iXFhVIEIxm6Uai039q1Tz5++4ekNFYsGy9YLetXL5PaskoQ94Q898qbcgNMSsk8RkEfu3r6pTgSkMsbpiN8c6YyU4eKBzCt2fipz8qFH79XiX+WQszOn3yI8QhOEgu+JOJjsPThlc9kCgz35VfQkSWhG1wHJrDiFugFVeFGwIwzCBgE5i4CeNvH+kWatkBaJ8HCs4rLJEugKwOnRVq2kYr6NzFkzx7CcaiLnD/48f59EhChnpf11UlZU2OpWyyyz+JBz0jMbDKlF8Qtweau0qJCpXMk4DT/JBVWksbmI2JFabHEcHgcHY+B2HfomJzG0RBkDldfeqHcjHOFkrg/cOK4vPrmLqkqs2ZBQ4jb2T0ga+elZVUNjpuYQvpHaX4rK1rutH8olS/CGReX3n+/1VZtSXZyEndyxBEchNTX0iLdJ0/IIMw+EyMjEo7FYR5aI2ULF0nZggWq+1fclCO68kG+tCy6+Hd+T5q3vSG9zU1qSeSKYW4NAgaBuYYA9PiBYy9g5RMS77wLQbxx5bs/gsXMI89IoPeEpFXXryTU0zrbL4tWuKiuJ/Z78ciii0Crb1s2Jvs7CrAzl2QVtAoMiMyAdI/0j6LtONYlaO7Jr3iNQrffB+G3FwyA6wKsdQDqIurzq9RMlGudAemC3X8nDo7bf/iErGxYLFXQtNAlYVDz6FMvQmWUkOICa7bQOzCEA+UG5daLxqQwmpIx7FKe3M10HwAaEi4skMvu/10prKyG+S4OxvA4Np6739oO7Je9j/9Kjr32ivSeatG4VB1R6o/gPIxy6PiXXne9rL3tDqlavtK2q83udDKbcoCw6ra7ZOs/fwsrKr8tC8IODlN1qAf88+3xN6QZ5xusc7s+GNOw/gnsf1TSLTBxLMY+AFoC9ZyUwFAbaOD58o7nH7zjIPpX1Sfllfnj8nozTNyhB1LCT1ag9+ghWPNwoXdweEQJd1V5GZhFQgYGhxELDAAzBqah/FxeViyDQyO6sNvW3gkin5Td+w7JR2+8XplKCPHfOXZEnnl5q2y6YA3WAMLIIwB1Up+srxmUyxoS0yD+HDUznAEkoLpZdvmV0nj1NZLQKVz2UGSlCNuJrVvlxa//L2nd845O56w9AAglAUejx0cGpXXfPmndu1ea3twqN37lP0s9TEEDCHNgd3KmSeeyzTfL7gcfkNH+PmUgTth0rmqGykw5RbPrx1oSfLrprC04cTWB6wf9yxxsHztPzdZpBcLscl3Jcm41f7s+nEfyHx03nBAvBQVeZK6Z8jTK+/eT1S5vsayc5We1xa6r7cf663G3rL8FWnYGGq4FoH8ZhHiKh9NPQMQvXXYuvk8T2CK95mEVYxfBB/6de/6+hc7E0263DYTCqm+F1hs/ioMDbL6CEE/je8KdMUZvpxyWoNnZeTpx8uGdk455MS2oojrmZ+dl++RcWDdIx4HuwyJd+KNzVEEMc5I7ddEIfg3SAPtHM7XbZXtNVQ93cmuQOgkzbZhoL4Js7OkVi6TlvjXjcgwfZD89wC9zUfLH657Gzl4QfzzpIXAdXd04q+cRJe7cGTwOk05dJ2BJiB+G8czxpjPy+AuvqiXQ7n2HETckew8clSNNTZhBxJFPSB558kUQ/F6pqcaMgKaexGu0W+5aMwiz1JDOROzKT3qZ0QoJX6A1d9yhu3qpzslxaEw7CPuzX/2f0nH4MNQ91m63rHjIg/9CEUvPd3L7dnnua38r93zjm1JavxDSQbYNP2cN5YsbpWbNOqgOX5GAvaU6K0+fB4vww1wKsw2amMaKSyVSAF0hCPL4MM7jHuyXMZzTPQZmpDMTi/Lk5sRO4qYN7XxXMJ4500nrXgeMCPyneiuEUwAD4NAsnwvjxIl7INhmr9M6wjME/R83sOluaUzv+MzRkR4fg6p0BPXFugn/sK1crQm0Lrn5efOftWe0jVZeAW7a8Sk2laCNNQkA+jUal0hRiYQKi/WeuCTGhiU51A8jDe72hvTHTOx8aBPNvNlP4UKkKyjBOl5Ev7caCcOueRhphgchJI4ozZouIyDhJ0zaH5E48IUeNoK+mcB2FPiOA1PkPYr62QLNdPOfNWydjFhfqgZiqCcsYULRAgwojAOOS4yf1PgwcBiSFHfK0qbdOx6dfIguxl9uOPwpULBDSMFCGNNhlBEtkjSvKBt6BgmMI38s1GLgWvGccpiGjnp4psGfWvPQL4U1vQQ2ZKKO2OZvjQUnHcPdjtlo/VCek6cTzjScDbCOdHzv7Fu78y1/n98ANnWl8edsLKMEjhfUJ6aPl9YDZWMtIRBGu4h90KZd3KuANqVpYcR7xkU98dqr3v3etaPyvV1xGcB2JA5pEn8d3nxgVPwLR3CgG8Y5vwGgYfyx20V7/+279uqfHheB/HmSKK19vvadH0ptRYUUFMXltW27JB6L6AxiO84Zqq6Iy6LwUUlUp0D8pz9rOmcGQGJX3tAgy667QRdxvTBy8I709cqzf/PX0nnkiD/x9ybCcwRHpJ7auUNe/fY/yo1/+mfof6vT3OMnjDjVq9bIydde9skh14smqrGSMmm8frM0XH6VVDYuhdVSpYTAkCjxJ8dGta69TSekZcdbcvzVF2Sw9QxeHA+Q6IwQiPpFn/2iMhGLyFnlBTE4W9/dJft++YjE6xbI4quvxcbG9VKIoy+YhkwliV3K+37+gLTteivrWAoSJ4YXVtcizQapWrVeyrDDr6CqFlZwxVZcDiBgQeI/0t0p/S1N0nlwr3Ts3S19zScwgCx1Wm7rZ98njZeyZPFaqbv69on+mSgF73HL8z+HMNIuleuvlIq1l0jR/EYJl1ToDnC+MKkEGFlvpwycPCSdu16T3sO7+KYoBvHqeVK54SopW3GhxGsWKBMI2gwU00wwjR4ZbW+SwaO7ZeDgdkkM9YImevppojK8sWYNsar5UrgY/bFwlUSrkC/qEwIj4AZEvoVp5J3CEQTjfd0y2tEkQyf2yOCRXTI+0D1F/lmFzfxB+zEskfnLJN6wQaK1jRIqrZZgHOOABJBbVHGWfAqCQHKwQ8bbTspw0y4Za9oLogSCRMLtOGDN409KL/+EBJA+i8BCtZJqg6lk71bswF0Oe/uLJF2xFEcx4AiCEBdRMeBAMNNkAIOnJdC2RwItO61FWxIsEv6aNZKqu0CktAH2/GXwY/3gnHRDnZDqj0jgzG7BILXytGJkftEWmX+5pKpXoX4eAo13M3gC7zjyYJ1CjXeAQHDB055dFNblptGcQWYXf1hC8y6zyoQlUKrlVVHT0EzJ/nesQ6xUArWXSLB6rQSK5lllkkmx3WS24wOSHmyRVNd+Sbdh7I71IiikNve3NCYkFhuWH++KSQs+zM69AST6JPDU/eNOn3WSxHv4QaMDx3GKcYhn3UAGn3EKUnDKi4Hp2+8e1HD6cRYQA/16YcvbcuzQLrkfTd1QB+tIeyc140zHnTsDgDRbs2KV2unzA8heF8L0pnnbmyDmb531EQwkpkdfeVEiIJwEhwBGY5CGbC5AgtB5+ABeiMlefKtGSlhr6uSiz/2urLz1I1K6cCEAtSRyi+uSLQekZH69VK9cLQsuvgRrECtk54/+DQvWzVkLzeycEAjGqtvulOK6+SBYlE4sR2ZSUFkpJ7a8LOs/9QVpvOEmKQBBZ1213uxYxGl+42Vp3fkmElkvi6UKCUrN+oulcfPtUrthoxTVzgexBHNCLAwLHTx2MVrX8sblUrPhEqm/7FrpOPCONL3yHM46ehXEEAPAy7QmEs7eDRlqvLZe6q65C0Qze+bH9g63nFDCOv/aj0iseoFFQNF+4kdHPOIgyEWLVknx4lVy6tmHpP2tl8AoFkv9TZ8C47gc7zmmtuxvVzo+R0nI61dKceMFUlC3WDq2PCLj/fmINMtD367YKBUXbQYDWKeEXyVihZU/Vp2YN/GO1SySoiVrpWT5RulrWCNdbz4uoyCykzMZtmoWHKXFcEwKV18rhWuvl0jNEowZLvBZOLgHQrAYkmTVQonWr5HYovUytO8lGXj3OUmPgmC7Zq8kCIWrrlEm4hZYSKzHm3H+znHMJFbeJlK5TImsVYaNCZtUgF2rpQvBHJbrOT2BQ0+q5JtefK2kF18Hnf18vKMkI0zjTgdGAsbA833SyDt46GnsUtqPunneWbQ5XYW8G2+AgJO9i183grUjDW36QcQD866UQCHqo7NLFKfjw0t7rDoEazZm6sMNZT2HJN25D36TOeQFphLC/oJA3WUSKEAblDq724a+KKiRQMliCVSslnTRAkkeR9ugfgF1oEJBrlqUEH6O97F3Y3KsG/UmU8ezxZtJ5FF1xOY1jQCajtKEdIIZsDgdjRbDYGLGDXHWrW0mM7H+llSMyl0rR2VV6RjgQyEMn7abwSIwCVfNypUQBCKYimYTAZZPbnb01Veg3x9VqX7adULEIBo6iA0SO//9p4RFG11cDIJpN45NJEYkNlM5qiOWXH0dCPY8MPYylVhTmKJ6HQxN1augskbW3HkP6p+S1//313Wx2mE8ThquYfCM71QiUz7rWVxbJxd88nOy5u77VP2jKiFMo7U/kTiQzMRnXiyDzGjh1TfKyrvuVemfbfKmc8p1rsyP5ZHBNFRvlvLGlVI0r14OP/4zWNX1vy9MgHUhneECVpZD5WquuEliZdUSLa/Wc5zSwMDtMjQ3KCVL10nDbb+DWfWAVF9yo9Re8WF0M6fIHmmQGSBvC0swgor5Unn5ncqE2174qR0/e/Bzml265gqpvfHTEl+wFBkgHMTDWx+t20TefApKtHKBVG26FeqrMjn9zPdkvLv1PWYCbFlAilZfI6VX3iuhkho0FgTJDwdW0QICWGG2ULcU5oVV6jWw43GEIdBNCLSjtLOY0nLIO1zZAIL3MdgdNlplURrP5+I4mmDpZmsGMNIn6ZWQxrmLl/WbLF0E6hPMLlKw7gm+/X3Lrt89S9Hy2G+sn2cseeui3etuhw2CNx6ftf2aAA/M17lnYB6HsRGcD8LPmQVnQToj8TKYTNpAvFICDR/S9icP/0KxUEKOoq5ZMi5FIFlPHUjLO2dCuigLsqa1sAg932DWX5W41j3qPPFuIEQ1dGyHRgMzYDNwT0sjHj9xwbyk3LpqVC7GAjQ1GU7aTA2nuoMQMQ1YfHNhgRVQAZHQex0JJlUVrfv26lQlN4Y3Re6z9p9iD05pr6pbR0hbcTVPjTR513IGULEUEgYg1k1luUVl+ZA4UEJcfftH5dT2rXLk2acs1QVisaksV1U2Ovb0R9PTLKu0vkHWffQTqlri2UR+juntajMjWXjV9bLhC1/CeViLlVjmS5ebF3CxiUPpwsWy5uOfwwAJyP6f/RjtpG5REcpNluXDBnEgTiduJuFEbA8GjME6FS9cofn6EtpMNoytqpfCBY2y+E5Yks1bBD/0cj6iN5GWbcfiGWZJFZfeIf2H34ZKaJfOOpwoOkuZt0RqP/RpKVgAFQdmLXhDnWBgBWnKRYjILDLlWvlTN122/hqohdql9ZkfoLuQfgpc+dIqnoQ2Mzwmys13w3EaqcFuz0s/BmkdxN8zfrwzEHddGTdYUCYll9wpYy0H9I9MNNO3rIjzZ9cAYy8QhzqFqhuv6sWvkowTikm6EUyAuu8Yib//GM9KTsz44kDFk1pygwT3PIjgiRGkdbSePfXLyoTxnTSTxXMnYjzH8R7pnSwc75wrMCkGU6SbNiZRCSy8QQId+6Bi2oOEFu5U/WxqGJcqHBb38tGIvNUcwTd6udGLC8TMn4VYb57DEOhj+SMQ48yS//nLBNZnHkOghQ0VyBubz65blpAlFegDRNcWTtk+LcH+Qa4oIzzODjoHx4XngkpMkfzSo4U8zrnnTKskUYguhJxDGU6SIL65mUA5tJPNdooi7GuxRYIDOjsw86SsEeGoC6V3jYik1rc7c9vPlytSVCyr77hbDr/4PLg3OSw6BC8pywJ5yOTt3MGf6wzacUpsnIDsawJ5jIGFB9OjUDmtkfWf+X3MsJdYRDs7qpapi612y1gq60Zi5XYk+NHScll192egam2So88/OS21GxlqAlYIKcxmzsZxhpL01CE7PerH/gBmEyoperHu2hfZsREAVdBqTcN7TUe9vt2hxJ1/Xqf9BFVR2YYbpPcQTAjVGgKx7DIqN90mBfUrwGRIqCzMtB/xNII1itFebK6B3pyzrihmLPHKOhSJ3nXgZV+jHuUXf1i6dr0sAyf2qXDgrYf7mWkjWEwOId2kELkT8R665dIVV0m4GidjYrE/ywHHkdZjMtZ+QtsWnb8CKjTEQ/0mHIhxuLQW6qPrsH7xLvgowlCZIBdD7bZPxM26QTzibDMMDSLW7ryd+CSKVAkxgSP1k4k6kjsb78u84c+w+k2SPvgUdje1on72mMPYdatSnaKcqwoRWKPjuhE6CkVhFm0TZ20/8/VzjOv4Iw3HSkoPioRhgs9YcqIic+uWY1fbxVw4Jiw8M/HsO9QlEC2T4IIrZbwV6wH4NjBGuSTt5i0uSchHV43JsrKQ7GyJyMHOkHQORwXbAMAXbWaAIhxhgcyAZI5jx3pXWH5AYqGk1BQmZEXVuFyyMCnr6hLYGQwLSvDic3N4zzBOwwP6cpxlFqgciWcQi7ETgLmyIMcaw660bphpjlCiTp8dgXFlpbfMLzmKwewNsJ/54eQx1IdQ5XMk/GPQkfe0nJLhvh5dX6jAnoICWASRoHkdZwt16zdICN/r7D5xDDMZqGZQRnwUAxaRWZY9VFxJtdfsZ9TaLWWiY7kuMgJm0js0jMXdQrn8znulYtkqvPueF575o748RK+v+RTOPwKhwgCOg8iXYa2CFkzemQJfFC5sr/7YZ+Xwti3ShzOTgngJHKdEwFNhLjYVwMCDKrfJnOKKF8JxSSxAlsFyajLAKbGODw3IYFuzzgajsAQqntcADCBF+hIXvGBwfOnI0PpPH8XCfBdUjDGo7xogqFbqS+zUwblSsi9YtE4G8caNw7KI4pX6Ya2gdM2VHKiI6jTcCjuz6xVp370Fe41OgwGMKAOIVc6X+ZfdJLVYuM7Exy1wj0C9Urjycmna/WYuY/UQID4mx2CGF6Pg49Qyz9XBFInY33X1a1F0diLiOIJF71NP/LOMgQkwPN6wVhbe+YcSqYCqwkVwmV20AesBI1wkBhZwoQJHYMj0X3Zt4I/+SPc0iwxh8xUJbOk8S9duE9rs+Kwf/5AOBab7YavfewZeeIeKqiVQVq/+VhxXSoZjgTkVxeymfTe4JC3b4IA/TjxTpm95uH5ZtQGomzD+ed59qPuEpEfQLrvNAXxDIMBdvxP9m0mb6muBrsSmjlhXSXSfkURvt0YN4X2jTX5eRxUkrHxSOIYijY1VAaixAqVYy4rAIsgPE/gFKlahOLxlONZiBOuV4zgXyCmBapaLKkQaMCaOloXleF+BNA9EpQOMoH+cNAH0DVSf40XrBW4QAiOJh1NSGk1KVWxM6otHZWnZiDRWYlbBZSHA1j+ctwXTCACjCpRLeMRnAXfq1GhoEn/k4jlSOVNbUj+J3ShfQI6XGThOmUJcVclDp8bGKZGiHAdxT1kk/j2nW2T3rx6V5nfexgdnemDhFZcF6y6QTR+/DwfNLc4lqOjUeHmFFDcskaaDBzD7ReYoI4CyPO+opzRUAy9tGukH2ltlsKNVRvEx6CQYShjrJd1gQEMYgFVLL8RR2ZuBY+40msRgoK1VDkKSP/XODuTThncUA6KsXGoxa1h5461Su2JNDkFMQ4qk5VH95dfJzod/DOJpv2SoYQgLYfwSm7svyADGwJxDFu3NaYfjQeZjqVAsnxQksjEQ6Txwa/uHOlvl6HOPwFLpHVgQDmJGVSrzNlwujR+6W008fZkAiH9ibESOvfSYnH7rNRklAwChqGhcI8tvuVdKFizJaTM7IwrmkIgWy1BHhxJzmnCWrFgAPf487Qfqyem4gN95YKcceuSfZPAMiIlr7HMxbqDlGNY0G2GNtSC7HBDIoqUXYPYH5gTGN/FqI42fieUY8g2Dp0817NlfrD+1wGGoY0LFoBIcxy5HiXf4zFHp2v40xr+1CDh05rgUL71Iytdfmz1zRH1SwC9BZjhIixAkSdPgwZod59aH4wHE/9CLIodfgbVPOxIAq0rgvOEunJu/HOG5wpFWD2WlT4GQ73kcVjpNVr1LaiW9erMEll+HdBwdnhKZNxZQ04N9amKp+cCIIICxRGaS6+CHNcQUBIlkLCSjO3+cIfhoU/yS+1HHlSjb/Q5Z5Y7t/QU+7HIC+aJMjquOg5Lih1IQl2PZipVbIjpUkrBYGj/8a0l2HMCiusUAQnXrJLrqdgkWgoHlYIL8sB6SjpTjewIn8U6B4XhoFcsrxc9F1TAXrRjAx+QjygC6R8JgAiEZSkBowNEN7LMwGEAcJs8k/pWxBD7sMiqV8YQUYBZASLnO70HWpyFTewXjo+e6BoDOBwg8w8fPcUBHILlF4jEZwaKkSxD1iz49P4BHEP2c79ixI1Ki5Gxkyw++Kzsf/ZkMY1ai8AHBEzu2QVXVL7d+5b9ZxBKDasLhll/eKZ9Pax/XC5SvEk55lNhQxtFXn5fmt7dJ7+lT2GMA23XOhFDR3jOndev3sqtuxO7pKkgNtpQykT4Iwtcrbz7wHdn3zOMy3IPzwl0Sc9Nbb0j7of1y/Ze/IlVY/HXPBFj9MJjHihtvlncf/znqTWJiVXj15ttw1MZCxM+80MStuCQMvpq/UTSTPPP269K+fwf60bJcYp4TRHACMOcGYwMM48jT/y4Hn3hApX8npOvgbpXkF193BzQI2YSOccioT+18TfY+9B181BrEyHYdBzC1hsrhovv/lLHwl+knjjXOKqLYM4AdHNpcvkQknH1Q2fBDQ45jW5pf+xU+ELQP/Q3JEc1mn5CwEoNexO9vOihFmHGwDY7jfSFUM1Gom0a6IfEqg6fKrwIL+CCUqLdTJdYsDpozuYEaykQ/tL/xmCQGYcHENrHSmWY5Ret7FsOCdOmqS2UYsyLdpwAG3PbKz2Tw2C4l7myHNga/JG5p7LOw1jeohpvIKvcG9U6fALZb/lXS3c1IzArgr/ltCXB/wYe/gpeAQoSnYlQXwQRVXv++pJu2g6jaWKGwQNdJWAwtAmFemvF3l1xUiSe216kYr869O6J9r8H4Ab1JnNpmtZdBeCei6+6BxIy8chxUm6d3SaL1HRSFzoCzZuNobxaz8CREXmmcTTS28wEZO/aSZQJrR0meQV5QQ8U3fRE+LNOFCW+xPkLmALnY7o7cN0RHPMLjwaTUF/EPe4LAKMeguuS5/ZwF0HFCzhlAhDMBmgjBcXbAuOpwse+s53P6tfK10DmHDCgV8gteXHjMcWhpvLhYiisqpQ+SrAVYTqz3xSMItcup7bvkrZ8/CEYwqFKgUzCJ767HHpYLP3K3LN64KYehsWWxkhJ0dS6xcvLIumIAUYLdiYXYd3/5kPS1QsXgkfCpluEmr4UXb8IYsjrBnQclyoMvPiO7Hn1Q9ydYlk544WzHOh95+VmcnzRfNv/Jf4dv9mDkYjRnCUWwEOo70wLaRk2/yJqbPyILL7kceWYIIrOceA/54OPCIJRkYK17trkYgE9E24vqpP7TWId48VHM7ofx/jlMAxoGEPXjrzwpi66+BbGJrrv9kF4hCR594RewADuD2RKn9pYj0zq19VlZdefnYSJLJuaS+JCFvtzKnKz8uAmor/mg7HvoW3jhuX4ACQ0NjRSWYvd4p1SuvAj31sa0IMphWSH0SQB5xEqrrLfNKRxXStDcOBYBkxlB3cgAKKmHi8ql8ebPQC3ETULutkzxgqIu3HfQ8+7LkkB9mF8SRDsx2Iu9D9Dtu4YbCVbBvEap/8gfyuDx3TLS0SxjPa0y3tMmvfvf0A11lPrpdKGYsJIosmN9xpdG1B87fN+TULEcy0jkDCNmh18S2XgfTC8hYbvxZjgZR9MOSZ98E+UAiwnBALOZtv0SOA7/WkrmGSbKZAoRj39mHc/FoayJ8aogTZIRMFA8bAYwreLQDwnsdRg7/CzqCoHNlZb7IcYOPiHRlTdJsHxJbtuoDVGTXVfn5SmU4iQZheOiJPJcs8lyGCN4dphCVtBsPQC+GTCANKRZbJby6U0SzBgYQN2KldK8512VpM+6zmg9X3SOYY5njkGSOsfpaXuUvKZwJLiU9Id7ofcvgEmay1HiHOzpUbXQ0ktxwp5LWtRoAIizgOk6qhiOvP6qvPHAd7FJB8e84tmbXtcRoMMvq1+kZ3xk5Y3RzU9a7n3qMUjOwyBMlL6yHYkd5AI59MJTsunTX5SKRYtBOF0vGiSlAqhEyuYtwJlLTQDNQo2b0bjukKRuwu04yiZxYQxqtmtyYuLKAHj3Nh/Bx3vasog/YxCLgTMnsXCFtoHguvkq+3MUfdR7/CDoSzbmbPNYfw909mcgnS9yFebcYhS6aAHjcyPacMdpREhD9bxAymBuWrJwudTVXA8T1SoIbAU6C+AaQxDqMarIuNM0jGc/M2GOFc4aCJdTFJlKGPmQiWRRbada+a4Y0KkQ+sGpNK6U2gdPvAPVzgakymZwXNcoXrZBChtWY69HH8ZWN/YetYMRtMlYJ9a0oM4aOnVQxrCmwdo59ctX/IQ/GccZ2MbbKrIJf46ZESwO9Z3CJq018HbVRyOhhNN7rZcSAlbGwZ9SaufRjJf3btqV8yZ87585E0uCAaSx09daW3CVCWaQxqwn0XEYqsXlOQyAzXIzDFfKKW+tV/ADAAYFu3tvyoq6I7C6TTjbx62emAhHxtQvb7zzTnn7V7+0iIcz2CciTXIDqs/vBl/20U9KvKQYZUDPS0sVGyMuyLYfPSwHXnoewtNUTACMCrt6nbR+pfYhnDpgX5fP3ycyJc03cUbRAHTRxaX4oIPVs9kxIbnEMasowJ4Ende5QoOQcPo7W6DigYoi68VyRcItmRq/lUxVUNWS5aCjGQbAMrnWUIjF66y+QYBl6uhXqez83U/M42xScMYx0tWuUrez2W0iP0DMXddUywQgUVP77ThV1UE3PDY0OMG0nDB2nqocSbCm2R/MmcR98YfulfqrPwImMA+bquKgpRgvzCNTtF2M5aGWFzlhiOJIlJlK6R3jK86+ne2JPPEIac8bH7i1vvCgbkArXLgaGJFR2xXBRfXWGOvRUqhQMEspmA/TVu1TLPhiIXWsu1W6d/xa2l7CzBHPlgXLRIG5N8CAC53p4V4fvO3oYEq+juVSBeTXF4QW6Sz51Tf1eevJ8ZjkOkiWqJmprr4LaDdZrN8QycScI3foq3NmACS8Lfv2Q6feD2kOU2CPyUMCi6U8KG7RxRfLibe26cs4XVjGYf2y/OKNcvuffEWlaM3bNdi4trDlh/8m+559ehoMAANSdeH5S7fCZ9illGCx2Ntx9CiI91RMCcir85TJlwe6cUtP78Txrzdf/gQ/lu0XDVh5pWgrF0R24eifs8fXL39PFO+jRRC9vlM/K/F1TwumTpI/Bvq88ZbPytLbPi+RYjBbQk3Chb8M8SUe8AcmqodHH+oi7BTjJbtQByDnmh2a/yk7PheqR7tOycmH/0Hq7/gSdiOvB8+xddb6blljxcIoM264kTCIBeTw/BKJbZ7HaZacfuq7/uPCW5ksLLyBkz27MZws3hwLc/DI7hpPIzLYewLm3iOa4taqnFUDgljlaj9xVFoPHcSCV/aUXTOCNFyEs6s//B/+AHp0mC1O09yUxC8GVcX1X/w9KccnJovKKqQIByAxL+cvjvzajxzKL7WfVUtmJzKXEam+GcGhckpM8mRLtUEC0p1+J9kz0Eg4Y6Ulau45KdPCQKWFTwnOzVFi6ymLRIIf2skm9iiMxsbOIJ/21VNJT1nn4yNVh1T5LL75szDhxA5W6rR1JmO/vOiDIM0Q0bQUTBDHertkqL1Zeo/uxewFa1ZUgUzbMU9ixOt0/5z4rkLgRd+Bozvl5INflZZf/qP0H3hTkjjmggE8tC5ANRWYgrtfKbVq29C+UEGp1F7zCT0qw8+6zFXaLNzaWM5CTiaLDw6Bc54BcIo50jcg7z73rCzZdCnsebMbweFBYr7muhvk9j/+ijz5ja+rHl712n5SKAhSApJ/rLhEbvryl2XNjZvxDJt7DGy348yj51SznNi5HadyTiVpu1O+9/fcjOY2l/QtEW0fhW3zEKx7Csq5fd8FHCQ96u8bNl4qux89ht2d2WsWTn5JbN6qxvpKzTJYAXkZK/Ln4ms/Ft+pC7ek27TseOj7WFx+2lbN2DmBsJSWRFRd5+TtvVLC7IDpZMYCyBvjPHwGwZ+/CWf/VNWpyimrhpDySfRbtj4jPUffldGedujVBzDWuAjbL0tu+rQs2XwfrDKshdWstK4HXWfAgXb7Hvwm1kHJMCyCyN84DL+jGJqTkkjUMdGHw9ImmI2tasPi8FDLEcwG8OGkXc/rkRSx2kVSgL9Y7RKJwxopjMPhuIbhJfJcMI6W10npyk0ydHLPWTIyV+PM7W8HAnj/z5kBEKEQCPCuJ38l13zu81JSU2OrLjLYURKlpHr5Jz+lUvyWnzwgJ995Bxt2IJ16XLSoSBovvEiuvO9TcsEtt0kUah4umHpdCKcb7n/+WenFl8Wskxy9MT6gZ4pvlKqncKrr7h+QjiOHpWY5dL20BbcdpTnyxotxrMPJ7a+jjc26KOmW+Kg/D8Wisum++2FSaZ1t5KTnlTr4/jNtsADCQXaUFtUF5Ngbryqhd9eQm05q67AYStVHXoclfSwyc8Y3NxzWj7h3YNn6HOGB9ceuBzn87E/l5PP/rqez8mhujtMAxhpnTUpUpzUBwILhcL+ceuMJ5JrBj/iWYs9IId4sN9Ys2+tSVOHZk/Agvoilewo0FaV6HjrZA6bUo9Y/QWxGChUUSbi4HEwB5yBdfLMeU5Ez5lD3GA7JY9mZWnlLNs8GAQuBGTEA2j+3HjoiW376E7ntj/4khwGwCE6/4yDuF952h9SvXS9N7+zC4vEe6ccmqTHuiIWUW45PQS7A8c4NF1wg1TgGmaeA+hF/Sv99sDza/vCDOu6n9Z6ehz1NE9pjW1+WNfy+scdxBlG3eq186I//Urb+4P9K28F9E1Is8eZ5Qxs/8TlZ/WHY0rttyex8gmCQ3H8w2IVNVLTesR0XX722HFyo57EuUyoCyZXmCjkB5aOQ4Kh+nPbrFe2glNzx7huwUmoFPlBdatuwOE3VI4hrGRhHzqwqKxP7AZBwcpoGrm5HwmsdfzI1A1BMmQ9UVnWYeRThhFOahzqOs4NxbIZrevjvYAWF2QKPpoaRwNBJrL2dOiyF2AEdwYxR1y2cRKiAZZbqeJirQSAPAhgrGQqRJ85k3tRn0+rrjQd/Ius346x9SPDejU1MT2JO1c88nB5aBQK/9sbNMAWENQheOhJ1fgOAJooRxOFL4Uf8VZUBtdPrP/6enNm/F4N8rkikuQhyb8Lx11+WzmNHYca5JIvgqDSKdi698jopB7Fv2fu29DSdRJxxzLJwXMHaC3AM92qYtMKKxqMeo7ngOKxo9j4NyyvvYir6imTc7dh/SgBtIugOm8v3tLNWwwFn44zTGIrVYIrljWulc992EH0SW2KAIxRA/Jfe8hmcy7QCaTNWVU5S3yvSaWJPoIWrx3OyR5juctdy+bqr1YLHnScFgn6sC3RufRz1gkoUVeNMMYhvGZDZ67KOJ+8EZg45MwNPHPNoEOC4nxEDIISUSnugjvklvuL16a/9ve6czbGnRzwSNg5KEvkozsX3OoZrHJ28ekJBoMhAduEoh20P4ehfBE+2e9WT+rx7pGqmv+207PjZj2TzH/0FQERPEB/bEQdKsdXQ8VfgpE9+a5nBoWjYsjtH+hzij7RhbEja8+snpHnn9DZtOeX9Zl0xq4EZ5Ahs5EsblkOX72kdZk3U8XMX70DLceAIyb+8BiqjC6Ri1UYIJDw6wZvIk8csP7Jvh5oOYFDzPHnPKwmT3gW3/r4UwTR0uB27bNG2SFmtlK29UlVC3rpyNjGAk1Gdmc0sV9Vk95uEAMadZ7SdfetUCAITOLTlNfnV1/5G7vmLv5KiqirLysUnuwyh9wn084JUy6n6nmeelOe+9fc4GqFbZw1+UeeSHxnnvicelfoLNsraW+/SBXCl8nYjLGaIDgKz5LlFxFl5BH68Lz2T8IM0rQf2qNqIu5GtHcR2Zr9NFwDFdZLOgzvxcZ1rc1pOgh+HtN1w48eh/oKdOxkr1gyC2JdA01nru8s5yd5TD46F3v1b8KWzZomgblk7bzEb0W8fXIFvH4D4U6WqG9f4qUjMcDgbcBy/GDbcfEAGjmDRnuot4wwCkyGAd2VW1Oic8lJts+vJJ+Tnf/UX0kbTUCziZiwcJqtFnjDkyQXk1FhCtjzwQ3nq774qXVCFcBv6b4LjYvAwrIFe++dvyMEXnlZ9vR9eyjCBLfEl4Xe/8IoDcQLxb4Na7IV/+Kp0HDv020v87YFB5te67VkcV9OUx1AAM1F8IjFeVoMD/2r0oy8hWDtRah7HOUwO832/xpnuAehokdbnH8BHg6DjmVi8d2qAoyiw2zhSVIHziKrw6V6c44/xkzUW0OYkjjo5/evv6xfSZunVdipgrr+hCMwKAyA2tD6hXn/300/JT//Ln8mbDz2EjVEDygh4JMK0pqR4AUkE9ePx4E4n8G3gn/+Pv5SnvvUN6ToJ4o8wSsJ5HQORR85f3gSuAN+0rnDv7bmW48qHqqDu5pPy4rf+Vrb/vx/omTv6neIcAuBK5NxyZgQGyfPDDz77hDzzN3+ui7+5mn4nwXtx9cGauEzlNI5P2sl7F7n6pHH6wVUmmetAa5McfvRfcVbOEHTl1tqSK4rFTMlQ+QdFOneeD7QclWPPPGBFc/LVK4ueRrvcBZzNvZ11x7bHpeWZf8NRzjjJk+cLucq0Zs52fVVFZUv+fCcQNwGT1FOPfUt63nnFEryyqsuHfH9TVdQv3VRpGO6Xjn753NnGd/LxpqP/ZOXkSzedNJOlPZv0Tj4f8HU2VEDuJpAJcPp9YsdbWLzcI6/9+AFY/9wuq6+9TqoXLYIEU6SMgmkyUhZIlo3dOCwq+tpxYNiO7fLOk0/KoTe2SH93lxK5ogIseLkL89xbkjLyhaTsdt5nd9jEPdUqSOaNq++Za4rtxOerp4TDVVYaBDnTJifm1FcyvN5TJ+Xl//M1OfDcE7L+9o9J45XXSjG+Y0zVBJ2Tr4UTZ1s4iA9nGPGo6Hcff1hObHsNx//iCAU6B0zr6b37pT6KALkw0ML02SZO+Up34rjT2h8wyZdE/Z3y3OkY4G0znskYT732mH74ZcVHf0/KGtfpwinAdOFpjajxgV5p2fWMHP7Vd3X8Lr39C5CyizNtA0PRtk5auZkFchykYIZ6+tffgwpnh9Re+0kpXrEJB85hFzPbR7x1LOLebi+PHklgraNn72vS/urPZASnheoY9uJhDW5PG5hn9ruS0wItUl8MT9AU/ct6OmW6U2p5fmkni+/OwHvPvNgGdzso07qfvWnwrFh60zGeX9180ueUyThTlOmXzQftx6H0+zWV0231WVWXRIvSKL8ZXFJVLbXLlknN0qVgBIulGM+xAui1oafkjtghHALWc6pF2o4ckTP42Hv36dM48xp7BewXnQeFFeKMXe+4dipES4ma5Stwrv8iGHBkdwRPpzxz4ACOZW6GZJSrPmLaCqSrRXq/tB3Hjknn8aO62E2gaLW0BB+O5+mQbl08pU6aWh5/a5tEcG53HOeX6zhzKjnVlZHRQB5GVoqPvvBEz+rGFbhfgFMowThRbgIbmAY62qQL9Wk7uBezoqOYNeA8F+KUD5xJyqUZaF0dTsLE9Wwc1VFFVbWwplltle1KTCFgoK1Fek4enmD2mWAubsekevXFuq/AjQ/ViAl8RrTjII449hB4xotGUFeYEcegAvF+YY6vfPexd2E3j3NtSKwdZ2Maw/k55csvkorl66QQp22GY0Xom6QeMNePg+u6Dr0tA82HgS8l74hUIi516N4Xo+cIvm2Aw9iyynDKsq9Mo/sAoIL3pvdE9X/UOmO3Ag7Li9c14ktp6yQ2bym+eVCFuuHQOYzXJGYI4zgRdOj0YRwgt08PhOOXzXTAuccBKsD1hWJ8eyKEtNyo6Hb4ZI80DMOiLm1bQ7kDGbdmmUhJHfKFWirLAeN2LFoP4AMy7vIYh+l45HPdKtxnv4uoDL5igp3W7Ucy6RifR0eXYe3Da33F+G04x3+oQwb5TXCPC1WvxodrwCA9x9CgYEm27dWjnb2qMI6tML5zECzGWVnedGhLEu1KDUPodI8ju1ymDVUuwic7eWJrNpakUQkcgpdG+4biQNb1QRhPtc+TxzSMH5a8dwzAaiWlLdyR02C5gQSH6iASZW564UtPUGl3nYT1Qoqg4tliHkxnESZeJmUAVhHKcNj52Y55WAc6W7llhzK2RTKseNmh8MP/rM9NOnXShmXHVqtD/MSxESgWhY7WW5Xs6D5PSGCnIbPiDlPqs7kJiwOSRxwQKz0lle+W84LZdfLJcFKvc2UAzOXavqUAAANeSURBVJRtzf1Ep12cn22iUxPW1RkUjp99pSqGSb2O0aPAs6AIFjqeF8+Ji1wd6Bwv+2phSglbxxwIuy6QIx9uxNKNeAlq08lE+Z8Lq/65+ftmF8fqz4gBMDtn4KDOZDa6oY/1xphgTWnpw89cWmfbo0QHk7zjgA1jzTKOT1Hkv3o+Tqy1XoBMoN4xBltM51ytJwtp+nEQ+oUxQ3d6dzreu8Pc9355oRS0a7A4V3izcmUa5nG2zi+dn59fvn7xMn5DUawlzQUGULFk5lZAfvBk/DLqHQ4Wrm9xw43jMpBZPnwm0Vc7aifSNK5OPnw5cp3lp3nnBurwteSUPGnhnZUWLydj+sW2AhiSlcKn1HxeSGcn5fSef1Sp+TrGy/vC+6aYVU+LnljI5WSsnDDH1/JwiJvPlDkvQ7Gzcs+4vLlbRNvry2cLU1XZ8YRNnsNkYzzRifpseVr96t+u/GX4lTsDP6dfIQzxvSHD58df/WvF9jkNylOmqmN8wnLOoHfHYZ7OKHeu7vB845zpnJr6pWMe7vpOVQ6ju+MzvdvlK8Mdx+/eL52f32yn9cvvg/ObsRno9KvuZgaZVJN1bSbW1Hczyeds004Wf7pDaMoWTTrop0z9PkWYDImpqnAuac8ljVMPpPUm9z47UXMiTgS8vzezNQby5pMXALudU4Xng+Ns051t/HzlGv+zRcB38ne2mZj4BgGDgEHAIDDHEIC0ahjAHOszU12DgEHAIDBbCBgGMFtImnwMAgYBg8AcQ8AwgDnWYaa6BgGDgEFgVhDA0othALOCpMnEIGAQMAjMPQQMA5h7fWZqbBAwCBgEZo6AWQSeOYYmB4OAQcAgMCcRMCqgOdltptIGAYOAQWDmCJgZwMwxNDkYBAwCBoG5ioBZA5irPWfqbRAwCBgEZoKAUQHNBD2T1iBgEDAIzGEEjApoDneeqbpBwCBgEJgJAmYGMBP0TFqDgEHAIDCHETAzgDnceabqBgGDgEFghgiYReAZAmiSGwQMAgaBOYmAUQHNyW4zlTYIGAQMArOCgJkBzAqMJhODgEHAIDDHEDBrAHOsw0x1DQIGAYPAbCFgVECzhaTJxyBgEDAIzDEEzAxgjnWYqa5BwCBgEJgtBMwMYLaQNPkYBAwCBoG5hQAmAPL/AVnocnBXeJ8CAAAAAElFTkSuQmCC" alt="Chromasmith" class="lib-logo-img"></div>
       <div class="lib-logo-gap"></div>
       <!-- Single search feature, one icon: plain filename/keyword search and AI/CLIP semantic
-           search (e.g. "a dog on a beach") both live in this one box — Enter triggers AI search
-           when a plain-text match comes up empty (runClipTextSearch, wired below). Per explicit
-           decision, there is no separate AI-search button/icon: two search icons read as two
-           features when there's really only one. -->
+           search (e.g. "a dog on a beach") both live in this one box — typing filters live
+           (plain match), and Enter with non-empty text ALWAYS also runs the AI/CLIP semantic
+           search (runClipTextSearch, wired below), not only when the plain match is empty.
+           HANDOVER §3.11 — this comment previously claimed the empty-match condition. Per
+           explicit decision, there is no separate AI-search button/icon: two search icons read
+           as two features when there's really only one. -->
       <div class="lib-search-wrap">
         ${ic('search', 14)}
         <input id="lib-search" placeholder="Search name, keyword, or filter" />
@@ -1477,9 +1493,11 @@
         <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size">
         ${ic('zoomIn',12)}
       </div>
-      <!-- Flag row: rates whichever photo is open in the Editor, or the first of a multi-
-           selection — same window.chromasmithToggle*() bridge the Editor's own top-bar flag
-           buttons already use, so the two stay in sync automatically. -->
+      <!-- Flag row: rates state.openedPath — whichever single photo is open in the Editor —
+           same window.chromasmithToggle*() bridge the Editor's own top-bar flag buttons already
+           use, so the two stay in sync automatically. HANDOVER §3.11 — this comment previously
+           claimed a multi-selection fallback; chromasmithToggleFlag/Favorite (below) read
+           state.openedPath only and ignore state.selected entirely. -->
       <div class="lib-flagrow" id="lib-flagrow">
         <button class="lib-btn lib-btn-icon" id="lib-flag-reject" title="Reject">${ic('close',15)}</button>
         <button class="lib-btn lib-btn-icon" id="lib-flag-pick" title="Pick">${ic('flagGreen',15)}</button>
@@ -1638,7 +1656,11 @@
       <div class="lib-side-resizer" id="lib-side-resizer"></div>
       <div class="lib-side-tabs">
         <button class="lib-side-tab on" id="lib-side-tab-library">Library</button>
-        <button class="lib-side-tab" id="lib-side-tab-develop" title="Develop — not yet available">Develop</button>
+        <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
+             performs a real navigation (closes the Library, same as the header button / L key).
+             The wiring is correct — Develop simply IS the editor you land back in — so the
+             stale "not yet available" title was the lie, not the handler. -->
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop">Develop</button>
       </div>
       <div id="lib-collections"></div><div id="lib-tree"></div>
     </div>
@@ -3096,14 +3118,21 @@
     const isExpanded = state.expanded.has(path);
     // Chevron rotates rather than swapping ▾/▸ glyphs — same mechanism as the editor's
     // .msk-group-chev, so a leaf's permanently-empty chevron slot doesn't need its own case.
-    row.innerHTML = `<span class="lib-tree-chev${isExpanded ? ' open' : ''}">${ic('chevron', 11)}</span>`
+    row.innerHTML = `<span class="lib-tree-chev${isExpanded ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`
       + `<span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)">${ic('folder', 13)}</span>`
       + `<span>${baseName(path) || path}</span>`;
-    row.onclick = async (e) => {
+    // Chevron: expansion ONLY — no folder load. Row body: load ONLY — no expansion toggle.
+    // Same split the date tree already uses (see its own onclick wiring, above) — merging
+    // them here was the exact bug that made peeking at a folder's children trigger a full load.
+    row.querySelector('[data-chev-toggle]').onclick = async (e) => {
       e.stopPropagation();
       if (state.expanded.has(path)) state.expanded.delete(path); else state.expanded.add(path);
-      await openFolder(path);
       await renderTree();
+    };
+    row.onclick = async (e) => {
+      e.stopPropagation();
+      await openFolder(path);
+      await renderTree(); // openFolder() doesn't re-render the tree itself — needed for the .on highlight
     };
     wrap.appendChild(row);
     if (isExpanded) {
@@ -5311,7 +5340,9 @@
     });
     const se = document.getElementById('lib-search');
     if (se) se.value = state.search || '';
-    if (typeof updateFilterChips === 'function') updateFilterChips();
+    // HANDOVER §3.10: this called updateFilterChips(), which never existed — typeof-guarded so
+    // it silently no-op'd every time instead of throwing. syncFilterUI is the real function.
+    syncFilterUI();
   }
   function renderViewsMenu() {
     const sel = document.getElementById('lib-views');
@@ -5427,12 +5458,15 @@
   // Bug #2 fix: discoverable Info-panel trigger — window.__libInfo(true) already existed and
   // worked, it just had no button anywhere pointing at it. Uses the same _kbCursor/openedPath/
   // selected fallback renderInfoPanel already reads, so no new "what's the target" logic needed.
-  overlay.querySelector('#lib-info-btn').onclick = () => window.__libInfo(true);
+  // HANDOVER §3.3: was hardcoded to `true`, so a second click couldn't close the panel it just
+  // opened — only the I key (which does toggle, below) could. Toggle here too.
+  overlay.querySelector('#lib-info-btn').onclick = () => window.__libInfo(!state.showInfo);
   function toggleExpandedView(force) {
     state.expanded_view = force !== undefined ? force : !state.expanded_view;
     overlay.classList.toggle('full', state.expanded_view);
     document.body.classList.toggle('lib-full', state.expanded_view);
     syncDockPadding();
+    syncListViewAvailability(); // HANDOVER §3.12 — docked-ness just changed, re-sync the list button
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
   window.chromasmithToggleExpandedView = () => { if (state.open) toggleExpandedView(); }; // menu-bar "Toggle Full Library" — no-op if the Library isn't even open
@@ -5548,6 +5582,24 @@
     if (!state.open) return;
     const t = e.target;
     if (t && t.closest && t.closest('input,textarea,[contenteditable]')) return;
+    // HANDOVER §3.5: the sort menu, gear menu and filters panel each closed on outside click
+    // but ignored Escape entirely. Close whichever transient layer is open and stop — placed
+    // BEFORE the full-window-exit Escape below (:5719ish) so Escape dismisses the topmost menu
+    // first rather than closing the whole Library out from under it.
+    if (e.key === 'Escape') {
+      const sortMenuEl = document.getElementById('lib-sort-menu');
+      const gearMenuEl = document.getElementById('lib-view-menu');
+      const filtersPanelEl = document.getElementById('lib-filters-panel');
+      if (sortMenuEl && sortMenuEl.classList.contains('open')) { sortMenuEl.classList.remove('open'); e.preventDefault(); return; }
+      if (gearMenuEl && gearMenuEl.classList.contains('open')) { gearMenuEl.classList.remove('open'); e.preventDefault(); return; }
+      if (filtersPanelEl && filtersPanelEl.classList.contains('open')) {
+        filtersPanelEl.classList.remove('open');
+        const filtersBtnEl = document.getElementById('lib-filters-btn');
+        if (filtersBtnEl) filtersBtnEl.classList.remove('active');
+        e.preventDefault();
+        return;
+      }
+    }
     // Own early-return branch, same pattern as the Compare-mode branch below — Quick Look's
     // arrows/space/escape/enter/rating-flag keys must never also fall through to the grid's
     // OWN cursor-movement handling further down.
@@ -5708,6 +5760,7 @@
     FILTER_SELECT_IDS.forEach((id) => { const sel = document.getElementById(id); if (sel) sel.value = 'all'; });
     state.typeFilter = 'all'; state.cameraFilter = 'all'; state.lensFilter = 'all'; state.isoFilter = 'all';
     state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all'; state.facesFilter = 'all';
+    state.ratingFilter = 'all'; // HANDOVER §3.9: the <select> was reset but this field wasn't
     const searchEl = document.getElementById('lib-search');
     if (searchEl) searchEl.value = '';
     state.search = '';
@@ -5814,9 +5867,19 @@
 
   // ── view options: view mode, sort, thumb size, metadata display, source ─────────────────
   const viewSeg = overlay.querySelector('#lib-viewmode-seg');
-  function syncViewSeg() { viewSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.viewMode)); }
+  const listViewBtn = viewSeg.querySelector('[data-v="list"]');
+  // HANDOVER §3.12: renderGrid's own isList = viewMode==='list' && !docked (the docked 340px
+  // strip really can't show a table) is correct — the bug was the BUTTON claiming an effect it
+  // can't have. Disable it while docked instead of leaving it clickable-but-inert.
+  function syncListViewAvailability() {
+    const docked = document.body.classList.contains('deskx') && !overlay.classList.contains('full');
+    listViewBtn.disabled = docked;
+    listViewBtn.title = docked ? 'List view (unavailable while docked — expand the Library first)' : 'List view';
+  }
+  function syncViewSeg() { viewSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.viewMode)); syncListViewAvailability(); }
   viewSeg.querySelectorAll('button').forEach((b) => {
     b.onclick = () => {
+      if (b.disabled) return;
       if (state.viewMode === 'compare') exitCompareMode();
       state.viewMode = b.dataset.v; localStorage.setItem('chromasmith_lib_view', state.viewMode); syncViewSeg(); renderGrid();
     };
@@ -5970,6 +6033,16 @@
   // an ancestor's own rule, which is why the resize handle visibly dragged but the column never
   // actually moved. ──
   const sideEl = overlay.querySelector('#lib-side');
+  // HANDOVER §3.6: sidebar rows are role="button" divs (added at their template sites), so they
+  // need Enter/Space to behave like a real button would. One delegated listener instead of
+  // per-row wiring — new rows (folder tree, keyword tree, collections) inherit it for free.
+  sideEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target.closest('[role="button"]');
+    if (!target || !sideEl.contains(target)) return;
+    e.preventDefault();
+    target.click();
+  });
   const sideResizer = overlay.querySelector('#lib-side-resizer');
   const savedSideW = parseInt(localStorage.getItem('chromasmith_lib_side_w'), 10);
   if (savedSideW >= 150 && savedSideW <= 420) overlay.style.setProperty('--lib-side-w', savedSideW + 'px');
@@ -5989,6 +6062,10 @@
   // Library/Develop tabs — Develop just switches back to the editor (the same toggle the
   // header's own library button / "L" shortcut already uses), not a new mode.
   overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.open) toggleLibrary(); };
+  // HANDOVER §3.4: #lib-side-tab-library previously had a static `on` class and no handler at
+  // all — harmless while it's the only place you can already be, but a real button should do
+  // *something* when clicked rather than silently no-op. It's already the active view.
+  overlay.querySelector('#lib-side-tab-library').onclick = () => {};
 
   // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
   // #lib-sort-dir button — reusing their own handlers keeps grid view and list view unable to
@@ -6175,7 +6252,7 @@
   function sidebarSection(key, label, bodyHtml, opts = {}) {
     const open = sidebarSecOpen.has(key);
     const count = opts.count != null && opts.count !== '' ? `<span class="lib-coll-count">${opts.count}</span>` : '';
-    return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}">
+    return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}" role="button" tabindex="0" aria-expanded="${open}">
         <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>${label}</span>${count}
       </div>${open ? bodyHtml : ''}`;
   }
@@ -6539,7 +6616,7 @@
       if (!byParent.has(key)) byParent.set(key, []);
       byParent.get(key).push(n);
     }
-    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span>`;
+    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`;
     const renderLevel = (parentKey) => {
       const kids = (byParent.get(parentKey) || []).slice().sort((a, b) => a.leaf.localeCompare(b.leaf));
       return kids.map((n) => {
@@ -6873,7 +6950,7 @@
   // "All Photos" above it — moved there by renderCollections()'s own assembly order below.
   function reviewRowHtml() {
     return catalogCounts.blurry ? `
-      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'blurry' ? ' on' : ''}" data-catalog="blurry" title="Photos flagged as possibly out of focus — review, never auto-deleted">
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'blurry' ? ' on' : ''}" data-catalog="blurry" role="button" tabindex="0" title="Photos flagged as possibly out of focus — review, never auto-deleted">
         <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs Review</span>
         <span class="lib-coll-count">${catalogCounts.blurry}</span>
       </div>` : '';
@@ -6891,7 +6968,7 @@
   }
 
   function catalogSectionHtml() {
-    return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all">
+    return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all" role="button" tabindex="0">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">${catalogCounts.all || ''}</span>
       </div>`;
@@ -8567,11 +8644,17 @@
     }]);
 
     const menu = document.createElement('div');
+    // HANDOVER §3.7: this popover had no class, id or role — invisible to assistive tech and
+    // unreachable by keyboard. The confirmModal each item already goes through is fine; this is
+    // just addressability for the trigger itself.
+    menu.setAttribute('role', 'menu');
     menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
       + 'border-radius:7px;padding:4px;min-width:220px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
       it.textContent = label;
+      it.setAttribute('role', 'menuitem');
+      it.tabIndex = 0;
       it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
       it.onmouseenter = () => { it.style.background = 'var(--bdr)'; };
       it.onmouseleave = () => { it.style.background = ''; };
@@ -8589,7 +8672,7 @@
     const host = document.getElementById('lib-collections');
     if (!host) return;
     const collectionsBody = COLLECTIONS.map((c) => `
-      <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}">
+      <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}" role="button" tabindex="0">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
       </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + rawVideoShortcutRows();
@@ -8705,13 +8788,20 @@
       };
     }
     host.querySelectorAll('.lib-tree-row[data-kw-scope]').forEach((row) => {
-      row.onclick = (e) => {
-        e.stopPropagation();
-        const toggleKey = row.dataset.kwToggle;
-        if (toggleKey) {
+      // Chevron: expansion ONLY, no catalog navigation — same split the date tree and folder
+      // tree use. Row body: navigation ONLY, no expansion toggle.
+      const kwChev = row.querySelector('[data-chev-toggle]');
+      const toggleKey = row.dataset.kwToggle;
+      if (kwChev && toggleKey) {
+        kwChev.onclick = (e) => {
+          e.stopPropagation();
           const id = parseInt(toggleKey, 10);
           if (kwExpanded.has(id)) kwExpanded.delete(id); else kwExpanded.add(id);
-        }
+          renderCollections();
+        };
+      }
+      row.onclick = (e) => {
+        e.stopPropagation();
         openCatalogView(row.dataset.kwScope);
       };
       // Drag-to-tag: same contract the album rows use (application/x-chromasmith-paths), just

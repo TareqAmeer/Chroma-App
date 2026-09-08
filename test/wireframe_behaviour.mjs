@@ -487,15 +487,36 @@ test.describe('sidebar', () => {
   });
 
   test('folder tree: a chevron expands WITHOUT loading the folder', async ({ lib: { page } }) => {
-    // KNOWN DEFECT (HANDOVER #4): buildTreeNode (library-ui.js:3102-3107) wires ONE row.onclick
-    // that toggles expansion AND calls openFolder() AND re-renders — the chevron has no
-    // handler of its own. So peeking at a folder's children triggers a full load, which is the
-    // exact bug the date tree fixed and documented at :6475-6481. Asserting the correct split.
+    // HANDOVER §3.2, now fixed (buildTreeNode, library-ui.js): the chevron previously shared
+    // ONE row.onclick with the row body that toggled expansion AND called openFolder() AND
+    // re-rendered — peeking at a folder's children triggered a full load, same bug the date
+    // tree already fixed. Asserted on catalogQuery, NOT listDir: expanding a never-before-seen
+    // node legitimately costs exactly one list_dir call either way (that's how its children get
+    // discovered at all, see listDirCached) — that call happens whether or not the fix is
+    // applied, so it can't distinguish the bug. openFolder() is what's heavy (catalog_add_root +
+    // catalog_scan + catalog_query) and what must NOT fire from a chevron click.
     const chev = page.locator('#lib-tree .lib-tree-chev').first();
     if (await chev.count() === 0) test.skip(true, 'no folder tree rendered (no root set in this mock state)');
     const c0 = await counts(page);
     await chev.click();
-    expect((await counts(page)).listDir, 'a folder chevron click must not load the folder').toBe(c0.listDir);
+    expect((await counts(page)).catalogQuery, 'a folder chevron click must not load the folder').toBe(c0.catalogQuery);
+  });
+
+  test('keyword tree: a chevron expands WITHOUT navigating', async ({ lib: { page } }) => {
+    // Companion to the folder-tree test above — HANDOVER §3.2 covers all three trees. Before
+    // the fix, keywordsSectionHtml's row.onclick (library-ui.js:8707-8716) toggled kwExpanded
+    // AND called openCatalogView() in one handler; expanding "Travel" to see "Iceland" would
+    // also navigate the catalog scope to Travel. The ?libcat=1 mock (library-ui.js:313-318)
+    // seeds a two-level tree (Travel > Iceland) specifically so this nesting is testable.
+    const kwRoot = page.locator('[data-kw-tree-toggle]');
+    if (await kwRoot.count() === 0) test.skip(true, 'no keyword tree rendered in this mock state');
+    await kwRoot.click(); // expand the "Keywords" root section itself first
+    const travelChev = page.locator('.lib-tree-row[data-kw-scope] [data-chev-toggle]').first();
+    if (await travelChev.count() === 0) test.skip(true, 'no expandable keyword node in this mock state');
+    const rows0 = await page.locator('.lib-tree-row[data-kw-scope]').count();
+    await travelChev.click();
+    await expect(page.locator('.lib-tree-row[data-kw-scope]')).not.toHaveCount(rows0); // Iceland appeared
+    await expect(page.locator('.lib-tree-row[data-kw-scope].on'), 'a chevron click navigated').toHaveCount(0);
   });
 
   test('drive volume rows are display-only', async ({ lib: { page } }) => {
