@@ -1,4 +1,8 @@
-// Config for the @playwright/test-based suites ONLY (currently test/wireframe_behaviour.mjs).
+// Config for the @playwright/test-based suites ONLY (test/wireframe_behaviour.mjs,
+// test/editor_wireframe_behaviour.mjs). Widen testMatch here BEFORE writing a new *_behaviour.mjs
+// file — a file that doesn't match this regex runs zero tests and exits 0, which reads exactly
+// like a passing suite. This bit Editor tooling planning once (2026-09-08): the plan called for
+// a new editor_wireframe_behaviour.mjs and this regex would have silently never run it.
 //
 // ⚠️ Every OTHER test in test/ is a plain `node test/foo.mjs` script driving raw `playwright`
 // (chromium.launch()), not this runner — see package.json's script list. Do not point
@@ -12,7 +16,7 @@ import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './test
 
 export default defineConfig({
   testDir: './test',
-  testMatch: /wireframe_behaviour\.mjs$/,
+  testMatch: /wireframe_behaviour\.mjs$|editor_wireframe_behaviour\.mjs$/,
   // Interactions mutate localStorage; workers must not share a profile or a section-collapse
   // test would race a theme test. Playwright gives each worker its own context by default —
   // this just keeps the count low enough that the shared static server isn't the bottleneck.

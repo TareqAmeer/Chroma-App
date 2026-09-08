@@ -14,6 +14,7 @@ Usage:
     python3 test/verify.py --full       # also run the Playwright behaviour suite (~5-8 min)
     python3 test/verify.py --editor     # also run editor_wireframe_diff.mjs (both themes)
     python3 test/verify.py --tail 40    # show more than the default 20 lines on a failing gate
+    python3 test/verify.py --editor-ux  # print test/editor_ux_spec.json as a done/open checklist
 
 Exit code is 0 only if every gate that ran passed — safe to use in a script or as a pre-commit
 check the way the existing githooks already do for the individual npm scripts.
@@ -23,6 +24,7 @@ a failure — `npm run wireframe:test` etc. still exist and print everything. Th
 "did anything break" loop, where a one-line PASS per gate is all you need 9 times out of 10.
 """
 import argparse
+import json
 import subprocess
 import sys
 import time
@@ -43,6 +45,31 @@ EDITOR_GATE = ("editor:wireframe-test", ["node", "test/editor_wireframe_diff.mjs
 FULL_GATE = ("behaviour:test", ["npx", "playwright", "test", "--config=playwright.config.mjs"])
 
 
+def print_editor_ux_checklist():
+    """Prints test/editor_ux_spec.json as a done/open checklist grouped by category, so 'is item
+    3.4.8 finished' is a one-glance answer instead of re-reading the user's original 40-item list
+    or re-deriving status from memory. Does not run any gate — pure report."""
+    spec_path = ROOT / "test" / "editor_ux_spec.json"
+    spec = json.loads(spec_path.read_text())
+    items = spec["items"]
+    by_cat = {}
+    for item_id, d in items.items():
+        by_cat.setdefault(d["category"], []).append((item_id, d))
+    order = ["bug", "topbar", "context-menu", "library-sidebar", "looks-panel"]
+    counts = {"open": 0, "fixed": 0, "backlog": 0}
+    for cat in order:
+        rows = by_cat.get(cat, [])
+        if not rows:
+            continue
+        print(f"\n{cat}")
+        for item_id, d in sorted(rows, key=lambda kv: kv[0]):
+            mark = {"open": " ", "fixed": "x", "backlog": "-"}.get(d["status"], "?")
+            counts[d["status"]] = counts.get(d["status"], 0) + 1
+            print(f"  [{mark}] {item_id:<8} {d['source'][:88]}")
+    total = sum(counts.values())
+    print(f"\n{counts['fixed']} fixed, {counts['open']} open, {counts['backlog']} backlog  ({total} total)")
+
+
 def run(label, cmd, tail_lines):
     t0 = time.time()
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
@@ -58,7 +85,12 @@ def main():
     ap.add_argument("--full", action="store_true", help="also run the Playwright behaviour suite")
     ap.add_argument("--editor", action="store_true", help="also run editor_wireframe_diff.mjs")
     ap.add_argument("--tail", type=int, default=20, help="lines of output to show for a failing gate (default 20)")
+    ap.add_argument("--editor-ux", action="store_true", help="print test/editor_ux_spec.json as a done/open checklist and exit (no gates run)")
     args = ap.parse_args()
+
+    if args.editor_ux:
+        print_editor_ux_checklist()
+        sys.exit(0)
 
     # Stray Chromium/preview-server processes from ad-hoc probe scripts (a very real failure
     # mode discovered while building this: 9 leftover processes from earlier one-off debugging

@@ -5,31 +5,23 @@
 // prior to this file was a code read, never a driven comparison.
 //
 // Loads the literal wireframe (chromasmith-design/project/Editor (Developer) View.dc.html) and
-// the real app (chromasmith-22.html?deskx=1, the desktop one-tool-rail layout) side by side at
-// the same viewport, in both themes, and reports a computed-style mismatch table + screenshots.
+// the real app (desktop/dist/index.html?libtest=1&deskx=1) side by side at the same viewport, in
+// both themes, and reports a computed-style mismatch table + screenshots.
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
   toRecords, writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
+import { loadAllowlist, isAccepted, hardGate } from './wireframe_checks_lib.mjs';
 
 const REPORT_PATH = 'test/output/editor_wireframe_diff_report.json';
-// ⚠️ 2026-09-08: this used to gate on REGRESSIONS ONLY — compare against the previous run's
-// report, then overwrite that same report in the same run, so a new defect failed exactly once
-// and read as "persisting" (exit 0) forever after; on a clean checkout the report doesn't exist,
-// recheck() returns null, and it always exited 0. This is the EXACT bug found and fixed in
-// Library's wireframe_inventory.mjs — same root cause, same fix, applied here before Editor
-// alignment work starts so the same "9 fixed" -> "14 more reported" trust collapse can't repeat.
-// The ~59-item backlog this file already had is seeded verbatim (exact string match, not a
-// pattern) into editor_wireframe_accepted.json as explicitly UNTRIAGED — not silently accepted
-// as fine, just not re-litigated by this tooling-only pass. Remove an entry once its item is
-// actually addressed or confirmed intentional.
+// Findings are ZONE-qualified as `[zone] [theme] label: prop — ...` so the shared allowlist's
+// zone-scoped matching (wireframe_checks_lib.mjs) can't let a topbar waiver silence an identical
+// rail finding — see that file's own comment for the Library bug this already caused once.
 let ACCEPTED = [];
-try { ACCEPTED = JSON.parse(await readFile('test/editor_wireframe_accepted.json', 'utf8')); } catch { /* none yet */ }
-function isAccepted(finding) {
-  return ACCEPTED.some((a) => a.exact ? finding === a.match : finding.includes(a.match));
-}
+try { ACCEPTED = loadAllowlist(JSON.parse(await readFile('test/editor_wireframe_accepted.json', 'utf8'))); } catch { /* none yet */ }
+
 const ROOT = process.cwd();
 const server = createServer(async (req, res) => {
   try {
@@ -45,19 +37,19 @@ await new Promise((r) => server.on('listening', r));
 const port = server.address().port;
 
 const VIEWPORT = { width: 1440, height: 900 };
-// wireframe selector -> [app selector, human label]. One row per topbar/rail/panel element
-// named in UI_SPEC.md's Editor zones.
+// wireframe selector -> { app: appSelector, label, zone }. One row per topbar/rail/panel element
+// named in UI_SPEC.md's Editor zones. `zone` drives allowlist scoping (see ACCEPTED above).
 const PAIRS = {
-  '.topbar': ['#fx-deskbar', 'topbar'],
-  '.tb-left .undogrp': ['#fx-deskbar', 'undo/redo cluster'], // app has no wrapper box — see NOTE below
-  '.zoomctl': ['#fx-zoom-ctrl', 'zoom control'],
-  '#btn-tools': ['#fx-tools .fx-db', 'Tools button'],
-  '#btn-allfx': ['.js-allfx', 'All FX button'],
-  '.btn-export': ['#btn-fx-export, [onclick*="exportFX"]', 'Export button'],
-  '.rail': ['#fx-toolrail', 'tool rail'],
-  '.toolpanel': ['.fx-panel', 'tool panel'],
-  '.filmstrip': ['#lib-overlay', 'filmstrip (docked library)'],
-  '.statusbar': ['#fx-deskbar', 'status bar — NO EQUIVALENT, see NOTE'],
+  '.topbar': { app: '#fx-deskbar', label: 'topbar', zone: 'topbar' },
+  '.tb-left .undogrp': { app: '#fx-deskbar', label: 'undo/redo cluster', zone: 'topbar' }, // app has no wrapper box — see NOTE below
+  '.zoomctl': { app: '#fx-zoom-ctrl', label: 'zoom control', zone: 'zoom' },
+  '#btn-tools': { app: '#fx-tools .fx-db', label: 'Tools button', zone: 'topbar' },
+  '#btn-allfx': { app: '.js-allfx', label: 'All FX button', zone: 'topbar' },
+  '.btn-export': { app: '#btn-fx-export, [onclick*="exportFX"]', label: 'Export button', zone: 'topbar' },
+  '.rail': { app: '#fx-toolrail', label: 'tool rail', zone: 'rail' },
+  '.toolpanel': { app: '.fx-panel', label: 'tool panel', zone: 'panel' },
+  '.filmstrip': { app: '#lib-overlay:not(.full)', label: 'filmstrip (docked library)', zone: 'filmstrip' },
+  '.statusbar': { app: '#fx-statusbar', label: 'status bar', zone: 'statusbar' }, // app equivalent added in Phase F — until then this is a real "missing" finding, not a placeholder mapping
 };
 const PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight',
   'backgroundColor', 'color', 'borderRadius', 'borderColor', 'borderWidth', 'boxShadow', 'height'];
@@ -66,6 +58,75 @@ function near(a, b) {
   const na = parseFloat(a), nb = parseFloat(b);
   if (!isNaN(na) && !isNaN(nb) && /px$/.test(a) && /px$/.test(b)) return Math.abs(na - nb) <= 1;
   return a === b;
+}
+// Blink re-serializes `BlinkMacSystemFont` in a font stack as `"system-ui"`, so a wireframe stack
+// naming BlinkMacSystemFont and an app stack naming system-ui can be the SAME stack reported as
+// different strings. Normalize before comparing so that isn't a permanent false finding.
+function normFont(f) { return (f || '').replace(/BlinkMacSystemFont/g, 'system-ui'); }
+
+// ── Authored-property filter ────────────────────────────────────────────────────────────────
+// The wireframe deliberately does not link _ds/tokens/base.css (the only file setting
+// line-height), so it renders every element at the browser default line-height:normal. Diffing
+// PROPS unconditionally therefore reports a permanent, unfixable "normal vs 24px" finding on
+// every zone — 12 of the 59 pre-existing findings were exactly this. Rather than hand-listing
+// line-height as a permanent exception (a hand-list is itself an unfalsifiable constant that
+// drifts the moment the wireframe is re-exported — the "check that always passes" class,
+// HANDOVER_EDITOR.md §4), this derives the exception from the wireframe's OWN cascade: walk its
+// stylesheets for rules matching the element (and its ancestors, for inherited properties), and
+// only assert a PROPS entry the wireframe actually declares somewhere in that chain.
+const INHERITED = new Set(['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight', 'color']);
+// Map each camelCase PROPS name to the CSS longhand(s) that would satisfy it — Chrome enumerates
+// shorthands into longhands in cssRules, so `border-bottom:1px solid X` never appears as
+// `border-color` itself but does appear as `border-bottom-color`.
+const LONGHANDS = {
+  fontFamily: ['font-family'], fontSize: ['font-size'], fontWeight: ['font-weight'],
+  letterSpacing: ['letter-spacing'], lineHeight: ['line-height'], color: ['color'],
+  backgroundColor: ['background-color', 'background'],
+  borderRadius: ['border-radius', 'border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius'],
+  borderColor: ['border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color', 'border'],
+  borderWidth: ['border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width'],
+  boxShadow: ['box-shadow'],
+  height: ['height'],
+};
+async function authoredProps(page, selectorMap) {
+  return page.evaluate(({ selectorMap, LONGHANDS, INHERITED }) => {
+    INHERITED = new Set(INHERITED);
+    function declaredOn(el) {
+      const set = new Set();
+      if (el.getAttribute && el.getAttribute('style')) {
+        for (const prop of el.style) set.add(prop);
+      }
+      for (const sheet of document.styleSheets) {
+        let rules;
+        try { rules = sheet.cssRules; } catch { continue; }
+        for (const rule of rules) {
+          if (!rule.selectorText || !rule.style) continue;
+          try { if (!el.matches(rule.selectorText)) continue; } catch { continue; }
+          for (const prop of rule.style) set.add(prop);
+        }
+      }
+      return set;
+    }
+    const out = {};
+    for (const [key, sel] of Object.entries(selectorMap)) {
+      const el = document.querySelector(sel);
+      if (!el) { out[key] = null; continue; }
+      const authored = new Set();
+      const propKeys = Object.keys(LONGHANDS);
+      for (const propKey of propKeys) {
+        const longhands = LONGHANDS[propKey];
+        let node = el, found = false;
+        do {
+          const declared = declaredOn(node);
+          if (longhands.some((lh) => declared.has(lh))) { found = true; break; }
+          node = node.parentElement;
+        } while (node && INHERITED.has(propKey) && !found);
+        if (found) authored.add(propKey);
+      }
+      out[key] = Array.from(authored);
+    }
+    return out;
+  }, { selectorMap, LONGHANDS, INHERITED: Array.from(INHERITED) });
 }
 
 async function extract(page, selectorMap) {
@@ -82,7 +143,7 @@ async function extract(page, selectorMap) {
 }
 
 // Rail item ORDER is the thing UI_SPEC.md names explicitly (Looks/Adjust/Color/Detail/Retouch/
-// Masks/Film/Frame/Export/Info) — a computed-style diff on `.rail` as a whole can't see this,
+// Crop/Masks/Film/Frame/Export/Info) — a computed-style diff on `.rail` as a whole can't see this,
 // so extract the actual visible button label sequence from both sides.
 async function railLabels(page, railSel) {
   return page.evaluate((sel) => {
@@ -92,11 +153,28 @@ async function railLabels(page, railSel) {
   }, railSel);
 }
 
+async function loadImage(page) {
+  // Copies the fixture-drop mechanism from export_harness.mjs so #fx-zoom-ctrl/#fx-tools/gear —
+  // inline display:none until a photo is open (relocatePreviewTools) — are actually measurable.
+  const buf = await readFile(path.join(ROOT, 'test/fixtures/portrait.png'));
+  const b64 = buf.toString('base64');
+  await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const file = new File([bytes], 'portrait.png', { type: 'image/png' });
+    if (typeof window.loadFXImages === 'function') await window.loadFXImages([file]);
+  }, b64);
+  await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(300);
+}
+
 const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 let mismatches = [];
 let missing = [];
 let notes = [];
 
+// Runs the whole PAIRS/rail sweep once per {theme, photoState}, tagging every finding with which
+// state produced it — the zoom-control/Tools-button pairs are meaningless without a photo loaded,
+// and everything else should hold in BOTH states.
 for (const theme of ['dark', 'light']) {
   const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
   await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
@@ -104,74 +182,102 @@ for (const theme of ['dark', 'light']) {
   await settleForCapture(wf);
   const wfSelMap = Object.fromEntries(Object.keys(PAIRS).map((k) => [k, k]));
   const wfStyles = await extract(wf, wfSelMap);
+  const wfAuthored = await authoredProps(wf, wfSelMap);
   const wfRail = await railLabels(wf, '.rail');
   await wf.screenshot({ path: `test/output/editor_wireframe_${theme}.png`, fullPage: false });
   await wf.close();
 
-  const app = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-  app.on('pageerror', (e) => console.log('[pageerror]', e.message));
-  await app.goto(`http://127.0.0.1:${port}/chromasmith-22.html?deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await app.waitForTimeout(1500);
-  await app.evaluate(() => {
-    // Dismiss the first-run "Welcome to Chromasmith" modal, unrelated to layout fidelity.
-    document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });
-  });
-  if (theme === 'light') await app.evaluate(() => { if (typeof toggleTheme === 'function' && !document.body.classList.contains('light')) toggleTheme(); });
-  await app.waitForTimeout(200);
-  await settleForCapture(app);
-  const appSel = Object.fromEntries(Object.entries(PAIRS).map(([wfSel, [appSelector]]) => [wfSel, appSelector]));
-  const appStyles = await extract(app, appSel);
-  const appRail = await railLabels(app, '#fx-toolrail');
-  await app.screenshot({ path: `test/output/editor_app_${theme}.png`, fullPage: false });
-  await app.close();
-
-  for (const [wfSel, [appSelector, label]] of Object.entries(PAIRS)) {
-    const w = wfStyles[wfSel], a = appStyles[wfSel];
-    if (!w) continue;
-    if (!a) { missing.push(`[${theme}] ${label} (${appSelector}) — not found in app`); continue; }
-    for (const p of PROPS) {
-      if (!near(w[p], a[p])) mismatches.push(`[${theme}] ${label}: ${p} — wireframe "${w[p]}" vs app "${a[p]}"`);
+  for (const photoState of ['no-photo', 'photo']) {
+    const app = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
+    app.on('pageerror', (e) => console.log('[pageerror]', e.message));
+    // ⚠️ 2026-09-08: was chromasmith-22.html?deskx=1 (repo root) — that document never loads
+    // desktop/library-ui.js, so #lib-overlay does not exist in it (the "filmstrip … not found"
+    // findings were a harness artifact). It also never sets window.__TAURI__, so
+    // _eachSection()/fxDesktopFoldImageIntoLooks() keep the 'image' rail item the real desktop
+    // app drops — an artifact rail-order finding. desktop/dist/index.html?libtest=1&deskx=1 is
+    // what library_responsive_qa.mjs already uses — ?libtest=1 stubs window.__TAURI__ AND loads
+    // library-ui.js (library-ui.js:13-15,525), fixing both with no app change. Needs
+    // `bash build-desktop.sh` first (verify.py does this).
+    await app.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await app.waitForTimeout(1500);
+    await app.evaluate(() => {
+      // Dismiss the first-run "Welcome to Chromasmith" modal, unrelated to layout fidelity.
+      document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });
+      // The rail is first built by applyFxLayout() at the main script's top-level execution
+      // (chromasmith-22.html:20427) — BEFORE library-ui.js's <script src> tag (which stubs
+      // window.__TAURI__ under ?libtest=1) has even loaded. So the FIRST rail build always sees
+      // __TAURI__ undefined and keeps the 'image' item real desktop users never get. Re-invoke it
+      // now that library-ui.js has definitely run, so the harness measures the rail the way the
+      // shipped desktop app actually builds it.
+      if (typeof applyFxLayout === 'function') applyFxLayout();
+    });
+    if (theme === 'light') {
+      await app.evaluate(() => { if (typeof toggleTheme === 'function' && !document.body.classList.contains('light')) toggleTheme(); });
+      let applied = await app.waitForFunction(() => document.body.classList.contains('light'), { timeout: 3000 }).then(() => true).catch(() => false);
+      if (!applied) {
+        // Observed intermittently (~1 in 3 runs) even with the wait above — matches this
+        // machine's documented SwiftShader/Chromium flakiness (CLAUDE.md's export_harness /
+        // video_harness section) rather than a real app defect: a re-run with no app change
+        // came back clean. One retry of the toggle itself before treating it as a real finding.
+        await app.evaluate(() => { if (typeof toggleTheme === 'function' && !document.body.classList.contains('light')) toggleTheme(); });
+        applied = await app.waitForFunction(() => document.body.classList.contains('light'), { timeout: 3000 }).then(() => true).catch(() => false);
+        if (!applied) console.log(`[warn] [${theme}/${photoState}] light theme did not apply after retry — findings this state may be spurious`);
+      }
     }
-  }
+    if (photoState === 'photo') await loadImage(app);
+    await app.waitForTimeout(200);
+    await settleForCapture(app);
+    const appSel = Object.fromEntries(Object.entries(PAIRS).map(([wfSel, p]) => [wfSel, p.app]));
+    const appStyles = await extract(app, appSel);
+    const appRail = await railLabels(app, '#fx-toolrail');
+    await app.screenshot({ path: `test/output/editor_app_${theme}_${photoState}.png`, fullPage: false });
+    await app.close();
 
-  if (wfRail && appRail) {
-    if (JSON.stringify(wfRail) !== JSON.stringify(appRail)) {
-      mismatches.push(`[${theme}] rail order/content — wireframe [${wfRail.join(', ')}] vs app [${appRail.join(', ')}]`);
+    const stateTag = `[${theme}/${photoState}]`;
+    for (const [wfSel, { app: appSelector, label, zone }] of Object.entries(PAIRS)) {
+      const w = wfStyles[wfSel], a = appStyles[wfSel];
+      const authored = wfAuthored[wfSel] || [];
+      if (!w) continue;
+      if (!a) { missing.push(`[${zone}] ${stateTag} ${label} (${appSelector}) — not found in app`); continue; }
+      for (const p of PROPS) {
+        if (!authored.includes(p)) continue; // wireframe never authors this property — assert only what it declares
+        const wv = p === 'fontFamily' ? normFont(w[p]) : w[p];
+        const av = p === 'fontFamily' ? normFont(a[p]) : a[p];
+        if (!near(wv, av)) mismatches.push(`[${zone}] ${stateTag} ${label}: ${p} — wireframe "${w[p]}" vs app "${a[p]}"`);
+      }
     }
-  } else {
-    missing.push(`[${theme}] rail labels — could not read one or both sides (wf:${!!wfRail} app:${!!appRail})`);
+
+    if (wfRail && appRail) {
+      if (JSON.stringify(wfRail) !== JSON.stringify(appRail)) {
+        mismatches.push(`[rail] ${stateTag} rail order/content — wireframe [${wfRail.join(', ')}] vs app [${appRail.join(', ')}]`);
+      }
+    } else {
+      missing.push(`[rail] ${stateTag} rail labels — could not read one or both sides (wf:${!!wfRail} app:${!!appRail})`);
+    }
   }
 }
 await b.close();
 server.close();
 
-notes.push('CAVEAT: no photo is loaded in this harness (loading a real image needs the file-drop path,');
-notes.push('  not wired up here yet) — the app hides #fx-zoom-ctrl/#fx-tools/gear until a photo is');
-notes.push('  open (relocatePreviewTools), so "zoom control"/"Tools button" mismatches above may be');
-notes.push('  comparing the wireframe against an app state that legitimately looks different, not a');
-notes.push('  real bug. Treat those two pairs as unverified until a photo-loaded pass is added.');
-notes.push('NOTE: ".statusbar" has no real app equivalent (mapped to #fx-deskbar as a placeholder) —');
-notes.push('  the Editor topbar itself doubles as the deskbar; this pair exists to be visibly wrong');
-notes.push('  until a real statusbar zone is confirmed to exist or not in the app, not silently skipped.');
-notes.push('NOTE: ".filmstrip" is mapped to "#lib-overlay" per the plan\'s finding that the wireframe\'s');
-notes.push('  filmstrip IS the docked Library overlay, not a separate #fx-filmstrip element.');
+notes.push('NOTE: every sweep now runs against desktop/dist/index.html?libtest=1&deskx=1, in both');
+notes.push('  a no-photo and a photo-loaded state (test/fixtures/portrait.png) — findings are tagged');
+notes.push('  [theme/photoState]. zoom-control findings from the no-photo state reflect');
+notes.push('  #fx-zoom-ctrl legitimately being display:none (relocatePreviewTools), not a bug.');
+notes.push('NOTE: ".statusbar" has no app equivalent yet (#fx-statusbar does not exist until the');
+notes.push('  status bar is built) — this is a real, expected "missing" finding until then.');
+notes.push('NOTE: ".filmstrip" is mapped to "#lib-overlay:not(.full)" — the wireframe\'s filmstrip IS');
+notes.push('  the docked Library overlay, not a separate #fx-filmstrip element (that element is');
+notes.push('  unused under deskx — see CLAUDE.md).');
 
 const allFindings = [...missing, ...mismatches];
-const unaccepted = allFindings.filter((f) => !isAccepted(f));
-const acceptedHit = allFindings.length - unaccepted.length;
-console.log(`editor_wireframe_diff: ${mismatches.length} style/order mismatches, ${missing.length} missing elements (${acceptedHit} allowlisted in test/editor_wireframe_accepted.json)`);
-const unaccMissing = missing.filter((f) => !isAccepted(f));
-const unaccMismatches = mismatches.filter((f) => !isAccepted(f));
-if (unaccMissing.length) { console.log('\nMissing:'); unaccMissing.forEach((m) => console.log('  ' + m)); }
-if (unaccMismatches.length) { console.log('\nMismatches:'); unaccMismatches.forEach((m) => console.log('  ' + m)); }
-if (acceptedHit) console.log(`\n  (+${acceptedHit} allowlisted findings suppressed)`);
+console.log(`editor_wireframe_diff: ${mismatches.length} style/order mismatches, ${missing.length} missing elements`);
 notes.forEach((n) => console.log(n));
+console.log('');
 
 const records = toRecords(mismatches, missing);
 const rc = await recheck(REPORT_PATH, records);
 printRecheck(rc);
 await writeReport(REPORT_PATH, records);
 
-console.log(unaccepted.length ? '\nRESULT: FAIL' : '\nRESULT: PASS');
-// HARD gate: fail on anything not explicitly allowlisted — see the comment on ACCEPTED above.
-process.exit(unaccepted.length ? 1 : 0);
+const ok = await hardGate(allFindings, ACCEPTED, null, {});
+process.exit(ok ? 0 : 1);

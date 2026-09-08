@@ -1,0 +1,49 @@
+{
+  "_readme": "Stable-ID spec for the Editor UX/wireframe alignment pass. Each item: category (bug|topbar|context-menu|library-sidebar|looks-panel), status (open|fixed|backlog), source (verbatim ask), wireframeRef (source line in the .dc.html when the wireframe governs this item, else null), check (the test/check name that will assert it once written, else null). Update status in place as work lands — do not delete entries. See HANDOVER_EDITOR.md and the approved plan for the process this file is part of.",
+  "items": {
+    "E1": {"category":"bug","status":"open","source":"scrolling and zooming very buggy when full res is enabled","wireframeRef":null,"check":"perf:test + manual full-res scroll/zoom probe","note":"Diagnosed: wheel/pan paths never set _fxPreviewInteracting (chromasmith-22.html:14930,14969-14972), unlike sliders (:9779-9788). Fix = extend existing rAF+interacting pattern to wheel/pan."},
+    "E2": {"category":"bug","status":"open","source":"reset sometimes doesn't reset the photo","wireframeRef":null,"check":"editor_wireframe_behaviour.mjs: reset-restores-defaults"},
+    "E3": {"category":"bug","status":"open","source":"reset doesn't need a check for confirmation given an undo can fix it","wireframeRef":null,"check":null},
+    "E4": {"category":"bug","status":"open","source":"when you decrease the size of the app, the photos get squeezed instead of shrinking in size","wireframeRef":null,"check":"aspect-ratio invariant (wireframe_checks_lib.mjs)"},
+    "E5": {"category":"bug","status":"open","source":"flag updates in the sidebar (library) but not in the top bar, and the top bar flagging is stuck on the previous photo when switching photos","wireframeRef":null,"check":"state-leak sweep (wireframe_checks_lib.mjs)"},
+
+    "3.1.1": {"category":"topbar","status":"open","source":"undo/redo buttons feel not aligned to the rest of the buttons","wireframeRef":".dc.html:41-43 .undogrp wrapper","check":"editor_wireframe_diff.mjs: undogrp pair"},
+    "3.1.2": {"category":"topbar","status":"open","source":"undo/redo/export/show original should be greyed out and not clickable when they cannot be used","wireframeRef":null,"check":"disabled-state audit (wireframe_checks_lib.mjs)"},
+    "3.1.3": {"category":"topbar","status":"open","source":"edit history timeline doesn't work","wireframeRef":".dc.html #history-menu","check":"dead-control probe"},
+    "3.1.4": {"category":"topbar","status":"open","source":"edit history timeline should be combined with export timeline","wireframeRef":".dc.html #history-menu","check":"editor_wireframe_behaviour.mjs: combined history menu"},
+    "3.1.5": {"category":"topbar","status":"open","source":"gamut warning button doesn't work","wireframeRef":null,"check":"dead-control probe"},
+    "3.1.6": {"category":"topbar","status":"open","source":"gamut button should be removed but can be enabled from the View menu bar","wireframeRef":".dc.html #view-menu","check":"editor_wireframe_inventory.mjs: topbar zone"},
+    "3.1.7": {"category":"topbar","status":"open","source":"zoom: remove +/-, keep the bar; double-click resets to 100%; don't show zoom size unless hovering/clicking","wireframeRef":".dc.html .zoomctl .zpct","check":"editor_wireframe_behaviour.mjs: zoom hover/dblclick"},
+    "3.1.8": {"category":"topbar","status":"open","source":"remove the three dots and move those options under a new Tools button in the menu bar","wireframeRef":".dc.html #btn-tools / #tools-menu","check":"editor_wireframe_inventory.mjs: topbar zone"},
+    "3.1.9": {"category":"topbar","status":"open","source":"move export and all fx to the right","wireframeRef":".dc.html .topbar 1fr auto 1fr grid","check":"editor_wireframe_diff.mjs: topbar pair"},
+    "3.1.10": {"category":"topbar","status":"open","source":"make sure the title is centered","wireframeRef":".dc.html .tb-title","check":"editor_wireframe_diff.mjs: topbar pair"},
+    "3.1.11": {"category":"topbar","status":"open","source":"change the icon for see original","wireframeRef":null,"check":null},
+    "3.1.12": {"category":"topbar","status":"open","source":"get rid of fit button","wireframeRef":null,"check":"editor_wireframe_inventory.mjs: topbar zone","note":"Function kept, reachable via zoom double-click (3.1.7) + a keyboard shortcut per user decision."},
+    "3.1.13": {"category":"topbar","status":"open","source":"full res button can be replaced with an icon","wireframeRef":".dc.html .ibtn","check":null},
+    "3.1.14": {"category":"topbar","status":"open","source":"clicking and holding the undo button should reset the photo","wireframeRef":".dc.html #btn-undo hold->history","check":"editor_wireframe_behaviour.mjs: hold-undo / shift-click-undo","note":"Resolved by user: hold=history (wireframe, 450ms), shift-click=reset, reset also in history dropdown, hover shows both shortcuts."},
+
+    "3.2.1": {"category":"context-menu","status":"open","source":"right click rate and flag renamed to Rate should also include hearting","wireframeRef":".dc.html #ctx-rate","check":null},
+    "3.2.2": {"category":"context-menu","status":"open","source":"right click version & edit changed to Edit and doesn't need undo option","wireframeRef":".dc.html .ctx-menu","check":null},
+    "3.2.3": {"category":"context-menu","status":"open","source":"right click Merge needs renaming to Merge (beta)","wireframeRef":null,"check":null},
+    "3.2.4": {"category":"context-menu","status":"open","source":"right click Find Faces renamed to Scan Photos, greyed out if already scanned","wireframeRef":null,"check":null,"note":"Rename ships now; greying-out backlogged (needs persisted per-photo scan state)."},
+    "3.2.5": {"category":"context-menu","status":"open","source":"right click Export should have Quick export and Export custom (opens export sidebar)","wireframeRef":".dc.html #ctx-export .sub","check":null},
+    "3.2.6": {"category":"context-menu","status":"open","source":"editor sublist rotate and flip","wireframeRef":".dc.html .ctx-menu .sub","check":null},
+    "3.2.7": {"category":"context-menu","status":"backlog","source":"right click needs to include add to album","wireframeRef":null,"check":null,"note":"Needs an albums concept to exist first."},
+    "3.2.8": {"category":"context-menu","status":"open","source":"BUG: get info popup is always in the top right corner even when scrolling; should move with scroll and be draggable","wireframeRef":null,"check":"popover anchoring (wireframe_checks_lib.mjs)"},
+
+    "3.3.1": {"category":"library-sidebar","status":"open","source":"clicking the info button opens it in the sidebar which is mostly hidden outside the screen","wireframeRef":null,"check":null},
+    "3.3.2": {"category":"library-sidebar","status":"open","source":"sidebar size can be readjusted","wireframeRef":".dc.html .filmstrip resizer","check":"editor_wireframe_behaviour.mjs: filmstrip resizer"},
+    "3.3.3": {"category":"library-sidebar","status":"backlog","source":"remove cloud button; combine recents with pick-a-folder so Google/Lightroom/recent folders/new folder are all under one button; up/down arrows open the photo instead of just moving the selection","wireframeRef":null,"check":null,"note":"Descoped from this pass: Library information-architecture change in a different file, unrelated to the rest of this work. Own pass."},
+
+    "3.4.1": {"category":"looks-panel","status":"open","source":"BUG: Raw Profile should update based on photo type, greyed out if non-RAW","wireframeRef":null,"check":"disabled-state audit"},
+    "3.4.2": {"category":"looks-panel","status":"open","source":"dropdown menu style needs changing to match the rest of the app","wireframeRef":".dc.html .select","check":"control-idiom self-consistency check"},
+    "3.4.3": {"category":"looks-panel","status":"open","source":"Apply LUT box smaller, moved under Preset section, including LUT chart button, save to library, delete, download cube","wireframeRef":".dc.html .presetbox","check":"editor_wireframe_inventory.mjs: panel zone (Looks)"},
+    "3.4.4": {"category":"looks-panel","status":"open","source":"remove Google Photos button","wireframeRef":null,"check":"editor_wireframe_inventory.mjs: panel zone (Looks)"},
+    "3.4.5": {"category":"looks-panel","status":"open","source":"Input moved right under Raw Profile as a dropdown","wireframeRef":".dc.html .presetbox","check":"editor_wireframe_inventory.mjs: panel zone (Looks)"},
+    "3.4.6": {"category":"looks-panel","status":"open","source":"BUG: Highlight Response doesn't seem to do anything to the photo","wireframeRef":null,"check":"dead-control probe"},
+    "3.4.7": {"category":"looks-panel","status":"open","source":"Highlight Response should be moved","wireframeRef":null,"check":null},
+    "3.4.8": {"category":"looks-panel","status":"open","source":"Strength should be moved under Preset, between preset filter menu and the tiles, greyed until a preset is selected","wireframeRef":".dc.html #strength-row","check":"disabled-state audit"},
+    "3.4.9": {"category":"looks-panel","status":"open","source":"Preset section should be expandable/contracted, fit 6 filters with internal scroll","wireframeRef":".dc.html .presetbox collapse + .preset-grid","check":"editor_wireframe_behaviour.mjs: preset box collapse"},
+    "3.4.10": {"category":"looks-panel","status":"open","source":"arrow keys while selecting a preset should change the preset","wireframeRef":".dc.html preset arrow-key nav","check":"editor_wireframe_behaviour.mjs: preset arrow-key nav","note":"Derive column count from the live grid (virtMetrics lesson), don't hardcode the wireframe's 3."}
+  }
+}

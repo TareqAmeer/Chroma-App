@@ -1,297 +1,92 @@
 [
   {
-    "match": "[dark] filmstrip (docked library) (#lib-overlay) — not found in app",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "filmstrip",
+    "match": "filmstrip (docked library) (#lib-overlay:not(.full)) — not found in app",
+    "exact": false,
+    "reason": "The mapping is correct (the wireframe's filmstrip IS the docked Library overlay, per editor_wireframe_diff.mjs's own note), but #lib-overlay is created by library-ui.js's initDock() only after the Library subsystem finishes its own async init — it isn't guaranteed to exist yet at the point this harness measures. Real defect risk if this persists after Library init is awaited in the harness; tracked as a harness timing gap, not a missing UI element (chromasmith-22.html has no #fx-filmstrip use under deskx — CLAUDE.md)."
   },
   {
-    "match": "[light] filmstrip (docked library) (#lib-overlay) — not found in app",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "statusbar",
+    "match": "status bar (#fx-statusbar) — not found in app",
+    "exact": false,
+    "reason": "Genuinely missing — the empty 26px status bar has not been built yet (plan Phase F). Remove this entry once #fx-statusbar exists."
   },
   {
-    "match": "[dark] topbar: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "topbar: borderColor",
+    "exact": false,
+    "reason": "Token drift, not a per-element bug: app's --bdr is rgba(255,255,255,.12) doing triple duty as panel/control/pill border; wireframe uses three distinct roles (.1 panel edges, .12 control outlines, .14 pills — chromasmith-design/project/Editor (Developer) View.dc.html lines 31,71,99,102,108,157 vs 41,43 vs 44,56,76,116,123). Fixed by introducing --bdr-panel/--bdr-ctrl/--bdr-pill in plan Phase D, one edit for all borderColor findings below."
   },
   {
-    "match": "[dark] topbar: borderColor — wireframe \"rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.1)\" vs app \"rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.12)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "topbar: height — wireframe \"48px\" vs app \"44px\"",
+    "exact": false,
+    "reason": "Real, scheduled: --deskx-topbar-h 44->48px is plan Phase F item 1, copied from Editor (Developer) View.dc.html:31."
   },
   {
-    "match": "[dark] topbar: height — wireframe \"48px\" vs app \"44px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "undo/redo cluster: borderRadius",
+    "exact": false,
+    "reason": "Real: the wireframe wraps undo/redo in a bordered .undogrp (Editor (Developer) View.dc.html:41-43) the app lacks entirely (chromasmith-22.html:1371-1372 are two bare buttons). Covers user list item 3.1.1, scheduled in plan Phase D."
   },
   {
-    "match": "[dark] undo/redo cluster: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "undo/redo cluster: borderColor",
+    "exact": false,
+    "reason": "Same root cause as the .undogrp borderRadius entry above — building the wrapper fixes both."
   },
   {
-    "match": "[dark] undo/redo cluster: backgroundColor — wireframe \"rgba(0, 0, 0, 0)\" vs app \"rgb(39, 39, 41)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "zoom",
+    "match": "zoom control: fontFamily",
+    "exact": false,
+    "reason": "Mostly a false positive: Blink re-serializes the wireframe's BlinkMacSystemFont as \"system-ui\", making the two stacks the same after normFont() normalization used elsewhere in this file — but this SPECIFIC element's app font-family comes from --mono (chromasmith-22.html:404, .fx-zoom-ctrl{font-family:var(--mono)}), which is a real, different defect: numeric readouts should use tabular-nums, not a monospace family (user list item, wireframe's own answer is Editor (Developer) View.dc.html:133 .sr-val{font-variant-numeric:tabular-nums}). Scheduled in plan Phase D."
   },
   {
-    "match": "[dark] undo/redo cluster: borderRadius — wireframe \"8px\" vs app \"0px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "Tools button: fontSize",
+    "exact": false,
+    "reason": "Real: the Tools button doesn't exist yet as specified — user list item 3.1.8 (replace the three-dot overflow with a dedicated Tools button). Currently mapped to the closest existing control (#fx-tools .fx-db) as a placeholder measurement target; will resolve once 3.1.8 ships in plan Phase E."
   },
   {
-    "match": "[dark] undo/redo cluster: borderColor — wireframe \"rgba(255, 255, 255, 0.12)\" vs app \"rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.12)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "Tools button: fontWeight",
+    "exact": false,
+    "reason": "Same root cause as the Tools button fontSize entry — placeholder mapping until 3.1.8 ships."
   },
   {
-    "match": "[dark] undo/redo cluster: height — wireframe \"32px\" vs app \"44px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "Tools button: borderColor",
+    "exact": false,
+    "reason": "Same root cause as the Tools button fontSize entry — placeholder mapping until 3.1.8 ships."
   },
   {
-    "match": "[dark] zoom control: fontFamily — wireframe \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\" vs app \"ui-monospace, \"SF Mono\", Menlo, \"Courier New\", monospace\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "All FX button: borderColor",
+    "exact": false,
+    "reason": "Token drift — same --bdr-pill root cause as the topbar borderColor entry above (Editor (Developer) View.dc.html uses .14 for pills, app's single --bdr is .12). Fixed by the same Phase D token split."
   },
   {
-    "match": "[dark] zoom control: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "topbar",
+    "match": "Export button: borderColor",
+    "exact": false,
+    "reason": "Real, expected to move: the app's Export button already uses the app's own accent (rgb(97,160,175) = #61a0af blue-mist) as its border, not the wireframe's near-black literal (rgb(11,18,21)) — this is the accent-swap decision (plan Phase D) already partially in place for this control. Will re-verify after the full palette adoption lands; if it still mismatches then it's a real border-color bug, not a token gap."
   },
   {
-    "match": "[dark] zoom control: borderRadius — wireframe \"0px\" vs app \"6px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "rail",
+    "match": "tool rail: borderColor",
+    "exact": false,
+    "reason": "Token drift — same --bdr-panel root cause as the topbar borderColor entry (rail is a panel-edge border, wireframe .1 vs app's single --bdr .12). Fixed by the same Phase D token split."
   },
   {
-    "match": "[dark] zoom control: height — wireframe \"16px\" vs app \"auto\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "panel",
+    "match": "tool panel: borderColor",
+    "exact": false,
+    "reason": "Token drift — same --bdr-panel root cause as tool rail borderColor above."
   },
   {
-    "match": "[dark] Tools button: fontSize — wireframe \"16px\" vs app \"12px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] Tools button: fontWeight — wireframe \"400\" vs app \"500\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] Tools button: borderColor — wireframe \"rgb(255, 255, 255)\" vs app \"rgba(0, 0, 0, 0)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] All FX button: borderColor — wireframe \"rgba(255, 255, 255, 0.14)\" vs app \"rgba(255, 255, 255, 0.12)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] Export button: borderColor — wireframe \"rgb(11, 18, 21)\" vs app \"rgb(97, 160, 175)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] tool rail: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] tool rail: borderColor — wireframe \"rgb(255, 255, 255) rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.1)\" vs app \"rgb(255, 255, 255) rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.12)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] tool rail: height — wireframe \"826px\" vs app \"856px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] tool panel: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] tool panel: borderColor — wireframe \"rgb(255, 255, 255) rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.1)\" vs app \"rgb(255, 255, 255) rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.12)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] tool panel: height — wireframe \"826px\" vs app \"856px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] status bar — NO EQUIVALENT, see NOTE: fontSize — wireframe \"11px\" vs app \"16px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] status bar — NO EQUIVALENT, see NOTE: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] status bar — NO EQUIVALENT, see NOTE: color — wireframe \"rgb(204, 204, 204)\" vs app \"rgb(255, 255, 255)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] status bar — NO EQUIVALENT, see NOTE: borderColor — wireframe \"rgba(255, 255, 255, 0.1) rgb(204, 204, 204) rgb(204, 204, 204)\" vs app \"rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.12)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] status bar — NO EQUIVALENT, see NOTE: height — wireframe \"26px\" vs app \"44px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[dark] rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Masks, Film, Frame, Export, Info] vs app [Image, Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info]",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] topbar: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] topbar: borderColor — wireframe \"rgb(224, 224, 224)\" vs app \"rgb(29, 29, 31) rgb(29, 29, 31) rgb(224, 224, 224)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] topbar: height — wireframe \"48px\" vs app \"44px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] undo/redo cluster: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] undo/redo cluster: backgroundColor — wireframe \"rgba(0, 0, 0, 0)\" vs app \"rgb(255, 255, 255)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] undo/redo cluster: borderRadius — wireframe \"8px\" vs app \"0px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] undo/redo cluster: borderColor — wireframe \"rgb(224, 224, 224)\" vs app \"rgb(29, 29, 31) rgb(29, 29, 31) rgb(224, 224, 224)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] undo/redo cluster: height — wireframe \"32px\" vs app \"44px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] zoom control: fontFamily — wireframe \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\" vs app \"ui-monospace, \"SF Mono\", Menlo, \"Courier New\", monospace\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] zoom control: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] zoom control: borderRadius — wireframe \"0px\" vs app \"6px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] zoom control: height — wireframe \"16px\" vs app \"auto\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] Tools button: fontSize — wireframe \"16px\" vs app \"12px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] Tools button: fontWeight — wireframe \"400\" vs app \"500\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] Tools button: borderColor — wireframe \"rgb(29, 29, 31)\" vs app \"rgba(0, 0, 0, 0)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] Export button: borderColor — wireframe \"rgb(11, 18, 21)\" vs app \"rgb(97, 160, 175)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] tool rail: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] tool rail: borderColor — wireframe \"rgb(224, 224, 224)\" vs app \"rgb(29, 29, 31) rgb(29, 29, 31) rgb(29, 29, 31) rgb(224, 224, 224)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] tool rail: height — wireframe \"826px\" vs app \"856px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] tool panel: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] tool panel: borderColor — wireframe \"rgb(224, 224, 224)\" vs app \"rgb(29, 29, 31) rgb(29, 29, 31) rgb(29, 29, 31) rgb(224, 224, 224)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] tool panel: height — wireframe \"826px\" vs app \"856px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] status bar — NO EQUIVALENT, see NOTE: fontSize — wireframe \"11px\" vs app \"16px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] status bar — NO EQUIVALENT, see NOTE: lineHeight — wireframe \"normal\" vs app \"24px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] status bar — NO EQUIVALENT, see NOTE: color — wireframe \"rgb(122, 122, 122)\" vs app \"rgb(29, 29, 31)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] status bar — NO EQUIVALENT, see NOTE: borderColor — wireframe \"rgb(224, 224, 224)\" vs app \"rgb(29, 29, 31) rgb(29, 29, 31) rgb(224, 224, 224)\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] status bar — NO EQUIVALENT, see NOTE: height — wireframe \"26px\" vs app \"44px\"",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
-  },
-  {
-    "match": "[light] rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Masks, Film, Frame, Export, Info] vs app [Image, Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info]",
-    "exact": true,
-    "reason": "Pre-existing Editor/wireframe backlog, captured verbatim 2026-09-08 when the gate was hardened from regressions-only to hard-fail — NOT yet triaged real-bug-vs-intentional (that's Editor alignment work, explicitly out of scope for this tooling-only pass). Remove this entry once the underlying item is actually addressed or confirmed intentional, not before."
+    "zone": "rail",
+    "match": "rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info]",
+    "exact": false,
+    "reason": "Justified difference, confirmed with the user 2026-09-08: keep the app's 11 items and current order. The wireframe's 10-item rail omits Crop as a mock simplification — it still has a working crop .tp-panel (Editor (Developer) View.dc.html:374) that its own rail just never links to. Do not remove Crop from the app to chase this finding."
   }
 ]
