@@ -52,6 +52,10 @@ const DURATION_RE = /^\d{1,2}:\d{2}$/;      // 0:13, 12:04, ...
 const NOISE_LABELS = new Set([
   'Sarah', 'Buddy (Dog)', 'Summer Trip', 'Portfolio', 'External SSD', 'iPhone', 'Client Work',
   'Archive T7', 'Old LaCie', 'This Mac', 'Dogs 2026', 'Travel', 'Film scans',
+  // Added once the keyword/folder trees started being expanded (tree-indentation/Folders-vs-tree
+  // checks): 'Portrait'/'Iceland' are the ?libcat=1 mock's own sample keyword leaves
+  // (library-ui.js:313-318), 'sub' is the mock list_dir's single synthetic subfolder name.
+  'Portrait', 'Iceland', 'sub',
 ]);
 // The date-tree's month/day labels are also mock sample data — the wireframe's static "March" and
 // the app's mock catalog_date_counts (August/July/December, whatever the mock happens to cover)
@@ -412,6 +416,46 @@ const scrollbarFindings = await app.evaluate((margin) => {
   return out;
 }, OVERLAY_SCROLLBAR_SAFETY_MARGIN);
 scrollbarFindings.forEach((f) => findings.push(`[sidebar] scrollbar safety margin: ${f}`));
+
+// ── "Folders" section vs. its own tree — HANDOVER 2026-09-08 item #5, confirmed by a user
+// screenshot: the folder tree (root row labelled "Photos" in this mock) renders visually AFTER
+// the Cloud section, disconnected from the "Folders" header above it, instead of appearing
+// directly under it. Root cause: `#lib-tree` (renderTree()'s target) is a DOM SIBLING of
+// `#lib-collections` in the static template (`<div id="lib-collections"></div><div id="lib-
+// tree"></div>`), and #lib-collections's own innerHTML places the "Folders" header just before
+// Cloud — so #lib-tree, always rendered last regardless of where "Folders" sits in that
+// sequence, ends up after EVERYTHING, including Cloud. Checked two ways: position (the tree
+// must appear before Cloud's own rows, not after) and indentation (the tree's root row should
+// sit further right than the "Folders" header's own chevron, to read as its child rather than a
+// second unrelated top-level row).
+{
+  const folderTreeFindings = await app.evaluate(() => {
+    const out = [];
+    const tree = document.getElementById('lib-tree');
+    const foldersHeader = document.querySelector('[data-sec-toggle="folders"]');
+    if (!tree || !foldersHeader) return out;
+    const treeRow = tree.querySelector('.lib-tree-row');
+    if (!treeRow || treeRow.getBoundingClientRect().width === 0) return out; // not rendered/expanded right now
+    const cloudHeader = document.querySelector('[data-sec-toggle="cloud"]');
+    if (cloudHeader) {
+      const treeTop = treeRow.getBoundingClientRect().top;
+      const cloudTop = cloudHeader.getBoundingClientRect().top;
+      if (treeTop > cloudTop) {
+        out.push(`the folder tree's root row (y=${Math.round(treeTop)}) sits BELOW the Cloud section header (y=${Math.round(cloudTop)}) — it should appear directly under "Folders", not after every later section`);
+      }
+    }
+    const foldersChev = foldersHeader.querySelector('.lib-tree-chev');
+    const treeChev = treeRow.querySelector('.lib-tree-chev');
+    if (foldersChev && treeChev) {
+      const fx = foldersChev.getBoundingClientRect().left, tx = treeChev.getBoundingClientRect().left;
+      if (tx <= fx + 2) {
+        out.push(`the folder tree's root chevron (x=${Math.round(tx)}) is not indented further right than the "Folders" section header's own chevron (x=${Math.round(fx)}) — reads as a second top-level row, not a child of Folders`);
+      }
+    }
+    return out;
+  });
+  folderTreeFindings.forEach((f) => findings.push(`[sidebar] Folders/tree relationship: ${f}`));
+}
 
 // ── Topbar flag-row borders — HANDOVER 2026-09-08 item #7: the wireframe's .flagbtn has NO
 // border property at all (only border-radius + a hover background); the app's flag buttons

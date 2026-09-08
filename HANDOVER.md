@@ -225,11 +225,10 @@ same day found 16 MORE real defects the tools still couldn't see — see §8 for
 full per-item root-cause breakdown. **Every one of the 16 (plus the user-reported §8 item 21) now
 has a concrete tool finding — all still UNFIXED.** That's the very next work, in the order below:
 
-1. Fix §8's 16(+1) defects. Items 3, 4, 6, 7, 8, 9, 12, 15, 16, 21 have a specific confirmed
+1. Fix §8's 16(+1) defects. Items 3, 4, 5, 6, 7, 8, 9, 12, 15, 16, 21 have a specific confirmed
    root cause (file:line + exact rule to change) — start there. Items 10/11 need a judgment call
    first (feature superset vs. bug, same question §6.2 already settled for Filters) before
-   "fixing" means anything. Item 5 needs a screenshot/pointer before a check can even be built —
-   ask before guessing at it.
+   "fixing" means anything.
 2. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
    inline chip row (Types pills + Flags & tags icon chips); the app has a slide-out `<select>`
    drawer. A real rebuild, not a bug fix.
@@ -354,11 +353,17 @@ is still tooling, per the standing instruction to build coverage before starting
    a working chevron, one is a leaf with an empty chevron slot of a different width), so a leaf's
    label starts 7px off from its expandable sibling's. `wireframe_inventory.mjs` now checks
    same-depth alignment, not just monotonic staircasing.
-5. **Photos under folders, indentation** — **still unresolved.** I could not confidently identify
-   which sidebar element "photos" refers to from the text description alone (no "Photos" section
-   exists at the sidebar's literal bottom in the current render order — Cloud is last). Needs a
-   screenshot or a direct pointer to the row before a check can be built; noted rather than
-   guessed at.
+5. **Photos under folders, indentation** — confirmed by a user screenshot: "Photos" is the
+   folder tree's own ROOT row (`state.root`, this mock's `/test/Photos`), and it renders below
+   Cloud, disconnected from the "Folders" header, at the section-header's own indent (not one
+   level deeper). Root cause: the static template has `<div id="lib-collections"></div><div
+   id="lib-tree"></div>` as SIBLINGS (`:1665`); `renderCollections()`'s `host.innerHTML` (into
+   `#lib-collections`) places the "Folders" header right before Cloud (`:8693`), but `#lib-tree`
+   (renderTree()'s separate target, `:8695`'s own comment already flags this split) always
+   paints AFTER all of `#lib-collections`, i.e. after Cloud, regardless of where "Folders" sits
+   in that sequence. `wireframe_inventory.mjs` now asserts both the position (tree root must sit
+   above Cloud, not below it) and the indent (tree root's chevron must be right of the "Folders"
+   header's own chevron, to read as a child) — both currently fail.
 6. **Topbar icons not centered** — `wireframe_inventory.mjs`'s icon-centering check (icon bbox
    center vs. its nearest square/circular hit-shape) finds 2 real cases (2.2px, 3.2px off) in the
    topbar. Small enough that ICON_CENTER_TOLERANCE=1.5px is worth revisiting once these are fixed
