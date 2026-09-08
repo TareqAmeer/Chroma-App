@@ -16,7 +16,7 @@
 // the first attempt at this too noisy to keep. Extras and missing atoms are both failures.
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
   writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
@@ -104,8 +104,26 @@ const INVENTORY_FN = `(sel) => {
         .filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(' ').trim();
       const isControl = ['button', 'input', 'select', 'textarea', 'a'].includes(tag);
       const isIcon = tag === 'svg' || tag === 'img';
+      // ICON SHAPE SIGNATURE — the gap that let the view-toggle ship a crop-tool glyph and a
+      // log glyph where the wireframe has a 2x2 grid and three lines, across several sessions,
+      // while this tool reported PASS. Counting icons can never catch a WRONG icon; comparing
+      // their geometry can. Normalised so equivalent geometry expressed differently (a "line"
+      // vs a two-point "path") still lands on the same signature where it genuinely is the
+      // same shape, and whitespace/attribute order never matters.
+      const iconSig = isIcon ? (() => {
+        const parts = [];
+        for (const g of child.querySelectorAll('path,rect,line,circle,polyline,polygon,ellipse')) {
+          const n = g.tagName.toLowerCase();
+          const d = (g.getAttribute('d') || g.getAttribute('points') || '').replace(/\\s+/g, ' ').trim();
+          const box = ['x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'x1', 'y1', 'x2', 'y2']
+            .map((a) => g.getAttribute(a)).filter(Boolean).join(',');
+          parts.push(n + ':' + (d || box));
+        }
+        return parts.sort().join('|') || (child.getAttribute('src') || '').slice(-40);
+      })() : '';
       if (isControl || isIcon || ownText) {
         out.push({
+          iconSig,
           kind: isIcon ? 'icon' : (isControl ? tag : 'text'),
           text: (ownText || child.getAttribute('placeholder') || '').replace(/\\s+/g, ' ').slice(0, 40),
           x: Math.round(b.left - rootBox.left),
@@ -134,6 +152,28 @@ function tally(list) {
   const m = new Map();
   list.forEach((k) => m.set(k, (m.get(k) || 0) + 1));
   return m;
+}
+
+// ── Icon-shape regression baseline ──────────────────────────────────────────────────────────
+// ⚠️ This deliberately does NOT compare the app's icon geometry against the WIREFRAME's. The
+// two use different icon sets on purpose — design.md records that no icon assets were supplied
+// and Lucide was substituted in the wireframe, while the app draws its own set in chromasmith-
+// 22.html's ICONS. Diffing those geometries would emit a mismatch for every icon on the page:
+// pure noise, which is exactly how the last attempt at a structural diff died.
+//
+// What IS checkable is the app against ITSELF over time. A committed signature baseline turns
+// "someone swapped the grid glyph for the crop-tool glyph" — which shipped for several sessions
+// under a green PASS, because counting icons cannot see a wrong icon — into a loud diff.
+// Convention follows test/baselines/*.json (committed, survives a fresh checkout), not
+// test/output/ (gitignored).
+const ICON_BASELINE = path.join(ROOT, 'test/baselines/wireframe_icons.json');
+
+function iconSignatures(zoneLabel, atoms) {
+  // Positional key: icons have no text to identify them, so the nth icon in a zone is the
+  // identity. A reorder therefore reads as a change — correct, since moving an icon to a
+  // different control is exactly the class of bug this exists to catch.
+  return atoms.filter((a) => a.kind === 'icon')
+    .map((a, i) => [`${zoneLabel}#${i}`, a.iconSig || '(empty)']);
 }
 
 const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
@@ -173,11 +213,15 @@ await app.evaluate(() => {
 await app.waitForTimeout(400);
 await settleForCapture(app);
 
+const iconsNow = {};
+
 for (const zone of ZONES) {
   const w = await wf.evaluate(`(${INVENTORY_FN})(${JSON.stringify(zone.wf)})`);
   const a = await app.evaluate(`(${INVENTORY_FN})(${JSON.stringify(zone.app)})`);
   if (!w) { findings.push(`[${zone.label}] wireframe container ${zone.wf} not found`); continue; }
   if (!a) { findings.push(`[${zone.label}] app container ${zone.app} NOT FOUND`); continue; }
+
+  for (const [k, sig] of iconSignatures(zone.label, a.atoms)) iconsNow[k] = sig;
 
   // Row-count parity for noisy rows: same number of dynamic-data atoms, even though their exact
   // text will never match (mock counts vs the wireframe's hand-picked numbers).
@@ -225,6 +269,32 @@ for (const zone of ZONES) {
 await wf.close(); await app.close();
 await b.close();
 server.close();
+
+// ── icon-shape regression check ─────────────────────────────────────────────────────────────
+// `--icons-baseline` records the current glyphs as correct; every other run compares against
+// that file and reports any icon whose geometry changed. Findings use the same em-dash record
+// format the rest of this file emits so they flow through the allowlist and recheck machinery
+// unchanged.
+if (process.argv.includes('--icons-baseline')) {
+  await mkdir(path.dirname(ICON_BASELINE), { recursive: true });
+  await writeFile(ICON_BASELINE, JSON.stringify({ capturedAt: new Date().toISOString().slice(0, 10), icons: iconsNow }, null, 2));
+  console.log(`icon baseline written: ${Object.keys(iconsNow).length} glyphs -> ${path.relative(ROOT, ICON_BASELINE)}`);
+  process.exit(0);
+}
+let iconBase = null;
+try { iconBase = JSON.parse(await readFile(ICON_BASELINE, 'utf8')).icons; } catch { /* no baseline yet */ }
+if (iconBase) {
+  for (const [k, sig] of Object.entries(iconsNow)) {
+    const was = iconBase[k];
+    if (was === undefined) findings.push(`[icons] ${k}: added — no baseline entry for this position`);
+    else if (was !== sig) findings.push(`[icons] ${k}: shape — baseline "${was.slice(0, 60)}" vs now "${sig.slice(0, 60)}"`);
+  }
+  for (const k of Object.keys(iconBase)) {
+    if (!(k in iconsNow)) findings.push(`[icons] ${k}: removed — present in baseline, absent now`);
+  }
+} else {
+  console.log('(no icon baseline yet — run with --icons-baseline to record one)');
+}
 
 const raw = findings.length;
 const unaccepted = findings.filter((f) => !isAccepted(f));

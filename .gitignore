@@ -96,3 +96,7 @@ site/photos-src/
 diagnostics/reports/
 diagnostics/baseline.json
 .diagvenv/
+
+# @playwright/test artifacts (behaviour suite) — traces/screenshots from failing runs
+test-results/
+playwright-report/

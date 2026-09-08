@@ -13,6 +13,9 @@
     "lint:ai": "node test/lint_ai_origin.mjs",
     "lint:formats": "node test/lint_formats.mjs",
     "mask:test": "node test/mask_raster.mjs",
+    "wireframe:test": "node test/wireframe_inventory.mjs",
+    "wireframe:icons": "node test/wireframe_inventory.mjs --icons-baseline",
+    "behaviour:test": "playwright test --config=playwright.config.mjs",
     "ui:test": "node test/ui_audit.mjs",
     "ui:baseline": "node test/ui_audit.mjs --baseline",
     "visual:test": "node test/visual_baseline.mjs",
@@ -33,6 +36,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
+    "@playwright/test": "^1.63.0",
     "patch-package": "^8.0.1",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.48.0",
