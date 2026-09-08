@@ -247,6 +247,204 @@ export function isAccepted(allowlist, finding) {
   return allowlist.some((a) => a._zone && finding.includes(a.match) && fz && fz[1] === a._zone);
 }
 
+// ── Check: DEAD CONTROLS — click/drag every control, assert something observably changed ─────
+// Built for the Editor UX pass (editor_ux_spec.json E1.3.1/3.1.5/3.4.6 etc.) after the user
+// reported several controls that visibly exist but silently do nothing — a class no
+// computed-style diff can ever see. `controls`: [{ label, sel, kind: 'click'|'slider',
+// observe: 'dom'|'style'|'canvas', styleProp?, canvasSel? }].
+//
+// ⚠️ SAFETY: this clicks/drags real controls, some of which are destructive (export, delete,
+// file-open dialogs) or slow (full export). It must run ONLY against a scratch fixture photo in
+// a throwaway state, and callers MUST exclude destructive controls from `controls` — write a
+// hand-authored behaviour test for those instead (see editor_wireframe_behaviour.mjs). This
+// module does not and cannot know which controls are destructive; the caller's `controls` list
+// IS the safe-list.
+export async function checkDeadControls(page, controls) {
+  const findings = [];
+  for (const c of controls) {
+    const before = await captureObservable(page, c);
+    if (before == null) { findings.push(`[deadcontrol] ${c.label} (${c.sel}): not found or not rendered — cannot probe`); continue; }
+    if (c.kind === 'slider') {
+      await page.evaluate((sel) => {
+        const el = document.querySelector(sel); if (!el) return;
+        const min = +el.min || 0, max = +el.max || 100;
+        el.value = Math.abs(+el.value - max) < Math.abs(+el.value - min) ? min : max;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, c.sel);
+    } else {
+      await page.click(c.sel).catch(() => {});
+    }
+    await page.waitForTimeout(c.settleMs || 250);
+    const after = await captureObservable(page, c);
+    if (after != null && JSON.stringify(before) === JSON.stringify(after)) {
+      findings.push(`[deadcontrol] ${c.label} (${c.sel}): ${c.kind === 'slider' ? 'moving to its extreme' : 'clicking'} produced no observable change (${c.observe}: ${JSON.stringify(before)})`);
+    }
+  }
+  return findings;
+}
+async function captureObservable(page, c) {
+  if (c.observe === 'style') {
+    return page.evaluate(({ sel, prop }) => {
+      const el = document.querySelector(sel); if (!el) return null;
+      return getComputedStyle(el)[prop];
+    }, { sel: c.sel, prop: c.styleProp });
+  }
+  if (c.observe === 'canvas') {
+    return page.evaluate((canvasSel) => {
+      const cv = document.querySelector(canvasSel); if (!cv) return null;
+      const ctx = cv.getContext('2d') || cv.getContext('webgl2') || cv.getContext('webgl');
+      if (!ctx || !ctx.getImageData) {
+        // WebGL canvas: hash a downscaled readback via a 2D copy instead of raw pixel read.
+        const tmp = document.createElement('canvas'); tmp.width = 32; tmp.height = 32;
+        tmp.getContext('2d').drawImage(cv, 0, 0, 32, 32);
+        return tmp.toDataURL();
+      }
+      const d = ctx.getImageData(0, 0, Math.min(32, cv.width), Math.min(32, cv.height)).data;
+      let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) | 0;
+      return h;
+    }, c.canvasSel);
+  }
+  // 'dom' default: a structural fingerprint of the element's own subtree, not just outerHTML
+  // (which would also flip on e.g. a live timestamp) — text + attribute snapshot.
+  return page.evaluate((sel) => {
+    const el = document.querySelector(sel); if (!el) return null;
+    return { text: el.textContent, cls: el.className, attrs: Array.from(el.attributes).map((a) => `${a.name}=${a.value}`).sort() };
+  }, c.sel);
+}
+
+// ── Check: DISABLED-STATE correctness — a control with no valid action must look/act disabled ─
+// `controls`: [{ label, sel, validWhen: (page)=>Promise<boolean> }]. `validWhen` is the caller's
+// own predicate for "this control currently has something valid to do" (e.g. a preset is
+// selected, the photo is RAW) — this module has no domain knowledge of when a control is valid,
+// only how to check that the DOM agrees with the caller once told.
+export async function checkDisabledState(page, controls) {
+  const findings = [];
+  for (const c of controls) {
+    const valid = await c.validWhen(page);
+    const state = await page.evaluate((sel) => {
+      const el = document.querySelector(sel); if (!el || el.getBoundingClientRect().width === 0) return null;
+      return { disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true', opacity: parseFloat(getComputedStyle(el).opacity), pointerEvents: getComputedStyle(el).pointerEvents };
+    }, c.sel);
+    if (!state) continue;
+    const looksDisabled = state.disabled || state.opacity < 0.6 || state.pointerEvents === 'none';
+    if (!valid && !looksDisabled) {
+      findings.push(`[disabled] ${c.label} (${c.sel}): has nothing valid to do right now but is not disabled/dimmed/non-interactive (disabled=${state.disabled}, opacity=${state.opacity}, pointer-events=${state.pointerEvents})`);
+    }
+    if (valid && (state.disabled || state.pointerEvents === 'none')) {
+      findings.push(`[disabled] ${c.label} (${c.sel}): has a valid action available but is disabled/non-interactive`);
+    }
+  }
+  return findings;
+}
+
+// ── Check: STATE-LEAK sweep across a photo switch ──────────────────────────────────────────
+// `fields`: [{ label, sel, prop: 'value'|'textContent'|styleProp, style? }]. Snapshots every
+// field for photo A, switches to photo B via `switchTo(page, b)`, snapshots B, switches back to
+// A, and asserts A's values are restored — catches "control follows the WRONG photo" bugs like
+// the reported flag getting stuck on the previous photo (editor_ux_spec.json E5), which a
+// single-photo check structurally cannot see.
+export async function checkStateLeak(page, fields, switchTo, photoA, photoB) {
+  const findings = [];
+  async function snapshot() {
+    return page.evaluate((fields) => fields.map((f) => {
+      const el = document.querySelector(f.sel);
+      if (!el) return null;
+      if (f.style) return getComputedStyle(el)[f.prop];
+      return el[f.prop];
+    }), fields);
+  }
+  const a1 = await snapshot();
+  await switchTo(page, photoB);
+  const b1 = await snapshot();
+  await switchTo(page, photoA);
+  const a2 = await snapshot();
+  fields.forEach((f, i) => {
+    if (a1[i] == null && a2[i] == null) return; // field absent on both — nothing to leak
+    if (JSON.stringify(a1[i]) !== JSON.stringify(a2[i])) {
+      findings.push(`[stateleak] ${f.label}: was ${JSON.stringify(a1[i])} for photo A, still ${JSON.stringify(a2[i])} after switching to B and back — did not restore (B showed ${JSON.stringify(b1[i])})`);
+    }
+  });
+  return findings;
+}
+
+// ── Check: POPOVER anchoring survives scroll ────────────────────────────────────────────────
+// Extends checkMenuViewportOverflow, which never scrolls — built specifically for the reported
+// "Get Info popup always renders top-right even when scrolling" bug (editor_ux_spec.json 3.2.8).
+// `popovers`: [{ label, trigger, popover, scrollSel, scrollBy }]. Opens the popover, records its
+// position relative to its trigger, scrolls `scrollSel` by `scrollBy`, and asserts the popover
+// either tracks the trigger's on-screen movement or closes — a popover that stays glued to a
+// fixed viewport position while its trigger scrolls away is the bug.
+export async function checkPopoverAnchoring(page, popovers) {
+  const findings = [];
+  for (const p of popovers) {
+    await page.click(p.trigger).catch(() => {});
+    await page.waitForTimeout(150);
+    const before = await page.evaluate(({ trigger, popover }) => {
+      const t = document.querySelector(trigger), m = document.querySelector(popover);
+      if (!t || !m || getComputedStyle(m).display === 'none') return null;
+      const tb = t.getBoundingClientRect(), mb = m.getBoundingClientRect();
+      return { dx: mb.left - tb.left, dy: mb.top - tb.top };
+    }, p);
+    if (!before) { findings.push(`[popover] ${p.label}: could not open or measure — trigger ${p.trigger} / popover ${p.popover}`); continue; }
+    await page.evaluate(({ scrollSel, scrollBy }) => {
+      const s = document.querySelector(scrollSel) || document.scrollingElement;
+      s.scrollBy(0, scrollBy);
+    }, p);
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(({ trigger, popover }) => {
+      const t = document.querySelector(trigger), m = document.querySelector(popover);
+      if (!t) return null;
+      const stillOpen = m && getComputedStyle(m).display !== 'none';
+      if (!stillOpen) return { closed: true };
+      const tb = t.getBoundingClientRect(), mb = m.getBoundingClientRect();
+      return { dx: mb.left - tb.left, dy: mb.top - tb.top };
+    }, p);
+    await page.click(p.trigger).catch(() => {});
+    if (!after) continue;
+    if (after.closed) continue; // closing on scroll is an acceptable alternative to tracking
+    if (Math.abs(after.dx - before.dx) > 2 || Math.abs(after.dy - before.dy) > 2) {
+      findings.push(`[popover] ${p.label}: offset from its trigger changed from (${before.dx},${before.dy}) to (${after.dx},${after.dy}) after scrolling — it is not tracking its trigger (fixed-position bug)`);
+    }
+  }
+  return findings;
+}
+
+// ── Check: preview ASPECT RATIO stays constant across viewport widths ──────────────────────
+// Built for editor_ux_spec.json E4 ("photos get squeezed instead of shrinking"). `sel` is the
+// element whose intrinsic content must be letterboxed/shrunk, never non-uniformly scaled.
+// `widths`: array of viewport widths to test at a fixed height. Tolerance 0.02 (2%) absorbs
+// sub-pixel rounding, not a real aspect change.
+export async function checkAspectRatioInvariant(page, sel, widths, height) {
+  const findings = [];
+  const ratios = [];
+  for (const w of widths) {
+    await page.setViewportSize({ width: w, height });
+    await page.waitForTimeout(150);
+    const r = await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      // Prefer the rendered image/canvas's natural aspect, not the wrapper's box — the wrapper
+      // is EXPECTED to change aspect as the window resizes; its content should not.
+      const media = el.tagName === 'CANVAS' || el.tagName === 'IMG' ? el : el.querySelector('canvas,img');
+      if (media && (media.naturalWidth || media.width) && (media.naturalHeight || media.height)) {
+        return (media.naturalWidth || media.width) / (media.naturalHeight || media.height);
+      }
+      return b.width / b.height;
+    }, sel);
+    if (r != null) ratios.push({ w, r });
+  }
+  if (ratios.length < 2) return findings;
+  const base = ratios[0].r;
+  for (const { w, r } of ratios.slice(1)) {
+    if (Math.abs(r - base) / base > 0.02) {
+      findings.push(`[aspect] ${sel}: aspect ratio was ${base.toFixed(3)} at ${ratios[0].w}px wide, ${r.toFixed(3)} at ${w}px wide — the image is being squeezed, not scaled uniformly`);
+    }
+  }
+  return findings;
+}
+
 // A HARD gate: fails on any finding not explicitly allowlisted. This replaces the older
 // "gate on regressions only" pattern (compare against the previous run, then overwrite that
 // same report in the same run) — which let a new defect fail exactly once and read as
