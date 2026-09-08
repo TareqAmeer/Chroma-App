@@ -1,6 +1,7 @@
 # Live diagnostic tool
 
-Watches the **real, running** `/Applications/Chromasmith.app` while you use it by
+Watches the **real, running** app (installed via `desktop/install-app.sh` to
+`"<repo root>/Chromasmith copy.app"`) while you use it by
 hand, and turns "it felt slow" / "that button did nothing" / "the app froze" into
 a timestamped, categorized event log — so debugging starts from evidence instead
 of screenshots and assumptions.
@@ -52,7 +53,7 @@ pip install -r diagnostics/requirements.txt
 
 ## Usage
 
-1. Launch Chromasmith normally (Dock, Finder, Spotlight — `/Applications/Chromasmith.app`).
+1. Launch "Chromasmith copy.app" in the repo root normally (Dock, Finder, or `open`).
 2. Start a capture session:
    ```bash
    python3 diagnostics/cli.py start --duration 15m
@@ -185,10 +186,11 @@ this is local-only.
 ## Known limitations
 
 - The app must be found by process name (`chromasmith`) and, when more than one
-  candidate is running, the one under `/Applications/Chromasmith.app` is
-  preferred — never a stray "Chromasmith copy.app" build artifact. If neither
-  disambiguates cleanly you'll see a warning naming the app path it attached to;
-  check that before trusting the run.
+  candidate is running, the one at the repo's own `Chromasmith copy.app`
+  (`find_process.REAL_APP_PATH`) is preferred — never a stray
+  `target/release` build artifact launched directly. If neither disambiguates
+  cleanly you'll see a warning naming the app path it attached to; check that
+  before trusting the run.
 - Freeze detection has ~3-6s granularity (ping interval + two-miss confirmation)
   — a freeze shorter than that won't be flagged, though it also likely wasn't
   the freeze you were chasing.

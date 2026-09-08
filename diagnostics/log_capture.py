@@ -16,13 +16,15 @@ capture (some log-stream predicates can miss lines depending on OS
 logging privacy/redaction settings).
 """
 import json
+import os
 import re
 import subprocess
 import threading
 import time
 
 EXE_NAME = 'chromasmith'
-EXE_PATH = '/Applications/Chromasmith.app/Contents/MacOS/chromasmith'
+# 2026-09-08: install target moved from /Applications to "<repo root>/Chromasmith copy.app".
+EXE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Chromasmith copy.app', 'Contents', 'MacOS', 'chromasmith')
 
 GLSL_ERROR_RE = re.compile(r'GLSL (compile|link) error', re.IGNORECASE)
 CORRUPT_DB_RE = re.compile(r'catalog\.corrupt-\d+\.db')

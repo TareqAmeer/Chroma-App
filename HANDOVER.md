@@ -675,8 +675,8 @@ session so nothing there was expected to move.
 
 **⚠️ Not done this session: a native Tauri rebuild.** `catalog.rs::catalog_counts_run` gained two
 new SQL fields (`raw`/`video`, for #14's sidebar counts) — `desktop/dist/` (what every
-Playwright/preview check above reads) is fully up to date via `build-desktop.sh`, but the
-COMPILED macOS app (`/Applications/Chromasmith.app`, `Chromasmith copy.app`) will not see the
-Rust change until a real `cargo`/`tauri build` runs — a multi-minute step out of scope for this
-tooling-plus-fix pass. The JS side degrades safely in the meantime (`catalogCounts.raw ?? ''`
-just renders blank against an old binary that never sends those fields).
+Playwright/preview check above reads, and per 2026-09-08's scope decision the only build target
+that matters now) is fully up to date via `build-desktop.sh`, but a compiled native build would
+not see the Rust change until a real `cargo`/`tauri build` runs. The JS side degrades safely in
+the meantime (`catalogCounts.raw ?? ''` just renders blank against an old binary that never sends
+those fields).

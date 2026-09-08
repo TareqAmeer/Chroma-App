@@ -1,17 +1,18 @@
 """
 Locate the real, running Chromasmith.app process — and only that one.
 
-There is a second, stray "Chromasmith copy.app" on this machine (a build
-artifact, not the app the user actually launches — Lightroom launches it,
-per project memory, but it is never what a live-diagnostic run should
-attach to). Bundle id com.tareq.chromasmith is shared by both, so PID
+2026-09-08: the canonical install target moved from /Applications to
+"<repo root>/Chromasmith copy.app" -- the user only cares about the copy
+inside this repo now. Bundle id com.tareq.chromasmith could still be
+shared by a stray target/release build someone launched directly, so PID
 lookup alone isn't enough; this module also verifies the executable's
-containing .app via `lsof` and prefers the one under /Applications.
+containing .app via `lsof` and prefers the one at REAL_APP_PATH.
 """
+import os
 import subprocess
 
 EXE_NAME = 'chromasmith'
-REAL_APP_PATH = '/Applications/Chromasmith.app'
+REAL_APP_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Chromasmith copy.app')
 
 
 class ProcessNotFound(RuntimeError):
