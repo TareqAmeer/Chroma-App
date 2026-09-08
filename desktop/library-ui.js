@@ -894,6 +894,19 @@
     .lib-chip.lib-iconchip{width:26px;height:26px;padding:0;border-radius:50%;display:flex;
       align-items:center;justify-content:center}
     .lib-chip.lib-iconchip svg{width:13px;height:13px}
+    /* Per-icon tint (wireframe :76-79 uses reject=danger/pick=primary/fav=warning/none=muted —
+       "pick" specifically is re-mapped to the app's OWN established green-pine, not the
+       wireframe's primary blue: the topbar flag row (#lib-flag-pick svg, :913) and the grid
+       card's own selection box-shadow (.lbl-green, :1250) already use green for "picked"
+       app-wide, and matching that existing convention keeps ONE flag colour language across
+       the app instead of introducing a second, wireframe-only one for just this row — the same
+       self-consistency principle this session's tooling was built around, applied by hand where
+       literal copying would have made the app less internally consistent, not more). Found live
+       2026-09-08: every chip rendered plain white with no tint at all until this was added. */
+    .lib-chip.lib-iconchip[data-fval="red"] svg{stroke:var(--red-oxide)}
+    .lib-chip.lib-iconchip[data-fval="green"] svg{stroke:var(--green-pine)}
+    .lib-chip.lib-iconchip[data-fval="favorite"] svg{stroke:var(--orange-ember)}
+    .lib-chip.lib-iconchip[data-fval="none"] svg{stroke:var(--mut)}
     .lib-chip.lib-iconchip.lib-sel{background:var(--sur2);box-shadow:inset 0 0 0 2px var(--acc);color:inherit}
     .lib-chip.lib-more-type{display:none}
     .lib-filterrow.types-expanded .lib-chip.lib-more-type{display:inline-flex}
