@@ -87,5 +87,120 @@
     "match": "order@3",
     "reason": "Test-tool artifact, not a real UI difference: the wireframe's \"By date\" text is a bare text node sibling of its chevron <svg> (pushed as one atom for the container, icon found on recursion), while the app wraps both icon and text in their own <span>s (icon visited first, then the text span) — same visual icon-then-label order in both, different atom-visitation order in this walker. Verified live: both render identically. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
+  },
+  {
+    "match": "By date\" uses .lib-sec-h but has no data-sec-toggle",
+    "zone": "selfconsist",
+    "reason": "Deliberate, documented pre-existing decision (dateSectionHtml's own comment, library-ui.js): \"Uses its own dateExpanded('__root__') open flag (session-only, not sidebarSecOpen) since sidebarSecOpen would need a migration for no behavioral gain.\" Unlike Keywords (HANDOVER #4, an accidental omission with no rationale ever given), this was a considered choice. Investigated 2026-09-08, left as-is."
+  },
+  {
+    "match": "sidebar row \"Archive T7\" renders an EMPTY count element",
+    "zone": "selfconsist",
+    "reason": "Intentional: drive rows show a middle-dot ONLY when offline (library-ui.js ~6650: `v.online ? '' : '·'`), blank when online by design (an online drive has nothing to flag). Confirmed by reading the source, not guessed."
+  },
+  {
+    "match": "[statusbar] EXTRA   1x  text:\"12 KB\"",
+    "zone": "statusbar",
+    "reason": "#lib-status-size — a real disk-size readout for the current selection, not in the wireframe's static mock. Same superset reasoning as the sidebar's Drives-management rows."
+  },
+  {
+    "match": "[sidebar] EXTRA   3x  icon",
+    "zone": "sidebar",
+    "reason": "Downstream of already-accepted sidebar extras (Drives-management rows, Keywords), each contributing its own icon — same reasoning as the already-accepted [sidebar] atom count / EXTRA icon entries."
+  },
+  {
+    "match": "text:\"Library\"",
+    "zone": "gearmenu",
+    "reason": "The gear/View menu's \"Library\" action group (Choose folder/Import from Google Photos/Recent folders/Get Info/Full-window view/Compare view) is a real app feature superset — the wireframe's mock view-menu only covers Thumbnails/Metadata/Panels/Appearance. Same pattern as Filters/sidebar-collapse (HANDOVER §6.2/§6.3)."
+  },
+  {
+    "match": "text:\"Choose folder…\"",
+    "zone": "gearmenu",
+    "reason": "Part of the Library action group — see \"Library\" entry above."
+  },
+  {
+    "match": "text:\"Import from Google Photos…\"",
+    "zone": "gearmenu",
+    "reason": "Part of the Library action group — see \"Library\" entry above."
+  },
+  {
+    "match": "text:\"Recent folders…\"",
+    "zone": "gearmenu",
+    "reason": "Part of the Library action group — see \"Library\" entry above."
+  },
+  {
+    "match": "text:\"Get Info\"",
+    "zone": "gearmenu",
+    "reason": "Part of the Library action group — see \"Library\" entry above."
+  },
+  {
+    "match": "text:\"Full-window view\"",
+    "zone": "gearmenu",
+    "reason": "Part of the Library action group — see \"Library\" entry above."
+  },
+  {
+    "match": "text:\"Compare view\"",
+    "zone": "gearmenu",
+    "reason": "Part of the Library action group — see \"Library\" entry above."
+  },
+  {
+    "match": "text:\"Show title\"",
+    "zone": "gearmenu",
+    "reason": "Real Thumbnails-group option (toggle photo titles under grid cards) with no wireframe equivalent — now uses the SAME checkmark-glyph idiom as its siblings (HANDOVER #12, fixed 2026-09-08), only its presence is a superset, not its markup shape."
+  },
+  {
+    "match": "text:\"Real aspect ratio\"",
+    "zone": "gearmenu",
+    "reason": "Real Thumbnails-group option with no wireframe equivalent — its own inconsistency (a stray leading icon, HANDOVER #10/#11) was fixed 2026-09-08; only its presence as an extra row is a superset."
+  },
+  {
+    "match": "EXTRA   8x  button",
+    "zone": "gearmenu",
+    "reason": "Downstream of the accepted Library action group (6 buttons) + Show title/Real aspect ratio being <button> elements per HANDOVER #12's idiom fix, vs the wireframe's <div>-based .opt rows."
+  },
+  {
+    "match": "EXTRA   4x  icon",
+    "zone": "gearmenu",
+    "reason": "Downstream of the accepted Library action group, each of whose 6 rows carries a leading icon (Choose folder/Import/Recent/Get Info/Full-window/Compare). [count updated 2026-09-08: dropped to 4 after removing Real aspect ratio's own inconsistent leading icon, HANDOVER #10/#11.]"
+  },
+  {
+    "match": "atom count",
+    "zone": "gearmenu",
+    "reason": "Downstream of the accepted Library action group and Show title/Real aspect ratio rows — same reasoning as every other already-accepted atom-count entry."
+  },
+  {
+    "match": "font-size 10px",
+    "zone": "gearmenu",
+    "reason": "Downstream of the accepted Library action group's own font-size, inflating the aggregate tally — same reasoning as the sidebar's font-size entries."
+  },
+  {
+    "match": "font-size 13px",
+    "zone": "gearmenu",
+    "reason": "Downstream of the accepted Library action group's own font-size, inflating the aggregate tally — same reasoning as the sidebar's font-size entries."
+  },
+  {
+    "match": "font-family \"SF Pro Text\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the accepted Library action group's own font-family, inflating the aggregate tally — same reasoning as the sidebar's font-family entry."
+  },
+  {
+    "match": "order@0: wireframe text:\"Thumbnails\" vs app text:\"Library\"",
+    "zone": "gearmenu",
+    "reason": "The accepted Library action group is the FIRST group in the menu (Library actions before display options reads correctly) — its presence necessarily shifts what atom sits at position 0 relative to the wireframe's Thumbnails-first mock, which has no Library group at all."
+  },
+  {
+    "match": "MISSING 1x  text:\"Square crops\"",
+    "zone": "gearmenu",
+    "reason": "Investigated 2026-09-08: the app has no square-vs-original-dimensions crop-mode toggle at all (a real functional gap, not a markup/style difference) — out of scope for a wireframe-fidelity pass; would need a real feature decision from the user first, same as Filters/sidebar-collapse were."
+  },
+  {
+    "match": "MISSING 1x  text:\"Original dimensions\"",
+    "zone": "gearmenu",
+    "reason": "See \"Square crops\" entry above — same missing feature."
+  },
+  {
+    "match": "MISSING 1x  text:\"Normal spacing\"",
+    "zone": "gearmenu",
+    "reason": "The app's equivalent is the \"No spacing between photos\" checkbox-turned-checkmark row (HANDOVER #12) — a single toggle, not the wireframe's separate Normal/Zero two-option pair. Functionally equivalent, different interaction shape; same judgment-call category as the sort menu's key set."
   }
 ]

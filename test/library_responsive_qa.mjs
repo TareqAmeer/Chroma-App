@@ -76,7 +76,13 @@ const AUDIT_FN = `() => {
     // its menu share a position:relative div, and .lib-flagrow/.lib-zoomrow/.lib-seg each group
     // several controls — could collide entirely invisibly to this check. Descend into wrappers
     // that hold more than one control and compare the real leaf controls instead.
+    // BUG (found live, not by design): recursing on el.children also recurses INTO an <svg>'s
+    // own internal primitives (circle/path/rect are real DOM children of an svg element) — the
+    // logo mark's <circle>/<path> were being extracted as separate top-level "controls" and
+    // compared for overlap against unrelated buttons, producing nonsense findings. An SVG (and
+    // anything inside one — svg.children can nest further, e.g. a <g>) is always a leaf.
     const leaves = (root) => Array.from(root.children).flatMap((el) => {
+      if (el instanceof SVGElement) return [el];
       const isControl = /^(BUTTON|INPUT|SELECT|A)$/.test(el.tagName);
       const kids = Array.from(el.children).filter((k) => k.getBoundingClientRect().width > 0);
       return (!isControl && kids.length > 1) ? leaves(el) : [el];

@@ -5318,6 +5318,14 @@ pub fn catalog_counts_run(conn: &Connection) -> Result<std::collections::HashMap
         [], |r| r.get(0)
     ).map_err(|e| e.to_string())?;
     m.insert("faces_scanned".to_string(), faces_scanned as u64);
+    // HANDOVER 2026-09-08 item #14: the sidebar's Raw/Videos shortcut rows rendered no count at
+    // all, unlike every other row in renderCollections() — there was no backend field to feed
+    // one. `kind` already distinguishes 'raw'/'video' (see is_raw above, media_kind()), so this
+    // reuses the same column rather than adding a new one.
+    let raw: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND kind = 'raw'", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("raw".to_string(), raw as u64);
+    let video: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND kind = 'video'", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("video".to_string(), video as u64);
     Ok(m)
 }
 

@@ -236,7 +236,12 @@
         // Pending = every third photo (id % 3 === 0), matching the synthetic entries' own
         // faces_scanned rule below — a real, verifiable count rather than an arbitrary fraction.
         const pending = N ? Array.from({ length: N }, (_, i) => i + 1).filter((id) => id % 3 === 0).length : 0;
-        return Promise.resolve({ all: N, blurry: N ? Math.max(1, Math.floor(N / 5)) : 0, faces_pending: pending, faces_scanned: N - pending });
+        // Matches the list_dir mock's own synthetic split (line ~68 below): every 6th entry
+        // is a video (.MP4), everything else is RAW (.RW2) — same rule, so the sidebar count
+        // and the grid's actual per-card badges agree.
+        const video = N ? Array.from({ length: N }, (_, i) => i + 1).filter((id) => id % 6 === 0).length : 0;
+        const raw = N - video;
+        return Promise.resolve({ all: N, blurry: N ? Math.max(1, Math.floor(N / 5)) : 0, faces_pending: pending, faces_scanned: N - pending, raw, video });
       }
       case 'catalog_date_counts': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ days: [], no_date: 0 });
@@ -747,6 +752,9 @@
       --divider-soft:rgba(255,255,255,.12);
       --primary:var(--blue-mist);--primary-focus:var(--blue-mist);--primary-on-dark:var(--blue-mist);
       --blue-mist-soft:rgba(97,160,175,.22);
+      /* wireframe Library View.html:24 — a fixed-alpha overlay hover, not a surface-colour
+         swap, so it stays visible no matter how --sur/--sur2 are aliased. */
+      --hover-tint:rgba(255,255,255,.08);
     }
     #lib-overlay.lib-light{
       --bg:#ffffff;--sur:var(--canvas-parchment);--sur2:var(--canvas-parchment);
@@ -758,6 +766,8 @@
       --hairline:#e0e0e0;--hairline-alpha:rgba(0,0,0,.08);
       --primary:var(--blue-slate);--primary-focus:var(--blue-slate-focus);--primary-on-dark:var(--blue-mist);
       --blue-mist-soft:#e3edf0;
+      /* wireframe Library View.html:143 — .row:hover{background:rgba(0,0,0,.035)}. */
+      --hover-tint:rgba(0,0,0,.035);
     }
   `;
   style.textContent = DS_FONTS + `
@@ -867,11 +877,27 @@
        to these two. */
     .lib-btn.lib-pill,.lib-btn.lib-btn-export{font-size:13px}
     .lib-btn.lib-pill{border-radius:9999px!important;background:transparent;padding:0 14px;height:30px}
-    .lib-btn.lib-pill:hover{background:var(--sur2)}
+    .lib-btn.lib-pill:hover{background:var(--hover-tint)}
     /* UI_SPEC.md #1/#9: token-based tint of the one sanctioned interactive accent, not a
        leftover hardcoded blue from before the design-system import. */
     .lib-btn.lib-pill.active{background:var(--blue-mist-soft);border-color:var(--acc2)!important;color:var(--acc2)}
     #lib-filters-btn-wrap{position:relative}
+    /* #5 — Library View.html:111-117,74-82, copied literally. */
+    .lib-filterrow{display:none;height:40px;flex:none;align-items:center;gap:10px;padding:0 16px;
+      border-bottom:1px solid var(--bdr);overflow-x:auto}
+    .lib-filterrow.open{display:flex}
+    .lib-filterrow .lib-flabel{font-size:11px;color:var(--mut);flex:none}
+    .lib-chip{height:26px;padding:0 12px;border-radius:9999px;border:1px solid var(--bdr);
+      font-size:12px;flex:none;white-space:nowrap;background:none;color:var(--txt)}
+    .lib-chip:hover{background:var(--hover-tint)}
+    .lib-chip.lib-sel{background:var(--acc);border-color:var(--acc);color:#fff}
+    .lib-chip.lib-iconchip{width:26px;height:26px;padding:0;border-radius:50%;display:flex;
+      align-items:center;justify-content:center}
+    .lib-chip.lib-iconchip svg{width:13px;height:13px}
+    .lib-chip.lib-iconchip.lib-sel{background:var(--sur2);box-shadow:inset 0 0 0 2px var(--acc);color:inherit}
+    .lib-chip.lib-more-type{display:none}
+    .lib-filterrow.types-expanded .lib-chip.lib-more-type{display:inline-flex}
+    .lib-filterdiv{width:1px;height:20px;background:var(--bdr);flex:none}
     /* Top-bar flag row (design-import wireframe) — hairline-bracketed group, matching the
        wireframe's .flagrow, so it reads as one control cluster distinct from the icon buttons
        either side of it. */
@@ -880,7 +906,7 @@
     .lib-flagrow .lib-btn-icon{width:28px!important;height:28px!important}
     /* HANDOVER §8 item #7: the shared .lib-btn base rule gives every button a 1px border; the
        wireframe's .flagbtn has none at all (hover background only, Library View.html:64-65). */
-    .lib-flagrow .lib-btn-icon{border:none}
+    .lib-flagrow .lib-btn-icon{border:none;background:none}
     /* UI_SPEC.md #1: never a raw hex — the flag/pick/favorite glyphs are the DS's own semantic
        state tokens (oxide/pine/ember), not the app's pre-existing hand-picked hex triad. */
     #lib-flag-reject svg{stroke:var(--red-oxide)}
@@ -896,10 +922,24 @@
        with .lib-logo-gap. This was flex:0 1 90px (non-growable): every extra pixel piled onto
        logo-gap alone, over-widening it and dragging everything after it (search, view toggle,
        the whole right-side button cluster) further right than the wireframe's positions. */
-    .lib-zoomrow{display:flex;align-items:center;gap:8px;flex:1 1 30px;min-width:60px;color:var(--mut)}
+    /* min-width raised 60->90px: the row's own children (2 x 12px icons + 2 x 8px gaps +
+       the 50px-min slider = 90px) genuinely need 90px — a 60px floor let the flex box shrink
+       BELOW its own children's minimum footprint, so the icons/slider silently overflowed
+       their own box and visually collided with the flag row next to it WITHOUT increasing
+       #lib-top's scrollWidth (the overflow never left the flex item's own bounds in a way the
+       ResizeObserver-based compact detector could see) — measured live: an 8-12px real overlap
+       with #lib-flag-reject at 900-1100px that .lib-top-compact never engaged to fix, because
+       nothing had actually overflowed the ROW as far as scrollWidth was concerned. */
+    .lib-zoomrow{display:flex;align-items:center;gap:8px;flex:1 1 30px;min-width:90px;color:var(--mut)}
     .lib-zoomrow svg{flex:none}
     .lib-zoomrow input[type=range]{width:100%;min-width:50px;accent-color:var(--acc2)}
     #lib-overlay:not(.full) .lib-zoomrow{display:none}
+    /* #8 squeeze: wireframe's own compact contract (Library View.html:61) hides the zoom row's
+       icons under squeeze — the app never did, so .lib-zoomrow kept its full ~76px floor
+       (2 icons + a 50px-min slider) and collided with the flag row / view toggle at 1100px down
+       to 640px (measured live: up to 18px overlap). Copied literally rather than re-derived. */
+    #lib-top.lib-top-compact .lib-zoomrow svg{display:none}
+    #lib-top.lib-top-compact .lib-zoomrow{min-width:36px}
     /* Primary filled Export button — transplanted from the wireframe's .btn-export. */
     /* Library View.html:92's .btn-export always uses --primary (Slate Blue) — no dark-mode
        override exists for it despite the app's own #lib-overlay dark remap swapping --primary to
@@ -930,14 +970,12 @@
     .lib-menu button.opt-toggle .check{visibility:hidden;stroke:var(--primary);flex:none}
     .lib-menu button.opt-toggle.on .check{visibility:visible}
     .lib-menu hr{border:none;border-top:1px solid var(--bdr);margin:6px 2px}
-    #lib-sort-dir::after{content:'↑'}
-    #lib-sort-dir[data-dir="desc"]::after{content:'↓'}
     /* Pill search bar — icon + input in one hairline capsule, matching the wireframe's .search. */
     /* HANDOVER §8 item #13: min-width:70px was a floor on the WRAPPER, not the input the user
        actually types into — icon (14px) + padding (20px) + gap (8px) eat ~42px of that before
        the input gets anything, so the input itself could shrink to ~28px, well under any usable
        width. 120px guarantees the input keeps a real ~80px floor of its own. */
-    .lib-search-wrap{flex:1 1 160px;min-width:120px;max-width:300px;height:32px;border-radius:9999px;
+    .lib-search-wrap{flex:1 1 160px;min-width:130px;max-width:300px;height:32px;border-radius:9999px;
       border:1px solid var(--bdr);background:var(--surface-ghost);display:flex;align-items:center;gap:8px;
       padding:0 6px 0 14px;overflow:hidden}
     /* Library View.html:23 — dark mode's search pill is a barely-there white tint over the dark
@@ -949,7 +987,7 @@
       font:13px var(--sans)}
     .lib-search-wrap input::placeholder{color:var(--mut)}
     #lib-filters-badge{display:none;margin-left:5px;background:var(--acc2);color:#fff;font-size:9px;
-      font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4}
+      font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4;font-variant-numeric:tabular-nums}
     #lib-filters-badge.on{display:inline-block}
     #lib-filters-clear{font-size:11px}
     #lib-filter-chips{flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px}
@@ -995,7 +1033,7 @@
        accent wash per the token remap above, matching Library View.html's .app.dark .row.sel). */
     .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 20px;border-radius:var(--radius-xs,5px);
       cursor:pointer;font-size:13px;color:var(--txt)}
-    .lib-coll-row:hover{background:var(--sur2)}
+    .lib-coll-row:hover{background:var(--hover-tint)}
     .lib-coll-row.on{background:var(--blue-mist-soft);color:var(--primary);font-weight:var(--weight-semibold)}
     .lib-coll-row.on .lib-coll-ic{color:var(--primary)}
     /* Dark mode's selected row is NOT accent-coloured text — Library View.html:25 keeps it white
@@ -1007,7 +1045,7 @@
     .lib-coll-row.offline{cursor:default}
     .lib-coll-row.offline:hover{background:transparent}
     .lib-coll-ic{display:inline-flex;flex-shrink:0;color:inherit}
-    .lib-coll-lb{flex:1}
+    .lib-coll-lb{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     /* UI_SPEC.md sidebar rule: "All Photos" is semibold permanently, selected or not — the one
        named exception to "no bold on non-selected rows". */
     .lib-coll-row[data-catalog="all"]{font-weight:var(--weight-semibold)}
@@ -1032,7 +1070,7 @@
        here was an unrequested rounding. */
     .lib-sec-h{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;border-radius:0;
       margin:0 8px;padding:6px 8px}
-    .lib-sec-h:hover{background:var(--sur2)}
+    .lib-sec-h:hover{background:var(--hover-tint)}
     .lib-sec-h .lib-tree-chev{color:var(--mut);opacity:.7}
     .lib-sec-h .lib-coll-count{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--mut)}
     /* People & Pets — face avatar in place of the generic .lib-coll-ic user glyph (people-pets
@@ -1133,7 +1171,7 @@
     .lib-tree-row-month{font-size:12px}
     .lib-tree-row-day{font-size:11px}
     .lib-tree-row .dayname{color:var(--mut);font-weight:400}
-    .lib-tree-row:hover{background:var(--sur2)}
+    .lib-tree-row:hover{background:var(--hover-tint)}
     /* HANDOVER §8 item #16: was var(--bdr) — a neutral grey overlay, the SAME token :hover
        above uses. Every other selected sidebar row (.lib-coll-row.on, :983-990) is blue; this
        one silently wasn't. Mirrors that rule's exact shape, including the dark-mode ink/accent
@@ -1177,9 +1215,16 @@
        matches the wireframe's .viewtoggle, where the active state is "which one is pressed", not
        "which one is the accent colour". */
     .lib-seg{display:flex;border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden}
-    .lib-seg button{background:transparent;border:none;color:var(--mut);font-size:11px;padding:6px 9px;cursor:pointer}
+    /* #7 icon centering — this is at least the second time an icon-only button reported off-
+       centre by a small amount; the app never had a SHARED centering rule, so each button was
+       one-off. Copied literally from the wireframe's own .viewtoggle button (Library View.html
+       :52): a fixed square box + flex centering, rather than relying on padding to land an
+       icon in the middle of a variable-width button. Every icon-ONLY button in this file
+       should use .lib-icon-center; text+icon buttons keep using .lib-btn's own flex row. */
+    .lib-icon-center{display:flex;align-items:center;justify-content:center}
+    .lib-seg button{background:transparent;border:none;color:var(--mut);font-size:11px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer}
     .lib-seg button+button{border-left:1px solid var(--bdr)}
-    .lib-seg button:hover{background:var(--sur2)}
+    .lib-seg button:hover{background:var(--hover-tint)}
     .lib-seg button.on{background:var(--sur2);color:var(--txt)}
     /* Slide-out filters/display panel (scenario C of the toolbar wireframe review): shares
        #lib-main's own grid cell via an EXPLICIT grid-row/grid-column — not auto-placed, so it
@@ -1217,7 +1262,8 @@
     #lib-overlay.lib-hide-icons .lib-flags,#lib-overlay.lib-hide-icons .lib-raw-badge,
     #lib-overlay.lib-hide-icons .lib-video-badge,#lib-overlay.lib-hide-icons .lib-dupe-badge,
     #lib-overlay.lib-hide-icons .lib-synced-badge,#lib-overlay.lib-hide-icons .lib-stack-badge,
-    #lib-overlay.lib-hide-icons .lib-strip-flag,#lib-overlay.lib-hide-icons .lib-offline-badge{display:none!important}
+    #lib-overlay.lib-hide-icons .lib-strip-flag,#lib-overlay.lib-hide-icons .lib-offline-badge,
+    #lib-overlay.lib-hide-icons .lib-edited-badge{display:none!important}
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
     /* View menu: "No spacing between photos" — a la Lightroom's zero-gutter grid. */
     #lib-grid.lib-zero-gap{gap:0}
@@ -1559,10 +1605,20 @@
             <option value="rating">Rating</option>
             <option value="editedts">Date edited</option>
           </select>
-          ${['date:Date taken', 'mtime:Date modified', 'editedts:Date edited', 'name:Name', 'rating:Rating', 'camera:Camera']
+          <!-- #13: matches the wireframe's own 3 keys (Library View.html:238-241) exactly —
+               Name/Rating/Camera stay reachable via the list-view's own column headers
+               (data-sort on .lib-lh-cell), a separate real feature the wireframe's mock has no
+               equivalent surface for, so removing them from just this menu keeps the feature
+               without keeping the menu's own divergence from the wireframe. "Date added" reuses
+               the existing 'mtime' sort key (file mtime) — the closest available proxy; there is
+               no distinct added-to-catalog timestamp anywhere in this app. -->
+          ${['date:Date taken', 'mtime:Date added', 'editedts:Date edited']
             .map((s) => { const [v, l] = s.split(':'); return `<div class="opt" data-sortval="${v}"><span>${l}</span>${LIB_CHECK_SVG}</div>`; }).join('')}
           <hr>
-          <div class="opt" id="lib-sort-dir" data-dir-label="1"><span>Reverse order</span></div>
+          <!-- Newest first / Oldest first radio pair, replacing the old single "Reverse order"
+               toggle — Library View.html:244-245, copied literally. -->
+          <div class="opt" data-sortdir="desc"><span>Newest first</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-sortdir="asc"><span>Oldest first</span>${LIB_CHECK_SVG}</div>
         </div>
       </div>
       <div id="lib-filters-btn-wrap">
@@ -1583,10 +1639,13 @@
           <button class="lib-btn opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
           <hr>
           <div class="grp-label">Thumbnails</div>
-          <label class="opt" id="lib-hideicons-wrap"><span>Hide flag &amp; type icons</span><input type="checkbox" id="lib-hideicons" class="opt-check"></label>
-          <label class="opt" id="lib-zerogap-wrap"><span>No spacing between photos</span><input type="checkbox" id="lib-zerogap" class="opt-check"></label>
-          <label class="opt" id="lib-showtitle-wrap"><span>Show title</span><input type="checkbox" id="lib-showtitle" class="opt-check"></label>
-          <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to).">${ic('image',15)}<span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
+          <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
+          <!-- #10/#11: no leading icon — every other option row in this menu (metadata/theme/
+               panels) is icon-less; this one's ${ic('image',15)} was its own inconsistency,
+               confirmed by wireframe_inventory.mjs's self-consistency check. -->
+          <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
           <hr>
           <div class="grp-label">Metadata overlay</div>
           <select id="lib-metadisp" style="display:none">
@@ -1683,6 +1742,7 @@
         <option value="edited">Edited</option>
         <option value="noedited">Not edited</option>
         <option value="favorite">Favorites</option>
+        <option value="none">Unflagged</option>
       </select>
       <button class="lib-btn" id="lib-filters-clear">Clear all</button>
       <div class="lib-fp-label">Display</div>
@@ -1701,9 +1761,36 @@
              stale "not yet available" title was the lie, not the handler. -->
         <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop">Develop</button>
       </div>
-      <div id="lib-collections"></div><div id="lib-tree"></div>
+      <div id="lib-collections"></div><div id="lib-folders-header"></div><div id="lib-tree"></div><div id="lib-collections-post"></div>
     </div>
     <div id="lib-main">
+      <!-- #5: the wireframe's own inline filter chip row (Library View.html:375-392), built
+           literally rather than re-derived — Types pills + a "…" more-types expander, then
+           Flags & tags icon chips. Drives the SAME state.typeFilter/tagFilter the (still-present,
+           still holding camera/lens/ISO/duplicates/sync/faces/rating — real features the
+           wireframe's static mock has no equivalent for) Filters popover panel already used, the
+           same way #lib-metadisp is a hidden <select> driven by the View menu's visible rows. -->
+      <div class="lib-filterrow" id="lib-filter-row">
+        <span class="lib-flabel">Types</span>
+        <button class="lib-chip lib-sel" data-fgrp="type" data-fval="all">All</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="raw">RAW</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="jpeg">JPEG</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="video">Video</button>
+        <button class="lib-chip" id="lib-types-more" title="More types">…</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="heic" hidden>HEIC</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="tiff" hidden>TIFF</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="png" hidden>PNG</button>
+        <div class="lib-filterdiv"></div>
+        <span class="lib-flabel">Flags &amp; tags</span>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="green" title="Picked">${ic('flagGreen', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="red" title="Rejected">${ic('close', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="favorite" title="Favorited">${ic('heart', 14)}</button>
+        <!-- No 'circleSlash' key in ICONS — wireframe's own unflagged glyph (Library View.html
+             :392) inlined verbatim: a plain circle with a diagonal line through it. -->
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+        <div class="lib-filterdiv"></div>
+        <button class="lib-chip" id="lib-more-filters" title="Camera, lens, ISO, duplicates, sync and rating filters">More…</button>
+      </div>
       <div id="lib-list-head">
         <div class="lib-lh-cell lib-lh-thumb"></div>
         <div class="lib-lh-cell" data-sort="name">Name</div>
@@ -3759,6 +3846,10 @@
     if (state.tagFilter === 'edited' && !sc.edited) return false;
     if (state.tagFilter === 'noedited' && sc.edited) return false;
     if (state.tagFilter === 'favorite' && !sc.favorite) return false;
+    // #5: "Unflagged" chip (Library View.html:392) — no pick/reject label and not a favorite.
+    // No backend catalog_query field for this combination; filtered client-side like the other
+    // tagFilter values already are as a secondary pass over whatever the query returned.
+    if (state.tagFilter === 'none' && (sc.label === 'Red' || sc.label === 'Green' || sc.favorite)) return false;
     return true;
   }
 
@@ -5389,6 +5480,13 @@
     });
     const se = document.getElementById('lib-search');
     if (se) se.value = state.search || '';
+    // #5: keep the chip row in sync with state too, whichever entry point changed it (a
+    // sidebar Raw/Videos shortcut, the "More filters" panel, or clearAllLibFilters).
+    const fr = document.getElementById('lib-filter-row');
+    if (fr) {
+      fr.querySelectorAll('.lib-chip[data-fgrp="type"]').forEach((c) => c.classList.toggle('lib-sel', c.dataset.fval === state.typeFilter));
+      fr.querySelectorAll('.lib-chip[data-fgrp="flag"]').forEach((c) => c.classList.toggle('lib-sel', c.dataset.fval === state.tagFilter));
+    }
     // HANDOVER §3.10: this called updateFilterChips(), which never existed — typeof-guarded so
     // it silently no-op'd every time instead of throwing. syncFilterUI is the real function.
     syncFilterUI();
@@ -5639,10 +5737,18 @@
       const sortMenuEl = document.getElementById('lib-sort-menu');
       const gearMenuEl = document.getElementById('lib-view-menu');
       const filtersPanelEl = document.getElementById('lib-filters-panel');
+      const filterRowEl = document.getElementById('lib-filter-row');
       if (sortMenuEl && sortMenuEl.classList.contains('open')) { sortMenuEl.classList.remove('open'); e.preventDefault(); return; }
       if (gearMenuEl && gearMenuEl.classList.contains('open')) { gearMenuEl.classList.remove('open'); e.preventDefault(); return; }
       if (filtersPanelEl && filtersPanelEl.classList.contains('open')) {
         filtersPanelEl.classList.remove('open');
+        e.preventDefault();
+        return;
+      }
+      // #5: the chip row is now what the Filters button itself opens/closes — same Escape
+      // contract every other transient layer in this list gets.
+      if (filterRowEl && filterRowEl.classList.contains('open')) {
+        filterRowEl.classList.remove('open');
         const filtersBtnEl = document.getElementById('lib-filters-btn');
         if (filtersBtnEl) filtersBtnEl.classList.remove('active');
         e.preventDefault();
@@ -5813,6 +5919,14 @@
     const searchEl = document.getElementById('lib-search');
     if (searchEl) searchEl.value = '';
     state.search = '';
+    // #5: keep the chip row's own selection in sync — it drives the same state fields but has
+    // no <select> for FILTER_SELECT_IDS to reset.
+    const fr = document.getElementById('lib-filter-row');
+    if (fr) {
+      fr.querySelectorAll('.lib-chip.lib-sel').forEach((c) => c.classList.remove('lib-sel'));
+      const allTypeChip = fr.querySelector('.lib-chip[data-fgrp="type"][data-fval="all"]');
+      if (allTypeChip) allTypeChip.classList.add('lib-sel');
+    }
     applyCatalogFilterChange();
   }
   overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; applyCatalogFilterChange(); };
@@ -5879,14 +5993,19 @@
   overlay.querySelector('#lib-flag-fav').onclick = async () => { await window.chromasmithToggleFavorite(); syncLibFlagRow(); };
   const filtersBtn = overlay.querySelector('#lib-filters-btn');
   const filtersPanel = overlay.querySelector('#lib-filters-panel');
-  // A slide (transform), not a display toggle, so this can't repeat #lib-filters-pop's old
-  // "an inline style always wins the cascade" trap — there's no inline display for anything
-  // else to clobber, only the .open class the two handlers below ever touch.
+  const filterRow = overlay.querySelector('#lib-filter-row');
+  // #5: the Filters button now opens the wireframe's own inline chip row (Library View.html
+  // :497 — btnFilters.onclick toggles filterRow, verbatim), not the old side panel. The panel
+  // still exists and still holds the 7 filters (camera/lens/ISO/duplicates/sync/faces/rating)
+  // that have no wireframe equivalent — opened from the row's own "More filters…" chip instead.
   filtersBtn.onclick = (e) => {
     e.stopPropagation();
-    filtersPanel.classList.toggle('open');
-    filtersBtn.classList.toggle('active', filtersPanel.classList.contains('open'));
+    filterRow.classList.toggle('open');
+    filtersBtn.classList.toggle('active', filterRow.classList.contains('open'));
   };
+  document.addEventListener('click', (e) => {
+    if (filterRow.classList.contains('open') && !filterRow.contains(e.target) && e.target !== filtersBtn) filterRow.classList.remove('open');
+  });
   overlay.querySelector('#lib-filters-panel-close').onclick = (e) => {
     e.stopPropagation();
     filtersPanel.classList.remove('open');
@@ -5894,6 +6013,36 @@
   document.addEventListener('click', (e) => {
     if (filtersPanel.classList.contains('open') && !filtersPanel.contains(e.target) && e.target !== filtersBtn) filtersPanel.classList.remove('open');
   });
+  const moreFiltersBtn = overlay.querySelector('#lib-more-filters');
+  if (moreFiltersBtn) {
+    moreFiltersBtn.onclick = (e) => {
+      e.stopPropagation();
+      filtersPanel.classList.add('open');
+    };
+  }
+  // Chip-row wiring: single-select per data-fgrp group (same rule as the wireframe's own
+  // script), driving the SAME state.typeFilter/tagFilter the hidden #lib-type-filter select and
+  // the rest of the filter machinery already use.
+  filterRow.querySelectorAll('.lib-chip[data-fgrp]').forEach((chip) => {
+    chip.onclick = () => {
+      const grp = chip.dataset.fgrp;
+      const val = chip.dataset.fval;
+      filterRow.querySelectorAll(`.lib-chip[data-fgrp="${grp}"]`).forEach((c) => c.classList.remove('lib-sel'));
+      chip.classList.add('lib-sel');
+      if (grp === 'type') {
+        const sel = overlay.querySelector('#lib-type-filter');
+        sel.value = val;
+        sel.onchange({ target: sel });
+      } else if (grp === 'flag') {
+        state.tagFilter = val;
+        applyCatalogFilterChange();
+      }
+    };
+  });
+  overlay.querySelector('#lib-types-more').onclick = (e) => {
+    e.stopPropagation();
+    filterRow.classList.toggle('types-expanded');
+  };
   overlay.querySelector('#lib-filters-clear').onclick = () => clearAllLibFilters();
   const aspectToggleBtn = overlay.querySelector('#lib-aspect-toggle');
   if (aspectToggleBtn) aspectToggleBtn.onclick = () => {
@@ -5956,32 +6105,41 @@
   const sortSel = overlay.querySelector('#lib-sort');
   sortSel.value = state.sortBy;
   sortSel.onchange = (e) => { state.sortBy = e.target.value; localStorage.setItem('chromasmith_lib_sort', state.sortBy); renderGrid(); };
-  const sortDirBtn = overlay.querySelector('#lib-sort-dir');
-  function syncSortDirBtn() { sortDirBtn.dataset.dir = state.sortDir === 'desc' ? 'desc' : 'asc'; }
-  syncSortDirBtn();
-  sortDirBtn.onclick = () => {
+  // #13: the standalone #lib-sort-dir button is gone — direction is now the sort menu's own
+  // Newest/Oldest radio pair (wired below, near syncSortMenuSel). This function is what's left:
+  // the list-view column-header click handler (further down) still needs a way to flip
+  // direction on a second click of the active column, with no DOM button behind it any more.
+  function toggleSortDir() {
     state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
     localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
-    syncSortDirBtn(); syncSortMenuSel(); renderGrid();
-  };
+    syncSortMenuSel(); renderGrid();
+  }
 
   // ── Sort pill + popover (design transplant: Library View.html's #btn-sort/#sort-menu) ──
-  // sortSel/sortDirBtn above remain the single source of truth; this popover just drives them.
+  // sortSel above / toggleSortDir below remain the single source of truth; this popover just drives them.
   const sortBtn = overlay.querySelector('#lib-sort-btn');
   const sortMenu = overlay.querySelector('#lib-sort-menu');
   const sortLabelEl = overlay.querySelector('#lib-sort-label');
-  const SORT_LABELS = { name: 'Name', mtime: 'Date modified', date: 'Date taken', camera: 'Camera', rating: 'Rating', editedts: 'Date edited' };
+  const SORT_LABELS = { name: 'Name', mtime: 'Date added', date: 'Date taken', camera: 'Camera', rating: 'Rating', editedts: 'Date edited' };
   function syncSortLabel() { sortLabelEl.textContent = SORT_LABELS[state.sortBy] || sortSel.selectedOptions[0]?.textContent || state.sortBy; }
   syncSortLabel();
   function syncSortMenuSel() {
     sortMenu.querySelectorAll('.opt[data-sortval]').forEach((o) => o.classList.toggle('sel', o.dataset.sortval === state.sortBy));
-    const dirOpt = overlay.querySelector('#lib-sort-dir');
-    if (dirOpt) dirOpt.classList.toggle('sel', state.sortDir === 'desc');
+    sortMenu.querySelectorAll('.opt[data-sortdir]').forEach((o) => o.classList.toggle('sel', o.dataset.sortdir === (state.sortDir === 'asc' ? 'asc' : 'desc')));
   }
   syncSortMenuSel();
   sortBtn.onclick = (e) => { sortMenu.classList.toggle('open'); overlay.querySelector('#lib-view-menu')?.classList.remove('open'); e.stopPropagation(); };
   sortMenu.querySelectorAll('.opt[data-sortval]').forEach((opt) => {
     opt.onclick = () => { sortSel.value = opt.dataset.sortval; sortSel.onchange({ target: sortSel }); syncSortLabel(); syncSortMenuSel(); sortMenu.classList.remove('open'); };
+  });
+  sortMenu.querySelectorAll('.opt[data-sortdir]').forEach((opt) => {
+    opt.onclick = () => {
+      state.sortDir = opt.dataset.sortdir;
+      localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
+      syncSortMenuSel(); renderGrid();
+      // Newest/Oldest stays open like every other data-sortdir/data-metaval/data-theme radio
+      // group in this menu family — only opt-action rows close the menu (#21 fix).
+    };
   });
   document.addEventListener('click', (e) => { if (!sortMenu.contains(e.target) && e.target !== sortBtn) sortMenu.classList.remove('open'); });
 
@@ -5989,23 +6147,32 @@
   metaSel.value = state.metaDisplay;
   metaSel.onchange = (e) => { state.metaDisplay = e.target.value; localStorage.setItem('chromasmith_lib_metadisp', state.metaDisplay); renderGrid(); };
 
-  const showTitleChk = overlay.querySelector('#lib-showtitle');
-  showTitleChk.checked = state.showTitle;
-  showTitleChk.onchange = (e) => { state.showTitle = e.target.checked; localStorage.setItem('chromasmith_lib_showtitle', state.showTitle ? '1' : '0'); renderGrid(); };
-  const hideIconsChk = overlay.querySelector('#lib-hideicons');
-  hideIconsChk.checked = state.hideIcons;
+  // #12: these three rows now use the same checkmark-glyph .sel idiom as every other row in
+  // this menu (sort-field, metadata, theme, aspect-ratio) instead of a native checkbox.
+  const showTitleOpt = overlay.querySelector('#lib-showtitle');
+  showTitleOpt.classList.toggle('sel', !!state.showTitle);
+  showTitleOpt.onclick = () => {
+    state.showTitle = !state.showTitle;
+    localStorage.setItem('chromasmith_lib_showtitle', state.showTitle ? '1' : '0');
+    showTitleOpt.classList.toggle('sel', state.showTitle);
+    renderGrid();
+  };
+  const hideIconsOpt = overlay.querySelector('#lib-hideicons');
+  hideIconsOpt.classList.toggle('sel', !!state.hideIcons);
   overlay.classList.toggle('lib-hide-icons', state.hideIcons);
-  hideIconsChk.onchange = (e) => {
-    state.hideIcons = e.target.checked;
+  hideIconsOpt.onclick = () => {
+    state.hideIcons = !state.hideIcons;
     localStorage.setItem('chromasmith_lib_hideicons', state.hideIcons ? '1' : '0');
+    hideIconsOpt.classList.toggle('sel', state.hideIcons);
     overlay.classList.toggle('lib-hide-icons', state.hideIcons);
   };
-  const zeroGapChk = overlay.querySelector('#lib-zerogap');
-  zeroGapChk.checked = state.zeroGap;
+  const zeroGapOpt = overlay.querySelector('#lib-zerogap');
+  zeroGapOpt.classList.toggle('sel', !!state.zeroGap);
   if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
-  zeroGapChk.onchange = (e) => {
-    state.zeroGap = e.target.checked;
+  zeroGapOpt.onclick = () => {
+    state.zeroGap = !state.zeroGap;
     localStorage.setItem('chromasmith_lib_zerogap', state.zeroGap ? '1' : '0');
+    zeroGapOpt.classList.toggle('sel', state.zeroGap);
     if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
   };
 
@@ -6121,14 +6288,14 @@
   overlay.querySelector('#lib-side-tab-library').onclick = () => {};
 
   // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
-  // #lib-sort-dir button — reusing their own handlers keeps grid view and list view unable to
+  // toggleSortDir() — reusing the same functions keeps grid view and list view unable to
   // disagree about how the collection is sorted (single source of truth: state.sortBy/sortDir).
   const listHead = overlay.querySelector('#lib-list-head');
   listHead.querySelectorAll('.lib-lh-cell[data-sort]').forEach((cell) => {
     cell.onclick = () => {
       const key = cell.dataset.sort;
       if (state.sortBy === key) {
-        sortDirBtn.onclick(); // toggle direction — already re-renders
+        toggleSortDir(); // already re-renders
       } else {
         sortSel.value = key;
         sortSel.onchange({ target: sortSel }); // sets state.sortBy + re-renders
@@ -6305,7 +6472,7 @@
   function sidebarSection(key, label, bodyHtml, opts = {}) {
     const open = sidebarSecOpen.has(key);
     const count = opts.count != null && opts.count !== '' ? `<span class="lib-coll-count">${opts.count}</span>` : '';
-    return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}" role="button" tabindex="0" aria-expanded="${open}">
+    return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}"${opts.extraHeaderAttrs || ''} role="button" tabindex="0" aria-expanded="${open}">
         <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>${label}</span>${count}
       </div>${open ? bodyHtml : ''}`;
   }
@@ -6670,6 +6837,14 @@
   /// built-in browse axis, and a photo can carry many of them at once instead of exactly one.
   function keywordsSectionHtml() {
     if (!keywordTree.length) return '';
+    // #4: this used to render its own ad-hoc header (a bare .lib-tree-row with a session-only
+    // kwExpanded('__root__') flag) instead of going through sidebarSection() like every other
+    // sidebar section — no shared collapse chrome, no entry in sidebarSecOpen, no persistence
+    // across restarts the way Collections/People/Albums/Drives/Devices/Folders/Cloud all get.
+    // Now built exactly like them; data-kw-tree-toggle stays on the header for the existing
+    // click-target tests, but the open/closed state itself is sidebarSecOpen's, same Set/key as
+    // every sibling. Also drops the header's leading tag icon — no other section header in this
+    // app or the wireframe carries one, so it was its own inconsistency.
     const byParent = new Map();
     for (const n of keywordTree) {
       const key = n.parent_id == null ? '__root__' : n.parent_id;
@@ -6696,14 +6871,8 @@
           </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
       }).join('');
     };
-    return `<div class="lib-tree-node" id="lib-keyword-tree">
-        <div class="lib-tree-row" data-kw-tree-toggle="1">
-          <span class="lib-tree-chev${kwExpanded.has('__root__') ? ' open' : ''}">${ic('chevron', 11)}</span>
-          <span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)">${ic('tag', 13)}</span>
-          <span>Keywords</span>
-        </div>
-        ${kwExpanded.has('__root__') ? `<div class="lib-tree-children">${renderLevel('__root__')}</div>` : ''}
-      </div>`;
+    const body = `<div class="lib-tree-node" id="lib-keyword-tree">${renderLevel('__root__')}</div>`;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('keywords', 'Keywords', body, { extraHeaderAttrs: ' data-kw-tree-toggle="1"' });
     // No trailing separator of its own — the next section (People & Pets) supplies its own
     // leading one. This used to double up into two adjacent dividers whenever both a keyword
     // tree AND named people existed (notes §2.3.14, "duplicated separators").
@@ -6751,7 +6920,7 @@
       const scope = `person:${p.id}`;
       return `<div class="lib-coll-row${state.catalogScope === scope && state.source === 'catalog' ? ' on' : ''}" data-person="${p.id}">
         ${faceAvaHtml(p)}<span class="lib-coll-lb">${esc(p.name)}</span>
-        <span class="lib-coll-count">${p.face_count || ''}</span>
+        <span class="lib-coll-count">${p.face_count ?? ''}</span>
       </div>`;
     };
     const namedRows = named.length
@@ -6759,7 +6928,7 @@
       : `<div class="lib-coll-row" style="opacity:.5;cursor:default">Review faces to name people</div>`;
     const unnamedRow = `<div class="lib-coll-row${state.catalogScope === 'person:unnamed' ? ' on' : ''}" data-people-review="1">
         <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
-        <span class="lib-coll-count">${unnamedCount || ''}</span>
+        <span class="lib-coll-count">${unnamedCount ?? ''}</span>
       </div>`;
     return '<div class="lib-coll-sep"></div>' + sidebarSection('people', `People &amp; Pets${scanGlyph}`, namedRows + unnamedRow);
   }
@@ -6935,7 +7104,7 @@
       sorted.forEach((c) => {
         const row = document.createElement('div');
         row.className = 'lib-coll-row';
-        row.innerHTML = `${faceAvaHtml(c)}<span class="lib-coll-lb">${esc(c.name)}</span><span class="lib-coll-count">${c.face_count || ''}</span>`;
+        row.innerHTML = `${faceAvaHtml(c)}<span class="lib-coll-lb">${esc(c.name)}</span><span class="lib-coll-count">${c.face_count ?? ''}</span>`;
         row.onclick = () => { wrap.remove(); resolve(c); };
         rows.appendChild(row);
         const ava = row.querySelector('.lib-face-ava[data-face-id]');
@@ -7037,7 +7206,7 @@
   function catalogSectionHtml() {
     return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all" role="button" tabindex="0">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
-        <span class="lib-coll-count">${catalogCounts.all || ''}</span>
+        <span class="lib-coll-count">${catalogCounts.all ?? ''}</span>
       </div>`;
     // Note: Drives used to render immediately here. It's now placed by renderCollections()'s own
     // assembly order (see the sidebar reorder comment there) rather than baked into this
@@ -7053,13 +7222,18 @@
   // useful thing to see rather than noise). Per Library View.html:331-332, these are the last
   // two rows INSIDE Collections, not top-level rows next to All Photos.
   function rawVideoShortcutRows() {
+    // HANDOVER 2026-09-08 item #14: these rendered no count element at all, unlike every other
+    // row in renderCollections() — catalog_counts() now exposes raw/video (catalog.rs), same
+    // ?? '' fix as every other count span (0 must render "0", not blank).
     const raw = `
       <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'raw' ? ' on' : ''}" data-type-shortcut="raw" title="All RAW files">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">Raw</span>
+        <span class="lib-coll-count">${catalogCounts.raw ?? ''}</span>
       </div>`;
     const video = `
       <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'video' ? ' on' : ''}" data-type-shortcut="video" title="All video clips">
         <span class="lib-coll-ic">${ic('video', 14)}</span><span class="lib-coll-lb">Videos</span>
+        <span class="lib-coll-count">${catalogCounts.video ?? ''}</span>
       </div>`;
     return raw + video;
   }
@@ -8566,7 +8740,7 @@
     const rows = _albums.map((a) => `
       <div class="lib-coll-row${state.source === 'album:' + a.id ? ' on' : ''}" data-album="${a.id}" title="${esc2(a.name)} — ${a.paths.length} photo${a.paths.length === 1 ? '' : 's'}">
         <span class="lib-coll-ic">${ALBUM_SVG}</span><span class="lib-coll-lb">${esc2(a.name)}</span>
-        <span class="lib-coll-count">${a.paths.length || ''}</span>
+        <span class="lib-coll-count">${a.paths.length ?? ''}</span>
       </div>`).join('');
     const newBtn = `<span id="lib-album-new" title="New album" style="float:right;cursor:pointer;padding:0 4px">+</span>`;
     return '<div class="lib-coll-sep"></div>' + sidebarSection('albums', `Albums${newBtn}`,
@@ -8741,7 +8915,7 @@
     const collectionsBody = COLLECTIONS.map((c) => `
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}" role="button" tabindex="0">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
-        <span class="lib-coll-count">${collectionCounts[c.name] || ''}</span>
+        <span class="lib-coll-count">${collectionCounts[c.name] ?? ''}</span>
       </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + rawVideoShortcutRows();
     // Sidebar section order (UI_SPEC.md wireframe order): All Photos (catalogSectionHtml) →
     // By Date (dateSectionHtml, its own top-level section) → Collections → People & Pets →
@@ -8754,27 +8928,36 @@
     // tooling's structural audit flagged it. dateSectionHtml() can return '' (no dates yet), so
     // the separator is conditional on it — else a bare divider would dangle before Collections.
     const dateHtml = dateSectionHtml();
+    // ⚠️ REGRESSION FIX (found live 2026-09-08, not by any prior tooling — the tooling's own
+    // check for this had a silent early-return that no-op'd whenever #lib-tree was absent, so
+    // it never caught the destroy either). The first fix attempt moved #lib-tree via
+    // insertAdjacentElement to a position INSIDE #lib-collections (the folders-header's
+    // insertion point) — which is STILL inside the container this function rewrites via
+    // innerHTML, so the tree was destroyed on the very next render regardless. A node embedded
+    // anywhere inside a string that becomes some container's innerHTML is, structurally,
+    // ALWAYS a descendant of that container — there is no way to interleave a persistent live
+    // node between two pieces of rewritten HTML without giving it a container of its own.
+    // #lib-side's static template (see its <div id="lib-tree">...</div> markup) now gives the
+    // tree that container: #lib-tree sits as a REAL, PERMANENT SIBLING of #lib-collections,
+    // never touched by any innerHTML assignment, with its own small #lib-folders-header sibling
+    // immediately before it (rewritten every render — it's just a chevron+label, cheap) and
+    // #lib-collections-post immediately after it (holds only Cloud, the one section that must
+    // render after the tree). #lib-collections itself now holds everything BEFORE Folders.
     host.innerHTML = catalogSectionHtml() + (dateHtml ? '<div class="lib-coll-sep"></div>' + dateHtml : '')
       + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
-      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml()
-      + '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '')
-      + cloudSectionHtml();
-    // The actual folder tree renders into the SIBLING #lib-tree node (renderTree(), elsewhere in
-    // this file) rather than into #lib-collections, so "Folders" collapsing hides that sibling
-    // directly instead of trying to fold tree markup into this function's own innerHTML.
+      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml();
+    const foldersHeaderEl = document.getElementById('lib-folders-header');
+    if (foldersHeaderEl) foldersHeaderEl.innerHTML = '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '');
     const treeEl = document.getElementById('lib-tree');
-    if (treeEl) {
-      treeEl.style.display = sidebarSecOpen.has('folders') ? '' : 'none';
-      // HANDOVER §8 item #5: #lib-tree is a static-template SIBLING of #lib-collections
-      // (`<div id="lib-collections"></div><div id="lib-tree"></div>`), so it always painted
-      // AFTER everything host.innerHTML just wrote above — including Cloud, the LAST section —
-      // regardless of where the "Folders" header actually sits in that sequence. Moved here,
-      // every render, to sit directly after its own header (this node is being RELOCATED, not
-      // recreated, so renderTree()'s own separately-managed content inside it survives).
-      const foldersHeader = host.querySelector('[data-sec-toggle="folders"]');
-      if (foldersHeader) foldersHeader.insertAdjacentElement('afterend', treeEl);
-    }
-    host.querySelectorAll('[data-sec-toggle]').forEach((row) => {
+    if (treeEl) treeEl.style.display = sidebarSecOpen.has('folders') ? '' : 'none';
+    const postEl = document.getElementById('lib-collections-post');
+    if (postEl) postEl.innerHTML = cloudSectionHtml();
+    // Every wiring call below used to query `host` (#lib-collections) alone, which was safe
+    // when every section lived inside it. Now that Folders/Cloud are their own siblings, the
+    // wiring scope is #lib-side — the real common ancestor of all four containers — so a row in
+    // any of them still gets its click/drag handlers.
+    const host2 = document.getElementById('lib-side') || host;
+    host2.querySelectorAll('[data-sec-toggle]').forEach((row) => {
       row.onclick = (e) => {
         e.stopPropagation();
         const key = row.dataset.secToggle;
@@ -8785,21 +8968,21 @@
     });
     wireAlbumRows(host);
     wirePeopleRows(host);
-    host.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
+    host2.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
       // "All Photos" doubles as a clear-all-filters shortcut on a second click — matches the
       // sidebar's other "click again to reset" gestures and gives filters an escape hatch that
       // doesn't require opening the Filters panel.
       if (row.dataset.catalog === 'all') row.ondblclick = () => clearAllLibFilters();
     });
-    host.querySelectorAll('.lib-coll-row[data-type-shortcut]').forEach((row) => {
+    host2.querySelectorAll('.lib-coll-row[data-type-shortcut]').forEach((row) => {
       row.onclick = async () => {
         state.typeFilter = row.dataset.typeShortcut;
         syncFilterControls();
         await openCatalogView('all');
       };
     });
-    const facesPendingRow = host.querySelector('[data-faces-pending]');
+    const facesPendingRow = host2.querySelector('[data-faces-pending]');
     if (facesPendingRow) {
       facesPendingRow.onclick = async () => {
         // "All photos" scope + the faces filter, same combination the filter-chip dropdown
@@ -8815,25 +8998,25 @@
         await openCatalogView('all');
       };
     }
-    const freeUpRow = host.querySelector('[data-cache-free]');
+    const freeUpRow = host2.querySelector('[data-cache-free]');
     if (freeUpRow) freeUpRow.onclick = (e) => showCacheMenu(e);
-    const verifyRow = host.querySelector('[data-verify-library]');
+    const verifyRow = host2.querySelector('[data-verify-library]');
     if (verifyRow) verifyRow.onclick = () => runVerifyLibrary();
-    const findDupesRow = host.querySelector('[data-find-duplicates]');
+    const findDupesRow = host2.querySelector('[data-find-duplicates]');
     if (findDupesRow) findDupesRow.onclick = () => runDupeDetectionOnDemand();
-    const rescanFlagsRow = host.querySelector('[data-rescan-flags]');
+    const rescanFlagsRow = host2.querySelector('[data-rescan-flags]');
     if (rescanFlagsRow) rescanFlagsRow.onclick = () => runRescanFlags();
     // "By Date" root row: toggles the whole tree open/closed, same gesture the real folder
     // tree's own root uses, but never navigates on its own (a bare "By Date" click isn't a
     // filterable scope — unlike every row inside it).
-    const dateTreeRoot = host.querySelector('[data-date-tree-toggle]');
+    const dateTreeRoot = host2.querySelector('[data-date-tree-toggle]');
     if (dateTreeRoot) {
       dateTreeRoot.onclick = () => {
         if (dateExpanded.has('__root__')) dateExpanded.delete('__root__'); else dateExpanded.add('__root__');
         renderCollections();
       };
     }
-    host.querySelectorAll('.lib-tree-row[data-date-scope]').forEach((row) => {
+    host2.querySelectorAll('.lib-tree-row[data-date-scope]').forEach((row) => {
       const toggleKey = row.dataset.dateToggle;
       // Chevron: LOCAL state only — toggle which children are visible, re-render the sidebar
       // from the counts already in memory (refreshCatalogCounts fetched them), and stop right
@@ -8856,15 +9039,9 @@
         openCatalogView(row.dataset.dateScope);
       };
     });
-    // "Keywords" root row: same expand-only gesture as "By Date"'s own root.
-    const kwTreeRoot = host.querySelector('[data-kw-tree-toggle]');
-    if (kwTreeRoot) {
-      kwTreeRoot.onclick = () => {
-        if (kwExpanded.has('__root__')) kwExpanded.delete('__root__'); else kwExpanded.add('__root__');
-        renderCollections();
-      };
-    }
-    host.querySelectorAll('.lib-tree-row[data-kw-scope]').forEach((row) => {
+    // Keywords' header now goes through the shared [data-sec-toggle] wiring above (#4) —
+    // no bespoke click handler needed any more.
+    host2.querySelectorAll('.lib-tree-row[data-kw-scope]').forEach((row) => {
       // Chevron: expansion ONLY, no catalog navigation — same split the date tree and folder
       // tree use. Row body: navigation ONLY, no expansion toggle.
       const kwChev = row.querySelector('[data-chev-toggle]');
@@ -8901,13 +9078,13 @@
         toast(`Tagged ${paths.length} photo${paths.length > 1 ? 's' : ''} "${kwPath.split('|').pop()}"`);
       };
     });
-    host.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
+    host2.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
       row.onclick = () => openImportPanel(row.dataset.card);
     });
-    host.querySelectorAll('.lib-card-row[data-card-pick]').forEach((row) => {
+    host2.querySelectorAll('.lib-card-row[data-card-pick]').forEach((row) => {
       row.onclick = () => pickImportFolder();
     });
-    host.querySelectorAll('.lib-coll-row[data-coll]').forEach((row) => {
+    host2.querySelectorAll('.lib-coll-row[data-coll]').forEach((row) => {
       row.onclick = () => {
         const name = row.dataset.coll;
         if (name === 'edited') ensureBackfill();
@@ -8938,7 +9115,7 @@
         Promise.all(paths.map(mutate)).then(() => toast(`Added ${paths.length} photo${paths.length === 1 ? '' : 's'} to ${label ? label.textContent : 'collection'}`, true));
       };
     });
-    const root = host.querySelector('[data-lr-root]');
+    const root = host2.querySelector('[data-lr-root]');
     if (root) {
       // Disconnected → wireframe empty state in the main area (the Connect button there starts
       // OAuth); connected with albums loaded → jump to the first album; loading → ignore.
@@ -8951,7 +9128,7 @@
       };
       root.oncontextmenu = (e) => { e.preventDefault(); lrSignOut(); };
     }
-    host.querySelectorAll('[data-lr-album]').forEach((row) => { row.onclick = () => openLrAlbum(row.dataset.lrAlbum); });
+    host2.querySelectorAll('[data-lr-album]').forEach((row) => { row.onclick = () => openLrAlbum(row.dataset.lrAlbum); });
     // Connected chip (viewbar, right-aligned) — visible only while browsing the cloud source.
     overlay.classList.toggle('lr-mode', state.source === 'lr' && !!(window.lrCloud && window.lrCloud.connected()));
     const chipOut = document.querySelector('#lib-lr-chip .lib-lr-signout');

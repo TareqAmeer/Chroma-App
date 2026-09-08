@@ -510,3 +510,173 @@ touched). One tooling hygiene fix found along the way: expanding the keyword/fol
 session surfaced their own sample data ("Portrait", "Iceland", "sub") as spurious EXTRA findings
 in `wireframe_inventory.mjs` — added to the existing dynamic-data noise filter alongside the
 People/Album/Device sample names already there.
+
+---
+
+## 10. 2026-09-08 (tooling-first pass) — repaired the tooling before trusting any "fixed", found 20 more defects, fixed all of it
+
+The user reported 14 items after the §8/§9 fix pass, several of them items §9 had just claimed
+fixed. `HANDOVER_NEXT.md` documented two live diagnosis mistakes and one confirmed dead check
+(the sidebar-hover colour pair). Per explicit instruction, this session did NOT start fixing —
+it audited all three test files (`wireframe_inventory.mjs`, `wireframe_behaviour.mjs`,
+`library_responsive_qa.mjs`) for the same "reports PASS while findings are real" shape first,
+with a hard stop condition: if the repaired tooling couldn't surface ≥10 discrepancies beyond
+the 14 reported, stop and re-examine the tooling rather than declare victory. It surfaced 20.
+
+### What was actually wrong with the tooling (not guessed — traced)
+
+- **The gate was not a gate.** `wireframe_inventory.mjs` compared each run against the PREVIOUS
+  run's report, then overwrote that report in the same run — a new defect failed exactly once
+  and was "persisting" (exit 0) forever after. On a clean checkout the report file doesn't
+  exist, `recheck()` returns null, and the script always exited 0. 35 findings + `RESULT: FAIL`
+  on stdout coexisted with a green exit code. Now hard-fails on anything not explicitly
+  allowlisted.
+- **The allowlist was unscoped.** `isAccepted()` was a bare substring test — `order@3`, reasoned
+  about as a sidebar walker artifact, was silently suppressing a REAL sortmenu finding
+  (Date-added-vs-Date-modified) too. Every entry is now zone-tagged and matching is
+  zone-qualified; an unscoped entry is rejected at load.
+- **Four checks could never fail**, not one: the documented sidebar-hover colour pair;
+  `wireframe_behaviour.mjs`'s "Develop tab matches its own tooltip" (its only `expect` sat
+  inside an `if` whose condition — `/not yet available/i.test(title)` — stopped being true once
+  the title became "Switch to Develop", so it asserted nothing and reported PASS while still
+  clicking the button); its prefers-reduced-motion test (the fixture's own `settleForCapture`
+  injects `transition-duration:0s!important` before the test reads it — unfalsifiable by
+  construction); and `library_responsive_qa.mjs`'s `NO_ELLIPSIS` (its `scrollWidth>clientWidth`
+  precondition can only be true for an element that ALREADY has the `overflow:hidden`+`nowrap`
+  it's checking for the absence of — the wrap defect it was written for was invisible to it, and
+  it also searched for `.rn`, a wireframe-only class that doesn't exist in the app).
+- **The folder-tree chevron behaviour test silently `test.skip()`'d every run** because its
+  fixture never expanded the tree — a non-failure read as coverage that never existed.
+- **The focus-ring check accepted any `box-shadow`**, including `.lib-btn`'s own decorative
+  resting shadow, so it never actually required focus to change anything visually.
+
+### New coverage that finds things without being told about them
+
+Rather than only re-diagnosing the 14 reported items, `wireframe_inventory.mjs` gained
+self-consistency checks that compare the app against ITSELF (no wireframe counterpart needed):
+shared section-header chrome, count-badge presence/emptiness per row family, one on-state idiom
+per menu, one-off leading icons, icon centering reported WITH the actual CSS causing it (not
+just an offset number), one-off icon sizes, truncation PROVEN by substituting a 60-character
+label into a real row and measuring whether it grows (not inferred from a CSS property), hover
+asserted as a MEASURED perceptual colour delta benchmarked against the wireframe's own hover
+lift, and sidebar render idempotence (render the sidebar twice, diff which element ids survive).
+`library_responsive_qa.mjs` grew from 4 to 11 viewports (a real defect sat between two of the
+old sample points), descends into flex wrappers instead of only comparing `#lib-top`'s direct
+children, and drags the sidebar to its 150px floor as a second pass.
+
+### The 20 new discrepancies this surfaced, and what turned out to matter most
+
+1. **The folder tree was permanently destroying itself — a REGRESSION from §9's own #5 fix.**
+   That fix moved `#lib-tree` via `insertAdjacentElement` to a position that was STILL inside
+   `#lib-collections`, the exact container `renderCollections()` rewrites via `innerHTML` on
+   every call — proven live: two consecutive section-toggle clicks and the tree was gone with no
+   error. `sidebarSection('folders', ...)`'s previous fix had the tree "fixed" for exactly one
+   render. Real fix: `#lib-tree` is now a permanent, structurally-separate sibling of
+   `#lib-collections` (`#lib-side`'s static template gained `#lib-folders-header` +`#lib-tree`
+   +`#lib-collections-post`, none of which any `innerHTML` write ever touches) — a node embedded
+   anywhere inside a string that becomes some container's `innerHTML` is, structurally, ALWAYS a
+   descendant of that container; there is no way to interleave a persistent live node between
+   two pieces of rewritten HTML without giving it a container of its own. Verified live: tree
+   survives 4 consecutive re-renders and stays correctly positioned.
+2-5. **Sidebar/topbar hover was invisible** (0.0-3.0/255 measured delta) because `--sur` and
+   `--sur2` are BOTH aliased to `--surface-tile-2` while the row's own ground is
+   `--surface-tile-1`. Fixed by copying the wireframe's own mechanism literally (Library View
+   .html:24,143) — a fixed-alpha overlay (`--hover-tint: rgba(255,255,255,.08)` dark /
+   `rgba(0,0,0,.035)` light) instead of a surface-colour swap, which stays visible no matter how
+   the surface tokens are aliased underneath.
+6-10. Empty/inconsistent section chrome and count badges: "By date" missing `data-sec-toggle`
+   (investigated — a DELIBERATE prior decision with its own code comment, allowlisted rather
+   than migrated); "Flagged"/"Rejected" and every other `0`-count row rendering BLANK instead of
+   "0" — `collectionCounts[c.name] || ''` treats `0` as falsy; same bug audited and fixed across
+   every sibling count span (`face_count`, `unnamedCount`, `catalogCounts.all`,
+   `a.paths.length`) via `??` instead of `||`.
+11-12. Sort/gear menus mixed two "is this on" idioms (native checkbox vs checkmark glyph) —
+   unified onto the checkmark idiom app-wide (#12); "Real aspect ratio" carried a leading icon
+   none of its 9 sibling option rows had — removed (#10/#11).
+13-14. **Topbar controls genuinely overlapped from 1100px down to 640px**, up to 18px — not
+   caught before because `.lib-zoomrow{min-width:60px}` was LESS than its own children's actual
+   minimum footprint (2×12px icons + 2×8px gaps + a 50px-min slider = 90px), so the icons/slider
+   silently overflowed their own flex box without increasing `#lib-top`'s `scrollWidth` — the
+   exact signal the `ResizeObserver`-based compact-mode detector depends on. Raised to 90px,
+   which lets the row's real overflow become detectable, which lets `.lib-top-compact` engage
+   the way it always should have. Also ported the wireframe's own compact contract literally
+   (`.topbar.compact .zoomrow svg{display:none}`, Library View.html:61) rather than re-deriving
+   a squeeze rule from scratch.
+15. `library_responsive_qa.mjs`'s own overlap check had a bug: its wrapper-descending `leaves()`
+   recursed into `<svg>` elements' internal primitives (`circle`/`path` are real DOM children of
+   an `svg`), extracting the LOGO's own icon parts as fake top-level "controls" compared against
+   unrelated buttons. Fixed: any `SVGElement` is always a leaf.
+16-17. Search input dropped to 76px at 900px width (below its own 80px floor) — the
+   `.lib-search-wrap` min-width (120px) left only ~78px for the input once icon+padding+gap
+   overhead was subtracted; raised to 130px.
+18. `.lib-flagrow` flag chips still painted as filled rounded-rect chips at rest — HANDOVER_NEXT
+   §0's diagnosis was right: `.lib-btn{background:var(--sur2)}` (the shared base rule), not
+   `border` (already 0 from a prior session). One line: `background:none`.
+19. `.lib-edited-badge` was missing from the "Hide flag & type icons" selector list — every
+   other badge/flag class was there, this one wasn't (a one-line omission).
+20. Sidebar labels (`.lib-coll-lb`) had no `white-space:nowrap`/`overflow:hidden`/
+   `text-overflow:ellipsis` — proven live by substituting a 60-character label into a real row
+   and measuring the row grow from 27px to 72px tall. Fixed.
+
+### The user's explicit decisions this session (not diagnosed — decided)
+
+- **Filters (#5)**: built the wireframe's inline chip row EXACTLY (Library View.html:375-392) —
+  Types pills (All/RAW/JPEG/Video + a "…" more-types expander for HEIC/TIFF/PNG/DNG) + a divider
+  + Flags & tags icon chips (pick/reject/favorite/unflagged, including a new "unflagged" tag-
+  filter value with no prior UI surface). The "Filters" topbar button now opens/closes this row
+  (matching the wireframe's own `btnFilters.onclick` exactly), not the old side panel. The old
+  panel (camera/lens/ISO/duplicates/sync/faces/rating — real features with no wireframe
+  equivalent) still exists, reachable from the row's own "More…" chip — the wireframe wins on
+  the row it actually specifies; the app's extra filters stay, just relocated.
+- **Sort menu (#13)**: cut to the wireframe's exact 3 keys (Date taken / Date added / Date
+  edited — "Date added" reuses the existing `mtime` sort key, the closest available proxy; there
+  is no distinct catalog-added timestamp anywhere in this app) + a Newest first/Oldest first
+  radio pair replacing the old single "Reverse order" toggle. Name/Rating/Camera sorting is
+  still reachable via the list-view's own column headers (`data-sort` on `.lib-lh-cell`) — a
+  separate, real feature the wireframe's mock has no equivalent surface for at all, so it was
+  left alone rather than deleted.
+- **Icon centering (#7)**: added a documented, reusable mechanism (`.lib-icon-center`, copied
+  literally from Library View.html:52's `.viewtoggle button` — fixed 28×28 box + flex
+  centering) instead of patching one button — this was at least the second time an
+  icon-centering defect had been reported per-button.
+- **Keywords section (#4)**: now goes through `sidebarSection()` exactly like every sibling
+  (Collections/People/Albums/Drives/Devices/Folders/Cloud) — shared collapse chrome, an entry in
+  `sidebarSecOpen` (persisted across restarts, which it never was before), and no more leading
+  tag icon (no other section header in the app or the wireframe has one — that was its own,
+  independent inconsistency).
+
+### Not touched, on purpose
+
+- **#10 (real aspect ratio "broken")**: turned out NOT to be a code bug. The `?libtest` mock's
+  thumbnail is a literal 1×1-pixel transparent PNG (`get_thumbnail`'s mock response) — the
+  aspect-ratio CSS (`width:auto;height:100%` once `.loaded`) correctly toggles and the `.grid`
+  gains `aspect-view`, but a 1×1 image has no real aspect ratio to display, so the grid stayed
+  visually square regardless. Confirmed the toggle logic itself is correct; a real photo (with
+  real RW2/JPEG dimensions) would show it working. No functional fix needed, only the icon
+  removal (#11) above.
+- **Gear menu's remaining "extras"** (the Library action group — Choose folder/Import from
+  Google Photos/Recent folders/Get Info/Full-window view/Compare view — plus Show title): real
+  features with no wireframe equivalent, same superset reasoning already settled for Filters/
+  sidebar-collapse in §6.2/§6.3. Allowlisted with written reasons, not silently dropped.
+- **"By date" section's own bespoke open-state**: a previously DOCUMENTED, deliberate decision
+  (dateSectionHtml's own comment: "sidebarSecOpen would need a migration for no behavioral
+  gain") — different from Keywords' accidental omission (no rationale was ever given for that
+  one). Left as-is, allowlisted.
+
+### Verification
+
+Full pass, all green: `wireframe:test` (0 unaccepted findings, hard-gated), `behaviour:test` (74
+Playwright tests, including the 2 repaired dead checks and the previously-skipped folder-tree
+test — all real assertions now), `library:responsive-test` (0 findings across 11 viewports incl.
+the sidebar's 150px floor), `lint:library-content` (the one pre-existing `tabular-nums` finding
+on `#lib-filters-badge` fixed along the way), `lint:ai`, `lint:formats`, `mask:test`, `lib:test`,
+`ui:test`, `perf:test` — all PASS, none of the editor/shader/perf paths were touched this
+session so nothing there was expected to move.
+
+**⚠️ Not done this session: a native Tauri rebuild.** `catalog.rs::catalog_counts_run` gained two
+new SQL fields (`raw`/`video`, for #14's sidebar counts) — `desktop/dist/` (what every
+Playwright/preview check above reads) is fully up to date via `build-desktop.sh`, but the
+COMPILED macOS app (`/Applications/Chromasmith.app`, `Chromasmith copy.app`) will not see the
+Rust change until a real `cargo`/`tauri build` runs — a multi-minute step out of scope for this
+tooling-plus-fix pass. The JS side degrades safely in the meantime (`catalogCounts.raw ?? ''`
+just renders blank against an old binary that never sends those fields).

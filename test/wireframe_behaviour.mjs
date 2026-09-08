@@ -168,34 +168,56 @@ test.describe('topbar', () => {
   });
 
   test('choosing a sort option updates the pill label and persists', async ({ lib: { page } }) => {
+    // #13: the menu is now the wireframe's own 3 keys (HANDOVER #13, fixed 2026-09-08) —
+    // 'name' is no longer one of the visible menu rows (still reachable via the list-view
+    // Name column header, a separate real feature untouched by the wireframe's spec).
     await page.click('#lib-sort-btn');
-    await page.click('#lib-sort-menu .opt[data-sortval="name"]');
-    await expect(page.locator('#lib-sort-label')).toHaveText('Name');
-    expect(await ls(page, 'chromasmith_lib_sort')).toBe('name');
+    await page.click('#lib-sort-menu .opt[data-sortval="editedts"]');
+    await expect(page.locator('#lib-sort-label')).toHaveText('Date edited');
+    expect(await ls(page, 'chromasmith_lib_sort')).toBe('editedts');
     await expect(page.locator('#lib-sort-menu')).not.toHaveClass(/\bopen\b/);
   });
 
-  test('sort direction flips, persists, and keeps the menu open', async ({ lib: { page } }) => {
+  test('sort direction: Newest/Oldest radio pair updates, persists, and keeps the menu open', async ({ lib: { page } }) => {
+    // #13: replaces the old single "Reverse order" toggle button with the wireframe's own
+    // Newest first / Oldest first radio pair (Library View.html:244-245).
     await page.click('#lib-sort-btn');
     const before = await ls(page, 'chromasmith_lib_sortdir');
-    await page.click('#lib-sort-dir');
-    const after = await ls(page, 'chromasmith_lib_sortdir');
-    expect(after).not.toBe(before);
-    await expect(page.locator('#lib-sort-dir')).toHaveAttribute('data-dir', after);
-    // Deliberate: direction is a refinement of the current sort, so the menu stays up.
+    const target = before === 'asc' ? 'desc' : 'asc';
+    await page.click(`#lib-sort-menu .opt[data-sortdir="${target}"]`);
+    expect(await ls(page, 'chromasmith_lib_sortdir')).toBe(target);
+    await expect(page.locator(`#lib-sort-menu .opt[data-sortdir="${target}"]`)).toHaveClass(/\bsel\b/);
+    // Deliberate: direction is a refinement of the current sort, so the menu stays up — same
+    // family as every other data-sortdir/data-metaval/data-theme radio group (#21).
     await expect(page.locator('#lib-sort-menu')).toHaveClass(/\bopen\b/);
   });
 
-  test('filters panel opens, closes by its X, and closes on outside click', async ({ lib: { page } }) => {
+  test('the Filters button opens the wireframe\'s inline chip row and closes on outside click', async ({ lib: { page } }) => {
+    // #5: the Filters button now opens the wireframe's own inline chip row (Library View.html
+    // :497), not the old side panel — the panel still exists (camera/lens/ISO/duplicates/sync/
+    // faces/rating, real features with no wireframe equivalent) behind the row's own "More…"
+    // chip, fixed 2026-09-08.
     await page.click('#lib-filters-btn');
-    await expect(page.locator('#lib-filters-panel')).toHaveClass(/\bopen\b/);
+    await expect(page.locator('#lib-filter-row')).toHaveClass(/\bopen\b/);
     await expect(page.locator('#lib-filters-btn')).toHaveClass(/\bactive\b/);
+    await page.click('#lib-grid', { position: { x: 5, y: 5 } });
+    await expect(page.locator('#lib-filter-row')).not.toHaveClass(/\bopen\b/);
+  });
+
+  test('the chip row\'s "More…" chip opens the extra-filters panel', async ({ lib: { page } }) => {
+    await page.click('#lib-filters-btn');
+    await page.click('#lib-more-filters');
+    await expect(page.locator('#lib-filters-panel')).toHaveClass(/\bopen\b/);
     await page.click('#lib-filters-panel-close');
     await expect(page.locator('#lib-filters-panel')).not.toHaveClass(/\bopen\b/);
+  });
+
+  test('Types/Flags chips filter the grid and stay in sync with the underlying selects', async ({ lib: { page } }) => {
     await page.click('#lib-filters-btn');
-    await expect(page.locator('#lib-filters-panel')).toHaveClass(/\bopen\b/);
-    await page.click('#lib-grid', { position: { x: 5, y: 5 } });
-    await expect(page.locator('#lib-filters-panel')).not.toHaveClass(/\bopen\b/);
+    await page.click('#lib-filter-row .lib-chip[data-fgrp="type"][data-fval="raw"]');
+    await expect(page.locator('#lib-type-filter')).toHaveValue('raw');
+    await expect(page.locator('#lib-filter-row .lib-chip[data-fgrp="type"][data-fval="raw"]')).toHaveClass(/lib-sel/);
+    await expect(page.locator('#lib-filter-row .lib-chip[data-fgrp="type"][data-fval="all"]')).not.toHaveClass(/lib-sel/);
   });
 
   test('a type filter narrows the grid and lights the badge', async ({ lib: { page } }) => {
@@ -457,9 +479,11 @@ test.describe('sidebar', () => {
   });
 
   // Each section header toggles independently against one shared Set + key
-  // (chromasmith_lib_sec_open_v1, library-ui.js:6162-6180). Keywords is deliberately absent —
-  // it is a [data-kw-tree-toggle] tree row with a session-only Set, not a section.
-  for (const sec of ['collections', 'people', 'albums', 'drives', 'devices', 'folders', 'cloud']) {
+  // (chromasmith_lib_sec_open_v1). Keywords now goes through the same sidebarSection() chrome
+  // as every other section (HANDOVER #4, fixed 2026-09-08) — it used to be a bespoke
+  // [data-kw-tree-toggle] tree row with its own session-only Set, deliberately excluded here for
+  // that reason; that reason no longer applies.
+  for (const sec of ['collections', 'people', 'albums', 'drives', 'devices', 'folders', 'cloud', 'keywords']) {
     test(`section "${sec}" toggles independently and persists`, async ({ lib: { page } }) => {
       const head = page.locator(`[data-sec-toggle="${sec}"]`);
       if (await head.count() === 0) test.skip(true, `section ${sec} not rendered in this mock state`);
@@ -474,7 +498,7 @@ test.describe('sidebar', () => {
       await expect.poll(async () => (JSON.parse(await ls(page, 'chromasmith_lib_sec_open_v1') || '[]')).includes(sec))
         .toBe(!openBefore);
       // The others must be untouched by this click.
-      const others = ['collections', 'people', 'albums', 'drives', 'devices', 'folders', 'cloud'].filter((s) => s !== sec);
+      const others = ['collections', 'people', 'albums', 'drives', 'devices', 'folders', 'cloud', 'keywords'].filter((s) => s !== sec);
       const after = JSON.parse(await ls(page, 'chromasmith_lib_sec_open_v1') || '[]');
       const defaults = new Set(['collections', 'folders', 'drives']);
       for (const o of others) {
@@ -611,8 +635,17 @@ test.describe('quality', () => {
     await expect(page.locator('#lib-view-menu')).not.toHaveClass(/\bopen\b/);
   });
 
-  test('Escape closes the filters panel', async ({ lib: { page } }) => {
+  test('Escape closes the filters chip row', async ({ lib: { page } }) => {
+    // #5: Filters now opens #lib-filter-row, not #lib-filters-panel — same Escape contract.
     await page.click('#lib-filters-btn');
+    await expect(page.locator('#lib-filter-row')).toHaveClass(/\bopen\b/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#lib-filter-row')).not.toHaveClass(/\bopen\b/);
+  });
+
+  test('Escape closes the extra-filters panel', async ({ lib: { page } }) => {
+    await page.click('#lib-filters-btn');
+    await page.click('#lib-more-filters');
     await expect(page.locator('#lib-filters-panel')).toHaveClass(/\bopen\b/);
     await page.keyboard.press('Escape');
     await expect(page.locator('#lib-filters-panel')).not.toHaveClass(/\bopen\b/);
