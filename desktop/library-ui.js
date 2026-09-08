@@ -1469,8 +1469,8 @@
            gear's View menu (below) per explicit decision: it's a real feature but not common
            enough to earn a permanent topbar slot next to the two everyday view modes. -->
       <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg">
-        <button data-v="grid" title="Grid view">${ic('crop',14)}</button>
-        <button data-v="list" title="List view">${ic('log',14)}</button>
+        <button data-v="grid" title="Grid view">${ic('gridView',14)}</button>
+        <button data-v="list" title="List view">${ic('tableView',14)}</button>
       </div>
       <div class="lib-zoomrow">
         ${ic('zoomOut',12)}
