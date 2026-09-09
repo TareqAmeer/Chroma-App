@@ -337,10 +337,11 @@
     },
     "3.4.9": {
       "category": "looks-panel",
-      "status": "open",
+      "status": "fixed",
       "source": "Preset section should be expandable/contracted, fit 6 filters with internal scroll",
       "wireframeRef": ".dc.html .presetbox collapse + .preset-grid",
-      "check": "editor_wireframe_behaviour.mjs: preset box collapse"
+      "check": "editor_wireframe_behaviour.mjs: preset box collapse",
+      "note": "Fixed 2026-09-09: Preset section (#fx-looks-ctrl) has its own collapse/expand toggle (#fx-preset-head, chevron rotates, persisted to localStorage chromasmith_fx_preset_collapsed) independent of the whole panel-level collapse every .fx-ctrl already has. Grid max-height set to fit exactly 6 tiles (3 rows at the real 2-column deskx layout) with overflow-y:auto for the rest -- measured live (tiles render 118.625px tall, gap 6px -> 368px exact), not estimated; the FIRST attempt at this used the wrong selector (body.fx-deskb .looks-grid, 2 columns, beats the base 3-column rule under real deskx) and would have shipped inert. Verified live via Playwright: 0 page errors, collapse toggles both directions, grid clientHeight=368 with scrollHeight=7615 confirming the scroll actually engages for the other 116 tiles."
     },
     "3.4.10": {
       "category": "looks-panel",

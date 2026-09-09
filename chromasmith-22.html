@@ -888,7 +888,12 @@ body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:s
    cause; it is now inert here and only still applies to the 2-column web layout. */
 body.fx-deskb .fx-panel{columns:initial;max-height:calc(100vh - 130px);overflow-y:auto;align-self:start;overscroll-behavior:contain}
 body.fx-deskb .fx-ctrl.sec-active:last-of-type{margin-bottom:0}
-body.fx-deskb .looks-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-height:480px}
+/* 3.4.9: this is the rule that actually wins under deskx (body carries both .deskx and
+   .fx-deskb, and this 2-class selector beats the base .looks-grid rule above) — the 198px set
+   there never took effect for the real desktop layout. 2 columns here (not 3), so "fit 6 tiles"
+   is 3 rows. Measured live (not estimated): tiles render 118.625px tall at this panel width,
+   gap is 6px, so 3*118.625 + 2*6 = 367.875px for an exact 6-tile fit before scrolling. */
+body.fx-deskb .looks-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-height:368px}
 body.fx-deskb #fx-actionbar,body.fx-deskb #fx-secnav{display:none}
 /* image always fits the viewport — no page scroll to see it */
 body.fx-deskb #fx-canvas{max-height:calc(100vh - 150px)}
