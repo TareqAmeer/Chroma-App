@@ -3,7 +3,7 @@
   "topbar#1": "path:M4 12h11a5 5 0 0 1 0 10h-1|path:M9 7L4 12l5 5",
   "topbar#2": "path:M15 7l5 5-5 5|path:M20 12H9a5 5 0 0 0 0 10h1",
   "topbar#3": "circle:12,12,9|path:M12 7v5l3.5 2",
-  "topbar#4": "circle:12,12,9|path:M12 3a9 9 0 0 1 0 18z",
+  "topbar#4": "circle:12,12,3|path:M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z",
   "topbar#5": "path:M12 4v16|path:M8 10l-2 2 2 2M16 10l2 2-2 2|rect:3,4,18,16",
   "topbar#6": "path:M6 9l6 6 6-6",
   "topbar#7": "circle:12,12,9|path:M12 7v5l3.5 2",

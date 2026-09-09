@@ -20005,6 +20005,10 @@ const ICONS={
  // which the original set above was already drawn against.
  library:'<path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
  compare:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" opacity=".55"/>',
+ // 3.1.11: "Show original" (#btn-before) used the half-filled 'compare' circle above, which
+ // reads as a before/after split-view glyph, not "see the original photo". Same eye shape as
+ // the wireframe's own "Show original" .ibtn (Editor (Developer) View.dc.html:185).
+ showOriginal:'<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>',
  split:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M8 10l-2 2 2 2M16 10l2 2-2 2"/>',
  scope:'<path d="M3 20V9M8 20V4M13 20v-8M18 20V7"/>',
  // HANDOVER 2026-09-08 §8 item #8: was a magnifying-glass (circle+handle) with a tiny +/-
@@ -20674,7 +20678,7 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  {const ab=document.getElementById('fx-add-btn');if(ab)ab.innerHTML=icon('plus',34);}
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
- set('db-lib-ic','library');set('db-more','more');set('db-tools','tools');set('db-view','view');set('ic-before','compare');set('ic-split','split');
+ set('db-lib-ic','library');set('db-more','more');set('db-tools','tools');set('db-view','view');set('ic-before','showOriginal');set('ic-split','split');
  set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-ah-clear','close');set('ic-fullres','fullres');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
  // the video transport row — gets its icon() populated the same way as the id-keyed set() calls

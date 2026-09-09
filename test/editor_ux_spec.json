@@ -151,10 +151,11 @@
     },
     "3.1.11": {
       "category": "topbar",
-      "status": "open",
+      "status": "fixed",
       "source": "change the icon for see original",
       "wireframeRef": null,
-      "check": null
+      "check": null,
+      "note": "Fixed 2026-09-09: #btn-before (Show original) used ICONS.compare, a half-filled circle that reads as a before/after split-view glyph, not \"see the original\". New ICONS.showOriginal (eye shape) matches the wireframe #btn-before (Editor (Developer) View.dc.html:185). compare itself is untouched (still used by the Color Copy reference-image drop zone)."
     },
     "3.1.12": {
       "category": "topbar",
