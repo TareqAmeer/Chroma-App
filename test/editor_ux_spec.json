@@ -34,10 +34,11 @@
     },
     "E5": {
       "category": "bug",
-      "status": "open",
+      "status": "fixed",
       "source": "flag updates in the sidebar (library) but not in the top bar, and the top bar flagging is stuck on the previous photo when switching photos",
       "wireframeRef": null,
-      "check": "state-leak sweep (wireframe_checks_lib.mjs)"
+      "check": "state-leak sweep (wireframe_checks_lib.mjs)",
+      "note": "Fixed in an earlier part of this session (setLabel/setFavorite/openInEditorInner in library-ui.js all call window.fxUpdateFlagBtns() to resync the Editor topbar flag buttons) but the spec status was never updated to reflect it until now (2026-09-09) -- caught only because it was re-verified live rather than trusted from the old commit message. Added test/library_flag_state_leak.mjs (Playwright, wired into playwright.config.mjs): flags photo A Pick, switches to photo B (flag must not leak), switches back to A (flag must persist/resync). Passes."
     },
     "E6": {
       "category": "bug",

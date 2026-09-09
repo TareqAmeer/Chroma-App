@@ -16,7 +16,7 @@ import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './test
 
 export default defineConfig({
   testDir: './test',
-  testMatch: /wireframe_behaviour\.mjs$|editor_wireframe_behaviour\.mjs$|library_dock_states\.mjs$/,
+  testMatch: /wireframe_behaviour\.mjs$|editor_wireframe_behaviour\.mjs$|library_dock_states\.mjs$|library_flag_state_leak\.mjs$/,
   // Interactions mutate localStorage; workers must not share a profile or a section-collapse
   // test would race a theme test. Playwright gives each worker its own context by default —
   // this just keeps the count low enough that the shared static server isn't the bottleneck.
