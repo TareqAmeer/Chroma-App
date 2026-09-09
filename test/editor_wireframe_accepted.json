@@ -49,21 +49,21 @@
   },
   {
     "zone": "topbar",
-    "match": "Tools button: fontSize",
+    "match": "Settings button (was Tools): fontSize",
     "exact": false,
-    "reason": "Real: the Tools button doesn't exist yet as specified — user list item 3.1.8 (replace the three-dot overflow with a dedicated Tools button). Currently mapped to the closest existing control (#fx-tools .fx-db) as a placeholder measurement target; will resolve once 3.1.8 ships in plan Phase E."
+    "reason": "2026-09-09: Tools/View/⋯ merged into one settings gear (#fx-settings), docked last to match the Library top bar's zoom -> flags -> All FX -> Export -> gear order — no longer a placeholder. This is the same wireframe-has-no-CSS-reset pattern every .fx-db icon button in the bar carries (wireframe renders at the browser default 16px/400 with no border since it never links _ds/tokens/base.css) — shared root cause, not specific to this control."
   },
   {
     "zone": "topbar",
-    "match": "Tools button: fontWeight",
+    "match": "Settings button (was Tools): fontWeight",
     "exact": false,
-    "reason": "Same root cause as the Tools button fontSize entry — placeholder mapping until 3.1.8 ships."
+    "reason": "Same shared root cause as the Settings button fontSize entry above."
   },
   {
     "zone": "topbar",
-    "match": "Tools button: borderColor",
+    "match": "Settings button (was Tools): borderColor",
     "exact": false,
-    "reason": "Same root cause as the Tools button fontSize entry — placeholder mapping until 3.1.8 ships."
+    "reason": "Same shared root cause as the Settings button fontSize entry above."
   },
   {
     "zone": "topbar",
@@ -93,6 +93,12 @@
     "zone": "rail",
     "match": "rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info]",
     "exact": false,
-    "reason": "Justified difference, confirmed with the user 2026-09-08: keep the app's 11 items and current order. The wireframe's 10-item rail omits Crop as a mock simplification — it still has a working crop .tp-panel (Editor (Developer) View.dc.html:374) that its own rail just never links to. Do not remove Crop from the app to chase this finding."
+    "reason": "Stale (both sides changed since 2026-09-08 — the wireframe itself gained Crop, and the app gained a trailing Narrow item; see the newer entry below). Left for history rather than deleted."
+  },
+  {
+    "zone": "rail",
+    "match": "rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info, Narrow]",
+    "exact": false,
+    "reason": "Untriaged — pending Editor alignment work (predates and is unrelated to the 2026-09-09 topbar/settings-menu change; found while verifying that change, spun off as its own follow-up task rather than fixed inline). The app's rail carries a trailing 'Narrow'/'Labels' collapse-expand toggle (chromasmith-22.html:20320, applyFxLayout()'s own rail-collapse affordance) that the wireframe's fixed-width rail has no equivalent for — real feature or a chrome addition the wireframe should also show is not yet decided."
   }
 ]

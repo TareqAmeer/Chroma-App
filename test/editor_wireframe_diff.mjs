@@ -45,7 +45,9 @@ const PAIRS = {
   // .undogrp — was pointed at #fx-deskbar as a stand-in before this existed.
   '.tb-left .undogrp': { app: '.fx-undogrp', label: 'undo/redo cluster', zone: 'topbar' },
   '.zoomctl': { app: '#fx-zoom-ctrl', label: 'zoom control', zone: 'zoom' },
-  '#btn-tools': { app: '#fx-tools .fx-db', label: 'Tools button', zone: 'topbar' },
+  // 2026-09-09: Tools/View/⋯ merged into one settings gear docked at the far right (after
+  // Export, matching the Library top bar's own order) — #fx-tools no longer exists standalone.
+  '#btn-tools': { app: '#fx-settings .fx-db', label: 'Settings button (was Tools)', zone: 'topbar' },
   '#btn-allfx': { app: '.js-allfx', label: 'All FX button', zone: 'topbar' },
   '.btn-export': { app: '#btn-fx-export, [onclick*="exportFX"]', label: 'Export button', zone: 'topbar' },
   '.rail': { app: '#fx-toolrail', label: 'tool rail', zone: 'rail' },

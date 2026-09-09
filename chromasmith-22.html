@@ -861,7 +861,7 @@ body.deskx #fx-deskbar-tools{display:flex;align-items:center;gap:2px}
 /* Hairline cluster separators — grouping by rule rather than by inconsistent sizing. */
 body.deskx #fx-deskbar-tools>*+*{margin-left:0}
 body.deskx #fx-deskbar-tools .fx-zoom-ctrl{margin-left:var(--sp-3);padding-left:var(--sp-3);border-left:1px solid var(--bdr)}
-body.deskx #fx-overflow{margin-left:var(--sp-2);padding-left:var(--sp-2);border-left:1px solid var(--bdr)}
+body.deskx #fx-settings{margin-left:var(--sp-2);padding-left:var(--sp-2);border-left:1px solid var(--bdr)}
 /* Zoom cluster: was bare 18px text controls with no button affordance at all. */
 .zc-ic{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}
 body.deskx .fx-zoom-ctrl{position:static;background:transparent;border:none;padding:0;gap:1px}
@@ -1066,13 +1066,20 @@ body.deskx .fx-preview-col{position:relative}
 body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
 /* Skin/AI Select used to be individual buttons gated by a rule here; mskAddMenu() now checks
    body.deskx itself (see the Masks panel's own comment) so this rule has nothing left to gate. */
-/* ⋯ overflow menu (deskbar): navigation to the non-editor tabs + utilities */
-#fx-overflow{display:none;position:relative}
-body.deskx #fx-overflow{display:inline-flex}
-#fx-overflow-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:200px;
+/* Settings menu (deskbar) — 2026-09-09: the ⋯ overflow / Tools / View triggers used to be three
+   separate buttons in the middle of the bar (three menus, 18 rows between them, some actions
+   reachable from two). They're now one gear, docked at the FAR RIGHT after Export — matching the
+   Library top bar's own zoom → flags → All FX → Export → gear order (desktop/library-ui.js).
+   settingsBuild() below fills the three sections (Tools/View/⋯) that live inside this one
+   dropdown; toolsBuild()/viewMenuBuild()/ovfBuild() are unchanged and still each own their
+   section, so nothing about what each item DOES had to move, only where the trigger sits. */
+#fx-settings{display:none;position:relative}
+body.deskx #fx-settings{display:inline-flex}
+#fx-settings-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:220px;
+  max-height:80vh;overflow-y:auto;
   background:var(--glass-bg);
   border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
-#fx-overflow-menu.on{display:block}
+#fx-settings-menu.on{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
   color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;
   padding:9px 10px;text-align:left}
@@ -1080,21 +1087,6 @@ body.deskx #fx-overflow{display:inline-flex}
 .fx-ovf-item.dim{color:var(--mut);cursor:default}
 .fx-ovf-sep{height:1px;background:var(--bdr);margin:4px 2px}
 .fx-ovf-grp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);padding:8px 8px 4px;font-weight:600}
-/* Tools menu (deskbar) — spec's "Tools menu (icon list dropdown, docked right)": rotate/flip,
-   gamut warning, copy/paste edit settings, reset photo. Reuses the ⋯ overflow menu's own
-   item/separator classes and open/close idiom rather than a second dropdown implementation. */
-#fx-tools{display:none;position:relative}
-body.deskx #fx-tools{display:inline-flex}
-#fx-tools-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:220px;
-  background:var(--glass-bg);
-  border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
-#fx-tools-menu.on{display:block}
-#fx-view{display:none;position:relative}
-body.deskx #fx-view{display:inline-flex}
-#fx-view-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:200px;
-  background:var(--glass-bg);
-  border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
-#fx-view-menu.on{display:block}
 .fx-ovf-item .fx-ovf-check{margin-left:auto;visibility:hidden;color:var(--acc)}
 .fx-ovf-item.on .fx-ovf-check{visibility:visible}
 /* ── LIGHT THEME ──────────────────────────────────────────────────────────────────────────────
@@ -1524,27 +1516,26 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
          cluster; Undo/Redo already cover the common "I changed my mind" case. -->
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
     <div id="fx-deskbar-tools"></div>
-    <div id="fx-tools">
-      <button class="fx-db fx-db-icon" onclick="toolsToggle(event)" title="Tools — rotate, flip, copy/paste edit settings, reset photo"><span class="fx-db-ic" id="db-tools"></span></button>
-      <div id="fx-tools-menu"></div>
-    </div>
-    <!-- View menu (Editor (Developer) View.dc.html:215's #btn-view-menu): gamut warning toggle +
-         Appearance. Splits these two out of Tools (which stays rotate/flip/copy-paste/reset) and
-         out of the ⋯ overflow menu's own Appearance section (removed there — single source now). -->
-    <div id="fx-view">
-      <button class="fx-db fx-db-icon" onclick="viewMenuToggle(event)" title="View — gamut warning, appearance"><span class="fx-db-ic" id="db-view"></span></button>
-      <div id="fx-view-menu"></div>
-    </div>
-    <div id="fx-overflow">
-      <button class="fx-db fx-db-icon" onclick="ovfToggle(event)" title="More — other tools &amp; settings"><span class="fx-db-ic" id="db-more"></span></button>
-      <div id="fx-overflow-menu"></div>
-    </div>
     <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
     <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
          window.chromasmithEditInPath and un-hides this) — writes the render straight back over
          the file Lightroom handed us instead of the normal share-sheet save. -->
     <button class="fx-db fx-db-pri" id="db-save-lr" style="display:none" onclick="chromasmithSaveToLightroom()" title="Save back to the file Lightroom handed off — Lightroom will re-import and sync it"><span class="fx-db-ic" id="db-export-lr"></span>Save to Lightroom</button>
     <button class="fx-db fx-db-pri" id="btn-export-db" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
+    <!-- 2026-09-09: Tools + View + ⋯ merged into ONE settings menu, docked last (far right) —
+         matches the Library top bar's own …zoom → flags → All FX → Export → gear order. Each
+         inner div below is still built/owned by its original function (toolsBuild/viewMenuBuild/
+         ovfBuild) — only the trigger button and outer dropdown are new; see settingsBuild(). -->
+    <div id="fx-settings">
+      <button class="fx-db fx-db-icon" onclick="settingsToggle(event)" title="Settings — transform, edit settings, view, appearance"><span class="fx-db-ic" id="db-settings"></span></button>
+      <div id="fx-settings-menu">
+        <div id="fx-tools-menu"></div>
+        <div class="fx-ovf-sep"></div>
+        <div id="fx-view-menu"></div>
+        <div class="fx-ovf-sep"></div>
+        <div id="fx-overflow-menu"></div>
+      </div>
+    </div>
   </div>
   <div class="fx-layout">
     <!-- DESKTOP tool rail (one tool at a time) -->
@@ -4628,7 +4619,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-09a';
+const BUILD='2026-09-09b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -20018,14 +20009,11 @@ function ovfBuild(){
   h+='<button class="fx-ovf-item" onclick="ovfClose();csAbout()">About Chromasmith</button>';
   m.innerHTML=h;
 }
-function ovfClose(){const m=document.getElementById('fx-overflow-menu');if(m)m.classList.remove('on');}
-function ovfToggle(e){
-  if(e)e.stopPropagation();
-  const m=document.getElementById('fx-overflow-menu');if(!m)return;
-  if(m.classList.contains('on')){ovfClose();return;}
-  toolsClose();viewMenuClose();ovfBuild();m.classList.add('on');
-}
-document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-overflow'))ovfClose();});
+// ovfClose/toolsClose/viewMenuClose are called from inside the HTML each of the three build
+// functions below generates (baked into onclick="toolsClose();geomRotate(90)" etc.) — kept as
+// three names for that reason, but all three now just close the ONE merged dropdown. See
+// settingsBuild()/settingsToggle() near the icon table for the single open/close surface.
+function ovfClose(){settingsClose();}
 // Deskbar Tools menu — spec's "Tools menu (icon list dropdown, docked right)": rotate/flip,
 // copy/paste edit settings, reset photo. Gamut warning moved to the View menu (viewMenuBuild,
 // below) per item 3.1.6 — it's an appearance-adjacent toggle, not a geometry/clipboard action.
@@ -20045,14 +20033,7 @@ function toolsBuild(){
   h+=`<button class="fx-ovf-item" onclick="toolsClose();fxResetAll()">${icon('reset',16)}<span>Reset photo</span></button>`;
   m.innerHTML=h;
 }
-function toolsClose(){const m=document.getElementById('fx-tools-menu');if(m)m.classList.remove('on');}
-function toolsToggle(e){
-  if(e)e.stopPropagation();
-  const m=document.getElementById('fx-tools-menu');if(!m)return;
-  if(m.classList.contains('on')){toolsClose();return;}
-  ovfClose();viewMenuClose();toolsBuild();m.classList.add('on');
-}
-document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-tools'))toolsClose();});
+function toolsClose(){settingsClose();}
 // View menu (Editor (Developer) View.dc.html:215's #btn-view-menu): gamut warning toggle (moved
 // off both the Tools menu and #fx-preview-tools' own standalone button per item 3.1.6 — a
 // single reachable place instead of two/three) + Appearance (moved off the ⋯ overflow menu,
@@ -20069,14 +20050,20 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item${curLight?' on':''}" onclick="fxSetTheme('light')"><span>Light</span>${chk}</button>`;
   m.innerHTML=h;
 }
-function viewMenuClose(){const m=document.getElementById('fx-view-menu');if(m)m.classList.remove('on');}
-function viewMenuToggle(e){
+function viewMenuClose(){settingsClose();}
+// Single open/close surface for the merged settings dropdown (2026-09-09) — see the HTML
+// comment at #fx-settings and the CSS comment above #fx-settings-menu for why Tools/View/⋯
+// collapsed into one gear. Building all three sections on every open (rather than caching) keeps
+// the checkmarks/labels current with zero extra invalidation logic, same as each did standalone.
+function settingsBuild(){toolsBuild();viewMenuBuild();ovfBuild();}
+function settingsClose(){const m=document.getElementById('fx-settings-menu');if(m)m.classList.remove('on');}
+function settingsToggle(e){
   if(e)e.stopPropagation();
-  const m=document.getElementById('fx-view-menu');if(!m)return;
-  if(m.classList.contains('on')){viewMenuClose();return;}
-  ovfClose();toolsClose();viewMenuBuild();m.classList.add('on');
+  const m=document.getElementById('fx-settings-menu');if(!m)return;
+  if(m.classList.contains('on')){settingsClose();return;}
+  settingsBuild();m.classList.add('on');
 }
-document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-view'))viewMenuClose();});
+document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-settings'))settingsClose();});
 // Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).
 const _SVG=(p,sz)=>`<svg viewBox="0 0 24 24" width="${sz||20}" height="${sz||20}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const ICONS={
@@ -20597,13 +20584,14 @@ function syncThemeBtns(){
 // active choice", the same semantics Library's own data-theme opts use, not "flip whatever it is
 // now". Shares the exact same csTheme key/class toggleTheme() above uses, so the two menus never
 // drift out of sync with each other.
-// ⚠️ Do NOT rebuild the menu (ovfBuild()) from here. It used to, and that innerHTML rebuild
-// DETACHES the just-clicked button mid-event — the document-level "click outside closes the
-// menu" listener at ovfToggle's definition then runs its `e.target.closest('#fx-overflow')`
-// check against an already-detached node, which fails to find any ancestor, and the menu
-// incorrectly closes on every theme click. Toggle the `.on` class on the two existing buttons
-// directly instead, exactly the targeted-update approach Library's own syncViewMenuChecks() uses
-// for the identical menu shape, and the menu correctly stays open (confirmed live).
+// ⚠️ Do NOT rebuild the menu (ovfBuild()/settingsBuild()) from here. It used to, and that
+// innerHTML rebuild DETACHES the just-clicked button mid-event — the document-level "click
+// outside closes the menu" listener at settingsToggle's definition then runs its
+// `e.target.closest('#fx-settings')` check against an already-detached node, which fails to find
+// any ancestor, and the menu incorrectly closes on every theme click. Toggle the `.on` class on
+// the two existing buttons directly instead, exactly the targeted-update approach Library's own
+// syncViewMenuChecks() uses for the identical menu shape, and the menu correctly stays open
+// (confirmed live).
 function fxSetTheme(mode){
   const light=mode==='light';
   document.body.classList.toggle('light',light);
@@ -20996,7 +20984,7 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  {const ab=document.getElementById('fx-add-btn');if(ab)ab.innerHTML=icon('plus',34);}
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
- set('db-lib-ic','library');set('db-more','more');set('db-tools','tools');set('db-view','view');set('ic-before','showOriginal');set('ic-split','split');
+ set('db-lib-ic','library');set('db-settings','view');set('ic-before','showOriginal');set('ic-split','split');
  set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-ah-clear','close');set('ic-fullres','fullres');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
  // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
