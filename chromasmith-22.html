@@ -424,11 +424,14 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px 7px;border-radius:4px;line-height:1}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
 .fx-zoom-ctrl button#btn-loupe.on,.fx-zoom-ctrl button#btn-fx-fullres.on{background:var(--acc);color:#000}
-/* Hover/drag-only percentage (wireframe: .zpct opacity 0 by default, 1 on :hover/.active) —
-   only shown while the value is actually changing or being pointed at, not sitting there
-   permanently. .active is toggled by the slider's mousedown/the window mouseup listener below. */
+/* Drag-only percentage (wireframe: .zpct opacity 0 by default, 1 on .active) — only shown while
+   the value is actually CHANGING, not on hover/permanently (2026-09-09: dropped the :hover
+   reveal — matching the Library's own zoom row, which shows no number at all, means the one
+   piece of information the Editor keeps over Library's version should earn its keep by staying
+   out of the way otherwise). .active is toggled by the slider's mousedown/the window mouseup
+   listener below. */
 .fx-zoom-ctrl #fx-zoom-pct{font-size:10px;color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity .1s}
-.fx-zoom-ctrl:hover #fx-zoom-pct,.fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
+.fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px;position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:2}
 .ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:.11em;color:var(--acc);font-style:italic;margin-bottom:2px}
 .ni-sub{font-family:var(--sans);font-size:var(--fs-1);letter-spacing:0;color:var(--mut)}
@@ -867,6 +870,28 @@ body.deskx #fx-settings{margin-left:var(--sp-2);padding-left:var(--sp-2);border-
 body.deskx .fx-zoom-ctrl{position:static;background:transparent;border:none;padding:0;gap:1px}
 body.deskx .fx-zoom-ctrl button:not(.flag-btn){height:28px;min-width:28px;font-size:var(--fs-1);font-weight:500;padding:0 9px;white-space:nowrap;flex:0 0 auto}
 body.deskx .fx-zoom-ctrl .flag-btn{width:32px;height:32px;min-width:32px;padding:0}
+/* Library-style minus/slider/plus: the two step buttons are icon-only, so they get the tight
+   .zc-ic footprint instead of the 0 9px text padding every other zoom-ctrl button uses. */
+body.deskx .fx-zoom-ctrl #btn-zoom-out,body.deskx .fx-zoom-ctrl #btn-zoom-in{padding:0;min-width:28px}
+body.deskx #fx-zoom-slider{width:80px}
+/* 2026-09-09: 1:1 view, full-res preview, editor background colour and the scope-overlay toggle
+   moved OFF the always-visible desktop bar and into the settings menu's View section
+   (viewMenuBuild()) — occasional preview-quality toggles, not everyday actions, and (for the
+   zoom cluster pair) what pushed the bar wide enough to collide with the centred title. Hidden
+   here rather than deleted from the HTML: #fx-zoom-ctrl/#fx-preview-tools are the SAME nodes
+   relocatePreviewTools() moves onto the floating over-canvas spot in web/mobile mode, so deleting
+   would remove them there too — this selector only fires under body.deskx. */
+body.deskx #btn-loupe,body.deskx #btn-fx-fullres,body.deskx #btn-editor-bg,body.deskx #btn-hist{display:none!important}
+/* 2026-09-09: width-driven responsive fold, cheapest-first — All FX loses its label before
+   Export does, both fold to icon-only (not hidden — they're the two most-used actions in the
+   bar) rather than the title/flags/zoom ever having to give up space. Driven by a ResizeObserver
+   on #fx-deskbar itself (see the IIFE next to the existing --deskbar-h one) rather than a plain
+   @media query, since the bar's available width depends on the tool-rail/panel split too, not
+   just the window. */
+body.deskx.fx-deskbar-tight1 .js-allfx .fx-db-lb{display:none}
+body.deskx.fx-deskbar-tight1 .js-allfx{padding:0;width:28px}
+body.deskx.fx-deskbar-tight2 #btn-export-db .fx-db-lb{display:none}
+body.deskx.fx-deskbar-tight2 #btn-export-db{padding:0;width:28px}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
 body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:calc(var(--deskbar-h, 58px) + 16px);align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
 .fx-rail-btn{display:flex;align-items:center;gap:10px;width:120px;background:none;border:none;border-radius:var(--r-sm);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:9px 10px;text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
@@ -1516,12 +1541,12 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
          cluster; Undo/Redo already cover the common "I changed my mind" case. -->
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
     <div id="fx-deskbar-tools"></div>
-    <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span>All FX</button>
+    <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button>
     <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
          window.chromasmithEditInPath and un-hides this) — writes the render straight back over
          the file Lightroom handed us instead of the normal share-sheet save. -->
     <button class="fx-db fx-db-pri" id="db-save-lr" style="display:none" onclick="chromasmithSaveToLightroom()" title="Save back to the file Lightroom handed off — Lightroom will re-import and sync it"><span class="fx-db-ic" id="db-export-lr"></span>Save to Lightroom</button>
-    <button class="fx-db fx-db-pri" id="btn-export-db" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
+    <button class="fx-db fx-db-pri" id="btn-export-db" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span><span class="fx-db-lb">Export</span></button>
     <!-- 2026-09-09: Tools + View + ⋯ merged into ONE settings menu, docked last (far right) —
          matches the Library top bar's own …zoom → flags → All FX → Export → gear order. Each
          inner div below is still built/owned by its original function (toolsBuild/viewMenuBuild/
@@ -2295,13 +2320,26 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
         <canvas id="fx-hist"></canvas>
         <div id="fx-crop-overlay"></div>
         <div id="msk-brush-cursor"></div>
-        <!-- 3.1.7/3.1.12: dropped the +/- step buttons and the "Fit" text button — the wireframe's
-             own zoomctl (Editor (Developer) View.dc.html:193) is just the slider + a hover-only
-             %. zoomFit() survives on the slider's double-click instead of a dedicated button. -->
+        <!-- 3.1.7/3.1.12: dropped the "Fit" text button — zoomFit() survives on the slider's
+             double-click instead of a dedicated button.
+             2026-09-09: restyled to match the Library top bar's own zoom row (desktop/
+             library-ui.js .lib-zoomrow — minus icon / slider / plus icon) instead of a bare
+             slider, so the two views read as one app. The Library's own row never shows a
+             number at all; the Editor keeps one (real zoom % matters for grading work) but only
+             while the value is actually changing — see .fx-zoom-ctrl #fx-zoom-pct's CSS, driven
+             by the same .active class the slider's mousedown already set. 1:1 view and full-res
+             preview moved into the settings menu's View section (viewMenuBuild()) — they're
+             occasional preview-quality toggles, not zoom controls, and were what pushed this
+             whole cluster wide enough to collide with the centred title. Kept in the DOM here
+             (just hidden under body.deskx) rather than removed: #fx-zoom-ctrl is the SAME node
+             relocatePreviewTools() moves between this floating over-canvas spot (web/mobile) and
+             the deskbar (desktop) — hiding, not deleting, keeps the web/mobile version unchanged. -->
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
+          <button class="zc-ic" id="btn-zoom-out" onclick="zoomBy(1/1.15)" title="Zoom out"><span class="fx-db-ic" id="ic-zoom-out"></span></button>
           <input type="range" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)"
             onmousedown="document.getElementById('fx-zoom-ctrl').classList.add('active')"
             ondblclick="zoomFit()" title="Drag to zoom · double-click to fit the whole image">
+          <button class="zc-ic" id="btn-zoom-in" onclick="zoomBy(1.15)" title="Zoom in"><span class="fx-db-ic" id="ic-zoom-in"></span></button>
           <span id="fx-zoom-pct" title="Scroll to zoom · drag to pan · double-click to fit">100%</span>
           <button id="btn-loupe" onclick="toggleLoupe()" title="True 1:1 view — renders a native-resolution crop through the full pipeline so grain &amp; halation appear at real export scale">1:1</button>
           <button id="btn-fx-fullres" class="zc-ic" onclick="fxFullResPreviewToggle()" title="Full resolution — renders the whole preview at full source resolution instead of the usual capped size. Costs more GPU time; drops to the capped size automatically while dragging a slider"><span class="fx-db-ic" id="ic-fullres"></span></button>
@@ -4619,7 +4657,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-09b';
+const BUILD='2026-09-09c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -10811,6 +10849,22 @@ function appHSync(){
   const bar=document.getElementById('fx-deskbar');
   if(!bar)return;
   const sync=()=>{if(bar.offsetHeight)document.documentElement.style.setProperty('--deskbar-h',bar.offsetHeight+'px');};
+  new ResizeObserver(sync).observe(bar);
+  window.addEventListener('resize',sync);
+  sync();
+})();
+// Responsive fold for the always-visible bar (2026-09-09) — see the .fx-deskbar-tight1/2 CSS
+// comment above #fx-settings. Reads the bar's own rendered width (not window.innerWidth) since
+// the tool-rail/panel split eats into it independently of the window; same ResizeObserver idiom
+// as --deskbar-h above, just watching width instead of height.
+(function(){
+  const bar=document.getElementById('fx-deskbar');
+  if(!bar)return;
+  const sync=()=>{
+    const w=bar.offsetWidth;if(!w)return;
+    document.body.classList.toggle('fx-deskbar-tight1',w<900);
+    document.body.classList.toggle('fx-deskbar-tight2',w<820);
+  };
   new ResizeObserver(sync).observe(bar);
   window.addEventListener('resize',sync);
   sync();
@@ -20043,6 +20097,16 @@ function viewMenuBuild(){
   const chk='<svg class="fx-ovf-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
   const curLight=document.body.classList.contains('light');
   let h='';
+  // 2026-09-09: 1:1 view / full-res preview / editor background / scope overlay moved here from
+  // four separate always-visible topbar buttons (body.deskx #btn-loupe etc. are display:none —
+  // see that CSS comment). Each still calls the exact same standalone function the old button
+  // did; only the entry point moved, so hold-to-compare/renderPreview/etc. behavior is untouched.
+  h+='<div class="fx-ovf-grp-label">Preview</div>';
+  h+=`<button class="fx-ovf-item${fxLoupe?' on':''}" onclick="viewMenuClose();toggleLoupe()"><span>True 1:1 view</span>${chk}</button>`;
+  h+=`<button class="fx-ovf-item${fxFullResPreview?' on':''}" onclick="viewMenuClose();fxFullResPreviewToggle()"><span>Full resolution preview</span>${chk}</button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Editor background…</span></button>`;
+  h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
+  h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
   h+='<div class="fx-ovf-grp-label">Appearance</div>';
@@ -20985,6 +21049,7 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
  set('db-lib-ic','library');set('db-settings','view');set('ic-before','showOriginal');set('ic-split','split');
+ set('ic-zoom-out','zoomOut');set('ic-zoom-in','zoomIn');
  set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-ah-clear','close');set('ic-fullres','fullres');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
  // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
