@@ -788,6 +788,8 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
    (8px), not the shared .fx-db's 6px. */
 .fx-db.fx-db-icon{border-radius:8px;height:30px;width:30px;padding:0}
 .fx-db:hover{border-color:var(--mut)}
+/* 3.1.2 — matches the wireframe's .ibtn.disabled (Editor (Developer) View.dc.html:40). */
+.fx-db:disabled{opacity:.35;pointer-events:none;cursor:default}
 .fx-db .fx-db-ic{display:inline-flex;color:var(--mut)}
 /* Editor (Developer) View.dc.html:46's .btn-export uses --primary-on-dark (Mist Blue #61a0af),
    not the app's own amber --acc brand color — per explicit decision, matched literally here. */
@@ -1423,8 +1425,8 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
   <!-- DESKTOP persistent quick-access bar -->
   <div id="fx-deskbar">
     <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
-    <button class="fx-db fx-db-icon" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
-    <button class="fx-db fx-db-icon" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+    <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
+    <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
     <div style="position:relative;display:inline-flex" id="db-history-wrap">
       <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit &amp; export history for this photo" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
     </div>
@@ -1455,7 +1457,7 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
          window.chromasmithEditInPath and un-hides this) — writes the render straight back over
          the file Lightroom handed us instead of the normal share-sheet save. -->
     <button class="fx-db fx-db-pri" id="db-save-lr" style="display:none" onclick="chromasmithSaveToLightroom()" title="Save back to the file Lightroom handed off — Lightroom will re-import and sync it"><span class="fx-db-ic" id="db-export-lr"></span>Save to Lightroom</button>
-    <button class="fx-db fx-db-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
+    <button class="fx-db fx-db-pri" id="btn-export-db" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span>Export</button>
   </div>
   <div class="fx-layout">
     <!-- DESKTOP tool rail (one tool at a time) -->
@@ -9605,6 +9607,7 @@ function installFXImages(entries,loadKey){
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
   _resetZoom(); fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
+  if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
   // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
   // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
   // CURRENTLY SELECTED photo's own masks array, swapped by fxSelectImage on every filmstrip
@@ -14491,6 +14494,7 @@ function fxHistoryPush(){
   fxHistory.push({j,snap,rasters,label:snapDiffLabel(prev,snap),ts:Date.now()});
   if(fxHistory.length>20){fxHistory.shift();}
   fxHistIdx=fxHistory.length-1;
+  fxSyncTopbarDisabled();
   // Freeze every live raster: an entry now references these exact arrays, so the next in-place
   // write must clone first.
   fxState.masks.forEach(m=>{if(m.px&&m.px.length)m._pxFrozen=true;});
@@ -14527,12 +14531,25 @@ async function fxUndo(){
   fxHistIdx--;await _fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Undo','info');
+  fxSyncTopbarDisabled();
 }
 async function fxRedo(){
   if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
   fxHistIdx++;await _fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Redo','info');
+  fxSyncTopbarDisabled();
+}
+// 3.1.2: undo/redo greyed out and unclickable when there's nothing to undo/redo, matching the
+// wireframe's .ibtn.disabled (opacity .35, pointer-events:none — done here with the real
+// `disabled` attribute instead, so a stray click can't fire the handler at all). Export's
+// disabled state already exists on #btn-fx-export (many call sites — see 9593/15892/16085/
+// etc.) and is mirrored onto the deskbar's Export button by the same MutationObserver pattern
+// #fx-fab-export already uses, further down this boot block — not reimplemented here.
+function fxSyncTopbarDisabled(){
+  const undo=document.getElementById('btn-undo-db'),redo=document.getElementById('btn-redo-db');
+  if(undo)undo.disabled=fxHistIdx<=0;
+  if(redo)redo.disabled=fxHistIdx>=fxHistory.length-1;
 }
 async function fxResetAll(){
   if(!fxHistory.length)return;
@@ -20630,6 +20647,15 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
    fab.disabled=realBtn.disabled;
    new MutationObserver(()=>{fab.disabled=realBtn.disabled;}).observe(realBtn,{attributes:true,attributeFilter:['disabled']});
  }}
+// Same mirror, onto the deskbar's own Export button (3.1.2) — see fxSyncTopbarDisabled()'s
+// comment for why undo/redo get their own direct sync instead of this observer pattern (their
+// disabled-ness isn't a DOM attribute anywhere else to mirror FROM).
+{const realBtn=document.getElementById('btn-fx-export'),db=document.getElementById('btn-export-db');
+ if(realBtn&&db){
+   db.disabled=realBtn.disabled;
+   new MutationObserver(()=>{db.disabled=realBtn.disabled;}).observe(realBtn,{attributes:true,attributeFilter:['disabled']});
+ }}
+if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // initial boot state, before any photo is loaded
 // The ff-off class in the markup is the DEFAULT (every section ships off). Reconcile it against
 // the actual toggle state at boot, so a section restored ON by a saved session/recipe is not left
 // looking disabled.
