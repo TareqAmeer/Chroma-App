@@ -1,682 +1,642 @@
-# Handover — Library wireframe fidelity & behaviour coverage
+# Chromasmith — Engineering Handover
 
-Read this first, then `chromasmith-design/project/design.md` (the design-system spec the
-wireframes were built from — tokens, type ladder, spacing, divider philosophy). Prior sessions
-never opened `design.md`, which is part of why divider/spacing decisions drifted.
-
----
-
-## 1. Where things stand
-
-| check | command | state |
-|---|---|---|
-| Structural fidelity | `npm run wireframe:test` | 35 persisting findings (20 allowlisted) — §8's remaining feature-superset/judgment-call items (10/11) + the unresolved icon-centering question (6); everything with a confirmed root cause is FIXED |
-| Icon-shape regression | same command (baseline: `test/baselines/wireframe_icons.json`) | **PASS** — 57 glyphs baselined |
-| Behaviour + UI quality | `npm run behaviour:test` | verify fresh — §9 fixed the #21 menu-close defect this suite was proving RED |
-| Library content lint | `npm run lint:library-content` | 1 finding (`#lib-filters-badge` tabular-nums — cosmetic, not one of the 16, deferred) |
-| Library responsive sweep | `npm run library:responsive-test` | **PASS** — was FAIL (wrap + search-floor at 820px), fixed in §9 |
-| Desktop UI audit | `npm run ui:test` | PASS |
-| Library perf | `npm run lib:test` | PASS |
-| Export/shader goldens | `npm run export:test` | PASS (18/18) |
-
-`npm run behaviour:test` asserts CORRECT behaviour rather than whatever today's code happens to
-do, so a genuine defect shows as a failure instead of being baked in as "expected". **Any future
-failure that doesn't map to a fresh, deliberately-added test is a real regression — investigate
-it, don't wave it off.**
-
-### Live-source preview (2026-09-08)
-
-`npm run preview` — `test/preview_server.mjs`. Serves the Library from SOURCE (synthesises
-`desktop/dist/index.html` in memory from `chromasmith-22.html` + the two injected `<script>`
-tags, and serves `desktop/library-ui.js`/`desktop-native.js`/`vendor/` straight off disk) with
-file-watch auto-reload. Opens at the same `?libtest=1&libcat=1&libn=60` mock state the behaviour
-suite drives, so what you see in a browser is what the tests exercise. This exists because
-looking at a Library change previously meant `bash build-desktop.sh` + manual refresh every time
-— now it's edit, save, look.
-
-⚠️ It does **not** replace the build. `desktop/dist/` stays the tests' actual source of truth
-(`test/wireframe_behaviour.mjs`, `test/library_perf.mjs`, etc. all read it from disk) — `bash
-build-desktop.sh` is still mandatory before any check. The preview is for the loop in between.
-
-`build-desktop.sh` itself is now incremental — `rsync -a --delete` for `vendor/` instead of
-`rm -rf` + full recopy, so a no-op run costs ~0.3s instead of walking 39MB every time. Output is
-unchanged; only how much gets rewritten to produce it.
+For a senior engineer taking this over and pairing with Claude Code going forward. This is the
+authoritative onboarding doc; `CLAUDE.md` (root) is the day-to-day reference you'll keep open.
+Everything below is grounded in files actually read in this repo on 2026-09-09 — no invented
+scripts, selectors, or test names.
 
 ---
 
-## 2. What was built this session
+## 1. Project Vision, User Persona & Mental Model
 
-- **`test/wireframe_behaviour.mjs`** (new, 66 tests) — the interaction coverage that never
-  existed. Uses `@playwright/test` for auto-retrying assertions; the older harnesses stay on raw
-  `playwright`. Config: `playwright.config.mjs` (scoped by `testMatch` so it never tries to run
-  the other `test/*.mjs` scripts as specs).
-  - **Safety:** every run is `?libtest=1`, where the Tauri `invoke` layer is swapped for mocks
-    (`library-ui.js:16`). No real file, library root or setting is reachable, and Playwright uses
-    a throwaway profile. Destructive actions are exercised against mocks only.
-  - Assertions are on **observable state only** — DOM classes, text, localStorage, inline custom
-    properties, and the app's two debug hooks. `state` is module-local and deliberately not
-    exposed; per Playwright's own guidance that's the right thing to assert against anyway.
-- **`test/wireframe_inventory.mjs`** — gained **icon shape signatures**. Counting icons could
-  never catch a *wrong* icon, which is how the view toggle shipped a crop-tool glyph and a log
-  glyph for several sessions under a green PASS. Now every icon's geometry is hashed and diffed
-  against a committed baseline. Verified working by deliberately corrupting a baseline entry and
-  confirming it was caught and named.
-  - ⚠️ It compares the app against **itself over time**, not against the wireframe's icons. The
-    two use different icon sets on purpose (`design.md` records that no icon assets were supplied
-    and Lucide was substituted). Diffing those geometries would flag every icon on the page —
-    pure noise, which is how an earlier attempt at a structural diff died.
-  - Re-baseline after an intentional icon change: `npm run wireframe:icons`.
-- **Icon fix shipped** (commit `8a94947`): the view toggle now uses a real 2×2 grid glyph and
-  three-line list glyph, literal to `Library View.html:220-221`.
+**Chromasmith** is a film-emulation and colour-grading photo editor for people who shoot RAW
+(specifically a Panasonic DC-S9) and want a Dehancer/analog-film look — halation, bloom, grain,
+film-stock LUTs, print-stock simulation — without a subscription app or a round trip to the cloud.
+The persona is a hobbyist-to-serious photographer who wants Lightroom/Capture One-grade local
+tools (RAW decode, face/subject-aware masking, a real photo catalog) but running entirely on their
+own machine, offline, for free.
 
-### Dependency change to be aware of
-`npm install @playwright/test` also bumped `playwright` 1.48 → 1.63 and required
-`npx playwright install chromium` (the cached browser was too old). All existing harnesses were
-re-run afterwards and still pass. On a fresh checkout, run `npx playwright install chromium`.
+There are **two products sharing one rendering core**, not one:
 
----
+1. **The web/iOS app** — `chromasmith-22.html`, a single self-contained file (HTML+CSS+JS+GLSL,
+   no build step) that runs the entire grading pipeline in WebGL2 in the browser. Deployed as-is
+   to GitHub Pages, and wrapped for iOS via Capacitor (`ios/`) as a sideloadable IPA. This shell
+   has **no backend** — RAW decode there uses a WebAssembly LibRaw port (`vendor/libraw/`), and AI
+   masking features are unavailable (gated on `window.Capacitor`/`window.__TAURI__`).
+2. **The desktop app** — `desktop/`, a Tauri 2 (Rust) native shell for macOS/Windows. It embeds
+   the **same** `chromasmith-22.html` as its WebView content (staged via `build-desktop.sh` into
+   `desktop/dist/`) but adds a real native backend: RAW decode via `rawler` (not the WASM
+   decoder), a SQLite photo catalog (`catalog.rs`), and a full local AI stack (face
+   detection/recognition/clustering, subject segmentation, CLIP text search, depth, pet detection)
+   running through the ONNX Runtime C API directly.
 
-## 3. Defect queue — CLEARED (2026-09-08)
-
-All 12 defects below were fixed this session. `npm run behaviour:test` is 67/67 green (66
-original tests + one new keyword-tree chevron test, §3.2). Left in place as a record of what
-each was and where the fix landed — useful if any of these regress.
-
-1. **Sidebar separators rendered ~7px thick instead of a 1px hairline.** ~~`.lib-coll-sep`
-   (`:986`) was `height:1px;background:var(--bdr);padding-top:6px` — no `box-sizing:border-box`,
-   so the box was 7px and `background` painted all of it. Wrong token too.~~ **Fixed:** now
-   `border-top:1px solid var(--divider-soft,var(--bdr));margin-top:6px;padding-top:6px;height:0`,
-   and `--divider-soft` is mapped in both theme blocks (`#lib-overlay` dark default, `.lib-light`).
-
-2. **All three trees' chevrons loaded/navigated instead of just expanding.** `buildTreeNode`
-   (folder tree) and the keyword tree's row handler each wired ONE `onclick` that toggled
-   expansion *and* triggered a full load/navigate; only the date tree had the correct split.
-   **Fixed:** chevron = expand only (`data-chev-toggle`, stops propagation, no load); row body =
-   load/navigate only, no expansion toggle — same contract in all three trees now. The folder-tree
-   regression test now asserts on `catalogQuery` staying flat, not `listDir` (expanding a
-   never-before-seen folder legitimately costs one `list_dir` call to discover its children,
-   before or after the fix — that's not the bug, `openFolder()` firing is).
-
-3. **Get Info couldn't be closed.** `#lib-info-btn` always set `showInfo = true` instead of
-   toggling. **Fixed:** `window.__libInfo(!state.showInfo)`.
-
-4. **Develop tab contradicted its own tooltip.** `title="Develop — not yet available"` but the
-   click already performs the real navigation (same as the header button / `L` key) — the
-   wiring was correct, the stale title was the lie. **Fixed:** title now says "Switch to
-   Develop"; `#lib-side-tab-library` also got a real (no-op) handler instead of a static class.
-
-5. **Escape closed nothing.** The sort menu, gear menu and filters panel each closed on outside
-   click but ignored Escape. **Fixed:** one keydown branch closes whichever is open, placed
-   before the full-window-exit Escape handler so the topmost menu dismisses first.
-
-6. **Sidebar rows were unlabelled clickable `div`s.** Every `[data-coll]`, `[data-catalog]`,
-   `[data-sec-toggle]` row had no role/keyboard reach. **Fixed:** `role="button" tabindex="0"`
-   at each template site, plus one delegated Enter/Space handler on `#lib-side`.
-
-7. **Destructive-action menu had no role.** `showCacheMenu`'s popover was a bare styled `div`.
-   **Fixed:** `role="menu"` on the container, `role="menuitem"` + `tabindex="0"` per item.
-
-8. **The sidebar resizer had a ~2px effective hit target**, not the ~3px HANDOVER guessed.
-   Root cause, confirmed via `elementFromPoint`: `#lib-side{overflow:auto}` (needed for the
-   tree's vertical scroll) clips its own child's `right:-3px` overhang — only the portion still
-   inside `#lib-side`'s box was ever hit-testable; the rest fell through to the editor canvas
-   placeholder underneath. **Fixed:** moved the hit box fully inside `#lib-side` (`right:0`, no
-   overhang) and widened it to 11px. No rest-state visual change — the permanent divider line is
-   `#lib-side`'s own `border-right`, not this element.
-
-9. **`clearAllLibFilters()` left `state.ratingFilter` stale.** **Fixed:** added alongside the
-   other eight fields it already reset.
-
-10. **`syncFilterControls()` called a nonexistent function** (`updateFilterChips`, silently
-    no-op'd by a `typeof` guard). **Fixed:** calls the real `syncFilterUI`.
-
-11. **Two comments contradicted their code.** Search-Enter's comment claimed CLIP only fires on
-    an empty plain-text match (it always fires); the flag row's comment claimed a
-    multi-selection fallback (it reads `state.openedPath` only). **Fixed:** both comments now
-    match the actual, defensible behaviour.
-
-12. **List view was a no-op while docked.** `renderGrid`'s own `!docked` guard was correct — a
-    table in the 340px strip is unusable — the *button* was what claimed an effect it didn't
-    have. **Fixed:** the list-view button disables itself while docked (title explains why),
-    re-synced whenever full/docked state changes.
-
-### Known fidelity gaps (not defects — deliberate or unbuilt)
-- **Sidebar drag-to-collapse doesn't exist.** Settled after being an open question for several
-  sessions: the resizer clamps `Math.max(150, …)` (`:5966-5989`), so it can never collapse. The
-  wireframe has this; the app doesn't. A test pins the current 150px-floor behaviour so
-  implementing collapse is a deliberate, visible change.
-- **Filters is a different UI pattern.** Wireframe (`Library View.html:375-392`) has an inline
-  chip row: a "Types" label + single-select pills (All/RAW/JPEG/Video + a "…" expander revealing
-  HEIC/TIFF/PNG/DNG), a vertical divider, a "Flags & tags" label, and four circular icon-only
-  chips (pick/reject/fav/none). The app has a slide-out drawer of `<select>`s. This is a rebuild.
-- **List/table view is out of scope** — the wireframe isn't finished there. (For when it is:
-  wireframe has 6 columns — thumbnail, Name, Type, Date taken, Flag (★/—), Size; the app has 9.)
-- **Statusbar sync indicator** deferred; needs a real `catalog_scan` progress signal.
-- 19 allowlisted structural findings in `test/wireframe_accepted.json`, each with a reason
-  (Drives block, Keywords section, Albums "+", no-date bucket, mock-data naming, one
-  test-tool artifact).
+**Core mental model:**
+- The GLSL/WebGL2 grading pipeline (`FXR` class) is the single source of truth for what a photo
+  looks like, shared byte-for-byte between web, iOS, and desktop — there is no second rendering
+  implementation to keep in sync.
+- Native code (Rust) exists only where the browser genuinely cannot do the job: fast/reliable RAW
+  decode, a real indexed database for 100k+ photo libraries, and ML inference that needs a
+  vendored ONNX Runtime binary.
+- Editing is **non-destructive**: masks, curves, HSL bands and adjustments are all state
+  (`fxState`) that re-renders through the same pipeline; undo/redo covers geometry, curves, HSL
+  and masks.
+- "Single-file" describes the **app code**, not bulk data — LUT presets and ONNX models are kept
+  out of the inlined HTML on purpose (see §3) because the file is parsed on every cold load.
 
 ---
 
-## 4. How to action findings efficiently
+## 2. Architecture & Data Flow
 
-The reason earlier sessions burned context is that findings were prose lines that forced
-re-investigation per item. Keep them self-contained:
+### Backend (desktop only — Rust / Tauri 2, `desktop/src-tauri/`)
 
-- Each finding above carries its own `file:line` and, where applicable, the literal corrective
-  declaration — applyable without opening anything else first.
-- **Group by fix locus.** Several findings often share one rule or one handler.
-- **Verify narrowly:** `npx playwright test --config=playwright.config.mjs -g "<test name>"`
-  re-runs one test in seconds instead of the ~6 minute full suite.
-- `wireframe_inventory.mjs` already tracks resolved/persisting/new between runs — a cheap signal
-  that a fix landed without re-reading anything.
-- **Report-first, per an explicit decision** — no autonomous fix loop. Propose grouped edits,
-  get approval, then apply and re-run the affected test only.
-- ⚠️ **`bash build-desktop.sh` before any check.** `desktop/dist/` is a staged copy; editing
-  `desktop/library-ui.js` alone does nothing and has silently wasted fix attempts before.
+- **RAW decode** (`raw_decode.rs`): `rawler` decodes RW2 to raw Bayer sensor data only; this app
+  does its own black-level/WB/demosaic in Rust, then hands linear 16-bit camera RGB to the
+  **existing, already-calibrated JS DCP pipeline** unchanged (`bakeDcpLUT` in
+  `chromasmith-22.html`). Chosen because WKWebView's `SharedArrayBuffer` support (needed by the
+  WASM decoder) could not be made reliable in the native shell — verified two independent ways
+  per the Cargo.toml comment.
+- **Catalog** (`catalog.rs`): `rusqlite` (bundled SQLite) backs an indexed photo catalog for
+  100k+-photo libraries — chosen because the app's existing flat-JSON persistence pattern
+  (`albums.json`, `registry_*.json`) rewrites its entire file on every write and doesn't scale.
+  Commands are `async fn` + `tauri::async_runtime::spawn_blocking` (per `ROADMAP.md`'s N3.1
+  correction — a plain sync `#[tauri::command]` runs on the dispatching thread in Tauri 2, it does
+  **not** get a worker pool for free).
+- **IPC**: standard Tauri `#[tauri::command]` functions (58 of them across `main.rs` alone,
+  `grep -c '#\[tauri::command\]' desktop/src-tauri/src/main.rs`) registered in one
+  `tauri::generate_handler![...]` block in `main()` (`desktop/src-tauri/src/main.rs:2002`), called
+  from JS via `window.__TAURI__.invoke(...)` in `desktop/library-ui.js` /
+  `desktop/desktop-native.js`. Long-running native work also pushes progress back to JS via Tauri
+  **events**, not just command return values (see `bgwork.rs`).
+- **Other Rust modules and what they own** (`desktop/src-tauri/src/`):
+  - `sam.rs` — MobileSAM/SAM2 tap-to-select subject masks, via `ort-sys` + `libloading` calling
+    the ONNX Runtime **C API directly**, deliberately bypassing the `ort` crate's own
+    Session/Environment wrapper. Cargo.toml records why: `ort` 2.0.0-rc.12's `load-dynamic`
+    feature has a confirmed, reproducible **hang bug** in its dylib-handle caching on this
+    platform; the raw C API has none of it and was proven end-to-end before writing `sam.rs`.
+  - `arcface.rs` — ArcFace `w600k_r50` face embeddings (groups photos of the same person).
+  - `scrfd.rs` — SCRFD-500M face detection.
+  - `faceparse.rs` — SegFormer face-parsing (excludes eyes/lips/hair from a skin mask).
+  - `clip.rs` — CLIP ViT-B/32 natural-language photo search; uses `tokenizers` with
+    `default-features = false, features = ["onig"]` because CLIP's pretokenizer regex needs
+    lookahead (`\s+(?!\S)`) that Rust's own `regex` crate can't express.
+  - `depth.rs` — Depth Anything V2 Small (Depth Range mask, depth blur/tilt-shift).
+  - `petdetect.rs` — RT-DETR r18vd (cat/dog/bird/horse detection).
+  - `rawdenoise.rs` — RawNIND UtNet2 RAW noise reduction (GPL-3.0, the reason the whole desktop
+    app is GPL-3.0).
+  - `ingest.rs` — card ingest (uses `libc`'s `statfs` for capacity/free space).
+  - `lens_correct.rs` — Lensfun-based distortion/vignette/TCA correction (pure-Rust port, no
+    system `liblensfun`; pre-alpha crate, API may shift).
+  - `still_decode.rs` — non-RAW still formats (EXR/HDR/TGA/DDS/QOI/PNM/BMP/ICO/GIF, plus JPEG XL
+    via `jxl-oxide`); deliberately **not** AVIF (macOS ImageIO / Chromium already decode it
+    natively client-side).
+  - `library.rs`, `bgwork.rs`, `dcp_store.rs`, `formats.rs`, `fastthumb.rs`, `gainmap.rs`,
+    `merge.rs`, `subject.rs`, `tiff_meta.rs`, `videothumb.rs`, `diag.rs`, `platform/` — library
+    browsing, background job orchestration, DCP camera-profile storage, format sniffing, fast
+    thumbnailing, HDR gain-map handling, stacking/merge (HDR/focus/astro/panorama/collage),
+    subject detection glue, TIFF metadata, video poster thumbnails, diagnostics logging, and the
+    macOS/Windows platform shims (`objc2`/`objc2-app-kit` on macOS, `windows` crate on Windows).
+- **Vendored models** (`desktop/src-tauri/vendor/<name>/`, ~1.1GB, gitignored — see
+  `LICENSES-MODELS.md`): SAM 2.1 Hiera-Tiny (Apache-2.0), EdgeSAM/MobileSAM (**non-commercial**),
+  face-parsing SegFormer (**non-commercial**), SCRFD-500M, ArcFace `w600k_r50`, CLIP ViT-B/32
+  (MIT), RawNIND UtNet2 (GPL-3.0), Depth Anything V2 Small (Apache-2.0), RT-DETR r18vd
+  (Apache-2.0), plus a vendored ONNX Runtime dylib (MIT) — vendored because no x86_64-apple-darwin
+  prebuilt exists via `ort`'s download-binaries feature and the dev machine is Intel.
 
----
+### Frontend & Rendering (`chromasmith-22.html`, single file, ~18K+ lines)
 
-## 5. Retrospective — what should have been done from the start
+- **`class FXR`** (`chromasmith-22.html:5143`) is the WebGL2 renderer, the one and only rendering
+  implementation shared by all three shells. It compiles its shader programs in `_compileAll()`
+  via a shared `_prog(vs,fs)` helper (`:5153`), each one a `#version 300 es` GLSL ES string. The
+  programs, in the order they're compiled: `progs.lut` (`:5207`), `progs.src` (`:5888`),
+  `progs.blur` (`:5946`), `progs.deconvUpdate`/`progs.deconvMix` (`:5982`/`:6001`, deconvolution
+  sharpen), `progs.lumdown` (`:6016`), `progs.blur_hal` (`:6046`, halation-specific blur),
+  `progs.lens` (`:6072`), `progs.nr` (`:6150`, noise reduction), `progs.comp` (`:6219`, final
+  composite), `progs.dof` (`:6483`, depth-of-field/tilt-shift).
+- **Per-frame pipeline** (documented in full in `CLAUDE.md` §3): lut pass (V-Log input transform →
+  sharpen/clarity → look LUT → HSL mixer → basic adjustments → local-adjustment masks → tone
+  curves) → emit pass (halation/bloom emission map) → blur passes (per-channel Gaussian, σ_R ≫
+  σ_G ≫ σ_B) → comp pass (screen-blend bloom+halation → grain → film artifacts → print LUT →
+  saturation/vibrance → vignette). Order is load-bearing and calibrated against Dehancer as
+  ground truth — see §4's invariants.
+- **Tiled export** (`renderTiled`) processes huge images in overlapping tiles with a halo ≥3σ so
+  peak GPU memory stays small and seams are invisible; the 1:1 loupe reuses the same mechanism.
+- Heavy JS (not GLSL) hot paths run in a **pixel worker** (`_cpuRun`), built from the real
+  `bakeDcpLUT`/`exportSharpen` functions via `Function.prototype.toString` — never hand-copied —
+  so the worker can never silently drift from the main-thread implementation.
+- **Canvas-to-DOM overlay mapping during zoom/pan**: two different mechanisms, used for two
+  different overlay kinds, and mixing them up is how a real bug shipped.
+  - **Mask/crop overlays** (`#fx-mask-overlay` etc.) live **inside `#fx-zoom-wrap`** as CSS
+    siblings of `#fx-canvas` (`mskOverlayBox()`, `chromasmith-22.html:14140-14146`), so they ride
+    the *same* `transform: scale(fxZoom) translate(...)` the canvas gets in `_applyZoom()`
+    (`:15009-15022`) for free, by construction. This replaced an earlier version that read
+    `getBoundingClientRect()` per frame, which lagged the transform by one frame during an active
+    zoom/pan and visibly "moved the mask" relative to the photo.
+  - **Pointer input → canvas pixel** (clicks, brush strokes, WB eyedropper) goes through
+    `fxPointerToCanvasPx()` (`:10349-10358`), which reads `getBoundingClientRect()` on whichever
+    element is actually visible — `#fx-canvas-bd` (the Borders/Canvas-matte composite) when a
+    frame is on, otherwise `FX.cv` directly — because `applyPreviewBorders` sets `FX.cv` to
+    `display:none` when compositing a border, and a `display:none` element reports an all-zero
+    rect (`FX.cv.width / rect.width` → `Infinity`, every pick/stroke previously landed on
+    garbage — the real "pick color does nothing when the photo has a border" bug). `_fxDisplayMap`
+    (`:10348`) records which canvas + offset is live so this resolves correctly either way.
+  - Rule of thumb: an overlay that must track zoom/pan pixel-perfectly belongs inside
+    `#fx-zoom-wrap` riding the transform; anything converting a live pointer event to an image
+    pixel must go through `fxPointerToCanvasPx()`, never a raw `getBoundingClientRect()` call.
 
-Checked against Anthropic's published Claude Code best practices. Every failure here is one they
-name explicitly; none of this was bad luck.
+### Color space pipeline
 
-1. **"Give Claude a way to verify its work" was skipped for the visual dimension.** Their example
-   for exactly this case: *"[paste screenshot] implement this design. take a screenshot of the
-   result and compare it to the original. list differences and fix them."* The transplant sessions
-   read the wireframe, hand-translated values into a differently-named `.lib-*` class system, and
-   moved on. That loop, run once per zone at transplant time, catches the icon swap and the
-   separator box-model bug in the session they were introduced — not five sessions later.
-2. **The trust-then-verify gap.** Their fix: *"Always provide verification (tests, scripts,
-   screenshots). If you can't verify it, don't ship it."* A three-zone structural check was
-   treated as proof of full fidelity. It never covered the grid, list view, filters panel,
-   icon shapes, colours, or any behaviour.
-3. **No adversarial second opinion.** *"a verification subagent… has a fresh model try to refute
-   the result, so the agent doing the work isn't the one grading it."* Every check was written and
-   graded by the same session that wrote the implementation, so its blind spots were invisible by
-   construction. The user ended up being the verification loop, repeatedly.
-4. **No spec extracted before implementing.** A good spec *"names the files and interfaces
-   involved, states what is out of scope, and ends with an end-to-end verification step."* There
-   was no wireframe-selector → literal-value → app-selector table to implement against, so values
-   were hand-copied by reading — exactly where transcription drift enters.
-5. **Worth adopting: a Stop hook.** *"runs your check as a script and blocks the turn from ending
-   until it passes"* — strictly stronger than this repo's pre-commit gate, which only fires at
-   commit time and can't stop a session claiming "done" while checks are red.
+- **Working space for grading is gamma-encoded sRGB** (the `img` texture bound into `progs.lut`
+  is sRGB-encoded 8-bit, or scene-linear floats when `usingSceneLinear` is set — see below); the
+  look LUT, HSL mixer, basic adjustments, masks, and tone curves in the lut pass all operate on
+  that encoded signal directly, matching how the calibration was fitted against Dehancer.
+- **The emit pass (`progs.src`, `:5893-5945`) converts to linear light before computing
+  halation/bloom emission**: `vec3 lin=vec3(s2l(c.r),s2l(c.g),s2l(c.b))` (`:5899-5902`, sRGB EOTF,
+  same `s2l`/`l2s` pair reimplemented per-shader-program rather than shared — see the multiple
+  `float s2l(...)` definitions at `:5335,5899,6238,10943`). All downstream emission math
+  (luminance, saturation, the warm/backing/yellow-driver terms, the bloom hue gate) runs in
+  linear light.
+- **The blur passes operate on that linear-light emission buffer directly** — the per-channel
+  Gaussian blur (σ_R ≫ σ_G ≫ σ_B) never re-encodes back to sRGB between the emit and comp passes,
+  so energy conservation (the "AREA-NORMALIZED separable Gaussian" comment at `:5947`) is correct
+  in the physically-meaningful linear domain, not gamma space.
+- **The comp pass (`:6224+`) screen-blends the linear bloom/halation back onto the graded sRGB
+  image**, meaning it round-trips through `s2l`/`l2s` again (`:6238-6241`) at the blend boundary,
+  then continues in sRGB for grain, film artifacts, the print LUT, and saturation/vibrance —
+  matching CLAUDE.md §3's documented stage order (grain before print, saturation/vibrance after
+  print).
+- **RAW / scene-linear path** (`usingSceneLinear`, `:6594`, ROADMAP.md's R1): when a RAW carries
+  real measured highlight headroom above 1.0 (`_sceneLinearPresent`), the pipeline keeps a
+  separate linear buffer (`img._sceneLinear`) and gates a tonemap step (`tonemapOn`, `:6806`) on
+  top of the normal sRGB path — PNG/JPEG sources and RAWs with no measured headroom never set
+  this and are unaffected. The Oklab-based skin-tone/mask color math (`_ok_s2l`/`_ok_l2s`,
+  `:5177-5197`) uses its own local sRGB↔linear pair feeding the standard OKLab matrices, kept
+  separate from the emit-pass `s2l`/`l2s` deliberately (different call sites, same formula, not
+  shared to avoid a cross-shader-program dependency).
 
-### Tooling research — settled, don't re-litigate
-- `pbakaus/impeccable`, `vercel-labs/agent-skills` (`web-design-guidelines`),
-  `nextlevelbuilder/ui-ux-pro-max-skill`: all real, all **generative design-quality guidance**,
-  none of them compare an implementation against a *specific* wireframe. The Vercel rule list was
-  useful and its assertable rules are now encoded in the `quality` block of the behaviour suite.
-  `ui_audit.mjs` already covers the overlapping ground (tap targets, font floor, contrast, focus).
-- `tugkanboz/awesome-ai-testing` lists ten pixel-diff tools (Percy, Chromatic, Applitools,
-  BackstopJS, Pixelmatch…). **None do wireframe comparison** — that is inherently custom, which is
-  why `wireframe_inventory.mjs` exists. Of the ten, only Pixelmatch fits an offline repo with no
-  SaaS account, and **it's already a devDependency** used by `test/visual_scorecard.mjs`.
-- **`test/visual_scorecard.mjs` already implements pixel diffing** (threshold 0.1, max diff ratio
-  0.001, writes diff PNGs to `test/output/visual_diffs/` on failure). Extending *that* is the way
-  to add wireframe-vs-app visual diffing — do not build a new one. (Not done this session.)
+### Data lifecycle, end to end
 
----
-
-## 6. Next steps, in order
-
-Steps 1–3 (all 12 §3 defects) are DONE as of 2026-09-08 (morning session). Two more passes the
-same day found 16 MORE real defects the tools still couldn't see (§8), and a fix pass (§9) landed
-9 of them plus the user-reported item 21. What's left:
-
-1. Decide on items #10/#11 (sort/gear dropdown) — real structural differences that read as an
-   intentional feature superset (more sort keys, a different toggle style), same question already
-   settled for Filters/collapse below. Not touched pending that call.
-2. Check #6 (icon centering) against the real compiled desktop app — the two browser harnesses
-   disagree with each other by more than the check's own tolerance (§9), so neither is fully
-   trustworthy here.
-3. Decide on the Filters chip-row rebuild — wireframe (`Library View.html:375-392`) has an
-   inline chip row (Types pills + Flags & tags icon chips); the app has a slide-out `<select>`
-   drawer. A real rebuild, not a bug fix.
-4. Decide on sidebar drag-to-collapse (with a re-expand affordance — a plain collapse-to-nothing
-   has no way back, which the wireframe doesn't show either) — the wireframe collapses past a
-   threshold, the app clamps at a 150px floor (a test pins this current behaviour deliberately,
-   per §3's "known fidelity gaps"). Also a feature decision, not a defect.
-5. Optional: fix `#lib-filters-badge`'s missing `tabular-nums` (the one remaining
-   `lint:library-content` finding — cosmetic, not one of the 16, never prioritized this session).
-6. Optional: extend `visual_baseline.mjs`/`visual_scorecard.mjs` with wireframe-vs-app zone
-   captures; wire a Stop hook to `wireframe:test` + `behaviour:test` + `lint:library-content` +
-   `library:responsive-test`.
-7. Use `npm run preview` (§1) for the iteration loop instead of round-tripping
-   `build-desktop.sh` + manual refresh on every look.
-
-## 7. Verification
-```bash
-bash build-desktop.sh                     # ALWAYS first — dist/ is a staged copy (now incremental)
-npm run wireframe:test                    # structural + icon/colour/overflow/indentation regression
-npm run behaviour:test                    # interaction + state coverage; asserts CORRECT behaviour
-npm run lint:library-content              # ellipsis / native-select dark-mode / tabular-nums
-npm run library:responsive-test           # overlap/wrap/search-floor sweep, 1440px down to 640px — PASS
-npm run ui:test && npm run lib:test       # must stay green (editor-scoped, untouched by any of this)
-npm run export:test                       # shader goldens, 18/18
-npm run preview                           # live-source Library preview, no build step needed to look
+```mermaid
+flowchart TD
+    subgraph Desktop shell
+        A1[RW2/RAW file on disk] --> A2["rawler decode (raw_decode.rs)\nblack-level / WB / demosaic in Rust"]
+        A2 --> A3["linear 16-bit camera RGB\nhanded to JS"]
+        C1[Photo catalog] <-->|rusqlite, async cmds| A2
+    end
+    subgraph Web/iOS shell
+        B1[RAW/JPEG file] --> B2["vendor/libraw WASM decode\n(needs SharedArrayBuffer via COI)"]
+    end
+    A3 --> D
+    B2 --> D
+    D["bakeDcpLUT (DCP camera profile,\nJS worker, byte-exact w/ main thread)"] --> E[WebGL2 texture upload]
+    E --> F["FXR.render(): lut pass -> emit pass ->\nblur passes -> comp pass"]
+    F --> G["Preview: devicePixelRatio-capped\ncanvas, CSS-fit"]
+    F --> H["Export: renderTiled(), overlapping\ntiles with halo, full resolution"]
+    H --> I[PNG/JPEG/TIFF written to disk\nor native share sheet (iOS)]
+    subgraph Desktop-only AI
+        A3 -.-> J["sam.rs / scrfd.rs / arcface.rs / clip.rs /\ndepth.rs / petdetect.rs (ort-sys direct C API)"]
+        J -.-> K[Mask data / face clusters / search index]
+        K -.-> F
+    end
 ```
-`wireframe:test` still shows real findings — §10/§11 (judgment call, §6.1) and #6 (unresolved
-measurement conflict, §6.2), all documented in §9. `lint:library-content` shows the one deferred
-`tabular-nums` item. Nothing else should be red; a finding that isn't traceable to §9's "not
-fixed" list is a new problem to investigate, not something to wave off.
 
 ---
 
-## 8. 2026-09-08 (afternoon session) — 16 new defects, and why the tools missed them
+## 3. Environment Setup & Asset Manifest
 
-The user reported 16 concrete Library issues in one pass — filters, sidebar collapse, a
-scrollbar covering sidebar counts, keyword/photo tree indentation, off-center topbar icons,
-bordered flag chips, wrong zoom icons, all-three-flags-visible-on-a-card instead of just the set
-one, wrong sort/gear dropdown markup, no reject-dimming, a responsive-squeeze rule missing
-entirely, sidebar text wrapping instead of truncating, wrong sidebar font, and hover/selected
-colours not matching the wireframe. **None of them were caught by `wireframe:test`,
-`behaviour:test`, or `ui:test`** despite all three reporting PASS. Root-caused before touching
-anything (an explicit instruction, not a shortcut):
+### Web app (no build step)
 
-- **`wireframe_inventory.mjs` only ever inventoried 3 static zones** (`#lib-top`, `#lib-side`,
-  `#lib-bottom`). The **photo grid was never a zone at all** — flag-visibility and reject-dimming
-  live entirely outside anything the tool looked at. It also only ever compared atom kind+text
-  tallies, an icon-shape **self**-baseline (drift over time, not "wrong since day one"), and
-  font-**size** — never colour, never font-family, never icon centering, never a **closed
-  menu's contents** (sort/gear dropdowns aren't in the DOM until clicked, and nothing clicked
-  them open before inventorying).
-- **`ui_audit.mjs`** — the tool that *would* catch overlap/wrapping/squeeze — is scoped only to
-  the editor's `.fx-panel` at `?deskx=1`. It has never once looked at the Library, so the
-  responsive-squeeze rule (item 13/14 in the original report) had no gate anywhere.
-- **`wireframe_behaviour.mjs`** asserts DOM state (classes/localStorage), never visual
-  appearance — it can prove a click toggled something, not that the toggle is drawn correctly.
-- **`.claude/skills/wireframe-transplant/SKILL.md`** (gitignored — local only, not in this repo's
-  git history) still named the *retired* `wireframe_diff.mjs`/`calib/wireframe_diff.py` as the
-  regression guard, and its manual-screenshot fallback only enumerated static *regions* ("top
-  bar, sidebar, grid, status bar"), never *states* (hover/selected/open-menu/narrow-viewport/
-  flagged-card) — so even the human fallback never prompted for the states that exposed most of
-  these bugs.
-- **Filters and sidebar-collapse** aren't tooling misses at all — both were already flagged as
-  deliberately-deferred features in §6 the same morning, not defects the tools failed to catch.
+```bash
+python3 -m http.server 8000   # then open http://localhost:8000/
+```
+- RAW support needs cross-origin isolation (`SharedArrayBuffer`); GitHub Pages can't set
+  COOP/COEP headers, so `coi-serviceworker.min.js` (first `<head>` script) shims it client-side.
+- macOS gotcha: sandboxed preview servers can't read `~/Documents` (TCC) — serve a copy from
+  `/tmp/` instead.
 
-Research grounding (not invented from scratch): [Vercel's
-web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) (100 rules /
-17 categories — only ~6 were ever encoded in `behaviour:test`'s `quality` block before today),
-plus general visual-QA-checklist conventions ([Percy](https://percy.io/blog/visual-qa-testing),
-[OverlayQA](https://overlayqa.com/blog/what-is-design-qa/)) and WCAG's own component-state and
-non-text-contrast guidance.
+### iOS shell (`ios/`, Capacitor 8 + CocoaPods)
 
-### What was built (all committed, all re-runnable)
+```bash
+npm run build:www   # ./build-ios.sh — stages chromasmith-22.html -> www/index.html + vendor/
+npm run sync         # build-ios.sh + npx cap sync ios
+```
+- `build-ios.sh` (repo root) never points `webDir` at the repo root — `calib/` must not ship.
+- `.github/workflows/ios-ipa.yml` builds an **unsigned** `Chromasmith.ipa` on a macOS CI runner
+  on every push touching the app (this dev machine has no Xcode). Sideloaded via Flarestore.
+- CocoaPods, not SPM — SPM can't be patched; `patches/@capacitor+ios*.patch` (via patch-package)
+  adds COOP/COEP headers in `WebViewAssetHandler` so SharedArrayBuffer works in WKWebView.
 
-- **`wireframe_inventory.mjs`**: added a `grid` zone (seeded with a flagged AND a rejected card,
-  clicked via each side's own click handler rather than simulated hover — headless :hover
-  proved unreliable through a click sequence); menus now opened ONE AT A TIME immediately before
-  their own inventory (batching opens first silently closed the first menu — `sortBtn`/
-  `viewMenuBtn`'s own handlers each close the other); hover/selected colour-state diffing read
-  from the wireframe's OWN computed values (not a hardcoded hex); an overflow/scrollbar-gutter
-  check; icon-centering (icon bbox center vs. its nearest square/circular hit-shape — explicitly
-  NOT exempting `<button>` from the squareness requirement, which is what produced a
-  90+px-off-center false positive on ordinary icon+label menu rows during development); a
-  font-family tally alongside the existing font-size one. Icon-shape baseline re-recorded
-  (`--icons-baseline`) and the grid's own `<img>` thumbnails excluded from it — their `src` is a
-  regenerated blob: URL every run, which is churn, not a shape regression.
-- **`wireframe_behaviour.mjs`**: `#lib-tree-toggle`/`#lib-aspect-toggle` both carry
-  `opt-action opt-toggle` together, and the gear menu's auto-close listener only checks for
-  `.opt-action` — so toggling "Show sidebar" or "Real aspect ratio" wrongly closes the whole
-  menu (the user's own report: "when I open a submenu... and select something, the menu
-  shouldn't disappear"). Two new tests prove it (RED); a third pins that `data-theme`/
-  `data-metaval` groups already behave correctly (GREEN, a regression guard) — plus the new
-  keyword-tree chevron test from the morning session.
-- **`test/lint_library_content.mjs`** (new, `npm run lint:library-content`): source-level checks
-  for a real ellipsis character (never `...`), a native `<select>` with explicit dark-mode
-  `background-color`/`color` (a Windows-only rendering bug otherwise), and
-  `font-variant-numeric:tabular-nums` on live numeric readouts. Currently 1 real finding
-  (`#lib-filters-badge`).
-- **`.claude/skills/wireframe-transplant/SKILL.md`**: Step 3 repointed at the current tools and
-  rewritten to require every STATE above, not just 4 static regions.
+### Desktop shell (`desktop/`, Tauri 2)
 
-### Coverage pass 2 (same day, immediately following) — every one of the 16 now has a real check
+```bash
+./build-desktop.sh   # stages chromasmith-22.html into desktop's dist/ (see script for exact steps)
+# then: cd desktop/src-tauri && cargo build / cargo tauri dev, per the desktop/ tooling
+```
+- `desktop/src-tauri/Cargo.toml`: `edition = "2021"`, `tauri = "2"`. **No `rust-toolchain.toml`
+  exists** (confirmed: `find . -iname "rust-toolchain*"` returns nothing) and CI
+  (`.github/workflows/desktop-dmg.yml`) uses `dtolnay/rust-toolchain@stable` — i.e. this project
+  intentionally does not pin a Rust version, it always builds against whatever `stable` currently
+  is. The version actually verified working on this dev machine: `rustc 1.97.0 (2d8144b78
+  2026-07-07)` / `cargo 1.97.0`. If a future `stable` breaks the build, that's a real regression to
+  investigate, not a config-drift symptom — there is no older pinned toolchain to fall back to.
+- **Node**: no `engines` field in `package.json` and no `.nvmrc`. CI pins differ by workflow —
+  `.github/workflows/export-gate.yml` and `desktop-dmg.yml` both use **Node 20**
+  (`actions/setup-node@v4`, `node-version: 20`); `.github/workflows/ios-ipa.yml` uses **Node 22**.
+  Use Node 20 locally to match the two workflows that actually run this repo's test suite
+  (`export-gate.yml` runs `npm test`); Node 22 only matters if you're touching the iOS build.
+- `.github/workflows/desktop-dmg.yml` builds the macOS `.dmg` on a `v*` git tag → GitHub Release.
+  **macos-13 (x86_64) is required** — the vendored `libonnxruntime.dylib` is Intel-only. The dmg
+  is packaged with `hdiutil`, not by touching `tauri.conf.json`'s deliberate `targets:["app"]`.
+- Native RAW decode replaces the WASM path entirely on desktop (see §2).
 
-Pass 1 above stopped after diagnosing 4 of 16 and left the rest as either raw unread tool output
-or literally no check at all — see the conversation for the honest breakdown. A second pass
-closed every remaining gap. **All 16 now produce a concrete, source-cited finding** (or, for the
-2 that turned out not to be defects, an explicit note why). None of the 16 are fixed yet — this
-is still tooling, per the standing instruction to build coverage before starting fixes.
+### Obtaining the ~1.1GB vendored AI models on a clean clone
 
-1. **Filters** — not a tooling gap. Deliberately deferred feature (§6.2), unchanged.
-2. **Sidebar collapse** — not a tooling gap. Deliberately deferred feature (§6.3), unchanged.
-3. **Scrollbar covers counts** — `#lib-side` has no `::-webkit-scrollbar`/`scrollbar-width`/
-   `scrollbar-gutter` rule anywhere, so it renders the platform DEFAULT scrollbar — an OVERLAY
-   style on macOS (paints over content, reserves ~0 box-model width), confirmed by measuring
-   `offsetWidth - clientWidth` ≈ 1px in Chromium. A box-model overlap check can never catch this
-   (there is no gutter to measure); `wireframe_inventory.mjs` instead asserts a fixed 14px safety
-   margin between each count element and the sidebar's own right edge — currently violated by
-   7-9px on every count. Real fix: either `scrollbar-gutter:stable` (switches to a reserved,
-   non-overlay gutter) or a `margin-right`/`padding-right` safety margin on `.lib-coll-count`.
-4. **Keywords expand-button alignment** — real, but not what "not a staircase" would have shown:
-   depth-to-depth indentation IS a clean staircase in both trees. The actual defect is WITHIN one
-   depth — the keyword tree's depth-1 rows disagree on chevron x by 7px (one has real children so
-   a working chevron, one is a leaf with an empty chevron slot of a different width), so a leaf's
-   label starts 7px off from its expandable sibling's. `wireframe_inventory.mjs` now checks
-   same-depth alignment, not just monotonic staircasing.
-5. **Photos under folders, indentation** — confirmed by a user screenshot: "Photos" is the
-   folder tree's own ROOT row (`state.root`, this mock's `/test/Photos`), and it renders below
-   Cloud, disconnected from the "Folders" header, at the section-header's own indent (not one
-   level deeper). Root cause: the static template has `<div id="lib-collections"></div><div
-   id="lib-tree"></div>` as SIBLINGS (`:1665`); `renderCollections()`'s `host.innerHTML` (into
-   `#lib-collections`) places the "Folders" header right before Cloud (`:8693`), but `#lib-tree`
-   (renderTree()'s separate target, `:8695`'s own comment already flags this split) always
-   paints AFTER all of `#lib-collections`, i.e. after Cloud, regardless of where "Folders" sits
-   in that sequence. `wireframe_inventory.mjs` now asserts both the position (tree root must sit
-   above Cloud, not below it) and the indent (tree root's chevron must be right of the "Folders"
-   header's own chevron, to read as a child) — both currently fail.
-6. **Topbar icons not centered** — `wireframe_inventory.mjs`'s icon-centering check (icon bbox
-   center vs. its nearest square/circular hit-shape) finds 2 real cases (2.2px, 3.2px off) in the
-   topbar. Small enough that ICON_CENTER_TOLERANCE=1.5px is worth revisiting once these are fixed
-   — read the live finding for which icons.
-7. **Flag-row borders** — `.lib-btn{border:1px solid var(--bdr)}` is the shared base button rule;
-   nothing in `.lib-flagrow .lib-btn-icon` overrides it back to none. Wireframe's `.flagbtn` has
-   no border property at all (hover background only).
-8. **Zoom icons wrong** — the app's `ic('zoomIn')`/`ic('zoomOut')` (chromasmith-22.html `ICONS`)
-   draw a full magnifying-glass metaphor (circle + diagonal handle + tiny +/-); the wireframe's
-   are plain minus/plus LINES, no circle at all (Library View.html:224-226) — a different icon
-   family, not a style variant. Hand-curated check (icon SHAPE isn't compared wireframe-vs-app
-   anywhere else on purpose — the two icon sets differ throughout by design — but this specific,
-   user-named pair gets a targeted "does it draw a circle" assertion).
-9. **All three flags visible instead of just the set one** — `.lib-flag{opacity:.55;filter:
-   grayscale(1)}` / `.on{opacity:1}` renders all three always, dimmed; wireframe's `.ratebar.
-   has-set button:not(.set){display:none}` removes the unset ones entirely. `wireframe_
-   inventory.mjs`'s grid-zone check clicks reject on a real card and counts `display!=='none'`
-   flags on each side — wireframe:1, app:3.
-10/11. **Sort/gear dropdown markup** — real signal, but read it as a feature-surface question,
-   not literal markup drift: the wireframe's sort menu offers 3 sort keys + a 2-option direction
-   toggle (Library View.html:238-245); the app offers Name/Date modified/Date taken/Camera/Rating
-   + a single "Reverse order" toggle — a superset with a different interaction shape, the same
-   pattern already accepted for Filters. `wireframe_inventory.mjs` now opens both menus (one at a
-   time — see the menu-batching bug note in pass 1) and reports the literal MISSING/EXTRA/
-   font-size/font-family diff; worth a deliberate look before deciding what's a bug vs. an
-   intentional superset, same as Filters/collapse were.
-12. **Reject dimming** — no `.rejected` class or filter exists anywhere in `library-ui.js`;
-   wireframe: `.card.rejected .ph{filter:brightness(.45) saturate(.7)}`.
-13. **Responsive squeeze rule missing entirely** — confirmed: `ui_audit.mjs`'s sweep has never
-   touched the Library. New `test/library_responsive_qa.mjs` (`npm run library:responsive-test`)
-   sweeps 1440/1024/820/640px, asserting no topbar control-pair overlap, no button label wrapping
-   to 2 lines, and a search-input floor width. At 820px: `#lib-sort-btn` and `#lib-allfx-btn`
-   labels wrap to 2 lines; the search input shrinks to 29px (far under any usable floor). Confirms
-   the rule is entirely missing, not just imperfect.
-14. **Sidebar text should ellipsis-truncate, not wrap** — same new file checks `.lib-coll-lb`/
-   `.rn` elements for `scrollWidth > clientWidth` without `text-overflow:ellipsis` + `white-space:
-   nowrap`; no violation found in the current fixture at the widths tested — either already
-   correct or the fixture's row labels aren't long enough to hit overflow at 640-1440px. Worth
-   re-running with longer synthetic folder/collection names before trusting this is clean.
-15. **Sidebar font wrong** — `wireframe_inventory.mjs`'s new font-family tally shows a real
-   mismatch (22 "SF Pro Text" atoms in the wireframe's sidebar vs. 29 in the app's) — the app is
-   rendering MORE text in a non-SF-Pro fallback than the wireframe's own DS_FONTS declaration
-   should allow. Read the live finding to trace which specific rows.
-16. **Hover=grey / selected=blue behaviour wrong** — confirmed for the tree specifically (folder/
-   date/keyword rows): `.lib-tree-row.on{background:var(--bdr)}` (light-grey overlay) where
-   `.lib-coll-row.on` correctly uses `var(--blue-mist-soft)`. Same bug family as the morning
-   session's §3.1 separator token miss — the right token exists in the file, just not wired to
-   this specific selector. `wireframe_inventory.mjs` reads the wireframe's own computed `.row.sel`
-   colour (not a hardcoded hex) and asserts the app's selected state is blue-family.
-21. **(User-reported, not in the original numbered list) Menu closes on toggle-option click** —
-   `#lib-tree-toggle`/`#lib-aspect-toggle` carry BOTH `opt-action` and `opt-toggle`; the
-   close-on-click listener only checks for `.opt-action` and doesn't exempt toggle-type options.
-   Two RED behaviour tests prove it; a third pins that `data-theme`/`data-metaval` groups already
-   behave correctly (regression guard).
+`desktop/src-tauri/vendor/` is **1.1GB total, but most of it IS committed to git** — this
+contradicts `LICENSES-MODELS.md`'s framing ("they are not in git"); verified directly with
+`git ls-files desktop/src-tauri/vendor`. What's actually true, file by file:
+
+| Vendor dir | Committed to git? | Size |
+|---|---|---|
+| `vendor/clip/{vision_model,text_model}.onnx` | ✅ committed | 335MB + 242MB |
+| `vendor/arcface/w600k_r50.onnx` | ✅ committed | 166MB |
+| `vendor/faceparse/model_quantized.onnx` | ✅ committed | 85MB |
+| `vendor/onnxruntime/libonnxruntime.dylib` | ✅ committed | 28MB |
+| `vendor/depth/model_quantized.onnx` | ✅ committed | 26MB |
+| `vendor/sam/edge_sam_{encoder,decoder}.onnx` | ✅ committed | 21MB + 15MB |
+| `vendor/rtdetr/model_quantized.onnx` | ✅ committed | 21MB |
+| `vendor/scrfd/scrfd_500m_bnkps.onnx` | ✅ committed | 2.4MB |
+| `vendor/sam2/{encoder,decoder}.onnx` | ❌ gitignored (`vendor/sam2/*.onnx`) | ~155MB total |
+| `vendor/rawdenoise/*.onnx` | ❌ gitignored (`vendor/rawdenoise/*.onnx`) | ~30MB each |
+
+So **a plain `git clone` already gets everything except SAM2 and the RawNIND denoiser** — those
+two are excluded specifically because `encoder.onnx` alone (~134MB) is over GitHub's 100MB hard
+push limit and this repo has no Git LFS configured (see `.gitignore:57-63`). Fetch the two missing
+ones exactly as their own `README.md` documents (verified against the real file contents):
+
+```bash
+# SAM2.1 Hiera-Tiny (optional — EdgeSAM in vendor/sam/, already committed, still works standalone
+# without this; losing it only disables the higher-quality tap-to-select tier)
+cd desktop/src-tauri/vendor/sam2
+curl -sL "https://huggingface.co/SharpAI/sam2-hiera-tiny-onnx/resolve/main/encoder.onnx" -o encoder.onnx
+curl -sL "https://huggingface.co/SharpAI/sam2-hiera-tiny-onnx/resolve/main/decoder.onnx" -o decoder.onnx
+
+# RawNIND UtNet2 RAW denoiser (GPL-3.0 weights)
+cd ../rawdenoise
+curl -sL "https://github.com/darktable-org/darktable-ai/releases/download/release-5.6.0/rawdenoise-nind.dtmodel" -o rd.dtmodel
+python3 -c "import zipfile; zipfile.ZipFile('rd.dtmodel').extractall('.')"
+mv rawdenoise-nind/model_linear.onnx rawdenoise-nind/model_bayer.onnx .
+rm -rf rd.dtmodel rawdenoise-nind
+```
+
+Without SAM2, `sam2_encode`/`sam2_points` fail with a clear "SAM2 encoder path not set" error —
+not a silent no-op. Without the RawNIND weights, RAW denoise is simply unavailable; nothing else
+depends on it. `libonnxruntime.dylib` (the C API runtime everything above calls into via
+`ort-sys`+`libloading`, §2) is already committed, so no separate fetch is needed for it — it's
+only pinned to v1.20.0 because Microsoft dropped Intel-Mac prebuilts after that release (see
+`vendor/onnxruntime/README.md`).
+
+### Asset manifest — where things live
+
+| What | Where | Notes |
+|---|---|---|
+| App code | `chromasmith-22.html` | The entire product; bump `const BUILD='YYYY-MM-DDx'` near the top of `<script>` every session that edits it |
+| Built-in LUTs (102 of 113) | `vendor/luts/<key>.bin` | Raw 33³ RGB bytes, 107,811B each; fetched + IndexedDB-cached on demand, **not** inlined |
+| Built-in LUTs (11 "User Looks") | inline `LUT_PRESETS` base64 in `chromasmith-22.html` | Deliberately inline — must survive a bare `file://` open, which can't `fetch()` |
+| LUT master list | `LUT_META` in `chromasmith-22.html` (`:4337`) | Authoritative key list, not `LUT_PRESETS` |
+| ONNX models (desktop AI) | `desktop/src-tauri/vendor/<name>/` | ~1.1GB, gitignored; each has its own README with source URL/date/size; see `LICENSES-MODELS.md` |
+| LibRaw WASM decoder | `vendor/libraw/` | index.js, worker.js, .wasm — web/iOS RAW path only |
+| DCP camera profiles | `vendor/dcp/` | 14 Panasonic DC-S9 Adobe DCP profiles, runtime copies |
+| MP4 demux/mux | `vendor/mediabunny/` | MPL-2.0, lazy-`import()`ed like libraw |
+| Calibration source (.cube) | `calib/LUT LIBRARY/` (46) + `calib/dehancer/cubes/` (67) | = 113 keys in `LUT_META`; sideload-ready |
+| Calibration ground truth | `calib/dehancer halation x2.png`, `calib/IMG_5774_2x.PNG` | Not needed to run the app, only to re-derive constants |
+| Test fixtures/goldens | `test/fixtures/`, `test/golden/`, `test/baselines/` | `test/output/` is gitignored scratch |
+| Wireframes (design source) | `chromasmith-design/project/` | `Editor (Developer) View.dc.html`, `Library View.html`, `design.md`, `UI_SPEC.md` — literal source of truth for UI fidelity work |
+| RAW/JPEG/TIFF test captures | gitignored `photos-src/` | Supply your own |
+
+**Payload discipline**: before inlining any new bulk asset into `chromasmith-22.html`, check
+`gzip -9 -c chromasmith-22.html | wc -c` — the file is parsed in full on every cold web load, iOS
+launch, and desktop `dist/` read. The 102-preset split to `vendor/luts/` was a 5.8× transfer cut
+(17.7MB/10.2MB gzipped → 3.02MB/1.76MB gzipped for the preset payload specifically).
 
 ---
 
-## 9. 2026-09-08 (fix pass) — every confirmed §8 item fixed, 2 turned out to be false positives
+## 4. Architectural Invariants & The Graveyard
 
-Per an explicit instruction — fix everything with a confirmed root cause, flag anything
-uncertain, and re-validate for defects beyond the original 16 before starting. **9 fixes landed
-in `desktop/library-ui.js`, 1 in `chromasmith-22.html`** (all built desktop/dist/, all verified
-against their own tool finding going to zero):
+Real, load-bearing rules — not style preferences. Breaking any of these has shipped a real bug.
 
-- **#3 scrollbar safety margin** — `#lib-side` had `padding:12px 0 8px` (zero right padding) in
-  BOTH its base rule and the `.full`-mode override (a second `#lib-overlay.full #lib-side{padding
-  :...}` rule the first fix attempt missed, since it wins in the mode being tested) — now
-  `padding-right:14px` on both.
-- **#4 keyword tree same-depth alignment** — a leaf's chevron slot was a bare, childless
-  `<span class="lib-tree-chev">`. Despite the shared CSS rule declaring `width:14px`, the
-  EMPTY span's rendered `getBoundingClientRect().width` measured 0 (computed style still
-  reported 14px — a real, unexplained flex-collapse specific to having zero children; not worth
-  chasing further once a robust fix existed). Fixed by rendering the SAME chevron markup for
-  leaves, just `visibility:hidden` — guarantees byte-identical layout regardless of cause. Same
-  fix applied to the date tree's identical pattern pre-emptively (not proven broken, but
-  structurally identical code).
-- **#5 Folders/tree relationship** — `renderCollections()` now moves the persistent `#lib-tree`
-  DOM node (`insertAdjacentElement('afterend', ...)`) to sit directly after the "Folders" header
-  on every render, instead of leaving it as a static-template sibling that always painted after
-  Cloud. `#lib-tree{padding-left:14px}` added so it reads as indented under that header.
-- **#7 flag-row borders** — `.lib-flagrow .lib-btn-icon{border:none}`, overriding the shared
-  `.lib-btn` base border (more specific selector, no `!important` needed).
-- **#8 zoom icons** — `ic('zoomIn')`/`ic('zoomOut')` (chromasmith-22.html `ICONS`, used ONLY by
-  the Library's thumbnail slider — confirmed by grep before changing a shared entry) now draw
-  plain minus/plus lines instead of a magnifying-glass. BUILD stamp bumped to `2026-09-08b`.
-- **#9 flag visibility** — `.lib-flags:has(.lib-flag.on) .lib-flag:not(.on){display:none}`,
-  scoped to grid/list cards only (never the topbar's own always-three-visible `#lib-flagrow`).
-- **#12 reject dimming** — the CORRECT mechanism already existed and was already correctly
-  spec'd (`UI_SPEC.md`'s deliberate black-overlay-not-filter choice, `.lbl-red .lib-thumb-wrap::
-  after`) — `setLabel()`'s optimistic click-update just never synced the card's own `lbl-red`/
-  `lbl-green` class, only a full `renderGrid()` did. One `classList` sync fixed it. The tooling
-  check itself was also wrong (asserted the wireframe's literal `filter:` property instead of the
-  app's own deliberate overlay mechanism) and was corrected alongside the real fix.
-- **#13 responsive squeeze** — root cause: `syncTopCompact()`'s whole detection strategy
-  (`scrollWidth > clientWidth` triggers the existing icon-only fallback) never fired because
-  nothing stopped `.lbl` from wrapping onto a second line under squeeze, silently absorbing the
-  overflow instead of forcing it. `#lib-top .lbl{white-space:nowrap}` makes the overflow real and
-  detectable — the existing fallback then engages correctly with no other changes needed. Search
-  input's own floor was a separate bug: `.lib-search-wrap{min-width:70px}` constrained the
-  WRAPPER, but ~42px of that is icon+padding+gap overhead before the input gets anything, so the
-  input itself could shrink to ~28px; raised to `min-width:120px` to guarantee the input keeps a
-  real ~80px floor. `library_responsive_qa.mjs`: 4 findings → 0.
-- **#16 tree row selected colour** — `.lib-tree-row.on` now mirrors `.lib-coll-row.on`'s exact
-  rule shape (blue background + dark-mode ink/accent override) instead of the neutral `--bdr`
-  grey it shared with `:hover`.
-- **#21 menu-close-on-toggle** — `.opt-action:not(.opt-toggle)` on the close-on-click selector.
-  All 6 gear-menu behaviour tests (including the 2 that were RED) now pass.
+### Hard invariants
 
-**#6 (icon centering) — NOT fixed, flagged as uncertain per instruction.** The automated headless
-harness (Chromium/swiftshader) consistently measures 2 icons 2.2px/3.2px off-center; a live check
-in the interactive Browser pane on the same build measured 0px for the same icons. Given the
-1.5px tolerance is smaller than the discrepancy between the two measurement environments
-themselves, this could be real sub-pixel layout drift or purely a rendering-backend difference —
-unresolved until it's checked against the actual compiled desktop app, not either browser harness.
+- **Never put a backtick `` ` `` or `${` inside a GLSL `//` comment.** The GLSL lives inside a JS
+  template literal; a stray backtick truncates the shader source and throws a page-breaking
+  `SyntaxError`. Has bitten the project **twice**. Always reload the live page after touching
+  shader source, even for a comment-only change.
+- **A GLSL compile/link failure does not white-screen the app.** The affected program just
+  renders as if the whole feature were switched off — reads as a logic bug, not a build error. It
+  happened for real: a uniform named `half` (a reserved word in GLSL ES) silently killed the
+  `lut` program, so **every mask did nothing** while the app looked completely healthy. Other
+  reserved words that read as innocent identifiers: `input`, `output`, `filter`, `sample`, `cast`,
+  `union`, `this`, `double`. Rule: after any shader edit, run `node test/export_harness.mjs` and
+  watch for `[console.error] GLSL compile error` — never judge a shader change by "the page still
+  loads."
+- **Saturation/vibrance run AFTER the print LUT, on purpose.** Pulling saturation to 0 must
+  collapse the printed pixel to its luma, not re-tint an already-grey pixel. Verified against
+  Dehancer's own `*lut print 0 sat*` reference renders.
+- **Grain runs BEFORE the print LUT, on purpose** — it's modeled as being in the negative; the
+  print stock then modulates it.
+- **GLSL functions must be declared before use** — `maskAdjust` once referenced `s2lp` before its
+  definition and blacked out the whole pipeline.
+- **Mask persistence must go through `_mskToSnap`/`_mskFromSnap`, never a raw JSON clone.**
+  `Uint8ClampedArray` serializes to `{"0":…,"1":…}` via `JSON.stringify` — huge and lossy on the
+  way back. Every persistence path (session save, Library sidecar, copy/paste recipe, undo
+  history) must go through the snap helpers.
+- **`lutcache` (IndexedDB) is a separate object store from `luts`.** `lutLibList()` does a bare
+  `getAllKeys()` on `luts` to feed the "My library" optgroup — if the 102 cached built-ins shared
+  that store they'd all render as the user's own uploaded LUTs.
+- **`ort-sys` + `libloading`, never the `ort` crate's own Session wrapper**, on this platform —
+  confirmed hang bug in `ort` 2.0.0-rc.12's `load-dynamic` dylib-handle caching (see `sam.rs`
+  top-of-file comment and the Cargo.toml comment above the `ort-sys` dependency).
+- **A `#[tauri::command]` must be `async fn` + `spawn_blocking` to actually leave the dispatch
+  thread.** A plain sync command in Tauri 2 runs on the thread that dispatched it — confirmed via
+  Tauri's own IPC docs, not assumed, after `grep -c "async fn" catalog.rs` returned 0 despite an
+  earlier "fix."
+- **`overflow-x:hidden` on `html`/`body` silently disables `position:sticky`** on every descendant
+  (makes `body` a scroll-clipping context). Use `overflow-x:clip` instead.
+- **`column-count` establishes a multicol context even at `1`.** `.fx-panel` had `column-count:2`
+  globally, `1` under `fx-deskb`, and a *definite block-size* under `deskx` — so any panel taller
+  than the window silently fragmented into 2–4 side-by-side columns with `scrollTop` pinned at 0
+  (measured: `scrollWidth 937` vs `clientWidth 319` on Masks at 1440×820). Use `columns:initial`
+  to leave the formatting context entirely, don't just set `column-count:1`.
+- **Before toggling `display`/`visibility` on any container you didn't just create, read its
+  full children list first.** Real incident (commit `c088091`, 2026-09-09): widening the docked
+  Library filmstrip past 150px correctly revealed the Library/Develop tab pair, but *also*
+  revealed the entire Collections/By-Date navigation tree, because both lived inside the same
+  `#lib-side` wrapper and only the tabs were checked. Fix scoped the toggle to the leaf, not the
+  shared parent — see §7 for the current state of that fix.
 
-**#15 (sidebar font-family) — investigated, turned out to be a false positive, not a defect.**
-Direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all
-deliberately monospace (`var(--mono)`) count badges — a real, intentional tabular-number choice,
-not a font bug. The wireframe-vs-app atom-count MISMATCH this finding was based on is downstream
-of the app rendering more real content (expanded trees, live counts) than the wireframe's sparse
-static mock — same reasoning as #10/#11 below. Allowlisted in `test/wireframe_accepted.json` with
-the investigation written into the reason field, not silently dropped.
+### The graveyard (real, dated process lessons — do not re-derive these blind)
 
-**#10/#11 (sort/gear dropdown markup) — still a judgment call, not touched.** Confirmed real
-structural differences (the app offers more sort keys, a different toggle-vs-radio style in the
-gear menu's non-appearance groups) but read as an intentional feature superset, the same pattern
-already settled for Filters (§6.2) and sidebar collapse (§6.3) — needs the same kind of explicit
-decision, not a blind "make it match."
-
-**#1/#2 (Filters, sidebar collapse) — untouched, per standing decision.** Real features, not bugs.
-
-### Validation beyond the original 16
-
-Re-ran every gate after the fix pass, specifically looking for anything NOT already tracked:
-`wireframe_inventory.mjs` (deterministic across repeated runs, 0 new vs. the fix-pass baseline),
-`lint_library_content.mjs` (1 pre-existing, unrelated finding — `tabular-nums` on the filters
-badge, not one of the 16, left for later), `library_responsive_qa.mjs` (now PASS), `ui:test` /
-`lib:test` / `export_harness.mjs` (all PASS, untouched by any of this — no editor/shader code was
-touched). One tooling hygiene fix found along the way: expanding the keyword/folder trees this
-session surfaced their own sample data ("Portrait", "Iceland", "sub") as spurious EXTRA findings
-in `wireframe_inventory.mjs` — added to the existing dynamic-data noise filter alongside the
-People/Album/Device sample names already there.
+- **`validate_v22.py`'s gap-only metric structurally cannot see interior flooding** (pink-flood,
+  yellow-bleed) — the most visible defects to a human eye. Always render-and-look at the full
+  chart before trusting a point-sample number; `calib/scorecard.py` is the fast all-requirements
+  gate that replaced blind optimization loss-chasing.
+- **`export_harness.mjs` intermittently renders an all-zero RGBA(0,0,0,0) canvas** — a
+  SwiftShader/driver WebGL **context loss** event (`contextLost:true`, glError 37442), not an app
+  bug. It used to report `ok` and exit 0 on this, which read exactly like a shader regression and
+  was "the single most expensive false lead" in a prior work phase. The harness now throws a
+  BLANK RENDER error and retries the whole run once automatically.
+- **`video_harness`'s post-video byte-exact check fails ~40% of runs on a clean tree** —
+  unattributed, suspected to be the seeded-`Math.random` per-combo reset interacting with
+  timing-dependent render counts before the still capture.
+- **Seeded-`Math.random` goldens are order-dependent** — every `FX.render` without an explicit
+  `opts.seed` consumes a number from the stream, so adding one live preview render during harness
+  setup used to shift three unrelated grain goldens with zero app-code change.
 
 ---
 
-## 10. 2026-09-08 (tooling-first pass) — repaired the tooling before trusting any "fixed", found 20 more defects, fixed all of it
+## 5. Working with Claude Code (CLAUDE.md Playbook & Token Hygiene)
 
-The user reported 14 items after the §8/§9 fix pass, several of them items §9 had just claimed
-fixed. `HANDOVER_NEXT.md` documented two live diagnosis mistakes and one confirmed dead check
-(the sidebar-hover colour pair). Per explicit instruction, this session did NOT start fixing —
-it audited all three test files (`wireframe_inventory.mjs`, `wireframe_behaviour.mjs`,
-`library_responsive_qa.mjs`) for the same "reports PASS while findings are real" shape first,
-with a hard stop condition: if the repaired tooling couldn't surface ≥10 discrepancies beyond
-the 14 reported, stop and re-examine the tooling rather than declare victory. It surfaced 20.
+- **CLAUDE.md is a thin index**; subsystem deep-dives live in `docs/*.md` and `calib/CLAUDE.md`,
+  loaded on demand rather than carried in every turn. Load the relevant one before touching that
+  subsystem: `docs/skin-tone.md` before `mskRebuild`/`skinUniformity`/AI-mask work, `docs/raw-dcp.md`
+  before `loadRw2`/`bakeDcpLUT`/`raw_decode.rs`, `docs/lut-workflows.md` before `chartToLUT`, etc.
+- **Blast-radius check before any visibility/display toggle**: read the full children list of a
+  container you didn't just create — don't just confirm the one element you want is somewhere
+  inside it. This is now written into `CLAUDE.md` §6.15 as a direct result of the `c088091`
+  incident (§4 above).
+- **State-matrix testing for any resizable/breakpoint-driven UI, scoped to the real parent that
+  could leak** (`CLAUDE.md` §6.16). Assert structure (Playwright ARIA snapshot,
+  `toMatchAriaSnapshot()`) at min/threshold/max — `test/library_dock_states.mjs` does this at
+  90/150/280px scoped to `#lib-side` specifically (the container that leaked), not just the
+  `.lib-side-tabs` pair alone — snapshotting only the leaf would not have caught the bug.
+  **Hand-author the expected snapshot from the spec/wireframe; never auto-generate it from current
+  code**, or you just codify whatever bug already shipped.
+- **Wireframe fidelity work must copy literal values, not re-derive them from memory** — this is
+  the `wireframe-transplant` skill's core rule, and it exists because a prior diff tool
+  (`test/wireframe_diff.mjs`) existed unused for 7 commits before anyone wired it into the
+  workflow (see `test/wireframe_inventory.mjs`'s own top comment, which was written specifically
+  to close the gap a 13-pair hand-written check couldn't: it can't see an element the app has that
+  the wireframe doesn't, a missing element, a control-count mismatch, or a wrong row order).
+- **Never judge a shader change by "the page still loads"** — see §4's GLSL invariants; run
+  `node test/export_harness.mjs` and read the console output every time.
+- **Token efficiency**: prefer `npm run ui:test -- --json` / reading `test/output/` JSON over
+  round-tripping screenshots through the model for layout questions — the UI audit and perf
+  harnesses exist specifically because "reading JSON is far cheaper than round-tripping
+  screenshots through a model" (verbatim rationale in `CLAUDE.md`'s testing section). Baselines
+  live in `test/baselines/`, never `test/output/` (gitignored scratch).
+- **Truncate test-runner output to the assertion diff, never the full log.** `npm test` chains
+  eight scripts (§6); a failing `export_harness` or `perf_bench` run can print per-fixture
+  timings, full Playwright traces, or Rust panic backtraces that are mostly noise once you know
+  which assertion failed. Pull the specific failing case (recipe name, budget name, golden path)
+  and its expected-vs-actual line into context; don't paste the whole stdout, especially not
+  `cargo test`'s full backtrace unless the failure is a Rust panic whose location isn't already in
+  the one-line summary.
+- **Don't ask Claude Code to retrospectively explain a failed attempt.** Feed it the current error
+  diff and exact repro steps (which script, which fixture/recipe, the assertion that failed) and
+  let it re-derive the cause from the live code, the same way this handover's own process lessons
+  were found — by reading the loop / running the harness, not by re-litigating what went wrong in
+  a prior turn. This matters doubly here because several of this repo's own documented bugs (the
+  `column-count` multicol issue, the GLSL reserved-word `half` bug) were invisible from reasoning
+  about a description and only surfaced by driving the real page — the same is true of debugging a
+  test failure after the fact.
+- **Never trust a comment's stated complexity class.** `_boxFilterJS` was documented as an
+  O(w·h) prefix sum and was actually a naive O(w·h·r) window sum, costing ~5.5s of blocked main
+  thread per "Refine edges" press. Read the loop when a hot path feels slow.
 
-### What was actually wrong with the tooling (not guessed — traced)
+---
 
-- **The gate was not a gate.** `wireframe_inventory.mjs` compared each run against the PREVIOUS
-  run's report, then overwrote that report in the same run — a new defect failed exactly once
-  and was "persisting" (exit 0) forever after. On a clean checkout the report file doesn't
-  exist, `recheck()` returns null, and the script always exited 0. 35 findings + `RESULT: FAIL`
-  on stdout coexisted with a green exit code. Now hard-fails on anything not explicitly
-  allowlisted.
-- **The allowlist was unscoped.** `isAccepted()` was a bare substring test — `order@3`, reasoned
-  about as a sidebar walker artifact, was silently suppressing a REAL sortmenu finding
-  (Date-added-vs-Date-modified) too. Every entry is now zone-tagged and matching is
-  zone-qualified; an unscoped entry is rejected at load.
-- **Four checks could never fail**, not one: the documented sidebar-hover colour pair;
-  `wireframe_behaviour.mjs`'s "Develop tab matches its own tooltip" (its only `expect` sat
-  inside an `if` whose condition — `/not yet available/i.test(title)` — stopped being true once
-  the title became "Switch to Develop", so it asserted nothing and reported PASS while still
-  clicking the button); its prefers-reduced-motion test (the fixture's own `settleForCapture`
-  injects `transition-duration:0s!important` before the test reads it — unfalsifiable by
-  construction); and `library_responsive_qa.mjs`'s `NO_ELLIPSIS` (its `scrollWidth>clientWidth`
-  precondition can only be true for an element that ALREADY has the `overflow:hidden`+`nowrap`
-  it's checking for the absence of — the wrap defect it was written for was invisible to it, and
-  it also searched for `.rn`, a wireframe-only class that doesn't exist in the app).
-- **The folder-tree chevron behaviour test silently `test.skip()`'d every run** because its
-  fixture never expanded the tree — a non-failure read as coverage that never existed.
-- **The focus-ring check accepted any `box-shadow`**, including `.lib-btn`'s own decorative
-  resting shadow, so it never actually required focus to change anything visually.
+## 6. Testing, Tooling & Verification Guide
 
-### New coverage that finds things without being told about them
+Full script list, `package.json`:
 
-Rather than only re-diagnosing the 14 reported items, `wireframe_inventory.mjs` gained
-self-consistency checks that compare the app against ITSELF (no wireframe counterpart needed):
-shared section-header chrome, count-badge presence/emptiness per row family, one on-state idiom
-per menu, one-off leading icons, icon centering reported WITH the actual CSS causing it (not
-just an offset number), one-off icon sizes, truncation PROVEN by substituting a 60-character
-label into a real row and measuring whether it grows (not inferred from a CSS property), hover
-asserted as a MEASURED perceptual colour delta benchmarked against the wireframe's own hover
-lift, and sidebar render idempotence (render the sidebar twice, diff which element ids survive).
-`library_responsive_qa.mjs` grew from 4 to 11 viewports (a real defect sat between two of the
-old sample points), descends into flex wrappers instead of only comparing `#lib-top`'s direct
-children, and drags the sidebar to its 150px floor as a second pass.
+```jsonc
+"export:test":            "node test/export_harness.mjs",              // golden PNG diff, real chromium
+"export:golden":          "node test/export_harness.mjs --golden",     // regenerate goldens — only when intended
+"video:test":              "node test/video_harness.mjs",              // ~40% flaky on a clean tree, see §4
+"lint:ai":                "node test/lint_ai_origin.mjs",              // source-level: no raw origin==='ai' outside mskIsAI()
+"lint:formats":           "node test/lint_formats.mjs",
+"lint:library-content":   "node test/lint_library_content.mjs",
+"mask:test":              "node test/mask_raster.mjs",                 // raster mask byte-exact round-trip
+"wireframe:test":         "node test/wireframe_inventory.mjs",         // Library full-inventory structural diff
+"wireframe:icons":        "node test/wireframe_inventory.mjs --icons-baseline",
+"behaviour:test":         "playwright test --config=playwright.config.mjs",
+"ui:test":                "node test/ui_audit.mjs",                    // desktop layout invariants gate
+"ui:baseline":            "node test/ui_audit.mjs --baseline",
+"library:responsive-test":"node test/library_responsive_qa.mjs",
+"editor:wireframe-test":  "node test/editor_wireframe_diff.mjs",       // Editor vs Editor (Developer) View.dc.html
+"editor:inventory":       "node test/editor_wireframe_inventory.mjs",
+"editor:inventory-icons": "node test/editor_wireframe_inventory.mjs --icons-baseline",
+"editor:responsive-test": "node test/editor_responsive_qa.mjs",
+"visual:test":            "node test/visual_baseline.mjs",
+"visual:baseline":        "node test/visual_baseline.mjs --baseline",
+"visual:scorecard":       "node test/visual_scorecard.mjs",
+"perf:test":              "node test/perf_bench.mjs",                  // 7+ hot-path timing budgets
+"perf:baseline":          "node test/perf_bench.mjs --baseline",
+"scorecard":              "calib/export_scorecard.py",                 // fast halation PASS/FAIL
+"lib:test":               "node test/library_perf.mjs",                // grid virtualization + hash-cluster perf
+"preview":                "node test/preview_server.mjs",              // serves Library from SOURCE, not dist/
+"test":                   "lint:ai && lint:formats && export:test && scorecard && mask:test && perf:test && ui:test && lib:test"
+```
 
-### The 20 new discrepancies this surfaced, and what turned out to matter most
+Note `npm test` does **not** include `behaviour:test`, `wireframe:test`, `editor:wireframe-test`,
+`library:responsive-test`, or `video:test` — those are separate gates you must run explicitly for
+UI-fidelity or behavioural work; don't assume `npm test` green covers them.
 
-1. **The folder tree was permanently destroying itself — a REGRESSION from §9's own #5 fix.**
-   That fix moved `#lib-tree` via `insertAdjacentElement` to a position that was STILL inside
-   `#lib-collections`, the exact container `renderCollections()` rewrites via `innerHTML` on
-   every call — proven live: two consecutive section-toggle clicks and the tree was gone with no
-   error. `sidebarSection('folders', ...)`'s previous fix had the tree "fixed" for exactly one
-   render. Real fix: `#lib-tree` is now a permanent, structurally-separate sibling of
-   `#lib-collections` (`#lib-side`'s static template gained `#lib-folders-header` +`#lib-tree`
-   +`#lib-collections-post`, none of which any `innerHTML` write ever touches) — a node embedded
-   anywhere inside a string that becomes some container's `innerHTML` is, structurally, ALWAYS a
-   descendant of that container; there is no way to interleave a persistent live node between
-   two pieces of rewritten HTML without giving it a container of its own. Verified live: tree
-   survives 4 consecutive re-renders and stays correctly positioned.
-2-5. **Sidebar/topbar hover was invisible** (0.0-3.0/255 measured delta) because `--sur` and
-   `--sur2` are BOTH aliased to `--surface-tile-2` while the row's own ground is
-   `--surface-tile-1`. Fixed by copying the wireframe's own mechanism literally (Library View
-   .html:24,143) — a fixed-alpha overlay (`--hover-tint: rgba(255,255,255,.08)` dark /
-   `rgba(0,0,0,.035)` light) instead of a surface-colour swap, which stays visible no matter how
-   the surface tokens are aliased underneath.
-6-10. Empty/inconsistent section chrome and count badges: "By date" missing `data-sec-toggle`
-   (investigated — a DELIBERATE prior decision with its own code comment, allowlisted rather
-   than migrated); "Flagged"/"Rejected" and every other `0`-count row rendering BLANK instead of
-   "0" — `collectionCounts[c.name] || ''` treats `0` as falsy; same bug audited and fixed across
-   every sibling count span (`face_count`, `unnamedCount`, `catalogCounts.all`,
-   `a.paths.length`) via `??` instead of `||`.
-11-12. Sort/gear menus mixed two "is this on" idioms (native checkbox vs checkmark glyph) —
-   unified onto the checkmark idiom app-wide (#12); "Real aspect ratio" carried a leading icon
-   none of its 9 sibling option rows had — removed (#10/#11).
-13-14. **Topbar controls genuinely overlapped from 1100px down to 640px**, up to 18px — not
-   caught before because `.lib-zoomrow{min-width:60px}` was LESS than its own children's actual
-   minimum footprint (2×12px icons + 2×8px gaps + a 50px-min slider = 90px), so the icons/slider
-   silently overflowed their own flex box without increasing `#lib-top`'s `scrollWidth` — the
-   exact signal the `ResizeObserver`-based compact-mode detector depends on. Raised to 90px,
-   which lets the row's real overflow become detectable, which lets `.lib-top-compact` engage
-   the way it always should have. Also ported the wireframe's own compact contract literally
-   (`.topbar.compact .zoomrow svg{display:none}`, Library View.html:61) rather than re-deriving
-   a squeeze rule from scratch.
-15. `library_responsive_qa.mjs`'s own overlap check had a bug: its wrapper-descending `leaves()`
-   recursed into `<svg>` elements' internal primitives (`circle`/`path` are real DOM children of
-   an `svg`), extracting the LOGO's own icon parts as fake top-level "controls" compared against
-   unrelated buttons. Fixed: any `SVGElement` is always a leaf.
-16-17. Search input dropped to 76px at 900px width (below its own 80px floor) — the
-   `.lib-search-wrap` min-width (120px) left only ~78px for the input once icon+padding+gap
-   overhead was subtracted; raised to 130px.
-18. `.lib-flagrow` flag chips still painted as filled rounded-rect chips at rest — HANDOVER_NEXT
-   §0's diagnosis was right: `.lib-btn{background:var(--sur2)}` (the shared base rule), not
-   `border` (already 0 from a prior session). One line: `background:none`.
-19. `.lib-edited-badge` was missing from the "Hide flag & type icons" selector list — every
-   other badge/flag class was there, this one wasn't (a one-line omission).
-20. Sidebar labels (`.lib-coll-lb`) had no `white-space:nowrap`/`overflow:hidden`/
-   `text-overflow:ellipsis` — proven live by substituting a 60-character label into a real row
-   and measuring the row grow from 27px to 72px tall. Fixed.
+**What the key gates actually check** (from their own top comments):
 
-### The user's explicit decisions this session (not diagnosed — decided)
+- **`test/ui_audit.mjs`** — loads the real `chromasmith-22.html` at `?deskx=1`, walks every tool
+  section at three window sizes, asserting: no panel fragmentation (the `column-count` bug in
+  §4), no control painted before its own label, no overlapping siblings, a 28px pointer-target
+  floor (18px for checkboxes/swatches), an 11px font floor, 4.5:1 text contrast. Plus a separate
+  375×812 phone pass (no `?deskx=1` — under 700px is a different shell, see `CLAUDE.md` §4);
+  `CS_UI_NO_MOBILE=1` skips it.
+- **`test/editor_wireframe_diff.mjs`** — loads the literal wireframe
+  (`chromasmith-design/project/Editor (Developer) View.dc.html`) and the real app side by side at
+  the same viewport, in both themes, and reports a computed-style mismatch table. Existed for
+  Library (`test/wireframe_diff.mjs`) for a long time before the Editor got equivalent coverage —
+  every "Editor matches the wireframe" claim before this file was a code read, never a driven
+  comparison.
+- **`test/wireframe_inventory.mjs`** — deliberately supersedes the 13-pair hand-written
+  `wireframe_diff.mjs` check: walks both trees and compares "visible atoms" by shape/text/geometry
+  rather than class name, because the two codebases use different naming schemes.
+- **`test/perf_bench.mjs`** — every budget anchored to a real pre-optimisation measurement:
+  `_boxFilterJS` ×6 @2048×1365 (was 1996ms), retained undo history with a brush mask (was 9.5MB
+  for a 512×384 mask), renders during a 30-event slider drag (was 1 — no feedback at all),
+  `getUISnapshot`, fraction of look thumbnails rendered on gallery build (was all 113, one rAF
+  each), retained `_presetLutCache` (was unbounded, 48.7MB after scrolling "All"), worst frame gap
+  during a 65³ DCP bake (was a 1157ms whole-second freeze on every RAW load). Three of the seven
+  carry a **correctness guard** alongside timing (`_boxFilterJS` diffed against a reference impl,
+  the worker DCP bake diffed against the main thread's — max|Δ|=0 over 823,875 entries, the lazy
+  gallery asserts *something* rendered) — a faster-but-wrong version would be strictly worse than
+  the slow one and invisible on a stopwatch alone.
+- **`test/library_perf.mjs`** — Library grid budgets against a synthetic folder
+  (`?libtest=1&libn=N`): DOM node count (was 17,914 → 1,995 at 1,000 entries via virtualization)
+  and `clusterByHash` perceptual-hash clustering (was O(n²) BigInt bit-counting, ~42s at n=5,000
+  — now SWAR popcount on parsed Int32Arrays, gated to agree with the original exactly over 83,436
+  pairs including deliberate near-duplicates at every Hamming distance 0–8).
+- **`test/mask_raster.mjs`** — exists because **no export golden contains a raster mask** (every
+  recipe uses analytic shapes); asserts byte-exact round-trips, legacy plain-`Array` mask
+  loading, and that painting can't corrupt a history entry.
+- **`test/export_harness.mjs`** — loads the real file in Playwright/Chromium with software
+  (SwiftShader) GL so output doesn't depend on host GPU, drives it through the app's own
+  `applyUISnapshot`/`processToCanvas`, diffs against `test/golden/`. Watch console output for
+  `[pageerror]` and `GLSL compile error` on every run.
 
-- **Filters (#5)**: built the wireframe's inline chip row EXACTLY (Library View.html:375-392) —
-  Types pills (All/RAW/JPEG/Video + a "…" more-types expander for HEIC/TIFF/PNG/DNG) + a divider
-  + Flags & tags icon chips (pick/reject/favorite/unflagged, including a new "unflagged" tag-
-  filter value with no prior UI surface). The "Filters" topbar button now opens/closes this row
-  (matching the wireframe's own `btnFilters.onclick` exactly), not the old side panel. The old
-  panel (camera/lens/ISO/duplicates/sync/faces/rating — real features with no wireframe
-  equivalent) still exists, reachable from the row's own "More…" chip — the wireframe wins on
-  the row it actually specifies; the app's extra filters stay, just relocated.
-- **Sort menu (#13)**: cut to the wireframe's exact 3 keys (Date taken / Date added / Date
-  edited — "Date added" reuses the existing `mtime` sort key, the closest available proxy; there
-  is no distinct catalog-added timestamp anywhere in this app) + a Newest first/Oldest first
-  radio pair replacing the old single "Reverse order" toggle. Name/Rating/Camera sorting is
-  still reachable via the list-view's own column headers (`data-sort` on `.lib-lh-cell`) — a
-  separate, real feature the wireframe's mock has no equivalent surface for at all, so it was
-  left alone rather than deleted.
-- **Icon centering (#7)**: added a documented, reusable mechanism (`.lib-icon-center`, copied
-  literally from Library View.html:52's `.viewtoggle button` — fixed 28×28 box + flex
-  centering) instead of patching one button — this was at least the second time an
-  icon-centering defect had been reported per-button.
-- **Keywords section (#4)**: now goes through `sidebarSection()` exactly like every sibling
-  (Collections/People/Albums/Drives/Devices/Folders/Cloud) — shared collapse chrome, an entry in
-  `sidebarSecOpen` (persisted across restarts, which it never was before), and no more leading
-  tag icon (no other section header in the app or the wireframe has one — that was its own,
-  independent inconsistency).
+**Two known-flaky tests on this machine** (measured, not guessed — see `CLAUDE.md`'s own flaky
+section and §4 above): `export_harness`'s blank-render/context-loss retry, and `video_harness`'s
+~40% post-video byte-exact failure rate. Re-run before bisecting either as a regression.
 
-### Not touched, on purpose
+**`test/editor_ux_spec.json`** is not a test script but the checklist those scripts assert
+against — a stable-ID backlog of every Editor UX ask, each carrying the `check` name (script or
+manual probe) that will close it. See §7 below for its current open items; consult it before
+starting any Editor UX work so you don't re-report or re-diagnose something already tracked.
 
-- **#10 (real aspect ratio "broken")**: turned out NOT to be a code bug. The `?libtest` mock's
-  thumbnail is a literal 1×1-pixel transparent PNG (`get_thumbnail`'s mock response) — the
-  aspect-ratio CSS (`width:auto;height:100%` once `.loaded`) correctly toggles and the `.grid`
-  gains `aspect-view`, but a 1×1 image has no real aspect ratio to display, so the grid stayed
-  visually square regardless. Confirmed the toggle logic itself is correct; a real photo (with
-  real RW2/JPEG dimensions) would show it working. No functional fix needed, only the icon
-  removal (#11) above.
-- **Gear menu's remaining "extras"** (the Library action group — Choose folder/Import from
-  Google Photos/Recent folders/Get Info/Full-window view/Compare view — plus Show title): real
-  features with no wireframe equivalent, same superset reasoning already settled for Filters/
-  sidebar-collapse in §6.2/§6.3. Allowlisted with written reasons, not silently dropped.
-- **"By date" section's own bespoke open-state**: a previously DOCUMENTED, deliberate decision
-  (dateSectionHtml's own comment: "sidebarSecOpen would need a migration for no behavioral
-  gain") — different from Keywords' accidental omission (no rationale was ever given for that
-  one). Left as-is, allowlisted.
+**Never run `--golden` or `--baseline` on unverified code.** Both flags overwrite the ground
+truth the gates check against — `export_harness --golden` would happily bake a blank-render
+failure into all 18 goldens if the blank-render guard weren't there specifically to stop it, and
+`perf_bench --baseline` / `ui_audit --baseline` will silently normalize a real regression into the
+new "expected" number if run before the change is confirmed correct.
 
-### Verification
+---
 
-Full pass, all green: `wireframe:test` (0 unaccepted findings, hard-gated), `behaviour:test` (74
-Playwright tests, including the 2 repaired dead checks and the previously-skipped folder-tree
-test — all real assertions now), `library:responsive-test` (0 findings across 11 viewports incl.
-the sidebar's 150px floor), `lint:library-content` (the one pre-existing `tabular-nums` finding
-on `#lib-filters-badge` fixed along the way), `lint:ai`, `lint:formats`, `mask:test`, `lib:test`,
-`ui:test`, `perf:test` — all PASS, none of the editor/shader/perf paths were touched this
-session so nothing there was expected to move.
+## 7. Known Tech Debt & High-Priority Backlog
 
-**⚠️ Not done this session: a native Tauri rebuild.** `catalog.rs::catalog_counts_run` gained two
-new SQL fields (`raw`/`video`, for #14's sidebar counts) — `desktop/dist/` (what every
-Playwright/preview check above reads, and per 2026-09-08's scope decision the only build target
-that matters now) is fully up to date via `build-desktop.sh`, but a compiled native build would
-not see the Rust change until a real `cargo`/`tauri build` runs. The JS side degrades safely in
-the meantime (`catalogCounts.raw ?? ''` just renders blank against an old binary that never sends
-those fields).
+### #0 — `test/editor_ux_spec.json`: the live Editor UX backlog (check this FIRST)
+
+Stable-ID spec tracking the Editor-vs-wireframe alignment pass (see `HANDOVER_EDITOR.md`). Each
+entry has `category`, `status` (`open`/`fixed`/`backlog`), `source` (verbatim user ask),
+`wireframeRef`, and `check` (the test that will assert it once written). **Update status in place
+as work lands — never delete entries.** Current count: 44 items, 29 fixed, 12 open, 3 backlog. Open
+items as of this handover:
+
+| ID | Category | Ask |
+|---|---|---|
+| E1 | bug | Scrolling/zooming buggy with full-res enabled — wheel/pan paths never set `_fxPreviewInteracting` (`chromasmith-22.html:14930,14969-14972`), unlike sliders (`:9779-9788`); fix is extending the existing rAF+interacting pattern to wheel/pan |
+| E2 | bug | Reset sometimes doesn't reset the photo — **could not reproduce** 2026-09-09 via the real gear-menu path; `editor_wireframe_behaviour.mjs`'s reset-restores-defaults check passes |
+| E3 | bug | Reset shouldn't need a confirmation dialog, since undo can already fix it |
+| E4 | bug | Shrinking the app window squeezes photos instead of shrinking them |
+| E6 | bug | (tooling-found, 2026-09-08) docked Library filmstrip issue |
+| E7 | bug | (tooling-found, 2026-09-08) intermittent failure, ~half of runs |
+| 3.1.5 | topbar | Gamut warning button doesn't work |
+| 3.1.8 | topbar | Remove the three-dot menu; move those options under a new Tools button |
+| 3.1.9 | topbar | Move export and all FX controls to the right |
+| 3.1.10 | topbar | Title isn't centered |
+| 3.4.6 | looks-panel | BUG: Highlight Response slider doesn't affect the photo |
+| 3.4.10 | looks-panel | Arrow keys while a preset is selected should change the preset |
+
+Read the full `note` field on each ID in `test/editor_ux_spec.json` before starting — several
+(E1, E2) already carry a diagnosed root cause or a "could not reproduce" write-up; don't
+re-diagnose from scratch. The three `backlog`-status items are deferred by design, not omissions.
+
+### #1 — Docked Library filmstrip / `#lib-side` coupling (freshly touched, watch closely)
+
+The most recent commits (`72a0c67`, `a59bc59`, `c088091`, `eaffa4b`, `5e9c843`, `ad18d27`) are all
+in this area. Real coupling, confirmed via `git show c088091 --stat` and the commit message:
+`desktop/library-ui.js`'s `#lib-side` wrapper holds **both** the always-visible Library/Develop
+tab pair (`.lib-side-tabs`, `.lib-side-tab`) **and** the Collections/By-Date/Recents/Favorites/
+Drives navigation tree (`#lib-collections`, `#lib-folders-header`, `#lib-tree`,
+`#lib-collections-post`) in one shared container. The bug (widening the docked filmstrip past
+150px leaked the whole nav tree, not just the tab pair) was fixed by unconditionally showing
+`#lib-side` while docked and unconditionally hiding the nav-tree children while docked, and
+removing the old width-threshold JS/CSS (`lib-dock-wide`/`lib-dock-icons`) entirely. A live
+regression test now exists: `test/library_dock_states.mjs` (Playwright ARIA-snapshot state matrix
+at 90/150/280px, scoped to `#lib-side`) plus `test/library_flag_state_leak.mjs` (per
+`eaffa4b`, E5 flag-state leak). **Safest next step if this area is touched again**: extract the
+tab pair into its own top-level sibling element (not a child of `#lib-side`) so "always visible
+while docked" and "hidden while docked" are structurally two different containers instead of one
+container with conditional children — the current fix is correct but still relies on every future
+edit remembering which children of `#lib-side` are dock-visible and which aren't. There is also an
+untracked scratch file at the repo root, `test/_verify_filmstrip_fix.mjs` (per `git status`) —
+check whether it should be folded into the permanent suite or deleted before it goes stale.
+
+### #2 — N2.3 part 2: dedicated CPU worker for concurrent RAW-load + export
+
+From `ROADMAP.md`'s Open Items: a user can drag in a new RAW while a previous export is still
+rendering in the background (export doesn't block the drop zone). Both `bakeDcpLUT` (RAW load)
+and `exportSharpen` (export) currently share one `_cpuWorker` queue. Measured with a throwaway
+two-worker prototype against the real functions: worst case (bake + a 24MP sharpen dispatched to
+the single worker at the same instant) **2639ms** vs **1605ms** split across two workers — about
+**1034ms** of added latency before a newly-loaded photo becomes usable. Verdict in the roadmap:
+cheap to build, real win, narrow trigger — reuse that probe's methodology to re-verify on real
+hardware before picking it up, since the original numbers came from a SwiftShader-class CPU path.
+
+### #3 — R16: draggable panel workspace / unified Library+Edit view
+
+Listed in `ROADMAP.md`'s RapidRAW competitive-review section as size M, not yet started. Removes
+the mode switch between the grid and editor views and persists panel order — the largest
+still-open UX item from that review. Sequencing note in the roadmap: R2 should land before R4 (R4
+depends on R1's remaining gap and is the "real" version of R2's stand-in); R3/R10/R15 are called
+out as session-sized wins with no dependencies. R5 (a Naga-based shared shader kernel) was
+investigated and explicitly **closed as rejected** — its spike concluded no second shader copy
+exists to unify, since the desktop shell already reuses the same WebGL2/GLSL through its WebView.
+
+Also worth knowing about, not urgent: `ROADMAP.md` documents that `R15` (JXL/AVIF export) was
+checked for real and rejected as not cheap enough to ship (CLI-export half was delivered
+separately), and `R13`'s N-way panorama stitching remainder (3+ photos) needs either pairwise
+feature-matching or homography+seam-finding work neither built nor validated yet.
+
+---
+
+## 8. Day 1 Kickoff Prompt
+
+Paste this as the first message in a fresh Claude Code session in this repo:
+
+```
+Read CLAUDE.md (root) fully, then HANDOVER.md (this file) section 7. Before touching any code:
+
+1. Run `npm test` and `npm run ui:test` from a clean tree and confirm both are green on main —
+   this establishes your baseline. Do NOT run `--golden` or `--baseline` on anything yet.
+2. Read desktop/library-ui.js's #lib-side handling (grep for "lib-side", "filmstrip", "dock")
+   and test/library_dock_states.mjs, test/library_flag_state_leak.mjs — these are the freshest
+   commits in the repo (c088091, eaffa4b) and the #1 backlog item in HANDOVER.md §7: the tab
+   pair and the nav tree still share one #lib-side wrapper, held apart only by conditional
+   children rather than structurally separate containers.
+3. Check whether test/_verify_filmstrip_fix.mjs (currently untracked per git status) should be
+   folded into the permanent Playwright suite (playwright.config.mjs's testMatch) or deleted.
+4. Tell me what you find before making any change — I want your read on whether the #lib-side
+   extraction (splitting the tab pair into its own top-level sibling) is worth doing now or
+   whether the current conditional-children fix plus its state-matrix test is durable enough to
+   leave alone.
+
+Follow CLAUDE.md's process lessons (§6) throughout: render-and-look before point-samples, read a
+container's full children before toggling its visibility, and never judge a shader change by
+"the page still loads" — always run `node test/export_harness.mjs` after any GLSL edit.
+```
