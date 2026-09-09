@@ -211,15 +211,15 @@
   },
   {
     "zone": "topbar",
-    "match": "EXTRA   9x  button",
+    "match": "EXTRA   10x  button",
     "exact": false,
-    "reason": "Aggregate of the not-yet-built topbar restructuring (Tools button consolidation 3.1.8, undogrp wrapper 3.1.1) plus the zoom 1:1/Full-res buttons (B1, backlogged) — all individually tracked elsewhere. 2026-09-09: was 11 before the zoom +/- buttons (3.1.7) and the Fit button (3.1.12) were removed and the View menu (3.1.6) was added net +1 — re-verify the raw count once Phase E ships."
+    "reason": "Aggregate of the not-yet-built topbar restructuring (Tools button consolidation 3.1.8, undogrp wrapper 3.1.1) plus the zoom 1:1/Full-res buttons (B1, backlogged) — all individually tracked elsewhere. 2026-09-09: was 11 before 3.1.6/3.1.7/3.1.12 (net -2), then +1 again when Full res's <button>text became <button><svg> (3.1.13, still one button, but now also an icon atom) — re-verify the raw count once Phase E ships."
   },
   {
     "zone": "topbar",
-    "match": "EXTRA   7x  icon",
+    "match": "EXTRA   8x  icon",
     "exact": false,
-    "reason": "Same root cause as the EXTRA 9x button entry above — one icon per extra button."
+    "reason": "Same root cause as the EXTRA 10x button entry above — one icon per extra button, plus Full res's own new icon (3.1.13)."
   },
   {
     "zone": "topbar",

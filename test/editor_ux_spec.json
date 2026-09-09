@@ -166,10 +166,11 @@
     },
     "3.1.13": {
       "category": "topbar",
-      "status": "open",
+      "status": "fixed",
       "source": "full res button can be replaced with an icon",
       "wireframeRef": ".dc.html .ibtn",
-      "check": null
+      "check": null,
+      "note": "Fixed 2026-09-09: #btn-fx-fullres is now icon-only (ICONS.fullres, same glyph as the wireframe #btn-fullres, Editor (Developer) View.dc.html:186), reusing the .zc-ic sizing class the removed zoom +/- buttons (3.1.7) left free. The .on active-state highlight (background:var(--acc)) still applies."
     },
     "3.1.14": {
       "category": "topbar",
