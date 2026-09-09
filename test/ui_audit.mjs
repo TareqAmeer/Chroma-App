@@ -69,6 +69,12 @@ const MIN_TAP = 28;   // px — below this a pointer target is uncomfortable
 // 18px — the point of the exemption is to name the two shapes it covers, not to stop measuring.
 const MIN_TAP_INLINE = 18;
 const INLINE_TARGET_SEL = 'input[type=checkbox], input[type=color], input[type=radio], .pc-chip';
+// Edge drag handles (the tool-panel and tool-rail resizers) are deliberately thin on ONE axis and
+// full-height on the other: 7x776 is a larger pointer target than any button in the app, and the
+// platform convention for a col-resize edge is 5-8px. Widening one to 28px would put an invisible
+// grab strip over 28px of the panel's own controls. They are still measured — on their long axis,
+// against the ordinary floor — so a handle that collapses to nothing still fails.
+const EDGE_TARGET_SEL = '.fx-edge';
 const MIN_FONT = 11;  // px — below this UI text stops being comfortably legible
 const MIN_CONTRAST = 4.5;
 
@@ -219,7 +225,7 @@ function auditTokens(sources) {
 }
 
 // ── the in-page audit. Runs once per (section, viewport). ───────────────────────────────────
-function auditInPage({ minTap, minTapInline, inlineSel, minFont, minContrast }) {
+function auditInPage({ minTap, minTapInline, inlineSel, edgeSel, minFont, minContrast }) {
   const out = [];
   const vis = (el) => {
     const r = el.getBoundingClientRect();
@@ -277,6 +283,13 @@ function auditInPage({ minTap, minTapInline, inlineSel, minFont, minContrast }) 
       if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return;
       const k = desc(el) + Math.round(r.top);
       if (seen.has(k)) return; seen.add(k);
+      if (el.matches(edgeSel)) {
+        const long = Math.max(r.width, r.height), short = Math.min(r.width, r.height);
+        if (long < minTap || short < 5) {
+          out.push({ kind: 'TAP', el: desc(el), detail: `edge handle ${Math.round(r.width)}x${Math.round(r.height)}` });
+        }
+        return;
+      }
       const floor = el.matches(inlineSel) ? minTapInline : minTap;
       if (r.height < floor || r.width < floor) {
         out.push({ kind: 'TAP', el: desc(el), detail: `${Math.round(r.width)}x${Math.round(r.height)} < ${floor}` });
@@ -458,7 +471,7 @@ async function main() {
         if (!ok) continue;
         await page.waitForTimeout(60);
         const res = await page.evaluate(auditInPage,
-          { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL,
+          { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL, edgeSel: EDGE_TARGET_SEL,
             minFont: MIN_FONT, minContrast: MIN_CONTRAST });
         res.forEach(f => findings.push({ ...f, section: sec, viewport: vp.label }));
       }
@@ -482,7 +495,7 @@ async function main() {
           if (!ok) continue;
           await mp.waitForTimeout(80);
           const res = await mp.evaluate(auditInPage,
-            { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL,
+            { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL, edgeSel: EDGE_TARGET_SEL,
               minFont: MIN_FONT, minContrast: MIN_CONTRAST });
           res.forEach(f => findings.push({ ...f, section: sec, viewport: '375x812 (phone)' }));
         }

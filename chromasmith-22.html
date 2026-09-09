@@ -957,8 +957,13 @@ body.deskx .fx-db{padding:5px 10px}
    second px value anywhere that has to be kept in sync with it (the root cause of 4 previous
    "library covers the editor" regressions, which all stemmed from a SEPARATE body.paddingLeft
    value computed in JS). A reserved grid track can never visually overlap a sibling track. */
-body.deskx .fx-layout{--dock-w:0px;--panel-w:320px;grid-template-columns:var(--dock-w) 1fr var(--panel-w) 72px;
+body.deskx .fx-layout{--dock-w:0px;--panel-w:var(--panel-w-user,320px);--rail-w:72px;
+  grid-template-columns:var(--dock-w) 1fr var(--panel-w) var(--rail-w);position:relative;
   gap:0;height:calc(100vh - var(--deskx-topbar-h));align-items:stretch;transition:grid-template-columns .2s ease}
+/* Mid-drag the .2s column transition lags the pointer by a visible fifth of a second, so every
+   drag reads as sluggish and overshoots. Dropped for the duration of the drag only — the class
+   toggles (panel-closed, rail-icons, rail-hidden) keep their animation. */
+body.deskx .fx-layout.fx-nodrag-anim{transition:none}
 /* --dock-w-user: the ONLY thing library-ui.js's docked-filmstrip resizer (#lib-dock-resizer) is
    allowed to setProperty() — an indirection layer, not the token a state class assigns. Setting
    --dock-w directly here would beat this class selector on any later drag (inline style always
@@ -969,6 +974,44 @@ body.deskx .fx-layout{--dock-w:0px;--panel-w:320px;grid-template-columns:var(--d
 body.deskx.lib-docked:not(.lib-full) .fx-layout{--dock-w:var(--dock-w-user,120px)}
 body.deskx.panel-closed .fx-layout{--panel-w:0px}
 body.deskx.panel-closed .fx-panel{display:none}
+/* ── Resizable tool panel + shrinkable tool rail (wireframe .tp-resizer / .rail icons-only).
+   Both handles are absolutely-positioned children of .fx-layout rather than of the panel/rail
+   themselves: .fx-panel is the scroll container (overflow-y:auto), so a handle inside it would
+   scroll away with the content, and the rail is 44px wide in icon mode with no room to spare.
+   Offsets are expressed in the SAME two vars the grid template uses, so there is still exactly
+   one source of truth for these track widths (see the --dock-w comment above). ── */
+/* Inert outside deskx: the handles are static markup in every layout, and on the phone shell they
+   would otherwise paint as ordinary full-width 4px-tall buttons. */
+.fx-edge{display:none}
+body.deskx .fx-edge{display:block;position:absolute;top:0;bottom:0;width:7px;z-index:40;cursor:col-resize;
+  background:none;border:0;padding:0}
+body.deskx #fx-panel-resizer{right:calc(var(--panel-w) + var(--rail-w) - 3px)}
+body.deskx #fx-rail-resizer{right:calc(var(--rail-w) - 3px)}
+body.deskx.panel-closed #fx-panel-resizer{display:none}
+body.deskx.rail-hidden #fx-rail-resizer{display:none}
+body.deskx .fx-edge::after{content:'';position:absolute;left:3px;top:50%;transform:translateY(-50%);
+  width:2px;height:28px;border-radius:2px;background:transparent;transition:background var(--dur-1) var(--ease)}
+body.deskx .fx-edge:hover::after,body.deskx .fx-edge:focus-visible::after{background:var(--acc)}
+/* Icons-only rail: the labels go, the touch target does not — padding grows to keep each button
+   at the same height, so switching modes never moves the tools under the pointer more than the
+   width change itself. */
+body.deskx.rail-icons .fx-layout{--rail-w:44px}
+body.deskx.rail-icons #fx-toolrail .fx-rail-lb{display:none}
+body.deskx.rail-icons #fx-toolrail .fx-rail-btn{padding:11px 3px}
+body.deskx.rail-hidden .fx-layout{--rail-w:0px}
+body.deskx.rail-hidden #fx-toolrail{display:none}
+/* Foot of the rail: one button that narrows it a step (labels -> icons) and puts them back.
+   margin-top:auto pins it to the bottom however many tools are above it. */
+body.deskx #fx-rail-foot{margin-top:auto;padding-top:6px;border-top:1px solid var(--bdr);flex:0 0 auto}
+body.deskx #fx-rail-foot .fx-rail-btn{width:100%}
+body.deskx.rail-icons #fx-rail-foot .fx-rail-ic{transform:scaleX(-1)}
+/* Restore button for a HIDDEN rail — the panel needs no equivalent, because clicking any tool
+   already reopens it; a hidden rail has no tools left to click. */
+#fx-rail-show{display:none}
+body.deskx.rail-hidden #fx-rail-show{position:absolute;top:8px;right:8px;z-index:41;display:flex;
+  align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:var(--r-sm);
+  background:var(--sur2);border:1px solid var(--bdr-pill);color:var(--mut);cursor:pointer}
+body.deskx.rail-hidden #fx-rail-show:hover{color:var(--txt)}
 /* Explicit grid-column (not just `order`, which only sequences auto-placement — it doesn't
    pin a track) on all 4 potential .fx-layout children: #lib-overlay is only actually IN the
    DOM once library-ui.js's initDock() has run — which is AFTER this layout's very first paint
@@ -1506,6 +1549,11 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
   <div class="fx-layout">
     <!-- DESKTOP tool rail (one tool at a time) -->
     <div id="fx-toolrail"></div>
+    <!-- Drag handles + hidden-rail restore. Only ever visible under deskx (CSS above); they are
+         inert markup in every other layout. -->
+    <button class="fx-edge" id="fx-panel-resizer" title="Drag to resize the tool panel" aria-label="Resize tool panel"></button>
+    <button class="fx-edge" id="fx-rail-resizer" title="Drag to narrow or hide the tool bar" aria-label="Resize tool bar"></button>
+    <button id="fx-rail-show" onclick="railMode('labels')" title="Show the tool bar" aria-label="Show the tool bar"></button>
     <div class="fx-panel">
       <!-- tap OR drag-down to close — both handled by the pointer logic (no onclick: a
            click also fires after a spring-back drag and would wrongly close the sheet) -->
@@ -20120,6 +20168,12 @@ const ICONS={
  star:'<path d="M12 3.5l2.5 5.3 5.5.8-4 4 1 5.7-5-2.8-5 2.8 1-5.7-4-4 5.5-.8z"/>',
  rename:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
  chevron:'<path d="M6 9l6 6 6-6"/>',
+ // Tool-rail narrow/widen affordance (#fx-rail-foot) — flipped with scaleX(-1) in icons-only
+ // mode rather than swapped for a second glyph, so there is one path to keep in sync.
+ chevleft:'<path d="M15 18l-6-6 6-6"/>',
+ // Restore a hidden tool rail: the wireframe's own #show-toolpanel glyph (a panel with its
+ // right-hand rail marked), not a generic arrow.
+ railshow:'<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>',
  refine:'<path d="M4 12h4l3-7 4 14 3-7h4"/>',
  trash:'<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
@@ -20271,8 +20325,102 @@ function buildToolRail(){        // desktop vertical labelled rail
     b.onclick=()=>fxSection(bKey);
     rail.appendChild(b);
   });
+  // Foot: narrow the rail a step (labels -> icons) and put them back. Rebuilt with the rail, so
+  // it can't outlive a layout change that drops the rail entirely.
+  if(dx){
+    const foot=document.createElement('div');foot.id='fx-rail-foot';
+    const fb=document.createElement('button');fb.className='fx-rail-btn';
+    fb.innerHTML=`<span class="fx-rail-ic">${icon('chevleft',22)}</span><span class="fx-rail-lb">Narrow</span>`;
+    fb.onclick=()=>railMode(document.body.classList.contains('rail-icons')?'labels':'icons');
+    foot.appendChild(fb);rail.appendChild(foot);
+    railSyncFoot();
+  }
   fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
   syncSectionEnabled();
+}
+/* ── Tool-panel resize + tool-rail shrink (deskx) ─────────────────────────────────────────
+   Three states for the rail — 'labels' (72px), 'icons' (44px), 'hidden' — and a free width for
+   the panel. Both are driven by CLASSES and a single custom property each, never by writing
+   grid-template-columns from JS: the layout has exactly one column expression (see the
+   --dock-w comment in the CSS) and four previous "library covers the editor" regressions all
+   came from a second width computed in JS drifting out of sync with it.
+   ⚠️ The panel's user width goes into --panel-w-user, NOT --panel-w: body.panel-closed sets
+   --panel-w:0px through a class rule, and an inline --panel-w would outrank it forever, so
+   closing the panel would silently stop working after the first drag. */
+const RAIL_MODES=['labels','icons','hidden'];
+function railSyncFoot(){
+  const fb=document.querySelector('#fx-rail-foot .fx-rail-btn');if(!fb)return;
+  const ic=document.body.classList.contains('rail-icons');
+  fb.title=ic?'Show the tool bar labels':'Hide the tool bar labels';
+  const lb=fb.querySelector('.fx-rail-lb');if(lb)lb.textContent=ic?'Labels':'Narrow';
+}
+function railMode(m){
+  if(!RAIL_MODES.includes(m))m='labels';
+  document.body.classList.toggle('rail-icons',m==='icons');
+  document.body.classList.toggle('rail-hidden',m==='hidden');
+  railSyncFoot();
+  try{localStorage.setItem('cs_railmode',m);}catch(e){}
+  fxLayoutSettle();
+}
+// One redraw once the column transition has finished, matching what fxSection already does for
+// the panel toggle — the canvas's own max-width:100% covers the frames in between.
+function fxLayoutSettle(){
+  if(typeof renderPreview!=='function')return;
+  clearTimeout(fxLayoutSettle._t);
+  fxLayoutSettle._t=setTimeout(()=>{try{renderPreview();}catch(e){}},240);
+}
+function fxPanelWidth(w){
+  const lay=document.querySelector('.fx-layout');if(!lay)return;
+  w=Math.min(440,Math.max(220,Math.round(w)));
+  lay.style.setProperty('--panel-w-user',w+'px');
+  try{localStorage.setItem('cs_panelw',w);}catch(e){}
+  return w;
+}
+function fxEdgeDrag(handle,onMove){
+  if(!handle)return;
+  handle.addEventListener('pointerdown',e=>{
+    const lay=document.querySelector('.fx-layout');if(!lay)return;
+    handle.setPointerCapture(e.pointerId);
+    lay.classList.add('fx-nodrag-anim');
+    handle._drag=true;e.preventDefault();
+  });
+  handle.addEventListener('pointermove',e=>{if(handle._drag)onMove(e.clientX);});
+  const end=()=>{
+    if(!handle._drag)return;handle._drag=false;
+    const lay=document.querySelector('.fx-layout');if(lay)lay.classList.remove('fx-nodrag-anim');
+    fxLayoutSettle();
+  };
+  handle.addEventListener('pointerup',end);
+  handle.addEventListener('pointercancel',end);
+}
+function fxInitEdges(){
+  const lay=document.querySelector('.fx-layout');if(!lay)return;
+  // Restore both persisted sizes before the first paint of the editor.
+  try{
+    const w=parseInt(localStorage.getItem('cs_panelw'),10);
+    if(w>=220&&w<=440)lay.style.setProperty('--panel-w-user',w+'px');
+    const m=localStorage.getItem('cs_railmode');
+    // A hidden rail is NOT restored: it leaves the editor with no visible tool affordance at all
+    // beyond one 28px button, which is a hostile thing to launch into. Hiding stays per-session.
+    if(m==='icons')railMode('icons');
+  }catch(e){}
+  const railBtn=document.getElementById('fx-rail-show');
+  if(railBtn&&!railBtn.childElementCount)railBtn.innerHTML=icon('railshow',16);
+  fxEdgeDrag(document.getElementById('fx-panel-resizer'),x=>{
+    const rail=document.getElementById('fx-toolrail');
+    const railW=document.body.classList.contains('rail-hidden')?0:rail.getBoundingClientRect().width;
+    const w=lay.getBoundingClientRect().right-railW-x;
+    // Same gesture closes the panel: dragging it below usable width is the user saying "gone",
+    // not "38px wide". Any rail click reopens it, so this needs no restore button of its own.
+    if(w<60){document.body.classList.add('panel-closed');
+      document.querySelectorAll('#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.remove('on'));return;}
+    document.body.classList.remove('panel-closed');
+    fxPanelWidth(w);
+  });
+  fxEdgeDrag(document.getElementById('fx-rail-resizer'),x=>{
+    const w=lay.getBoundingClientRect().right-x;
+    railMode(w<28?'hidden':(w<58?'icons':'labels'));
+  });
 }
 function fxSection(name,noSheet){
   const dx=document.body.classList.contains('deskx');
@@ -20562,6 +20710,8 @@ function applyFxLayout(){
   if(!mob)document.body.classList.remove('sheet-open'); // sheet state is mobile-only
   if(mob){buildSecNav();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
   else if(desk){buildToolRail();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
+  // Idempotent: the handles are static markup, so this only ever (re)binds them once per element.
+  if(desk&&!fxInitEdges._done){fxInitEdges._done=true;fxInitEdges();}
   relocatePreviewTools(mob,desk);
 }
 // On desktop the zoom + compare/split/histogram controls live in the top action bar;
