@@ -1,5 +1,23 @@
 [
   {
+    "zone": "toolsmenu",
+    "match": "MISSING 1x  text:\"Gamut warning\"",
+    "exact": false,
+    "reason": "Intentional (item 3.1.6): gamut warning moved out of the Tools menu into the new View menu (viewMenuBuild(), chromasmith-22.html), matching the wireframe's own #btn-view-menu/#view-menu split rather than the wireframe's Tools menu (which the app previously over-matched by also carrying gamut there)."
+  },
+  {
+    "zone": "toolsmenu",
+    "match": "EXTRA   7x  button",
+    "exact": false,
+    "reason": "Kind-classification artifact: the wireframe's #tools-menu rows are <div class=\"opt\"> (kind:div in the inventory), the app's #fx-tools-menu rows are real <button> elements (kind:button, matching every other menu in the app, e.g. #fx-overflow-menu) — same content, different element kind, not a real structural mismatch."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   3x  button",
+    "exact": false,
+    "reason": "Same kind-classification artifact as toolsmenu above, now that the app has a real View menu (#fx-view/#fx-view-menu) to compare against the wireframe's #view-menu — its 3 rows (gamut toggle, Dark, Light) are <div class=\"opt\"> in the wireframe vs real <button> in the app."
+  },
+  {
     "zone": "panel",
     "match": "text:\"Presets & Looks\"   (app has 1, wireframe has 0)",
     "exact": false,

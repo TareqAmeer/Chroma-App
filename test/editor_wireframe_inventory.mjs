@@ -46,13 +46,11 @@ const ZONES = [
 // Menus whose CONTENTS are invisible until opened — same principle as Library's OPEN_MENUS.
 const OPEN_MENUS = [
   { label: 'toolsmenu', wfTrigger: '#btn-tools', wfContainer: '#tools-menu', appTrigger: '#fx-tools .fx-db', appContainer: '#fx-tools-menu' },
-  // ⚠️ 2026-09-09: appTrigger was '.js-overflow, #fx-overflow-btn' — neither exists, confirmed
-  // live in the Browser pane. Every 'viewmenu' finding up to and including the Appearance-section
-  // work was silently comparing the wireframe against an UNOPENED/empty #fx-overflow-menu, not
-  // its real content. The real trigger, confirmed by clicking it live: '#fx-overflow .fx-db'
-  // (the same selector editor_wireframe_diff.mjs's own 'Tools button' pair already uses for the
-  // sibling #fx-tools trigger).
-  { label: 'viewmenu', wfTrigger: '#btn-view-menu', wfContainer: '#view-menu', appTrigger: '#fx-overflow .fx-db', appContainer: '#fx-overflow-menu' },
+  // 2026-09-09: the app now has a real View menu (#fx-view/#fx-view-menu, viewMenuBuild() in
+  // chromasmith-22.html) — gamut warning + Appearance, split out of both Tools and the ⋯
+  // overflow menu per item 3.1.6. Previously this row pointed at #fx-overflow as a stand-in
+  // (see git history) because no dedicated View trigger existed yet.
+  { label: 'viewmenu', wfTrigger: '#btn-view-menu', wfContainer: '#view-menu', appTrigger: '#fx-view .fx-db', appContainer: '#fx-view-menu' },
 ];
 
 // Wireframe sample-data noise: the preset grid renders arbitrary hand-picked LUT names the app's
