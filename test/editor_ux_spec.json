@@ -225,10 +225,11 @@
     },
     "3.2.6": {
       "category": "context-menu",
-      "status": "open",
+      "status": "fixed",
       "source": "editor sublist rotate and flip",
       "wireframeRef": ".dc.html .ctx-menu .sub",
-      "check": null
+      "check": null,
+      "note": "Already correct, just untracked -- found while auditing open items 2026-09-09. desktop/library-ui.js buildPathsMenu() already has submenu('Rotate & flip') with Rotate 90 CW/CCW + Flip horizontal/vertical as a nested sublist, exactly matching the wireframe (Editor (Developer) View.dc.html #ctx-rotateflip, lines 262-267). Right-clicking the open photo in the editor canvas routes to this same menu (chromasmith-22.html only intercepts a right-click on the EMPTY background around the photo, not the photo itself). Verified live via a Playwright probe: right-clicking the open photo shows the exact submenu text."
     },
     "3.2.7": {
       "category": "context-menu",
