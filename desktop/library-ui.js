@@ -746,6 +746,10 @@
       --bg:var(--surface-tile-1);--sur:var(--surface-tile-2);--sur2:var(--surface-tile-2);
       --bdr:rgba(255,255,255,.14);--txt:var(--ink-on-dark);--mut:var(--ink-on-dark-muted);
       --acc2:var(--blue-mist);--acc:var(--blue-mist);--r:var(--radius-sm);
+      /* Wireframe border-alpha split, mirrored from chromasmith-22.html's own tokens: the
+         filmstrip's own outer edge is a panel-role border (wireframe: .1 alpha), distinct from
+         --bdr's .14 which the rest of this file's control/pill borders keep using unchanged. */
+      --bdr-panel:rgba(255,255,255,.1);
       --canvas:var(--surface-tile-1);--surface-alt:var(--surface-tile-2);
       --ink:var(--ink-on-dark);--ink-muted-80:var(--ink-on-dark);--ink-muted-48:var(--ink-on-dark-muted);
       --hairline:rgba(255,255,255,.12);--hairline-alpha:rgba(255,255,255,.12);
@@ -759,6 +763,7 @@
     #lib-overlay.lib-light{
       --bg:#ffffff;--sur:var(--canvas-parchment);--sur2:var(--canvas-parchment);
       --bdr:var(--hairline);--txt:var(--ink);--mut:var(--ink-muted-48);
+      --bdr-panel:var(--hairline);
       --divider-soft:#f0f0f0;
       --acc2:var(--blue-slate);--acc:var(--blue-slate);
       --canvas:#ffffff;--surface-alt:var(--canvas-parchment);
@@ -774,13 +779,13 @@
     /* overflow:hidden — nothing (grid blowout, an oversized top bar) can ever paint past this
        column into the editor preview, whatever mode/width it's in. */
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;overflow:hidden;
-      background:var(--bg);display:none;border-right:1px solid var(--bdr);
+      background:var(--bg);display:none;border-right:1px solid var(--bdr-panel);
       /* Only the right edge has a real (visible) border, but with no border-width on the other
          three sides their computed border-color still resolves to currentColor (the text color),
          not var(--bdr) — so getComputedStyle().borderColor reported 3 mismatched sides even
          though nothing renders differently. Setting the color explicitly on all sides keeps the
          computed style honest without adding any visible border. */
-      border-color:var(--bdr);
+      border-color:var(--bdr-panel);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
       font-family:var(--font-text);transition:width .15s ease;
