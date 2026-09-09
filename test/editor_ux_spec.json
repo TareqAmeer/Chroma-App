@@ -73,10 +73,11 @@
     },
     "3.1.1": {
       "category": "topbar",
-      "status": "open",
+      "status": "fixed",
       "source": "undo/redo buttons feel not aligned to the rest of the buttons",
       "wireframeRef": ".dc.html:41-43 .undogrp wrapper",
-      "check": "editor_wireframe_diff.mjs: undogrp pair"
+      "check": "editor_wireframe_diff.mjs: undogrp pair",
+      "note": "Fixed 2026-09-09: undo/redo wrapped in a new .fx-undogrp div matching the wireframe .undogrp (Editor (Developer) View.dc.html:41-43) \u2014 outer border (8px radius, var(--bdr)), square inner button corners, hairline divider between the two. editor_wireframe_diff.mjs's undo/redo cluster pair was pointed at #fx-deskbar as a stand-in (no real wrapper existed); repointed at .fx-undogrp for a genuine comparison. Resolved borderColor/borderRadius findings across both themes."
     },
     "3.1.2": {
       "category": "topbar",

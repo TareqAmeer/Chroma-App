@@ -41,7 +41,9 @@ const VIEWPORT = { width: 1440, height: 900 };
 // named in UI_SPEC.md's Editor zones. `zone` drives allowlist scoping (see ACCEPTED above).
 const PAIRS = {
   '.topbar': { app: '#fx-deskbar', label: 'topbar', zone: 'topbar' },
-  '.tb-left .undogrp': { app: '#fx-deskbar', label: 'undo/redo cluster', zone: 'topbar' }, // app has no wrapper box — see NOTE below
+  // 2026-09-09 (3.1.1): the app now has a real wrapper (.fx-undogrp) matching the wireframe's
+  // .undogrp — was pointed at #fx-deskbar as a stand-in before this existed.
+  '.tb-left .undogrp': { app: '.fx-undogrp', label: 'undo/redo cluster', zone: 'topbar' },
   '.zoomctl': { app: '#fx-zoom-ctrl', label: 'zoom control', zone: 'zoom' },
   '#btn-tools': { app: '#fx-tools .fx-db', label: 'Tools button', zone: 'topbar' },
   '#btn-allfx': { app: '.js-allfx', label: 'All FX button', zone: 'topbar' },

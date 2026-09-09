@@ -790,6 +790,11 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-db:hover{border-color:var(--mut)}
 /* 3.1.2 — matches the wireframe's .ibtn.disabled (Editor (Developer) View.dc.html:40). */
 .fx-db:disabled{opacity:.35;pointer-events:none;cursor:default}
+/* 3.1.1 — matches the wireframe's .undogrp (Editor (Developer) View.dc.html:41-43): one outer
+   border/radius around both buttons, square inner corners, a hairline divider between them. */
+.fx-undogrp{display:inline-flex;flex:0 0 auto;border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
+.fx-undogrp .fx-db{border-radius:0;border:none}
+.fx-undogrp .fx-db+.fx-db{border-left:1px solid var(--bdr)}
 .fx-db .fx-db-ic{display:inline-flex;color:var(--mut)}
 /* Editor (Developer) View.dc.html:46's .btn-export uses --primary-on-dark (Mist Blue #61a0af),
    not the app's own amber --acc brand color — per explicit decision, matched literally here. */
@@ -1425,8 +1430,14 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
   <!-- DESKTOP persistent quick-access bar -->
   <div id="fx-deskbar">
     <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
-    <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
-    <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+    <!-- 3.1.1: undo/redo used to be two bare .fx-db buttons, reading as unaligned with the rest
+         of the bar's filled-tile buttons — wrapped in a bordered pill matching the wireframe's
+         own .undogrp (Editor (Developer) View.dc.html:41-43): one outer border, square inner
+         corners, a hairline divider between the two. -->
+    <div class="fx-undogrp">
+      <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
+      <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+    </div>
     <div style="position:relative;display:inline-flex" id="db-history-wrap">
       <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit &amp; export history for this photo" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
     </div>
