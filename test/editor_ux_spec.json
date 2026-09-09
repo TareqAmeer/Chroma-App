@@ -216,10 +216,11 @@
     },
     "3.2.5": {
       "category": "context-menu",
-      "status": "open",
+      "status": "fixed",
       "source": "right click Export should have Quick export and Export custom (opens export sidebar)",
       "wireframeRef": ".dc.html #ctx-export .sub",
-      "check": null
+      "check": null,
+      "note": "Fixed 2026-09-09: context-menu Export is now a submenu \u2014 Quick export (unchanged libExportPaths, fires exportFX() immediately with whatever settings are already configured) and Export custom\u2026 (opens the photo(s) in the editor via openInEditor/openPathsInEditor and reveals the Export section, .fx-ctrl[data-fxsec=export], instead of firing right away). Verified live via a Playwright probe: clicking Export custom\u2026 leaves #panel-fx active and the export section un-collapsed."
     },
     "3.2.6": {
       "category": "context-menu",

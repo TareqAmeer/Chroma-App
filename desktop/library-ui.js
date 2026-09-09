@@ -4786,7 +4786,21 @@
       if (!ids.length) { toast('Could not resolve the selected photos', 'err'); return; }
       await runFindFaces(ids);
     });
-    item(`Export ${n > 1 ? n + ' photos' : ''}`.trim(), () => libExportPaths(paths), '⌘E');
+    // 3.2.5: split into Quick (unchanged libExportPaths — loads the recipe and fires exportFX()
+    // immediately with whatever export settings are already configured) and Custom (opens the
+    // photo(s) in the editor and reveals the Export section instead of firing right away, so
+    // quality/scope/etc can be changed first).
+    const exportMenu = submenu(`Export ${n > 1 ? n + ' photos' : ''}`.trim());
+    exportMenu.subItem('Quick export', () => libExportPaths(paths), '⌘E');
+    exportMenu.subItem('Export custom…', async () => {
+      if (n <= 1) await openInEditor(paths[0]);
+      else await openPathsInEditor(paths);
+      const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
+      if (card) {
+        card.classList.remove('fx-sec-collapsed');
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
     sep();
     // Was prefixed with a 🗑️ emoji — every other row in this same menu is plain text, and
     // CLAUDE.md §3b is explicit: no emoji in desktop chrome, they render per-platform and never
