@@ -99,6 +99,6 @@
     "zone": "rail",
     "match": "rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info, Narrow]",
     "exact": false,
-    "reason": "Untriaged — pending Editor alignment work (predates and is unrelated to the 2026-09-09 topbar/settings-menu change; found while verifying that change, spun off as its own follow-up task rather than fixed inline). The app's rail carries a trailing 'Narrow'/'Labels' collapse-expand toggle (chromasmith-22.html:20320, applyFxLayout()'s own rail-collapse affordance) that the wireframe's fixed-width rail has no equivalent for — real feature or a chrome addition the wireframe should also show is not yet decided."
+    "reason": "Resolved 2026-09-09: justified app-only addition, not a gap. 'Narrow'/'Labels' (chromasmith-22.html:20320, railMode()) is the rail's own labels<->icons<->hidden collapse control (chromasmith-22.html:20337 RAIL_MODES) — real interactive chrome that only exists because the live app's rail is resizable/collapsible. The wireframe is a fixed-width static mockup with no resize affordance at all, so it has nothing for this control to correspond to; adding a fake 'Narrow' button to the wireframe would misrepresent it as a real design decision rather than dev chrome."
   }
 ]
