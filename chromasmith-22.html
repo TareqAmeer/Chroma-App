@@ -944,7 +944,14 @@ body.deskx .fx-db{padding:5px 10px}
    value computed in JS). A reserved grid track can never visually overlap a sibling track. */
 body.deskx .fx-layout{--dock-w:0px;--panel-w:320px;grid-template-columns:var(--dock-w) 1fr var(--panel-w) 72px;
   gap:0;height:calc(100vh - var(--deskx-topbar-h));align-items:stretch;transition:grid-template-columns .2s ease}
-body.deskx.lib-docked:not(.lib-full) .fx-layout{--dock-w:120px}
+/* --dock-w-user: the ONLY thing library-ui.js's docked-filmstrip resizer (#lib-dock-resizer) is
+   allowed to setProperty() — an indirection layer, not the token a state class assigns. Setting
+   --dock-w directly here would beat this class selector on any later drag (inline style always
+   wins over a class rule, same specificity trap --panel-w-user/--rail-w-user exist to avoid) and
+   permanently break collapse-on-active-rail-click for this track the same way it would have for
+   the others. State classes keep authority over the derived value; the user's own resize is only
+   ever a fallback inside var(). */
+body.deskx.lib-docked:not(.lib-full) .fx-layout{--dock-w:var(--dock-w-user,120px)}
 body.deskx.panel-closed .fx-layout{--panel-w:0px}
 body.deskx.panel-closed .fx-panel{display:none}
 /* Explicit grid-column (not just `order`, which only sequences auto-placement — it doesn't

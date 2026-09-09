@@ -1,5 +1,40 @@
 [
   {
+    "match": "MISSING 1x  button:\"Library\"",
+    "reason": "2026-09-09: the Library/Develop tab buttons now carry an icon (ICONS.library/tools) alongside their text, so each is a container atom with a nested text child rather than a leaf button:\"Library\" — same kind-classification split seen elsewhere (wireframe rows are often leaf text, the app's real buttons carry icons). Functionally present and correctly active-state-synced; see EXTRA text:\"Library\" below.",
+    "zone": "sidebar"
+  },
+  {
+    "match": "MISSING 1x  button:\"Develop\"",
+    "reason": "Same root cause as the Library entry above.",
+    "zone": "sidebar"
+  },
+  {
+    "match": "EXTRA   2x  button",
+    "reason": "The Library/Develop tab pair itself — real, was previously hardcoded to always show \"Library\" active even while docked; now correctly tracks which view is active (syncSideTabs()). Not in the wireframe's static mock at all.",
+    "zone": "sidebar"
+  },
+  {
+    "match": "EXTRA   5x  icon",
+    "reason": "Library/Develop tab icons (2) plus the kind-classification split's own knock-on count — same root cause as the button entries above.",
+    "zone": "sidebar"
+  },
+  {
+    "match": "EXTRA   1x  text:\"Library\"",
+    "reason": "The Library tab's own label, now a nested text atom instead of the button's whole text content — see MISSING button:\"Library\" above.",
+    "zone": "sidebar"
+  },
+  {
+    "match": "EXTRA   1x  text:\"Develop\"",
+    "reason": "Same as the Library text entry above.",
+    "zone": "sidebar"
+  },
+  {
+    "match": "order@0: wireframe button:\"Library\" vs app button",
+    "reason": "Ordinal-position artifact of the same kind-classification split — the app's atom at this position is a container (button) not a leaf (button:\"Library\"), so the order comparison reads as a mismatch even though it's the same control in the same place.",
+    "zone": "sidebar"
+  },
+  {
     "match": "[sidebar] font-family \"SF Pro Text\"",
     "reason": "HANDOVER §8 item #15, investigated 2026-09-08: direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all deliberately monospace (var(--mono)) count badges on date/keyword tree rows — a real, intentional choice for tabular-number alignment, not a font bug. The wireframe-vs-app COUNT mismatch is downstream of the app rendering more real content (expanded folder/keyword trees, live counts) than the wireframe's sparse static mock — same superset reasoning as the sort/gear menu entries."
   },

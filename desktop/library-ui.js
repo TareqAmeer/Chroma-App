@@ -835,7 +835,11 @@
     /* deskx docked (non-full): a real grid-column sibling of the preview/panel/rail, placed by
        initDock() as the first child of .fx-layout — see chromasmith-22.html's own
        body.deskx .fx-layout / body.lib-docked rules for the reserved column width. */
-    body.deskx #lib-overlay:not(.full){grid-column:1;position:static;top:auto;left:auto;bottom:auto;height:100%}
+    /* position:relative (not static) — .lib-dock-resizer is position:absolute;right:0 and needs
+       THIS element as its containing block, not the viewport (which is what "static" gave it:
+       the resizer rendered pinned to the window's own right edge instead of the 120px filmstrip's).
+       relative still behaves as a normal grid item (unlike absolute), so grid-column:1 is unaffected. */
+    body.deskx #lib-overlay:not(.full){grid-column:1;position:relative;top:auto;left:auto;bottom:auto;height:100%}
     body.deskx #lib-overlay.full{position:fixed} /* full takeover: back to covering everything */
     /* Unified top bar — transplanted from Library View.html's .topbar. One wrapping flex row
        holding everything (logo/search/viewtoggle/zoom/flags/sort/filters/allfx/export/gear);
@@ -1054,11 +1058,15 @@
     .lib-side-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
     .lib-side-resizer:hover,.lib-side-resizer.active{background:rgba(97,160,175,.25)}
     #lib-overlay.full .lib-side-resizer{display:block}
-    .lib-side-tabs{display:none;gap:4px;padding:0 12px 12px}
-    #lib-overlay.full .lib-side-tabs{display:flex}
+    /* Was full-view only — the docked filmstrip (next to an open photo, i.e. Develop) showed no
+       Library/Develop indicator at all, so the two views didn't read as one consistent toggle.
+       Shown in both now, with the active tab genuinely tracking which one you're in (see
+       syncSideTabs()) instead of a class that could only ever say "Library". */
+    .lib-side-tabs{display:flex;gap:4px;padding:0 12px 12px}
     .lib-side-tab{flex:1;height:28px;border-radius:var(--r);font-size:12px;font-weight:var(--weight-semibold);
-      display:flex;align-items:center;justify-content:center;border:1px solid transparent;color:var(--mut);
+      display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid transparent;color:var(--mut);
       background:none;cursor:pointer}
+    .lib-side-tab svg{flex:none}
     .lib-side-tab.on{background:var(--bg);border-color:var(--bdr);color:var(--txt)}
     /* Collections/tree rows — transplanted from the wireframe's .row/.row.sel: 20px left inset,
        13px, selected = the mist-blue wash + primary text/icon (dark mode swaps to the translucent
@@ -1503,13 +1511,43 @@
        "auto 1fr" row split never resolves, #lib-main{overflow:auto} has nothing to overflow
        against, and everything below the fold is simply unreachable ("can't scroll the sidebar").
        44px = the fixed deskbar height (see body.deskx #lib-overlay{top:44px} below). */
-    body.deskx #lib-overlay:not(.full){width:120px;height:calc(100vh - 44px);grid-template-rows:auto 1fr}
-    /* the filmstrip hides filters/viewbar/side/bottom, so re-pin the two visible children */
+    /* The grid TRACK is chromasmith-22.html's .fx-layout (--dock-w custom property) — this element's own width
+       still has to be told to MATCH it explicitly. Grid items only stretch to their track by
+       default when width is auto; #lib-overlay's base rule (non-deskx) sets an explicit
+       width:${DOCK_W}px (356px), which — being a definite length, not auto — wins over stretch
+       and rendered at 356px regardless of a 280px track when this was first tried without an
+       override here. var(--dock-w-user,120px) mirrors the exact same variable the track itself
+       resolves from (.fx-layout{--dock-w:var(--dock-w-user,120px)}), so the two can never drift —
+       ONLY the resizer JS below is allowed to set --dock-w-user, on .fx-layout. */
+    body.deskx #lib-overlay:not(.full){width:var(--dock-w-user,120px);height:calc(100vh - 44px);grid-template-rows:auto 1fr}
+    /* the filmstrip hides filters/viewbar/bottom, so re-pin the two always-visible children */
     body.deskx #lib-overlay:not(.full) #lib-top{grid-row:1}
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
-    body.deskx #lib-overlay:not(.full) #lib-filters,body.deskx #lib-overlay:not(.full) #lib-side,
+    body.deskx #lib-overlay:not(.full) #lib-filters,
     body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar,
     body.deskx #lib-overlay:not(.full) #lib-filters-panel{display:none}
+    /* #lib-side (the Library/Develop tab pair + folder tree) stays hidden below
+       LIB_DOCK_WIDE_PX (see the resizer's own JS) — there's no room for it in a narrow
+       filmstrip — and is revealed once the user drags the filmstrip wide enough to fit it,
+       mirroring how the full-view sidebar has always behaved at that same width. */
+    body.deskx #lib-overlay:not(.full) #lib-side{display:none}
+    body.deskx.lib-dock-wide #lib-overlay:not(.full) #lib-side{display:block;grid-row:2;overflow:auto;max-height:40vh}
+    body.deskx.lib-dock-wide #lib-overlay:not(.full){grid-template-rows:auto auto 1fr}
+    body.deskx.lib-dock-wide #lib-overlay:not(.full) #lib-main{grid-row:3}
+    .lib-dock-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
+    body.deskx #lib-overlay:not(.full) .lib-dock-resizer{display:block}
+    .lib-dock-resizer:hover,.lib-dock-resizer.active{background:rgba(97,160,175,.25)}
+    /* Library/Develop tabs are icon+label at a wide enough filmstrip; below LIB_DOCK_TEXT_PX
+       (see syncDockWidth()) the label collapses to icon-only, same idea as .full mode's own
+       lib-top-compact but scoped to the tab pair specifically since it lives in #lib-side, a
+       sibling of #lib-top, not a descendant lib-top-compact's own selector could reach. */
+    /* Scoped to :not(.full) rather than relying on the body class being cleared on switching to
+       full — syncDockWidth() only updates it while docked (it bails out in full mode, since that
+       column doesn't exist there), so the class can be stale-true from the last docked width
+       when full mode opens; the selector itself is what has to stay correct, not the timing of
+       when the class toggles. */
+    body.lib-dock-icons #lib-overlay:not(.full) .lib-side-tab span{display:none}
+    body.lib-dock-icons #lib-overlay:not(.full) .lib-side-tab{gap:0}
     /* padding-top 22px (not the tighter horizontal 8px/6px): #lib-overlay already sits below the
        fixed deskbar (top:44px above), so this is the ONLY breathing room between the deskbar and
        the folder/cloud/history icons — 8px read as flush against the bar. Matches the same 22px
@@ -1783,15 +1821,27 @@
            relocated to the top bar / gear View menu above — kept as the single live copy of
            each id there, not duplicated here. -->
     </div>
+    <!-- Deskx-docked-only resizer for the filmstrip's own width — a sibling of #lib-side (not
+         nested inside it) because #lib-side is hidden below LIB_DOCK_REVEAL_PX and the resizer
+         still needs to be grabbable at the narrowest, default filmstrip width to widen it in the
+         first place. Same drag pattern as #lib-side-resizer below, but sets --dock-w-user on
+         chromasmith-22.html's .fx-layout (the actual grid track, not this element's own cosmetic
+         width) — see that variable's own comment for why it's an indirection layer. -->
+    <div class="lib-dock-resizer" id="lib-dock-resizer"></div>
     <div id="lib-side">
       <div class="lib-side-resizer" id="lib-side-resizer"></div>
       <div class="lib-side-tabs">
-        <button class="lib-side-tab on" id="lib-side-tab-library">Library</button>
+        <!-- "on" was a static class here, always Library, even while docked next to an open
+             photo (i.e. actually in Develop) — the active tab now genuinely tracks which view
+             you're in (syncSideTabs(), called on every toggleExpandedView + photo open). Icons
+             added so the tab still reads as itself once the filmstrip is too narrow for the
+             label (.lib-dock-icons, syncDockWidth()). -->
+        <button class="lib-side-tab" id="lib-side-tab-library" title="Switch to Library">${ic('library',13)}<span>Library</span></button>
         <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
              performs a real navigation (closes the Library, same as the header button / L key).
              The wiring is correct — Develop simply IS the editor you land back in — so the
              stale "not yet available" title was the lie, not the handler. -->
-        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop">Develop</button>
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop">${ic('tools',13)}<span>Develop</span></button>
       </div>
       <div id="lib-collections"></div><div id="lib-folders-header"></div><div id="lib-tree"></div><div id="lib-collections-post"></div>
     </div>
@@ -3081,6 +3131,7 @@
       // exactly "flag stuck on the previous photo when switching photos". More central than the
       // fxSelectImage() fix (that one is for the separate drag-loaded multi-photo batch path).
       if (typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
+      if (typeof syncSideTabs === 'function') syncSideTabs(); // opening a photo (docked) makes Develop the active tab — see that function's comment
       if (!LIBTEST) { try { localStorage.setItem(LS_LAST_PATH, path); } catch (e) {} }
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -3989,6 +4040,7 @@
         state.openedPath = path;
         if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
         if (typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see openInEditorInner's comment
+        if (typeof syncSideTabs === 'function') syncSideTabs();
         window.chromasmithSourcePath = path;
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -5731,7 +5783,20 @@
     document.body.classList.toggle('lib-full', state.expanded_view);
     syncDockPadding();
     syncListViewAvailability(); // HANDOVER §3.12 — docked-ness just changed, re-sync the list button
+    syncSideTabs(); // the Library/Develop tab pair's active state was static — see that function
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  // The Library/Develop tabs (#lib-side header) previously had a hardcoded `on` class on Library
+  // and no handler at all — meaning they showed "Library" as active even while docked next to an
+  // open photo (i.e. actually in Develop), the exact inconsistency between the two views this
+  // fixes. Docked (expanded_view false, photo open) = Develop is the active one; full library
+  // grid = Library is. Called on every toggleExpandedView AND once at setup for the initial state.
+  function syncSideTabs() {
+    const libTab = overlay.querySelector('#lib-side-tab-library'), devTab = overlay.querySelector('#lib-side-tab-develop');
+    if (!libTab || !devTab) return;
+    const inDevelop = !state.expanded_view && !!state.openedPath;
+    libTab.classList.toggle('on', !inDevelop);
+    devTab.classList.toggle('on', inDevelop);
   }
   window.chromasmithToggleExpandedView = () => { if (state.open) toggleExpandedView(); }; // menu-bar "Toggle Full Library" — no-op if the Library isn't even open
 
@@ -6414,13 +6479,55 @@
     const w = parseInt(getComputedStyle(overlay).getPropertyValue('--lib-side-w'), 10);
     if (w) localStorage.setItem('chromasmith_lib_side_w', w);
   });
-  // Library/Develop tabs — Develop just switches back to the editor (the same toggle the
-  // header's own library button / "L" shortcut already uses), not a new mode.
+
+  // ── Docked filmstrip drag-resize (deskx :not(.full) only) — was a hardcoded 120px; now the
+  // user can widen it toward the full Library view's own width. Same mousedown/mousemove/mouseup
+  // pattern as the sidebar resizer above, but writes --dock-w-user on chromasmith-22.html's OWN
+  // .fx-layout element (fxLayout, below) — the actual grid track authority (.fx-layout{--dock-w:
+  // var(--dock-w-user,120px)}), not this element's own `width`, which a grid item's track always
+  // overrides regardless of what the item's own CSS says. Clamped narrower than the sidebar
+  // resizer since this column also has to hold nothing but a single-column thumbnail strip.
+  const LIB_DOCK_MIN = 90, LIB_DOCK_MAX = 420;
+  // Below this, #lib-side (Library/Develop tabs + folder tree) has no room at all and stays
+  // hidden — same threshold the CSS's own .lib-dock-wide class gate uses.
+  const LIB_DOCK_REVEAL_PX = 150;
+  // Between LIB_DOCK_REVEAL_PX and this, #lib-side is visible but the tab labels aren't — icon
+  // only (.lib-dock-icons). Above it, the full "Library"/"Develop" text shows.
+  const LIB_DOCK_TEXT_PX = 220;
+  const dockResizer = overlay.querySelector('#lib-dock-resizer');
+  const fxLayout = document.querySelector('.fx-layout'); // chromasmith-22.html's grid, not this file's own markup
+  const savedDockW = parseInt(localStorage.getItem('chromasmith_lib_dock_w'), 10);
+  if (fxLayout && savedDockW >= LIB_DOCK_MIN && savedDockW <= LIB_DOCK_MAX) fxLayout.style.setProperty('--dock-w-user', savedDockW + 'px');
+  function syncDockWidth() {
+    if (overlay.classList.contains('full')) return; // this column doesn't exist in full mode
+    const w = overlay.getBoundingClientRect().width;
+    document.body.classList.toggle('lib-dock-wide', w >= LIB_DOCK_REVEAL_PX);
+    document.body.classList.toggle('lib-dock-icons', w < LIB_DOCK_TEXT_PX);
+  }
+  new ResizeObserver(syncDockWidth).observe(overlay);
+  syncDockWidth();
+  let dockResizing = false;
+  dockResizer.addEventListener('mousedown', (e) => { dockResizing = true; dockResizer.classList.add('active'); e.preventDefault(); });
+  window.addEventListener('mousemove', (e) => {
+    if (!dockResizing || !fxLayout) return;
+    const w = Math.min(LIB_DOCK_MAX, Math.max(LIB_DOCK_MIN, e.clientX - overlay.getBoundingClientRect().left));
+    fxLayout.style.setProperty('--dock-w-user', w + 'px');
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dockResizing) return;
+    dockResizing = false; dockResizer.classList.remove('active');
+    const w = fxLayout ? parseInt(getComputedStyle(fxLayout).getPropertyValue('--dock-w-user'), 10) : 0;
+    if (w) localStorage.setItem('chromasmith_lib_dock_w', w);
+  });
+
+  // Library/Develop tabs — Develop switches back to the editor (same toggle as the header's own
+  // library button / "L" shortcut) if a photo is open to go back to, otherwise this IS Library
+  // already and there's nothing to do. Library expands to the full grid (toggleExpandedView(true))
+  // — previously a static no-op, which was fine only because it could never show as active while
+  // docked (see the markup comment); now that it can, clicking it needs to actually do something.
   overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.open) toggleLibrary(); };
-  // HANDOVER §3.4: #lib-side-tab-library previously had a static `on` class and no handler at
-  // all — harmless while it's the only place you can already be, but a real button should do
-  // *something* when clicked rather than silently no-op. It's already the active view.
-  overlay.querySelector('#lib-side-tab-library').onclick = () => {};
+  overlay.querySelector('#lib-side-tab-library').onclick = () => { if (!state.expanded_view) toggleExpandedView(true); };
+  syncSideTabs(); // initial state — expanded_view/openedPath may already be set by boot restore
 
   // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
   // toggleSortDir() — reusing the same functions keeps grid view and list view unable to
