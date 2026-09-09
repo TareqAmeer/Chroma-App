@@ -775,6 +775,12 @@
        column into the editor preview, whatever mode/width it's in. */
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;overflow:hidden;
       background:var(--bg);display:none;border-right:1px solid var(--bdr);
+      /* Only the right edge has a real (visible) border, but with no border-width on the other
+         three sides their computed border-color still resolves to currentColor (the text color),
+         not var(--bdr) — so getComputedStyle().borderColor reported 3 mismatched sides even
+         though nothing renders differently. Setting the color explicitly on all sides keeps the
+         computed style honest without adding any visible border. */
+      border-color:var(--bdr);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
       font-family:var(--font-text);transition:width .15s ease;
