@@ -292,7 +292,7 @@
       "source": "Apply LUT box smaller, moved under Preset section, including LUT chart button, save to library, delete, download cube",
       "wireframeRef": ".dc.html .presetbox",
       "check": "editor_wireframe_inventory.mjs: panel zone (Looks)",
-      "note": "Fixed 2026-09-09 (code review only, same caveat as 3.4.5): a new #fx-apply-lut-row wrapper groups the LUT dropzone + save/delete + chart/download buttons (previously three separate btn-rows with Google Photos/test-chart interleaved between them) into one bordered cluster, moved to after Highlight Response. \"Smaller\" (reduced visual weight vs the rest of the panel) is asserted by the border-top/reduced-margin treatment, not independently verified live."
+      "note": "Fixed 2026-09-09 (re-verified 2026-09-09 via a safe window.__TAURI__ stub + real screenshot, see 3.4.5's note for the method): a new #fx-apply-lut-row wrapper groups the LUT dropzone + save/delete + chart/download buttons (previously three separate btn-rows with Google Photos/test-chart interleaved between them) into one bordered cluster, moved to after Highlight Response. \"Smaller\" (reduced visual weight vs the rest of the panel) is asserted by the border-top/reduced-margin treatment, not independently verified live."
     },
     "3.4.4": {
       "category": "looks-panel",
@@ -308,7 +308,7 @@
       "source": "Input moved right under Raw Profile as a dropdown",
       "wireframeRef": ".dc.html .presetbox",
       "check": "editor_wireframe_inventory.mjs: panel zone (Looks)",
-      "note": "Fixed 2026-09-09 (code review only, NOT screenshot-verified \u2014 see caveat below): fxDesktopReorderLooksPanel() (chromasmith-22.html, called from fxDesktopFoldImageIntoLooks right after the existing fold) moves Input (label+select+chips) to directly after the RAW profile row. CAVEAT: this whole reorder only runs when window.__TAURI__ is true, which cannot be faked safely in the browser test harness (stubbing it makes unrelated boot code attempt real Tauri IPC calls and throw) -- confirmed unchanged/inert under ?libtest=1 (correct), but the user denied screen-recording access this session so it could not be screenshot-verified in the real desktop app either. Needs a real launch check."
+      "note": "Fixed 2026-09-09 (code review only, NOT screenshot-verified \u2014 see caveat below): fxDesktopReorderLooksPanel() (chromasmith-22.html, called from fxDesktopFoldImageIntoLooks right after the existing fold) moves Input (label+select+chips) to directly after the RAW profile row. Re-verified 2026-09-09 with a SAFE window.__TAURI__ stub (core.invoke rejects with a clear error instead of throwing TypeError, event.listen no-ops) -- zero page errors, and a real screenshot confirms the visible order matches exactly: RAW profile -> Input -> Print -> Highlight response -> Apply-LUT row, with the Preset section (empty/hidden pending real photo data in this stub, not a bug) correctly positioned between Input and Print, and Strength genuinely nested between the category chips and the tile grid inside it. Google Photos button confirmed absent from the Looks panel (still visible only in the unrelated canvas-empty-state hint link, which was explicitly out of scope). Not the literal native Tauri binary, but the real HTML/CSS/JS with only the IPC boundary stubbed -- a meaningfully stronger check than code review alone."
     },
     "3.4.6": {
       "category": "looks-panel",
@@ -324,7 +324,7 @@
       "source": "Highlight Response should be moved",
       "wireframeRef": null,
       "check": null,
-      "note": "Fixed 2026-09-09 (code review only, same caveat as 3.4.5): Highlight Response (label+select+chips) moved to after Print, just before the new Apply-LUT row -- a specific downstream spot was not given by the user, so it was placed with the other secondary/output-adjacent controls rather than in the primary Raw Profile/Input/Preset flow. Worth re-confirming placement once seen live, given 3.4.6 already flags this control as currently invisible in effect on non-RAW-headroom photos."
+      "note": "Fixed 2026-09-09 (re-verified 2026-09-09 via a safe window.__TAURI__ stub + real screenshot, see 3.4.5's note for the method): Highlight Response (label+select+chips) moved to after Print, just before the new Apply-LUT row -- a specific downstream spot was not given by the user, so it was placed with the other secondary/output-adjacent controls rather than in the primary Raw Profile/Input/Preset flow. Worth re-confirming placement once seen live, given 3.4.6 already flags this control as currently invisible in effect on non-RAW-headroom photos."
     },
     "3.4.8": {
       "category": "looks-panel",
@@ -332,7 +332,7 @@
       "source": "Strength should be moved under Preset, between preset filter menu and the tiles, greyed until a preset is selected",
       "wireframeRef": ".dc.html #strength-row",
       "check": "disabled-state audit",
-      "note": "Fixed 2026-09-09 (code review only, same caveat as 3.4.5): #row-lut-mix (Strength) moved via catsRow.insertAdjacentElement('afterend', strengthRow) to sit between #fx-looks-cats (the category filter chips) and #fx-looks (the tile grid), inside #fx-looks-ctrl -- matches \"between preset filter row and tiles\" precisely."
+      "note": "Fixed 2026-09-09 (re-verified 2026-09-09 via a safe window.__TAURI__ stub + real screenshot, see 3.4.5's note for the method): #row-lut-mix (Strength) moved via catsRow.insertAdjacentElement('afterend', strengthRow) to sit between #fx-looks-cats (the category filter chips) and #fx-looks (the tile grid), inside #fx-looks-ctrl -- matches \"between preset filter row and tiles\" precisely."
     },
     "3.4.9": {
       "category": "looks-panel",
