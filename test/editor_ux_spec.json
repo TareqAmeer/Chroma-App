@@ -255,10 +255,11 @@
     },
     "3.3.2": {
       "category": "library-sidebar",
-      "status": "open",
+      "status": "fixed",
       "source": "sidebar size can be readjusted",
       "wireframeRef": ".dc.html .filmstrip resizer",
-      "check": "editor_wireframe_behaviour.mjs: filmstrip resizer"
+      "check": "editor_wireframe_behaviour.mjs: filmstrip resizer",
+      "note": "Fixed 2026-09-09: docked filmstrip (was hardcoded 120px) now has a drag handle (#lib-dock-resizer) widening it up to 420px, persisted to localStorage. Also fixed a related consistency bug: the Library/Develop tab pair was hardcoded to always show Library active (even while docked/actually in Develop) and was hidden entirely while docked \u2014 now shown (icon-only 150-220px, full text above) with a real active-state sync (syncSideTabs()). Verified live via screenshots at three widths."
     },
     "3.3.3": {
       "category": "library-sidebar",
