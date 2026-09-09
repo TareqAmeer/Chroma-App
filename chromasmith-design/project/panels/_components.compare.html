@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chromasmith — Editor panel components (current vs proposed)</title>
+<!--
+  STAGE 0 of the Editor panel redesign. Six components the nine undesigned tool panels need,
+  which do NOT exist in Editor (Developer) View.dc.html today. Approved once here, then reused
+  by every panel — designing them inside whichever panel happens to need them first would mean
+  inventing the section toggle nine different ways.
+
+  LEFT COLUMN  = the app exactly as it is now. Its CSS is copied verbatim out of
+                 chromasmith-22.html (values, not approximations) and driven by the app's own
+                 :root token values, so it renders as the real thing rather than as a sketch.
+  RIGHT COLUMN = proposed, built from the wireframe's own component CSS
+                 (.toolpanel/.slider-row/.select/.fieldlabel/.ibtn/.menu) plus the design
+                 system's tokens.
+
+  ⚠️ base.css IS linked here (the main wireframe deliberately omits it) so the proposed side
+  shows real line-height. Do NOT copy that link into Editor (Developer) View.dc.html —
+  test/editor_wireframe_diff.mjs derives which properties it asserts from that file's own
+  cascade precisely because line-height is unset there.
+-->
+<link rel="stylesheet" href="../_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/fonts.css">
+<link rel="stylesheet" href="../_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/colors.css">
+<link rel="stylesheet" href="../_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/typography.css">
+<link rel="stylesheet" href="../_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/spacing.css">
+<link rel="stylesheet" href="../_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/radius.css">
+<link rel="stylesheet" href="../_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/elevation.css">
+<link rel="stylesheet" href="../_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens/base.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);padding:32px 28px 80px}
+
+/* ── Review page chrome ─────────────────────────────────────────────────────────────── */
+.pagehead{max-width:1080px;margin:0 auto 36px}
+.pagehead h1{font-family:var(--font-display);font-size:var(--type-display-md-size);font-weight:var(--weight-semibold);letter-spacing:-.374px;margin-bottom:10px}
+.pagehead p{font-size:var(--type-caption-size);color:var(--ink-on-dark-muted);max-width:62ch;line-height:1.5}
+.pagehead .warn{margin-top:14px;font-size:var(--type-fine-print-size);color:var(--orange-ember);
+  border-left:2px solid var(--orange-ember);padding-left:10px}
+
+.cmp{max-width:1080px;margin:0 auto 44px;border-top:1px solid rgba(255,255,255,.1);padding-top:26px}
+.cmp > h2{font-family:var(--font-display);font-size:var(--type-tagline-size);font-weight:var(--weight-semibold);margin-bottom:4px}
+.cmp > .where{font-size:var(--type-fine-print-size);color:var(--ink-on-dark-muted);margin-bottom:18px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+/* chromasmith-design/project/CLAUDE.md: no UI elements may ever visually overlap at any
+   viewport width — collapse instead. The specimens are a fixed 300px (real .toolpanel width,
+   which is the point of showing them at all), so two of them plus the gap need 624px; below
+   that the grid columns would squeeze under the specimens and they would spill into each
+   other. Stack instead of shrinking, so both columns stay at true size. */
+@media (max-width:700px){.cols{grid-template-columns:1fr}.changes li{padding-left:0}
+  .changes li b{position:static;display:inline-block;margin-right:6px}}
+.col > .tag{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);margin-bottom:8px;display:block}
+.col.proposed > .tag{color:var(--primary-on-dark)}
+/* Both specimens sit in a real .toolpanel-width card so they read at true size, not floating. */
+.spec{width:300px;background:var(--surface-tile-1);border:1px solid rgba(255,255,255,.1);
+  border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:16px}
+.changes{grid-column:1/-1;margin-top:16px;font-size:var(--type-fine-print-size);line-height:1.6}
+.changes li{list-style:none;color:var(--ink-on-dark-muted);padding-left:74px;position:relative;margin-bottom:4px}
+.changes li b{position:absolute;left:0;top:0;font-size:9px;letter-spacing:.07em;text-transform:uppercase;
+  font-weight:var(--weight-semibold);padding:1px 6px;border-radius:3px}
+.changes li b.kept{background:rgba(255,255,255,.1);color:var(--ink-on-dark-muted)}
+.changes li b.moved{background:rgba(97,160,175,.18);color:var(--blue-mist)}
+.changes li b.merged{background:rgba(97,160,175,.18);color:var(--blue-mist)}
+.changes li b.new{background:rgba(33,78,29,.5);color:#9ad48f}
+.changes li b.cut{background:rgba(135,15,19,.42);color:#e79a9d}
+.changes li b.demoted{background:rgba(255,155,66,.18);color:var(--orange-ember)}
+
+/* ── CURRENT column: the app's own CSS, copied verbatim from chromasmith-22.html ──────
+   Token values are the app's real dark-theme :root block (line 45-80), NOT the design system's,
+   because the point of this column is to show what ships today. Note --acc is already
+   #61a0af (= --blue-mist / --primary-on-dark): the accent swap has already happened in the app,
+   so none of the proposals below are about changing the accent colour. */
+.app{--sur:#2a2a2c;--sur2:#252527;--bdr:rgba(255,255,255,.12);--acc:#61a0af;--txt:#ffffff;--mut:#cccccc;
+  --r:8px;--fs-0:10px;--fs-1:11px;--fs-2:12px;--fs-3:13px;--sp-1:4px;--sp-2:8px;--sp-3:12px;
+  --sans:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-family:var(--sans);font-size:var(--fs-2)}
+.app .fx-ctrl-title{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-size:var(--fs-0);text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600}
+.app .fx-toggle{width:32px;height:18px;border-radius:9px;background:var(--bdr);position:relative;cursor:pointer;flex-shrink:0;box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.app .fx-toggle.on{background:var(--acc);box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
+.app .fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 2px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.06)}
+.app .fx-toggle.on::after{left:16px}
+.app .fx-fields{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.app .fx-fields.ff-off{opacity:.42}
+.app .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
+.app .fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
+.app .fx-row{display:flex;align-items:center;gap:8px}
+.app .fx-row > *{order:2}
+.app .fx-label{order:1;flex:0 0 78px;font-size:var(--fs-2);color:var(--txt)}
+.app .fx-slider{order:3;flex:1;accent-color:var(--acc);height:4px}
+.app .btn{font:inherit;font-size:var(--fs-2);color:var(--txt);background:none;border:1px solid var(--bdr);
+  border-radius:6px;padding:5px 9px;cursor:pointer}
+.app .btn.bgh{background:rgba(255,255,255,.04)}
+.app .btn.bsec{background:rgba(97,160,175,.2);border-color:rgba(97,160,175,.5)}
+.app .btn.on{background:var(--acc);color:#10222a;border-color:var(--acc)}
+.app .btn-row{display:flex;gap:5px;flex-wrap:wrap}
+.app .msk-rowbar{display:flex;align-items:center;gap:6px;padding:2px 0 8px;border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
+.app .msk-rowbar-nm{font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .msk-tag{font-size:var(--fs-0);color:var(--mut);background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;white-space:nowrap}
+.app .msk-more{margin-left:auto;background:none;border:none;color:var(--mut);cursor:pointer;font-size:14px}
+.app .msk-list{display:flex;flex-direction:column;gap:4px}
+.app .msk-li{display:flex;align-items:center;gap:6px;width:100%;text-align:left}
+.app .msk-thumb{width:26px;height:26px;border-radius:4px;border:1px solid var(--bdr);flex:none;
+  background:radial-gradient(circle at 38% 42%,#fff 0 22%,#7a7a7a 34%,#1b1b1d 72%)}
+.app .cv{background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px}
+.app .axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px}
+
+/* ── PROPOSED column: the wireframe's own component CSS, copied from
+      Editor (Developer) View.dc.html so the proposals sit in the SAME system as the already
+      designed `looks` and `adjust` panels rather than a parallel one. ─────────────────── */
+.wf{font-family:var(--font-text);font-size:12px;color:var(--ink-on-dark)}
+.wf .fieldlabel{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);margin-bottom:6px;display:block}
+.wf .slider-row{display:flex;flex-direction:column;gap:8px}
+.wf .slider-row .sr-top{display:flex;justify-content:space-between;font-size:12px}
+.wf .slider-row .sr-val{color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums}
+.wf .slider-row input[type=range]{width:100%;accent-color:var(--primary-on-dark);height:4px;margin-top:2px}
+.wf .select-btn{width:100%;height:32px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);
+  background:var(--surface-tile-2);display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:12px;color:inherit}
+.wf .select-btn svg{width:12px;height:12px;stroke:var(--ink-on-dark-muted);flex:none;fill:none;stroke-width:2}
+.wf .ibtn{width:30px;height:30px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex:none;background:none;border:none;cursor:pointer}
+.wf .ibtn:hover{background:rgba(255,255,255,.08)}
+.wf .ibtn svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── PROPOSED: the six new components ────────────────────────────────────────────────── */
+
+/* 1. Section header + switch. The wireframe's panels are TABS, but several of them still hold
+      multiple independently switchable effect groups (Film alone has grain, halation, bloom,
+      artifacts, vignette), so a per-group switch is still required — it just belongs on a group
+      header inside a tab rather than on a stack of cards. Reuses .fieldlabel's eyebrow so the
+      header reads as the panel's own section label, not as a second title. */
+.wf .grp{display:flex;flex-direction:column;gap:10px}
+.wf .grp-hd{display:flex;align-items:center;gap:8px;min-height:22px}
+.wf .grp-hd .fieldlabel{margin-bottom:0;flex:1}
+.wf .sw{width:30px;height:18px;border-radius:var(--radius-pill);background:rgba(255,255,255,.14);
+  position:relative;flex:none;cursor:pointer;transition:background .18s ease;border:none;padding:0}
+.wf .sw::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;
+  top:2px;left:2px;transition:left .18s cubic-bezier(.34,1.4,.64,1);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.wf .sw.on{background:var(--primary-on-dark)}
+.wf .sw.on::after{left:14px}
+.wf .grp-bd{display:flex;flex-direction:column;gap:14px;transition:opacity .2s ease}
+.wf .grp.off .grp-bd{opacity:.4}
+.wf .grp.off .grp-hd .fieldlabel{color:rgba(204,204,204,.6)}
+
+/* 2. Curve editor. */
+.wf .seg{display:flex;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);
+  border-radius:var(--radius-sm);padding:2px;gap:2px}
+.wf .seg button{flex:1;height:24px;border-radius:6px;font-size:11px;color:var(--ink-on-dark-muted);
+  background:none;border:none;cursor:pointer}
+.wf .seg button.on{background:rgba(255,255,255,.1);color:var(--ink-on-dark)}
+.wf .chrow{display:flex;gap:6px}
+.wf .ch{width:26px;height:22px;border-radius:6px;border:1px solid rgba(255,255,255,.14);
+  background:var(--surface-tile-2);font-size:10px;color:var(--ink-on-dark-muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:3px}
+.wf .ch.on{border-color:var(--primary-on-dark);color:var(--ink-on-dark)}
+.wf .ch i{width:6px;height:6px;border-radius:50%;display:block}
+.wf .curve{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);
+  background:var(--surface-tile-2);position:relative;overflow:hidden}
+.wf .curve svg{position:absolute;inset:0;width:100%;height:100%}
+
+/* 3. Colour wheels. */
+.wf .wheels{display:flex;gap:10px}
+.wf .wheel{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.wf .wheel .disc{width:100%;aspect-ratio:1;border-radius:50%;position:relative;
+  background:conic-gradient(#e05454,#e0c454,#63d17a,#57c9d4,#5b7fe0,#c25fd4,#e05454);
+  box-shadow:inset 0 0 18px 12px var(--surface-tile-1)}
+.wf .wheel .disc::after{content:'';position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;
+  border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.wf .wheel .nm{font-size:11px;text-align:center;line-height:1.25}
+.wf .wheel .nm em{display:block;font-style:normal;font-size:10px;color:var(--ink-on-dark-muted)}
+
+/* 4. Colour swatch row. */
+.wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
+.wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
+.wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums}
+
+/* 5. Hint. Two forms: an inline caption for short ones, an expandable for long ones. */
+.wf .hint{font-size:var(--type-fine-print-size);color:var(--ink-on-dark-muted);line-height:1.5}
+.wf .hint-x{border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-sm);overflow:hidden}
+.wf .hint-x > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;
+  padding:7px 9px;font-size:11px;color:var(--ink-on-dark-muted)}
+.wf .hint-x > summary::-webkit-details-marker{display:none}
+.wf .hint-x > summary svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2}
+.wf .hint-x p{padding:0 9px 9px;font-size:var(--type-fine-print-size);color:var(--ink-on-dark-muted);line-height:1.5}
+
+/* 6. Mask list. */
+.wf .mlist{display:flex;flex-direction:column;gap:2px}
+.wf .mrow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:var(--radius-xs);cursor:pointer}
+.wf .mrow:hover{background:rgba(255,255,255,.05)}
+.wf .mrow.sel{background:rgba(97,160,175,.16);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
+.wf .mrow .grip{width:12px;flex:none;display:flex;align-items:center;cursor:grab}
+.wf .mrow .grip svg{width:12px;height:12px;fill:rgba(255,255,255,.34);stroke:none}
+.wf .mrow:hover .grip svg{fill:rgba(255,255,255,.6)}
+.wf .mrow .th{width:26px;height:26px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.16);flex:none;
+  background:radial-gradient(circle at 38% 42%,#fff 0 22%,#7a7a7a 34%,#1b1b1d 72%)}
+.wf .mrow .nm{flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wf .mrow .chip{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-on-dark-muted);
+  border:1px solid rgba(255,255,255,.16);border-radius:3px;padding:1px 4px;flex:none}
+.wf .mrow .eye{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;
+  background:none;border:none;cursor:pointer}
+.wf .mrow .eye svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .mrow.muted .nm,.wf .mrow.muted .th{opacity:.45}
+.wf .mrow.muted .eye svg{stroke:rgba(204,204,204,.5)}
+</style>
+</head>
+<body>
+
+<div class="pagehead">
+  <h1>Editor panel components — current vs proposed</h1>
+  <p>Six components the nine undesigned tool panels need, which the Editor wireframe does not
+  have yet. Left is the app exactly as it ships today, with its own CSS and token values. Right
+  is the proposal, built from the wireframe's existing component CSS and the design system's
+  tokens, so it sits in the same system as the already-designed Looks and Adjust panels.</p>
+  <div class="warn">Approve or redirect this sheet before any panel is drawn. The section switch
+  alone appears in 19 of the app's 22 tool sections — settling it once here is what stops it
+  being invented nine different ways.</div>
+</div>
+
+<!-- ══ 1. SECTION SWITCH ══════════════════════════════════════════════════════════════ -->
+<section class="cmp">
+  <h2>1 · Section switch</h2>
+  <div class="where">In 19 of 22 sections. Missing from the wireframe entirely — including the
+  Adjust panel, which is otherwise finished.</div>
+  <div class="cols">
+    <div class="col">
+      <span class="tag">Current — app</span>
+      <div class="spec app">
+        <div>
+          <div class="fx-ctrl-title">Grain <div class="fx-toggle on"></div></div>
+          <div class="fx-fields">
+            <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="34"></div>
+            <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="0" max="100" value="50"></div>
+          </div>
+        </div>
+        <div>
+          <div class="fx-ctrl-title">Halation <div class="fx-toggle"></div></div>
+          <div class="fx-fields ff-off">
+            <div class="fx-row"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="0"></div>
+            <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="0"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <span class="tag">Proposed</span>
+      <div class="spec wf">
+        <div class="grp">
+          <div class="grp-hd"><span class="fieldlabel">Grain</span><button class="sw on" aria-label="Grain on"></button></div>
+          <div class="grp-bd">
+            <div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">34</span></div><input type="range" min="0" max="100" value="34"></div>
+            <div class="slider-row"><div class="sr-top"><span>Size</span><span class="sr-val">50</span></div><input type="range" min="0" max="100" value="50"></div>
+          </div>
+        </div>
+        <div class="grp off">
+          <div class="grp-hd"><span class="fieldlabel">Halation</span><button class="sw" aria-label="Halation off"></button></div>
+          <div class="grp-bd">
+            <div class="slider-row"><div class="sr-top"><span>Strength</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div>
+            <div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="changes">
+      <li><b class="kept">Kept</b>The switch itself, and the rule that an off section is <em>dimmed, not hidden</em> — so you can see what a section offers before enabling it, and touching any control turns it on. That behaviour was hard-won (CLAUDE.md §3b) and is not up for redesign.</li>
+      <li><b class="moved">Moved</b>The section title becomes the panel's <code>.fieldlabel</code> eyebrow instead of a bespoke <code>.fx-ctrl-title</code>. In a tabbed panel the tab already names the tool, so a second full-weight title competes with it.</li>
+      <li><b class="new">New</b>Every slider gains a live value readout via <code>.sr-top</code>/<code>.sr-val</code>. The app currently shows the number only in some sections; the wireframe's Adjust panel shows it on all of them.</li>
+      <li><b class="kept">Kept</b>Accent colour. The app's <code>--acc</code> is already <code>#61a0af</code>, the same Mist Blue as the design system's <code>--primary-on-dark</code> — the accent swap has already happened, so this is not a colour change.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══ 2. CURVE EDITOR ════════════════════════════════════════════════════════════════ -->
+<section class="cmp">
+  <h2>2 · Tone-curve editor</h2>
+  <div class="where">Curves section → Color panel.</div>
+  <div class="cols">
+    <div class="col">
+      <span class="tag">Current — app</span>
+      <div class="spec app">
+        <div class="fx-ctrl-title">Tone Curves <div class="fx-toggle on"></div></div>
+        <div class="fx-fields">
+          <div class="btn-row"><button class="btn bgh on">Point</button><button class="btn bgh">Parametric</button></div>
+          <div class="btn-row" style="margin-top:6px"><button class="btn bgh on">RGB</button><button class="btn bgh">R</button><button class="btn bgh">G</button><button class="btn bgh">B</button></div>
+          <div class="axis" style="margin-top:8px"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+          <div class="cv" style="width:100%;aspect-ratio:1;position:relative">
+            <svg viewBox="0 0 100 100" style="position:absolute;inset:0;width:100%;height:100%">
+              <path d="M0 100 L100 0" stroke="rgba(255,255,255,.14)" stroke-width="1" fill="none"/>
+              <path d="M0 100 C30 78 62 30 100 0" stroke="#fff" stroke-width="1.6" fill="none"/>
+              <circle cx="32" cy="74" r="2.6" fill="#fff"/><circle cx="68" cy="28" r="2.6" fill="#fff"/>
+            </svg>
+          </div>
+          <div class="axis" style="margin-bottom:4px"><span>Blacks</span><span>Midtones</span><span>Whites</span></div>
+          <div class="btn-row" style="margin-top:6px"><button class="btn bgh">Reset channel</button><button class="btn bgh">Reset all</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <span class="tag">Proposed</span>
+      <div class="spec wf">
+        <div class="grp">
+          <div class="grp-hd"><span class="fieldlabel">Tone curve</span>
+            <button class="ibtn" title="Reset curve"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg></button>
+            <button class="sw on" aria-label="Tone curve on"></button></div>
+          <div class="grp-bd">
+            <div class="seg"><button class="on">Point</button><button>Parametric</button></div>
+            <div class="chrow">
+              <button class="ch on">RGB</button>
+              <button class="ch"><i style="background:#e05454"></i></button>
+              <button class="ch"><i style="background:#63d17a"></i></button>
+              <button class="ch"><i style="background:#5b7fe0"></i></button>
+            </div>
+            <div class="curve">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                <path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" stroke="rgba(255,255,255,.06)" stroke-width=".6" fill="none"/>
+                <path d="M0 100 L100 0" stroke="rgba(255,255,255,.14)" stroke-width=".8" fill="none"/>
+                <path d="M0 100 C30 78 62 30 100 0" stroke="#fff" stroke-width="1.6" fill="none" vector-effect="non-scaling-stroke"/>
+                <circle cx="32" cy="74" r="2.6" fill="#fff"/><circle cx="68" cy="28" r="2.6" fill="#fff"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="changes">
+      <li><b class="kept">Kept</b>The canvas itself, its 1:1 aspect, point dragging, and the Point/Parametric split.</li>
+      <li><b class="merged">Merged</b>Mode chips become one segmented control. Two adjacent rows of pill buttons read as eight peers when they are actually two separate two-way and four-way choices.</li>
+      <li><b class="merged">Merged</b>R/G/B channel chips become colour dots. The letters carry no information the colour does not, and three narrow buttons free the row width.</li>
+      <li><b class="cut">Cut</b>The <code>0% 25% 50% 75% 100%</code> strip above the canvas and the <code>Blacks / Midtones / Whites</code> strip below it. The grid drawn inside the canvas says the same thing without consuming two rows, and the app renders both in <code>--mono</code> at 9px — below the 11px floor <code>test/ui_audit.mjs</code> enforces everywhere else.</li>
+      <li><b class="demoted">Demoted</b><code>Reset channel</code> / <code>Reset all</code> become one icon button on the group header. Two full-width destructive-ish buttons sitting under the curve get hit by accident and are the least-used controls in the section.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══ 3. COLOUR WHEELS ══════════════════════════════════════════════════════════════ -->
+<section class="cmp">
+  <h2>3 · Colour wheels</h2>
+  <div class="where">Wheels section → Color panel (spec D2 moves it there).</div>
+  <div class="cols">
+    <div class="col">
+      <span class="tag">Current — app</span>
+      <div class="spec app">
+        <div class="fx-ctrl-title">Colour Wheels <div class="fx-toggle on"></div></div>
+        <div class="fx-fields">
+          <div class="fx-hint">Drag each wheel off-centre to tint that tonal region; the slider underneath is an independent brightness for the same region. Double-click a wheel to reset it.</div>
+          <div style="display:flex;gap:14px;justify-content:space-between;margin-top:6px">
+            <div style="flex:1;min-width:0;text-align:center">
+              <div style="width:100%;aspect-ratio:1;border-radius:50%;background:conic-gradient(#e05454,#e0c454,#63d17a,#57c9d4,#5b7fe0,#c25fd4,#e05454);box-shadow:inset 0 0 14px 9px #2a2a2c"></div>
+              <div style="font-size:11px;color:var(--mut);margin-top:4px">Shadows (Lift)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" style="width:100%">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)">0</div>
+            </div>
+            <div style="flex:1;min-width:0;text-align:center">
+              <div style="width:100%;aspect-ratio:1;border-radius:50%;background:conic-gradient(#e05454,#e0c454,#63d17a,#57c9d4,#5b7fe0,#c25fd4,#e05454);box-shadow:inset 0 0 14px 9px #2a2a2c"></div>
+              <div style="font-size:11px;color:var(--mut);margin-top:4px">Midtones (Gamma)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" style="width:100%">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)">0</div>
+            </div>
+            <div style="flex:1;min-width:0;text-align:center">
+              <div style="width:100%;aspect-ratio:1;border-radius:50%;background:conic-gradient(#e05454,#e0c454,#63d17a,#57c9d4,#5b7fe0,#c25fd4,#e05454);box-shadow:inset 0 0 14px 9px #2a2a2c"></div>
+              <div style="font-size:11px;color:var(--mut);margin-top:4px">Highlights (Gain)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" style="width:100%">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <span class="tag">Proposed</span>
+      <div class="spec wf">
+        <div class="grp">
+          <div class="grp-hd"><span class="fieldlabel">Colour wheels</span><button class="sw on" aria-label="Colour wheels on"></button></div>
+          <div class="grp-bd">
+            <div class="wheels">
+              <div class="wheel"><div class="disc"></div><div class="nm">Shadows<em>Lift</em></div></div>
+              <div class="wheel"><div class="disc"></div><div class="nm">Midtones<em>Gamma</em></div></div>
+              <div class="wheel"><div class="disc"></div><div class="nm">Highlights<em>Gain</em></div></div>
+            </div>
+            <div class="slider-row"><div class="sr-top"><span>Shadow brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
+            <div class="slider-row"><div class="sr-top"><span>Midtone brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
+            <div class="slider-row"><div class="sr-top"><span>Highlight brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
+            <details class="hint-x">
+              <summary><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>How the wheels work</summary>
+              <p>Drag a wheel off-centre to tint that tonal region. The matching brightness slider is independent of the tint. Double-click a wheel to reset it.</p>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="changes">
+      <li><b class="kept">Kept</b>Three wheels side by side in shadow → midtone → highlight order. That is the standard grading layout and matches every other tool users come from.</li>
+      <li><b class="moved">Moved</b>The three brightness sliders move out from under their wheels into normal <code>.slider-row</code>s below. Under the wheels they are ~90px wide — too short to set a value precisely — and they are the only sliders in the app with no readable label or value.</li>
+      <li><b class="merged">Merged</b>The separate 9px numeric readout merges into <code>.sr-val</code>, so wheel brightness reads like every other slider in the panel.</li>
+      <li><b class="demoted">Demoted</b>The three-line hint becomes a collapsed <q>How the wheels work</q> disclosure. It is a one-time explanation currently holding permanent space above the controls it explains.</li>
+      <li><b class="moved">Moved</b>Technical names (Lift/Gamma/Gain) drop to a muted second line so the plain-language name leads.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══ 4. COLOUR SWATCH ══════════════════════════════════════════════════════════════ -->
+<section class="cmp">
+  <h2>4 · Colour swatch</h2>
+  <div class="where">Borders and Canvas sections → Frame panel.</div>
+  <div class="cols">
+    <div class="col">
+      <span class="tag">Current — app</span>
+      <div class="spec app">
+        <div class="fx-ctrl-title">Borders &amp; background <div class="fx-toggle on"></div></div>
+        <div class="fx-fields">
+          <div class="fx-row"><div class="fx-label">Width</div><input class="fx-slider" type="range" min="0" max="100" value="12"></div>
+          <div class="fx-row"><div class="fx-label">Colour</div><input class="fx-color" type="color" value="#ffffff"></div>
+          <div class="fx-row"><div class="fx-label">Inner</div><input class="fx-color" type="color" value="#101014"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <span class="tag">Proposed</span>
+      <div class="spec wf">
+        <div class="grp">
+          <div class="grp-hd"><span class="fieldlabel">Border</span><button class="sw on" aria-label="Border on"></button></div>
+          <div class="grp-bd">
+            <div class="slider-row"><div class="sr-top"><span>Width</span><span class="sr-val">12</span></div><input type="range" min="0" max="100" value="12"></div>
+            <div class="swatch-row"><span class="swatch" style="background:#ffffff"></span><span>Border colour</span><span class="hex">#FFFFFF</span></div>
+            <div class="swatch-row"><span class="swatch" style="background:#101014"></span><span>Inner colour</span><span class="hex">#101014</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="changes">
+      <li><b class="new">New</b>A hex readout beside each swatch. A 32×22 chip is the only place in the app where the current value cannot be read without opening a picker — and two dark swatches are indistinguishable at that size.</li>
+      <li><b class="new">New</b>The swatch grows to 28×28, clearing the 28px pointer-target floor <code>test/ui_audit.mjs</code> enforces. The current 32×22 passes on width and fails on height.</li>
+      <li><b class="moved">Moved</b>The label sits after the swatch rather than in a fixed 78px column, so the row reads left to right as <q>this colour is the border colour, currently white</q>.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══ 5. HINT TEXT ══════════════════════════════════════════════════════════════════ -->
+<section class="cmp">
+  <h2>5 · Hint text</h2>
+  <div class="where">Noise, Deconvolution, Wheels — and wherever a panel needs to explain itself.</div>
+  <div class="cols">
+    <div class="col">
+      <span class="tag">Current — app</span>
+      <div class="spec app">
+        <div class="fx-ctrl-title">Noise Reduction <div class="fx-toggle on"></div></div>
+        <div class="fx-fields">
+          <div class="fx-hint">Luminance NR softens grain; Colour NR removes chroma blotches. Both are applied before sharpening, so raise NR before reaching for Detail.</div>
+          <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="18"></div>
+          <div class="fx-row"><div class="fx-label">Colour</div><input class="fx-slider" type="range" min="0" max="100" value="25"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <span class="tag">Proposed</span>
+      <div class="spec wf">
+        <div class="grp">
+          <div class="grp-hd"><span class="fieldlabel">Noise reduction</span><button class="sw on" aria-label="Noise reduction on"></button></div>
+          <div class="grp-bd">
+            <div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">18</span></div><input type="range" min="0" max="100" value="18"></div>
+            <div class="slider-row"><div class="sr-top"><span>Colour</span><span class="sr-val">25</span></div><input type="range" min="0" max="100" value="25"></div>
+            <p class="hint">Applied before sharpening — raise this before reaching for Detail.</p>
+            <details class="hint-x">
+              <summary><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>About noise reduction</summary>
+              <p>Luminance NR softens grain. Colour NR removes chroma blotches. Both run before sharpening in the pipeline.</p>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="changes">
+      <li><b class="new">New</b>Two forms instead of one: a short inline caption for a single actionable sentence, and a collapsed disclosure for anything longer. Today every hint is the same block of prose regardless of length or usefulness.</li>
+      <li><b class="moved">Moved</b>The caption sits <em>below</em> the controls. Above them it delays reaching the thing you opened the panel for.</li>
+      <li><b class="kept">Kept</b>Muted colour, so a hint never competes with a control label.</li>
+      <li><b class="cut">Cut</b>11px. Hints move to the design system's 12px <code>--type-fine-print-size</code>; 11px is the app's absolute floor and hints are the longest text in any panel.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══ 6. MASK LIST ══════════════════════════════════════════════════════════════════ -->
+<section class="cmp">
+  <h2>6 · Mask list</h2>
+  <div class="where">Local Adjustments → Masks panel. Built dynamically by <code>mskRebuild()</code>,
+  so it appears nowhere in the app's static markup.</div>
+  <div class="cols">
+    <div class="col">
+      <span class="tag">Current — app</span>
+      <div class="spec app">
+        <div class="fx-ctrl-title">Masks <div class="fx-toggle on"></div></div>
+        <div class="fx-fields">
+          <div class="btn-row"><button class="btn bgh">+ Mask</button></div>
+          <div class="msk-list" style="margin-top:6px">
+            <button class="btn bsec msk-li"><span class="msk-thumb"></span><span>Sky</span></button>
+            <button class="btn bgh msk-li"><span class="msk-thumb"></span><span>Radial 1</span></button>
+            <button class="btn bgh msk-li" style="opacity:.45"><span class="msk-thumb"></span><span>Skin — Ana</span></button>
+          </div>
+          <div class="msk-rowbar" style="margin-top:10px">
+            <span class="msk-rowbar-nm">Sky</span><span class="msk-tag">Inverted</span>
+            <button class="msk-more">⋯</button>
+          </div>
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <span class="tag">Proposed</span>
+      <div class="spec wf">
+        <div class="grp">
+          <div class="grp-hd"><span class="fieldlabel">Masks</span><button class="sw on" aria-label="Masks on"></button></div>
+          <div class="grp-bd">
+            <div class="mlist">
+              <div class="mrow sel"><span class="grip"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="th"></span><span class="nm">Sky</span><span class="chip">Inv</span>
+                <button class="eye" title="Mute"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+              <div class="mrow"><span class="grip"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="th"></span><span class="nm">Radial 1</span>
+                <button class="eye" title="Mute"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+              <div class="mrow muted"><span class="grip"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="th"></span><span class="nm">Skin — Ana</span>
+                <button class="eye" title="Unmute"><svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.7a3 3 0 0 0 4.2 4.2M9.9 5.2A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.7A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 3.4-.6"/></svg></button></div>
+            </div>
+            <button class="select-btn"><span>+ Add mask</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">70</span></div><input type="range" min="0" max="100" value="70"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="changes">
+      <li><b class="new">New</b>A visible drag grip. Masks are already reorderable and order is load-bearing (later masks subtract from earlier ones), but nothing on screen says so — the affordance is currently discoverable only by accident or from a tooltip.</li>
+      <li><b class="moved">Moved</b>Mute becomes an eye button on the row itself instead of living inside the <code>⋯</code> menu. It is the most-used action on a mask and currently costs two clicks and a menu read.</li>
+      <li><b class="moved">Moved</b>State tags (Inverted, Subtracting, Eraser…) move onto the list row, so the state of every mask is visible at once rather than only for the selected one.</li>
+      <li><b class="cut">Cut</b>The separate <code>.msk-rowbar</code> header repeating the selected mask's name. The list already shows which row is selected; the name appeared twice.</li>
+      <li><b class="moved">Moved</b><q>+ Mask</q> becomes a full-width menu trigger below the list, matching the wireframe's <code>.select-btn</code> and reading as <q>add to this list</q> rather than as a peer of the mask rows.</li>
+      <li><b class="kept">Kept</b>Thumbnail, name, selection highlight, muting at 45% opacity, and the grouped add-menu (<code>mskAddMenu</code>) behind the trigger.</li>
+    </ul>
+  </div>
+</section>
+
+</body>
+</html>

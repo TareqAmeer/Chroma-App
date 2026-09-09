@@ -105,8 +105,13 @@ function mentions(src, key) {
 
 function coverageFor(key) {
   const inPairs = pairsSelectors.some((s) => mentions(s, key)) || pairsBlock.includes(`data-panel="${key}"`);
+  // Spec attribution is by the item's OWN fields — its controlled-vocabulary `category`, or an
+  // explicit `panel` field — never by scanning source/note prose. Free-text matching was tried
+  // and immediately produced false positives: a single item whose note explains a decision
+  // across several panels ("wheels joins Color, deconv joins Detail...") credited itself to
+  // every panel it named, so panels with no tracked work at all reported spec coverage.
   const specHits = specItems.filter(([, v]) =>
-    (v.category || '').includes(key) || mentions(`${v.source || ''} ${v.note || ''}`, key));
+    (v.panel && v.panel === key) || (v.category || '').split('-')[0] === key || (v.category || '') === `${key}-panel`);
   const hasBehaviour = mentions(behavSrc, key);
   return { inPairs, specOpen: specHits.filter(([, v]) => v.status === 'open').length, specTotal: specHits.length, hasBehaviour };
 }
@@ -142,7 +147,13 @@ if (asJson) {
   console.log('-'.repeat(78));
   const designed = rows.filter((r) => r.designed);
   console.log(`${designed.length}/${rows.length} panels designed; ${appSections.length} app sections total`);
-  if (orphans.length) console.log(`\n⚠ app sections no wireframe panel claims (needs a DESIGN decision, not a fix):\n  ${orphans.join(', ')}`);
+  // An orphan is a section with nowhere to live. That is a DESIGN decision, not a code fix —
+  // but once the decision is made it stays listed here until FX_GROUPS actually changes, so
+  // point at the spec item rather than re-asking a question that has already been answered.
+  if (orphans.length) {
+    const d2 = spec.items?.D2?.status;
+    console.log(`\n⚠ app sections no wireframe panel claims (${d2 === 'open' ? 'decision recorded in spec D2 — not yet implemented in FX_GROUPS' : 'needs a DESIGN decision, not a fix'}):\n  ${orphans.join(', ')}`);
+  }
   if (emptyPanels.length) console.log(`⚠ wireframe panels with no app section behind them:\n  ${emptyPanels.join(', ')}`);
   const unchecked = designed.filter((r) => !r.inPairs || !r.hasBehaviour);
   if (unchecked.length) {
