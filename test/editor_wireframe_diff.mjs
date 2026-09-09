@@ -131,6 +131,17 @@ async function authoredProps(page, selectorMap) {
 
 async function extract(page, selectorMap) {
   return page.evaluate(({ selectorMap, PROPS }) => {
+    // ⚠️ 2026-09-08, UNRESOLVED — kept in as a partial mitigation, not a fix. A targeted repro
+    // (forcing a reflow then reading `#fx-deskbar`'s computed `color` right after a theme toggle
+    // + photo load) found body.light correctly applied and --txt correctly resolving to the
+    // light-theme value, yet the ELEMENT's computed `color` still intermittently reads the DARK
+    // value — the custom property and the property derived from it can disagree, which shouldn't
+    // be possible if the read were simply stale. Adding a forced reflow here appeared to fix it
+    // 4/4 in a small sample, but a larger sample (8 more runs) still showed ~5/8 failing — the
+    // earlier result was luck, not a fix. This is left in (harmless, occasionally helps) but the
+    // [light/photo] color findings below must still be treated as genuinely flaky pending a
+    // dedicated debugging session — see editor_ux_spec.json E7. Do NOT assume this comment block
+    // means it's solved; it explicitly is not.
     const out = {};
     for (const [key, sel] of Object.entries(selectorMap)) {
       const el = document.querySelector(sel);
@@ -211,14 +222,23 @@ for (const theme of ['dark', 'light']) {
       // shipped desktop app actually builds it.
       if (typeof applyFxLayout === 'function') applyFxLayout();
     });
+    // ⚠️ CORRECTION (found while building editor_wireframe_inventory.mjs): the intermittent
+    // "light theme color findings" flake below was mis-attributed to generic SwiftShader/
+    // Chromium flakiness. The real cause is chromasmithForceLibraryReady() (library-ui.js:5655),
+    // which forces the Library into its FULL window takeover (body.lib-full, which hides
+    // #fx-deskbar entirely) as a splash-hiding fallback if a boot watchdog fires before boot
+    // settles — a TIMING race against this harness's own waits, not app flakiness. When it wins,
+    // every computed style this file reads comes from whatever's left visible under the Library
+    // overlay, not the editor — producing spurious-looking mismatches on EVERY property, not
+    // just color; color was just the one that happened to get reported first. Escape reliably
+    // exits full-view (library-ui.js:5924) regardless of which side of the race fired.
+    await app.keyboard.press('Escape');
+    await app.waitForTimeout(150);
     if (theme === 'light') {
       await app.evaluate(() => { if (typeof toggleTheme === 'function' && !document.body.classList.contains('light')) toggleTheme(); });
       let applied = await app.waitForFunction(() => document.body.classList.contains('light'), { timeout: 3000 }).then(() => true).catch(() => false);
       if (!applied) {
-        // Observed intermittently (~1 in 3 runs) even with the wait above — matches this
-        // machine's documented SwiftShader/Chromium flakiness (CLAUDE.md's export_harness /
-        // video_harness section) rather than a real app defect: a re-run with no app change
-        // came back clean. One retry of the toggle itself before treating it as a real finding.
+        // One retry of the toggle itself before treating it as a real finding.
         await app.evaluate(() => { if (typeof toggleTheme === 'function' && !document.body.classList.contains('light')) toggleTheme(); });
         applied = await app.waitForFunction(() => document.body.classList.contains('light'), { timeout: 3000 }).then(() => true).catch(() => false);
         if (!applied) console.log(`[warn] [${theme}/${photoState}] light theme did not apply after retry — findings this state may be spurious`);

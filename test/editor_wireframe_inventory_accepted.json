@@ -1,0 +1,386 @@
+[
+  {
+    "zone": "panel",
+    "match": "text:\"Presets & Looks\"   (app has 1, wireframe has 0)",
+    "exact": false,
+    "reason": "Justified difference: the app's Looks panel carries a section title (.fx-ctrl-title) the wireframe's mock omits. Not on the user's list; low-priority cosmetic, revisit only if it reads as visual clutter once 3.4.3/3.4.5/3.4.9 land."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Highlight response\"",
+    "exact": false,
+    "reason": "Real, already scoped — user list 3.4.6/3.4.7 (Highlight Response is dead + needs relocating). Tracked in test/editor_ux_spec.json, fixed in plan Phase H."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Print\"   (app has 1, wireframe has 0)",
+    "exact": false,
+    "reason": "Justified difference: Print profile selection is real app functionality (Kodak/Fuji print stock, applied after the film look per CLAUDE.md §3) the wireframe's mock simply doesn't model. Not on the user's list to remove."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Preset\"   (app has 1, wireframe has 0)",
+    "exact": false,
+    "reason": "The app's own 'Preset' section label — folds into the same 3.4.3/3.4.9 restructuring as the Presets & Looks title entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "input:\"Search looks…\"",
+    "exact": false,
+    "reason": "Justified: app search-filters the real 113-preset library; the wireframe's static mock has no need for search over its ~6 hand-picked tiles. Its own 'Filter presets…' input (a category filter, not a text search) is a different control — see the category-chip entries below."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"All\"   (app has 1, wireframe has 0)",
+    "exact": false,
+    "reason": "Category filter chip — app functionality over the real 9-category preset library (User Looks/C41 Still/Cinema/Reversal/Instant/Niche/B&W/Film + All), which the wireframe's tiny mock has no need for. Same reasoning for the 8 sibling category-chip findings (User Looks/C41 Still/Cinema/Reversal/Instant/Niche/B&W/Film)."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"User Looks\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"C41 Still\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Cinema\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Reversal\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Instant\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Niche\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"B&W\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Film\"",
+    "exact": false,
+    "reason": "Category filter chip, same as the 'All' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Standard (sRGB/Rec.709)\"",
+    "exact": false,
+    "reason": "Real Input/Raw-profile dropdown option, part of the 3.4.1/3.4.5 restructuring (Raw Profile + Input placement/behaviour) — tracked in editor_ux_spec.json, fixed in plan Phase H."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"V-Log (Lumix)\"",
+    "exact": false,
+    "reason": "Same as the Standard (sRGB/Rec.709) entry above — same dropdown."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Standard (BT.2390)\"",
+    "exact": false,
+    "reason": "Highlight Response dropdown option — same root cause as the 'Highlight response' text entry above (3.4.6/3.4.7)."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"AgX (filmic)\"",
+    "exact": false,
+    "reason": "Same as the Standard (BT.2390) entry above — same dropdown."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Film stock (native)\"",
+    "exact": false,
+    "reason": "Same as the Standard (BT.2390) entry above — same dropdown."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"None\"   (app has 1, wireframe has 0)",
+    "exact": false,
+    "reason": "Print profile dropdown option ('None' = no print stock) — same justified-difference reasoning as the 'Print' text entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Kodak Print\"",
+    "exact": false,
+    "reason": "Same as the Print 'None' entry above — same dropdown."
+  },
+  {
+    "zone": "panel",
+    "match": "button:\"Fuji Print\"",
+    "exact": false,
+    "reason": "Same as the Print 'None' entry above — same dropdown."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Presets\"   (wireframe has 1, app has 0)",
+    "exact": false,
+    "reason": "Real, missing — matches user list 3.4.3/3.4.9 (Preset section needs restructuring/relabeling). Tracked in editor_ux_spec.json, fixed in plan Phase H."
+  },
+  {
+    "zone": "panel",
+    "match": "input:\"Filter presets…\"",
+    "exact": false,
+    "reason": "Real, missing — the wireframe's category-filter input under Presets. Covered by 3.4.9 (collapsible preset section) restructuring in plan Phase H."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Strength\"   (wireframe has 1, app has 0)",
+    "exact": false,
+    "reason": "Real, missing — matches user list 3.4.8 (Strength moved under Preset, between filter and tiles, greyed until a preset is picked). Tracked in editor_ux_spec.json, fixed in plan Phase H."
+  },
+  {
+    "zone": "panel",
+    "match": "input   (wireframe has 1, app has 0)",
+    "exact": false,
+    "reason": "The wireframe's Strength slider input — same root cause as the Strength text entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"No LUT applied\"",
+    "exact": false,
+    "reason": "Real, missing — part of the Apply-LUT row restructuring, user list 3.4.3. Tracked in editor_ux_spec.json, fixed in plan Phase H."
+  },
+  {
+    "zone": "panel",
+    "match": "font-size 10px",
+    "exact": false,
+    "reason": "Font-size tally drift is a downstream symptom of the panel restructuring above (Strength/Presets/Apply-LUT rows not built yet) — will re-verify once Phase H ships rather than chase the number now."
+  },
+  {
+    "zone": "panel",
+    "match": "font-size 12px",
+    "exact": false,
+    "reason": "Same as the font-size 10px entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "font-size 11px",
+    "exact": false,
+    "reason": "Same as the font-size 10px entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "order@0: wireframe text:\"Raw profile\" vs app text:\"Presets & Looks\"",
+    "exact": false,
+    "reason": "Downstream of the Presets & Looks title entry above — the wireframe has no section title so its first atom is the first real label (Raw profile); once the panel is restructured per 3.4.3/3.4.5, re-check whether this still fires."
+  },
+  {
+    "zone": "topbar",
+    "match": "dynamic-data row count",
+    "exact": false,
+    "reason": "Downstream of the noisy-container fix for the filename label (#db-title-name/.fn) — both sides now emit exactly one dynamic-data stand-in atom for it, but the count still differs by small amounts as other topbar work lands (zoom cluster, Tools button). Re-check once Phase E (topbar) is complete rather than chase this number now."
+  },
+  {
+    "zone": "topbar",
+    "match": "EXTRA   11x  button",
+    "exact": false,
+    "reason": "Aggregate of the not-yet-built topbar restructuring (Tools button consolidation 3.1.8, undogrp wrapper 3.1.1, zoom cluster) plus the zoom Fit/1:1/Full-res buttons (B1, backlogged) — all individually tracked elsewhere. Re-verify the raw count once Phase E ships."
+  },
+  {
+    "zone": "topbar",
+    "match": "EXTRA   9x  icon",
+    "exact": false,
+    "reason": "Same root cause as the EXTRA 11x button entry above — one icon per extra button."
+  },
+  {
+    "zone": "topbar",
+    "match": "atom count",
+    "exact": false,
+    "reason": "Same root cause as the EXTRA 11x button entry above — re-verify once Phase E ships."
+  },
+  {
+    "zone": "topbar",
+    "match": "button:\"Fit\"",
+    "exact": false,
+    "reason": "Real, already scoped — user list 3.1.12 (remove the Fit text button; the function moves onto zoom-bar double-click + a keyboard shortcut). Tracked in editor_ux_spec.json, fixed in plan Phase E."
+  },
+  {
+    "zone": "topbar",
+    "match": "button:\"1:1\"",
+    "exact": false,
+    "reason": "Justified difference for now — user decision 2026-09-09 (B1 in editor_ux_spec.json): keep 1:1/Full-res, backlog a longer-term zoom-cluster simplification."
+  },
+  {
+    "zone": "topbar",
+    "match": "button:\"Full res\"",
+    "exact": false,
+    "reason": "Same as the '1:1' entry above — B1 in editor_ux_spec.json."
+  },
+  {
+    "zone": "topbar",
+    "match": "font-size 11px",
+    "exact": false,
+    "reason": "Downstream of the not-yet-built topbar restructuring — re-verify once Phase E ships."
+  },
+  {
+    "zone": "topbar",
+    "match": "order@0: wireframe icon vs app button",
+    "exact": false,
+    "reason": "The wireframe's first topbar atom is the logo mark (an icon); the app's is presumably the folder/back icon-button — a real ordering nuance folded into the topbar restructuring in Phase E, not a standalone bug."
+  },
+  {
+    "zone": "rail",
+    "match": "EXTRA   1x  button   (app has 11, wireframe has 10)",
+    "exact": false,
+    "reason": "The app's Crop rail item — same root cause as the 'text:\"Crop\"' entry below."
+  },
+  {
+    "zone": "rail",
+    "match": "EXTRA   1x  icon   (app has 11, wireframe has 10)",
+    "exact": false,
+    "reason": "The app's Crop rail icon — same root cause as the 'text:\"Crop\"' entry below."
+  },
+  {
+    "zone": "rail",
+    "match": "text:\"Crop\"",
+    "exact": false,
+    "reason": "Justified difference, confirmed with the user 2026-09-08 (mirrors editor_wireframe_accepted.json's identical rail-order entry): keep the app's 11 items including Crop. The wireframe's 10-item rail omits it as a mock simplification — it still has a working crop .tp-panel (Editor (Developer) View.dc.html:374) its own rail just never links to."
+  },
+  {
+    "zone": "rail",
+    "match": "atom count: wireframe 30 vs app 33",
+    "exact": false,
+    "reason": "Same root cause as the Crop entries above (one extra rail item = 3 extra atoms: icon + label + button wrapper)."
+  },
+  {
+    "zone": "rail",
+    "match": "font-size 9px",
+    "exact": false,
+    "reason": "Rail label font-size — real, tied to the rail geometry change in plan Phase F (72px→64px rail width may force fitRail() icons-only, changing whether labels render at all). Re-verify once Phase F ships rather than chase this number now."
+  },
+  {
+    "zone": "rail",
+    "match": "font-size 11px",
+    "exact": false,
+    "reason": "Same as the font-size 9px entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "dynamic-data row count: wireframe 2 vs app 1",
+    "exact": false,
+    "reason": "The wireframe's Raw Profile dropdown mock (Adobe Standard/sRGB, treated as dynamic camera-profile content) has no app-side equivalent visible with a non-RAW test photo — see the Raw profile MISSING entries below (3.4.1)."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Raw profile\"",
+    "exact": false,
+    "reason": "Real, already scoped — user list 3.4.1 (Raw Profile should update based on photo type, greyed out if non-RAW). The harness's test photo (test/fixtures/portrait.png) is NOT RAW, so the section correctly stays absent/empty — this finding is confirmation that 3.4.1 is real, not a new discovery. Tracked in editor_ux_spec.json, fixed in plan Phase H. Re-verify with a RAW test fixture once 3.4.1 ships."
+  },
+  {
+    "zone": "panel",
+    "match": "MISSING 7x  button",
+    "exact": false,
+    "reason": "Same root cause as the 'text:\"Raw profile\"' entry above — the DCP camera-profile option buttons."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Adobe Standard\"",
+    "exact": false,
+    "reason": "Same root cause as the 'text:\"Raw profile\"' entry above — one of the DCP profile options."
+  },
+  {
+    "zone": "panel",
+    "match": "MISSING 7x  icon",
+    "exact": false,
+    "reason": "Same root cause as the 'text:\"Raw profile\"' entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"sRGB\"",
+    "exact": false,
+    "reason": "Same root cause as the 'text:\"Raw profile\"' entry above — the sRGB fallback option."
+  },
+  {
+    "zone": "statusbar",
+    "match": "app container #fx-statusbar NOT FOUND",
+    "exact": false,
+    "reason": "Genuinely missing — the empty 26px status bar has not been built yet (plan Phase F), same as editor_wireframe_accepted.json's equivalent entry. Remove once #fx-statusbar exists."
+  },
+  {
+    "zone": "toolsmenu",
+    "match": "EXTRA   8x  button",
+    "exact": false,
+    "reason": "TOOL ARTIFACT, not a defect: the wireframe implements each Tools-menu row as a plain <div class=\"opt\"> (Editor (Developer) View.dc.html:200-208), the app as a real <button class=\"fx-ovf-item\"> (chromasmith-22.html toolsBuild()). Both sides' actual LABELS match correctly as 8 separate text atoms (Rotate 90° CW/CCW, Flip horizontal/vertical, Gamut warning, Copy/Paste edit settings, Reset photo) — this finding is only the wrapper tag mismatch (kind:'button' vs kind:'text' for the same content), surfaced because a <button>'s own direct-text-node check misses text nested in a child <span>. The app using a real semantic <button> here is the better implementation, not a regression; no fix needed."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "MISSING 1x  text:\"Show gamut warning\"",
+    "exact": false,
+    "reason": "Real, already scoped — user list 3.1.6 (gamut button removed from the topbar, added to the View menu instead). Tracked in editor_ux_spec.json, fixed in plan Phase E."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"✓ Editor\"",
+    "exact": false,
+    "reason": "Justified difference — the app's #fx-overflow-menu (mapped to the wireframe's View menu because it's the closest existing gear/settings trigger) does DOUBLE DUTY: it's also the tab switcher for the non-Editor panels (Match & Refine/Color Copy/Collage/Guide), unrelated to the wireframe's narrower 'View settings' concept. Not a fidelity gap — the wireframe's static mock has no equivalent surface for switching top-level app tabs at all. Same reasoning covers the 4 sibling tab-button findings (Match & Refine/Color Copy/Collage/Guide)."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"Match & Refine\"",
+    "exact": false,
+    "reason": "Justified difference, same root cause as the '✓ Editor' entry above — one of the 5 tab-switcher rows."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"Color Copy\"",
+    "exact": false,
+    "reason": "Justified difference, same root cause as the '✓ Editor' entry above — one of the 5 tab-switcher rows."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"Collage\"",
+    "exact": false,
+    "reason": "Justified difference, same root cause as the '✓ Editor' entry above — one of the 5 tab-switcher rows."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"Guide\"",
+    "exact": false,
+    "reason": "Justified difference, same root cause as the '✓ Editor' entry above — one of the 5 tab-switcher rows."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"Library (L)\"",
+    "exact": false,
+    "reason": "Justified difference, same root cause as the tab-switcher entry above — real app functionality (toggle the docked Library) the wireframe's View menu doesn't model."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   2x  button",
+    "exact": false,
+    "reason": "The two Appearance rows (Dark/Light) themselves — counted as generic 'button' here because summarize() only reads OWN direct-text-node content and both labels live in a child <span>, same tag-vs-content nuance as the toolsmenu EXTRA finding below. Confirmed correct live (screenshot + programmatic check, 2026-09-09): menu stays open, checkmark moves, body.light toggles."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"Reset all edits\"",
+    "exact": false,
+    "reason": "Justified difference, same root cause as the tab-switcher entry above — real app functionality the wireframe's View menu doesn't model (it lives on the Tools menu in the wireframe instead, as 'Reset photo' — already covered by the toolsmenu EXTRA/rename work)."
+  },
+  {
+    "zone": "viewmenu",
+    "match": "EXTRA   1x  button:\"About Chromasmith\"",
+    "exact": false,
+    "reason": "Justified difference, same root cause as the tab-switcher entry above."
+  }
+]

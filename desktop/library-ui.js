@@ -6222,14 +6222,32 @@
     if (legacy && !localStorage.getItem('csTheme')) localStorage.setItem('csTheme', legacy);
     if (legacy) localStorage.removeItem('chromasmith_lib_theme');
   } catch {}
-  state.libTheme = localStorage.getItem('csTheme') || 'dark';
-  overlay.classList.toggle('lib-light', state.libTheme === 'light');
+  // ⚠️ 2026-09-09 FIX: sharing the 'csTheme' KEY is not the same as staying in sync. Before this,
+  // #lib-overlay's OWN .lib-light class (and state.libTheme) were only ever set here at init and
+  // from THIS menu's own opt.onclick below — never when the EDITOR's toggleTheme()/fxSetTheme()
+  // (chromasmith-22.html) ran. Result: switching theme from the Editor's gear menu flipped
+  // body.light (and the Editor itself repainted correctly) but left the docked filmstrip
+  // (#lib-overlay) stuck on whichever theme it booted into — confirmed live by
+  // editor_wireframe_diff.mjs's corrected harness (editor_ux_spec.json E6). Fix: a reusable sync
+  // function, exposed on window so the Editor's own theme functions can call it — same
+  // cross-file-hook pattern this codebase already uses for chromasmithForceLibraryReady/
+  // chromasmithToggleLibrary.
+  function syncLibThemeFromShared() {
+    state.libTheme = (localStorage.getItem('csTheme') || 'dark');
+    overlay.classList.toggle('lib-light', state.libTheme === 'light');
+    syncViewMenuChecks();
+  }
+  window.chromasmithSyncLibTheme = syncLibThemeFromShared;
+  syncLibThemeFromShared();
   viewMenu.querySelectorAll('.opt[data-theme]').forEach((opt) => {
     opt.onclick = () => {
-      state.libTheme = opt.dataset.theme;
-      localStorage.setItem('csTheme', state.libTheme);
-      overlay.classList.toggle('lib-light', state.libTheme === 'light');
-      syncViewMenuChecks();
+      localStorage.setItem('csTheme', opt.dataset.theme);
+      // Keep body.light (the Editor's own class) in lockstep too, the same direction this sync
+      // already runs in reverse — otherwise choosing a theme from the LIBRARY's own menu would
+      // leave the freshly-fixed sync one-way instead of two-way.
+      document.body.classList.toggle('light', opt.dataset.theme === 'light');
+      if (typeof syncThemeBtns === 'function') syncThemeBtns();
+      syncLibThemeFromShared();
     };
   });
   syncViewMenuChecks();

@@ -41,7 +41,10 @@ FAST_GATES = [
     ("library:responsive-test", ["node", "test/library_responsive_qa.mjs"]),
     ("mask:test", ["node", "test/mask_raster.mjs"]),
 ]
-EDITOR_GATE = ("editor:wireframe-test", ["node", "test/editor_wireframe_diff.mjs"])
+EDITOR_GATES = [
+    ("editor:wireframe-test", ["node", "test/editor_wireframe_diff.mjs"]),
+    ("editor:inventory", ["node", "test/editor_wireframe_inventory.mjs"]),
+]
 FULL_GATE = ("behaviour:test", ["npx", "playwright", "test", "--config=playwright.config.mjs"])
 
 
@@ -116,7 +119,7 @@ def main():
 
     gates = list(FAST_GATES)
     if args.editor:
-        gates.append(EDITOR_GATE)
+        gates.extend(EDITOR_GATES)
     if args.full:
         gates.append(FULL_GATE)
 

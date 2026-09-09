@@ -980,6 +980,7 @@ body.deskx #fx-overflow{display:inline-flex}
 .fx-ovf-item:hover{background:var(--sur2)}
 .fx-ovf-item.dim{color:var(--mut);cursor:default}
 .fx-ovf-sep{height:1px;background:var(--bdr);margin:4px 2px}
+.fx-ovf-grp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);padding:8px 8px 4px;font-weight:600}
 /* Tools menu (deskbar) — spec's "Tools menu (icon list dropdown, docked right)": rotate/flip,
    gamut warning, copy/paste edit settings, reset photo. Reuses the ⋯ overflow menu's own
    item/separator classes and open/close idiom rather than a second dropdown implementation. */
@@ -4479,7 +4480,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-08d';
+const BUILD='2026-09-09a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -19787,7 +19788,20 @@ function ovfBuild(){
   tabs.forEach(([k,lb])=>{h+=`<button class="fx-ovf-item" onclick="ovfClose();switchTab('${k}')">${active==='panel-'+k?'✓ ':''}${lb}</button>`;});
   h+='<div class="fx-ovf-sep"></div>';
   if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Library (L)</button>';
-  h+='<button class="fx-ovf-item" onclick="ovfClose();toggleTheme()">Light / dark theme</button>';
+  h+='<div class="fx-ovf-sep"></div>';
+  // Appearance (Dark/Light radio) — mirrors the Library's own gear/View menu section verbatim
+  // (desktop/library-ui.js's #lib-view-menu "Appearance" group: grp-label + two .opt rows with a
+  // checkmark on the active one), rather than the single toggle button this replaced. Both sides
+  // already share the SAME 'csTheme' localStorage key (see toggleTheme() below and library-ui.js's
+  // own comment on why it migrated onto this key), so this is just giving that shared state a
+  // second, consistently-styled home — not a new theme mechanism.
+  {
+    const chk='<svg class="fx-ovf-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    const curLight=document.body.classList.contains('light');
+    h+='<div class="fx-ovf-grp-label">Appearance</div>';
+    h+=`<button class="fx-ovf-item${!curLight?' on':''}" onclick="fxSetTheme('dark')"><span>Dark</span>${chk}</button>`;
+    h+=`<button class="fx-ovf-item${curLight?' on':''}" onclick="fxSetTheme('light')"><span>Light</span>${chk}</button>`;
+  }
   h+='<div class="fx-ovf-sep"></div>';
   // Moved off the always-visible deskbar (top-bar decluttering pass) — the one semi-destructive
   // action in that cluster, and the least frequently reached for next to Undo/Redo/Export.
@@ -20232,10 +20246,38 @@ function toggleTheme(){
   const light=document.body.classList.toggle('light');
   try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
   syncThemeBtns();
+  // The docked Library filmstrip (#lib-overlay) keeps its OWN theme class (.lib-light) rather
+  // than reading body.light directly — see the fix comment on library-ui.js's
+  // syncLibThemeFromShared(). Without this call it stays on whatever theme it booted into,
+  // regardless of what the Editor's own theme toggle does (editor_ux_spec.json E6).
+  if(typeof window.chromasmithSyncLibTheme==='function')window.chromasmithSyncLibTheme();
 }
 function syncThemeBtns(){
   const light=document.body.classList.contains('light');
   document.querySelectorAll('.theme-ic').forEach(e=>e.innerHTML=icon(light?'moon':'sun',18));
+}
+// Absolute set (not toggle) — the View menu's Appearance radio (ovfBuild) needs "make this the
+// active choice", the same semantics Library's own data-theme opts use, not "flip whatever it is
+// now". Shares the exact same csTheme key/class toggleTheme() above uses, so the two menus never
+// drift out of sync with each other.
+// ⚠️ Do NOT rebuild the menu (ovfBuild()) from here. It used to, and that innerHTML rebuild
+// DETACHES the just-clicked button mid-event — the document-level "click outside closes the
+// menu" listener at ovfToggle's definition then runs its `e.target.closest('#fx-overflow')`
+// check against an already-detached node, which fails to find any ancestor, and the menu
+// incorrectly closes on every theme click. Toggle the `.on` class on the two existing buttons
+// directly instead, exactly the targeted-update approach Library's own syncViewMenuChecks() uses
+// for the identical menu shape, and the menu correctly stays open (confirmed live).
+function fxSetTheme(mode){
+  const light=mode==='light';
+  document.body.classList.toggle('light',light);
+  try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
+  syncThemeBtns();
+  if(typeof window.chromasmithSyncLibTheme==='function')window.chromasmithSyncLibTheme(); // see toggleTheme()'s comment — E6
+  const m=document.getElementById('fx-overflow-menu');
+  if(m)m.querySelectorAll('.fx-ovf-item').forEach(btn=>{
+    if(btn.onclick&&btn.getAttribute('onclick')?.includes("fxSetTheme('dark')"))btn.classList.toggle('on',!light);
+    if(btn.getAttribute('onclick')?.includes("fxSetTheme('light')"))btn.classList.toggle('on',light);
+  });
 }
 // Desktop (Tauri) app only: the "Image Input" tab exists so web/mobile can drag/drop a photo in,
 // but the desktop app loads photos from its native Library, so the tab is dead weight there — its

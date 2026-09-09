@@ -1,9 +1,15 @@
 [
   {
     "zone": "filmstrip",
-    "match": "filmstrip (docked library) (#lib-overlay:not(.full)) — not found in app",
+    "match": "[dark/no-photo] filmstrip (docked library): borderColor",
     "exact": false,
-    "reason": "The mapping is correct (the wireframe's filmstrip IS the docked Library overlay, per editor_wireframe_diff.mjs's own note), but #lib-overlay is created by library-ui.js's initDock() only after the Library subsystem finishes its own async init — it isn't guaranteed to exist yet at the point this harness measures. Real defect risk if this persists after Library init is awaited in the harness; tracked as a harness timing gap, not a missing UI element (chromasmith-22.html has no #fx-filmstrip use under deskx — CLAUDE.md)."
+    "reason": "Token drift only (dark theme) — same --bdr-panel (.1) vs --bdr-pill (.14) role confusion as the topbar/rail/panel borderColor entries below (#lib-overlay's dock border currently reuses a pill-role token), fixed by the same Phase D token split. Deliberately does NOT match the light-theme filmstrip borderColor findings — those are part of E6 (docked filmstrip doesn't re-theme at all) and stay live until fixed."
+  },
+  {
+    "zone": "filmstrip",
+    "match": "[dark/photo] filmstrip (docked library): borderColor",
+    "exact": false,
+    "reason": "Same as the [dark/no-photo] entry above, photo-loaded state."
   },
   {
     "zone": "statusbar",
