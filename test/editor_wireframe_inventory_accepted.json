@@ -394,5 +394,17 @@
     "match": "EXTRA   1x  button:\"About Chromasmith\"",
     "exact": false,
     "reason": "Justified difference, same root cause as the tab-switcher entry above."
+  },
+  {
+    "zone": "panel",
+    "match": "MISSING 6x  icon",
+    "exact": false,
+    "reason": "Seeded 2026-09-09 when editor:inventory was first wired into `npm test` (test/editor_gates.mjs). REAL gap, not a justified difference — tracked as 3.4.11 in editor_ux_spec.json. The wireframe's tool panel carries 8 icons where the app's carries 2; confirm WHICH icons against the live panel before adding any, since some of the wireframe's are per-row affordances the app renders as text. Remove this entry under 3.4.11."
+  },
+  {
+    "zone": "panel",
+    "match": "atom count: wireframe 24 vs app 25",
+    "exact": false,
+    "reason": "Seeded 2026-09-09 alongside the icon entry above; tracked as 3.4.12. One extra atom in the app's tool panel. Probably the same root cause as 3.4.11 (text where the wireframe has an icon) rather than an independent defect — diff the two atom lists before treating it as separate work. Remove under 3.4.12."
   }
 ]

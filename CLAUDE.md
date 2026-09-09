@@ -443,10 +443,15 @@ carrying it in every turn:
 - **[docs/video-grading.md](docs/video-grading.md)** — video grading feature (demux/mux,
   per-frame grain seeding, HLG handling, trim/export, audio passthrough). Load before any
   video-related (`fxVideo*`) work.
-- **[HANDOVER_EDITOR.md](HANDOVER_EDITOR.md)** — starting point for Editor-view wireframe
-  alignment: current tooling state (`editor_wireframe_diff.mjs`'s gate, the untriaged seeded
-  backlog, `test/wireframe_checks_lib.mjs`), lessons from the Library pass, and the order of
-  work. Load before starting any Editor-vs-wireframe fidelity work.
+- **[docs/editor-redesign-plan.md](docs/editor-redesign-plan.md)** — the Editor redesign process:
+  who designs what, the per-panel loop (design → `PAIRS` entry → spec item → behaviour test →
+  implement → gates), the order of work, and what each check can and cannot see. **Load this
+  before any Editor layout/style work** — it supersedes HANDOVER_EDITOR.md's ordering, which
+  predates the tooling now in place. `npm run editor:coverage` is its live status view.
+- **[HANDOVER_EDITOR.md](HANDOVER_EDITOR.md)** — history of how that tooling got here: the
+  regressions-only gate bug, the seeded backlog, lessons from the Library pass. ⚠️ Partly stale
+  — several gaps it describes as missing (structural inventory, responsive sweep, behaviour
+  suite) now exist. Read it for the reasoning, not the current state.
 
 ## 6. Process lessons (read before tuning)
 

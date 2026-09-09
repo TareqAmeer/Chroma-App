@@ -16,6 +16,32 @@ import { checkAspectRatioInvariant } from './wireframe_checks_lib.mjs';
 const ROOT = process.cwd();
 const DUMP_JSON = process.argv.includes('--json');
 
+// ── Allowlist ───────────────────────────────────────────────────────────────────────────────
+// Added 2026-09-09, when this gate was wired into `npm test` for the first time (test/
+// editor_gates.mjs). It failed immediately on a CLEAN tree with 5 real topbar overlaps, and a
+// gate that is red on a clean checkout gets ignored within a day — which is the exact failure
+// mode this repo has already paid for twice (HANDOVER_EDITOR.md §0). So the known backlog is
+// seeded honestly, the same way test/editor_wireframe_inventory_accepted.json seeds Editor's
+// structural backlog, and the gate is hard for everything else from day one.
+//
+// ⚠️ An allowlist entry is NOT a claim the finding is fine. Every entry must name the spec item
+// that tracks the real fix, so the backlog stays visible in editor_ux_spec.json rather than
+// disappearing into a file nobody reads. An entry with no spec item is rejected below.
+//
+// This does NOT reuse wireframe_checks_lib.mjs's isAccepted(): its ZONE_RE is /^\[([a-z]+)\]/,
+// and these findings are scoped by VIEWPORT ("[1440x900 (normal)] ..."), which that regex can
+// never match. Reusing it would silently accept nothing and read as a working allowlist.
+const ACCEPTED_PATH = 'test/editor_responsive_accepted.json';
+let ACCEPTED = [];
+try {
+  ACCEPTED = JSON.parse(await readFile(path.join(ROOT, ACCEPTED_PATH), 'utf8'));
+} catch { /* none yet — gate everything */ }
+for (const a of ACCEPTED) {
+  if (!a.spec) console.log(`[allowlist] REJECTED entry ${JSON.stringify(a.match)} — needs a "spec" field naming the editor_ux_spec.json item that tracks the fix`);
+}
+const isAcceptedFinding = (f) => ACCEPTED.some((a) =>
+  a.spec && (!a.viewport || a.viewport === f.viewport) && (!a.kind || a.kind === f.kind) && f.detail.includes(a.match));
+
 // Same viewport list as library_responsive_qa.mjs, plus the wireframe's OWN stated floor
 // (Editor (Developer) View.dc.html:17, .app{min-width:760px}) as an explicit checkpoint: below
 // it the app must degrade gracefully, not overlap — the wireframe itself gives up below this,
@@ -143,17 +169,21 @@ await page.close();
 await b.close();
 server.close();
 
+const live = findings.filter((f) => !isAcceptedFinding(f));
+const suppressed = findings.length - live.length;
+
 if (DUMP_JSON) {
-  console.log(JSON.stringify(findings, null, 2));
+  console.log(JSON.stringify({ findings, live, suppressed }, null, 2));
 } else {
   const byKind = new Map();
-  for (const f of findings) { if (!byKind.has(f.kind)) byKind.set(f.kind, []); byKind.get(f.kind).push(f); }
-  console.log(`editor_responsive_qa: ${findings.length} finding(s) across ${VIEWPORTS.length} viewports\n`);
+  for (const f of live) { if (!byKind.has(f.kind)) byKind.set(f.kind, []); byKind.get(f.kind).push(f); }
+  console.log(`editor_responsive_qa: ${findings.length} finding(s) across ${VIEWPORTS.length} viewports (${suppressed} allowlisted)\n`);
   for (const [kind, list] of byKind) {
     console.log(`  ${kind} (${list.length})`);
     for (const f of list.slice(0, 15)) console.log(`    [${f.viewport}] ${f.detail}`);
     if (list.length > 15) console.log(`    ...and ${list.length - 15} more`);
   }
-  console.log(findings.length ? '\nRESULT: FAIL' : '\nRESULT: PASS');
+  if (suppressed) console.log(`  (+${suppressed} allowlisted — see ${ACCEPTED_PATH}, each entry names its editor_ux_spec.json item)`);
+  console.log(live.length ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 }
-process.exit(findings.length ? 1 : 0);
+process.exit(live.length ? 1 : 0);

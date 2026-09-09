@@ -114,6 +114,16 @@ test.describe('menus', () => {
   });
 
   test('theme change from the Library gear menu also re-themes the Editor (E6, reverse direction)', async ({ editor: { page } }) => {
+    // #lib-view-menu-btn lives in #lib-top, which is now .lib-fullview-only (2026-09-09: the
+    // docked filmstrip stopped rendering the whole Library toolbar — search/sort/filters/view-menu
+    // — since none of it is in the wireframe's docked .filmstrip and the app-wide theme toggle
+    // already lives in the Editor's own gear menu, which syncs both ways; confirmed with the user
+    // that a second, docked-only theme control is not needed). The gear button itself still exists
+    // and still works in the Library's FULL (undocked) view, so this test proves the Library-side
+    // handler still propagates to body.light by opening full view first, rather than testing a
+    // docked-only trigger surface that no longer exists.
+    await page.click('#lib-side-tab-library');
+    await expect(page.locator('#lib-overlay')).toHaveClass(/\bfull\b/);
     await page.click('#lib-view-menu-btn');
     await page.click('#lib-view-menu .opt[data-theme="light"]');
     await expect(page.locator('body')).toHaveClass(/\blight\b/);

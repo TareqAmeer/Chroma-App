@@ -14632,7 +14632,6 @@ function fxSyncTopbarDisabled(){
 }
 async function fxResetAll(){
   if(!fxHistory.length)return;
-  if(!await confirmModal('Reset all edits on this photo? This cannot be undone.','Reset all'))return;
   if(typeof hapt==='function')hapt();
   await _fxHistoryRestore(0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
   if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
@@ -14808,7 +14807,7 @@ async function fxToggleTimelinePopover(){
   });
   pop.appendChild(list);
   // 3.1.14: reset also lives here, not just behind shift-click on Undo — a discoverable path to
-  // the same fxResetAll() (which still confirms; E3 tracks removing that confirmation).
+  // the same fxResetAll() (no confirmation dialog: undo can recover it, see E3).
   const resetRow=document.createElement('div');
   resetRow.style.cssText='margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr);padding-left:8px;padding-right:8px;padding-bottom:6px;font-size:11px;cursor:pointer;border-radius:5px;color:var(--err)';
   resetRow.textContent='Reset all edits';

@@ -19,7 +19,7 @@
     },
     "E3": {
       "category": "bug",
-      "status": "open",
+      "status": "fixed",
       "source": "reset doesn't need a check for confirmation given an undo can fix it",
       "wireframeRef": null,
       "check": null
@@ -42,11 +42,11 @@
     },
     "E6": {
       "category": "bug",
-      "status": "open",
+      "status": "fixed",
       "source": "[found by tooling, not user-reported, 2026-09-08] the docked Library filmstrip (#lib-overlay, left column in deskx) does not re-theme at all \u2014 toggleTheme()/body.light never changes its background/text/border colours, which stay on dark tokens regardless of theme.",
       "wireframeRef": null,
       "check": "editor_wireframe_diff.mjs: filmstrip zone borderColor/backgroundColor/color",
-      "note": "2026-09-09: ROOT CAUSE FIXED. #lib-overlay keeps its OWN theme class (.lib-light) separate from body.light, only synced from its own boot/click handlers, never when the Editor's toggleTheme()/fxSetTheme() ran (they share the 'csTheme' localStorage KEY but were never wired to react to each other live). Added window.chromasmithSyncLibTheme (desktop/library-ui.js) called from both chromasmith-22.html theme functions, and made the Library's own opt.onclick set body.light in the reverse direction too \u2014 now genuinely two-way. Verified live in the Browser pane, both directions, both themes (confirmed via a hard cache-bust after an unrelated Browser-pane script-caching artifact briefly made the fix look broken). backgroundColor/color findings now clear. RESIDUAL, still open: a borderColor finding remains \u2014 the dock's border mixes light/dark per-side colours in light theme (a narrower, separate CSS gap from the theme-sync bug just fixed), left as a visible failing finding rather than allowlisted."
+      "note": "2026-09-09: ROOT CAUSE FIXED. #lib-overlay keeps its OWN theme class (.lib-light) separate from body.light, only synced from its own boot/click handlers, never when the Editor's toggleTheme()/fxSetTheme() ran (they share the 'csTheme' localStorage KEY but were never wired to react to each other live). Added window.chromasmithSyncLibTheme (desktop/library-ui.js) called from both chromasmith-22.html theme functions, and made the Library's own opt.onclick set body.light in the reverse direction too \u2014 now genuinely two-way. Verified live in the Browser pane, both directions, both themes (confirmed via a hard cache-bust after an unrelated Browser-pane script-caching artifact briefly made the fix look broken). backgroundColor/color findings now clear. RESIDUAL, still open: a borderColor finding remains \u2014 the dock's border mixes light/dark per-side colours in light theme (a narrower, separate CSS gap from the theme-sync bug just fixed), left as a visible failing finding rather than allowlisted. 2026-09-09 (follow-up): border-colour residual re-checked live in the Browser pane (docked, light theme, .lib-light applied, tab active/inactive, photo loaded) across every bordered element in the filmstrip (#lib-overlay, #lib-side, .lib-side-tabs, both tab buttons, #lib-top, .lib-dock-resizer) via getComputedStyle per side \u2014 every visible (non-zero-width) border resolved to the same theme-correct hairline token, no mismatch found. User independently confirmed the docked filmstrip's border looks consistent in light theme on the real app. Marking FIXED (not reproducible); the only mismatches found were 0px-width sides falling back to currentColor, invisible and already noted as a known non-issue in the code's own comment (library-ui.js ~line 785)."
     },
     "E7": {
       "category": "bug",
@@ -350,6 +350,54 @@
       "wireframeRef": ".dc.html preset arrow-key nav",
       "check": "editor_wireframe_behaviour.mjs: preset arrow-key nav",
       "note": "Derive column count from the live grid (virtMetrics lesson), don't hardcode the wireframe's 3."
+    },
+    "E9": {
+      "category": "bug",
+      "status": "fixed",
+      "source": "user: the docked Library filmstrip (left column in the Editor tab) shows a full toolbar (search, grid/list, rate/flag/favorite, sort, filters, view-menu) that isn't in the wireframe; the filmstrip should be treated as a genuinely different surface from the full Library view, not the full view with pieces conditionally hidden.",
+      "wireframeRef": "Editor (Developer) View.dc.html:71-84,227-248 (.filmstrip: fs-tabs + fs-head + fs-list only, no toolbar, at any width 90-280px)",
+      "check": "test/library_dock_states.mjs (state-matrix ARIA snapshot, 90/150/280px) + editor_wireframe_behaviour.mjs (theme-sync E6 tests)",
+      "note": "2026-09-09: Root cause was #lib-top (the full Library toolbar) staying display:flex while docked (body.deskx #lib-overlay:not(.full) never hid it) \u2014 confirmed live via a real screenshot from the user, and reproduced/measured in the Browser pane (199px of chrome above the tabs at every dock width). Architecture changed per user request: instead of a growing per-element CSS selector allowlist (previously 9 separate selectors across two rules, one miss \u2014 #lib-top \u2014 being exactly this bug), every full-view-only element now carries a single shared class, .lib-fullview-only, at its own definition site (#lib-top/#lib-filters/#lib-viewbar/#lib-bottom/#lib-filters-panel/#lib-collections/#lib-folders-header/#lib-tree/#lib-collections-post), and the docked-mode CSS collapses to ONE rule: body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none}. A future full-view-only feature is excluded by construction the moment it's tagged, instead of needing a matching CSS selector added elsewhere. Full-view (#lib-overlay.full) is untouched \u2014 the rule only fires under :not(.full) \u2014 verified live (toggled into full view, all elements still display:flex/block as before). One real regression found and fixed during verification: hiding #lib-top also hid #lib-view-menu-btn, the Library's own theme toggle, which broke editor_wireframe_behaviour.mjs's 'reverse direction' E6 test (confirmed via A/B against clean main \u2014 passes on main, failed with this change). User confirmed the theme toggle is meant to be a single system-wide control (already synced two-way with the Editor's own gear menu), so no replacement toggle was added to the dock; the test was updated to open full Library view first (where #lib-view-menu-btn still exists) rather than testing a docked-only trigger surface that no longer exists \u2014 verified the updated test can still fail (temporarily broke the real sync handler, confirmed RED, restored, confirmed GREEN). Single-column thumbnails at all three widths were already correct (#lib-grid's minmax(var(--lib-thumb),1fr) is inherently single-column at dock widths) \u2014 not a bug, no change made. Verification: test/library_dock_states.mjs 3/3 pass at 90/150/280px; full editor_wireframe_behaviour.mjs + wireframe_behaviour.mjs suite 90 passed / 1 failed (the pre-existing, documented E3 'not yet built' gap, unrelated); test/verify.py --editor shows the same 2 pre-existing failures confirmed via A/B against clean main (editor:inventory, editor:responsive-test \u2014 unrelated topbar/panel findings) plus E7's own-documented ~50% flakiness, none caused by this change."
+    },
+    "3.4.11": {
+      "category": "looks-panel",
+      "status": "open",
+      "source": "[found by tooling, 2026-09-09] tool panel carries 2 icons where the wireframe's panel carries 8",
+      "wireframeRef": "Editor (Developer) View.dc.html: .toolpanel / .tp-panel[data-panel=looks]",
+      "check": "editor:inventory ([panel] MISSING 6x icon)",
+      "note": "Surfaced when editor_gates.mjs first ran the inventory as part of npm test. Allowlisted in test/editor_wireframe_inventory_accepted.json pending this item. Confirm WHICH icons before adding any: the wireframe's Looks panel shows per-tile/per-row affordances the app renders as text, so this may resolve as several small row-level changes rather than one 'add 6 icons' edit."
+    },
+    "3.4.12": {
+      "category": "looks-panel",
+      "status": "open",
+      "source": "[found by tooling, 2026-09-09] tool panel atom count: wireframe 24 vs app 25",
+      "wireframeRef": "Editor (Developer) View.dc.html: .toolpanel",
+      "check": "editor:inventory ([panel] atom count)",
+      "note": "One extra atom in the app. Likely the same root cause as 3.4.11 (text where the wireframe has an icon, or an extra wrapper). Diff the two atom lists before treating it as a separate defect \u2014 a single structural change may clear both."
+    },
+    "D1": {
+      "category": "panel-design",
+      "status": "backlog",
+      "source": "9 of the wireframe's 11 tool panels are placeholders ('<X> tools live here') \u2014 color, crop, detail, export, film, frame, info, masks, retouch have no design yet",
+      "wireframeRef": "Editor (Developer) View.dc.html:374-382",
+      "check": "editor:coverage (designed column)",
+      "note": "This is DESIGN work, not implementation work \u2014 nothing can be coded against a placeholder. Only `looks` and `adjust` are designed. Each panel becomes its own item as it is designed; see docs/editor-redesign-plan.md for the per-panel loop (design -> PAIRS entry -> spec item -> behaviour test -> implement)."
+    },
+    "D2": {
+      "category": "panel-design",
+      "status": "backlog",
+      "source": "4 app tool sections have no wireframe panel to live in: deconv, diag, image, wheels",
+      "wireframeRef": null,
+      "check": "editor:coverage (orphan list)",
+      "note": "Needs a DESIGN DECISION per section, not a fix: fold into an existing panel, give it its own, or drop it. `image` is the least ambiguous \u2014 the app already folds Image Input into Looks on desktop (fxDesktopFoldImageIntoLooks), so the wireframe having no Image tab may already be correct. `diag` is a developer panel and may be deliberately out of the wireframe. `wheels` (color wheels) and `deconv` (deconvolution sharpening) are real user-facing tools with nowhere to go \u2014 most likely Color and Detail respectively, but that is the user's call."
+    },
+    "D3": {
+      "category": "panel-design",
+      "status": "backlog",
+      "source": "[found by tooling, 2026-09-09] wireframe has 11 tool panels but only 10 rail buttons \u2014 `crop` has a panel and no way to open it",
+      "wireframeRef": "Editor (Developer) View.dc.html:374 (tp-panel crop) vs the .rail button list",
+      "check": "editor:coverage (rail column)",
+      "note": "Either the rail is missing a Crop button or the crop panel is vestigial. The APP has a crop section and a rail entry for it, so the app is currently the more complete of the two \u2014 resolve in the wireframe, not the app."
     }
   }
 }
