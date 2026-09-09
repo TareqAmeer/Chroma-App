@@ -519,6 +519,18 @@ Learned the hard/expensive way:
    just change defaults** — stale `localStorage` (e.g. an old tree-collapsed flag) can silently
    override a new default. Use a new storage key (and delete the legacy one) whenever a
    persisted choice's meaning changes.
+15. **Before changing `display`/`visibility` on any container you didn't just create in the
+   same edit, read its full children list first** — not just confirm the one element you want
+   is somewhere inside it. Toggling a wrapper to reveal one child can reveal unrelated siblings
+   bundled into the same container (2026-09-09: widening the docked Library filmstrip revealed
+   the Library/Develop tab pair as intended, but also the full Collections/By-Date navigation
+   tree, because both lived inside the same `#lib-side` wrapper and only the tabs were checked
+   for). Target the specific leaf element; never toggle a shared parent as a shortcut.
+16. **Any resizable/breakpoint-driven UI needs a state-matrix test, not a default-state-only
+   one.** Assert structure (Playwright ARIA snapshot, `toMatchAriaSnapshot()`) at min, threshold,
+   and max — scoped to the actual parent container that could leak, not just the child you're
+   adding. Hand-author the expected snapshot from the spec/wireframe; never auto-generate it
+   from the current implementation, or you just codify whatever bug is already there.
 
 ---
 

@@ -1526,28 +1526,27 @@
     body.deskx #lib-overlay:not(.full) #lib-filters,
     body.deskx #lib-overlay:not(.full) #lib-bottom,body.deskx #lib-overlay:not(.full) #lib-viewbar,
     body.deskx #lib-overlay:not(.full) #lib-filters-panel{display:none}
-    /* #lib-side (the Library/Develop tab pair + folder tree) stays hidden below
-       LIB_DOCK_WIDE_PX (see the resizer's own JS) — there's no room for it in a narrow
-       filmstrip — and is revealed once the user drags the filmstrip wide enough to fit it,
-       mirroring how the full-view sidebar has always behaved at that same width. */
-    body.deskx #lib-overlay:not(.full) #lib-side{display:none}
-    body.deskx.lib-dock-wide #lib-overlay:not(.full) #lib-side{display:block;grid-row:2;overflow:auto;max-height:40vh}
-    body.deskx.lib-dock-wide #lib-overlay:not(.full){grid-template-rows:auto auto 1fr}
-    body.deskx.lib-dock-wide #lib-overlay:not(.full) #lib-main{grid-row:3}
+    /* #lib-side bundles TWO different things: the Library/Develop tab pair (spec: Editor
+       (Developer) View.dc.html's .fs-tabs, ALWAYS visible in the filmstrip at every width from
+       90-280px, nothing gates it) and the full Collections/By-Date navigation tree (full-view
+       ONLY — the wireframe's filmstrip never shows it at any width; resizing only changes
+       thumbnail size). A prior version of this rule toggled #lib-side as one block on a width
+       threshold, which correctly revealed the tabs but ALSO revealed the entire nav tree
+       alongside them — caught by test/library_dock_states.mjs's state-matrix ARIA snapshot
+       (CLAUDE.md #6.15/#6.16). Fixed by never toggling the shared wrapper: the tab pair is
+       shown unconditionally while docked, and the tree elements (#lib-collections/
+       #lib-folders-header/#lib-tree/#lib-collections-post) are hidden unconditionally, with no
+       width dependency on either side. */
+    body.deskx #lib-overlay:not(.full) #lib-side{display:block;grid-row:2;padding:6px 8px 0}
+    body.deskx #lib-overlay:not(.full){grid-template-rows:auto auto 1fr}
+    body.deskx #lib-overlay:not(.full) #lib-main{grid-row:3}
+    body.deskx #lib-overlay:not(.full) #lib-collections,
+    body.deskx #lib-overlay:not(.full) #lib-folders-header,
+    body.deskx #lib-overlay:not(.full) #lib-tree,
+    body.deskx #lib-overlay:not(.full) #lib-collections-post{display:none}
     .lib-dock-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
     body.deskx #lib-overlay:not(.full) .lib-dock-resizer{display:block}
     .lib-dock-resizer:hover,.lib-dock-resizer.active{background:rgba(97,160,175,.25)}
-    /* Library/Develop tabs are icon+label at a wide enough filmstrip; below LIB_DOCK_TEXT_PX
-       (see syncDockWidth()) the label collapses to icon-only, same idea as .full mode's own
-       lib-top-compact but scoped to the tab pair specifically since it lives in #lib-side, a
-       sibling of #lib-top, not a descendant lib-top-compact's own selector could reach. */
-    /* Scoped to :not(.full) rather than relying on the body class being cleared on switching to
-       full — syncDockWidth() only updates it while docked (it bails out in full mode, since that
-       column doesn't exist there), so the class can be stale-true from the last docked width
-       when full mode opens; the selector itself is what has to stay correct, not the timing of
-       when the class toggles. */
-    body.lib-dock-icons #lib-overlay:not(.full) .lib-side-tab span{display:none}
-    body.lib-dock-icons #lib-overlay:not(.full) .lib-side-tab{gap:0}
     /* padding-top 22px (not the tighter horizontal 8px/6px): #lib-overlay already sits below the
        fixed deskbar (top:44px above), so this is the ONLY breathing room between the deskbar and
        the folder/cloud/history icons — 8px read as flush against the bar. Matches the same 22px
@@ -1821,10 +1820,9 @@
            relocated to the top bar / gear View menu above — kept as the single live copy of
            each id there, not duplicated here. -->
     </div>
-    <!-- Deskx-docked-only resizer for the filmstrip's own width — a sibling of #lib-side (not
-         nested inside it) because #lib-side is hidden below LIB_DOCK_REVEAL_PX and the resizer
-         still needs to be grabbable at the narrowest, default filmstrip width to widen it in the
-         first place. Same drag pattern as #lib-side-resizer below, but sets --dock-w-user on
+    <!-- Deskx-docked-only resizer for the filmstrip's own width — a sibling of #lib-side, not
+         nested inside it, so it stays grabbable regardless of what's shown inside #lib-side.
+         Same drag pattern as #lib-side-resizer below, but sets --dock-w-user on
          chromasmith-22.html's .fx-layout (the actual grid track, not this element's own cosmetic
          width) — see that variable's own comment for why it's an indirection layer. -->
     <div class="lib-dock-resizer" id="lib-dock-resizer"></div>
@@ -1834,8 +1832,9 @@
         <!-- "on" was a static class here, always Library, even while docked next to an open
              photo (i.e. actually in Develop) — the active tab now genuinely tracks which view
              you're in (syncSideTabs(), called on every toggleExpandedView + photo open). Icons
-             added so the tab still reads as itself once the filmstrip is too narrow for the
-             label (.lib-dock-icons, syncDockWidth()). -->
+             kept for visual consistency with the full-view tabs — the docked filmstrip always
+             has room for the label now (spec: fs-tabs is never width-gated), so this is no
+             longer a narrow-width fallback. -->
         <button class="lib-side-tab" id="lib-side-tab-library" title="Switch to Library">${ic('library',13)}<span>Library</span></button>
         <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
              performs a real navigation (closes the Library, same as the header button / L key).
@@ -6487,25 +6486,15 @@
   // var(--dock-w-user,120px)}), not this element's own `width`, which a grid item's track always
   // overrides regardless of what the item's own CSS says. Clamped narrower than the sidebar
   // resizer since this column also has to hold nothing but a single-column thumbnail strip.
+  // No width-gated reveal here on purpose: per spec (Editor (Developer) View.dc.html's
+  // .fs-tabs), the Library/Develop tab pair is visible at every width in this clamp, and the
+  // Collections/By-Date navigation tree is never visible at any width while docked — both are
+  // now plain unconditional CSS rules (above), not something this resize handler decides.
   const LIB_DOCK_MIN = 90, LIB_DOCK_MAX = 420;
-  // Below this, #lib-side (Library/Develop tabs + folder tree) has no room at all and stays
-  // hidden — same threshold the CSS's own .lib-dock-wide class gate uses.
-  const LIB_DOCK_REVEAL_PX = 150;
-  // Between LIB_DOCK_REVEAL_PX and this, #lib-side is visible but the tab labels aren't — icon
-  // only (.lib-dock-icons). Above it, the full "Library"/"Develop" text shows.
-  const LIB_DOCK_TEXT_PX = 220;
   const dockResizer = overlay.querySelector('#lib-dock-resizer');
   const fxLayout = document.querySelector('.fx-layout'); // chromasmith-22.html's grid, not this file's own markup
   const savedDockW = parseInt(localStorage.getItem('chromasmith_lib_dock_w'), 10);
   if (fxLayout && savedDockW >= LIB_DOCK_MIN && savedDockW <= LIB_DOCK_MAX) fxLayout.style.setProperty('--dock-w-user', savedDockW + 'px');
-  function syncDockWidth() {
-    if (overlay.classList.contains('full')) return; // this column doesn't exist in full mode
-    const w = overlay.getBoundingClientRect().width;
-    document.body.classList.toggle('lib-dock-wide', w >= LIB_DOCK_REVEAL_PX);
-    document.body.classList.toggle('lib-dock-icons', w < LIB_DOCK_TEXT_PX);
-  }
-  new ResizeObserver(syncDockWidth).observe(overlay);
-  syncDockWidth();
   let dockResizing = false;
   dockResizer.addEventListener('mousedown', (e) => { dockResizing = true; dockResizer.classList.add('active'); e.preventDefault(); });
   window.addEventListener('mousemove', (e) => {
