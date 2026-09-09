@@ -278,10 +278,11 @@
     },
     "3.4.2": {
       "category": "looks-panel",
-      "status": "open",
+      "status": "fixed",
       "source": "dropdown menu style needs changing to match the rest of the app",
       "wireframeRef": ".dc.html .select",
-      "check": "control-idiom self-consistency check"
+      "check": "control-idiom self-consistency check",
+      "note": "Fixed 2026-09-09: .fx-select reskinned to match the wireframe .select-btn idiom (Editor (Developer) View.dc.html:123-127) -- fixed 32px pill height, 8px radius, var(--bdr-pill) border, custom SVG chevron replacing the native arrow (appearance:none), hover/disabled states -- while staying a real native <select> (keyboard/native-picker behavior untouched, unlike the wireframe which mocks it as a plain button). Applies globally, not just Looks. Verified live via screenshot: RAW profile select renders as a rounded pill with a chevron; rows that already use chip buttons (Input/Highlight response/Print) are unaffected since their <select> stays hidden there."
     },
     "3.4.3": {
       "category": "looks-panel",

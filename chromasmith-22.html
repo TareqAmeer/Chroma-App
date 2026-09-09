@@ -398,7 +398,18 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
 .fx-slider-grad{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b)}
 .fx-slider-grad::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.5)}
 .fx-slider-grad::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:none;box-shadow:0 0 3px rgba(0,0,0,.5)}
-.fx-select{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px 9px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);flex:1;cursor:pointer;min-width:0;box-sizing:border-box;text-overflow:ellipsis;overflow:hidden}
+/* 3.4.2: matches the wireframe's .select-btn idiom (Editor (Developer) View.dc.html:123-127) —
+   a real native <select> reskinned to look like it (fixed 32px pill height, 8px radius, a
+   pill-role border, a custom chevron replacing the native arrow) rather than replaced with a
+   fake button, so keyboard/accessibility/native-picker behavior is untouched. */
+.fx-select{background:var(--sur2);border:1px solid var(--bdr-pill);border-radius:8px;height:32px;padding:0 26px 0 9px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);flex:1;cursor:pointer;min-width:0;box-sizing:border-box;text-overflow:ellipsis;overflow:hidden;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cccccc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;background-size:12px}
+.fx-select:hover{background-color:rgba(255,255,255,.06)}
+.fx-select:disabled{opacity:.4;pointer-events:none;cursor:default}
+body.light .fx-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a7a7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")}
+body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
 #fx-canvas{display:block;max-width:100%;height:auto}
 .fx-preview-col{position:sticky;top:16px;align-self:start}
@@ -20445,6 +20456,58 @@ function fxDesktopFoldImageIntoLooks(){
   // a photo gets in there) but is redundant clutter on desktop, where photos come from the OS
   // Library instead — hidden here rather than deleted from the markup outright.
   const gp=document.getElementById('btn-gp-import');if(gp)gp.style.display='none';
+  fxDesktopReorderLooksPanel(looksCard,title);
+}
+// 3.4.5/3.4.7/3.4.8: reorders the Looks panel's EXISTING elements (moves nodes, writes no new
+// markup) into the wireframe's presetbox sequence — RAW profile -> Input -> Preset section (with
+// Strength now inside it, between the category chips and the tile grid) -> Print -> Highlight
+// response -> the LUT-apply row (dropzone + chart/save/delete/download) -> test-chart button.
+// Desktop-only (called from fxDesktopFoldImageIntoLooks, same window.__TAURI__ gate) because the
+// web/mobile Looks panel has its own different accordion affordances this reorder was never
+// designed against — reordering there too risked breaking a layout this pass never looked at.
+// ⚠️ Untestable through ?libtest=1 (it stubs window.__TAURI__ falsy on purpose, so this function
+// never runs under the browser harness) — verified instead with real screenshots of the built
+// desktop app (bash desktop/install-app.sh), not the structural gates.
+function fxDesktopReorderLooksPanel(looksCard,title){
+  if(!title)return;
+  const rowOf=(el)=>el&&el.closest('.fx-row');
+  const rawRow=rowOf(document.getElementById('sel-dcp'));
+  const inputLabel=Array.from(looksCard.querySelectorAll(':scope > .fx-label')).find(l=>l.textContent.trim()==='Input');
+  const inputSel=document.getElementById('sel-input'),inputChips=document.getElementById('chips-input');
+  const printLabel=Array.from(looksCard.querySelectorAll(':scope > .fx-label')).find(l=>l.textContent.trim()==='Print');
+  const printSel=document.getElementById('sel-print'),printChips=document.getElementById('chips-print'),legacyLutSel=document.getElementById('sel-lut');
+  const hrLabel=Array.from(looksCard.querySelectorAll(':scope > .fx-label')).find(l=>l.textContent.trim()==='Highlight response');
+  const hrSel=document.getElementById('sel-tonemap'),hrChips=document.getElementById('chips-tonemap');
+  const strengthRow=document.getElementById('row-lut-mix');
+  const looksCtrl=document.getElementById('fx-looks-ctrl');
+  const catsRow=document.getElementById('fx-looks-cats'),grid=document.getElementById('fx-looks');
+  const clipInfo=document.getElementById('fx-clip-info');
+  const lutDz=document.getElementById('dz-fx-lut');
+  const testchartBtn=document.getElementById('btn-gp-import')&&document.getElementById('btn-gp-import').closest('.btn-row');
+  const saveDelRow=document.getElementById('btn-lut-save')&&document.getElementById('btn-lut-save').closest('.btn-row');
+  const chartDlRow=document.getElementById('btn-lut-dl')&&document.getElementById('btn-lut-dl').closest('.btn-row');
+  // 3.4.8: Strength moves INSIDE the preset section, between the category-chip row and the tile
+  // grid — not just "near" the presets, between its own two named landmarks.
+  if(strengthRow&&catsRow&&grid&&catsRow.parentElement===grid.parentElement){
+    catsRow.insertAdjacentElement('afterend',strengthRow);
+  }
+  // 3.4.3: a smaller "apply LUT" cluster — the dropzone plus chart/save/delete/download, grouped
+  // together rather than spread across three separate btn-rows with Google Photos/test-chart
+  // mixed in between them.
+  const applyLutWrap=document.createElement('div');
+  applyLutWrap.id='fx-apply-lut-row';
+  applyLutWrap.style.cssText='margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)';
+  [lutDz,saveDelRow,chartDlRow].forEach(el=>{if(el)applyLutWrap.appendChild(el);});
+  let anchor=title;
+  const place=(el)=>{if(el&&el!==anchor){anchor.insertAdjacentElement('afterend',el);anchor=el;}};
+  place(rawRow);
+  place(inputLabel);place(inputSel);place(inputChips);
+  place(clipInfo);
+  place(looksCtrl);
+  place(printLabel);place(printSel);place(printChips);place(legacyLutSel);
+  place(hrLabel);place(hrSel);place(hrChips);
+  place(applyLutWrap);
+  place(testchartBtn);
 }
 // ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
 let _mqMobile=window.matchMedia('(max-width:700px)');
