@@ -44,6 +44,7 @@ FAST_GATES = [
 EDITOR_GATES = [
     ("editor:wireframe-test", ["node", "test/editor_wireframe_diff.mjs"]),
     ("editor:inventory", ["node", "test/editor_wireframe_inventory.mjs"]),
+    ("editor:responsive-test", ["node", "test/editor_responsive_qa.mjs"]),
 ]
 FULL_GATE = ("behaviour:test", ["npx", "playwright", "test", "--config=playwright.config.mjs"])
 
