@@ -413,7 +413,11 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
 .fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px 7px;border-radius:4px;line-height:1}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
 .fx-zoom-ctrl button#btn-loupe.on,.fx-zoom-ctrl button#btn-fx-fullres.on{background:var(--acc);color:#000}
-.fx-zoom-ctrl #fx-zoom-pct{font-size:10px;color:var(--mut);min-width:36px;text-align:center;cursor:default}
+/* Hover/drag-only percentage (wireframe: .zpct opacity 0 by default, 1 on :hover/.active) —
+   only shown while the value is actually changing or being pointed at, not sitting there
+   permanently. .active is toggled by the slider's mousedown/the window mouseup listener below. */
+.fx-zoom-ctrl #fx-zoom-pct{font-size:10px;color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity .1s}
+.fx-zoom-ctrl:hover #fx-zoom-pct,.fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px;position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:2}
 .ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:.11em;color:var(--acc);font-style:italic;margin-bottom:2px}
 .ni-sub{font-family:var(--sans);font-size:var(--fs-1);letter-spacing:0;color:var(--mut)}
@@ -2190,12 +2194,14 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
         <canvas id="fx-hist"></canvas>
         <div id="fx-crop-overlay"></div>
         <div id="msk-brush-cursor"></div>
+        <!-- 3.1.7/3.1.12: dropped the +/- step buttons and the "Fit" text button — the wireframe's
+             own zoomctl (Editor (Developer) View.dc.html:193) is just the slider + a hover-only
+             %. zoomFit() survives on the slider's double-click instead of a dedicated button. -->
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
-          <button class="zc-ic" onclick="zoomBy(1/1.25)" title="Zoom out"><span class="fx-db-ic" id="ic-zoomout"></span></button>
-          <input type="range" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)" title="Drag to zoom">
-          <span id="fx-zoom-pct" title="Scroll to zoom · drag to pan · double-click to reset">100%</span>
-          <button class="zc-ic" onclick="zoomBy(1.25)" title="Zoom in"><span class="fx-db-ic" id="ic-zoomin"></span></button>
-          <button onclick="zoomFit()" title="Fit the whole image">Fit</button>
+          <input type="range" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)"
+            onmousedown="document.getElementById('fx-zoom-ctrl').classList.add('active')"
+            ondblclick="zoomFit()" title="Drag to zoom · double-click to fit the whole image">
+          <span id="fx-zoom-pct" title="Scroll to zoom · drag to pan · double-click to fit">100%</span>
           <button id="btn-loupe" onclick="toggleLoupe()" title="True 1:1 view — renders a native-resolution crop through the full pipeline so grain &amp; halation appear at real export scale">1:1</button>
           <button id="btn-fx-fullres" onclick="fxFullResPreviewToggle()" title="Render the whole preview at full source resolution instead of the usual capped size — costs more GPU time, drops to the capped size automatically while dragging a slider">Full res</button>
           <button id="btn-flag-red" class="flag-btn flag-btn-red" onclick="fxToggleFlag('Red')" title="Reject (Library)" style="margin-left:4px;display:none"></button>
@@ -14938,6 +14944,10 @@ function zoomBy(factor){
   _applyZoom(true);
 }
 function zoomFit(){if(fxLoupe)toggleLoupe();else _resetZoom(true);}
+// Mirrors the wireframe's own zoomctl mousedown/mouseup pair (Editor (Developer) View.dc.html:457-458)
+// — the slider's onmousedown sets .active (see fx-zoom-slider markup), this clears it on ANY
+// mouseup so a drag that ends off the slider still resets the hover-only % visibility.
+window.addEventListener('mouseup',()=>{const z=document.getElementById('fx-zoom-ctrl');if(z)z.classList.remove('active');});
 // True 1:1 loupe: render a NATIVE-resolution crop through the full pipeline (scOverride =
 // fullWidth/REF) so grain & halation appear at REAL export scale — the CSS zoom only
 // magnifies the ~1800px preview buffer and can't show that.
@@ -20637,7 +20647,6 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
  set('db-lib-ic','library');set('db-more','more');set('db-tools','tools');set('db-view','view');set('ic-before','compare');set('ic-split','split');
  set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-ah-clear','close');
- set('ic-zoomout','zoomOut');set('ic-zoomin','zoomIn');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
  // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
  // above. One data-driven pass instead of one `set()` call per element because these sites are

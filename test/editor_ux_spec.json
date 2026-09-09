@@ -119,10 +119,11 @@
     },
     "3.1.7": {
       "category": "topbar",
-      "status": "open",
+      "status": "fixed",
       "source": "zoom: remove +/-, keep the bar; double-click resets to 100%; don't show zoom size unless hovering/clicking",
       "wireframeRef": ".dc.html .zoomctl .zpct",
-      "check": "editor_wireframe_behaviour.mjs: zoom hover/dblclick"
+      "check": "editor_wireframe_behaviour.mjs: zoom hover/dblclick",
+      "note": "Fixed 2026-09-09: removed the +/- zoom-step buttons; slider double-click calls zoomFit() (app semantic: fit whole image, not reset-to-100% like the wireframe literal \u2014 matches the plan decision \"double-click fits\"); % readout is hover/drag-only (opacity 0 by default, shown via :hover or a new .active class the slider toggles on mousedown, cleared on any window mouseup \u2014 mirrors the wireframe zoomctl JS at Editor (Developer) View.dc.html:454-458). No keyboard shortcut added yet for jump-to-100% (deferred \u2014 needs a free key picked without live testing of every existing binding)."
     },
     "3.1.8": {
       "category": "topbar",
@@ -156,11 +157,11 @@
     },
     "3.1.12": {
       "category": "topbar",
-      "status": "open",
+      "status": "fixed",
       "source": "get rid of fit button",
       "wireframeRef": null,
       "check": "editor_wireframe_inventory.mjs: topbar zone",
-      "note": "Function kept, reachable via zoom double-click (3.1.7) + a keyboard shortcut per user decision."
+      "note": "Fixed 2026-09-09: removed the \"Fit\" text button from #fx-zoom-ctrl; zoomFit() now reachable via the zoom slider double-click (see 3.1.7)."
     },
     "3.1.13": {
       "category": "topbar",

@@ -211,27 +211,21 @@
   },
   {
     "zone": "topbar",
-    "match": "EXTRA   11x  button",
+    "match": "EXTRA   9x  button",
     "exact": false,
-    "reason": "Aggregate of the not-yet-built topbar restructuring (Tools button consolidation 3.1.8, undogrp wrapper 3.1.1, zoom cluster) plus the zoom Fit/1:1/Full-res buttons (B1, backlogged) — all individually tracked elsewhere. Re-verify the raw count once Phase E ships."
+    "reason": "Aggregate of the not-yet-built topbar restructuring (Tools button consolidation 3.1.8, undogrp wrapper 3.1.1) plus the zoom 1:1/Full-res buttons (B1, backlogged) — all individually tracked elsewhere. 2026-09-09: was 11 before the zoom +/- buttons (3.1.7) and the Fit button (3.1.12) were removed and the View menu (3.1.6) was added net +1 — re-verify the raw count once Phase E ships."
   },
   {
     "zone": "topbar",
-    "match": "EXTRA   9x  icon",
+    "match": "EXTRA   7x  icon",
     "exact": false,
-    "reason": "Same root cause as the EXTRA 11x button entry above — one icon per extra button."
+    "reason": "Same root cause as the EXTRA 9x button entry above — one icon per extra button."
   },
   {
     "zone": "topbar",
     "match": "atom count",
     "exact": false,
     "reason": "Same root cause as the EXTRA 11x button entry above — re-verify once Phase E ships."
-  },
-  {
-    "zone": "topbar",
-    "match": "button:\"Fit\"",
-    "exact": false,
-    "reason": "Real, already scoped — user list 3.1.12 (remove the Fit text button; the function moves onto zoom-bar double-click + a keyboard shortcut). Tracked in editor_ux_spec.json, fixed in plan Phase E."
   },
   {
     "zone": "topbar",
