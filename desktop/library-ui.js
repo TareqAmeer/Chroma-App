@@ -3064,6 +3064,12 @@
       }
       state.openedPath = path;
       if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
+      // E5 fix (editor_ux_spec.json, 2026-09-09): this is the real "switching photos" path (a
+      // Library grid/filmstrip click opening a different photo) — it synced the Library's OWN
+      // flag row but never the Editor topbar's (fxUpdateFlagBtns, chromasmith-22.html), which is
+      // exactly "flag stuck on the previous photo when switching photos". More central than the
+      // fxSelectImage() fix (that one is for the separate drag-loaded multi-photo batch path).
+      if (typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
       if (!LIBTEST) { try { localStorage.setItem(LS_LAST_PATH, path); } catch (e) {} }
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -3904,6 +3910,14 @@
       else if (label === 'Green') card.classList.add('lbl-green');
     }
     if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
+    // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel is the ONE canonical write path every
+    // flag UI funnels through (grid click, right-click menu, keyboard X/P/U, compare pane, the
+    // docked filmstrip's own flag row) — but none of them ever told the Editor's topbar flag
+    // buttons (fxUpdateFlagBtns, chromasmith-22.html) to re-read state, so flagging the
+    // CURRENTLY OPEN photo from anywhere in the Library left the topbar showing stale state
+    // ("updates in the sidebar but not the top bar"). Fixing it here once covers every entry
+    // point instead of patching each call site.
+    if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
   }
   // Mirrors setLabel() above but for the favorite heart — same optimistic-update +
   // sidecar-write + rollback pattern, kept separate since favorite is independent of
@@ -3917,6 +3931,7 @@
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite);
     renderCollectionCounts();
+    if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see setLabel's comment
   }
   // Exposed so the main editor toolbar (chromasmith-22.html's top bar) can flag the
   // CURRENTLY OPEN photo without needing the Library panel open — same underlying
@@ -3962,6 +3977,7 @@
         window.chromasmithEditInPath = path;
         state.openedPath = path;
         if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
+        if (typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see openInEditorInner's comment
         window.chromasmithSourcePath = path;
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -5014,11 +5030,56 @@
       // --glass-bg + --lift-2, matching every other floating surface (#fx-overflow-menu, the
       // context menus, the toast). `var(--pan,#1c1c1e)` was a phantom token, so this panel was
       // pinned to a hardcoded near-black that no theme could reach.
-      el.style.cssText = 'position:absolute;right:12px;top:56px;width:232px;z-index:38;padding:10px 12px;'
+      // 3.2.8/3.3.1 fix (editor_ux_spec.json, 2026-09-09): was position:absolute anchored to
+      // #lib-main, its scrolling+positioning ancestor — the offsets resolve against #lib-main's
+      // own box regardless of scrollTop, which is what made it LOOK pinned to a fixed corner
+      // while scrolling underneath it (it never moved because it was never meant to). Switched
+      // to position:fixed with a viewport-relative saved/dragged position, appended to
+      // document.body instead of #lib-main — #lib-overlay is overflow:hidden and, in the docked
+      // deskx filmstrip mode, only 120-150px wide, so a 232px-wide #lib-main child there got
+      // clipped down to a sliver near the right edge (3.3.1's "mostly hidden outside the
+      // screen"). Appending to body and using viewport coordinates sidesteps that clipping
+      // entirely rather than trying to special-case the narrow-dock layout.
+      let savedPos = null;
+      try { savedPos = JSON.parse(localStorage.getItem('chromasmith_lib_info_pos') || 'null'); } catch {}
+      const PANEL_W = 232, MARGIN = 12;
+      let left = (savedPos && typeof savedPos.left === 'number') ? savedPos.left : window.innerWidth - PANEL_W - MARGIN;
+      let top = (savedPos && typeof savedPos.top === 'number') ? savedPos.top : 56;
+      // Clamp to the CURRENT viewport — a position saved from a wide window (or before a resize)
+      // must not place the panel off-screen or under a narrower docked layout next time.
+      left = Math.min(Math.max(MARGIN, left), Math.max(MARGIN, window.innerWidth - PANEL_W - MARGIN));
+      top = Math.min(Math.max(MARGIN, top), Math.max(MARGIN, window.innerHeight - 40 - MARGIN));
+      el.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${PANEL_W}px;z-index:3800;padding:10px 12px;`
         + 'border-radius:10px;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);'
         + 'backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);'
         + 'box-shadow:var(--lift-2);font-size:11px;line-height:1.55';
-      (document.getElementById('lib-main') || document.body).appendChild(el);
+      document.body.appendChild(el);
+      // Drag handle: attached to `el` itself (not to any child inside the innerHTML rebuilt on
+      // every render below — a listener on a rebuilt child would be silently lost on the very
+      // next fetch-driven re-render, the same innerHTML-rebuild-detaches-listeners class of bug
+      // fixed earlier in chromasmith-22.html's ovfBuild()). Drag only starts from the header row
+      // (data-drag-handle, set on the title div in the innerHTML below) so text selection inside
+      // the panel's own content (keywords, EXIF values) still works normally.
+      let dragging = false, dx = 0, dy = 0;
+      el.addEventListener('mousedown', (e) => {
+        if (!e.target.closest || !e.target.closest('[data-drag-handle]')) return;
+        dragging = true;
+        const b = el.getBoundingClientRect();
+        dx = e.clientX - b.left; dy = e.clientY - b.top;
+        e.preventDefault();
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const w = el.getBoundingClientRect().width;
+        const nl = Math.min(Math.max(MARGIN, e.clientX - dx), window.innerWidth - w - MARGIN);
+        const nt = Math.min(Math.max(MARGIN, e.clientY - dy), window.innerHeight - 40 - MARGIN);
+        el.style.left = nl + 'px'; el.style.top = nt + 'px';
+      });
+      window.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        try { localStorage.setItem('chromasmith_lib_info_pos', JSON.stringify({ left: parseFloat(el.style.left), top: parseFloat(el.style.top) })); } catch {}
+      });
     }
     const entry = (state.entries || []).find((e) => e.path === path) || {};
     const m = state.meta.get(path) || {};
@@ -5065,7 +5126,7 @@
     // scan/folder-open, matching how ratings/labels already lag one scan behind a foreign
     // edit elsewhere in this app; see the plan's own "Authority: the .xmp always wins" section).
     const kwOptions = keywordTree.map((n) => `<option value="${esc(n.path)}">`).join('');
-    el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;word-break:break-all">${esc(entry.name || baseName(path))}</div>`
+    el.innerHTML = `<div data-drag-handle style="font-weight:600;margin-bottom:6px;word-break:break-all;cursor:move" title="Drag to move">${esc(entry.name || baseName(path))}</div>`
       + row('Date', m.date) + row('Camera', m.camera) + row('Lens', m.lens)
       + row('ISO', m.iso) + row('Shutter', m.shutter) + row('Aperture', m.aperture)
       + row('Focal', m.focal_len) + row('Size', fmt(entry.size))

@@ -1399,8 +1399,7 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
     <button class="fx-db fx-db-icon" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
     <button class="fx-db fx-db-icon" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
     <div style="position:relative;display:inline-flex" id="db-history-wrap">
-      <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleHistoryPopover()" title="Exported versions of this photo (Library-only)" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
-      <div id="fx-history-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:220px;max-height:280px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+      <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit &amp; export history for this photo" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
     </div>
     <!-- The title used to need two flex:1 spacers to center itself in the space left over
          between the two clusters — now redundant, it positions off #fx-deskbar directly (see
@@ -7295,38 +7294,8 @@ function fxClampPopoverToViewport(pop){
     pop.style.transform=(pop.style.transform||'').replace(/translate\([^)]*\)/,'')+` translate(${dx}px,${dy}px)`;
   }
 }
-async function fxToggleHistoryPopover(){
-  const pop=document.getElementById('fx-history-popover');
-  if(!pop)return;
-  if(pop.style.display!=='none'){pop.style.display='none';return;}
-  if(typeof window.chromasmithGetExportHistory!=='function')return;
-  const list=await window.chromasmithGetExportHistory();
-  pop.innerHTML='';
-  if(!list||!list.length){
-    pop.innerHTML='<div style="padding:8px;font-size:11px;color:var(--mut)">No exports yet</div>';
-  }else{
-    [...list].reverse().forEach(entry=>{
-      const row=document.createElement('div');
-      row.style.cssText='padding:7px 9px;font-size:11px;font-family:var(--mono);cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:10px';
-      row.onmouseenter=()=>row.style.background='var(--hov)';
-      row.onmouseleave=()=>row.style.background='';
-      const d=new Date(entry.ts*1000);
-      row.innerHTML=`<span>v${entry.version}</span><span style="color:var(--mut)">${d.toLocaleDateString()} ${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
-      row.onclick=async()=>{
-        try{const snap=JSON.parse(decodeURIComponent(escape(atob(entry.recipe))));await applyUISnapshot(snap);fxUpdate();log(`Restored v${entry.version} recipe`,'info');}
-        catch(e){log('Failed to restore that version: '+(e&&e.message||e),'err');}
-        pop.style.display='none';
-      };
-      pop.appendChild(row);
-    });
-  }
-  pop.style.display='block';
-  fxClampPopoverToViewport(pop);
-}
-document.addEventListener('click',e=>{
-  const wrap=document.getElementById('db-history-wrap');
-  if(wrap&&!wrap.contains(e.target)){const pop=document.getElementById('fx-history-popover');if(pop)pop.style.display='none';}
-});
+// fxToggleHistoryPopover() retired 2026-09-09 (3.1.3/3.1.4) — #btn-export-history now opens the
+// same combined popover fxToggleTimelinePopover() builds; see that function's own comment.
 // ── Auto lens-profile correction (desktop only) — see desktop/src-tauri/src/lens_correct.rs.
 // The actual correction runs server-side in Rust during RAW decode (a geometric per-pixel
 // remap, not a shader term), so toggling it can't take effect live like the manual sliders —
@@ -14643,13 +14612,19 @@ document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-split-popover');
   if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-split-menu')wrap.style.display='none';
 });
-// ── B2: in-session edit-history timeline (separate from the export-version popover above) ─────
+// ── B2/3.1.3/3.1.4: in-session edit-history timeline, COMBINED with the export-version list
+// (editor_ux_spec.json, 2026-09-09 — was two entirely separate popovers: #btn-export-history
+// only ever showed exported versions via chromasmithGetExportHistory, and #btn-history/
+// fxToggleTimelinePopover only ever showed the in-session undo stack (fxHistory). A user hitting
+// the export-history button expecting edit history saw only exports (or nothing, if no exports
+// exist yet) — "the edit history timeline doesn't work" was really "you're looking at the wrong
+// one of two". Both buttons now open this SAME popover with ONE interleaved list.
 async function fxTimelineScrub(idx){
   idx=Math.max(0,Math.min(fxHistory.length-1,idx|0));
   fxHistIdx=idx;
   await _fxHistoryRestore(idx);   // shared rasters must be re-attached — see fxHistoryPush
 }
-function fxToggleTimelinePopover(){
+async function fxToggleTimelinePopover(){
   const pop=document.getElementById('fx-timeline-popover');
   if(!pop)return;
   if(pop.style.display!=='none'){pop.style.display='none';return;}
@@ -14662,15 +14637,39 @@ function fxToggleTimelinePopover(){
   pop.appendChild(rail);
   const list=document.createElement('div');
   list.style.cssText='margin-top:6px';
-  [...fxHistory].map((h,i)=>({h,i})).reverse().forEach(({h,i})=>{
-    const row=document.createElement('div');
-    row.style.cssText='padding:6px 8px;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(i===fxHistIdx?';background:var(--hov)':'');
-    row.onmouseenter=()=>row.style.background='var(--hov)';
-    row.onmouseleave=()=>row.style.background=i===fxHistIdx?'var(--hov)':'';
-    const d=new Date(h.ts);
-    row.innerHTML=`<span>${i}: ${h.label}</span><span style="color:var(--mut)">${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>`;
-    row.onclick=()=>{fxTimelineScrub(i);fxToggleTimelinePopover();fxToggleTimelinePopover();};
-    list.appendChild(row);
+  // Edit-history rows (in-session undo stack) — ts is already ms (Date.now() at push time).
+  const editRows=[...fxHistory].map((h,i)=>({kind:'edit',i,label:h.label,ts:h.ts}));
+  // Export-history rows, if the Library backend exposes any — ts is SECONDS (export_history.rs
+  // convention), so ×1000 to compare against fxHistory's ms timestamps on one shared timeline.
+  let exportRows=[];
+  if(typeof window.chromasmithGetExportHistory==='function'){
+    try{
+      const exp=await window.chromasmithGetExportHistory();
+      exportRows=(exp||[]).map(entry=>({kind:'export',entry,label:`Export v${entry.version}`,ts:entry.ts*1000}));
+    }catch(e){/* Library backend not reachable — edit history alone still renders below */}
+  }
+  const merged=[...editRows,...exportRows].sort((a,b)=>b.ts-a.ts); // newest first, one shared order
+  if(!merged.length){
+    list.innerHTML='<div style="padding:8px;font-size:11px;color:var(--mut)">No history yet</div>';
+  }
+  merged.forEach(row=>{
+    const isCur=row.kind==='edit'&&row.i===fxHistIdx;
+    const el=document.createElement('div');
+    el.style.cssText='padding:6px 8px;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(isCur?';background:var(--hov)':'');
+    el.onmouseenter=()=>el.style.background='var(--hov)';
+    el.onmouseleave=()=>el.style.background=isCur?'var(--hov)':'';
+    const d=new Date(row.ts);
+    const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:row.kind==='edit'?'2-digit':undefined});
+    const tag=row.kind==='export'?'<span style="color:var(--acc);margin-right:5px">⬆</span>':'';
+    const escLbl=String(row.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); // matches log()'s own inline escape — no shared esc() helper in this file
+    el.innerHTML=`<span>${tag}${row.kind==='edit'?row.i+': '+escLbl:escLbl}</span><span style="color:var(--mut)">${timeStr}</span>`;
+    el.onclick=async()=>{
+      if(row.kind==='edit'){fxTimelineScrub(row.i);fxToggleTimelinePopover();fxToggleTimelinePopover();return;}
+      try{const snap=JSON.parse(decodeURIComponent(escape(atob(row.entry.recipe))));await applyUISnapshot(snap);fxUpdate();log(`Restored v${row.entry.version} recipe`,'info');}
+      catch(e){log('Failed to restore that version: '+(e&&e.message||e),'err');}
+      pop.style.display='none';
+    };
+    list.appendChild(el);
   });
   pop.appendChild(list);
   pop.style.display='block';
@@ -14678,7 +14677,7 @@ function fxToggleTimelinePopover(){
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-timeline-popover');
-  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-history')wrap.style.display='none';
+  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-history'&&e.target.id!=='btn-export-history')wrap.style.display='none';
 });
 function _applySplitPos(){
   const wrap=document.getElementById('fx-wrap');
@@ -16703,6 +16702,10 @@ function fxSelectImage(idx){
   fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext));
   setDZ('dz-fx-img','fn-fx-img',fxImages.length>1?`${fxImages.length} images — previewing ${fxCurIdx+1}/${fxImages.length}: ${it.name}`:it.name);
   showExif(it.exif||{});
+  // E5 fix (editor_ux_spec.json, 2026-09-09): this function never re-synced the topbar's own
+  // flag/favorite buttons, so switching photos left them showing whichever photo's state
+  // happened to be on screen before the switch — "flag stuck on the previous photo".
+  fxUpdateFlagBtns();
   renderPreview();buildLookGallery();buildFilmstrip();
 }
 function curGeom(){const it=curItem();if(!it)return null;return it.geom||(it.geom=defGeom());}
@@ -16888,6 +16891,22 @@ function updateWork(){
   fxWork=it?geomCanvas(it):null;
   if(fxWork)FX.setImage(fxWork);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry
+  fxSyncDcpProfileUI();
+}
+// 3.4.1 fix (editor_ux_spec.json, 2026-09-09): #sel-dcp (the "RAW profile" dropdown) was
+// populated once at boot by initDcpSelect() and never touched again — it stayed fully enabled
+// and showing whatever value it last had regardless of which photo was current, including for a
+// non-RAW photo where it does nothing at all. updateWork() is the one function every "the
+// current photo changed" path already calls (27 call sites), so this is the single place to
+// keep it in sync rather than adding the same check at every load/switch site individually.
+// Same isRaw check the RAW-NR "Denoise now" button already uses (fxRawNrSyncUI, line ~7497).
+function fxSyncDcpProfileUI(){
+  const sel=document.getElementById('sel-dcp');
+  if(!sel)return;
+  const it=(typeof curItem==='function')?curItem():null;
+  const isRaw=!!(it&&it.rawFile);
+  sel.disabled=!isRaw;
+  sel.title=isRaw?'':'RAW profile only applies to RAW files';
 }
 function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
 function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
