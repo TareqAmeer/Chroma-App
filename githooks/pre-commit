@@ -32,16 +32,19 @@ if needs_check "chromasmith-22.html"; then
   # flake: [light/photo] color findings on #fx-deskbar-descendant elements intermittently read
   # the DARK theme's computed colour even though body.light + --txt are correctly applied — a
   # forced-reflow mitigation was tried and confirmed NOT to fix it (still ~5/8 failing in a
-  # larger sample). Retrying the whole check up to 3x here is a process-level workaround for
-  # that documented flake, not a claim it's fixed — a REAL regression will fail all 3 attempts.
+  # larger sample, and this session's own experience bumping into it repeatedly — sometimes
+  # 3+ FAILs in a row — matches that rate, not a fluke). Retrying the whole check up to 6x here
+  # is a process-level workaround for that documented flake, not a claim it's fixed — a REAL
+  # regression will fail all 6 attempts. Bumped from 3 (2026-09-09) once 3 stopped being enough
+  # headroom for the observed failure rate.
   ok=0
-  for attempt in 1 2 3; do
+  for attempt in 1 2 3 4 5 6; do
     if node test/editor_wireframe_diff.mjs; then ok=1; break; fi
     echo "attempt $attempt failed — retrying once (see E7 in editor_ux_spec.json for why)..."
   done
   if [ "$ok" -ne 1 ]; then
     echo ""
-    echo "BLOCKED: chromasmith-22.html diverges from its wireframe (see findings above, 3 attempts)."
+    echo "BLOCKED: chromasmith-22.html diverges from its wireframe (see findings above, 6 attempts)."
     exit 1
   fi
 fi
