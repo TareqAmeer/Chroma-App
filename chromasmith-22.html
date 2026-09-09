@@ -1435,7 +1435,7 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
          own .undogrp (Editor (Developer) View.dc.html:41-43): one outer border, square inner
          corners, a hairline divider between the two. -->
     <div class="fx-undogrp">
-      <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-db-ic" id="db-undo"></span></button>
+      <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndoBtnClick(event)" onmousedown="fxUndoMousedown(event)" onmouseup="fxUndoMouseup()" onmouseleave="fxUndoMouseup()" title="Undo (⌘Z) · hold for edit history · shift-click to reset"><span class="fx-db-ic" id="db-undo"></span></button>
       <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
     </div>
     <div style="position:relative;display:inline-flex" id="db-history-wrap">
@@ -14537,6 +14537,25 @@ async function _fxHistoryRestore(i){
   fxUpdate();
   _fxHistLocked=false;
 }
+// 3.1.14: hold Undo opens edit history, shift-click resets, reset also lives in the history
+// dropdown already (fxToggleTimelinePopover's own list has no reset row — see the NOTE below).
+// Click alone still just undoes — the common case shouldn't need a modifier.
+let _undoHoldTimer=null, _undoLongPressed=false;
+function fxUndoMousedown(e){
+  if(e.button!==0||e.shiftKey)return; // shift-click is handled by the click handler, not a hold
+  _undoLongPressed=false;
+  _undoHoldTimer=setTimeout(()=>{
+    _undoLongPressed=true;
+    if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();
+    if(typeof hapt==='function')hapt();
+  },450);
+}
+function fxUndoMouseup(){if(_undoHoldTimer){clearTimeout(_undoHoldTimer);_undoHoldTimer=null;}}
+function fxUndoBtnClick(e){
+  if(_undoLongPressed){_undoLongPressed=false;return;} // the hold already acted — click is the mouseup of that same press
+  if(e.shiftKey){fxResetAll();return;}
+  fxUndo();
+}
 async function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}
   fxHistIdx--;await _fxHistoryRestore(fxHistIdx);
@@ -14739,12 +14758,24 @@ async function fxToggleTimelinePopover(){
     list.appendChild(el);
   });
   pop.appendChild(list);
+  // 3.1.14: reset also lives here, not just behind shift-click on Undo — a discoverable path to
+  // the same fxResetAll() (which still confirms; E3 tracks removing that confirmation).
+  const resetRow=document.createElement('div');
+  resetRow.style.cssText='margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr);padding-left:8px;padding-right:8px;padding-bottom:6px;font-size:11px;cursor:pointer;border-radius:5px;color:var(--err)';
+  resetRow.textContent='Reset all edits';
+  resetRow.onmouseenter=()=>resetRow.style.background='var(--hov)';
+  resetRow.onmouseleave=()=>resetRow.style.background='';
+  resetRow.onclick=()=>{pop.style.display='none';fxResetAll();};
+  pop.appendChild(resetRow);
   pop.style.display='block';
   fxClampPopoverToViewport(pop);
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-timeline-popover');
-  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-history'&&e.target.id!=='btn-export-history')wrap.style.display='none';
+  // btn-undo-db: a long-press-opened popover's mouseup fires a click on the SAME button
+  // afterwards — without this exemption that click reads as "outside" and immediately
+  // re-closes the popover the hold just opened (see fxUndoMousedown/fxUndoBtnClick).
+  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-history'&&e.target.id!=='btn-export-history'&&e.target.id!=='btn-undo-db'&&!e.target.closest('#btn-undo-db'))wrap.style.display='none';
 });
 function _applySplitPos(){
   const wrap=document.getElementById('fx-wrap');

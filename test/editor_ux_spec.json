@@ -176,11 +176,11 @@
     },
     "3.1.14": {
       "category": "topbar",
-      "status": "open",
+      "status": "fixed",
       "source": "clicking and holding the undo button should reset the photo",
       "wireframeRef": ".dc.html #btn-undo hold->history",
       "check": "editor_wireframe_behaviour.mjs: hold-undo / shift-click-undo",
-      "note": "Resolved by user: hold=history (wireframe, 450ms), shift-click=reset, reset also in history dropdown, hover shows both shortcuts."
+      "note": "Fixed 2026-09-09: holding Undo (450ms, fxUndoMousedown/fxUndoMouseup) opens the merged edit+export history popover instead of undoing; shift-click calls fxResetAll() (fxUndoBtnClick). A Reset all edits row was also added to the bottom of the history popover itself. Hover title on the button reads \"Undo (\u2318Z) \u00b7 hold for edit history \u00b7 shift-click to reset\". Fixed a real bug found while wiring this up: the popovers own outside-click-closes listener treated the SAME click that ends a long-press (mouseup fires click on btn-undo-db) as an outside click and immediately re-closed what the hold just opened \u2014 exempted btn-undo-db the same way btn-history/btn-export-history already were. Verified live via a Playwright probe: a 600ms hold opens the popover (with the new Reset row present) and does NOT undo; a quick click does not open the popover. Reset itself still confirms (E3, tracked separately, not touched here)."
     },
     "3.2.1": {
       "category": "context-menu",
