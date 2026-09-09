@@ -1063,11 +1063,24 @@
        Shown in both now, with the active tab genuinely tracking which one you're in (see
        syncSideTabs()) instead of a class that could only ever say "Library". */
     .lib-side-tabs{display:flex;gap:4px;padding:0 12px 12px}
-    .lib-side-tab{flex:1;height:28px;border-radius:var(--r);font-size:12px;font-weight:var(--weight-semibold);
+    /* min-width:0 is the actual fix — flex:1 alone does NOT let a flex item shrink below its
+       content's min-content size (the browser's implicit min-width:auto on flex items), so at
+       the wireframe's own 90px filmstrip floor the two buttons' combined natural width (icon +
+       "Library"/"Develop" text) overflowed #lib-side entirely and "Develop" rendered fully
+       off-screen, clipped by #lib-overlay's own overflow:hidden — invisible, not just tight.
+       Found live 2026-09-09 after claiming this fixed from a structural-only ARIA snapshot test,
+       which asserts presence/absence, not layout overflow — a real gap in that test's coverage. */
+    .lib-side-tab{flex:1;min-width:0;height:28px;border-radius:var(--r);font-size:12px;font-weight:var(--weight-semibold);
       display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid transparent;color:var(--mut);
-      background:none;cursor:pointer}
+      background:none;cursor:pointer;padding:0 4px;overflow:hidden}
     .lib-side-tab svg{flex:none}
+    .lib-side-tab span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
     .lib-side-tab.on{background:var(--bg);border-color:var(--bdr);color:var(--txt)}
+    /* Docked filmstrip only: tighter padding/gap than the full-view sidebar (which is never
+       narrower than DOCK_W=356px) — the extra breathing room there was itself eating into the
+       ~66px two buttons have to share at the 90px floor. */
+    body.deskx #lib-overlay:not(.full) .lib-side-tabs{padding:0 6px 8px;gap:3px}
+    body.deskx #lib-overlay:not(.full) .lib-side-tab{font-size:11px;gap:3px}
     /* Collections/tree rows — transplanted from the wireframe's .row/.row.sel: 20px left inset,
        13px, selected = the mist-blue wash + primary text/icon (dark mode swaps to the translucent
        accent wash per the token remap above, matching Library View.html's .app.dark .row.sel). */
@@ -1519,7 +1532,15 @@
        override here. var(--dock-w-user,120px) mirrors the exact same variable the track itself
        resolves from (.fx-layout{--dock-w:var(--dock-w-user,120px)}), so the two can never drift —
        ONLY the resizer JS below is allowed to set --dock-w-user, on .fx-layout. */
-    body.deskx #lib-overlay:not(.full){width:var(--dock-w-user,120px);height:calc(100vh - 44px);grid-template-rows:auto 1fr}
+    /* grid-template-columns:minmax(0,1fr) is the actual fix for the whole "filmstrip is a mess"
+       report (2026-09-09 live, screenshotted): with no explicit column, the single implicit grid
+       column auto-sizes to fit its WIDEST content (the Library/Develop tab pair's natural
+       content width, ~195px) — completely ignoring this element's own "width" above. Every
+       child (the #lib-top toolbar, the tabs, the thumbnail grid) then rendered against that
+       195px track regardless of how narrow the filmstrip actually was, which is why every one
+       of them looked broken at once — one root cause, not three separate bugs. minmax(0,1fr)
+       forces the track to the container's real width and lets its content shrink into it. */
+    body.deskx #lib-overlay:not(.full){width:var(--dock-w-user,120px);height:calc(100vh - 44px);grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr}
     /* the filmstrip hides filters/viewbar/bottom, so re-pin the two always-visible children */
     body.deskx #lib-overlay:not(.full) #lib-top{grid-row:1}
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
@@ -1537,7 +1558,7 @@
        shown unconditionally while docked, and the tree elements (#lib-collections/
        #lib-folders-header/#lib-tree/#lib-collections-post) are hidden unconditionally, with no
        width dependency on either side. */
-    body.deskx #lib-overlay:not(.full) #lib-side{display:block;grid-row:2;padding:6px 8px 0}
+    body.deskx #lib-overlay:not(.full) #lib-side{display:block;grid-row:2;padding:6px 8px 0;overflow:hidden;min-width:0}
     body.deskx #lib-overlay:not(.full){grid-template-rows:auto auto 1fr}
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:3}
     body.deskx #lib-overlay:not(.full) #lib-collections,

@@ -443,7 +443,17 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fs-thumb canvas{display:block;width:100%;height:100%}
 .fs-idx{position:absolute;bottom:1px;right:2px;font-size:9px;font-family:var(--mono);color:#fff;background:rgba(0,0,0,.6);border-radius:3px;padding:0 3px;line-height:1.4;pointer-events:none}
 /* one-tap looks */
-.looks-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:340px;overflow-y:auto}
+/* 3.4.9: max-height sized to fit exactly 2 rows (6 tiles at the 3-column layout below) with an
+   internal scroll for the rest, matching the wireframe's own .preset-grid (Editor (Developer)
+   View.dc.html:149 — 172px for its narrower panel/tile size; this panel's tiles measure ~96px
+   square at the ~300px panel width, so 2*96+6px gap ≈ 198px here). */
+.looks-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:198px;overflow-y:auto}
+/* 3.4.9: collapse/expand chevron for the preset filter+grid specifically (Preset section only —
+   independent of the whole panel's own section-level collapse, fxSecToggle further down). */
+.fx-preset-chev{display:inline-flex;width:14px;height:14px;color:var(--mut);transition:transform .15s}
+.fx-preset-chev svg{display:block;width:100%;height:100%}
+#fx-looks-ctrl.fx-preset-collapsed .fx-preset-chev{transform:rotate(-90deg)}
+#fx-looks-ctrl.fx-preset-collapsed #fx-preset-body{display:none}
 .look-cell{cursor:pointer;border-radius:5px;overflow:hidden;border:2px solid transparent;background:var(--sur2);position:relative;min-width:0}
 .look-cell.sel{border-color:var(--acc)}
 /* A look whose vendor/luts/ fetch failed (offline before the warm-up finished). Marked rather
@@ -1558,13 +1568,24 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
         <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
         <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)" style="display:none"><option value="">None</option></select>
         <div class="fx-row" id="row-lut-mix" style="display:none;margin-top:8px"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-lut-mix" oninput="fxUpdate()" title="Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original."><div class="fx-val" id="vl-lut-mix">100</div></div>
+        <!-- 3.4.9: matches the wireframe's .presetbox (Editor (Developer) View.dc.html:317-341)
+             — a dedicated collapse toggle for JUST the preset filter+grid, independent of the
+             panel-level section collapse every .fx-ctrl already gets (fxSecToggle, further down
+             this file). The wireframe's own .presetbox-body also wraps the Apply-LUT row, but
+             that row was already deliberately relocated out to its own section for 3.4.3 — not
+             re-nested here, since undoing an already-verified fix wasn't part of this item. -->
         <div id="fx-looks-ctrl" style="display:none;margin-top:10px">
-          <div class="fx-label" style="margin-bottom:4px">Preset</div>
-          <input class="vinput" id="fx-looks-search" type="search" placeholder="Search looks…" autocomplete="off"
-                 oninput="fxLookSearchChanged(this.value)" style="width:100%;margin-bottom:6px"
-                 title="Filter the looks by name — matches letters in order, so &quot;p800&quot; finds Portra 800.">
-          <div class="btn-row chip-tap" id="fx-looks-cats" style="margin-bottom:8px"></div>
-          <div class="looks-grid" id="fx-looks"></div>
+          <div class="fx-label fx-preset-head" id="fx-preset-head" style="margin-bottom:4px;cursor:pointer;display:flex;align-items:center;justify-content:space-between" title="Collapse/expand presets">
+            <span>Preset</span>
+            <span class="fx-preset-chev" id="fx-preset-chev"></span>
+          </div>
+          <div id="fx-preset-body">
+            <input class="vinput" id="fx-looks-search" type="search" placeholder="Search looks…" autocomplete="off"
+                   oninput="fxLookSearchChanged(this.value)" style="width:100%;margin-bottom:6px"
+                   title="Filter the looks by name — matches letters in order, so &quot;p800&quot; finds Portra 800.">
+            <div class="btn-row chip-tap" id="fx-looks-cats" style="margin-bottom:8px"></div>
+            <div class="looks-grid" id="fx-looks"></div>
+          </div>
         </div>
       </div>
       <!-- BASIC ADJUSTMENTS -->
@@ -20437,10 +20458,16 @@ function fxSetTheme(mode){
   try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
   syncThemeBtns();
   if(typeof window.chromasmithSyncLibTheme==='function')window.chromasmithSyncLibTheme(); // see toggleTheme()'s comment — E6
-  const m=document.getElementById('fx-overflow-menu');
-  if(m)m.querySelectorAll('.fx-ovf-item').forEach(btn=>{
-    if(btn.onclick&&btn.getAttribute('onclick')?.includes("fxSetTheme('dark')"))btn.classList.toggle('on',!light);
-    if(btn.getAttribute('onclick')?.includes("fxSetTheme('light')"))btn.classList.toggle('on',light);
+  // Appearance moved from #fx-overflow-menu into #fx-view-menu (viewMenuBuild) when Tools/View/⋯
+  // were split — this live-update loop still only checked the old menu, so clicking Dark/Light
+  // inside the NEW View menu correctly changed the theme but left the button's own 'on' state
+  // stale until the menu was closed and reopened (rebuilding it fresh). Both menus checked now.
+  ['fx-overflow-menu','fx-view-menu'].forEach(id=>{
+    const m=document.getElementById(id);
+    if(m)m.querySelectorAll('.fx-ovf-item').forEach(btn=>{
+      if(btn.onclick&&btn.getAttribute('onclick')?.includes("fxSetTheme('dark')"))btn.classList.toggle('on',!light);
+      if(btn.getAttribute('onclick')?.includes("fxSetTheme('light')"))btn.classList.toggle('on',light);
+    });
   });
 }
 // Desktop (Tauri) app only: the "Image Input" tab exists so web/mobile can drag/drop a photo in,
@@ -20767,6 +20794,22 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
     fxSecToggle(card);
   });
 });
+// 3.4.9: the Preset section's OWN collapse toggle, independent of the panel-level one above
+// (fxSecToggle collapses the whole "Presets & Looks" card, including RAW profile/Input/Print;
+// this collapses just the filter+grid inside #fx-looks-ctrl). Same persisted-boolean pattern.
+{
+  let _fxPresetCollapsed=false;
+  try{_fxPresetCollapsed=localStorage.getItem('chromasmith_fx_preset_collapsed')==='1';}catch(e){}
+  const head=document.getElementById('fx-preset-head'),ctrl=document.getElementById('fx-looks-ctrl'),chev=document.getElementById('fx-preset-chev');
+  if(head&&ctrl&&chev){
+    chev.innerHTML=icon('chevron',14);
+    if(_fxPresetCollapsed)ctrl.classList.add('fx-preset-collapsed');
+    head.addEventListener('click',()=>{
+      const open=ctrl.classList.toggle('fx-preset-collapsed');
+      try{localStorage.setItem('chromasmith_fx_preset_collapsed',open?'1':'0');}catch(e){}
+    });
+  }
+}
 // Mirror #btn-fx-export's disabled state onto the bottom-pinned #fx-fab-export duplicate — an
 // observer instead of touching every one of the several places that toggle the real button, so
 // the two can never drift out of sync.

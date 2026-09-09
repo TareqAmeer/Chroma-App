@@ -86,11 +86,14 @@ test.describe('menus', () => {
   });
 
   // E8 (editor_ux_spec.json): the wireframe's View-menu Appearance section, added 2026-09-09.
+  // 2026-09-09: Appearance moved out of the overflow (⋯) menu into the new #fx-view menu
+  // (viewMenuBuild()) when Tools/View/⋯ were split — this test's trigger selector was never
+  // updated at the time, so it silently timed out instead of catching the real behavior.
   test('Appearance: Dark/Light rows toggle body.light and stay open (not the old rebuild-closes-menu bug)', async ({ editor: { page } }) => {
-    await page.click('#fx-overflow .fx-db');
+    await page.click('#fx-view .fx-db');
     await page.click('button[onclick*="fxSetTheme(\'light\')"]');
     await expect(page.locator('body')).toHaveClass(/\blight\b/);
-    await expect(page.locator('#fx-overflow-menu')).toHaveClass(/\bon\b/); // menu must still be open
+    await expect(page.locator('#fx-view-menu')).toHaveClass(/\bon\b/); // menu must still be open
     await expect(page.locator('button[onclick*="fxSetTheme(\'light\')"]')).toHaveClass(/\bon\b/);
     await page.click('button[onclick*="fxSetTheme(\'dark\')"]');
     await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
@@ -103,7 +106,7 @@ test.describe('menus', () => {
   // the trigger only once, or a second click closes an already-open menu instead of reopening it.
   test('theme change from the Editor gear menu also re-themes the docked Library filmstrip (E6)', async ({ editor: { page } }) => {
     const overlay = page.locator('#lib-overlay');
-    await page.click('#fx-overflow .fx-db');
+    await page.click('#fx-view .fx-db');
     await page.click('button[onclick*="fxSetTheme(\'light\')"]');
     await expect(overlay).toHaveClass(/\blib-light\b/);
     await page.click('button[onclick*="fxSetTheme(\'dark\')"]'); // menu is still open — no re-click needed
