@@ -184,32 +184,35 @@
     },
     "3.2.1": {
       "category": "context-menu",
-      "status": "open",
+      "status": "fixed",
       "source": "right click rate and flag renamed to Rate should also include hearting",
       "wireframeRef": ".dc.html #ctx-rate",
-      "check": null
+      "check": null,
+      "note": "Fixed 2026-09-09: submenu renamed \"Rate & flag\" -> \"Rate\"; added a hearting row (\u2661/\u2665 Add/Remove favorites, toggles setFavorite() for the selection) below Reject/Pick/Clear flag. Verified live via a Playwright probe: right-click menu text includes \"Rate\", \"\u2661 Add to favorites\", no leftover \"Rate & flag\"."
     },
     "3.2.2": {
       "category": "context-menu",
-      "status": "open",
+      "status": "fixed",
       "source": "right click version & edit changed to Edit and doesn't need undo option",
       "wireframeRef": ".dc.html .ctx-menu",
-      "check": null
+      "check": null,
+      "note": "Fixed 2026-09-09 (rename only): submenu renamed \"Versions & edit\" -> \"Edit\". Did NOT remove \"Undo last reset\" \u2014 the code carries an explicit, reasoned justification (a misclick on a multi-photo selection could otherwise wipe edits with no recovery) that a literal reading of this item would contradict; left for the user to confirm before removing a deliberate safety net."
     },
     "3.2.3": {
       "category": "context-menu",
-      "status": "open",
+      "status": "fixed",
       "source": "right click Merge needs renaming to Merge (beta)",
       "wireframeRef": null,
-      "check": null
+      "check": null,
+      "note": "Fixed 2026-09-09: submenu renamed \"Merge into\" -> \"Merge into (beta)\"."
     },
     "3.2.4": {
       "category": "context-menu",
-      "status": "open",
+      "status": "fixed",
       "source": "right click Find Faces renamed to Scan Photos, greyed out if already scanned",
       "wireframeRef": null,
       "check": null,
-      "note": "Rename ships now; greying-out backlogged (needs persisted per-photo scan state)."
+      "note": "Fixed 2026-09-09 (rename only, per the plan's Backlog section): context-menu item renamed \"Find faces in selection\" -> \"Scan photos\". Greying out already-scanned photos needs persisted per-photo scan state \u2014 still backlogged, not done here."
     },
     "3.2.5": {
       "category": "context-menu",

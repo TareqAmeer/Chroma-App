@@ -4542,11 +4542,17 @@
       sep();
     }
 
-    // ── Rate & flag ▸ — Reject/Pick/Clear flag, matching the grid's own X/P/U keys.
-    const rateMenu = submenu('Rate &amp; flag');
+    // ── Rate ▸ — Reject/Pick/Clear flag (matching the grid's own X/P/U keys) + Favorite (3.2.1:
+    // renamed from "Rate & flag" and given a hearting row — favorite was previously only
+    // reachable from the flag icons on the card itself / the deskbar's flag button, not here).
+    const rateMenu = submenu('Rate');
     rateMenu.subItem('Reject', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))), 'X');
     rateMenu.subItem('Pick', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))), 'P');
     rateMenu.subItem('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))), 'U');
+    rateMenu.subSep();
+    const allFavorited = paths.every((p) => (state.sidecars.get(p) || {}).favorite);
+    rateMenu.subItem(allFavorited ? '♥ Remove from favorites' : '♡ Add to favorites',
+      () => Promise.all(paths.map((p) => setFavorite(p, !allFavorited))));
 
     // ── Rotate & flip ▸ — reuses the SAME geomRotate/geomFlip (chromasmith-22.html) the Tools
     // menu and crop panel already call; geometry is per-photo, LIVE editor state (curItem().geom),
@@ -4567,7 +4573,7 @@
 
     // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
     // rather than the file itself.
-    const verMenu = submenu('Versions &amp; edit');
+    const verMenu = submenu('Edit'); // 3.2.2 rename (was "Versions & edit") — see "Undo last reset" below for the other half of this item
     verMenu.subItem('Copy edit', () => libCopyEdit(paths), '⌘⇧C');
     const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), '⌘⇧V');
     // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
@@ -4668,7 +4674,7 @@
     // refreshes the grid so it shows up as a normal library photo, not a special file type.
     // Dimmed (not hidden — §10.13's lesson: a permanently hidden control is a permanently
     // unaudited one) below the photo count each merge needs.
-    const mergeMenu = submenu('Merge into');
+    const mergeMenu = submenu('Merge into (beta)'); // 3.2.3: HDR/focus/astro/panorama/collage merge is new/unproven enough to flag
     const mergeHdrItem = mergeMenu.subItem('Merge exposures (HDR)…', async () => {
       toast(`Merging ${n} exposures…`);
       try {
@@ -4767,7 +4773,11 @@
     // faces_run → embed_run → cluster_run → clip_embed_run chain (runFindFaces) to just the
     // selected photos. Valid for any n>=1 (the menu only opens with a selection), so — unlike
     // the merge/pano items above — there's nothing to dim.
-    item(`Find faces in selection${n > 1 ? ` (${n})` : ''}`, async () => {
+    // 3.2.4: renamed "Find faces in selection" -> "Scan photos" (clearer, matches what it
+    // actually does — faces_run -> embed_run -> cluster_run -> clip_embed_run, not just faces).
+    // Greying it out once a photo is already scanned needs persisted per-photo scan state —
+    // backlogged, not done here (see plan's Backlog section).
+    item(`Scan photos${n > 1 ? ` (${n})` : ''}`, async () => {
       // Paths → ids: state.entries already carries `.id` alongside `.path` for everything
       // currently shown in the grid (the same field catalog_query/expandStack/photoIds results
       // use elsewhere), so no new lookup command is needed — just match on path.
