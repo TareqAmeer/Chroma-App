@@ -1509,7 +1509,12 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
                not a photo anyone edits — it now appears only under diag-on, with the rest of the
                developer surface. loadTestPhoto() itself is unchanged and still reachable there. -->
           <button class="btn bgh diag-only" onclick="loadTestPhoto()" title="Loads the built-in calibration chart">Load test chart</button>
-          <button class="btn bgh" onclick="gpImportClick()" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)">Google Photos…</button>
+          <!-- 3.4.4: hidden on desktop only (fxDesktopFoldImageIntoLooks, below, sets its own
+               display:none the same way it folds this whole card into Looks) — that's the "Looks
+               panel" the item refers to. Untouched on web/mobile, where it's still a real,
+               working import path (see the Guide's "Can I use Google Photos?" FAQ) and photos
+               come from the OS Library on desktop anyway, not this drop zone. -->
+          <button class="btn bgh" id="btn-gp-import" onclick="gpImportClick()" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)">Google Photos…</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)">Save to library…</button>
@@ -20436,6 +20441,10 @@ function fxDesktopFoldImageIntoLooks(){
   const title=looksCard.querySelector('.fx-ctrl-title');
   movable.classList.add('fx-folded');
   looksCard.insertBefore(movable,title?title.nextSibling:looksCard.firstChild); // right after the title
+  // 3.4.4: Google Photos import stays a real, useful entry point on web/mobile (drag/drop is how
+  // a photo gets in there) but is redundant clutter on desktop, where photos come from the OS
+  // Library instead — hidden here rather than deleted from the markup outright.
+  const gp=document.getElementById('btn-gp-import');if(gp)gp.style.display='none';
 }
 // ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
 let _mqMobile=window.matchMedia('(max-width:700px)');

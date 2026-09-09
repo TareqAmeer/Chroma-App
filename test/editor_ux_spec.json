@@ -292,10 +292,11 @@
     },
     "3.4.4": {
       "category": "looks-panel",
-      "status": "open",
+      "status": "fixed",
       "source": "remove Google Photos button",
       "wireframeRef": null,
-      "check": "editor_wireframe_inventory.mjs: panel zone (Looks)"
+      "check": "editor_wireframe_inventory.mjs: panel zone (Looks)",
+      "note": "Fixed 2026-09-09: Google Photos import button (#btn-gp-import, in the Image Input card that fxDesktopFoldImageIntoLooks() folds into the Looks panel on desktop) is now hidden by that same function when window.__TAURI__ is true. Untouched on web/mobile \u2014 still a real import path there, and the Guide FAQ still documents it. Photos come from the OS Library on desktop anyway, making the button redundant clutter there specifically."
     },
     "3.4.5": {
       "category": "looks-panel",
