@@ -1,6 +1,24 @@
 [
   {
     "zone": "filmstrip",
+    "match": "filmstrip (docked library): width",
+    "exact": false,
+    "reason": "T9 (editor_ux_spec.json, 2026-09-10): 'width' newly added to checked PROPS. Wireframe declares 150px, app computes 120px for the docked filmstrip in both themes/photo-states. Untriaged — real, small, pre-existing drift this session has no design context to rule on; not something to change blindly. Remove once someone confirms which width is correct."
+  },
+  {
+    "zone": "rail",
+    "match": "tool rail: width",
+    "exact": false,
+    "reason": "Same as the filmstrip width entry above — wireframe 64px vs app 72px, in BOTH light states (no-photo and photo) but not either dark state — reason not yet understood, possibly a theme-driven scrollbar/border difference. Untriaged; not scoped to one photo-state because both light states hit it identically."
+  },
+  {
+    "zone": "panel",
+    "match": "tool panel: width",
+    "exact": false,
+    "reason": "Same class as the rail entry above — wireframe 300px vs app 320px, both light states. Untriaged."
+  },
+  {
+    "zone": "filmstrip",
     "match": "[dark/no-photo] filmstrip (docked library): borderColor",
     "exact": false,
     "reason": "Token drift only (dark theme) — same --bdr-panel (.1) vs --bdr-pill (.14) role confusion as the topbar/rail/panel borderColor entries below (#lib-overlay's dock border currently reuses a pill-role token), fixed by the same Phase D token split. Deliberately does NOT match the light-theme filmstrip borderColor findings — those are part of E6 (docked filmstrip doesn't re-theme at all) and stay live until fixed."

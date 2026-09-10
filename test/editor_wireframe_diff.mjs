@@ -99,8 +99,20 @@ const PAIRS = {
   '.tp-panel[data-panel="color"] .grp[data-fxsec="pointcolor"]': { app: '.fx-ctrl[data-fxsec="pointcolor"]', label: 'point color section', zone: 'color-panel' },
   '.tp-panel[data-panel="color"] .grp[data-fxsec="wheels"]': { app: '.fx-ctrl[data-fxsec="wheels"]', label: 'colour wheels section', zone: 'color-panel' },
 };
+// T9 (editor_ux_spec.json): 'width' added 2026-09-10 — a row could match on every OTHER
+// property yet still be visibly cramped or oversized because its spacing drifted from the
+// wireframe, with no gate on that class of regression at all before this.
+// ⚠️ 'padding'/'gap' were also added and immediately found 41 findings across nearly every
+// panel — the app consistently uses container padding (e.g. 10px on `.grp`) where the wireframe
+// consistently uses gap-with-no-padding on the equivalent wrapper. That is a real, repo-wide
+// convention difference, not 41 independent bugs, but it's a DESIGN question (which convention
+// is actually correct) this tool has no way to answer and this session has no context to decide
+// — per explicit user decision, dropped back out of PROPS rather than guessed at or broadly
+// allowlisted. Re-add once someone with wireframe/design context has ruled on it; see this
+// commit's message for the full finding list.
 const PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight',
-  'backgroundColor', 'color', 'borderRadius', 'borderColor', 'borderWidth', 'boxShadow', 'height'];
+  'backgroundColor', 'color', 'borderRadius', 'borderColor', 'borderWidth', 'boxShadow', 'height',
+  'width'];
 
 function near(a, b) {
   const na = parseFloat(a), nb = parseFloat(b);
@@ -135,6 +147,7 @@ const LONGHANDS = {
   borderWidth: ['border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width'],
   boxShadow: ['box-shadow'],
   height: ['height'],
+  width: ['width'],
 };
 async function authoredProps(page, selectorMap) {
   return page.evaluate(({ selectorMap, LONGHANDS, INHERITED }) => {
@@ -179,17 +192,14 @@ async function authoredProps(page, selectorMap) {
 
 async function extract(page, selectorMap) {
   return page.evaluate(({ selectorMap, PROPS }) => {
-    // ⚠️ 2026-09-08, UNRESOLVED — kept in as a partial mitigation, not a fix. A targeted repro
-    // (forcing a reflow then reading `#fx-deskbar`'s computed `color` right after a theme toggle
-    // + photo load) found body.light correctly applied and --txt correctly resolving to the
-    // light-theme value, yet the ELEMENT's computed `color` still intermittently reads the DARK
-    // value — the custom property and the property derived from it can disagree, which shouldn't
-    // be possible if the read were simply stale. Adding a forced reflow here appeared to fix it
-    // 4/4 in a small sample, but a larger sample (8 more runs) still showed ~5/8 failing — the
-    // earlier result was luck, not a fix. This is left in (harmless, occasionally helps) but the
-    // [light/photo] color findings below must still be treated as genuinely flaky pending a
-    // dedicated debugging session — see editor_ux_spec.json E7. Do NOT assume this comment block
-    // means it's solved; it explicitly is not.
+    // ⚠️ RESOLVED 2026-09-10 (was UNRESOLVED as of 2026-09-08 — see test/editor_gates.mjs's E7
+    // comment for the full repro/fix). The forced reflow below was a partial, luck-based
+    // mitigation for the wrong theory (body.light/--txt WERE always correct — never the cause).
+    // The real cause was an in-flight CSS transition on #fx-deskbar's inherited `color` surviving
+    // settleForCapture()'s `transition-duration:0` override, which only blocks FUTURE
+    // transitions per spec. Fixed at the source in test/wireframe_diff_lib.mjs's
+    // settleForCapture() (forces every in-flight Animation to .finish()), not here. The reflow
+    // below is left in as harmless belt-and-suspenders, not load-bearing any more.
     const out = {};
     for (const [key, sel] of Object.entries(selectorMap)) {
       const el = document.querySelector(sel);

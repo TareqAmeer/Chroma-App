@@ -21437,6 +21437,16 @@ function fxResetSection(cardOrName){
 // The header injector below prefers one of these when the section has one, rather than
 // silently replacing already-correct behaviour with the generic sliders-and-toggles walk.
 const _fxSectionResetOverride={nr:'resetNR',deconv:'resetDeconv',adjust:'resetAdjust'};
+// T18 (editor_ux_spec.json, 2026-09-10): a startup check, not a test — an override entry
+// pointing at a renamed/deleted function silently falls through to `typeof window[override]===
+// 'function'` being false and the header's own onclick just uses the generic fxResetSection()
+// walk instead, with no error anywhere. Concretely exploitable: rename resetNR without updating
+// this map, and Noise Reduction's header Reset silently starts using the generic slider/toggle
+// walk instead of the RAW-aware bespoke one — visually identical in a quick look, wrong in a way
+// only a careful diff of behaviour would catch. This catches it for free at load time instead.
+Object.entries(_fxSectionResetOverride).forEach(([fxsec,fnName])=>{
+  if(typeof window[fnName]!=='function')console.error(`[startup] _fxSectionResetOverride['${fxsec}'] names '${fnName}', which is not a function — that section's header Reset will silently fall back to the generic walk`);
+});
 // Panel redesign (docs/editor-redesign-plan.md, feedback COLOR 1): the desktop reset button
 // is no longer mobile-only (see .fx-ctrl-title-reset's CSS — it now shows on desktop too, but
 // only once .fx-mod marks something in the section as changed from default; visibility logic

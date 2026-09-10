@@ -230,7 +230,17 @@ export async function checkHoverVisibility(page, targets, { minDelta = 8, ref = 
 // a real sortmenu finding). Every finding is expected as `[zone] ...`; an allowlist entry names
 // its zone either inside `match` or via an explicit `zone` field — an entry with neither is
 // rejected at load rather than silently going global.
-const ZONE_RE = /^\[([a-z]+)\]/;
+// ⚠️ Found 2026-09-10 while adding a real allowlist entry for a "color-panel" zone (a zone name
+// used throughout editor_wireframe_diff.mjs's PAIRS, alongside detail-panel/film-panel/frame-
+// panel/crop-panel/export-panel/retouch-panel): the character class below was letters-only, so
+// it silently failed to match ANY hyphenated zone name — isAccepted's `fz` came back null, and an
+// entry for one of those zones would never suppress anything, ever, with no error anywhere. Only
+// caught because a newly-added entry visibly failed to suppress its own finding; every zone name
+// actually used by this repo's allowlists happened to be a single word until now, so no
+// pre-existing entry was silently broken by this — but the next one for any -panel zone would
+// have been. Widened to allow hyphens in both the zone declared by an entry's `match` and the
+// zone read off a live finding string.
+const ZONE_RE = /^\[([a-z-]+)\]/;
 export function loadAllowlist(raw) {
   const list = raw || [];
   for (const a of list) {
