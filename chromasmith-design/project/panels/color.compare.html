@@ -5,7 +5,7 @@
 <title>Chromasmith — color panel (current vs proposed)</title>
 <!--
   AUTO-GENERATED DRAFT by test/panel_compare_build.mjs from test/output/panel_inventory.json
-  (Stage 1 live-app extraction, 2026-09-09). PROPOSED is a
+  (Stage 1 live-app extraction, 2026-09-10). PROPOSED is a
   mechanical 1:1 translation of CURRENT into the wireframe's component vocabulary — it is a
   starting point for review, not a design. Edit the PROPOSED column directly; once you do, add
   data-reviewed="1" to .col.proposed below so a re-run of this tool never overwrites your edits.
@@ -42,6 +42,9 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .changes li b{position:absolute;left:0;top:0;font-size:9px;letter-spacing:.07em;text-transform:uppercase;font-weight:var(--weight-semibold);padding:1px 6px;border-radius:3px}
 .changes li b.kept{background:rgba(255,255,255,.1);color:var(--ink-on-dark-muted)}
 .changes li b.new{background:rgba(33,78,29,.5);color:#9ad48f}
+.changes li b.moved,.changes li b.merged{background:rgba(97,160,175,.18);color:var(--blue-mist)}
+.changes li b.cut{background:rgba(135,15,19,.42);color:#e79a9d}
+.changes li b.demoted{background:rgba(255,155,66,.18);color:var(--orange-ember)}
 .changes li b.unlabeled{background:rgba(232,192,122,.2);color:#e8c07a}
 
 /* ── CURRENT column: app's own CSS, verbatim values ─────────────────────────────────── */
@@ -95,6 +98,106 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .wf-canvas{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2)}
 .wf .cb-row{display:flex;align-items:center;gap:8px;font-size:12px}
 .wf .unlabeled-flag{outline:1.5px dashed #e8c07a;outline-offset:2px}
+
+/* Reset control: borderless, and only visible once the section has been edited (feedback COLOR 1).
+   .grp.edited is the state switch — every proposal shows at least one edited section so the
+   rule is visible in review rather than only described. */
+.wf .rst{font-size:11px;color:var(--ink-on-dark-muted);cursor:pointer;opacity:0;transition:opacity .15s ease;white-space:nowrap}
+.wf .grp.edited .rst{opacity:1}
+.wf .rst:hover{color:var(--ink-on-dark)}
+.wf .rst i{font-style:normal;opacity:.4;margin:0 3px}
+/* Equal-width segmented control — replaces every ragged row of bordered chips. */
+.wf .seg{display:flex;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);padding:2px;gap:2px}
+.wf .seg button{flex:1;height:24px;border-radius:6px;font-size:11px;color:var(--ink-on-dark-muted);background:none;border:none;cursor:pointer;white-space:nowrap}
+.wf .seg button.on{background:rgba(255,255,255,.1);color:var(--ink-on-dark)}
+.wf .info-i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:none;color:var(--ink-on-dark-muted);font-size:9px;font-style:italic;line-height:1;cursor:help;padding:0;vertical-align:middle}
+.wf .chrow{display:flex;gap:6px}
+.wf .ch{width:34px;height:22px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);font-size:10px;color:var(--ink-on-dark-muted);display:flex;align-items:center;justify-content:center}
+.wf .ch.on{border-color:var(--primary-on-dark);color:var(--ink-on-dark)}
+.wf .ch i{width:7px;height:7px;border-radius:50%;display:block}
+.wf .curve{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2);position:relative;overflow:hidden}
+.wf .curve svg{position:absolute;inset:0;width:100%;height:100%}
+/* Colour-mixer bands: the colours themselves, names on the tooltip (feedback COLOR 3). */
+.wf .bands{display:flex;gap:4px}
+.wf .band{flex:1;height:26px;border-radius:5px;border:1px solid transparent;background:var(--b);cursor:pointer;padding:0}
+.wf .band.on{border-color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.wf .wheels{display:flex;gap:10px}
+.wf .wheel{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.wf .wheel .disc{width:100%;aspect-ratio:1;border-radius:50%;position:relative;background:conic-gradient(#e05454,#e0c454,#63d17a,#57c9d4,#5b7fe0,#c25fd4,#e05454);box-shadow:inset 0 0 18px 12px var(--surface-tile-1)}
+.wf .wheel .disc::after{content:'';position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.wf .wheel .nm{font-size:11px;text-align:center;line-height:1.25}
+.wf .wheel .nm em{display:block;font-style:normal;font-size:10px;color:var(--ink-on-dark-muted)}
+.wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
+.wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
+.wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
+.wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
+.wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
+.wf .rrow:hover{background:rgba(255,255,255,.04)}
+.wf .rtick{width:14px;flex:none;display:flex}
+.wf .rtick svg{width:14px;height:14px;stroke:var(--ink-on-dark);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.wf .rrow:not(.sel) .rlb{color:var(--ink-on-dark-muted)}
+.wf .rlb{flex:1;min-width:0}
+.wf .rval{color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+.wf .rico svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .rcustom{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-on-dark-muted)}
+.wf .rcustom input{width:38px;height:24px;text-align:center;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);border-radius:5px;color:var(--ink-on-dark);font:inherit;font-variant-numeric:tabular-nums}
+.wf .rcustom em{font-style:normal;opacity:.6}
+.wf .rcustom b{font-weight:400;opacity:.5}
+.wf .orient,.wf .combine,.wf .scope{margin-bottom:2px}
+.wf .iconrow{display:flex;gap:4px}
+.wf .ibtn2{flex:1;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.wf .ibtn2 svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .wide-btn,.wf .add-btn,.wf .pick-btn{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
+.wf .wide-btn svg,.wf .add-btn svg,.wf .pick-btn svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .wide-btn.ghost{background:none}
+.wf .wide-btn.danger{color:#e79a9d;border-color:rgba(231,154,157,.3)}
+.wf .wide-btn.primary{background:var(--primary-on-dark);color:#10222a;border-color:var(--primary-on-dark);font-weight:600}
+.wf .btn2{display:flex;gap:6px}
+.wf .txt{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font:inherit;font-size:12px;padding:0 9px}
+.wf .cb-row{display:flex;align-items:center;gap:8px;font-size:12px}
+/* Masks */
+.wf .mlist{display:flex;flex-direction:column;gap:2px}
+.wf .mrow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:var(--radius-xs);cursor:pointer}
+.wf .mrow.sel{background:rgba(97,160,175,.16);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
+.wf .mrow .grip{width:12px;flex:none;display:flex;cursor:grab}
+.wf .mrow .grip svg{width:12px;height:12px;stroke:rgba(255,255,255,.34)}
+.wf .mrow .th{width:26px;height:26px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.16);flex:none;background:radial-gradient(circle at 38% 42%,#fff 0 22%,#7a7a7a 34%,#1b1b1d 72%)}
+.wf .mrow .nm{flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wf .mrow .chip{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-on-dark-muted);border:1px solid rgba(255,255,255,.16);border-radius:3px;padding:1px 4px;flex:none}
+.wf .mrow .eye{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer}
+.wf .mrow .eye svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .mrow.muted .nm,.wf .mrow.muted .th{opacity:.45}
+.wf .addmenu{border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);background:var(--surface-tile-2);padding:5px}
+.wf .amgrp{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);padding:7px 7px 3px}
+.wf .amrow{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:5px;font-size:12px;cursor:pointer}
+.wf .amrow:hover{background:rgba(255,255,255,.07)}
+.wf .amic{width:15px;height:15px;flex:none;display:flex}
+.wf .amic svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .cov{font-size:11px;color:var(--ink-on-dark-muted)}
+/* Export */
+.wf .fnrow{display:flex;align-items:center}
+.wf .fnrow .fieldlabel{margin-bottom:0;flex:1}
+.wf .ver{font-size:11px;color:var(--primary-on-dark);font-variant-numeric:tabular-nums}
+/* Info */
+.wf .faces{display:flex;flex-wrap:wrap;gap:6px}
+.wf .face{display:flex;align-items:center;gap:6px;padding:3px 9px 3px 3px;border-radius:var(--radius-pill);border:1px solid rgba(255,255,255,.14);font-size:11px}
+.wf .face.unnamed{border-style:dashed;color:var(--ink-on-dark-muted)}
+.wf .favatar{width:22px;height:22px;border-radius:50%;flex:none;background:radial-gradient(circle at 50% 38%,#c9a68a 0 40%,#6b5344 72%)}
+.wf .kws{display:flex;flex-wrap:wrap;gap:5px}
+.wf .kw{display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border-radius:var(--radius-pill);background:rgba(255,255,255,.08)}
+.wf .kw b{font-weight:400;opacity:.5;cursor:pointer}
+.wf .kw.sug{background:none;border:1px dashed rgba(255,255,255,.2);color:var(--ink-on-dark-muted)}
+.wf .kwsug{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.wf .kwlb{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);margin-right:2px}
+.wf .exif{display:flex;flex-direction:column}
+.wf .erow{display:flex;justify-content:space-between;gap:10px;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.wf .elb{color:var(--ink-on-dark-muted)}
+.wf .eval{text-align:right;font-variant-numeric:tabular-nums}
+.wf .echips{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.wf .echip{display:flex;flex-direction:column;gap:1px;background:var(--surface-tile-2);border-radius:var(--radius-xs);padding:5px 8px;font-size:12px;font-variant-numeric:tabular-nums}
+.wf .eclb{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-on-dark-muted)}
+
 </style>
 </head>
 <body>
@@ -102,8 +205,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
   <h1>Color panel — current vs proposed</h1>
   <p>Auto-drafted from the live app. CURRENT is exactly what ships today (45 controls
   across 4 sections: Tone Curves, Color Mixer, Point Color, Colour Wheels).
-  PROPOSED starts as the same content in the wireframe's component vocabulary — nothing has been
-  cut, merged, or reordered yet. Edit the PROPOSED column to actually redesign the panel.</p>
+  PROPOSED is an authored redesign — every change is listed below with the feedback it answers.</p>
   <div class="warn">4 controls below could not be labeled automatically — flagged with a dashed outline in both columns.</div>
 </div>
 <section class="cmp">
@@ -157,99 +259,44 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
         </div>
       </div>
     </div>
-    <div class="col proposed">
-      <span class="tag">Proposed (unreviewed draft)</span>
+    <div class="col proposed" data-authored="1">
+      <span class="tag">Proposed</span>
       <div class="spec wf">
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Tone Curves</span><button class="sw" aria-label="Tone Curves off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Shadows</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Darks</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Lights</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Highlights</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="unlabeled-flag"><span class="fieldlabel">(unlabeled canvas #cv-curve)</span><div class="wf-canvas"></div></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Point</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Parametric</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">RGB</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">R</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">G</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">B</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset channel</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset all</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset all</button></div>
-          </div>
-        </div>
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Color Mixer</span><button class="sw" aria-label="Color Mixer off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Red</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Orange</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Yellow</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Green</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Aqua</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Blue</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Purple</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Magenta</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset band</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset all</button></div>
-          </div>
-        </div>
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Point Color</span><button class="sw" aria-label="Point Color off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Range</span><span class="sr-val">35</span></div><input type="range" min="0" max="100" value="35"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Click a color in the photo to target it precisely, then dial in how it shifts</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Delete point</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset all</button></div>
-          </div>
-        </div>
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Colour Wheels</span><button class="sw" aria-label="Colour Wheels off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Shadow  (Lift)</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Midtone  (Gamma)</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Highlight  (Gain)</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div>
-          <div class="unlabeled-flag"><span class="fieldlabel">(unlabeled canvas #cv-wheel-lift)</span><div class="wf-canvas"></div></div>
-          <div class="unlabeled-flag"><span class="fieldlabel">(unlabeled canvas #cv-wheel-gamma)</span><div class="wf-canvas"></div></div>
-          <div class="unlabeled-flag"><span class="fieldlabel">(unlabeled canvas #cv-wheel-gain)</span><div class="wf-canvas"></div></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset all</button></div>
-          </div>
-        </div>
+        <div class="grp edited">
+  <div class="grp-hd"><span class="fieldlabel">Tone curve</span><span class="rst">Reset <i>|</i> All</span><button class="sw on" aria-label="Tone curve on"></button></div>
+  <div class="grp-bd"><div class="seg"><button class="on">Point</button><button class="">Parametric</button></div><div class="chrow"><button class="ch on">RGB</button><button class="ch"><i style="background:#e05454"></i></button><button class="ch"><i style="background:#63d17a"></i></button><button class="ch"><i style="background:#5b7fe0"></i></button></div><div class="curve"><svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" stroke="rgba(255,255,255,.06)" stroke-width=".6" fill="none"/>
+              <path d="M0 100 L100 0" stroke="rgba(255,255,255,.14)" stroke-width=".8" fill="none"/>
+              <path d="M0 100 C30 78 62 30 100 0" stroke="#fff" stroke-width="1.6" fill="none" vector-effect="non-scaling-stroke"/>
+              <circle cx="32" cy="74" r="2.6" fill="#fff"/><circle cx="68" cy="28" r="2.6" fill="#fff"/>
+            </svg></div></div>
+</div>
+<div class="grp off">
+  <div class="grp-hd"><span class="fieldlabel">Color mixer</span><span class="rst">Reset <i>|</i> All</span><button class="sw" aria-label="Color mixer off"></button></div>
+  <div class="grp-bd"><div class="bands"><button class="band on" style="--b:#e04b4b" title="Red" aria-label="Red"></button><button class="band" style="--b:#e08b3a" title="Orange" aria-label="Orange"></button><button class="band" style="--b:#ddc73f" title="Yellow" aria-label="Yellow"></button><button class="band" style="--b:#5fbf5f" title="Green" aria-label="Green"></button><button class="band" style="--b:#4fc3c9" title="Aqua" aria-label="Aqua"></button><button class="band" style="--b:#4f7fd4" title="Blue" aria-label="Blue"></button><button class="band" style="--b:#8a63cc" title="Purple" aria-label="Purple"></button><button class="band" style="--b:#cc5fa8" title="Magenta" aria-label="Magenta"></button></div><div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div></div>
+</div>
+<div class="grp off">
+  <div class="grp-hd"><span class="fieldlabel">Point color</span><span class="rst">Reset <i>|</i> All</span><button class="sw" aria-label="Point color off"></button></div>
+  <div class="grp-bd"><button class="pick-btn"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Pick from photo <button class="info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button></button><div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Range</span><span class="sr-val">35</span></div><input type="range" min="0" max="100" value="35"></div><button class="wide-btn danger">Delete point</button></div>
+</div>
+<div class="grp off">
+  <div class="grp-hd"><span class="fieldlabel">Colour wheels</span><button class="sw" aria-label="Colour wheels off"></button></div>
+  <div class="grp-bd"><div class="wheels">
+            <div class="wheel"><div class="disc"></div><div class="nm">Shadows<em>Lift</em></div></div>
+            <div class="wheel"><div class="disc"></div><div class="nm">Midtones<em>Gamma</em></div></div>
+            <div class="wheel"><div class="disc"></div><div class="nm">Highlights<em>Gain</em></div></div>
+          </div><div class="slider-row"><div class="sr-top"><span>Shadow brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Midtone brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Highlight brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div></div>
+</div>
       </div>
     </div>
     <ul class="changes">
-      <li><b class="kept">Kept</b>[curves] Shadows — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Darks — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Lights — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Highlights — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="unlabeled">Unlabeled</b>[curves] a canvas (#cv-curve) has no discoverable label in the live DOM — confirm its real name before drafting a proposal for it.</li>
-      <li><b class="kept">Kept</b>[curves] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Point — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Parametric — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] RGB — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] R — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] G — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] B — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Reset channel — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Reset all — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[curves] Reset all — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Hue — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Saturation — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Luminance — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Red — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Orange — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Yellow — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Green — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Aqua — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Blue — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Purple — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Magenta — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Reset band — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hsl] Reset all — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Hue — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Saturation — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Luminance — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Range — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Click a color in the photo to target it precisely, then dial in how it shifts — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Delete point — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[pointcolor] Reset all — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[wheels] Shadow  (Lift) — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[wheels] Midtone  (Gamma) — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[wheels] Highlight  (Gain) — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="unlabeled">Unlabeled</b>[wheels] a canvas (#cv-wheel-lift) has no discoverable label in the live DOM — confirm its real name before drafting a proposal for it.</li>
-      <li><b class="unlabeled">Unlabeled</b>[wheels] a canvas (#cv-wheel-gamma) has no discoverable label in the live DOM — confirm its real name before drafting a proposal for it.</li>
-      <li><b class="unlabeled">Unlabeled</b>[wheels] a canvas (#cv-wheel-gain) has no discoverable label in the live DOM — confirm its real name before drafting a proposal for it.</li>
-      <li><b class="kept">Kept</b>[wheels] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[wheels] Reset all — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
+      <li><b class="moved">moved</b>COLOR 1 — Reset moves into the section header beside the switch, borderless. It is hidden until the section is edited: Tone curve is shown in the edited state so you can see it appear, the other three are shown untouched. That removes four full-width "Reset this section" buttons from the panel.</li>
+      <li><b class="merged">merged</b>COLOR 1 — Color mixer, Point color and Tone curve carry "Reset | All" in one header control instead of separate "Reset band" + "Reset all" buttons at the bottom.</li>
+      <li><b class="merged">merged</b>COLOR 2 — The RGB/R/G/B chip row becomes one RGB label plus three equal colour dots; Point/Parametric becomes an equal-width segmented control. No ragged bordered chips left in the panel.</li>
+      <li><b class="merged">merged</b>COLOR 3 — The Color mixer's eight named buttons (Red, Orange, Yellow…) become eight colour swatches. The names survive as tooltips and aria-labels, so nothing is lost for keyboard or screen-reader use.</li>
+      <li><b class="demoted">demoted</b>COLOR 4 — "Click a color in the photo to target it precisely, then dial in…" becomes a "Pick from photo" button with an ⓘ carrying the full sentence.</li>
+      <li><b class="moved">moved</b>Colour wheels arrive here from their own rail section (spec D2). Brightness sliders move out from under the wheels into full-width rows — under a 90px wheel they are too short to set precisely and were the only sliders in the app with no readable value.</li>
+      <li><b class="kept">kept</b>Curve canvas, point dragging, the four parametric bands, and every slider range and default.</li>
     </ul>
   </div>
 </section>

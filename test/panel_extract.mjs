@@ -83,8 +83,12 @@ const EXTRACT_FN = `(key) => {
   // none of these is flagged unlabeled rather than silently dropped — Stage 2 must not draft
   // a blank row into the proposal.
   function labelFor(el) {
-    const row = el.closest('.fx-row');
-    const lbl = row && row.querySelector('.fx-label');
+    // .vrow/.vlb is a second labelled-row idiom the app uses alongside .fx-row/.fx-label
+    // (Export's Filename field, Match/Colour Copy's name fields). Checking only .fx-row made
+    // those fall through to the title attribute, which is help text, not a label — Export's
+    // came out as the full "Batch tokens: {name} source name..." sentence.
+    const row = el.closest('.fx-row, .vrow');
+    const lbl = row && row.querySelector('.fx-label, .vlb');
     if (lbl && lbl.textContent.trim()) return lbl.textContent.trim();
     if (el.title) return el.title.trim();
     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
@@ -148,7 +152,15 @@ const EXTRACT_FN = `(key) => {
   }));
   card.querySelectorAll('input[type=checkbox]').forEach(el => record(el, 'checkbox', { default: el.checked }));
   card.querySelectorAll('input[type=color]').forEach(el => record(el, 'color', { default: el.value }));
-  card.querySelectorAll('input[type=text],input[type=number]:not([type=range])').forEach(el => record(el, 'text', { default: el.value || null }));
+  // ⚠️ "input[type=text]" does NOT match an <input> with no type attribute at all, and the
+  // app has five of those — including #fx-fname, the Export filename field, and #exp-wm-text,
+  // the watermark text. Reported as missing from the Export draft by the user, 2026-09-09. An
+  // attribute selector matches the ATTRIBUTE, not the effective type, so ":not([type])" has to
+  // be spelled out separately; el.type still reads "text" for them at runtime.
+  // ⚠️ NO BACKTICKS IN THIS COMMENT — it lives inside the EXTRACT_FN template literal, so a
+  // stray backtick truncates the whole function source. Same bug class as CLAUDE.md §3's GLSL
+  // rule, and it bit here first time out.
+  card.querySelectorAll('input[type=text],input[type=number],input:not([type])').forEach(el => record(el, 'text', { default: el.value || null, placeholder: el.placeholder || null }));
   card.querySelectorAll('canvas[id]').forEach(el => record(el, 'canvas', { width: el.width, height: el.height }));
   card.querySelectorAll('button').forEach(el => {
     // Skip a button whose only job is toggling another control we already record (the section

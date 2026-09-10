@@ -21,6 +21,11 @@
 //                                                        confirm with the user first)
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+// Authored proposals live in their own module so this builder stays mechanical: CURRENT is
+// regenerated from the live-app extraction every run, PROPOSED comes from panel_proposals.mjs
+// when that module has an entry for the panel, and falls back to the 1:1 translation below
+// when it does not (a panel nobody has designed yet still gets a usable draft).
+import { PROPOSALS, PROPOSAL_CSS } from './panel_proposals.mjs';
 
 const ROOT = process.cwd();
 const OUT_DIR = path.join(ROOT, 'chromasmith-design/project/panels');
@@ -81,6 +86,9 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .changes li b{position:absolute;left:0;top:0;font-size:9px;letter-spacing:.07em;text-transform:uppercase;font-weight:var(--weight-semibold);padding:1px 6px;border-radius:3px}
 .changes li b.kept{background:rgba(255,255,255,.1);color:var(--ink-on-dark-muted)}
 .changes li b.new{background:rgba(33,78,29,.5);color:#9ad48f}
+.changes li b.moved,.changes li b.merged{background:rgba(97,160,175,.18);color:var(--blue-mist)}
+.changes li b.cut{background:rgba(135,15,19,.42);color:#e79a9d}
+.changes li b.demoted{background:rgba(255,155,66,.18);color:var(--orange-ember)}
 .changes li b.unlabeled{background:rgba(232,192,122,.2);color:#e8c07a}
 
 /* ── CURRENT column: app's own CSS, verbatim values ─────────────────────────────────── */
@@ -134,6 +142,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .wf-canvas{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2)}
 .wf .cb-row{display:flex;align-items:center;gap:8px;font-size:12px}
 .wf .unlabeled-flag{outline:1.5px dashed #e8c07a;outline-offset:2px}
+${PROPOSAL_CSS}
 </style>`;
 
 function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
@@ -246,6 +255,7 @@ async function buildPanel(panelKey) {
     return;
   }
 
+  const proposal = PROPOSALS[panelKey] || null;
   const totalControls = sections.reduce((n, s) => n + s.controls.length, 0);
   const totalUnlabeled = sections.reduce((n, s) => n + s.controls.filter((c) => c.unlabeled).length, 0);
 
@@ -271,8 +281,7 @@ ${HEAD}
   <h1>${esc(panelKey.charAt(0).toUpperCase() + panelKey.slice(1))} panel — current vs proposed</h1>
   <p>Auto-drafted from the live app. CURRENT is exactly what ships today (${totalControls} controls
   across ${sections.length} section${sections.length === 1 ? '' : 's'}: ${sections.map((s) => esc(s.title || s.key)).join(', ')}).
-  PROPOSED starts as the same content in the wireframe's component vocabulary — nothing has been
-  cut, merged, or reordered yet. Edit the PROPOSED column to actually redesign the panel.</p>
+  ${proposal ? 'PROPOSED is an authored redesign — every change is listed below with the feedback it answers.' : "PROPOSED starts as the same content in the wireframe's component vocabulary — nothing has been cut, merged, or reordered yet."}</p>
   ${totalUnlabeled ? `<div class="warn">${totalUnlabeled} control${totalUnlabeled === 1 ? '' : 's'} below could not be labeled automatically — flagged with a dashed outline in both columns.</div>` : ''}
 </div>
 <section class="cmp">
@@ -285,14 +294,14 @@ ${HEAD}
         ${buildColumn(sections, renderAppControl, 'app')}
       </div>
     </div>
-    <div class="col proposed">
-      <span class="tag">Proposed (unreviewed draft)</span>
+    <div class="col proposed"${proposal ? ' data-authored="1"' : ''}>
+      <span class="tag">${proposal ? 'Proposed' : 'Proposed (unreviewed 1:1 draft)'}</span>
       <div class="spec wf">
-        ${buildColumn(sections, renderWfControl, 'wf')}
+        ${proposal ? proposal.html : buildColumn(sections, renderWfControl, 'wf')}
       </div>
     </div>
     <ul class="changes">
-      ${buildDiffList(sections)}
+      ${proposal ? proposal.changes.map(([kind, text]) => `<li><b class="${kind}">${kind}</b>${text}</li>`).join('\n      ') : buildDiffList(sections)}
     </ul>
   </div>
 </section>

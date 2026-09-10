@@ -5,7 +5,7 @@
 <title>Chromasmith — film panel (current vs proposed)</title>
 <!--
   AUTO-GENERATED DRAFT by test/panel_compare_build.mjs from test/output/panel_inventory.json
-  (Stage 1 live-app extraction, 2026-09-09). PROPOSED is a
+  (Stage 1 live-app extraction, 2026-09-10). PROPOSED is a
   mechanical 1:1 translation of CURRENT into the wireframe's component vocabulary — it is a
   starting point for review, not a design. Edit the PROPOSED column directly; once you do, add
   data-reviewed="1" to .col.proposed below so a re-run of this tool never overwrites your edits.
@@ -42,6 +42,9 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .changes li b{position:absolute;left:0;top:0;font-size:9px;letter-spacing:.07em;text-transform:uppercase;font-weight:var(--weight-semibold);padding:1px 6px;border-radius:3px}
 .changes li b.kept{background:rgba(255,255,255,.1);color:var(--ink-on-dark-muted)}
 .changes li b.new{background:rgba(33,78,29,.5);color:#9ad48f}
+.changes li b.moved,.changes li b.merged{background:rgba(97,160,175,.18);color:var(--blue-mist)}
+.changes li b.cut{background:rgba(135,15,19,.42);color:#e79a9d}
+.changes li b.demoted{background:rgba(255,155,66,.18);color:var(--orange-ember)}
 .changes li b.unlabeled{background:rgba(232,192,122,.2);color:#e8c07a}
 
 /* ── CURRENT column: app's own CSS, verbatim values ─────────────────────────────────── */
@@ -95,6 +98,106 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .wf-canvas{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2)}
 .wf .cb-row{display:flex;align-items:center;gap:8px;font-size:12px}
 .wf .unlabeled-flag{outline:1.5px dashed #e8c07a;outline-offset:2px}
+
+/* Reset control: borderless, and only visible once the section has been edited (feedback COLOR 1).
+   .grp.edited is the state switch — every proposal shows at least one edited section so the
+   rule is visible in review rather than only described. */
+.wf .rst{font-size:11px;color:var(--ink-on-dark-muted);cursor:pointer;opacity:0;transition:opacity .15s ease;white-space:nowrap}
+.wf .grp.edited .rst{opacity:1}
+.wf .rst:hover{color:var(--ink-on-dark)}
+.wf .rst i{font-style:normal;opacity:.4;margin:0 3px}
+/* Equal-width segmented control — replaces every ragged row of bordered chips. */
+.wf .seg{display:flex;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);padding:2px;gap:2px}
+.wf .seg button{flex:1;height:24px;border-radius:6px;font-size:11px;color:var(--ink-on-dark-muted);background:none;border:none;cursor:pointer;white-space:nowrap}
+.wf .seg button.on{background:rgba(255,255,255,.1);color:var(--ink-on-dark)}
+.wf .info-i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:none;color:var(--ink-on-dark-muted);font-size:9px;font-style:italic;line-height:1;cursor:help;padding:0;vertical-align:middle}
+.wf .chrow{display:flex;gap:6px}
+.wf .ch{width:34px;height:22px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);font-size:10px;color:var(--ink-on-dark-muted);display:flex;align-items:center;justify-content:center}
+.wf .ch.on{border-color:var(--primary-on-dark);color:var(--ink-on-dark)}
+.wf .ch i{width:7px;height:7px;border-radius:50%;display:block}
+.wf .curve{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2);position:relative;overflow:hidden}
+.wf .curve svg{position:absolute;inset:0;width:100%;height:100%}
+/* Colour-mixer bands: the colours themselves, names on the tooltip (feedback COLOR 3). */
+.wf .bands{display:flex;gap:4px}
+.wf .band{flex:1;height:26px;border-radius:5px;border:1px solid transparent;background:var(--b);cursor:pointer;padding:0}
+.wf .band.on{border-color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.wf .wheels{display:flex;gap:10px}
+.wf .wheel{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.wf .wheel .disc{width:100%;aspect-ratio:1;border-radius:50%;position:relative;background:conic-gradient(#e05454,#e0c454,#63d17a,#57c9d4,#5b7fe0,#c25fd4,#e05454);box-shadow:inset 0 0 18px 12px var(--surface-tile-1)}
+.wf .wheel .disc::after{content:'';position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.wf .wheel .nm{font-size:11px;text-align:center;line-height:1.25}
+.wf .wheel .nm em{display:block;font-style:normal;font-size:10px;color:var(--ink-on-dark-muted)}
+.wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
+.wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
+.wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
+.wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
+.wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
+.wf .rrow:hover{background:rgba(255,255,255,.04)}
+.wf .rtick{width:14px;flex:none;display:flex}
+.wf .rtick svg{width:14px;height:14px;stroke:var(--ink-on-dark);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.wf .rrow:not(.sel) .rlb{color:var(--ink-on-dark-muted)}
+.wf .rlb{flex:1;min-width:0}
+.wf .rval{color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+.wf .rico svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .rcustom{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-on-dark-muted)}
+.wf .rcustom input{width:38px;height:24px;text-align:center;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);border-radius:5px;color:var(--ink-on-dark);font:inherit;font-variant-numeric:tabular-nums}
+.wf .rcustom em{font-style:normal;opacity:.6}
+.wf .rcustom b{font-weight:400;opacity:.5}
+.wf .orient,.wf .combine,.wf .scope{margin-bottom:2px}
+.wf .iconrow{display:flex;gap:4px}
+.wf .ibtn2{flex:1;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.wf .ibtn2 svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .wide-btn,.wf .add-btn,.wf .pick-btn{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
+.wf .wide-btn svg,.wf .add-btn svg,.wf .pick-btn svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .wide-btn.ghost{background:none}
+.wf .wide-btn.danger{color:#e79a9d;border-color:rgba(231,154,157,.3)}
+.wf .wide-btn.primary{background:var(--primary-on-dark);color:#10222a;border-color:var(--primary-on-dark);font-weight:600}
+.wf .btn2{display:flex;gap:6px}
+.wf .txt{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font:inherit;font-size:12px;padding:0 9px}
+.wf .cb-row{display:flex;align-items:center;gap:8px;font-size:12px}
+/* Masks */
+.wf .mlist{display:flex;flex-direction:column;gap:2px}
+.wf .mrow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:var(--radius-xs);cursor:pointer}
+.wf .mrow.sel{background:rgba(97,160,175,.16);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
+.wf .mrow .grip{width:12px;flex:none;display:flex;cursor:grab}
+.wf .mrow .grip svg{width:12px;height:12px;stroke:rgba(255,255,255,.34)}
+.wf .mrow .th{width:26px;height:26px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.16);flex:none;background:radial-gradient(circle at 38% 42%,#fff 0 22%,#7a7a7a 34%,#1b1b1d 72%)}
+.wf .mrow .nm{flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wf .mrow .chip{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-on-dark-muted);border:1px solid rgba(255,255,255,.16);border-radius:3px;padding:1px 4px;flex:none}
+.wf .mrow .eye{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer}
+.wf .mrow .eye svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .mrow.muted .nm,.wf .mrow.muted .th{opacity:.45}
+.wf .addmenu{border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);background:var(--surface-tile-2);padding:5px}
+.wf .amgrp{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);padding:7px 7px 3px}
+.wf .amrow{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:5px;font-size:12px;cursor:pointer}
+.wf .amrow:hover{background:rgba(255,255,255,.07)}
+.wf .amic{width:15px;height:15px;flex:none;display:flex}
+.wf .amic svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wf .cov{font-size:11px;color:var(--ink-on-dark-muted)}
+/* Export */
+.wf .fnrow{display:flex;align-items:center}
+.wf .fnrow .fieldlabel{margin-bottom:0;flex:1}
+.wf .ver{font-size:11px;color:var(--primary-on-dark);font-variant-numeric:tabular-nums}
+/* Info */
+.wf .faces{display:flex;flex-wrap:wrap;gap:6px}
+.wf .face{display:flex;align-items:center;gap:6px;padding:3px 9px 3px 3px;border-radius:var(--radius-pill);border:1px solid rgba(255,255,255,.14);font-size:11px}
+.wf .face.unnamed{border-style:dashed;color:var(--ink-on-dark-muted)}
+.wf .favatar{width:22px;height:22px;border-radius:50%;flex:none;background:radial-gradient(circle at 50% 38%,#c9a68a 0 40%,#6b5344 72%)}
+.wf .kws{display:flex;flex-wrap:wrap;gap:5px}
+.wf .kw{display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border-radius:var(--radius-pill);background:rgba(255,255,255,.08)}
+.wf .kw b{font-weight:400;opacity:.5;cursor:pointer}
+.wf .kw.sug{background:none;border:1px dashed rgba(255,255,255,.2);color:var(--ink-on-dark-muted)}
+.wf .kwsug{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.wf .kwlb{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);margin-right:2px}
+.wf .exif{display:flex;flex-direction:column}
+.wf .erow{display:flex;justify-content:space-between;gap:10px;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.wf .elb{color:var(--ink-on-dark-muted)}
+.wf .eval{text-align:right;font-variant-numeric:tabular-nums}
+.wf .echips{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.wf .echip{display:flex;flex-direction:column;gap:1px;background:var(--surface-tile-2);border-radius:var(--radius-xs);padding:5px 8px;font-size:12px;font-variant-numeric:tabular-nums}
+.wf .eclb{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-on-dark-muted)}
+
 </style>
 </head>
 <body>
@@ -102,8 +205,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
   <h1>Film panel — current vs proposed</h1>
   <p>Auto-drafted from the live app. CURRENT is exactly what ships today (25 controls
   across 5 sections: Film Grain, Halation, Bloom, Film Artifacts, Vignette).
-  PROPOSED starts as the same content in the wireframe's component vocabulary — nothing has been
-  cut, merged, or reordered yet. Edit the PROPOSED column to actually redesign the panel.</p>
+  PROPOSED is an authored redesign — every change is listed below with the feedback it answers.</p>
   
 </div>
 <section class="cmp">
@@ -161,83 +263,37 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
         </div>
       </div>
     </div>
-    <div class="col proposed">
-      <span class="tag">Proposed (unreviewed draft)</span>
+    <div class="col proposed" data-authored="1">
+      <span class="tag">Proposed</span>
       <div class="spec wf">
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Film Grain</span><button class="sw" aria-label="Film Grain off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">30</span></div><input type="range" min="0" max="100" value="30"></div>
-          <div class="slider-row"><div class="sr-top"><span>Size</span><span class="sr-val">3</span></div><input type="range" min="1" max="20" value="3"></div>
-          <div class="slider-row"><div class="sr-top"><span>Grain motion</span><span class="sr-val">75</span></div><input type="range" min="0" max="100" value="75"></div>
-          <div class="slider-row"><div class="sr-top"><span>Gate weave</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div>
-          <div class="slider-row"><div class="sr-top"><span>Film breath</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div>
-          <div class=""><span class="fieldlabel">Film format</span><button class="select-btn"><span>8mm — coarse</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button></div>
-          </div>
-        </div>
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Halation</span><button class="sw" aria-label="Halation off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">70</span></div><input type="range" min="0" max="100" value="70"></div>
-          <div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">6</span></div><input type="range" min="2" max="40" value="6"></div>
-          <div class="slider-row"><div class="sr-top"><span>Shadow protect</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button></div>
-          </div>
-        </div>
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Bloom</span><button class="sw" aria-label="Bloom off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">40</span></div><input type="range" min="0" max="100" value="40"></div>
-          <div class="slider-row"><div class="sr-top"><span>Threshold</span><span class="sr-val">10</span></div><input type="range" min="2" max="60" value="10"></div>
-          <div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">12</span></div><input type="range" min="2" max="50" value="12"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button></div>
-          </div>
-        </div>
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Film Artifacts</span><button class="sw" aria-label="Film Artifacts off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Dust</span><span class="sr-val">30</span></div><input type="range" min="0" max="100" value="30"></div>
-          <div class="slider-row"><div class="sr-top"><span>Scratches</span><span class="sr-val">20</span></div><input type="range" min="0" max="100" value="20"></div>
-          <div class="slider-row"><div class="sr-top"><span>Light leak</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Both</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Black</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">White</button><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Re-roll the random dust/scratch/leak placement</button></div>
-          </div>
-        </div>
-        <div class="grp off">
-          <div class="grp-hd"><span class="fieldlabel">Vignette</span><button class="sw" aria-label="Vignette off"></button></div>
-          <div class="grp-bd">
-          <div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">50</span></div><input type="range" min="0" max="100" value="50"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ibtn" style="width:auto;padding:0 10px;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);font-size:12px;gap:6px">Reset this section</button></div>
-          </div>
-        </div>
+        <div class="grp edited">
+  <div class="grp-hd"><span class="fieldlabel">Film grain</span><span class="rst">Reset</span><button class="sw on" aria-label="Film grain on"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">30</span></div><input type="range" min="0" max="100" value="30"></div><div><span class="fieldlabel">Film format</span><button class="select-btn"><span>35mm — standard</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div class="slider-row"><div class="sr-top"><span>Size</span><span class="sr-val">3</span></div><input type="range" min="1" max="20" value="3"></div><div class="slider-row"><div class="sr-top"><span>Grain motion</span><span class="sr-val">75</span></div><input type="range" min="0" max="100" value="75"></div><div class="slider-row"><div class="sr-top"><span>Gate weave</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Film breath</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div></div>
+</div>
+<div class="grp off">
+  <div class="grp-hd"><span class="fieldlabel">Halation</span><span class="rst">Reset</span><button class="sw" aria-label="Halation off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Strength</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Threshold</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div></div>
+</div>
+<div class="grp off">
+  <div class="grp-hd"><span class="fieldlabel">Bloom</span><span class="rst">Reset</span><button class="sw" aria-label="Bloom off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Strength</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Threshold</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div></div>
+</div>
+<div class="grp off">
+  <div class="grp-hd"><span class="fieldlabel">Film artifacts</span><span class="rst">Reset</span><button class="sw" aria-label="Film artifacts off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Dust</span><span class="sr-val">30</span></div><input type="range" min="0" max="100" value="30"></div><div class="slider-row"><div class="sr-top"><span>Scratches</span><span class="sr-val">20</span></div><input type="range" min="0" max="100" value="20"></div><div class="slider-row"><div class="sr-top"><span>Light leak</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div><span class="fieldlabel">Dust colour</span><div class="seg"><button class="on">Both</button><button class="">Black</button><button class="">White</button></div></div><button class="wide-btn"><svg viewBox="0 0 24 24" stroke-width="2" fill="none"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>Re-roll</button></div>
+</div>
+<div class="grp off">
+  <div class="grp-hd"><span class="fieldlabel">Vignette</span><span class="rst">Reset</span><button class="sw" aria-label="Vignette off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div></div>
+</div>
       </div>
     </div>
     <ul class="changes">
-      <li><b class="kept">Kept</b>[grain] Amount — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[grain] Size — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[grain] Grain motion — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[grain] Gate weave — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[grain] Film breath — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[grain] Film format — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[grain] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hal] Amount — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hal] Radius — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hal] Shadow protect — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[hal] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[bloom] Amount — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[bloom] Threshold — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[bloom] Radius — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[bloom] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] Dust — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] Scratches — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] Light leak — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] Both — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] Black — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] White — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[art] Re-roll the random dust/scratch/leak placement — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[vig] Amount — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
-      <li><b class="kept">Kept</b>[vig] Reset this section — carried over unchanged. This is a starting point, not a recommendation: edit the PROPOSED column and this line stops applying.</li>
+      <li><b class="moved">moved</b>FILM 2 — Film format moves to the top of Film grain, directly under Amount. It sets what the other four sliders mean, so it belongs above them rather than buried after Film breath.</li>
+      <li><b class="cut">cut</b>FILM 1 — "Re-roll the random dust/scratch/leak placement" becomes "Re-roll". The explanation is in the section it sits in.</li>
+      <li><b class="merged">merged</b>Dust colour's Both / Black / White chips become an equal-width segmented control, under a real label — previously three bordered chips of different widths with no label saying what they applied to.</li>
+      <li><b class="moved">moved</b>COLOR 1 rule applied — five "Reset this section" buttons removed, replaced by one header control per section, hidden until edited. Film grain is shown edited.</li>
+      <li><b class="kept">kept</b>All five sections stay in the app's existing pipeline order: grain, halation, bloom, artifacts, vignette. That order mirrors the actual render pipeline (CLAUDE.md §3) and changing it in the UI would misrepresent what the app does.</li>
     </ul>
   </div>
 </section>
