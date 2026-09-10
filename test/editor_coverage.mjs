@@ -116,10 +116,63 @@ function coverageFor(key) {
   return { inPairs, specOpen: specHits.filter(([, v]) => v.status === 'open').length, specTotal: specHits.length, hasBehaviour };
 }
 
+// ── T29 (editor_ux_spec.json, 2026-09-10): fully-dynamic panels ───────────────────────────────
+// A panel like Masks builds its actual content (the mask list) entirely from JS at runtime — the
+// static HTML has only an EMPTY container the rebuild function fills via getElementById+innerHTML/
+// appendChild. editor_wireframe_inventory.mjs walks static markup, so there is nothing for it to
+// inventory until JS runs: no structural-diff safety net under that panel at all, unlike every
+// other panel. Detected structurally (not a hand-maintained panel list, per CLAUDE.md §2's
+// "drifting second source of truth" lesson): find an empty `id="*-list"`/`id="*-ctl"` container in
+// a section's static markup, then confirm some function actually repopulates it via
+// getElementById(id) + .innerHTML=/appendChild.
+const appSectionSpans = [...app.matchAll(/<div class="fx-ctrl" data-fxsec="([a-z]+)">/g)].map((m, i, arr) => {
+  const start = m.index;
+  const end = i + 1 < arr.length ? arr[i + 1].index : app.indexOf('</body>', start);
+  return { key: m[1], body: app.slice(start, end) };
+});
+function dynamicContainerFor(sectionKey) {
+  const span = appSectionSpans.find((s) => s.key === sectionKey);
+  if (!span) return null;
+  for (const cm of span.body.matchAll(/id="([a-z0-9-]+(?:-list|-ctl))"[^>]*><\/div>/g)) {
+    const id = cm[1];
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // The container is usually captured into a local var (`const list=document.getElementById(...)`)
+    // and populated a few statements later, not chained directly — so look for the getElementById
+    // call and an .innerHTML=/.appendChild( call ANYWHERE in the same enclosing function body
+    // (approximated as the 2000 chars following the getElementById call, which comfortably covers
+    // a rebuild function's body without needing a real JS parser).
+    const getM = app.match(new RegExp(`getElementById\\(['"]${escaped}['"]\\)`));
+    if (getM) {
+      const after = app.slice(getM.index, getM.index + 2000);
+      if (/\.innerHTML\s*=|\.appendChild\(/.test(after)) return id;
+    }
+  }
+  return null;
+}
+// Add/edit/delete-shaped smoke test: the panel's own behaviour describe block must show the
+// dynamic container's item COUNT both going up (add) and down (delete/remove) — "a test exists"
+// is not enough per T29's note; a boolean click-happened test would have missed the mskRebuild()
+// infinite-loop bug (T28) just as easily as no test at all.
+function hasSmokeTest(containerId) {
+  const escaped = containerId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`#${escaped}[^\\n]*toHaveCount`, 'g');
+  return [...behavSrc.matchAll(re)].length >= 2;
+}
+
 const rows = panels.map((p) => {
   const aliases = PANEL_ALIAS[p.key] || [];
   const members = appSections.filter((s) => (groupOf[s] || s) === p.key || aliases.includes(s));
-  return { ...p, onRail: railTabs.includes(p.key), appSections: members, ...coverageFor(p.key) };
+  const dynamicContainer = members.map(dynamicContainerFor).find(Boolean) || null;
+  const fullyDynamic = Boolean(dynamicContainer);
+  return {
+    ...p,
+    onRail: railTabs.includes(p.key),
+    appSections: members,
+    ...coverageFor(p.key),
+    fullyDynamic,
+    dynamicContainer,
+    hasSmokeTest: fullyDynamic ? hasSmokeTest(dynamicContainer) : null,
+  };
 });
 
 // App sections that no wireframe panel claims — these need a design decision, not a code fix.
@@ -133,7 +186,7 @@ if (asJson) {
 } else {
   const pad = (s, n) => String(s).padEnd(n);
   console.log('\nEDITOR DESIGN COVERAGE\n' + '='.repeat(78));
-  console.log(pad('panel', 10) + pad('designed', 10) + pad('rail', 6) + pad('PAIRS', 7) + pad('spec', 12) + pad('behav', 7) + 'app sections');
+  console.log(pad('panel', 10) + pad('designed', 10) + pad('rail', 6) + pad('PAIRS', 7) + pad('spec', 12) + pad('behav', 7) + pad('dynamic', 9) + 'app sections');
   console.log('-'.repeat(78));
   for (const r of rows.sort((a, b) => Number(b.designed) - Number(a.designed) || a.key.localeCompare(b.key))) {
     console.log(pad(r.key, 10)
@@ -142,6 +195,7 @@ if (asJson) {
       + pad(r.inPairs ? 'yes' : 'no', 7)
       + pad(r.specTotal ? `${r.specOpen}/${r.specTotal} open` : '-', 12)
       + pad(r.hasBehaviour ? 'yes' : 'no', 7)
+      + pad(r.fullyDynamic ? (r.hasSmokeTest ? 'smoke-ok' : 'NO-SMOKE') : '-', 9)
       + (r.appSections.join(', ') || '(none)'));
   }
   console.log('-'.repeat(78));
@@ -160,9 +214,21 @@ if (asJson) {
     console.log(`\n⚠ DESIGNED but not fully checked (${unchecked.length}):`);
     for (const r of unchecked) console.log(`  ${r.key}: ${[!r.inPairs && 'no PAIRS entry', !r.hasBehaviour && 'no behaviour test'].filter(Boolean).join(', ')}`);
   }
+  const dynamicPanels = rows.filter((r) => r.fullyDynamic);
+  if (dynamicPanels.length) {
+    console.log(`\n⚠ FULLY DYNAMIC panels (no static markup — structural inventory impossible, T29):`);
+    for (const r of dynamicPanels) {
+      console.log(`  ${r.key} (container #${r.dynamicContainer}): ${r.hasSmokeTest ? 'has add/edit/delete smoke test' : 'NO add/edit/delete-shaped smoke test'}`);
+    }
+  }
+  const dynamicUncovered = dynamicPanels.filter((r) => !r.hasSmokeTest);
   console.log('');
   if (strict && unchecked.length) {
     console.log('RESULT: FAIL (--strict: a designed panel must have a PAIRS entry and a behaviour test)');
+    process.exit(1);
+  }
+  if (strict && dynamicUncovered.length) {
+    console.log('RESULT: FAIL (--strict: a fully-dynamic panel needs an add/edit/delete-shaped smoke test, not just "a test exists" — T29)');
     process.exit(1);
   }
   console.log('RESULT: PASS' + (strict ? ' (--strict)' : ' (report only — use --strict to gate)'));
