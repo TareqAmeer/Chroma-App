@@ -611,6 +611,15 @@
       "wireframeRef": null, "check": null, "panel": null,
       "note": "Same class of risk T2 fixed for _FX_SNAP_*: two lists meant to describe the same thing, maintained by hand in two files, can silently drift. Confirmed this session in miniature — when 'wheels' was added to FX_GROUPS.color.members, editor_coverage.mjs's own report picked it up correctly, which is reassuring, but only because someone (this session) remembered to check both places; nothing would have flagged a drift if editor_coverage.mjs's copy had been forgotten."
     },
+    "R12": {
+      "category": "panel-design",
+      "status": "backlog",
+      "source": "[found while implementing the Info panel, 2026-09-10] the reviewed proposal's Keywords group (test/panel_proposals.mjs PROPOSALS.info) has no real implementation — no #fx-keywords in chromasmith-22.html, no fxRenderKeywords(), no wiring to the Editor at all",
+      "wireframeRef": "Editor (Developer) View.dc.html: .tp-panel[data-panel=info] .grp:last-child",
+      "check": null,
+      "panel": "info",
+      "note": "Backend exists (desktop/library-ui.js: addKeywordToPhoto/removeKeywordFromPhoto/catalog_keywords, all private to that file's closure) but keyed off the Library's own state.sidecars/state.selected model, not the Editor's fxImages/curItem() model — a real cross-file state-model bridge, not a markup move. Needs: (1) exposing equivalents to window (or a shared module), (2) a new fxRenderKeywords() in chromasmith-22.html paralleling fxRenderPeoplePanel(), called from the same showExif() choke point, (3) a catalog_keywords/set_keywords case added to the ?libtest=1 mock so editor_wireframe_behaviour.mjs can actually test it. Deferred rather than rushed: a wrong bridge (e.g. reusing Library's state.selected instead of the Editor's current photo) risks silently writing a keyword to the wrong photo."
+    },
     "R11": {
       "category": "panel-design",
       "status": "backlog",
@@ -727,6 +736,15 @@
       "wireframeRef": "Editor (Developer) View.dc.html: .tp-panel[data-panel=color]",
       "check": "editor_wireframe_behaviour.mjs: color-wheels-reachable, color-pointcolor-info",
       "note": "Color groups four pre-existing app sections (curves, hsl, pointcolor, wheels). Real bug found and fixed: wheels was never added to FX_GROUPS.color.members (spec D2, the same class of gap as deconv/Detail) — its rail button existed (own standalone entry) but the Color group button never revealed it, so it was unreachable from the Color rail entry despite having a fully working canvas UI. Wired 'wheels' into FX_GROUPS.color.members, same fix shape as DT1's deconv wiring. Point Color's Pick button had its long title= tooltip folded into a fx-info-i button per the proposal (RT1/DT1/F1 pattern) — placed as a SIBLING of the button, not nested inside it: the proposal's own raw markup (`<button class=pick-btn>Pick from photo <button class=info-i>i</button></button>`) nests a button inside a button, which is invalid HTML that browsers silently mis-parse (the outer button closes early); this was caught and fixed here, and is a latent defect in panel_proposals.mjs itself worth an audit pass across the other panels (not done this session — see R8). Curves' canvas-based point/parametric editor and Colour Wheels' 3 canvas discs were left structurally untouched — both are real interactive canvas widgets with their own pointer-handling code (_crvInit, wheel drag handlers), and the proposal's static SVG/disc mockups are illustrative only, not literal markup to move. Header-level 'Reset | All' (curves has a channel-vs-all distinction; hsl/pointcolor/wheels each have their own dual reset already as bottom buttons) was NOT moved into the section header this pass — deferred as R9, since collapsing a two-action reset into one header slot needs new override logic per section, unlike the single-action case RT1/DT1/F1/FR1 already covered. Real defaults verified: all four toggles OFF by default; HSL band colours already matched HSL_COLS exactly from an earlier correction pass this session."
+    },
+    "IN1": {
+      "category": "panel-design",
+      "status": "fixed",
+      "panel": "info",
+      "source": "implement the reviewed Info panel proposal (test/panel_proposals.mjs PROPOSALS.info)",
+      "wireframeRef": "Editor (Developer) View.dc.html: .tp-panel[data-panel=info]",
+      "check": "editor_wireframe_behaviour.mjs: info-order",
+      "note": "Info's real content (#fx-info EXIF block, #fx-people) is built dynamically per-photo by showExif()/fxRenderPeoplePanel() rather than static per-panel markup like every other section — so unlike DT1/F1/FR1/CR1/CO1/EX1, this required NO markup changes to chromasmith-22.html: the metadata-then-people order the user asked for ('it should be metadata, followed by people, followed by keywords') was already fixed in an earlier pass that predates this redesign session, confirmed still correct here rather than re-fixed. The wireframe's third group, Keywords, is real, reviewed, in-scope design (the plan document explicitly calls it out: 'surfacing existing plumbing, not new storage') but its backend — addKeywordToPhoto/removeKeywordFromPhoto/catalog_keywords in desktop/library-ui.js — is private to that file's closure, keyed off the LIBRARY's own state.sidecars/state.selected model, not bridged to the Editor's fxImages/curItem() model at all. Wiring it correctly needs: exposing those functions (or equivalents) to window, a new fxRenderKeywords() paralleling fxRenderPeoplePanel(), and a catalog_keywords/set_keywords case in the ?libtest=1 mock the Editor's own behaviour-test harness uses — real, non-trivial integration work across two files' state models, not a markup move, so it was deferred rather than rushed (a wrong bridge here risks writing a keyword to the wrong photo — a real data-safety concern, not just a cosmetic gap). Tracked as R12."
     },
     "EX1": {
       "category": "panel-design",

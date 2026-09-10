@@ -83,6 +83,15 @@ const PAIRS = {
   // the proposal covers — Save/Load session, Styles, and Google Photos are real, shipped
   // features with no equivalent in the design at all (tracked as R11, not this pass's scope).
   '.tp-panel[data-panel="export"]': { app: '.fx-ctrl[data-fxsec="export"]', label: 'export panel', zone: 'export-panel' },
+  // 2026-09-10 — Info panel (Stage 4 merge). #fx-info (EXIF)/#fx-people are dynamically built by
+  // showExif()/fxRenderPeoplePanel() from real photo data — already in the metadata-then-people
+  // order the user asked for, in an earlier fix that predates this redesign pass, so no app change
+  // was needed here beyond confirming it. The wireframe's third group, Keywords, has no real
+  // implementation yet (R12) — its backend exists (library-ui.js's addKeywordToPhoto/
+  // removeKeywordFromPhoto/catalog_keywords) but is private to that file's closure, not bridged
+  // to the Editor, so it is deliberately excluded from this mapping rather than compared against
+  // nothing.
+  '.tp-panel[data-panel="info"]': { app: '.fx-ctrl[data-fxsec="info"]', label: 'info panel', zone: 'info-panel' },
   // 2026-09-10 — Color panel (Stage 4 merge). Four pre-existing app sections; wheels was
   // homeless (spec D2) until this pass wired it into FX_GROUPS.color.members.
   '.tp-panel[data-panel="color"] .grp[data-fxsec="curves"]': { app: '.fx-ctrl[data-fxsec="curves"]', label: 'tone curves section', zone: 'color-panel' },

@@ -199,6 +199,23 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
 .fnrow{display:flex;align-items:center}
 .fnrow .fieldlabel{margin-bottom:0;flex:1}
 .ver{font-size:11px;color:var(--primary-on-dark);font-variant-numeric:tabular-nums}
+.faces{display:flex;flex-wrap:wrap;gap:6px}
+.face{display:flex;align-items:center;gap:6px;padding:3px 9px 3px 3px;border-radius:var(--radius-pill);border:1px solid rgba(255,255,255,.14);font-size:11px}
+.face.unnamed{border-style:dashed;color:var(--ink-on-dark-muted)}
+.favatar{width:22px;height:22px;border-radius:50%;flex:none;background:radial-gradient(circle at 50% 38%,#c9a68a 0 40%,#6b5344 72%)}
+.kws{display:flex;flex-wrap:wrap;gap:5px}
+.kw{display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border-radius:var(--radius-pill);background:rgba(255,255,255,.08)}
+.kw b{font-weight:400;opacity:.5;cursor:pointer}
+.kw.sug{background:none;border:1px dashed rgba(255,255,255,.2);color:var(--ink-on-dark-muted)}
+.kwsug{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.kwlb{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);margin-right:2px}
+.exif{display:flex;flex-direction:column}
+.erow{display:flex;justify-content:space-between;gap:10px;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.elb{color:var(--ink-on-dark-muted)}
+.eval{text-align:right;font-variant-numeric:tabular-nums}
+.echips{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.echip{display:flex;flex-direction:column;gap:1px;background:var(--surface-tile-2);border-radius:var(--radius-sm);padding:5px 8px;font-size:12px;font-variant-numeric:tabular-nums}
+.eclb{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-on-dark-muted)}
 
 .autoenhance{height:34px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:var(--weight-semibold)}
 .autoenhance:hover{background:rgba(255,255,255,.08)}
@@ -595,7 +612,46 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
             <button class="wide-btn primary">Export</button></div>
 </div>
       </div>
-      <div class="tp-panel" data-panel="info"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Photo info &amp; EXIF live here.</p></div>
+      <div class="tp-panel" data-panel="info">
+<div class="grp" data-fxsec="info-meta">
+  <div class="grp-hd"><span class="fieldlabel">Metadata</span></div>
+  <div class="grp-bd"><div class="exif">
+            <div class="erow"><span class="elb">Date</span><span class="eval">Aug 14, 2026</span></div>
+            <div class="erow"><span class="elb">Dimensions</span><span class="eval">6000×4000</span></div>
+          </div>
+          <div class="echips">
+            <div class="echip"><span class="eclb">ISO</span><span>400</span></div>
+            <div class="echip"><span class="eclb">Aperture</span><span>ƒ/1.8</span></div>
+            <div class="echip"><span class="eclb">Shutter</span><span>1/250</span></div>
+            <div class="echip"><span class="eclb">Focal</span><span>35mm</span></div>
+          </div>
+          <div class="exif">
+            <div class="erow"><span class="elb">File Name</span><span class="eval">P1010423.RW2</span></div>
+            <div class="erow"><span class="elb">Size</span><span class="eval">24.6 MB</span></div>
+            <div class="erow"><span class="elb">File Format</span><span class="eval">RW2</span></div>
+            <div class="erow"><span class="elb">Lens Model</span><span class="eval">LUMIX S 35mm F1.8</span></div>
+            <div class="erow"><span class="elb">Camera Make</span><span class="eval">Panasonic</span></div>
+            <div class="erow"><span class="elb">Camera Model</span><span class="eval">DC-S9</span></div>
+          </div></div>
+</div>
+<div class="grp" data-fxsec="info-people">
+  <div class="grp-hd"><span class="fieldlabel">People</span></div>
+  <div class="grp-bd"><div class="faces">
+            <div class="face"><span class="favatar"></span><span>Ana</span></div>
+            <div class="face"><span class="favatar"></span><span>Marcus</span></div>
+            <div class="face unnamed"><span class="favatar"></span><span>Who is this?</span></div>
+          </div>
+          <button class="wide-btn ghost">Scan this photo for faces</button></div>
+</div>
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">Keywords</span></div>
+  <div class="grp-bd"><div class="kws">
+            <span class="kw">portrait<b>×</b></span><span class="kw">golden hour<b>×</b></span><span class="kw">lisbon<b>×</b></span>
+          </div>
+          <input class="txt" value="" placeholder="Add a keyword…">
+          <div class="kwsug"><span class="kwlb">Suggested</span><span class="kw sug">rooftop</span><span class="kw sug">summer</span><span class="kw sug">smiling</span></div></div>
+</div>
+      </div>
 
     </div>
   </aside>

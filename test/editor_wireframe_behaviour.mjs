@@ -636,6 +636,17 @@ test.describe('export panel (EX1)', () => {
   });
 });
 
+test.describe('info panel (IN1)', () => {
+  test('metadata (#fx-info) renders above people (#fx-people)', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="info"]');
+    const infoBox = await page.locator('#fx-info').boundingBox();
+    const peopleBox = await page.locator('#fx-people').boundingBox();
+    expect(infoBox).not.toBeNull();
+    expect(peopleBox).not.toBeNull();
+    expect(peopleBox.y).toBeGreaterThanOrEqual(infoBox.y);
+  });
+});
+
 // ════════════════════════════════════════════════════════════════════════════════════════════
 // OTHER DROPDOWNS / POPOVERS — every remaining "click a control, something floats open" surface
 // that isn't the settings menu: the canvas-background right-click context menu (desktop mode,
