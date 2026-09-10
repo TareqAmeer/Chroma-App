@@ -65,6 +65,28 @@ const test = base.extend({
     await use({ page, errors });
     expect(errors, 'uncaught page errors during interaction').toEqual([]);
   },
+
+  // A REAL opened folder (?libtest=1&libn=N's list_dir mock), not a bare loadFXImages() call —
+  // the `docked` fixture above loads a photo directly, bypassing state.entries/renderTree()
+  // entirely, so it could never have exercised "does the folder survive a Library<->Develop
+  // round trip" (exactly the bug this fixture exists to catch: the Develop tab's handler called
+  // toggleLibrary(), which closes state.open and discards the open folder, instead of
+  // toggleExpandedView(false), which only narrows the view). Starts in the FULL grid, same as a
+  // real user opening the app and browsing before picking a photo.
+  libraryFolder: async ({ page, server }, use) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${server}/desktop/dist/index.html?libtest=1&libn=12&deskx=1`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => {
+      document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });
+    });
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length > 0, { timeout: 15000 });
+    await settleForCapture(page);
+    await use({ page, errors });
+    expect(errors, 'uncaught page errors during interaction').toEqual([]);
+  },
 });
 
 // Sets --dock-w-user on .fx-layout directly (the real track authority — see library-ui.js's own
@@ -91,3 +113,44 @@ for (const width of [90, 150, 280]) {
     await expect(page.locator('#lib-side')).toMatchAriaSnapshot(EXPECTED);
   });
 }
+
+// Behaviour test, not structure — CLICKS the Library/Develop tabs themselves and asserts what's
+// actually on screen after each click, rather than snapshotting fixed-width DOM shape. Exists
+// because that structural gap let a REAL regression through: the Develop tab's handler called
+// toggleLibrary() (closes the whole dock, folder included) instead of toggleExpandedView(false)
+// (just narrows the view) — a wrong CLICK HANDLER, which no amount of measuring #lib-side at
+// fixed widths could ever have caught, since nothing here ever pressed a tab. See the commit
+// that added this test for the full live repro this reproduces.
+test('Library <-> Develop round trip keeps the filmstrip and the open folder alive', async ({ libraryFolder: { page } }) => {
+  // #lib-grid is the SAME element in both modes (full grid vs. docked filmstrip — see
+  // renderGrid()'s own `docked` detection), so a plain count works for both; mode itself is
+  // asserted separately via #lib-overlay's own `full` class below.
+  const gridCards = () => page.locator('#lib-grid .lib-card').count();
+
+  // Start in the full grid with a real folder open (the libraryFolder fixture's own setup).
+  await expect.poll(gridCards).toBeGreaterThan(0);
+
+  // Open a photo into the editor — this is the app's own real path from full grid to docked
+  // filmstrip (openInEditorInner's toggleExpandedView(false) call), not a simulated click.
+  await page.locator('#lib-grid .lib-card').first().dblclick();
+  await page.waitForFunction(() => !document.getElementById('lib-overlay').classList.contains('full'), { timeout: 10000 });
+
+  // Symptom 1: "filmstrip disappears when switching to Develop" — click Develop from docked
+  // (a no-op per the handler's own `if (state.expanded_view)` guard, but must not close it).
+  await page.locator('#lib-side-tab-develop').click();
+  await expect(page.locator('#lib-overlay')).toHaveClass(/\bon\b/); // state.open must survive — this is the exact class toggleLibrary() used to clear
+  await expect(page.locator('#lib-overlay')).toBeVisible();
+  await expect(page.locator('#lib-overlay')).not.toHaveClass(/full/);
+
+  // Round-trip through full view and back — Library tab, then Develop tab.
+  await page.locator('#lib-side-tab-library').click();
+  await page.waitForFunction(() => document.getElementById('lib-overlay').classList.contains('full'), { timeout: 5000 });
+  // Symptom 3: "switching back to Library shows the folder as empty".
+  await expect.poll(gridCards, { timeout: 5000 }).toBeGreaterThan(0);
+
+  await page.locator('#lib-side-tab-develop').click();
+  await page.waitForFunction(() => !document.getElementById('lib-overlay').classList.contains('full'), { timeout: 5000 });
+  await expect(page.locator('#lib-overlay')).toBeVisible();
+  // Symptom 2: "filmstrip doesn't show the actual thumbnails in the selected folder".
+  await expect.poll(gridCards, { timeout: 5000 }).toBeGreaterThan(0);
+});
