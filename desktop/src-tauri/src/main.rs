@@ -2307,6 +2307,19 @@ fn main() {
                 MenuItem::with_id(handle, "menu-library", "Library…", true, Some("CmdOrCtrl+L"))?;
             let export_item =
                 MenuItem::with_id(handle, "menu-export", "Export…", true, Some("CmdOrCtrl+E"))?;
+            // Session save/load already existed as buttons (saveSession()/loadSession(), also in
+            // the ⌘K command palette) with no native menu entry point — grouped in their own
+            // submenu rather than flattened into File, which was already 4 items deep before this.
+            let save_session_item =
+                MenuItem::with_id(handle, "menu-save-session", "Save Session", true, Option::<&str>::None)?;
+            let load_session_item =
+                MenuItem::with_id(handle, "menu-load-session", "Load Session", true, Option::<&str>::None)?;
+            let session_menu = Submenu::with_items(
+                handle,
+                "Session",
+                true,
+                &[&save_session_item, &load_session_item],
+            )?;
             let file_menu = Submenu::with_items(
                 handle,
                 "File",
@@ -2315,6 +2328,7 @@ fn main() {
                     &open_item,
                     &open_recent_item,
                     &library_item,
+                    &session_menu,
                     &export_item,
                     &PredefinedMenuItem::separator(handle)?,
                     &PredefinedMenuItem::close_window(handle, None)?,
@@ -2365,6 +2379,34 @@ fn main() {
             let flip_v_item = MenuItem::with_id(handle, "menu-flip-v", "Flip Vertical", true, Option::<&str>::None)?;
             let copy_edit_item = MenuItem::with_id(handle, "menu-copy-edit", "Copy Edit", true, Some("CmdOrCtrl+Shift+C"))?;
             let paste_edit_item = MenuItem::with_id(handle, "menu-paste-edit", "Paste Edit", true, Some("CmdOrCtrl+Shift+V"))?;
+            // Geometry grouped into its own submenu — crop/straighten (cropToggle()) is the same
+            // on-canvas tool the crop button already opens, just with no prior menu path in.
+            let crop_item = MenuItem::with_id(handle, "menu-crop", "Crop / Straighten", true, Option::<&str>::None)?;
+            let geometry_menu = Submenu::with_items(
+                handle,
+                "Geometry",
+                true,
+                &[
+                    &rotate_left_item,
+                    &rotate_right_item,
+                    &flip_h_item,
+                    &flip_v_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &crop_item,
+                ],
+            )?;
+            // Auto Enhance / WB Eyedropper already existed as header buttons (autoEnhance()/
+            // wbEyedropper()) with no menu entry; Reshuffle already existed as the Film Artifacts
+            // panel's "Re-roll" button (artReshuffle()).
+            let auto_enhance_item = MenuItem::with_id(handle, "menu-auto-enhance", "Auto Enhance", true, Option::<&str>::None)?;
+            let wb_eyedrop_item = MenuItem::with_id(handle, "menu-wb-eyedrop", "White Balance Eyedropper", true, Option::<&str>::None)?;
+            let adjustments_menu = Submenu::with_items(
+                handle,
+                "Adjustments",
+                true,
+                &[&auto_enhance_item, &wb_eyedrop_item],
+            )?;
+            let reshuffle_item = MenuItem::with_id(handle, "menu-reshuffle-artifacts", "Reshuffle Film Artifacts", true, Option::<&str>::None)?;
             let photo_menu = Submenu::with_items(
                 handle,
                 "Photo",
@@ -2374,14 +2416,14 @@ fn main() {
                     &pick_item,
                     &clear_flag_item,
                     &PredefinedMenuItem::separator(handle)?,
-                    &rotate_left_item,
-                    &rotate_right_item,
-                    &flip_h_item,
-                    &flip_v_item,
+                    &geometry_menu,
                     &PredefinedMenuItem::separator(handle)?,
                     &copy_edit_item,
                     &paste_edit_item,
                     &reset_edit_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &adjustments_menu,
+                    &reshuffle_item,
                 ],
             )?;
 
@@ -2396,18 +2438,25 @@ fn main() {
             let split_item = MenuItem::with_id(handle, "menu-split", "Toggle Before/After Split", true, Some("CmdOrCtrl+\\"))?;
             let hist_item = MenuItem::with_id(handle, "menu-histogram", "Toggle Histogram", true, Some("CmdOrCtrl+H"))?;
             let expand_lib_item = MenuItem::with_id(handle, "menu-expand-library", "Toggle Full Library", true, Option::<&str>::None)?; // bare "G" is already the JS-side shortcut — see the Photo-menu comment above on why it can't ALSO be a native accelerator
+            let zoom_menu = Submenu::with_items(
+                handle,
+                "Zoom",
+                true,
+                &[&zoom_in_item, &zoom_out_item, &zoom_fit_item, &zoom_100_item],
+            )?;
+            // toggleLoupe() (the "1:1" button) already existed with no menu path — true
+            // native-res preview, separate from the split/histogram toggles already wired.
+            let loupe_item = MenuItem::with_id(handle, "menu-loupe", "Toggle 1:1 Loupe", true, Option::<&str>::None)?;
             let view_menu = Submenu::with_items(
                 handle,
                 "View",
                 true,
                 &[
-                    &zoom_in_item,
-                    &zoom_out_item,
-                    &zoom_fit_item,
-                    &zoom_100_item,
+                    &zoom_menu,
                     &PredefinedMenuItem::separator(handle)?,
                     &split_item,
                     &hist_item,
+                    &loupe_item,
                     &expand_lib_item,
                 ],
             )?;
@@ -2424,14 +2473,27 @@ fn main() {
                 ],
             )?;
 
+            // Search opens the existing ⌘K command palette (cpOpen() — a fuzzy list over every
+            // tab/section/look/action already in the app, see chromasmith-22.html). The
+            // accelerator matches the app's own JS-side ⌘K keydown listener, so this menu item is
+            // a discoverable alias for a shortcut that already worked, not a new binding.
+            let search_item = MenuItem::with_id(handle, "menu-search", "Search…", true, Some("CmdOrCtrl+K"))?;
             let shortcuts_item = MenuItem::with_id(handle, "menu-shortcuts", "Keyboard Shortcuts…", true, Some("CmdOrCtrl+/"))?;
             let guide_item = MenuItem::with_id(handle, "menu-guide", "Chromasmith Guide", true, Option::<&str>::None)?;
             let whatsnew_item = MenuItem::with_id(handle, "menu-whatsnew", "What's New", true, Option::<&str>::None)?;
+            let tour_item = MenuItem::with_id(handle, "menu-tour", "Welcome Tour", true, Option::<&str>::None)?;
             let help_menu = Submenu::with_items(
                 handle,
                 "Help",
                 true,
-                &[&shortcuts_item, &guide_item, &whatsnew_item],
+                &[
+                    &search_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &shortcuts_item,
+                    &guide_item,
+                    &whatsnew_item,
+                    &tour_item,
+                ],
             )?;
 
             // No dedicated preferences window exists yet, so this opens the same About panel
@@ -2471,12 +2533,14 @@ fn main() {
                 if matches!(
                     id,
                     "menu-open" | "menu-open-recent" | "menu-settings" | "menu-library" | "menu-export" | "menu-undo" | "menu-redo"
+                        | "menu-save-session" | "menu-load-session"
                         | "menu-reject" | "menu-pick" | "menu-clear-flag" | "menu-reset-edit"
-                        | "menu-rotate-left" | "menu-rotate-right" | "menu-flip-h" | "menu-flip-v"
+                        | "menu-rotate-left" | "menu-rotate-right" | "menu-flip-h" | "menu-flip-v" | "menu-crop"
                         | "menu-copy-edit" | "menu-paste-edit"
+                        | "menu-auto-enhance" | "menu-wb-eyedrop" | "menu-reshuffle-artifacts"
                         | "menu-zoom-in" | "menu-zoom-out" | "menu-zoom-fit" | "menu-zoom-100"
-                        | "menu-split" | "menu-histogram" | "menu-expand-library"
-                        | "menu-shortcuts" | "menu-guide" | "menu-whatsnew"
+                        | "menu-split" | "menu-histogram" | "menu-loupe" | "menu-expand-library"
+                        | "menu-search" | "menu-shortcuts" | "menu-guide" | "menu-whatsnew" | "menu-tour"
                 ) {
                     let _ = handle2.emit(id, ());
                 }

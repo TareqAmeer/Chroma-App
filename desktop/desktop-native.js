@@ -412,6 +412,17 @@
   wire('menu-flip-v', () => typeof geomFlip === 'function' && geomFlip('v'));
   wire('menu-copy-edit', () => typeof window.chromasmithMenuCopyEdit === 'function' && window.chromasmithMenuCopyEdit());
   wire('menu-paste-edit', () => typeof window.chromasmithMenuPasteEdit === 'function' && window.chromasmithMenuPasteEdit());
+  // Photo > Geometry > Crop/Straighten and Photo > Adjustments/Reshuffle — same functions the
+  // on-canvas crop button / header Auto-enhance & WB Eyedropper buttons / Film Artifacts panel's
+  // Re-roll button already call, just newly reachable from the menu bar (see main.rs comments).
+  wire('menu-crop', () => typeof cropToggle === 'function' && cropToggle());
+  wire('menu-auto-enhance', () => typeof autoEnhance === 'function' && autoEnhance());
+  wire('menu-wb-eyedrop', () => typeof wbEyedropper === 'function' && wbEyedropper());
+  wire('menu-reshuffle-artifacts', () => typeof artReshuffle === 'function' && artReshuffle());
+  // File > Session — same saveSession()/loadSession() the Effects & Export buttons and the ⌘K
+  // command palette already call.
+  wire('menu-save-session', () => typeof saveSession === 'function' && saveSession());
+  wire('menu-load-session', () => typeof loadSession === 'function' && loadSession(true));
   // View menu
   wire('menu-zoom-in', () => typeof zoomBy === 'function' && zoomBy(1.25));
   wire('menu-zoom-out', () => typeof zoomBy === 'function' && zoomBy(0.8));
@@ -419,11 +430,14 @@
   wire('menu-zoom-100', () => typeof zoomSet === 'function' && zoomSet(1));
   wire('menu-split', () => typeof toggleSplit === 'function' && toggleSplit());
   wire('menu-histogram', () => typeof toggleHist === 'function' && toggleHist());
+  wire('menu-loupe', () => typeof toggleLoupe === 'function' && toggleLoupe());
   wire('menu-expand-library', () => typeof window.chromasmithToggleExpandedView === 'function' && window.chromasmithToggleExpandedView());
-  // Help menu
+  // Help menu — Search opens the existing ⌘K command palette (cpOpen(), chromasmith-22.html).
+  wire('menu-search', () => typeof cpOpen === 'function' && cpOpen());
   wire('menu-shortcuts', () => typeof window.chromasmithShowShortcuts === 'function' && window.chromasmithShowShortcuts());
   wire('menu-guide', () => typeof switchTab === 'function' && switchTab('guide'));
   wire('menu-whatsnew', () => typeof window.chromasmithShowWhatsNew === 'function' && window.chromasmithShowWhatsNew());
+  wire('menu-tour', () => typeof window.chromasmithShowTour === 'function' && window.chromasmithShowTour());
   // Cmd+, / Chromasmith > Settings… — no dedicated preferences window exists yet, so this opens
   // the same About panel the header info button does (build/diagnostics today; the natural home
   // for real settings later). See main.rs's own comment on this menu item for why.
