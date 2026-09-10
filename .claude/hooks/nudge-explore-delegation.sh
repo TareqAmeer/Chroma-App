@@ -13,8 +13,8 @@
 # honest proxy — imperfect, but enforced rather than hoped for.
 #
 # Not a hard block: unlike the chromasmith-22.html read-size gate, "should this have been
-# delegated" isn't objectively checkable, so this only nudges (exit 0, stderr note) rather than
-# blocking (exit 2) — a false positive here would wrongly stop legitimate focused work.
+# delegated" isn't objectively checkable, so this only nudges (JSON additionalContext, allowed)
+# rather than blocking — a false positive here would wrongly stop legitimate focused work.
 repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 state="$repo/.claude/.explore-nudge-count"
 threshold=12
@@ -23,7 +23,12 @@ count=$(cat "$state" 2>/dev/null || echo 0)
 count=$((count + 1))
 
 if [ "$count" -ge "$threshold" ]; then
-  echo "NOTE: ${count} raw file reads/greps in a row with no subagent dispatch — if this is a broad multi-file search or audit (not iterating on one thing), consider fanning it out to 1-3 Explore subagents instead: only the conclusion lands in context, not every intermediate read. See CLAUDE.md's context-efficiency notes." >&2
+  # Plain stderr on a PreToolUse exit-0 is NEVER shown to Claude — only logged for debugging
+  # (confirmed live 2026-09-11: this hook fired and wrote its counter file, but the message
+  # never reached the conversation). The documented way to surface non-blocking guidance is
+  # JSON on stdout with hookSpecificOutput.additionalContext, exit 0.
+  jq -n --arg msg "${count} raw file reads/greps in a row with no subagent dispatch — if this is a broad multi-file search or audit (not iterating on one thing), consider fanning it out to 1-3 Explore subagents instead: only the conclusion lands in context, not every intermediate read." \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow", additionalContext: $msg}}'
   count=0
 fi
 

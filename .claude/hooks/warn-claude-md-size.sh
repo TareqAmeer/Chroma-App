@@ -14,6 +14,9 @@ size=$(wc -c < "$f" 2>/dev/null | tr -d ' ')
 [ -n "$size" ] || exit 0
 
 if [ "$size" -gt 46080 ]; then
-  echo "NOTE: CLAUDE.md is now ${size} bytes (>45KB). It's loaded in full every turn — consider hiving off a section into docs/*.md (see claude-md-structure memory)." >&2
+  # Plain stderr on exit-0 is never shown to Claude, only logged — JSON on stdout with
+  # hookSpecificOutput.additionalContext is the documented way to surface this without blocking.
+  jq -n --arg msg "CLAUDE.md is now ${size} bytes (>45KB). It's loaded in full every turn — consider hiving off a section into docs/*.md (see claude-md-structure memory)." \
+    '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $msg}}'
 fi
 exit 0
