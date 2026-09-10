@@ -407,6 +407,33 @@
       "check": null,
       "panel": "retouch",
       "note": "Interaction change, not a layout one \u2014 deferred out of the Retouch panel redesign (test/panel_proposals.mjs) for exactly this reason: proposal removed the old \"Undo spot\" button rather than restyling it, since replacing it with a real delete-a-specific-spot flow needs new interaction design (select a placed spot on the photo, then remove just that one) that a compare-page mockup cannot decide. Until this lands, undo is still \u2318Z / the gear-menu undo, same as every other tool."
+    },
+    "R2": {
+      "category": "export-panel",
+      "status": "backlog",
+      "source": "[found while proposing the Export panel redesign, 2026-09-10] the localStorage save/restore slider-settings pair, Style .json import/export, and the two Google Photos buttons (sign in, set OAuth client ID) were cut from the Export proposal as session/setup actions rather than export settings",
+      "wireframeRef": null,
+      "check": null,
+      "panel": "export",
+      "note": "The proposal (test/panel_proposals.mjs) removes these from Export but does not say where they land instead beyond \"belongs in the gear menu with the other session commands, which is where 'Save the current recipe' already half-lives.\" That relocation is undecided and unimplemented \u2014 flagging so it does not get lost between \"cut from Export\" and \"actually placed somewhere\". Needs a decision on which existing gear/overflow menu these join and in what grouping before implementation."
+    },
+    "R3": {
+      "category": "panel-design",
+      "status": "backlog",
+      "source": "[found while proposing the Info panel redesign, 2026-09-10] the proposed \"Scan this photo for faces\" button in the Info panel has no wired action for a single open photo",
+      "wireframeRef": null,
+      "check": null,
+      "panel": "info",
+      "note": "runFindFaces(photoIds) exists (desktop/library-ui.js:6762) and drives the Library's right-click \"Scan photos\" (renamed from \"Find Faces\" per an earlier item, see the item at source \"right click Find Faces renamed to Scan Photos\") \u2014 it is batch-oriented over Library selection state, not wired to fxImages[fxCurIdx] from the Editor. Needs a single-photo call path before the Info panel button can do anything."
+    },
+    "R4": {
+      "category": "bug",
+      "status": "backlog",
+      "source": "[found while proposing the Info panel redesign, 2026-09-10] the People section (fxRenderPeoplePanel) renders nothing \u2014 not even an empty state \u2014 for a photo with no it.path (e.g. drag-dropped rather than opened from the Library), or for a Library photo where face detection has not run yet",
+      "wireframeRef": null,
+      "check": null,
+      "panel": "info",
+      "note": "chromasmith-22.html: fxRenderPeoplePanel() returns early to el.innerHTML='' in both cases. Nobody reported this as a bug because the feature is invisible either way, which is exactly the problem \u2014 the redesigned Info panel (test/panel_proposals.mjs) adds a \"Scan this photo for faces\" affordance for the no-detection-yet case (see R3 for wiring it up), but the no-path case (drag-dropped photo) has no proposed treatment yet \u2014 worth deciding whether that state gets an explanation (\"open from your Library to use faces\") or stays silent."
     }
   }
 }
