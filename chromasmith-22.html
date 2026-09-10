@@ -18015,6 +18015,12 @@ function fxPickLookCell(cell,val){
   const host=document.getElementById('fx-looks');
   if(host)host.querySelectorAll('.look-cell').forEach(c=>c.classList.remove('sel'));
   cell.classList.add('sel');
+  // Clicking a cell doesn't move focus to it (the cell itself has no tabindex — the GRID is
+  // the single tab stop, per the wireframe's own #preset-grid tabindex="0"), so without this
+  // the host never has focus and a subsequent arrow press falls through to the browser's
+  // native "scroll the nearest scrollable ancestor" behaviour instead of reaching our keydown
+  // handler at all. Must match the native-scroll (focus-preserving) behaviour, not jump the page.
+  if(host&&document.activeElement!==host)host.focus({preventScroll:true});
 }
 // 3.4.10: arrow keys move the preset selection through the live grid. The column count is
 // READ from the grid's own computed style every keypress (grid-template-columns token count)
@@ -20375,13 +20381,21 @@ let _settingsCat='tools';
 function settingsCatsBuild(){
   const host=document.getElementById('fx-settings-cats');if(!host)return;
   host.innerHTML=SETTINGS_CATS.map(c=>
-    `<button type="button" class="fx-settings-cat${c.key===_settingsCat?' active':''}" onclick="settingsShowCat('${c.key}')">${c.label}</button>`
+    `<button type="button" class="fx-settings-cat" data-cat="${c.key}" onclick="settingsShowCat('${c.key}')">${c.label}</button>`
   ).join('');
 }
+// ⚠️ Do NOT call settingsCatsBuild() (an innerHTML rebuild) from in here — it used to, and that
+// DETACHES the just-clicked category button mid-event, exactly the bug already documented and
+// fixed once at fxSetTheme(): the document-level "click outside closes the menu" listener (see
+// settingsToggle()) then runs its `e.target.closest('#fx-settings')` check against an
+// already-detached node, which finds no ancestor, and the WHOLE settings menu incorrectly closes
+// on every category click (confirmed live — menuClass/display went to "none" on the very first
+// click). Toggle the `.active` class on the existing buttons directly instead, same
+// targeted-update fix fxSetTheme() already uses for the identical shape of bug.
 function settingsShowCat(key){
   if(!SETTINGS_PANE_ID[key])return;
   _settingsCat=key;
-  settingsCatsBuild();
+  document.querySelectorAll('.fx-settings-cat').forEach(b=>b.classList.toggle('active',b.dataset.cat===key));
   document.querySelectorAll('.fx-settings-pane').forEach(p=>p.classList.toggle('active',p.id===SETTINGS_PANE_ID[key]));
 }
 function settingsBuild(){
@@ -20594,7 +20608,7 @@ function _eachSection(cb){
 // button is emitted at whichever member buildToolRail reaches first, and the cards stack in
 // DOM order regardless of this array.
 const FX_GROUPS={color:{label:'Color',icon:'curves',members:['curves','hsl','pointcolor']},
-  detail:{label:'Detail',icon:'lens',members:['nr','lens']},
+  detail:{label:'Detail',icon:'lens',members:['nr','deconv','lens']},
   film:{label:'Film',icon:'grain',members:['grain','hal','bloom','art','vig']},
   frame:{label:'Frame',icon:'borders',members:['borders','canvas']}};
 const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
@@ -20706,7 +20720,13 @@ function fxEdgeDrag(handle,onMove){
     lay.classList.add('fx-nodrag-anim');
     handle._drag=true;e.preventDefault();
   });
-  handle.addEventListener('pointermove',e=>{if(handle._drag)onMove(e.clientX);});
+  // E4-class fix (2026-09-10): dragging the panel/rail resizer changes #fx-wrap's width every
+  // pointermove, but the canvas was only ever rescaled once at drag-END via fxLayoutSettle's
+  // renderPreview() — so mid-drag the canvas stayed pinned to its pre-drag px size while the
+  // shrinking/growing wrap clipped/gapped it, i.e. the reported squeeze/stretch WHILE dragging
+  // the sidebar (not just after). fxLiveFit is the same cheap continuous CSS-rescale E4 already
+  // wired for window resize; reuse it here so the photo tracks the wrap on every frame of the drag.
+  handle.addEventListener('pointermove',e=>{if(handle._drag){onMove(e.clientX);fxLiveFit(200);}});
   const end=()=>{
     if(!handle._drag)return;handle._drag=false;
     const lay=document.querySelector('.fx-layout');if(lay)lay.classList.remove('fx-nodrag-anim');
@@ -21286,6 +21306,7 @@ exportPresetListRefresh();  // populate the Export preset dropdown from localSto
 setTimeout(tourMaybeShow,400); // first-run tour — after layout settles, only for a genuinely empty/new session
 initZoomPan();
 initEditableVals();
+initLookGalleryKeyNav();
 fxDesktopFoldImageIntoLooks(); // desktop app only: Image tab has no reason to exist there (see fn)
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
 // Per-section reset (mobile bottom sheet only — see .fx-ctrl-title-reset CSS): resets just the
