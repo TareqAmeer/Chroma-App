@@ -45,6 +45,11 @@ EDITOR_GATES = [
     ("editor:wireframe-test", ["node", "test/editor_wireframe_diff.mjs"]),
     ("editor:inventory", ["node", "test/editor_wireframe_inventory.mjs"]),
     ("editor:responsive-test", ["node", "test/editor_responsive_qa.mjs"]),
+    # snap-check/html-check existed as npm scripts (and ran via editor:gates/npm test) but were
+    # never reachable from this wrapper's --editor flag — added so `verify.py --editor` actually
+    # covers the same gate set as `npm run editor:gates`, not a subset of it.
+    ("editor:snap-check", ["node", "test/editor_snap_lists_check.mjs"]),
+    ("editor:html-check", ["node", "test/editor_html_validity_check.mjs"]),
 ]
 FULL_GATE = ("behaviour:test", ["npx", "playwright", "test", "--config=playwright.config.mjs"])
 

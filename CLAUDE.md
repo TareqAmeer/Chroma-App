@@ -158,7 +158,18 @@ node test/export_harness.mjs --golden   # regenerate test/golden/ (only when a c
 npm run mask:test                 # raster-mask storage + round-trip + copy-on-write undo
 npm run ui:test                   # desktop layout audit (see below); --json for detail
 npm run perf:test                 # perf budgets; --baseline to re-record
+npm run editor:gates              # Editor wireframe/inventory/responsive/coverage/snap/html gates
 ```
+
+`npm run editor:gates` (also `npm test`'s `editor:gates` step, `githooks/pre-commit` for any
+commit touching `chromasmith-22.html`, and `.github/workflows/editor-gates.yml` on every push/PR)
+rebuilds `desktop/dist/` first — every gate underneath loads that staged copy, and this script
+used to skip the rebuild, so a run could quietly pass or fail against a previous session's stale
+build. For the Library's own gates too, or the Playwright click-through behaviour suite, use
+`python3 test/verify.py --editor [--full]` (see `test/verify.py`'s docstring for flags). None of
+this closes the desktop-engine gap — every check here drives Chromium, not the WKWebView the real
+Tauri desktop app renders with. A green run means no Chromium-visible regression, not that the
+actual `.app` is unaffected.
 
 **`test/ui_audit.mjs`** walks every tool section at 1440×820 / 1600×1000 / 1280×720 in `?deskx=1`,
 **plus a separate 375×812 phone pass** (2026-08-15). The phone pass loads its own page WITHOUT

@@ -15,7 +15,24 @@
 // pre-commit hook works around it by retrying up to 6x; this mirrors that number deliberately
 // rather than picking a new one — two different retry budgets for the same flake would drift.
 // A REAL regression fails all 6 attempts. Do not "fix" a red gate by raising this.
+//
+// ⚠️ STALE-BUILD GUARD (added 2026-09-10, found while auditing the test tooling itself): every
+// gate below loads desktop/dist/index.html, a STAGED COPY that build-desktop.sh generates from
+// chromasmith-22.html + desktop/library-ui.js. This script used to run every gate straight
+// against whatever was already in desktop/dist/ — so `npm test` (which calls this) could report
+// PASS or FAIL against code from a previous session's build, silently ignoring every edit made
+// since. test/verify.py already rebuilds before its gates; this was the one entry point that
+// didn't, and it's the one wired into `npm test` and the pre-commit hook. Now this always runs
+// build-desktop.sh first and fails loudly (before any gate) if the build itself is broken,
+// rather than letting every gate below quietly grade stale HTML.
 import { spawnSync } from 'node:child_process';
+
+const build = spawnSync('bash', ['build-desktop.sh'], { encoding: 'utf8' });
+if (build.status !== 0) {
+  console.log('BLOCKED: build-desktop.sh failed — cannot verify against stale desktop/dist/.');
+  console.log((build.stdout || '') + (build.stderr || ''));
+  process.exit(1);
+}
 
 const FLAKE_RETRIES = 6; // keep in sync with githooks/pre-commit's loop — same documented flake
 

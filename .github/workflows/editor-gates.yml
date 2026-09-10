@@ -1,0 +1,79 @@
+name: Editor/Library UI gates
+
+# Runs the full interface test suite (npm test — lint/format/mask/perf/UI-audit/Editor gates,
+# see package.json) plus the Playwright behaviour suite (click-through tests for the Editor and
+# Library) on every push/PR touching the app or its tests. Public repo -> free, unmetered on
+# GitHub-hosted runners (macOS included), so nothing here costs anything to run.
+#
+# WHY macOS, NOT ubuntu (unlike export-gate.yml): every UI/wireframe/behaviour test here loads
+# desktop/dist/index.html — the SAME staged build the real Tauri desktop app ships — but through
+# Playwright's Chromium, not the WKWebView (Safari engine) the desktop app actually renders with.
+# ubuntu-latest can't narrow that gap at all (no WebKit engine tied to macOS exists there);
+# macos-latest at least runs on the platform the desktop app targets, and lets a later pass add
+# a `webkit` Playwright project without needing a second runner OS. This does NOT close the
+# Chromium-vs-WKWebView gap by itself — see CLAUDE.md's engine-mismatch note — it's a
+# prerequisite for closing it, not the fix.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'chromasmith-22.html'
+      - 'desktop/library-ui.js'
+      - 'desktop/desktop-native.js'
+      - 'test/**'
+      - 'chromasmith-design/**'
+      - 'playwright.config.mjs'
+      - 'build-desktop.sh'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/editor-gates.yml'
+  pull_request:
+    paths:
+      - 'chromasmith-22.html'
+      - 'desktop/library-ui.js'
+      - 'desktop/desktop-native.js'
+      - 'test/**'
+      - 'chromasmith-design/**'
+      - 'playwright.config.mjs'
+      - 'build-desktop.sh'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/editor-gates.yml'
+
+jobs:
+  ui-gates:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install node dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Stage desktop build
+        run: bash build-desktop.sh
+
+      - name: Fast gates (lint, formats, masks, perf, UI audit, Library perf, Editor gates)
+        run: npm test
+
+      - name: Behaviour suite (Editor + Library click-through tests)
+        run: npx playwright test --config=playwright.config.mjs
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-gates-output
+          path: |
+            test/output/
+            test-results/
+          retention-days: 14
