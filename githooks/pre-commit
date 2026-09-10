@@ -29,13 +29,22 @@ fi
 if needs_check "chromasmith-22.html"; then
   echo "chromasmith-22.html changed — running all Editor gates (test/editor_gates.mjs)..."
   # Was: only editor_wireframe_diff.mjs, hand-retried 6x here for the documented E7 flake
-  # (editor_ux_spec.json). That left editor:inventory/responsive/coverage/snap-check/html-check
-  # — every OTHER Editor gate — unenforced at commit time, reachable only through `npm test`
-  # (which itself never rebuilt desktop/dist/ before this session's fix — see editor_gates.mjs's
-  # own comment). Calling editor_gates.mjs here instead runs every Editor gate, rebuilds
-  # desktop/dist/ first so none of them can pass against stale code, and keeps the E7 retry logic
-  # in exactly one place instead of two copies drifting apart.
-  if ! node test/editor_gates.mjs; then
+  # (editor_ux_spec.json, since fixed at its real root cause — see editor_gates.mjs). That left
+  # editor:inventory/responsive/coverage/snap-check/html-check — every OTHER Editor gate —
+  # unenforced at commit time, reachable only through `npm test` (which itself never rebuilt
+  # desktop/dist/ before this session's fix — see editor_gates.mjs's own comment). Calling
+  # editor_gates.mjs here instead runs every Editor gate and rebuilds desktop/dist/ first so none
+  # of them can pass against stale code.
+  #
+  # --advisory (added 2026-09-10, explicit user decision after this uncovered 253 pre-existing,
+  # unallowlisted editor:inventory findings on an otherwise-clean tree — none introduced by
+  # whatever commit happens to touch chromasmith-22.html next): editor:inventory/responsive/
+  # coverage print their findings here but don't block the commit; editor:snap-check/html-check/
+  # wireframe-diff still do — see editor_gates.mjs's own comment for why that split. `npm test`
+  # and CI call editor_gates.mjs WITHOUT this flag, so they stay fully strict; this only lowers
+  # local commit friction from a backlog this hook is not the right place to force someone to
+  # triage mid-commit.
+  if ! node test/editor_gates.mjs --advisory; then
     echo ""
     echo "BLOCKED: one or more Editor gates failed (see output above)."
     exit 1

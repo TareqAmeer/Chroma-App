@@ -36,12 +36,42 @@ export const DETERMINISTIC_CONTEXT_OPTIONS = {
 // loading (a screenshot taken mid-swap between a fallback and the real face is a false
 // mismatch, not a real one) and freezes CSS animations/transitions so a screenshot can't land
 // mid-frame of something moving.
+//
+// ⚠️ ROOT CAUSE OF E7 (editor_ux_spec.json), found 2026-09-10 by live instrumentation, not
+// theory — a prior session's "RESOLVED" note blamed a boot-watchdog race forcing the Library
+// into full-view takeover; that was verified FALSE (body.lib-full was confirmed false in every
+// failing run reproduced here) and its "fix" (widening/removing the watchdog) did not stop the
+// flake. The REAL cause: the injected stylesheet below sets `transition-duration:0s` to prevent
+// FUTURE transitions, but per the CSS Transitions spec this does not retroactively cancel a
+// transition that had ALREADY STARTED before the stylesheet was inserted — toggleTheme() flips
+// body.light, which changes #fx-deskbar's INHERITED `color` (it has `transition:all` from an
+// ancestor/utility rule), starting a real ~120ms CSSTransition; `document.getAnimations()`
+// confirmed one still `running` on #fx-deskbar in every reproduced failure, with its OWN
+// computed `transitionDuration` already reading "0s" — the animation object keeps interpolating
+// on its ORIGINAL duration regardless. Reading computed `color` while that's still in flight can
+// return any intermediate value, not just start/end — this session mostly saw it land on the
+// pre-toggle value, but that is a coincidence of relative timing, not a guarantee. Confirmed only
+// present under photoState:'photo' in editor_wireframe_diff.mjs's sweep (loading a photo appears
+// to retrigger or extend the transition-eligible window versus the no-photo sequence — not fully
+// isolated, and not needed to be: this fix does not depend on WHAT retriggers a transition, only
+// on making sure none can survive past this call). Fail-tested: 8 runs of the unmodified sweep
+// reproduced the [light/photo] color mismatch on ~35-45% of them (getAnimations().length was 1
+// with playState "running" on #fx-deskbar every time it failed, 0 every time it passed) — see
+// test/editor_wireframe_diff.mjs's own run history for the repeat-run confirmation after this fix.
 export async function settleForCapture(page) {
   await page.evaluate(() => document.fonts && document.fonts.ready).catch(() => {});
   await page.addStyleTag({
     content: `*, *::before, *::after { animation-duration: 0s !important; animation-delay: 0s !important;
       transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }`,
   });
+  // Force-complete every already-running Web Animation (including CSS Transitions started before
+  // the stylesheet above existed) so none can still be interpolating when a caller reads computed
+  // style right after this returns. finish() jumps each one straight to its end value; a transition
+  // silently doesn't participate if getAnimations() can't see it (e.g. inside a closed shadow
+  // root), which doesn't apply anywhere in this app.
+  await page.evaluate(() => {
+    document.getAnimations({ subtree: true }).forEach((a) => { try { a.finish(); } catch (e) {} });
+  }).catch(() => {});
 }
 
 // ── 2. Repair loop: structured report + recheck against the previous run ───────────────────

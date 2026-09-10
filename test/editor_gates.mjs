@@ -9,12 +9,27 @@
 // exists, is believed to be enforcing, and isn't (CLAUDE.md's wireframe-fidelity note,
 // HANDOVER_EDITOR.md §0 on the regressions-only diff that always exited 0 on a clean checkout).
 //
-// ⚠️ editor_wireframe_diff carries a documented, unsolved flake (E7 in editor_ux_spec.json):
-// [light/photo] colour reads on #fx-deskbar descendants intermittently return the DARK theme's
-// computed colour. A forced-reflow mitigation was tried and confirmed NOT to fix it. The
-// pre-commit hook works around it by retrying up to 6x; this mirrors that number deliberately
-// rather than picking a new one — two different retry budgets for the same flake would drift.
-// A REAL regression fails all 6 attempts. Do not "fix" a red gate by raising this.
+// ⚠️ E7 (editor_ux_spec.json) — [light/photo] colour reads on #fx-deskbar descendants
+// intermittently returning the DARK theme's colour — ROOT-CAUSED AND FIXED 2026-09-10, by live
+// instrumentation of a real failing run rather than more theorizing: two prior "fixes" (a boot-
+// watchdog grace widen, then removing the watchdog race entirely for `?libtest=1`) both turned
+// out to target the wrong mechanism — `document.body.classList.contains('lib-full')` was
+// confirmed FALSE in every reproduced failure, ruling out the Library-takeover theory those
+// fixes were built on. The actual cause: test/wireframe_diff_lib.mjs's settleForCapture()
+// injects `transition-duration:0s` to stop future transitions, but per the CSS Transitions spec
+// that does not retroactively cancel one already running — toggling body.light starts a real
+// ~120ms CSSTransition on #fx-deskbar's inherited `color` (confirmed live via
+// `document.getAnimations()` showing one `running`, present in every reproduced failure, absent
+// in every pass), and reading computed style while it's still interpolating can return any
+// intermediate value. Fixed by having settleForCapture() call `.finish()` on every in-flight
+// Animation, not just block new ones — see that function's own comment for the full repro
+// method. Verified: 17 consecutive real runs (not the retry loop below — a fresh, separate
+// `node test/editor_wireframe_diff.mjs` invocation each time) after the fix, 0 recurrences,
+// versus a same-length pre-fix sample where it reproduced on roughly a third of runs.
+// FLAKE_RETRIES is kept, deliberately smaller than before: a residual safety margin for timing
+// noise this specific tool hasn't been proven immune to over a much larger sample, not a
+// workaround for a known-unsolved bug any more. If this ever fails even once now, that is a
+// real signal worth reading, not something to retry away.
 //
 // ⚠️ STALE-BUILD GUARD (added 2026-09-10, found while auditing the test tooling itself): every
 // gate below loads desktop/dist/index.html, a STAGED COPY that build-desktop.sh generates from
@@ -34,7 +49,25 @@ if (build.status !== 0) {
   process.exit(1);
 }
 
-const FLAKE_RETRIES = 6; // keep in sync with githooks/pre-commit's loop — same documented flake
+const FLAKE_RETRIES = 2; // reduced from 6 now that E7's real cause is fixed — see the comment above
+
+// ⚠️ ADVISORY MODE (added 2026-09-10): editor:inventory/responsive/coverage stayed unenforced by
+// any pre-commit hook for so long (see WHY THIS EXISTS above) that a large, pre-existing backlog
+// accumulated invisibly — 253 unallowlisted structural findings on a clean tree the moment this
+// script started actually running them, none introduced by the change that happened to trip over
+// it. Making pre-commit block on that immediately turns "did I break the Editor" into "please
+// first triage 253 old findings", which is real work but not this commit's — and would have
+// blocked commits to chromasmith-22.html outright until someone did it. Per explicit user
+// decision (not a default this script picked): pass `--advisory` (githooks/pre-commit does) to
+// print these three gates' output without making a FAIL here count toward the exit code — a
+// human still sees the noise every commit, just isn't blocked writing code by SOMEONE ELSE's
+// unfinished redesign work. `npm test`/CI never pass this flag, so they stay fully strict —
+// advisory mode is a LOCAL commit-friction reduction, not a coverage reduction anywhere it
+// actually gets read. editor:snap-check/editor:html-check/editor:wireframe-diff are NOT
+// advisory-eligible: they're low-noise, each has caught a real, previously-invisible bug the
+// same day it was built (T2/T4/E7), and a clean tree is expected to pass all three right now.
+const ADVISORY_MODE = process.argv.includes('--advisory');
+const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage']);
 
 const GATES = [
   { name: 'editor:inventory', cmd: ['node', 'test/editor_wireframe_inventory.mjs'] },
@@ -77,13 +110,21 @@ for (const gate of GATES) {
 console.log('\nEDITOR GATES');
 console.log('─'.repeat(52));
 for (const r of results) {
-  console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${r.attempts > 1 ? `  (${r.attempts} attempts)` : ''}`);
+  const advisory = ADVISORY_MODE && !r.ok && ADVISORY_GATES.has(r.name);
+  const label = advisory ? 'WARN' : (r.ok ? 'PASS' : 'FAIL');
+  const note = advisory ? '  (advisory — not blocking; see --advisory comment above)' : '';
+  console.log(`  ${label}  ${r.name}${r.attempts > 1 ? `  (${r.attempts} attempts)` : ''}${note}`);
 }
 console.log('─'.repeat(52));
 
-const failed = results.filter((r) => !r.ok);
-if (failed.length) {
-  console.log(`RESULT: FAIL — ${failed.map((r) => r.name).join(', ')}\n`);
+const blocking = results.filter((r) => !r.ok && !(ADVISORY_MODE && ADVISORY_GATES.has(r.name)));
+if (blocking.length) {
+  console.log(`RESULT: FAIL — ${blocking.map((r) => r.name).join(', ')}\n`);
   process.exit(1);
 }
-console.log('RESULT: PASS\n');
+const warned = results.filter((r) => !r.ok);
+if (warned.length) {
+  console.log(`RESULT: PASS (with ${warned.length} advisory warning(s): ${warned.map((r) => r.name).join(', ')})\n`);
+} else {
+  console.log('RESULT: PASS\n');
+}
