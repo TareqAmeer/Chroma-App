@@ -329,9 +329,8 @@ export const PROPOSALS = {
   export: {
     html: [
       secPlain('Output', {
-        body: `<div class="fnrow"><span class="fieldlabel">Filename</span><span class="ver">v1.0</span></div>
-            <input class="txt" value="photo" placeholder="photo">
-            <p class="hint">Tokens: {name} {seq} {date} <button class="info-i" title="{name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></p>`
+        body: `<div class="fnrow"><span class="fieldlabel">Filename <button class="info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></span><span class="ver">v1.0</span></div>
+            <input class="txt" value="photo" placeholder="photo">`
           + field('Format', select('Auto (match source)'))
           + sl('Quality', 99, 80, 100)
           + field('Resize (long edge)', select('Full size'))
@@ -354,7 +353,7 @@ export const PROPOSALS = {
       ['new', 'EXPORT 1 — Filename and the v1.0 version badge are here. They were missing from the draft because of a real bug in the extractor, not a design choice: #fx-fname and #exp-wm-text have no type attribute, and input[type=text] does not match an input whose type is only the implied default. Fixed in test/panel_extract.mjs; Export went from 22 controls to 24.'],
       ['moved', 'The panel is split into Output / Watermark / Preset / Export. Today all twenty-four controls sit in one undifferentiated stack, with the actual Export button below eleven buttons that are not it.'],
       ['moved', 'Current photo / All photos becomes a segmented control directly above the Export button, so the scope of what you are about to do is adjacent to the button that does it.'],
-      ['demoted', 'The filename token help becomes a short hint plus an ⓘ rather than a title attribute nobody sees on a field they are typing into.'],
+      ['demoted', 'EXPORT 3 — The literal "Tokens: {name} {seq} {date}" string is gone; a batch-naming syntax nobody asked to see by default has no business sitting in the panel as visible text. The full explanation moves onto an ⓘ next to the Filename label — an info button never sits on its own line (feedback: MULTIPLE), it is either on a title or on a button, and here it is on the Filename title.'],
       ['cut', 'The "Save all slider settings to localStorage" / "Restore saved slider settings" pair and the Style .json import/export. These are recipe and session actions, not export settings — they belong in the gear menu with the other session commands, which is where "Save the current recipe" already half-lives.'],
       ['cut', 'The two Google Photos buttons ("Sign in", "Set or change your OAuth client ID"). Sign-in belongs to the Google Photos import flow, not to the Export section; the client-ID field is setup, not a per-export choice.'],
       ['kept', 'Every actual export setting: quality, format, resize, sharpening, HDR gain map, watermark text and opacity, presets, and the export/cancel behaviour.'],
@@ -365,22 +364,6 @@ export const PROPOSALS = {
   // Feedback: needs a real example; needs keyword editing like Get Info; needs faces with tagging.
   info: {
     html: [
-      secPlain('People', {
-        body: `<div class="faces">
-            <div class="face"><span class="favatar"></span><span>Ana</span></div>
-            <div class="face"><span class="favatar"></span><span>Marcus</span></div>
-            <div class="face unnamed"><span class="favatar"></span><span>Who is this?</span></div>
-          </div>
-          <button class="wide-btn ghost">Scan this photo for faces</button>`,
-        note: 'Shown when a photo has no detected faces yet — today the section renders nothing at all in that case, which is why it looks like the feature does not exist.',
-      }),
-      secPlain('Keywords', {
-        body: `<div class="kws">
-            <span class="kw">portrait<b>×</b></span><span class="kw">golden hour<b>×</b></span><span class="kw">lisbon<b>×</b></span>
-          </div>
-          <input class="txt" value="" placeholder="Add a keyword…">
-          <div class="kwsug"><span class="kwlb">Suggested</span><span class="kw sug">rooftop</span><span class="kw sug">summer</span><span class="kw sug">smiling</span></div>`,
-      }),
       secPlain('Metadata', {
         body: `<div class="exif">
             <div class="erow"><span class="elb">Date</span><span class="eval">Aug 14, 2026</span></div>
@@ -401,12 +384,27 @@ export const PROPOSALS = {
             <div class="erow"><span class="elb">Camera Model</span><span class="eval">DC-S9</span></div>
           </div>`,
       }),
+      secPlain('People', {
+        body: `<div class="faces">
+            <div class="face"><span class="favatar"></span><span>Ana</span></div>
+            <div class="face"><span class="favatar"></span><span>Marcus</span></div>
+            <div class="face unnamed"><span class="favatar"></span><span>Who is this?</span></div>
+          </div>
+          <button class="wide-btn ghost">Scan this photo for faces</button>`,
+      }),
+      secPlain('Keywords', {
+        body: `<div class="kws">
+            <span class="kw">portrait<b>×</b></span><span class="kw">golden hour<b>×</b></span><span class="kw">lisbon<b>×</b></span>
+          </div>
+          <input class="txt" value="" placeholder="Add a keyword…">
+          <div class="kwsug"><span class="kwlb">Suggested</span><span class="kw sug">rooftop</span><span class="kw sug">summer</span><span class="kw sug">smiling</span></div>`,
+      }),
     ].join('\n'),
     changes: [
+      ['moved', 'INFO — Reordered to Metadata, People, Keywords: what the camera recorded, then who is in the photo, then how you have tagged it — reference before action, action before your own annotations.'],
       ['new', 'INFO 1 — This is the actual example you asked for. The Metadata rows are exactly what showExif() renders today, in its real order (Date, Dimensions, the ISO/aperture/shutter/focal chip strip, File Name, Size, File Format, Lens Model, Camera Make, Camera Model), filled with representative values — the extraction found only one control here because the panel is almost entirely read-only text, not form controls.'],
       ['new', 'INFO 2 — A Keywords section: existing keywords as removable chips, a plain add field, and a Suggested row. This surfaces plumbing that is already built and shipped on the Library side (keywordsSectionHtml, addKeywordToPhoto, removeKeywordFromPhoto, catalog_keywords, set_keywords) plus the CLIP tag suggestions from ROADMAP R10. No new storage.'],
-      ['new', 'INFO 3 — A People section with named face chips, the unnamed "Who is this?" state, and a "Scan this photo for faces" action. The face plumbing already exists and is registered (fxRenderPeoplePanel → catalog_faces_for_path / catalog_face_crop, main.rs:2119) — it renders nothing unless the photo was opened from the Library AND detection has already run, which is why you have never seen it. The scan row is what makes it discoverable.'],
-      ['moved', 'People sits above Keywords and Metadata: who is in the photo is the thing you act on, the camera settings are reference.'],
+      ['new', 'INFO 3 — A People section with named face chips, the unnamed "Who is this?" state, and a "Scan this photo for faces" action (tracked as R3/R4 — the button has no wired action yet, and the no-photo-path case still renders nothing). The face plumbing already exists and is registered (fxRenderPeoplePanel → catalog_faces_for_path / catalog_face_crop, main.rs:2119) — it renders nothing unless the photo was opened from the Library AND detection has already run, which is why you have never seen it. The scan row is what makes the no-detection-yet case discoverable; the mockup does not itself explain this, since that is a fact for this review, not shipped UI copy.'],
       ['cut', 'The lone "Reset this section" button — there is nothing in Info to reset.'],
       ['kept', 'The mono preview-info line (#fx-info) and the video variant of the metadata block, which showExif() swaps in for a clip.'],
     ],

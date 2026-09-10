@@ -227,23 +227,6 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <span class="tag">Proposed</span>
       <div class="spec wf">
         <div class="grp">
-  <div class="grp-hd"><span class="fieldlabel">People</span></div>
-  <div class="grp-bd"><div class="faces">
-            <div class="face"><span class="favatar"></span><span>Ana</span></div>
-            <div class="face"><span class="favatar"></span><span>Marcus</span></div>
-            <div class="face unnamed"><span class="favatar"></span><span>Who is this?</span></div>
-          </div>
-          <button class="wide-btn ghost">Scan this photo for faces</button><p class="hint">Shown when a photo has no detected faces yet — today the section renders nothing at all in that case, which is why it looks like the feature does not exist.</p></div>
-</div>
-<div class="grp">
-  <div class="grp-hd"><span class="fieldlabel">Keywords</span></div>
-  <div class="grp-bd"><div class="kws">
-            <span class="kw">portrait<b>×</b></span><span class="kw">golden hour<b>×</b></span><span class="kw">lisbon<b>×</b></span>
-          </div>
-          <input class="txt" value="" placeholder="Add a keyword…">
-          <div class="kwsug"><span class="kwlb">Suggested</span><span class="kw sug">rooftop</span><span class="kw sug">summer</span><span class="kw sug">smiling</span></div></div>
-</div>
-<div class="grp">
   <div class="grp-hd"><span class="fieldlabel">Metadata</span></div>
   <div class="grp-bd"><div class="exif">
             <div class="erow"><span class="elb">Date</span><span class="eval">Aug 14, 2026</span></div>
@@ -264,13 +247,30 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
             <div class="erow"><span class="elb">Camera Model</span><span class="eval">DC-S9</span></div>
           </div></div>
 </div>
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">People</span></div>
+  <div class="grp-bd"><div class="faces">
+            <div class="face"><span class="favatar"></span><span>Ana</span></div>
+            <div class="face"><span class="favatar"></span><span>Marcus</span></div>
+            <div class="face unnamed"><span class="favatar"></span><span>Who is this?</span></div>
+          </div>
+          <button class="wide-btn ghost">Scan this photo for faces</button></div>
+</div>
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">Keywords</span></div>
+  <div class="grp-bd"><div class="kws">
+            <span class="kw">portrait<b>×</b></span><span class="kw">golden hour<b>×</b></span><span class="kw">lisbon<b>×</b></span>
+          </div>
+          <input class="txt" value="" placeholder="Add a keyword…">
+          <div class="kwsug"><span class="kwlb">Suggested</span><span class="kw sug">rooftop</span><span class="kw sug">summer</span><span class="kw sug">smiling</span></div></div>
+</div>
       </div>
     </div>
     <ul class="changes">
+      <li><b class="moved">moved</b>INFO — Reordered to Metadata, People, Keywords: what the camera recorded, then who is in the photo, then how you have tagged it — reference before action, action before your own annotations.</li>
       <li><b class="new">new</b>INFO 1 — This is the actual example you asked for. The Metadata rows are exactly what showExif() renders today, in its real order (Date, Dimensions, the ISO/aperture/shutter/focal chip strip, File Name, Size, File Format, Lens Model, Camera Make, Camera Model), filled with representative values — the extraction found only one control here because the panel is almost entirely read-only text, not form controls.</li>
       <li><b class="new">new</b>INFO 2 — A Keywords section: existing keywords as removable chips, a plain add field, and a Suggested row. This surfaces plumbing that is already built and shipped on the Library side (keywordsSectionHtml, addKeywordToPhoto, removeKeywordFromPhoto, catalog_keywords, set_keywords) plus the CLIP tag suggestions from ROADMAP R10. No new storage.</li>
-      <li><b class="new">new</b>INFO 3 — A People section with named face chips, the unnamed "Who is this?" state, and a "Scan this photo for faces" action. The face plumbing already exists and is registered (fxRenderPeoplePanel → catalog_faces_for_path / catalog_face_crop, main.rs:2119) — it renders nothing unless the photo was opened from the Library AND detection has already run, which is why you have never seen it. The scan row is what makes it discoverable.</li>
-      <li><b class="moved">moved</b>People sits above Keywords and Metadata: who is in the photo is the thing you act on, the camera settings are reference.</li>
+      <li><b class="new">new</b>INFO 3 — A People section with named face chips, the unnamed "Who is this?" state, and a "Scan this photo for faces" action (tracked as R3/R4 — the button has no wired action yet, and the no-photo-path case still renders nothing). The face plumbing already exists and is registered (fxRenderPeoplePanel → catalog_faces_for_path / catalog_face_crop, main.rs:2119) — it renders nothing unless the photo was opened from the Library AND detection has already run, which is why you have never seen it. The scan row is what makes the no-detection-yet case discoverable; the mockup does not itself explain this, since that is a fact for this review, not shipped UI copy.</li>
       <li><b class="cut">cut</b>The lone "Reset this section" button — there is nothing in Info to reset.</li>
       <li><b class="kept">kept</b>The mono preview-info line (#fx-info) and the video variant of the metadata block, which showExif() swaps in for a clip.</li>
     </ul>
