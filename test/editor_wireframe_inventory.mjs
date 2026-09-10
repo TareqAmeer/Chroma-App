@@ -44,13 +44,17 @@ const ZONES = [
   { label: 'statusbar', wf: '.statusbar', app: '#fx-statusbar' }, // real "missing" until Phase F builds it
 ];
 // Menus whose CONTENTS are invisible until opened — same principle as Library's OPEN_MENUS.
+// 2026-09-10: Tools + View + ⋯ merged into ONE settings menu (#fx-settings/#fx-settings-menu),
+// a two-column drill-down — one gear trigger, a category rail (#fx-settings-cats), and one
+// content pane visible at a time (settingsShowCat()). Both rows below share the same
+// appTrigger/appContainer-open (the gear) but click a different category (appCatClick) before
+// inventorying, since each wireframe menu maps to one settings PANE now, not a standalone popover.
 const OPEN_MENUS = [
-  { label: 'toolsmenu', wfTrigger: '#btn-tools', wfContainer: '#tools-menu', appTrigger: '#fx-tools .fx-db', appContainer: '#fx-tools-menu' },
-  // 2026-09-09: the app now has a real View menu (#fx-view/#fx-view-menu, viewMenuBuild() in
-  // chromasmith-22.html) — gamut warning + Appearance, split out of both Tools and the ⋯
-  // overflow menu per item 3.1.6. Previously this row pointed at #fx-overflow as a stand-in
-  // (see git history) because no dedicated View trigger existed yet.
-  { label: 'viewmenu', wfTrigger: '#btn-view-menu', wfContainer: '#view-menu', appTrigger: '#fx-view .fx-db', appContainer: '#fx-view-menu' },
+  { label: 'toolsmenu', wfTrigger: '#btn-tools', wfContainer: '#tools-menu', appTrigger: '#fx-settings .fx-db', appCatClick: '.fx-settings-cat[data-cat="tools"]', appContainer: '#fx-tools-menu' },
+  // 2026-09-09: the app now has a real View menu (gamut warning + Appearance, split out of both
+  // Tools and the ⋯ overflow menu per item 3.1.6); 2026-09-10: it became the "view" category pane
+  // inside the merged settings menu rather than its own standalone trigger.
+  { label: 'viewmenu', wfTrigger: '#btn-view-menu', wfContainer: '#view-menu', appTrigger: '#fx-settings .fx-db', appCatClick: '.fx-settings-cat[data-cat="view"]', appContainer: '#fx-view-menu' },
 ];
 
 // Wireframe sample-data noise: the preset grid renders arbitrary hand-picked LUT names the app's
@@ -264,6 +268,7 @@ for (const m of OPEN_MENUS) {
   await wf.click(m.wfTrigger).catch(() => {});
 
   await app.click(m.appTrigger).catch(() => {});
+  if (m.appCatClick) { await app.click(m.appCatClick).catch(() => {}); await app.waitForTimeout(100); }
   await app.waitForTimeout(150);
   const a = await app.evaluate(`(${INVENTORY_FN})(${JSON.stringify(m.appContainer)})`);
   await app.click(m.appTrigger).catch(() => {});

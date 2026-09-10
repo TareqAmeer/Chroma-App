@@ -64,36 +64,93 @@ const test = base.extend({
     await use({ page, errors });
     expect(errors, 'uncaught page errors during interaction').toEqual([]);
   },
+
+  // Same boot sequence as `editor`, at a MOBILE viewport and WITHOUT ?libtest=1. Needed because
+  // #btn-split-menu/#btn-history open FLOATING popovers (#fx-split-popover/#fx-timeline-popover)
+  // that only exist as standalone triggers in this mode. ⚠️ TWO separate things force desktop
+  // mode, and both had to go: (1) "web/mobile" is driven by `_mqMobile` (max-width:700px,
+  // chromasmith-22.html applyFxLayout()), not the ?deskx=1 query param, so a narrow viewport is
+  // required; (2) ?libtest=1 itself (desktop/library-ui.js's Tauri mock) unconditionally does
+  // `document.body.classList.add('deskx')` regardless of viewport — confirmed live, a 390px-wide
+  // ?libtest=1 page still reports body.deskx and #btn-split-menu stays display:none. Since this
+  // fixture doesn't need the Library mock (no Library interaction in these tests), it skips
+  // ?libtest=1 and boots the plain browser page instead — the one path where deskx is driven
+  // purely by the width media query, as the wireframe intends.
+  editorWeb: async ({ page, server }, use) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${server}/desktop/dist/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => {
+      document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });
+    });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    const fixtureB64 = (await readFile(path.join(ROOT, 'test/fixtures/portrait.png'))).toString('base64');
+    await page.evaluate(async (b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const file = new File([bytes], 'portrait.png', { type: 'image/png' });
+      if (typeof window.loadFXImages === 'function') await window.loadFXImages([file]);
+    }, fixtureB64);
+    await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    await settleForCapture(page);
+    await use({ page, errors });
+    expect(errors, 'uncaught page errors during interaction').toEqual([]);
+  },
 });
 
 // ════════════════════════════════════════════════════════════════════════════════════════════
 // TOOLS / VIEW MENUS
 // ════════════════════════════════════════════════════════════════════════════════════════════
+// 2026-09-10: Tools + View + ⋯ merged into ONE settings menu (#fx-settings), a two-column
+// drill-down — a fixed category list on the left (#fx-settings-cats, SETTINGS_CATS) and one
+// content pane visible at a time on the right (#fx-settings-page, settingsShowCat()). There is
+// no separate Tools/View/overflow trigger any more — every category lives behind the single
+// gear button and category switches happen WITHOUT closing the menu (settingsShowCat() toggles
+// `.active` on the existing buttons; see its comment on the detach-mid-event bug this guards
+// against — a naive innerHTML rebuild there closes the whole menu on the first category click).
 test.describe('menus', () => {
-  test('Tools menu opens and closes on outside click', async ({ editor: { page } }) => {
-    await page.click('#fx-tools .fx-db');
-    await expect(page.locator('#fx-tools-menu')).toHaveClass(/\bon\b/);
+  test('Settings menu opens and closes on outside click', async ({ editor: { page } }) => {
+    await page.click('#fx-settings .fx-db');
+    await expect(page.locator('#fx-settings-menu')).toHaveClass(/\bon\b/);
     await page.click('#fx-canvas-wrap, body', { position: { x: 5, y: 5 } }).catch(() => page.mouse.click(5, 5));
-    await expect(page.locator('#fx-tools-menu')).not.toHaveClass(/\bon\b/);
+    await expect(page.locator('#fx-settings-menu')).not.toHaveClass(/\bon\b/);
   });
 
-  test('opening the Tools menu closes the View/overflow menu and vice versa', async ({ editor: { page } }) => {
-    await page.click('#fx-overflow .fx-db');
-    await expect(page.locator('#fx-overflow-menu')).toHaveClass(/\bon\b/);
-    await page.click('#fx-tools .fx-db');
-    await expect(page.locator('#fx-tools-menu')).toHaveClass(/\bon\b/);
-    await expect(page.locator('#fx-overflow-menu')).not.toHaveClass(/\bon\b/);
+  // The core regression this file exists to catch: clicking a category must NOT close the menu
+  // (the detach-mid-event bug fixed in settingsShowCat() — see chromasmith-22.html's comment
+  // right above that function). Switch through all five categories and confirm the menu stays
+  // open and exactly one pane is active at a time.
+  test('switching settings categories keeps the menu open and shows exactly one pane', async ({ editor: { page } }) => {
+    await page.click('#fx-settings .fx-db');
+    await expect(page.locator('#fx-settings-menu')).toHaveClass(/\bon\b/);
+    const cats = [
+      ['tools', '#fx-tools-menu'],
+      ['view', '#fx-view-menu'],
+      ['split', '#fx-settings-split-list'],
+      ['history', '#fx-settings-history-list'],
+      ['overflow', '#fx-overflow-menu'],
+    ];
+    for (const [key, paneSel] of cats) {
+      await page.click(`.fx-settings-cat[data-cat="${key}"]`);
+      await expect(page.locator('#fx-settings-menu')).toHaveClass(/\bon\b/); // still open
+      await expect(page.locator(paneSel)).toHaveClass(/\bactive\b/);
+      await expect(page.locator(`.fx-settings-cat[data-cat="${key}"]`)).toHaveClass(/\bactive\b/);
+      const activePanes = await page.locator('.fx-settings-pane.active').count();
+      expect(activePanes).toBe(1);
+    }
   });
 
-  // E8 (editor_ux_spec.json): the wireframe's View-menu Appearance section, added 2026-09-09.
-  // 2026-09-09: Appearance moved out of the overflow (⋯) menu into the new #fx-view menu
-  // (viewMenuBuild()) when Tools/View/⋯ were split — this test's trigger selector was never
-  // updated at the time, so it silently timed out instead of catching the real behavior.
+  // E8 (editor_ux_spec.json): the wireframe's View-menu Appearance section, added 2026-09-09,
+  // now the View category inside the merged settings menu.
   test('Appearance: Dark/Light rows toggle body.light and stay open (not the old rebuild-closes-menu bug)', async ({ editor: { page } }) => {
-    await page.click('#fx-view .fx-db');
+    await page.click('#fx-settings .fx-db');
+    await page.click('.fx-settings-cat[data-cat="view"]');
     await page.click('button[onclick*="fxSetTheme(\'light\')"]');
     await expect(page.locator('body')).toHaveClass(/\blight\b/);
-    await expect(page.locator('#fx-view-menu')).toHaveClass(/\bon\b/); // menu must still be open
+    await expect(page.locator('#fx-settings-menu')).toHaveClass(/\bon\b/); // menu must still be open
     await expect(page.locator('button[onclick*="fxSetTheme(\'light\')"]')).toHaveClass(/\bon\b/);
     await page.click('button[onclick*="fxSetTheme(\'dark\')"]');
     await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
@@ -101,12 +158,12 @@ test.describe('menus', () => {
   });
 
   // E6 (editor_ux_spec.json): the docked Library filmstrip must re-theme with the Editor.
-  // Both trigger buttons are TOGGLES and the theme opts deliberately keep the menu open (same
-  // "stay open so several can be flipped in one visit" convention as Library's own menu) — click
-  // the trigger only once, or a second click closes an already-open menu instead of reopening it.
+  // The theme buttons deliberately keep the menu open (same "stay open so several can be
+  // flipped in one visit" convention as Library's own menu) — click the category only once.
   test('theme change from the Editor gear menu also re-themes the docked Library filmstrip (E6)', async ({ editor: { page } }) => {
     const overlay = page.locator('#lib-overlay');
-    await page.click('#fx-view .fx-db');
+    await page.click('#fx-settings .fx-db');
+    await page.click('.fx-settings-cat[data-cat="view"]');
     await page.click('button[onclick*="fxSetTheme(\'light\')"]');
     await expect(overlay).toHaveClass(/\blib-light\b/);
     await page.click('button[onclick*="fxSetTheme(\'dark\')"]'); // menu is still open — no re-click needed
@@ -129,6 +186,47 @@ test.describe('menus', () => {
     await expect(page.locator('body')).toHaveClass(/\blight\b/);
     await page.click('#lib-view-menu .opt[data-theme="dark"]'); // menu is still open — no re-click needed
     await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// LEFT CLUSTER (Undo/Redo/Show original/Full resolution) — the 2026-09-10 wireframe-fidelity
+// fixes (7-item mismatch list). fxSyncTopbarDisabled() (chromasmith-22.html) greys out Undo,
+// Redo, and Show original together off the SAME fxHistIdx signal, on purpose (deliberately not
+// a second, independently-driven signal that could drift — see the comment above that function).
+// ════════════════════════════════════════════════════════════════════════════════════════════
+test.describe('left cluster: undo/redo/show original/full resolution', () => {
+  test('Undo and Show original start disabled on a freshly loaded photo, Undo enables after an edit', async ({ editor: { page } }) => {
+    await expect(page.locator('#btn-undo-db')).toBeDisabled();
+    await expect(page.locator('#btn-before')).toBeDisabled();
+    await page.click('#fx-toolrail [data-sec="adjust"]');
+    await page.locator('#sl-adj-exp').fill('30').catch(() => {});
+    await page.waitForTimeout(200);
+    await expect(page.locator('#btn-undo-db')).toBeEnabled();
+    await expect(page.locator('#btn-before')).toBeEnabled();
+  });
+
+  test('Redo is disabled until an Undo has happened', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="adjust"]');
+    await page.locator('#sl-adj-exp').fill('30').catch(() => {});
+    await page.waitForTimeout(200);
+    await expect(page.locator('#btn-redo-db')).toBeDisabled();
+    await page.click('#btn-undo-db');
+    await expect(page.locator('#btn-redo-db')).toBeEnabled();
+  });
+
+  // 7-item wireframe fix #2: Show original moved next to Undo/Redo on the LEFT, and #5: Full
+  // resolution now lives in the same left cluster — both relocated by relocatePreviewTools()
+  // out of the zoom cluster / floating layer into #fx-deskbar-left under body.deskx.
+  test('Show original and Full resolution live in the left deskbar cluster, not the zoom cluster', async ({ editor: { page } }) => {
+    const left = page.locator('#fx-deskbar-left');
+    await expect(left.locator('#btn-before')).toHaveCount(1);
+    await expect(left.locator('#btn-fx-fullres')).toHaveCount(1);
+  });
+
+  // 7-item wireframe fix #1: the stray Library folder icon must not render in desktop/deskx mode.
+  test('the Library folder icon is not shown in the desktop deskbar', async ({ editor: { page } }) => {
+    await expect(page.locator('#db-lib-btn')).toBeHidden();
   });
 });
 
@@ -179,32 +277,34 @@ test.describe('zoom', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════════════════
-// RESET (E2/E3) — EXPECTED RED until Phase C ships
+// RESET (E2/E3)
 // ════════════════════════════════════════════════════════════════════════════════════════════
 test.describe('reset', () => {
-  // ⚠️ fxResetAll() (chromasmith-22.html:14529) awaits confirmModal() — a real in-page <dialog>
-  // (#fx-confirm-modal), not window.confirm() — so calling it via page.evaluate() without also
-  // clicking that dialog's OK button leaves the returned promise unresolved forever and the
-  // reset silently never happens. Drive it through the real UI (Reset all edits, in the gear
+  // E3 already shipped (confirmed live 2026-09-10): fxResetAll() (chromasmith-22.html:14863) no
+  // longer calls confirmModal() at all — it resets immediately, no dialog. This test used to click
+  // a #fx-confirm-modal OK button that no longer appears, which timed out forever (the dialog
+  // never exists — nothing to click). Drive it through the real UI (Reset all edits, in the gear
   // menu) so this test exercises the same path a user does, not a shortcut around it.
   test('reset restores every adjustment to its default (E2)', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="adjust"]');
     const slider = page.locator('#sl-adj-exp');
     await slider.fill('50').catch(() => {});
-    await page.click('#fx-overflow .fx-db');
-    await page.click('button[onclick*="fxResetAll"]');
-    await page.click('#fx-confirm-modal #fx-confirm-ok');
+    await page.waitForTimeout(500); // history push is debounced — see the undo/redo tests above
+    await page.click('#fx-settings .fx-db');
+    await page.click('.fx-settings-cat[data-cat="overflow"]');
+    await page.click('#fx-overflow-menu button[onclick*="fxResetAll"]');
     await expect(slider).toHaveValue('0');
   });
 
-  // 3.1.3/E3 (editor_ux_spec.json) — EXPECTED RED, not yet built: fxResetAll() (chromasmith-22.html
-  // :14531) awaits confirmModal(), a real in-page <dialog>, before doing anything. The user asked
-  // for this confirmation to be REMOVED (an undo can already recover from a mistaken reset).
-  test('reset does not show a confirmation dialog (E3, not yet built)', async ({ editor: { page } }) => {
+  // 3.1.3/E3 (editor_ux_spec.json) — SHIPPED: fxResetAll() (chromasmith-22.html:14863) no longer
+  // awaits confirmModal() at all, per the user's ask that an undo can already recover a mistake.
+  test('reset does not show a confirmation dialog (E3)', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="adjust"]');
     await page.locator('#sl-adj-exp').fill('50').catch(() => {});
-    await page.click('#fx-overflow .fx-db');
-    await page.click('button[onclick*="fxResetAll"]');
+    await page.waitForTimeout(500); // history push is debounced — see the undo/redo tests above
+    await page.click('#fx-settings .fx-db');
+    await page.click('.fx-settings-cat[data-cat="overflow"]');
+    await page.click('#fx-overflow-menu button[onclick*="fxResetAll"]');
     await expect(page.locator('#fx-confirm-modal[open]')).toHaveCount(0);
   });
 });
@@ -275,7 +375,7 @@ test.describe('retouch panel (RT1)', () => {
   });
 });
 
-test.describe('detail panel (D1)', () => {
+test.describe('detail panel (DT1)', () => {
   test('RAW noise reduction segmented control still drives sel-raw-nr', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="detail"]');
     await page.click('#seg-raw-nr button:has-text("High")');
@@ -310,6 +410,10 @@ test.describe('detail panel (D1)', () => {
     await page.click('#fx-toolrail [data-sec="detail"]');
     const slider = page.locator('#sl-nr-lum');
     await slider.fill('60');
+    // fxMarkModifiedSliders() debounces 120ms before flagging .fx-mod, which gates the reset
+    // button's visibility via :has() — wait it out before clicking (see the vig test's comment
+    // in the film-panel block for the failure this caused when there was no buffer).
+    await page.waitForTimeout(200);
     await page.click('.fx-ctrl[data-fxsec="nr"] .fx-ctrl-title-reset');
     await expect(slider).toHaveValue('0');
   });
@@ -319,7 +423,351 @@ test.describe('detail panel (D1)', () => {
     const slider = page.locator('#sl-deconv-amt');
     await slider.scrollIntoViewIfNeeded();
     await slider.fill('40');
+    await page.waitForTimeout(200);
     await page.click('.fx-ctrl[data-fxsec="deconv"] .fx-ctrl-title-reset');
     await expect(slider).toHaveValue('0');
+  });
+});
+
+test.describe('film panel (F1)', () => {
+  test('halation toggle still calls toggleFX and Shadow protect keeps its info tooltip', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="film"]');
+    const tg = page.locator('.fx-ctrl[data-fxsec="hal"] #tg-hal');
+    await tg.click();
+    await expect(tg).toHaveClass(/\bon\b/);
+    await expect(page.locator('.fx-ctrl[data-fxsec="hal"] .fx-info-i').first()).toBeVisible();
+    await tg.click();
+  });
+
+  test('Film artifacts Re-roll button still calls artReshuffle without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="film"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    const btn = page.locator('.fx-ctrl[data-fxsec="art"] button[onclick*="artReshuffle"]');
+    await expect(btn).toHaveText('Re-roll');
+    await btn.click();
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+
+  test('grain toggle still calls toggleFX without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="film"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.click('.fx-ctrl[data-fxsec="grain"] #tg-grain');
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+
+  test('bloom and vignette header Reset still work via the generic fxResetSection', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="film"]');
+    await page.click('.fx-ctrl[data-fxsec="bloom"] #tg-bloom');
+    const bloomSlider = page.locator('#sl-bloom-a');
+    await bloomSlider.scrollIntoViewIfNeeded();
+    await bloomSlider.fill('80');
+    await page.waitForTimeout(200); // fx-mod debounce
+    await page.click('.fx-ctrl[data-fxsec="bloom"] .fx-ctrl-title-reset');
+    await expect(bloomSlider).toHaveValue('40');
+    const vigSlider = page.locator('#sl-vig');
+    await vigSlider.scrollIntoViewIfNeeded();
+    await vigSlider.fill('90');
+    // fxMarkModifiedSliders() debounces 120ms before it flags the row .fx-mod (chromasmith-22.html)
+    // — the reset button's visibility is gated on that class via :has(), so a click right after
+    // fill() can race it. The bloom assertion above happens to give enough time by coincidence;
+    // vig has no such buffer, so wait explicitly.
+    await page.waitForTimeout(200);
+    await page.click('.fx-ctrl[data-fxsec="vig"] .fx-ctrl-title-reset');
+    await expect(vigSlider).toHaveValue('50');
+  });
+});
+
+test.describe('frame panel (FR1)', () => {
+  test('border colour and thickness rows are in colour-then-thickness order', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="frame"]');
+    // "borders" is in _ALLFX (chromasmith-22.html) — its fields start with inline display:none
+    // until first toggled on (a pre-existing app behaviour, not specific to this panel).
+    await page.click('.fx-ctrl[data-fxsec="borders"] #tg-borders');
+    const rows = page.locator('.fx-ctrl[data-fxsec="borders"] .fx-row');
+    await expect(rows.nth(0)).toContainText('Inner colour');
+    await expect(rows.nth(1)).toContainText('Inner thickness');
+    await expect(rows.nth(2)).toContainText('Outer colour');
+    await expect(rows.nth(3)).toContainText('Outer thickness');
+  });
+
+  test('header Reset restores both border colours, not just thickness', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="frame"]');
+    await page.click('.fx-ctrl[data-fxsec="borders"] #tg-borders');
+    const color = page.locator('#cl-b1');
+    const slider = page.locator('#sl-b1-t');
+    await slider.fill('5');
+    await page.waitForTimeout(200); // fx-mod debounce, see the film-panel vig test's comment
+    await page.evaluate(() => {
+      const c = document.getElementById('cl-b1');
+      c.value = '#ff0000';
+      c.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.click('.fx-ctrl[data-fxsec="borders"] .fx-ctrl-title-reset');
+    await expect(slider).toHaveValue('1');
+    await expect(color).toHaveValue('#000000');
+  });
+
+  test('Style select keeps its fx-info-i tooltip and filmFrameChanged still fires', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="frame"]');
+    await page.click('.fx-ctrl[data-fxsec="borders"] #tg-borders');
+    await expect(page.locator('.fx-ctrl[data-fxsec="borders"] .fx-info-i')).toBeVisible();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.selectOption('#sel-film-frame', 'sprocket35');
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+    await expect(page.locator('#sel-film-frame')).toHaveValue('sprocket35');
+  });
+});
+
+test.describe('crop panel (CR1)', () => {
+  test('Aspect ratio and Transform subheads are both present and in order', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="crop"]');
+    const subs = page.locator('.fx-ctrl[data-fxsec="crop"] .fx-sub');
+    await expect(subs).toHaveCount(2);
+    await expect(subs.nth(0)).toHaveText('Aspect ratio');
+    await expect(subs.nth(1)).toHaveText('Transform');
+  });
+
+  test('aspect chips still drive sel-crop-ar via cropSetAspect', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="crop"]');
+    await page.click('#crop-ar-chips button:has-text("1:1 Square")');
+    await expect(page.locator('#sel-crop-ar')).toHaveValue('1');
+  });
+
+  test('rotate/flip icon buttons still call geomRotate/geomFlip without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="crop"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.click('.fx-ctrl[data-fxsec="crop"] button[onclick*="geomRotate(-90)"]');
+    await page.click('.fx-ctrl[data-fxsec="crop"] button[onclick*="geomFlip"]');
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+
+  test('Crop button still calls cropToggle without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="crop"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.click('#btn-crop');
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('color panel (CO1)', () => {
+  test('Colour Wheels is now reachable from the Color rail button (was homeless, D2/CO1)', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="color"]');
+    await expect(page.locator('.fx-ctrl[data-fxsec="wheels"]')).toHaveClass(/sec-active/);
+  });
+
+  test('Point Color Pick button keeps its own click target and gained an info tooltip', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="color"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await expect(page.locator('.fx-ctrl[data-fxsec="pointcolor"] .fx-info-i')).toBeVisible();
+    // The info-i must NOT be nested inside #btn-pc-eye (invalid HTML/mis-parse risk, R8) —
+    // clicking the Pick button itself must still resolve to btn-pc-eye and call pcEyedropper.
+    await page.click('#btn-pc-eye');
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+
+  test('curve mode/channel chips still call curveSetMode/curveSetCh without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="color"]');
+    await page.click('.fx-ctrl[data-fxsec="curves"] #tg-curves');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.click('#curve-chips button[data-ch="r"]');
+    await expect(page.locator('#curve-chips button[data-ch="r"]')).toHaveClass(/\bon\b/);
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// OTHER DROPDOWNS / POPOVERS — every remaining "click a control, something floats open" surface
+// that isn't the settings menu: the canvas-background right-click context menu (desktop mode,
+// editorBgOpenMenu()), and the web/mobile split-compare and edit-history popovers, which are
+// hidden entirely under body.deskx (relocatePreviewTools() moves those same DOM nodes into the
+// settings menu's Compare/History categories instead — see the `menus` describe block above).
+// ════════════════════════════════════════════════════════════════════════════════════════════
+test.describe('other dropdowns', () => {
+  // editorBgOpenMenu()'s handler checks e.target!==wrap (chromasmith-22.html:10695), so it only
+  // fires for a contextmenu event whose target IS #fx-wrap itself, not one of its children (the
+  // canvas fills the wrap edge-to-edge once a photo is loaded, so a geometric right-click can't
+  // reliably land on the wrap's own background) — dispatch the event with an explicit target
+  // instead of aiming a pointer at a pixel.
+  test('right-clicking the empty canvas background opens the background-color menu, closes on outside click', async ({ editor: { page } }) => {
+    await page.evaluate(() => {
+      document.getElementById('fx-wrap').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+    await expect(page.locator('.fx-bgmenu')).toHaveCount(1);
+    await page.mouse.click(400, 5);
+    await expect(page.locator('.fx-bgmenu')).toHaveCount(0);
+  });
+
+  test('right-clicking ON the photo/canvas content does not open the background menu', async ({ editor: { page } }) => {
+    await page.locator('#fx-canvas').click({ button: 'right' });
+    await expect(page.locator('.fx-bgmenu')).toHaveCount(0);
+  });
+
+  test('web/mobile: split-compare popover opens off #btn-split-menu and closes on outside click', async ({ editorWeb: { page } }) => {
+    await page.click('#btn-split-menu');
+    await expect(page.locator('#fx-split-popover')).toBeVisible();
+    await page.mouse.click(10, 10);
+    await expect(page.locator('#fx-split-popover')).toBeHidden();
+  });
+
+  // ⚠️ page.click() here was observed (via a MutationObserver on style.display) to fire the
+  // button's onclick TWICE for one logical click — fxToggleTimelinePopover() has no
+  // e.stopPropagation() (unlike fxToggleSplitMenu(e), which does), so it's plausible Playwright's
+  // own actionability retry re-dispatches once the popover's appearance shifts layout under the
+  // click point. The net effect was open-then-immediately-close (toggle called twice: none→block,
+  // then block→none), well within the same tick. dispatchEvent bypasses that retry machinery.
+  test('web/mobile: edit-history popover opens off #btn-history and closes on outside click', async ({ editorWeb: { page } }) => {
+    await page.locator('#btn-history').dispatchEvent('click');
+    await expect(page.locator('#fx-timeline-popover')).toBeVisible();
+    await page.mouse.click(10, 10);
+    await expect(page.locator('#fx-timeline-popover')).toBeHidden();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// QUALITY (accessibility) — ported from test/wireframe_behaviour.mjs's own `quality` block
+// (the Library's equivalent file), ~150 lines the Editor never had a counterpart for. Same
+// generic a11y/keyboard/motion checks, re-scoped to the Editor's own containers
+// (#fx-deskbar/#fx-toolrail/.fx-settings-pane in place of #lib-top/#lib-side/.lib-menu).
+// ════════════════════════════════════════════════════════════════════════════════════════════
+test.describe('quality (accessibility)', () => {
+  test('every icon-only control in the deskbar/rail has an accessible name', async ({ editor: { page } }) => {
+    const unnamed = await page.evaluate(() => {
+      const out = [];
+      for (const b of document.querySelectorAll('#fx-deskbar button, #fx-toolrail button')) {
+        if (!b.offsetParent) continue;
+        const text = (b.textContent || '').trim();
+        const name = b.getAttribute('aria-label') || b.getAttribute('title') || text;
+        if (!name) out.push(b.id || b.className || b.outerHTML.slice(0, 80));
+      }
+      return out;
+    });
+    expect(unnamed, 'icon-only controls with no accessible name').toEqual([]);
+  });
+
+  // Fixed 2026-09-10: chromasmith-22.html's global keydown handler (~line 21563) had Escape
+  // wired for eyedropper/crop/loupe/AI-tap-mode but never checked #fx-settings-menu — every
+  // other menu in the app closed on click-outside only. Library's own sort/gear menus already
+  // supported Escape (test/wireframe_behaviour.mjs); found via porting that check over. Auditing
+  // the same pattern across the Editor turned up the same gap on #fx-split-popover,
+  // #fx-timeline-popover, and .fx-bgmenu (the right-click background menu) — all fixed together.
+  test('Escape closes the settings menu', async ({ editor: { page } }) => {
+    await page.click('#fx-settings .fx-db');
+    await expect(page.locator('#fx-settings-menu')).toHaveClass(/\bon\b/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#fx-settings-menu')).not.toHaveClass(/\bon\b/);
+  });
+
+  // Same rationale as the Library version: nothing else checks WHERE focus lands after a menu
+  // closes — stranding it on a now-hidden element silently breaks the next Tab press.
+  test('focus stays on a real, visible element after Escape closes the settings menu', async ({ editor: { page } }) => {
+    await page.click('#fx-settings .fx-db');
+    await page.keyboard.press('Escape');
+    const info = await page.evaluate(() => {
+      const el = document.activeElement;
+      return { id: el && el.id, visible: !!(el && el.offsetParent), isBody: el === document.body };
+    });
+    expect(info.isBody, 'focus fell back to <body> after closing the settings menu').toBe(false);
+    expect(info.visible, 'focus landed on a hidden element after closing the settings menu').toBe(true);
+  });
+
+  test('Escape closes the split-compare and edit-history popovers, and the background context menu', async ({ editorWeb: { page } }) => {
+    await page.click('#btn-split-menu');
+    await expect(page.locator('#fx-split-popover')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#fx-split-popover')).toBeHidden();
+
+    await page.locator('#btn-history').dispatchEvent('click'); // see the dropdowns test above re: dispatchEvent
+    await expect(page.locator('#fx-timeline-popover')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#fx-timeline-popover')).toBeHidden();
+
+    await page.evaluate(() => {
+      document.getElementById('fx-wrap').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+    await expect(page.locator('.fx-bgmenu')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.fx-bgmenu')).toHaveCount(0);
+  });
+
+  test('deskbar/rail controls are keyboard reachable', async ({ editor: { page } }) => {
+    const unreachable = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('#fx-deskbar button, #fx-deskbar input, #fx-toolrail button')) {
+        if (!el.offsetParent || el.disabled) continue; // disabled is correctly out of tab order
+        if (el.tabIndex < 0) out.push(el.id || el.className);
+      }
+      return out;
+    });
+    expect(unreachable, 'controls removed from the tab order').toEqual([]);
+  });
+
+  // Same "compare against its OWN unfocused paint" technique as the Library version — a plain
+  // "has some box-shadow" check would pass on decorative box-shadows that already exist at rest.
+  // ⚠️ Root cause of the original "failure" here: btn-undo-db/btn-redo-db/btn-before start
+  // `disabled` on a freshly loaded photo with no edits yet (fxSyncTopbarDisabled(), fxHistIdx<=0)
+  // — confirmed live that `el.focus()` on a disabled button is a silent no-op in Chromium
+  // (document.activeElement never changes), so the "no visible change" reading was really "this
+  // button structurally cannot be focused right now," not a missing CSS rule. A disabled control
+  // is correctly excluded from keyboard traversal already; testing it for a focus RING is the
+  // wrong question. Skip disabled controls, same as the "keyboard reachable" test above does
+  // implicitly (a disabled button reporting tabIndex 0 in Chromium doesn't mean it's reachable).
+  test('focused deskbar/rail/settings-menu controls show a visible focus indicator', async ({ editor: { page } }) => {
+    const bare = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('#fx-deskbar button, #fx-toolrail button, .fx-settings-pane button')) {
+        if (!el.offsetParent || el.disabled) continue;
+        el.blur();
+        const before = getComputedStyle(el);
+        const restOutline = `${before.outlineStyle} ${before.outlineWidth} ${before.outlineColor}`;
+        const restShadow = before.boxShadow;
+        el.focus();
+        const cs = getComputedStyle(el);
+        const focOutline = `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor}`;
+        const gainedOutline = focOutline !== restOutline && cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0;
+        const gainedShadow = cs.boxShadow !== restShadow && cs.boxShadow !== 'none';
+        if (!gainedOutline && !gainedShadow) out.push(el.id || el.className);
+        el.blur();
+      }
+      return out;
+    });
+    expect(bare, 'controls with no visible focus indicator').toEqual([]);
+  });
+
+  // ⚠️ Unfalsifiable-by-construction trap the Library version already hit once: settleForCapture()
+  // (called by the `editor` fixture) injects a `transition-duration:0s!important` stylesheet for
+  // deterministic screenshots — reading computed styles with that still in place would report 0s
+  // on EVERYTHING regardless of whether the app itself honours prefers-reduced-motion. Remove it
+  // first so the assertion is real, same fix as the Library test.
+  test('the Editor honours prefers-reduced-motion', async ({ editor: { page } }) => {
+    await page.evaluate(() => {
+      for (const st of document.querySelectorAll('style')) {
+        if (/transition-duration\s*:\s*0s\s*!important/.test(st.textContent || '')) st.remove();
+      }
+    });
+    await page.waitForTimeout(100);
+    const animated = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('#fx-deskbar *, #fx-toolrail *, .fx-settings-pane *')) {
+        const d = getComputedStyle(el).transitionDuration;
+        if (!d) continue;
+        if (d.split(',').some((v) => parseFloat(v) > 0.001)) out.push((el.id || (typeof el.className === 'string' ? el.className : el.tagName) || el.tagName) + ' ' + d);
+      }
+      return [...new Set(out)].slice(0, 10);
+    });
+    expect(animated, 'transitions still running under prefers-reduced-motion').toEqual([]);
   });
 });

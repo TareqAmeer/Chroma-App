@@ -65,6 +65,26 @@ const PAIRS = {
   '.tp-panel[data-panel="detail"] .grp[data-fxsec="nr"]': { app: '.fx-ctrl[data-fxsec="nr"]', label: 'noise reduction section', zone: 'detail-panel' },
   '.tp-panel[data-panel="detail"] .grp[data-fxsec="lens"]': { app: '.fx-ctrl[data-fxsec="lens"]', label: 'lens correction section', zone: 'detail-panel' },
   '.tp-panel[data-panel="detail"] .grp[data-fxsec="deconv"]': { app: '.fx-ctrl[data-fxsec="deconv"]', label: 'deconvolution section', zone: 'detail-panel' },
+  // 2026-09-10 — Film panel (Stage 4 merge). Same shape as Detail: five pre-existing app
+  // sections (grain/hal/bloom/art/vig), no single app container spans them.
+  '.tp-panel[data-panel="film"] .grp[data-fxsec="grain"]': { app: '.fx-ctrl[data-fxsec="grain"]', label: 'film grain section', zone: 'film-panel' },
+  '.tp-panel[data-panel="film"] .grp[data-fxsec="hal"]': { app: '.fx-ctrl[data-fxsec="hal"]', label: 'halation section', zone: 'film-panel' },
+  '.tp-panel[data-panel="film"] .grp[data-fxsec="bloom"]': { app: '.fx-ctrl[data-fxsec="bloom"]', label: 'bloom section', zone: 'film-panel' },
+  '.tp-panel[data-panel="film"] .grp[data-fxsec="art"]': { app: '.fx-ctrl[data-fxsec="art"]', label: 'film artifacts section', zone: 'film-panel' },
+  '.tp-panel[data-panel="film"] .grp[data-fxsec="vig"]': { app: '.fx-ctrl[data-fxsec="vig"]', label: 'vignette section', zone: 'film-panel' },
+  // 2026-09-10 — Frame panel (Stage 4 merge). Two pre-existing app sections (borders, canvas).
+  '.tp-panel[data-panel="frame"] .grp[data-fxsec="borders"]': { app: '.fx-ctrl[data-fxsec="borders"]', label: 'border section', zone: 'frame-panel' },
+  '.tp-panel[data-panel="frame"] .grp[data-fxsec="canvas"]': { app: '.fx-ctrl[data-fxsec="canvas"]', label: 'canvas section', zone: 'frame-panel' },
+  // 2026-09-10 — Crop panel (Stage 4 merge). One real app section (crop), regrouped into
+  // "Aspect ratio" / "Transform" subheads within the same card — see spec CR1 for why the
+  // aspect-ratio picker itself (chips, not the proposal's checklist) was kept as-is.
+  '.tp-panel[data-panel="crop"] .grp[data-fxsec="crop"]': { app: '.fx-ctrl[data-fxsec="crop"]', label: 'crop panel', zone: 'crop-panel' },
+  // 2026-09-10 — Color panel (Stage 4 merge). Four pre-existing app sections; wheels was
+  // homeless (spec D2) until this pass wired it into FX_GROUPS.color.members.
+  '.tp-panel[data-panel="color"] .grp[data-fxsec="curves"]': { app: '.fx-ctrl[data-fxsec="curves"]', label: 'tone curves section', zone: 'color-panel' },
+  '.tp-panel[data-panel="color"] .grp[data-fxsec="hsl"]': { app: '.fx-ctrl[data-fxsec="hsl"]', label: 'color mixer section', zone: 'color-panel' },
+  '.tp-panel[data-panel="color"] .grp[data-fxsec="pointcolor"]': { app: '.fx-ctrl[data-fxsec="pointcolor"]', label: 'point color section', zone: 'color-panel' },
+  '.tp-panel[data-panel="color"] .grp[data-fxsec="wheels"]': { app: '.fx-ctrl[data-fxsec="wheels"]', label: 'colour wheels section', zone: 'color-panel' },
 };
 const PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight',
   'backgroundColor', 'color', 'borderRadius', 'borderColor', 'borderWidth', 'boxShadow', 'height'];
