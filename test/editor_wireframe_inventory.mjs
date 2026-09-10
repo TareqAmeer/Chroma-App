@@ -262,6 +262,20 @@ await app.waitForTimeout(150);
 // stays invisible, and every menu-content finding downstream reads as "MISSING everything"
 // purely from that, not a real defect (confirmed live: the button was `visible: false`).
 // Read the fixture from disk and hand it in as base64, same as editor_wireframe_diff.mjs.
+// ⚠️ #btn-flag-red/green/#btn-favorite (chromasmith-22.html's fxUpdateFlagBtns) stay
+// display:none unless window.chromasmithOpenedFlag exists — a real Tauri-only hook this
+// libtest=1 harness never stubs, so every prior run of this file inventoried the topbar with
+// three real, always-shipping controls invisible and never flagged it (confirmed live: a
+// Topbar Parity pass built a "complete" reproduction from exactly this harness and missed all
+// three). Stubbed here, unconditionally, so the topbar/rail zones below always measure the
+// bar as it renders once opened from the Library — the state every real launch reaches, not
+// the strictly-narrower one a bare `?deskx=1` tab happens to start in.
+await app.evaluate(() => {
+  window.chromasmithOpenedFlag = () => null;
+  window.chromasmithOpenedFavorite = () => false;
+  window.chromasmithToggleFlag = async () => {};
+  window.chromasmithToggleFavorite = async () => {};
+});
 const fixtureB64 = (await readFile('test/fixtures/portrait.png')).toString('base64');
 await app.evaluate(async (b64) => {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -269,6 +283,7 @@ await app.evaluate(async (b64) => {
   if (typeof window.loadFXImages === 'function') await window.loadFXImages([file]);
 }, fixtureB64);
 await app.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
+await app.evaluate(() => { if (typeof fxUpdateFlagBtns === 'function') fxUpdateFlagBtns(); });
 await app.evaluate(() => { if (typeof fxSection === 'function') fxSection('looks', true); });
 await app.waitForTimeout(300);
 await settleForCapture(app);

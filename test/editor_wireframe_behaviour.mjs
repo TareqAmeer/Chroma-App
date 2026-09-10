@@ -61,6 +61,18 @@ const test = base.extend({
     });
     await page.keyboard.press('Escape');
     await page.waitForTimeout(150);
+    // ⚠️ #btn-flag-red/green/#btn-favorite stay display:none unless window.chromasmithOpenedFlag
+    // exists (fxUpdateFlagBtns, chromasmith-22.html) — a real Tauri-only hook ?libtest=1 never
+    // stubs. Every desktop launch reaches this bar via the Library, where the hook is real, so
+    // the `editor` fixture stubs it too — otherwise every behaviour test built on this fixture
+    // exercises a topbar with three real controls silently absent (see the Topbar Parity pass
+    // this was found from: a full inventory of this exact fixture missed all three).
+    await page.evaluate(() => {
+      window.chromasmithOpenedFlag = () => null;
+      window.chromasmithOpenedFavorite = () => false;
+      window.chromasmithToggleFlag = async () => {};
+      window.chromasmithToggleFavorite = async () => {};
+    });
     const fixtureB64 = (await readFile(path.join(ROOT, 'test/fixtures/portrait.png'))).toString('base64');
     await page.evaluate(async (b64) => {
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -68,6 +80,7 @@ const test = base.extend({
       if (typeof window.loadFXImages === 'function') await window.loadFXImages([file]);
     }, fixtureB64);
     await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
+    await page.evaluate(() => { if (typeof fxUpdateFlagBtns === 'function') fxUpdateFlagBtns(); });
     await page.waitForTimeout(300);
     await settleForCapture(page);
     await use({ page, errors });

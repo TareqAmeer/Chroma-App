@@ -521,6 +521,70 @@ async function main() {
         res.forEach(f => findings.push({ ...f, section: sec, viewport: vp.label }));
       }
     }
+
+    // ── TOPBAR NARROW PASS ───────────────────────────────────────────────────────────────
+    // The Library topbar redesign (2026-09-10) shipped a real overlap bug — the search box
+    // collided with the side clusters under ~820px — that nothing in this file's own VIEWPORTS
+    // sweep above could have caught: every entry there is a full desktop window width (1280+),
+    // chosen for auditing PANEL content, not for stress-testing a bar's own responsive fold.
+    // The bar itself can go narrower than any panel needs to, since a real user can resize the
+    // window down without ever opening a tool panel. This runs OVERLAP/MENU (and everything
+    // else auditInPage checks) against #fx-deskbar AND #lib-top at three widths spanning both
+    // documented fold thresholds (900px/820px — see body.fx-deskbar-tight1/2, chromasmith-22.html,
+    // and #lib-top-tight1/2, desktop/library-ui.js) plus one stress width below both.
+    const NARROW_WIDTHS = [900, 820, 700];
+    for (const w of NARROW_WIDTHS) {
+      await page.setViewportSize({ width: w, height: 820 });
+      await page.waitForTimeout(150); // let the ResizeObserver-driven tight1/tight2 classes settle
+      const res = await page.evaluate(auditInPage,
+        { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL, edgeSel: EDGE_TARGET_SEL,
+          minFont: MIN_FONT, minContrast: MIN_CONTRAST });
+      res.forEach(f => findings.push({ ...f, section: 'editor-topbar', viewport: `${w}x820 (narrow)` }));
+    }
+
+    // Library gets its own page — chromasmith-22.html alone doesn't include desktop/library-ui.js,
+    // that's only staged into desktop/dist/index.html by build-desktop.sh (run that first if this
+    // 404s or the Library never appears). #lib-top only renders in FULL mode (.lib-fullview-only),
+    // and whether boot lands there on its own is a genuine timing race (chromasmithForceLibraryReady,
+    // desktop/library-ui.js) — confirmed live: an early version of this pass pressed Escape (copied
+    // from the EDITOR fixture's boot sequence, which needs the opposite — Escape OUT of full-view
+    // back to the editor) and audited a docked #lib-top at 0x0 the entire time, finding nothing to
+    // check and reporting a clean pass with zero real coverage. test/wireframe_inventory.mjs's own
+    // Library-only setup does this correctly: force `.full` directly rather than racing the boot
+    // sequence or relying on Escape doing the right thing from an unknown starting state.
+    const libPage = await browser.newPage({ viewport: { width: NARROW_WIDTHS[0], height: 820 } });
+    try {
+      libPage.on('pageerror', (e) => console.error('  [pageerror]', e.message));
+      await libPage.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1&libn=8`, { waitUntil: 'domcontentloaded' });
+      await libPage.waitForTimeout(1200);
+      await libPage.evaluate(() => {
+        document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });
+        document.getElementById('lib-overlay')?.classList.add('full');
+      });
+      await libPage.waitForFunction(() => {
+        const el = document.getElementById('lib-top');
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }, null, { timeout: 10000 }).catch(() => {});
+      // The app's fonts (Inter/Instrument Serif) are base64 @font-face, loaded async — measuring
+      // text/button widths before they finish swapping in gave a real flake: the same MENU check
+      // read the gear popover 5-18px past the viewport edge on some runs and cleanly inside it on
+      // others, purely from fallback-vs-real font metrics shifting a button's width by a few px
+      // right at a hard boundary. document.fonts.ready removes the race instead of papering over
+      // it with a longer timeout.
+      await libPage.evaluate(() => document.fonts.ready).catch(() => {});
+      await libPage.waitForTimeout(150);
+      for (const w of NARROW_WIDTHS) {
+        await libPage.setViewportSize({ width: w, height: 820 });
+        await libPage.waitForTimeout(150);
+        const res = await libPage.evaluate(auditInPage,
+          { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL, edgeSel: EDGE_TARGET_SEL,
+            minFont: MIN_FONT, minContrast: MIN_CONTRAST });
+        res.forEach(f => findings.push({ ...f, section: 'library-topbar', viewport: `${w}x820 (narrow)` }));
+      }
+    } finally { await libPage.close(); }
+
     // ── MOBILE PASS ──────────────────────────────────────────────────────────────────────
     // Deliberately a SEPARATE page without ?deskx=1: under 700px the app is a different shell
     // (photo fills the screen, tools live in a bottom sheet — CLAUDE.md §4), and deskx pins the

@@ -1634,12 +1634,22 @@
     /* #lib-top-left/#lib-top-center/#lib-top-right — same 3-group shape as #fx-deskbar-left/
        #fx-deskbar-title/#fx-deskbar-right in chromasmith-22.html, so the two bars' structure
        reads as one design rather than two independent ones that happen to look similar. */
+    /* min-width:0 deliberately NOT set on -left/-right: a grid item's default sizing
+       contribution to its track is content-based (effectively minmax(auto,1fr) for a 1fr
+       track), and min-width:0 suppresses exactly that floor — the two 1fr tracks then shrink
+       evenly regardless of how much their own content actually needs, and content wider than
+       its track overflows past the track boundary in whichever direction justify-self points.
+       Measured live at 900px/820px: -right's buttons (370px, justify-self:end) overflowed
+       LEFT past its own ~253px track and 109px/93px into the centre track — caught by
+       test/ui_audit.mjs's new narrow-width topbar pass, not by eye. -center keeps min-width:0
+       on purpose: it's the one column meant to shrink below its content's natural size (the
+       search box), via its own minmax(0,280px) track below. */
     body.deskx #lib-overlay #lib-top-left{grid-column:1;justify-self:start;display:flex;
-      align-items:center;gap:8px;min-width:0}
+      align-items:center;gap:8px}
     body.deskx #lib-overlay #lib-top-center{grid-column:2;justify-self:center;display:flex;
       width:100%;min-width:0}
     body.deskx #lib-overlay #lib-top-right{grid-column:3;justify-self:end;display:flex;
-      align-items:center;gap:8px;min-width:0}
+      align-items:center;gap:8px}
     /* Search moves into the centre column, same slot the Editor uses for its filename/status
        title — sized off its minmax(0,280px) grid track (see #lib-top's grid-template-columns
        and .lib-search-wrap's width:100% further down) instead of the non-deskx flex-grow
