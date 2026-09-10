@@ -547,6 +547,19 @@ Learned the hard/expensive way:
    and max — scoped to the actual parent container that could leak, not just the child you're
    adding. Hand-author the expected snapshot from the spec/wireframe; never auto-generate it
    from the current implementation, or you just codify whatever bug is already there.
+17. **Never act on an existing writeup of a flaky/intermittent bug — including a prior session's
+   own "root cause" note or a comment in the code — without reproducing it live first, no matter
+   how detailed or confident it reads.** E7 (editor_ux_spec.json, 2026-09-10) cost real time
+   this way: an earlier session's note blamed a boot-watchdog race, a fix was built and shipped
+   for it, and it turned out to target the wrong mechanism entirely — `body.lib-full` was
+   confirmed FALSE in every reproduced failure, the thing the theory depended on. The actual
+   cause (an in-flight CSS transition surviving `transition-duration:0`) was found by adding one
+   line of live instrumentation to a real failing run and reading what it said, not by reasoning
+   about the existing writeup further. A theory that "sounds right" and is written down
+   somewhere is still just a theory. For any bug described as intermittent/flaky: spend one round
+   confirming it live (a console.log, a live property read, a screenshot at the failure moment)
+   BEFORE building a fix, and don't call it fixed off one clean run — rerun it enough times to
+   actually see the failure rate move.
 
 ---
 
