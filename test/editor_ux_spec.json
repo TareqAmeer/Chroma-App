@@ -471,6 +471,146 @@
       "panel": "color",
       "note": "Deferred because these are the first sections with a DUAL reset (e.g. curves' 'Reset channel' vs 'Reset all', hsl/pointcolor/wheels' 'Reset band/point' vs 'Reset all') — collapsing that into one header slot (the proposal's 'Reset | All' link) needs new per-section override logic, not just reusing _fxSectionResetOverride's single-action pattern. Bottom buttons still work correctly in the meantime."
     },
+    "T8": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools themselves, 2026-09-10] editor_wireframe_inventory.mjs's INVENTORY_FN classifies every button/input/select/textarea/a as an atom to compare, but has no concept of DISABLED state — a button that's disabled=true (e.g. #btn-denoise-now before a RAW photo loads) reads identically to an enabled one",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "A control that's visually present but silently non-interactive (wrong disabled state, e.g. always-disabled or never-disabled when it should gate) is invisible to every current check. Add `disabled: !!child.disabled` to each atom and diff it the same way font-size is diffed."
+    },
+    "T9": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_diff.mjs's PROPS list (fontFamily/fontSize/fontWeight/letterSpacing/lineHeight/backgroundColor/color/borderRadius/borderColor/borderWidth/boxShadow/height) never checks `width`, `padding`, or `gap`",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "A row could match on every checked property yet still be visibly cramped or oversized because its padding/gap drifted from the token scale — that class of regression has no gate at all right now."
+    },
+    "T10": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] no check asserts that a NEW colour or spacing value introduced anywhere in chromasmith-22.html actually resolves to one of :root's own custom properties",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Same root problem as T5 (no automated 'never invent a colour' enforcement) but broader — spacing/radius/shadow tokens are just as easy to invent as colours and nothing catches an invented `border-radius:7px` next to a design system that defines `--radius-sm`. A single static-analysis pass covering all of :root's token categories, not just colour, would be more efficient to build than doing colour alone first."
+    },
+    "T11": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_behaviour.mjs's fixture is a single PNG (test/fixtures/portrait.png) — every behaviour test in the file runs against exactly one photo shape/type",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Several panels this session are RAW-only or format-gated (Detail's High-tier NR/Denoise-now only meaningfully differ for a RAW file per `it.rawFile`; Frame's sprocket styles care about aspect ratio) but no test ever loads a RAW fixture or a non-square-ish image, so a RAW-specific regression (e.g. Denoise-now staying disabled for a real RAW photo) cannot be caught by this suite at all. Needs at least one small real or synthetic .RW2/.DNG fixture."
+    },
+    "T12": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] every behaviour test in editor_wireframe_behaviour.mjs runs at the fixed 1440x900 deskx viewport — none run the same interactions at the <=700px phone shell (CLAUDE.md section 4)",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "editor_responsive_qa.mjs checks STRUCTURE (overlap/wrap) down to 700px and ui_audit.mjs has a separate phone PASS, but neither one clicks anything — 'does the segmented control / info-i tooltip / header Reset actually work in the bottom-sheet shell' is untested for every panel built this session. A parametrized version of editor_wireframe_behaviour.mjs's fixture (desktop + phone) for at least the click-and-assert tests (not the ones inherently deskx-only, like the rail) would close this."
+    },
+    "T13": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor:gates has no dark-mode pass distinct from editor:wireframe-diff's own theme loop — light/dark is exercised there, but editor:inventory (structural atom counts) and the new editor:snap-check/editor:html-check never vary by theme at all",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Not a real gap for snap-check/html-check (theme is style-only, doesn't change DOM structure), but editor:inventory's disabled-state and atom-count logic COULD theoretically differ if a future change made something theme-conditional in the DOM (not just CSS) — worth a one-line note in that script rather than silent assumption. Low priority; listed for completeness of the audit."
+    },
+    "T14": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] none of the Editor gates assert anything about KEYBOARD accessibility — tab order, focus rings, or that a control built as a <button> (e.g. every fx-info-i, chip, seg button) is reachable and operable without a mouse",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "ui_audit.mjs checks pointer-target size and contrast but not keyboard operability. Every info-i/chip/seg control introduced this session is a real <button>, which is a reasonable default, but nothing confirms it, and a future control built as a styled <div onclick> would sail through every current check while being unusable by keyboard."
+    },
+    "T15": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_behaviour.mjs has no test asserting that a section's Reset button (RT1/DT1/F1/FR1's header-reset pattern) is INVISIBLE by default on a freshly loaded photo — every existing reset test starts by making a change and checks the button becomes visible, never checks the negative/resting case first",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "A regression that made the Reset button permanently visible (e.g. a CSS selector typo broadening :has()) would pass every current test, since none of them assert 'hidden at rest' before making a change. Retouch's own test (RT1) does check this ('Reset is hidden until a spot exists') — the pattern should be copied to DT1/F1/FR1's reset tests too, which currently jump straight to 'make a change, then check visible'."
+    },
+    "T16": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] test/editor_html_validity_check.mjs's tokenizer strips <script> blocks entirely before scanning, so a nested-button defect INSIDE an inline script's HTML-string template (the exact panel_proposals.mjs shape, just embedded in the app instead of a separate file) would not be caught if it ever existed there",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Not urgent (no known instance of this in chromasmith-22.html's own inline scripts today), but it's a real blind spot the check's own comment only partially acknowledges. A future pass could extract JS template-literal string contents that look like HTML (a heuristic: contains multiple `<tag`) and run the same tokenizer over them."
+    },
+    "T17": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] test/editor_snap_lists_check.mjs's KNOWN_EXCLUSIONS is a hand-maintained object with no test of its own — an exclusion reason could go stale (the referenced mechanism removed) and nothing would notice",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Lower priority meta-gap: the exclusions list is itself exactly the kind of hand-maintained id list T2 was built to stop trusting blindly elsewhere. A periodic manual re-verification (or a comment requiring the PR that removes an excluded mechanism to also remove its KNOWN_EXCLUSIONS entry) is the realistic mitigation, not another automated check on top of a check."
+    },
+    "T18": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] no gate verifies that _fxSectionResetOverride (chromasmith-22.html) stays in sync with which sections actually HAVE a bespoke reset function — an override entry pointing at a renamed/deleted function would silently fall through to `typeof window[override]==='function'` being false and use the generic reset instead, with no warning",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Concretely exploitable: rename resetNR to something else without updating the override map, and Noise Reduction's header Reset silently starts using the generic slider/toggle walk instead of the RAW-aware bespoke one — visually indistinguishable in a quick check, wrong in a way only a careful diff of behavior would catch. A one-line startup assertion (`Object.values(_fxSectionResetOverride).forEach(fn => console.assert(typeof window[fn]==='function', ...))`) would catch this for free at load time."
+    },
+    "T19": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_behaviour.mjs's per-test error collection (page.on('pageerror', ...)) is declared FRESH inside almost every individual test rather than once in the shared `editor` fixture, and the fixture's own `errors` array (asserted empty in its teardown) is a SEPARATE array from each test's local one",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "This means a pageerror thrown BEFORE a test's own local `page.on('pageerror', ...)` line executes (e.g. during the click that immediately precedes it) is only caught by the fixture's teardown assertion, not the test's own explicit `expect(errors).toEqual([])` — usually harmless since the fixture still fails the test, but the failure then reports as a generic teardown error rather than pointing at the specific action that threw. Consolidating to always read the fixture's own `errors` array (already provided) instead of redeclaring a local one per test would remove the duplication and the double bookkeeping is doing right now."
+    },
+    "T20": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] the debounce-race problem T7 already flags (fx-mod's 120ms timer) has a sibling nobody's checked for: fxRawNrSyncUI's _chipsRender-on-external-write pattern (selectToSeg/selectToChips) has no test asserting a PROGRAMMATIC value change (session restore, undo, copy-paste) re-renders the seg/chip UI, only that a USER click on a chip updates the underlying select",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Concretely: if a future change restored sel-raw-nr.value via s.rawNr without going through fxRawNrSyncUI (which explicitly calls sel._chipsRender()), the seg control would silently show the WRONG selection while the real underlying state was correct — a visible bug an undo/redo or session-restore test would catch immediately, but nothing currently exercises that path for any of the three selectToSeg/selectToChips-converted controls (heal-mode, raw-nr, crop-ar/input/tonemap chips)."
+    },
+    "T21": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor_gates.mjs's FLAKE_RETRIES=6 applies only to editor:wireframe-diff — the new editor:snap-check and editor:html-check gates run once with no retry, which is correct for them (they're pure static/DOM-structure checks with no known timing flake) but nothing DOCUMENTS that distinction, so a future contributor might reflexively add retries to a check that should never need them",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Trivial fix: a one-line comment on the GATES array noting that only wireframe-diff carries the documented E7 flake, and a new gate should default to zero retries unless it has its OWN documented, understood flake — retries are a targeted workaround for one known issue, not a default reliability blanket."
+    },
+    "T22": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] test/panel_compare_build.mjs's generated comparison pages (chromasmith-design/project/panels/*.compare.html) have not been regenerated since the Retouch/Detail/Film/Frame/Crop/Color proposals were corrected and then implemented this session — they still show the ORIGINAL (some since-fixed-for-fabrication) proposal content, not what actually shipped",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Not a test gate exactly, but a documentation-drift risk with the same shape as every other item here: a reviewer opening a .compare.html page today sees stale content and could waste time reviewing something already superseded, or worse, use the stale version as a reference while implementing Export/Info/Masks. Regenerating (or at least stamping each page with 'implemented — see chromasmith-22.html' once its panel ships) would prevent that."
+    },
+    "T23": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] npm test (package.json) does not include editor:snap-check or editor:html-check directly — they only run via editor:gates, which npm test DOES call, so they're covered transitively, but there's no STANDALONE fast-path for a contributor who only wants the two new cheap checks without also paying for the slower inventory/responsive/wireframe-diff runs",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Minor ergonomics gap, not a coverage gap (npm test already reaches both checks via editor:gates). A combined `editor:fast-check` script running just snap-check + html-check (both sub-second, no Playwright page navigation needed for snap-check... actually both need Playwright/a page load, so 'fast' is relative — still faster than the full inventory/responsive/diff trio) would make iterating on either check itself quicker."
+    },
+    "T24": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor_coverage.mjs's report treats a panel as fully checked once it has a PAIRS entry + spec item + at least one behaviour test — it has no notion of whether the behaviour tests actually exercise EVERY control in the panel, only that at least one test exists for the panel at all",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Concretely: Detail's behaviour suite (DT1) has 5 tests but Lens Correction alone has 9 sliders (Distortion/Vignette/CA/Vertical/Horizontal/Rotate/Scale/Defringe + the Auto toggle already tested) with zero behaviour coverage on the 8 untested sliders — editor:coverage reports 'detail: behav yes' regardless. A per-control coverage metric (cross-referencing the Stage-1 extraction's control inventory against which ids appear in behaviour-test source) would be far more honest than a boolean."
+    },
+    "T25": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] none of the new panel PAIRS entries in editor_wireframe_diff.mjs were EVER visually screenshotted and looked at by a human this session for the panels compared via the new multi-root zones (detail/film/frame/color's grouped .grp entries) — the plan's own step 6 ('screenshot the result and look at it — not to measure, to catch the class of defect no check has an opinion about') was done for Retouch alone",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "This is a PROCESS gap, not strictly a tooling gap, but it belongs on this list: every automated check in this project explicitly disclaims that it cannot see 'something ugly or in a nonsensical place' — that disclaimer is only honored if a human screenshot step actually happens per panel. It didn't, consistently, after Retouch. Cheap to fix going forward: screenshot each panel at the end of its own implementation pass, before moving to the next."
+    },
+    "T26": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_inventory.mjs's new appToggleOn mechanism (added for T1) clicks a toggle ON for measurement but never clicks it back OFF — state leaks across zones within the same script run",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Verified harmless for the current zone ORDER (grain/hal/bloom/borders are only ever toggled on by their OWN zone, and no later zone depends on them being off), but it's fragile: reordering ZONES, or adding a new zone that (for example) measures overall panel height/scroll position, could silently pick up bleed-over state from an earlier zone's toggle-on. Resetting each appToggleOn id back to its prior state after diffZone() finishes would remove the fragility instead of relying on today's zone order staying accidentally safe."
+    },
+    "T27": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10] there is no test asserting that FX_GROUPS/FX_GROUP_OF (chromasmith-22.html) and editor_coverage.mjs's own panel-to-app-section mapping stay in sync — editor:coverage's 'app sections' column is built by re-deriving group membership from a SEPARATE copy of that logic in test/editor_coverage.mjs, not by reading FX_GROUPS off the live app",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "Same class of risk T2 fixed for _FX_SNAP_*: two lists meant to describe the same thing, maintained by hand in two files, can silently drift. Confirmed this session in miniature — when 'wheels' was added to FX_GROUPS.color.members, editor_coverage.mjs's own report picked it up correctly, which is reassuring, but only because someone (this session) remembered to check both places; nothing would have flagged a drift if editor_coverage.mjs's copy had been forgotten."
+    },
     "R10": {
       "category": "panel-design",
       "status": "backlog",
