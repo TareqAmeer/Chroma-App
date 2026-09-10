@@ -26,30 +26,32 @@ const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
 // the only state in which the reset control is visible — showing both states across the nine
 // panels is the point, so the reviewer can see the rule rather than read it.
 function sec(title, opts = {}) {
-  const { on = true, edited = false, reset = null, body = '', note = '' } = opts;
+  const { on = true, edited = false, reset = null, body = '', info = null } = opts;
   const resetHtml = reset === 'all'
     ? `<span class="rst">Reset <i>|</i> All</span>`
     : reset === 'one' ? `<span class="rst">Reset</span>` : '';
+  const infoHtml = info ? ` <button class="info-i" title="${esc(info)}">i</button>` : '';
   return `<div class="grp${on ? '' : ' off'}${edited ? ' edited' : ''}">
-  <div class="grp-hd"><span class="fieldlabel">${esc(title)}</span>${resetHtml}<button class="sw${on ? ' on' : ''}" aria-label="${esc(title)} ${on ? 'on' : 'off'}"></button></div>
-  <div class="grp-bd">${body}${note ? `<p class="hint">${note}</p>` : ''}</div>
+  <div class="grp-hd"><span class="fieldlabel">${esc(title)}${infoHtml}</span>${resetHtml}<button class="sw${on ? ' on' : ''}" aria-label="${esc(title)} ${on ? 'on' : 'off'}"></button></div>
+  <div class="grp-bd">${body}</div>
 </div>`;
 }
 
 // A section with no on/off switch (Crop, Export, Info are always-on tools).
 function secPlain(title, opts = {}) {
-  const { edited = false, reset = null, body = '', note = '' } = opts;
+  const { edited = false, reset = null, body = '', info = null } = opts;
   const resetHtml = reset === 'all'
     ? `<span class="rst">Reset <i>|</i> All</span>`
     : reset === 'one' ? `<span class="rst">Reset</span>` : '';
+  const infoHtml = info ? ` <button class="info-i" title="${esc(info)}">i</button>` : '';
   return `<div class="grp${edited ? ' edited' : ''}">
-  <div class="grp-hd"><span class="fieldlabel">${esc(title)}</span>${resetHtml}</div>
-  <div class="grp-bd">${body}${note ? `<p class="hint">${note}</p>` : ''}</div>
+  <div class="grp-hd"><span class="fieldlabel">${esc(title)}${infoHtml}</span>${resetHtml}</div>
+  <div class="grp-bd">${body}</div>
 </div>`;
 }
 
-const sl = (label, val, min = -100, max = 100) =>
-  `<div class="slider-row"><div class="sr-top"><span>${esc(label)}</span><span class="sr-val">${esc(val)}</span></div><input type="range" min="${min}" max="${max}" value="${val}"></div>`;
+const sl = (label, val, min = -100, max = 100, info = null) =>
+  `<div class="slider-row"><div class="sr-top"><span>${esc(label)}${info ? ` <button class="info-i" title="${esc(info)}">i</button>` : ''}</span><span class="sr-val">${esc(val)}</span></div><input type="range" min="${min}" max="${max}" value="${val}"></div>`;
 
 // Equal-width segmented control — the replacement for every ragged row of bordered chips.
 const seg = (items, activeIdx = 0) =>
@@ -132,7 +134,7 @@ export const PROPOSALS = {
       ['merged', 'COLOR 3 — The Color mixer\'s eight named buttons (Red, Orange, Yellow…) become eight colour swatches. The names survive as tooltips and aria-labels, so nothing is lost for keyboard or screen-reader use.'],
       ['demoted', 'COLOR 4 — "Click a color in the photo to target it precisely, then dial in…" becomes a "Pick from photo" button with an ⓘ carrying the full sentence.'],
       ['moved', 'Colour wheels arrive here from their own rail section (spec D2). Brightness sliders move out from under the wheels into full-width rows — under a 90px wheel they are too short to set precisely and were the only sliders in the app with no readable value.'],
-      ['kept', 'Curve canvas, point dragging, the four parametric bands, and every slider range and default.'],
+      ['kept', 'Curve canvas, point dragging, and every slider range and default. The four Parametric-mode sliders (Shadows/Darks/Lights/Highlights) are unchanged and — same as today — hidden while Point mode is active, so this mockup\'s default Point-mode view does not show them; this is a behaviour note, not something rendered here.'],
     ],
   },
 
@@ -146,7 +148,14 @@ export const PROPOSALS = {
           + sl('Luminance', 0, 0, 100) + sl('Color', 0, 0, 100) + sl('Detail', 50, 0, 100)
           + sl('Sharpen', 0, 0, 100) + sl('Highlight desaturation', 0, 0, 100),
       }),
-      sec('Lens correction', { on: false, reset: 'one', body: sl('Distortion', 0) + sl('Vignetting', 0) + sl('Chromatic aberration', 0, 0, 100) }),
+      sec('Lens correction', {
+        on: false, reset: 'one',
+        body: `<div class="cb-row"><button class="sw"></button><span>Auto (lens profile)</span></div>`
+          + sl('Distortion', 0) + sl('Vignette', 0) + sl('Chromatic aberration', 0, 0, 100)
+          + sl('Vertical', 0) + sl('Horizontal', 0) + sl('Rotate', 0) + sl('Scale', 0, 0, 100) + sl('Defringe', 0, 0, 100)
+          + `<details class="hint-x"><summary>${icon('M4 22V10M4 10l8-6 8 6M4 10h16v12H4Z', ' fill="none" stroke-width="2"')}Manual lens (no EXIF)</summary>`
+          + field('Lens', select('None (auto-detect)')) + field('Focal length (mm)', `<input class="txt" value="35">`) + `</details>`,
+      }),
       sec('Deconvolution', { on: false, reset: 'one', body: sl('Amount', 0, 0, 100) + sl('Radius', 20, 0, 100) }),
     ].join('\n'),
     changes: [
@@ -156,6 +165,7 @@ export const PROPOSALS = {
       ['moved', 'COLOR 1 rule applied — per-section Reset in the header, hidden until edited. Noise reduction is shown edited.'],
       ['cut', 'The section-local "Cancel" and "Reset" buttons under Noise reduction. Cancel belongs to the neural NR job\'s progress state, not to the panel at rest — it should appear only while a job is running.'],
       ['kept', 'Every slider, its range and default. The "High Strength" slider is shown only when RAW noise reduction is set to High, which is what the app already does.'],
+      ['kept', 'Lens correction now shows every real control: Auto (lens profile) toggle, Distortion, Vignette, Chromatic aberration, Vertical, Horizontal, Rotate, Scale, Defringe, plus Manual lens + Focal length folded into a disclosure since both are hidden by default (EXIF auto-detect covers almost every lens). An earlier draft replaced this whole section with three invented placeholder sliders that do not exist in the app — caught and fixed before implementation, same class of error as Retouch\'s dropped button.'],
     ],
   },
 
@@ -167,7 +177,14 @@ export const PROPOSALS = {
         body: sl('Amount', 30, 0, 100) + field('Film format', select('35mm — standard'))
           + sl('Size', 3, 1, 20) + sl('Grain motion', 75, 0, 100) + sl('Gate weave', 0, 0, 100) + sl('Film breath', 0, 0, 100),
       }),
-      sec('Halation', { on: false, reset: 'one', body: sl('Strength', 0, 0, 100) + sl('Radius', 0, 0, 100) + sl('Threshold', 0, 0, 100) }),
+      sec('Halation', {
+        on: false, reset: 'one',
+        body: sl('Amount', 70, 0, 100) + sl('Radius', 6, 2, 40)
+          + sl('Shadow protect', 0, 0, 100, 'Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behaviour.')
+          + `<div class="cb-row"><button class="sw"></button><span>White glow</span><button class="info-i" title="Neutral white halation instead of the warm film glow — best for black-and-white photos.">i</button></div>`
+          + `<div class="cb-row"><button class="sw"></button><span>No remjet</span><button class="info-i" title="Film with no anti-halation backing — much stronger, bloomier halos with a yellow to orange to red edge.">i</button></div>`
+          + `<div class="cb-row"><button class="sw"></button><span>Extreme</span><button class="info-i" title="The no-remjet glow pushed roughly 5-6x stronger, for a heavy stylised bloom. Implies No remjet.">i</button></div>`,
+      }),
       sec('Bloom', { on: false, reset: 'one', body: sl('Strength', 0, 0, 100) + sl('Radius', 0, 0, 100) + sl('Threshold', 0, 0, 100) }),
       sec('Film artifacts', {
         on: false, reset: 'one',
@@ -183,6 +200,7 @@ export const PROPOSALS = {
       ['merged', 'Dust colour\'s Both / Black / White chips become an equal-width segmented control, under a real label — previously three bordered chips of different widths with no label saying what they applied to.'],
       ['moved', 'COLOR 1 rule applied — five "Reset this section" buttons removed, replaced by one header control per section, hidden until edited. Film grain is shown edited.'],
       ['kept', 'All five sections stay in the app\'s existing pipeline order: grain, halation, bloom, artifacts, vignette. That order mirrors the actual render pipeline (CLAUDE.md §3) and changing it in the UI would misrepresent what the app does.'],
+      ['kept', 'Halation now shows every real control (Amount, Radius, Shadow protect, White glow, No remjet, Extreme) — an earlier draft replaced it with three invented placeholder sliders (Strength/Radius/Threshold) that do not exist in the app. Caught and fixed before implementation.'],
     ],
   },
 
@@ -200,15 +218,24 @@ export const PROPOSALS = {
         on: false, reset: 'one',
         body: ratioList([
           { label: 'Fit', sel: true, val: 'no matte' },
-          { label: '1:1 Square' }, { label: '4:5 Instagram' }, { label: '3:4 Classic' },
-          { label: '4:3' }, { label: '9:16 Story' }, { label: '16:9' }, { label: '3:2 35mm' }, { label: '2:3' },
-        ]) + sl('Zoom', 100, 50, 150) + field('Background', select('Blurred photo')),
+          { label: '1:1' }, { label: '4:5' }, { label: '3:4' }, { label: '4:3' },
+          { label: '9:16' }, { label: '16:9' }, { label: '3:2' }, { label: '2:3' },
+        ]) + sl('Zoom', 100, 50, 150)
+          + `<div><span class="fieldlabel">Background</span><div class="swatchgrid">
+              <button class="chipsw" style="background:#000"></button><button class="chipsw" style="background:#fff"></button>
+              <button class="chipsw" style="background:#141414"></button><button class="chipsw" style="background:#f5f0e8"></button>
+              <button class="chipsw" style="background:#d4903a"></button><button class="chipsw" style="background:#4a5d73"></button>
+              <button class="chipsw" style="background:#7a3b3b"></button>
+              <button class="chipsw blur" title="Blurred photo">${icon('M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z', ' fill="none" stroke-width="1.6"')}</button>
+            </div></div>`
+          + swatchRow('Custom colour', '#141414'),
       }),
     ].join('\n'),
     changes: [
       ['moved', 'FRAME 1 — Reordered to outer colour → outer thickness → inner colour → inner thickness, so each colour sits directly above the thickness it belongs to. Today both colours and both thicknesses are separated, and neither pair says which is which.'],
       ['new', 'FRAME 1 — The two colour rows are named Outer and Inner. Today both are labelled just "Color", which is unreadable once two dark swatches sit next to each other.'],
-      ['merged', 'FRAME 2 — Canvas\'s nine ratio buttons become a Darkroom-style option list: one row each, tick on the selected one, room for a right-hand value. A wrapped grid of nine differently-sized chips was the single worst instance of the ragged-chip problem in the app.'],
+      ['merged', 'FRAME 2 — Canvas\'s nine ratio buttons become a Darkroom-style option list: one row each, tick on the selected one, room for a right-hand value. A wrapped grid of nine differently-sized chips was the single worst instance of the ragged-chip problem in the app. Labels are the app\'s real bare ratios (CV_ARS) — an earlier draft invented suffixes ("4:5 Instagram", "3:4 Classic", "3:2 35mm") the app does not have; caught and fixed before implementation.'],
+      ['kept', 'Canvas background stays the real 7-colour swatch grid plus the blurred-photo option (CV_BGS), now with a separate Custom colour swatch alongside it for the one-off picker (cl-canvas-bg) that was missing from an earlier draft.'],
       ['new', 'The colour swatches gain a hex readout and grow to 28px, clearing the pointer-target floor test/ui_audit.mjs enforces (the current 32×22 fails on height).'],
       ['moved', 'COLOR 1 rule applied — Reset in the header, hidden until edited. Border is shown edited.'],
     ],
@@ -223,10 +250,10 @@ export const PROPOSALS = {
           + ratioList([
             { label: 'Free', sel: true, icon: icon('M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4', ' fill="none" stroke-width="2"') },
             { label: 'As shot', val: '2320:3088' },
-            { custom: true, label: 'Custom aspect', h: '10', w: '15' },
+            { custom: true, label: 'Custom', h: '10', w: '10' },
             { label: '1:1 Square', icon: icon('M4 4h16v16H4z', ' fill="none" stroke-width="2"') },
-            { label: '2:3 35mm' }, { label: '3:4 Classic' }, { label: '4:5 Instagram' }, { label: '5:7 Print' },
-            { label: '9:16 Story' }, { label: '1:1.414 ISO A4' }, { label: '8.5:11 US Letter' }, { label: '24:65 XPan' },
+            { label: '3:2' }, { label: '4:3' }, { label: '5:4' }, { label: '7:5' },
+            { label: '16:9 Widescreen' }, { label: '1.414:1 ISO A4' }, { label: '11:8.5 US Letter' },
           ]),
       }),
       secPlain('Transform', {
@@ -239,16 +266,19 @@ export const PROPOSALS = {
             </div>`
           + field('Grid', select('3×3 (Rule of thirds)'))
           + `<button class="wide-btn">Auto level <button class="info-i" title="Finds the dominant horizontal or vertical line and levels the photo to it. Set a region to limit the search.">i</button></button>`
-          + `<button class="wide-btn ghost">Set region…</button>`,
+          + `<button class="wide-btn ghost">Set region…</button>`
+          + `<button class="wide-btn ghost">Apply to all photos</button>`
+          + `<button class="wide-btn primary">Crop</button>`,
       }),
     ].join('\n'),
     changes: [
-      ['merged', 'CROP 1 — The eleven aspect chips become the same Darkroom-style list used in Frame. "As shot" carries the photo\'s real pixel ratio on the right, and Custom holds its H : W fields inline on its own row instead of two loose text inputs elsewhere in the panel.'],
-      ['moved', 'Orientation becomes a Portrait | Landscape segmented control at the top of the list, where it changes the meaning of every row below it. It is currently a single unlabelled button among the ratio chips.'],
+      ['merged', 'CROP 1 — The eleven real aspect options (matching sel-crop-ar exactly) become the same Darkroom-style list used in Frame. "As shot" carries the photo\'s real pixel ratio on the right, and Custom holds its two number fields inline on its own row instead of a hidden separate row elsewhere in the panel. An earlier draft invented a different eleven ("2:3 35mm", "Instagram", "XPan"…) that do not exist in the app — caught and fixed before implementation.'],
+      ['moved', 'Orientation becomes a Portrait | Landscape segmented control at the top of the list. Today it is a single "Swap portrait/landscape" button — a real, labelled control, not an unlabelled one as an earlier draft of this entry claimed — that flips the current ratio (e.g. 3:2 ↔ 2:3); the segmented control makes that state visible instead of it living only inside a click.'],
       ['merged', 'Rotate left/right and flip horizontal/vertical become one icon row. Four bordered text buttons of four different widths was the second-worst ragged-chip row after Canvas.'],
       ['demoted', '"Finds the dominant horizontal or vertical line and levels the photo…" becomes an ⓘ on the Auto level button. "Clear region" folds into the Set region control rather than standing as its own button.'],
       ['cut', 'The separate Aspect dropdown. It listed the same ratios as the chips did — two controls for one choice.'],
-      ['kept', 'Straighten\'s ±45 range, the grid options, and "copy geometry to the whole batch" (which stays a batch action, shown only when more than one photo is loaded).'],
+      ['kept', 'Straighten\'s ±45 range and the grid options.'],
+      ['kept', 'The "Crop" primary action button (id=btn-crop) and "Apply to all photos" (batch action, shown only when more than one photo is loaded) — an earlier draft dropped the Crop button entirely, the same class of miss as Retouch\'s dropped paint-toggle. Caught before implementation.'],
     ],
   },
 
@@ -259,6 +289,8 @@ export const PROPOSALS = {
         edited: true, reset: 'one',
         body: field('Mode', seg(['Heal', 'Clone'], 0), 'Heal blends the copied area into the surrounding colour. Clone copies it exactly.')
           + sl('Size', 4, 1, 20) + sl('Feather', 50, 0, 100) + sl('Opacity', 100, 10, 100)
+          + `<button class="wide-btn primary">${icon('M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z', ' fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"')}Retouch</button>`
+          + `<p class="hint">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</p>`
           + `<button class="wide-btn ghost">Clear all spots</button>`,
       }),
     ].join('\n'),
@@ -266,6 +298,8 @@ export const PROPOSALS = {
       ['merged', 'Mode\'s "Heal (blend color)" / "Clone (copy exactly)" dropdown becomes a Heal | Clone segmented control with the explanations on an ⓘ. Two options never justify a dropdown.'],
       ['cut', 'RETOUCH 1 — "Undo spot" is removed here rather than restyled. You asked for a "delete spot" with a selection instead, which is a real interaction change (pick a spot on the photo, then remove it) rather than a layout one — it is on the backlog, not in this proposal. Until it lands, undo is still ⌘Z.'],
       ['moved', 'COLOR 1 rule applied — Reset in the header, hidden until edited.'],
+      ['kept', 'The "Retouch" paint-mode toggle — the tool\'s actual primary action, styled here as the one filled button in the panel since everything else (Mode, sliders) only configures what it does. An earlier draft of this proposal silently dropped it; caught before implementation.'],
+      ['kept', 'The spot-count status line ("No spots yet…") as a plain caption, not an info button — it is live status, not documentation.'],
       ['kept', 'Size, Feather and Opacity ranges and defaults; "Clear all spots" stays as the one destructive action, worded so it cannot be mistaken for the per-spot delete that is coming.'],
     ],
   },
@@ -310,7 +344,9 @@ export const PROPOSALS = {
         body: sl('Amount', 70, 0, 100) + sl('Exposure', 0) + sl('Contrast', 0) + sl('Temp', 0) + sl('Saturation', 0) + sl('Texture', 0),
       }),
       secPlain('Overlay', {
-        body: sl('Overlay opacity', 75, 10, 100) + `<div class="cb-row"><button class="sw"></button><span>Edge only</span></div>`,
+        body: field('Show on photo', seg(['Overlay', 'Isolate', 'Selection', 'Off'], 0),
+          'Overlay and Isolate draw the shape only. Selection shows the effective weight after the range gates — for a gated mask these can look very different.')
+          + sl('Overlay opacity', 75, 10, 100) + `<div class="cb-row"><button class="sw"></button><span>Edge only</span></div>`,
       }),
     ].join('\n'),
     changes: [
@@ -322,6 +358,7 @@ export const PROPOSALS = {
       ['moved', 'MASKS — Mute becomes an eye on the list row; a visible drag grip replaces the invisible drag affordance. Reordering is load-bearing here (later masks subtract from earlier ones) and nothing on screen said so.'],
       ['cut', 'MASKS — The .msk-rowbar header that repeated the selected mask\'s name. The section titles carry it now, and the list already shows selection.'],
       ['kept', 'Every adjustment slider, the Amount master, Refine edges, Overlay opacity and Edge only. This is a restructuring of the same controls, not a reduction of what a mask can do.'],
+      ['kept', 'The real "Show on photo" Overlay/Isolate/Selection/Off control — already a 4-way segmented control in the app, so it maps directly onto the same component used elsewhere in this redesign. An earlier draft of the Overlay section dropped it entirely; caught and fixed before implementation.'],
     ],
   },
 
@@ -344,6 +381,10 @@ export const PROPOSALS = {
         body: field('Export preset', select('— none —'))
           + `<div class="btn2"><button class="wide-btn ghost">Save current…</button><button class="wide-btn ghost danger">Delete</button></div>`,
       }),
+      secPlain('Match series', {
+        info: "Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing.",
+        body: `<div class="btn2"><button class="wide-btn ghost">Match to this photo</button><button class="wide-btn ghost">Clear</button></div>`,
+      }),
       secPlain('Export', {
         body: `<div class="scope">${seg(['Current photo', 'All photos'], 0)}</div>
             <button class="wide-btn primary">Export</button>`,
@@ -356,6 +397,7 @@ export const PROPOSALS = {
       ['demoted', 'EXPORT 3 — The literal "Tokens: {name} {seq} {date}" string is gone; a batch-naming syntax nobody asked to see by default has no business sitting in the panel as visible text. The full explanation moves onto an ⓘ next to the Filename label — an info button never sits on its own line (feedback: MULTIPLE), it is either on a title or on a button, and here it is on the Filename title.'],
       ['cut', 'The "Save all slider settings to localStorage" / "Restore saved slider settings" pair and the Style .json import/export. These are recipe and session actions, not export settings — they belong in the gear menu with the other session commands, which is where "Save the current recipe" already half-lives.'],
       ['cut', 'The two Google Photos buttons ("Sign in", "Set or change your OAuth client ID"). Sign-in belongs to the Google Photos import flow, not to the Export section; the client-ID field is setup, not a per-export choice.'],
+      ['kept', 'Match series (Match to this photo / Clear) as its own section, batch-only like today, with the explanation on an ⓘ instead of a standing sentence. An earlier draft of this proposal dropped it entirely; caught and fixed before implementation.'],
       ['kept', 'Every actual export setting: quality, format, resize, sharpening, HDR gain map, watermark text and opacity, presets, and the export/cancel behaviour.'],
     ],
   },
@@ -445,6 +487,11 @@ export const PROPOSAL_CSS = `
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}

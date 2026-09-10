@@ -130,6 +130,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
@@ -261,7 +266,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 </div>
 <div class="grp">
   <div class="grp-hd"><span class="fieldlabel">Overlay</span></div>
-  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Overlay opacity</span><span class="sr-val">75</span></div><input type="range" min="10" max="100" value="75"></div><div class="cb-row"><button class="sw"></button><span>Edge only</span></div></div>
+  <div class="grp-bd"><div><span class="fieldlabel">Show on photo <button class="info-i" title="Overlay and Isolate draw the shape only. Selection shows the effective weight after the range gates — for a gated mask these can look very different.">i</button></span><div class="seg"><button class="on">Overlay</button><button class="">Isolate</button><button class="">Selection</button><button class="">Off</button></div></div><div class="slider-row"><div class="sr-top"><span>Overlay opacity</span><span class="sr-val">75</span></div><input type="range" min="10" max="100" value="75"></div><div class="cb-row"><button class="sw"></button><span>Edge only</span></div></div>
 </div>
       </div>
     </div>
@@ -274,6 +279,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <li><b class="moved">moved</b>MASKS — Mute becomes an eye on the list row; a visible drag grip replaces the invisible drag affordance. Reordering is load-bearing here (later masks subtract from earlier ones) and nothing on screen said so.</li>
       <li><b class="cut">cut</b>MASKS — The .msk-rowbar header that repeated the selected mask's name. The section titles carry it now, and the list already shows selection.</li>
       <li><b class="kept">kept</b>Every adjustment slider, the Amount master, Refine edges, Overlay opacity and Edge only. This is a restructuring of the same controls, not a reduction of what a mask can do.</li>
+      <li><b class="kept">kept</b>The real "Show on photo" Overlay/Isolate/Selection/Off control — already a 4-way segmented control in the app, so it maps directly onto the same component used elsewhere in this redesign. An earlier draft of the Overlay section dropped it entirely; caught and fixed before implementation.</li>
     </ul>
   </div>
 </section>

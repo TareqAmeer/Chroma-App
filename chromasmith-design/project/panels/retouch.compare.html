@@ -130,6 +130,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
@@ -232,7 +237,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <div class="spec wf">
         <div class="grp edited">
   <div class="grp-hd"><span class="fieldlabel">Retouch</span><span class="rst">Reset</span><button class="sw on" aria-label="Retouch on"></button></div>
-  <div class="grp-bd"><div><span class="fieldlabel">Mode <button class="info-i" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></span><div class="seg"><button class="on">Heal</button><button class="">Clone</button></div></div><div class="slider-row"><div class="sr-top"><span>Size</span><span class="sr-val">4</span></div><input type="range" min="1" max="20" value="4"></div><div class="slider-row"><div class="sr-top"><span>Feather</span><span class="sr-val">50</span></div><input type="range" min="0" max="100" value="50"></div><div class="slider-row"><div class="sr-top"><span>Opacity</span><span class="sr-val">100</span></div><input type="range" min="10" max="100" value="100"></div><button class="wide-btn ghost">Clear all spots</button></div>
+  <div class="grp-bd"><div><span class="fieldlabel">Mode <button class="info-i" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></span><div class="seg"><button class="on">Heal</button><button class="">Clone</button></div></div><div class="slider-row"><div class="sr-top"><span>Size</span><span class="sr-val">4</span></div><input type="range" min="1" max="20" value="4"></div><div class="slider-row"><div class="sr-top"><span>Feather</span><span class="sr-val">50</span></div><input type="range" min="0" max="100" value="50"></div><div class="slider-row"><div class="sr-top"><span>Opacity</span><span class="sr-val">100</span></div><input type="range" min="10" max="100" value="100"></div><button class="wide-btn primary"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z"/></svg>Retouch</button><p class="hint">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</p><button class="wide-btn ghost">Clear all spots</button></div>
 </div>
       </div>
     </div>
@@ -240,6 +245,8 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <li><b class="merged">merged</b>Mode's "Heal (blend color)" / "Clone (copy exactly)" dropdown becomes a Heal | Clone segmented control with the explanations on an ⓘ. Two options never justify a dropdown.</li>
       <li><b class="cut">cut</b>RETOUCH 1 — "Undo spot" is removed here rather than restyled. You asked for a "delete spot" with a selection instead, which is a real interaction change (pick a spot on the photo, then remove it) rather than a layout one — it is on the backlog, not in this proposal. Until it lands, undo is still ⌘Z.</li>
       <li><b class="moved">moved</b>COLOR 1 rule applied — Reset in the header, hidden until edited.</li>
+      <li><b class="kept">kept</b>The "Retouch" paint-mode toggle — the tool's actual primary action, styled here as the one filled button in the panel since everything else (Mode, sliders) only configures what it does. An earlier draft of this proposal silently dropped it; caught before implementation.</li>
+      <li><b class="kept">kept</b>The spot-count status line ("No spots yet…") as a plain caption, not an info button — it is live status, not documentation.</li>
       <li><b class="kept">kept</b>Size, Feather and Opacity ranges and defaults; "Clear all spots" stays as the one destructive action, worded so it cannot be mistaken for the per-spot delete that is coming.</li>
     </ul>
   </div>

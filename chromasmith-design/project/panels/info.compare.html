@@ -130,6 +130,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}

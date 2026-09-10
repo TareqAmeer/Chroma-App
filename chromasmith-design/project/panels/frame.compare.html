@@ -130,6 +130,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
@@ -248,21 +253,28 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
   <div class="grp-hd"><span class="fieldlabel">Canvas</span><span class="rst">Reset</span><button class="sw" aria-label="Canvas off"></button></div>
   <div class="grp-bd"><div class="rlist"><div class="rrow sel"><span class="rtick"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
       <span class="rlb">Fit</span><span class="rval">no matte</span></div><div class="rrow"><span class="rtick"></span>
-      <span class="rlb">1:1 Square</span></div><div class="rrow"><span class="rtick"></span>
-      <span class="rlb">4:5 Instagram</span></div><div class="rrow"><span class="rtick"></span>
-      <span class="rlb">3:4 Classic</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">1:1</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">4:5</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">3:4</span></div><div class="rrow"><span class="rtick"></span>
       <span class="rlb">4:3</span></div><div class="rrow"><span class="rtick"></span>
-      <span class="rlb">9:16 Story</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">9:16</span></div><div class="rrow"><span class="rtick"></span>
       <span class="rlb">16:9</span></div><div class="rrow"><span class="rtick"></span>
-      <span class="rlb">3:2 35mm</span></div><div class="rrow"><span class="rtick"></span>
-      <span class="rlb">2:3</span></div></div><div class="slider-row"><div class="sr-top"><span>Zoom</span><span class="sr-val">100</span></div><input type="range" min="50" max="150" value="100"></div><div><span class="fieldlabel">Background</span><button class="select-btn"><span>Blurred photo</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div></div>
+      <span class="rlb">3:2</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">2:3</span></div></div><div class="slider-row"><div class="sr-top"><span>Zoom</span><span class="sr-val">100</span></div><input type="range" min="50" max="150" value="100"></div><div><span class="fieldlabel">Background</span><div class="swatchgrid">
+              <button class="chipsw" style="background:#000"></button><button class="chipsw" style="background:#fff"></button>
+              <button class="chipsw" style="background:#141414"></button><button class="chipsw" style="background:#f5f0e8"></button>
+              <button class="chipsw" style="background:#d4903a"></button><button class="chipsw" style="background:#4a5d73"></button>
+              <button class="chipsw" style="background:#7a3b3b"></button>
+              <button class="chipsw blur" title="Blurred photo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z"/></svg></button>
+            </div></div><div class="swatch-row"><span class="swatch" style="background:#141414"></span><span>Custom colour</span><span class="hex">#141414</span></div></div>
 </div>
       </div>
     </div>
     <ul class="changes">
       <li><b class="moved">moved</b>FRAME 1 — Reordered to outer colour → outer thickness → inner colour → inner thickness, so each colour sits directly above the thickness it belongs to. Today both colours and both thicknesses are separated, and neither pair says which is which.</li>
       <li><b class="new">new</b>FRAME 1 — The two colour rows are named Outer and Inner. Today both are labelled just "Color", which is unreadable once two dark swatches sit next to each other.</li>
-      <li><b class="merged">merged</b>FRAME 2 — Canvas's nine ratio buttons become a Darkroom-style option list: one row each, tick on the selected one, room for a right-hand value. A wrapped grid of nine differently-sized chips was the single worst instance of the ragged-chip problem in the app.</li>
+      <li><b class="merged">merged</b>FRAME 2 — Canvas's nine ratio buttons become a Darkroom-style option list: one row each, tick on the selected one, room for a right-hand value. A wrapped grid of nine differently-sized chips was the single worst instance of the ragged-chip problem in the app. Labels are the app's real bare ratios (CV_ARS) — an earlier draft invented suffixes ("4:5 Instagram", "3:4 Classic", "3:2 35mm") the app does not have; caught and fixed before implementation.</li>
+      <li><b class="kept">kept</b>Canvas background stays the real 7-colour swatch grid plus the blurred-photo option (CV_BGS), now with a separate Custom colour swatch alongside it for the one-off picker (cl-canvas-bg) that was missing from an earlier draft.</li>
       <li><b class="new">new</b>The colour swatches gain a hex readout and grow to 28px, clearing the pointer-target floor test/ui_audit.mjs enforces (the current 32×22 fails on height).</li>
       <li><b class="moved">moved</b>COLOR 1 rule applied — Reset in the header, hidden until edited. Border is shown edited.</li>
     </ul>

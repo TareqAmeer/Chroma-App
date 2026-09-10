@@ -130,6 +130,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
@@ -272,7 +277,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 </div>
 <div class="grp off">
   <div class="grp-hd"><span class="fieldlabel">Halation</span><span class="rst">Reset</span><button class="sw" aria-label="Halation off"></button></div>
-  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Strength</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Threshold</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">70</span></div><input type="range" min="0" max="100" value="70"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">6</span></div><input type="range" min="2" max="40" value="6"></div><div class="slider-row"><div class="sr-top"><span>Shadow protect <button class="info-i" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behaviour.">i</button></span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="cb-row"><button class="sw"></button><span>White glow</span><button class="info-i" title="Neutral white halation instead of the warm film glow — best for black-and-white photos.">i</button></div><div class="cb-row"><button class="sw"></button><span>No remjet</span><button class="info-i" title="Film with no anti-halation backing — much stronger, bloomier halos with a yellow to orange to red edge.">i</button></div><div class="cb-row"><button class="sw"></button><span>Extreme</span><button class="info-i" title="The no-remjet glow pushed roughly 5-6x stronger, for a heavy stylised bloom. Implies No remjet.">i</button></div></div>
 </div>
 <div class="grp off">
   <div class="grp-hd"><span class="fieldlabel">Bloom</span><span class="rst">Reset</span><button class="sw" aria-label="Bloom off"></button></div>
@@ -294,6 +299,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <li><b class="merged">merged</b>Dust colour's Both / Black / White chips become an equal-width segmented control, under a real label — previously three bordered chips of different widths with no label saying what they applied to.</li>
       <li><b class="moved">moved</b>COLOR 1 rule applied — five "Reset this section" buttons removed, replaced by one header control per section, hidden until edited. Film grain is shown edited.</li>
       <li><b class="kept">kept</b>All five sections stay in the app's existing pipeline order: grain, halation, bloom, artifacts, vignette. That order mirrors the actual render pipeline (CLAUDE.md §3) and changing it in the UI would misrepresent what the app does.</li>
+      <li><b class="kept">kept</b>Halation now shows every real control (Amount, Radius, Shadow protect, White glow, No remjet, Extreme) — an earlier draft replaced it with three invented placeholder sliders (Strength/Radius/Threshold) that do not exist in the app. Caught and fixed before implementation.</li>
     </ul>
   </div>
 </section>

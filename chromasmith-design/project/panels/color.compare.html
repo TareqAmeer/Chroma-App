@@ -130,6 +130,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
@@ -296,7 +301,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <li><b class="merged">merged</b>COLOR 3 — The Color mixer's eight named buttons (Red, Orange, Yellow…) become eight colour swatches. The names survive as tooltips and aria-labels, so nothing is lost for keyboard or screen-reader use.</li>
       <li><b class="demoted">demoted</b>COLOR 4 — "Click a color in the photo to target it precisely, then dial in…" becomes a "Pick from photo" button with an ⓘ carrying the full sentence.</li>
       <li><b class="moved">moved</b>Colour wheels arrive here from their own rail section (spec D2). Brightness sliders move out from under the wheels into full-width rows — under a 90px wheel they are too short to set precisely and were the only sliders in the app with no readable value.</li>
-      <li><b class="kept">kept</b>Curve canvas, point dragging, the four parametric bands, and every slider range and default.</li>
+      <li><b class="kept">kept</b>Curve canvas, point dragging, and every slider range and default. The four Parametric-mode sliders (Shadows/Darks/Lights/Highlights) are unchanged and — same as today — hidden while Point mode is active, so this mockup's default Point-mode view does not show them; this is a behaviour note, not something rendered here.</li>
     </ul>
   </div>
 </section>

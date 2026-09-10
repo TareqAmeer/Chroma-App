@@ -130,6 +130,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .swatch-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .wf .swatch{width:28px;height:28px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,.2);flex:none}
 .wf .swatch-row .hex{margin-left:auto;color:var(--ink-on-dark-muted);font-variant-numeric:tabular-nums;font-size:11px}
+/* Canvas background swatch grid — real 7-colour palette + blur (CV_BGS), not a dropdown. */
+.wf .swatchgrid{display:flex;flex-wrap:wrap;gap:6px}
+.wf .chipsw{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;padding:0;flex:none;display:flex;align-items:center;justify-content:center}
+.wf .chipsw.blur{background:linear-gradient(135deg,#8a8a8a,#333)}
+.wf .chipsw.blur svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:1.6}
 /* Darkroom-style option list — replaces grids of ratio chips (feedback FRAME 2 / CROP 1). */
 .wf .rlist{border-top:1px solid rgba(255,255,255,.08)}
 .wf .rrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;cursor:pointer}
@@ -263,7 +268,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 </div>
 <div class="grp off">
   <div class="grp-hd"><span class="fieldlabel">Lens correction</span><span class="rst">Reset</span><button class="sw" aria-label="Lens correction off"></button></div>
-  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Distortion</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Vignetting</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Chromatic aberration</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div></div>
+  <div class="grp-bd"><div class="cb-row"><button class="sw"></button><span>Auto (lens profile)</span></div><div class="slider-row"><div class="sr-top"><span>Distortion</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Vignette</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Chromatic aberration</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Vertical</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Horizontal</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Rotate</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Scale</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Defringe</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><details class="hint-x"><summary><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 22V10M4 10l8-6 8 6M4 10h16v12H4Z"/></svg>Manual lens (no EXIF)</summary><div><span class="fieldlabel">Lens</span><button class="select-btn"><span>None (auto-detect)</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div><span class="fieldlabel">Focal length (mm)</span><input class="txt" value="35"></div></details></div>
 </div>
 <div class="grp off">
   <div class="grp-hd"><span class="fieldlabel">Deconvolution</span><span class="rst">Reset</span><button class="sw" aria-label="Deconvolution off"></button></div>
@@ -278,6 +283,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <li><b class="moved">moved</b>COLOR 1 rule applied — per-section Reset in the header, hidden until edited. Noise reduction is shown edited.</li>
       <li><b class="cut">cut</b>The section-local "Cancel" and "Reset" buttons under Noise reduction. Cancel belongs to the neural NR job's progress state, not to the panel at rest — it should appear only while a job is running.</li>
       <li><b class="kept">kept</b>Every slider, its range and default. The "High Strength" slider is shown only when RAW noise reduction is set to High, which is what the app already does.</li>
+      <li><b class="kept">kept</b>Lens correction now shows every real control: Auto (lens profile) toggle, Distortion, Vignette, Chromatic aberration, Vertical, Horizontal, Rotate, Scale, Defringe, plus Manual lens + Focal length folded into a disclosure since both are hidden by default (EXIF auto-detect covers almost every lens). An earlier draft replaced this whole section with three invented placeholder sliders that do not exist in the app — caught and fixed before implementation, same class of error as Retouch's dropped button.</li>
     </ul>
   </div>
 </section>
