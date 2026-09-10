@@ -58,6 +58,7 @@ const ZONES = [
   { label: 'frame-panel', wf: '.tp-panel[data-panel="frame"] .grp[data-fxsec="borders"],.tp-panel[data-panel="frame"] .grp[data-fxsec="canvas"]', app: '[data-fxsec="borders"],[data-fxsec="canvas"]', appSection: 'frame', appToggleOn: ['tg-borders'], wfPanel: 'frame' },
   { label: 'crop-panel', wf: '.tp-panel[data-panel="crop"]', app: '[data-fxsec="crop"]', appSection: 'crop', wfPanel: 'crop' },
   { label: 'color-panel', wf: '.tp-panel[data-panel="color"] .grp[data-fxsec="curves"],.tp-panel[data-panel="color"] .grp[data-fxsec="hsl"],.tp-panel[data-panel="color"] .grp[data-fxsec="pointcolor"],.tp-panel[data-panel="color"] .grp[data-fxsec="wheels"]', app: '[data-fxsec="curves"],[data-fxsec="hsl"],[data-fxsec="pointcolor"],[data-fxsec="wheels"]', appSection: 'color', wfPanel: 'color' },
+  { label: 'export-panel', wf: '.tp-panel[data-panel="export"]', app: '[data-fxsec="export"]', appSection: 'export', wfPanel: 'export' },
 ];
 // Menus whose CONTENTS are invisible until opened — same principle as Library's OPEN_MENUS.
 // 2026-09-10: Tools + View + ⋯ merged into ONE settings menu (#fx-settings/#fx-settings-menu),

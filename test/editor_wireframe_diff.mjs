@@ -79,6 +79,10 @@ const PAIRS = {
   // "Aspect ratio" / "Transform" subheads within the same card — see spec CR1 for why the
   // aspect-ratio picker itself (chips, not the proposal's checklist) was kept as-is.
   '.tp-panel[data-panel="crop"] .grp[data-fxsec="crop"]': { app: '.fx-ctrl[data-fxsec="crop"]', label: 'crop panel', zone: 'crop-panel' },
+  // 2026-09-10 — Export panel (Stage 4 merge). One real app section, but a much bigger one than
+  // the proposal covers — Save/Load session, Styles, and Google Photos are real, shipped
+  // features with no equivalent in the design at all (tracked as R11, not this pass's scope).
+  '.tp-panel[data-panel="export"]': { app: '.fx-ctrl[data-fxsec="export"]', label: 'export panel', zone: 'export-panel' },
   // 2026-09-10 — Color panel (Stage 4 merge). Four pre-existing app sections; wheels was
   // homeless (spec D2) until this pass wired it into FX_GROUPS.color.members.
   '.tp-panel[data-panel="color"] .grp[data-fxsec="curves"]': { app: '.fx-ctrl[data-fxsec="curves"]', label: 'tone curves section', zone: 'color-panel' },

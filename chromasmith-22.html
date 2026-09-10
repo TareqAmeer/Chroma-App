@@ -2257,18 +2257,10 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <!-- EXPORT -->
       <div class="fx-ctrl" data-fxsec="export">
         <div class="fx-ctrl-title">Export</div>
-        <!-- HDR (gain map). Hidden unless the ORIGINAL file actually carries HDR headroom — a gain
-             map over an SDR source encodes nothing, so offering it there would be a lie. Shown by
-             fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
-        <div class="fx-row" id="fx-hdr-row" style="display:none"
-             title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
-          <div class="fx-label">HDR (gain map)</div>
-          <input type="checkbox" id="tg-exp-hdr">
-        </div>
-        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
+        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Output</div>
         <div class="vrow">
-          <div class="vlb">Filename</div>
-          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px" title="Export filename. Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD; add {nover} to drop the _vN.N version suffix.">
+          <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
           <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
@@ -2302,9 +2294,17 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <option value="3">High</option>
           </select>
         </div>
-        <!-- Watermark: drawn onto the FINAL (post-resize) canvas, last of all — so its text is a
-             constant fraction of whatever the actual output size ends up being, not the source. -->
-        <div class="fx-row" style="margin-top:10px" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
+        <!-- HDR (gain map). Hidden unless the ORIGINAL file actually carries HDR headroom — a gain
+             map over an SDR source encodes nothing, so offering it there would be a lie. Shown by
+             fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
+        <div class="fx-row" id="fx-hdr-row" style="display:none"
+             title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
+          <div class="fx-label">HDR (gain map)</div>
+          <input type="checkbox" id="tg-exp-hdr">
+        </div>
+        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
+        <div class="fx-sub">Watermark</div>
+        <div class="fx-row" style="margin-top:0" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
           <div class="fx-label">Watermark</div>
           <div class="fx-toggle" id="tg-exp-wm" onclick="this.classList.toggle('on');document.getElementById('exp-wm-row').style.display=this.classList.contains('on')?'block':'none'"></div>
         </div>
@@ -2318,7 +2318,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
              saved/recalled by name — distinct from Styles (the full edit recipe) and from Save
              session (one auto-restored slot). The common case this exists for: "small JPG for
              the web" vs "full-res PNG for print" as one click instead of four each time. -->
-        <div style="margin-top:10px">
+        <div class="fx-sub">Preset</div>
+        <div style="margin-top:0">
           <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
             <select class="fx-select" id="sel-exp-preset" onchange="if(this.value)exportPresetApply(this.value)">
               <option value="">— none —</option>
@@ -2330,14 +2331,14 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           </div>
         </div>
         <div id="fx-match-series-row" style="margin-top:8px;display:none">
-          <div class="fx-label" style="width:auto;margin-bottom:4px">Match series</div>
+          <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
           <div style="display:flex;gap:6px">
             <button class="btn bgh" onclick="matchSeriesToReference()">Match to this photo</button>
             <button class="btn bgh" onclick="matchSeriesClear()">Clear</button>
           </div>
-          <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.</div>
         </div>
-        <div id="fx-export-scope-row" style="margin-top:8px;display:none">
+        <div class="fx-sub">Export</div>
+        <div id="fx-export-scope-row" style="margin-top:0;display:none">
           <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope</div>
           <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
             <button class="btn bsec" id="btn-scope-all" onclick="setExportScope('all')" style="flex:1;padding-left:6px;padding-right:6px">All photos</button>

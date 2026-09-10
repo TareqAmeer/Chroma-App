@@ -195,6 +195,10 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
 .pick-btn{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
 .pick-btn svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .wide-btn.danger{background:rgba(135,15,19,.16);border-color:rgba(135,15,19,.5)}
+.orient,.combine,.scope{margin-bottom:2px}
+.fnrow{display:flex;align-items:center}
+.fnrow .fieldlabel{margin-bottom:0;flex:1}
+.ver{font-size:11px;color:var(--primary-on-dark);font-variant-numeric:tabular-nums}
 
 .autoenhance{height:34px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:var(--weight-semibold)}
 .autoenhance:hover{background:rgba(255,255,255,.08)}
@@ -567,7 +571,30 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
             </div></div><div class="swatch-row"><span class="swatch" style="background:#000000"></span><span>Custom colour</span><span class="hex">#000000</span></div></div>
 </div>
       </div>
-      <div class="tp-panel" data-panel="export"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Export settings live here.</p></div>
+      <div class="tp-panel" data-panel="export">
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">Output</span></div>
+  <div class="grp-bd"><div class="fnrow"><span class="fieldlabel">Filename <button class="info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></span><span class="ver">v1.0</span></div>
+            <input class="txt" value="photo" placeholder="photo"><div><span class="fieldlabel">Format</span><button class="select-btn"><span>Auto (match source)</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div class="slider-row"><div class="sr-top"><span>Quality</span><span class="sr-val">99</span></div><input type="range" min="80" max="100" value="99"></div><div><span class="fieldlabel">Resize (long edge)</span><button class="select-btn"><span>Full size</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div><span class="fieldlabel">Output sharpening</span><button class="select-btn"><span>Off</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div class="cb-row"><button class="sw"></button><span>HDR (gain map)</span></div></div>
+</div>
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">Watermark</span></div>
+  <div class="grp-bd"><input class="txt" value="" placeholder="© Your Name"><div class="slider-row"><div class="sr-top"><span>Opacity</span><span class="sr-val">55</span></div><input type="range" min="10" max="100" value="55"></div></div>
+</div>
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">Preset</span></div>
+  <div class="grp-bd"><div><span class="fieldlabel">Export preset</span><button class="select-btn"><span>— none —</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div class="btn2"><button class="wide-btn ghost">Save current…</button><button class="wide-btn ghost danger">Delete</button></div></div>
+</div>
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">Match series <button class="info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing.">i</button></span></div>
+  <div class="grp-bd"><div class="btn2"><button class="wide-btn ghost">Match to this photo</button><button class="wide-btn ghost">Clear</button></div></div>
+</div>
+<div class="grp">
+  <div class="grp-hd"><span class="fieldlabel">Export</span></div>
+  <div class="grp-bd"><div class="scope"><div class="seg"><button class="on">Current photo</button><button class="">All photos</button></div></div>
+            <button class="wide-btn primary">Export</button></div>
+</div>
+      </div>
       <div class="tp-panel" data-panel="info"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Photo info &amp; EXIF live here.</p></div>
 
     </div>

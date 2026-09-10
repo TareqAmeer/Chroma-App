@@ -611,6 +611,15 @@
       "wireframeRef": null, "check": null, "panel": null,
       "note": "Same class of risk T2 fixed for _FX_SNAP_*: two lists meant to describe the same thing, maintained by hand in two files, can silently drift. Confirmed this session in miniature — when 'wheels' was added to FX_GROUPS.color.members, editor_coverage.mjs's own report picked it up correctly, which is reassuring, but only because someone (this session) remembered to check both places; nothing would have flagged a drift if editor_coverage.mjs's copy had been forgotten."
     },
+    "R11": {
+      "category": "panel-design",
+      "status": "backlog",
+      "source": "[found while implementing the Export panel, 2026-09-10] the reviewed proposal (test/panel_proposals.mjs PROPOSALS.export) has no design at all for three real, shipped feature blocks in the app's Export section: Save/Load session, Styles (save current as a named recipe, import a Style .json, the style-list), and Google Photos (upload toggle, Connect, client-ID entry)",
+      "wireframeRef": null,
+      "check": null,
+      "panel": "export",
+      "note": "Left structurally untouched below the designed groups (their own border-top dividers already separate them visually, same as before this pass). Needs its own design pass rather than inventing subheadings/layout for them without review — same reasoning as R6/R7's deferred picker-widget redesigns, just for whole undesigned feature blocks instead of one control."
+    },
     "R10": {
       "category": "panel-design",
       "status": "backlog",
@@ -718,6 +727,15 @@
       "wireframeRef": "Editor (Developer) View.dc.html: .tp-panel[data-panel=color]",
       "check": "editor_wireframe_behaviour.mjs: color-wheels-reachable, color-pointcolor-info",
       "note": "Color groups four pre-existing app sections (curves, hsl, pointcolor, wheels). Real bug found and fixed: wheels was never added to FX_GROUPS.color.members (spec D2, the same class of gap as deconv/Detail) — its rail button existed (own standalone entry) but the Color group button never revealed it, so it was unreachable from the Color rail entry despite having a fully working canvas UI. Wired 'wheels' into FX_GROUPS.color.members, same fix shape as DT1's deconv wiring. Point Color's Pick button had its long title= tooltip folded into a fx-info-i button per the proposal (RT1/DT1/F1 pattern) — placed as a SIBLING of the button, not nested inside it: the proposal's own raw markup (`<button class=pick-btn>Pick from photo <button class=info-i>i</button></button>`) nests a button inside a button, which is invalid HTML that browsers silently mis-parse (the outer button closes early); this was caught and fixed here, and is a latent defect in panel_proposals.mjs itself worth an audit pass across the other panels (not done this session — see R8). Curves' canvas-based point/parametric editor and Colour Wheels' 3 canvas discs were left structurally untouched — both are real interactive canvas widgets with their own pointer-handling code (_crvInit, wheel drag handlers), and the proposal's static SVG/disc mockups are illustrative only, not literal markup to move. Header-level 'Reset | All' (curves has a channel-vs-all distinction; hsl/pointcolor/wheels each have their own dual reset already as bottom buttons) was NOT moved into the section header this pass — deferred as R9, since collapsing a two-action reset into one header slot needs new override logic per section, unlike the single-action case RT1/DT1/F1/FR1 already covered. Real defaults verified: all four toggles OFF by default; HSL band colours already matched HSL_COLS exactly from an earlier correction pass this session."
+    },
+    "EX1": {
+      "category": "panel-design",
+      "status": "fixed",
+      "panel": "export",
+      "source": "implement the reviewed Export panel proposal (test/panel_proposals.mjs PROPOSALS.export)",
+      "wireframeRef": "Editor (Developer) View.dc.html: .tp-panel[data-panel=export]",
+      "check": "editor_wireframe_behaviour.mjs: export-subheads, export-filename-info",
+      "note": "Export is one real app section but much larger than the proposal covers — the proposal only designs Output/Watermark/Preset/Match series/Export; Save/Load session, Styles (save/import/list), and Google Photos are real, shipped features the proposal never mentions at all (tracked as R11, not fixed this pass). Implemented 2026-09-10: added five .fx-sub subheadings (Output/Watermark/Preset/Match series/Export) matching the proposal's five .grp groups and reusing the existing app primitive (same as CR1's Crop regrouping) rather than inventing anything; reordered nothing except moving the HDR checkbox row (fx-hdr-row, conditionally shown only when the source photo actually carries HDR headroom — fxSyncHdrOption) from the very top of the panel down into the Output group, after Output sharpening, matching the proposal's placement — it was structurally isolated at the top before, with no heading context at all. Filename's long title= tooltip folded into a fx-info-i (RT1/DT1/F1/FR1/CO1 pattern); Match series's separate always-visible hint paragraph folded into a fx-info-i on its new subheading instead (same content, matches how DT1/F1 handled similarly-long real explanatory text). Export scope (Current/All photos) moved under the new 'Export' subheading alongside the Export button itself, matching the proposal's single combined group — previously it sat between Match series and the button with no heading of its own. HDR's underlying <input type=checkbox> was left as a native checkbox (not converted to the app's .fx-toggle convention) since chromasmith-22.html reads its .checked property directly in two places (fxSyncHdrOption) — a real behavioural change, not a markup move, so out of scope here. All existing ids/onclick handlers preserved verbatim."
     },
     "CR1": {
       "category": "panel-design",

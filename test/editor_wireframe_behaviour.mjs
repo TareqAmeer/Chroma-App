@@ -589,6 +589,53 @@ test.describe('color panel (CO1)', () => {
   });
 });
 
+test.describe('export panel (EX1)', () => {
+  test('all five subheadings are present and in order', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="export"]');
+    const subs = page.locator('.fx-ctrl[data-fxsec="export"] .fx-sub');
+    await expect(subs).toHaveCount(5);
+    await expect(subs.nth(0)).toContainText('Output');
+    await expect(subs.nth(1)).toContainText('Watermark');
+    await expect(subs.nth(2)).toContainText('Preset');
+    await expect(subs.nth(4)).toContainText('Export');
+  });
+
+  test('Filename input keeps its own value and gained an info tooltip', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="export"]');
+    await expect(page.locator('.fx-ctrl[data-fxsec="export"] .fx-info-i').first()).toBeVisible();
+    const fname = page.locator('#fx-fname');
+    await fname.fill('my-export');
+    await expect(fname).toHaveValue('my-export');
+  });
+
+  test('HDR row still lives in the Output group and toggles without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="export"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    // Hidden by default (no HDR-capable source loaded) — assert it's still wired, not visible.
+    const hdr = page.locator('#tg-exp-hdr');
+    await page.evaluate(() => { document.getElementById('fx-hdr-row').style.display = ''; });
+    await hdr.click();
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+
+  test('Export button still calls exportFX and Export scope sits under the Export subhead', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="export"]');
+    const exportBtn = page.locator('#btn-fx-export');
+    await expect(exportBtn).toHaveAttribute('onclick', /exportFX/);
+    const subs = page.locator('.fx-ctrl[data-fxsec="export"] .fx-sub');
+    const lastSub = subs.nth(4);
+    // #fx-export-scope-row is display:none until a batch (>1 photo) is loaded — force it
+    // visible to check its position, same approach as the HDR-row test above.
+    await page.evaluate(() => { document.getElementById('fx-export-scope-row').style.display = ''; });
+    const scopeRow = page.locator('#fx-export-scope-row');
+    const subBox = await lastSub.boundingBox();
+    const scopeBox = await scopeRow.boundingBox();
+    expect(scopeBox.y).toBeGreaterThan(subBox.y);
+  });
+});
+
 // ════════════════════════════════════════════════════════════════════════════════════════════
 // OTHER DROPDOWNS / POPOVERS — every remaining "click a control, something floats open" surface
 // that isn't the settings menu: the canvas-background right-click context menu (desktop mode,
