@@ -261,9 +261,22 @@ async function diffZone(zone) {
     await app.evaluate((sec) => { if (typeof fxSection === 'function') fxSection(sec, true); }, zone.appSection);
     await app.waitForTimeout(150);
   }
+  // T26 (editor_ux_spec.json, 2026-09-10): tracks which toggles THIS call actually turned on
+  // (an id already 'on' before this ran is left alone, and must stay alone after) so they can be
+  // restored at the end of diffZone(), rather than leaking on for every zone processed after this
+  // one in the same run. Verified harmless for the ZONE_ORDER this file has today (CLAUDE.md
+  // §10.10's own note), but restoring removes the fragility instead of relying on that staying
+  // true if zones are ever reordered or a new one added that measures overall panel state.
+  const _turnedOn = [];
   if (zone.appToggleOn) {
     for (const tg of zone.appToggleOn) {
-      await app.evaluate((id) => { const el = document.getElementById(id); if (el && !el.classList.contains('on')) el.click(); }, tg);
+      const wasOff = await app.evaluate((id) => {
+        const el = document.getElementById(id);
+        if (!el || el.classList.contains('on')) return false;
+        el.click();
+        return true;
+      }, tg);
+      if (wasOff) _turnedOn.push(tg);
     }
     await app.waitForTimeout(150);
   }
@@ -312,6 +325,11 @@ async function diffZone(zone) {
   const ICON_CENTER_TOLERANCE = 1.5;
   for (const icon of aClean.filter((x) => x.kind === 'icon' && x.centerOffset != null)) {
     if (icon.centerOffset > ICON_CENTER_TOLERANCE) findings.push(`[${zone.label}] icon off-center by ${icon.centerOffset}px within its hit-shape (icon#${aClean.indexOf(icon)})`);
+  }
+
+  // T26: undo exactly what this call turned on above, so state never leaks into the next zone.
+  for (const tg of _turnedOn) {
+    await app.evaluate((id) => { const el = document.getElementById(id); if (el) el.click(); }, tg);
   }
 }
 for (const zone of ZONES) await diffZone(zone);

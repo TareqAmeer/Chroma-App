@@ -20,6 +20,15 @@ import { settleForCapture } from './wireframe_diff_lib.mjs';
 
 const ROOT = process.cwd();
 
+// T19 (editor_ux_spec.json, 2026-09-10): individual tests used to declare their OWN local
+// `errors`/`page.on('pageerror', ...)` instead of using the `editor`/`editorWeb` fixture's own
+// (already listening from page creation, exposed as `errors` below). A page error thrown BEFORE
+// a test's own local listener line ran — e.g. during the click that immediately precedes it —
+// was only caught by the fixture's own teardown assertion, not that test's explicit
+// `expect(errors).toEqual([])`, so it failed as a generic teardown error rather than pointing at
+// the specific action that threw. Every such test now destructures `errors` from the fixture
+// (`{ editor: { page, errors } }`) instead of redeclaring it, closing that gap and removing the
+// duplication in one pass.
 const test = base.extend({
   server: [async ({}, use) => {
     const server = createServer(async (req, res) => {
@@ -344,10 +353,8 @@ test.describe('retouch panel (RT1)', () => {
     });
   });
 
-  test('Clear all spots still calls healClear without throwing', async ({ editor: { page } }) => {
+  test('Clear all spots still calls healClear without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="retouch"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.click('button[onclick*="healClear"]');
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
@@ -397,10 +404,8 @@ test.describe('detail panel (DT1)', () => {
     await expect(tg).not.toHaveClass(/\bon\b/);
   });
 
-  test('lens Auto toggle still calls fxLensAutoToggled without throwing', async ({ editor: { page } }) => {
+  test('lens Auto toggle still calls fxLensAutoToggled without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="detail"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.click('.fx-ctrl[data-fxsec="lens"] #tg-lens-auto');
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
@@ -408,6 +413,11 @@ test.describe('detail panel (DT1)', () => {
 
   test('header Reset still resets Noise Reduction via resetNR', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="detail"]');
+    // T15 (editor_ux_spec.json): assert the RESTING state first — every existing Reset test here
+    // jumped straight to "make a change, then check visible", which can't catch a regression
+    // that leaves Reset permanently visible (e.g. a CSS selector typo broadening :has()).
+    const reset = page.locator('.fx-ctrl[data-fxsec="nr"] .fx-ctrl-title-reset');
+    await expect(reset).toBeHidden();
     const slider = page.locator('#sl-nr-lum');
     await slider.fill('60');
     // fxMarkModifiedSliders() debounces 120ms before flagging .fx-mod, which gates the reset
@@ -420,6 +430,8 @@ test.describe('detail panel (DT1)', () => {
 
   test('header Reset still resets Deconvolution via resetDeconv', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="detail"]');
+    const reset = page.locator('.fx-ctrl[data-fxsec="deconv"] .fx-ctrl-title-reset'); // T15
+    await expect(reset).toBeHidden();
     const slider = page.locator('#sl-deconv-amt');
     await slider.scrollIntoViewIfNeeded();
     await slider.fill('40');
@@ -439,10 +451,8 @@ test.describe('film panel (F1)', () => {
     await tg.click();
   });
 
-  test('Film artifacts Re-roll button still calls artReshuffle without throwing', async ({ editor: { page } }) => {
+  test('Film artifacts Re-roll button still calls artReshuffle without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="film"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     const btn = page.locator('.fx-ctrl[data-fxsec="art"] button[onclick*="artReshuffle"]');
     await expect(btn).toHaveText('Re-roll');
     await btn.click();
@@ -450,10 +460,8 @@ test.describe('film panel (F1)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('grain toggle still calls toggleFX without throwing', async ({ editor: { page } }) => {
+  test('grain toggle still calls toggleFX without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="film"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.click('.fx-ctrl[data-fxsec="grain"] #tg-grain');
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
@@ -461,6 +469,12 @@ test.describe('film panel (F1)', () => {
 
   test('bloom and vignette header Reset still work via the generic fxResetSection', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="film"]');
+    // T15: both Resets checked hidden at rest before either section is touched at all — turning
+    // a section's on/off switch on (next line, bloom) must not by itself count as "modified".
+    const bloomReset = page.locator('.fx-ctrl[data-fxsec="bloom"] .fx-ctrl-title-reset');
+    const vigReset = page.locator('.fx-ctrl[data-fxsec="vig"] .fx-ctrl-title-reset');
+    await expect(bloomReset).toBeHidden();
+    await expect(vigReset).toBeHidden();
     await page.click('.fx-ctrl[data-fxsec="bloom"] #tg-bloom');
     const bloomSlider = page.locator('#sl-bloom-a');
     await bloomSlider.scrollIntoViewIfNeeded();
@@ -497,6 +511,8 @@ test.describe('frame panel (FR1)', () => {
   test('header Reset restores both border colours, not just thickness', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="frame"]');
     await page.click('.fx-ctrl[data-fxsec="borders"] #tg-borders');
+    const reset = page.locator('.fx-ctrl[data-fxsec="borders"] .fx-ctrl-title-reset'); // T15
+    await expect(reset).toBeHidden();
     const color = page.locator('#cl-b1');
     const slider = page.locator('#sl-b1-t');
     await slider.fill('5');
@@ -511,12 +527,10 @@ test.describe('frame panel (FR1)', () => {
     await expect(color).toHaveValue('#000000');
   });
 
-  test('Style select keeps its fx-info-i tooltip and filmFrameChanged still fires', async ({ editor: { page } }) => {
+  test('Style select keeps its fx-info-i tooltip and filmFrameChanged still fires', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="frame"]');
     await page.click('.fx-ctrl[data-fxsec="borders"] #tg-borders');
     await expect(page.locator('.fx-ctrl[data-fxsec="borders"] .fx-info-i')).toBeVisible();
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.selectOption('#sel-film-frame', 'sprocket35');
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
@@ -539,20 +553,16 @@ test.describe('crop panel (CR1)', () => {
     await expect(page.locator('#sel-crop-ar')).toHaveValue('1');
   });
 
-  test('rotate/flip icon buttons still call geomRotate/geomFlip without throwing', async ({ editor: { page } }) => {
+  test('rotate/flip icon buttons still call geomRotate/geomFlip without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="crop"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.click('.fx-ctrl[data-fxsec="crop"] button[onclick*="geomRotate(-90)"]');
     await page.click('.fx-ctrl[data-fxsec="crop"] button[onclick*="geomFlip"]');
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
   });
 
-  test('Crop button still calls cropToggle without throwing', async ({ editor: { page } }) => {
+  test('Crop button still calls cropToggle without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="crop"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.click('#btn-crop');
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
@@ -565,10 +575,8 @@ test.describe('color panel (CO1)', () => {
     await expect(page.locator('.fx-ctrl[data-fxsec="wheels"]')).toHaveClass(/sec-active/);
   });
 
-  test('Point Color Pick button keeps its own click target and gained an info tooltip', async ({ editor: { page } }) => {
+  test('Point Color Pick button keeps its own click target and gained an info tooltip', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="color"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await expect(page.locator('.fx-ctrl[data-fxsec="pointcolor"] .fx-info-i')).toBeVisible();
     // The info-i must NOT be nested inside #btn-pc-eye (invalid HTML/mis-parse risk, R8) —
     // clicking the Pick button itself must still resolve to btn-pc-eye and call pcEyedropper.
@@ -577,11 +585,9 @@ test.describe('color panel (CO1)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('curve mode/channel chips still call curveSetMode/curveSetCh without throwing', async ({ editor: { page } }) => {
+  test('curve mode/channel chips still call curveSetMode/curveSetCh without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="color"]');
     await page.click('.fx-ctrl[data-fxsec="curves"] #tg-curves');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.click('#curve-chips button[data-ch="r"]');
     await expect(page.locator('#curve-chips button[data-ch="r"]')).toHaveClass(/\bon\b/);
     await page.waitForTimeout(100);
@@ -608,10 +614,8 @@ test.describe('export panel (EX1)', () => {
     await expect(fname).toHaveValue('my-export');
   });
 
-  test('HDR row still lives in the Output group and toggles without throwing', async ({ editor: { page } }) => {
+  test('HDR row still lives in the Output group and toggles without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="export"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     // Hidden by default (no HDR-capable source loaded) — assert it's still wired, not visible.
     const hdr = page.locator('#tg-exp-hdr');
     await page.evaluate(() => { document.getElementById('fx-hdr-row').style.display = ''; });
@@ -702,10 +706,8 @@ test.describe('masks panel (MA1) — baseline, pre-redesign', () => {
     await expect(page.locator('#local-list button')).toHaveCount(countAfterAdd - 1);
   });
 
-  test('Show on photo (Overlay/Isolate/Selection/Off) still calls mskSetPreviewMode without throwing', async ({ editor: { page } }) => {
+  test('Show on photo (Overlay/Isolate/Selection/Off) still calls mskSetPreviewMode without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="local"]');
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
     const seg = page.locator('.fx-ctrl[data-fxsec="local"] .msk-prevmode-seg');
     await seg.locator('button[data-v="isolate"]').click();
     await expect(seg.locator('button[data-v="isolate"]')).toHaveClass(/\bon\b/);
