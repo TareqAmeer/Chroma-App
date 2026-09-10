@@ -6668,12 +6668,12 @@
     if (w) localStorage.setItem('chromasmith_lib_dock_w', w);
   });
 
-  // Library/Develop tabs — Develop switches back to the editor (same toggle as the header's own
-  // library button / "L" shortcut) if a photo is open to go back to, otherwise this IS Library
-  // already and there's nothing to do. Library expands to the full grid (toggleExpandedView(true))
-  // — previously a static no-op, which was fine only because it could never show as active while
-  // docked (see the markup comment); now that it can, clicking it needs to actually do something.
-  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.open) toggleLibrary(); };
+  // Library/Develop tabs — Develop switches from the full grid back to the docked filmstrip
+  // next to the open photo (toggleExpandedView(false), mirroring Library's toggleExpandedView
+  // (true) below), NOT toggleLibrary() — toggleLibrary() flips state.open and closes the WHOLE
+  // library dock (filmstrip included), which is the "docked filmstrip disappears when switching
+  // to Develop" bug: the tab is meant to narrow the view, not close it.
+  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.expanded_view) toggleExpandedView(false); };
   overlay.querySelector('#lib-side-tab-library').onclick = () => { if (!state.expanded_view) toggleExpandedView(true); };
   syncSideTabs(); // initial state — expanded_view/openedPath may already be set by boot restore
 
