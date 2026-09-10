@@ -1637,6 +1637,28 @@
        light space, so two stacked reservations would just leave a dead 44px gap above it. */
     body.deskx #lib-overlay{top:44px;z-index:2500}
     body.deskx #lib-overlay.full{top:0;height:100vh}
+
+    /* Fully closing the docked filmstrip (not just narrowing it — LIB_DOCK_MIN=90 already floors
+       the drag) was reported as missing: dragging the resizer to the edge just stopped at 90px,
+       with no way to reclaim that column for the photo entirely and no way back in if there were.
+       --dock-w:0px removes the column outright (the grid track itself, not a width on a visible
+       box — same "can never overlap a sibling track" property as every other dock-w consumer);
+       #lib-overlay is also display:none'd alongside it so nothing in it (even a stray 1px border)
+       can paint into a 0-width track. See #lib-dock-reopen below for the way back in. */
+    body.deskx.lib-dock-collapsed .fx-layout{--dock-w:0px}
+    body.deskx.lib-dock-collapsed #lib-overlay:not(.full){display:none}
+    /* The reopen affordance: a small fixed icon, NOT part of the (now zero-width) dock column, so
+       it can't be clipped by the very collapse it exists to undo. top uses the SAME
+       --deskx-topbar-h token #fx-deskbar itself sizes from (chromasmith-22.html) plus 8px
+       breathing room — matching every other "clear of the deskbar" offset in this file (see the
+       body.deskx #lib-overlay #lib-top padding-top comment above) instead of a second hardcoded
+       44 that could silently drift from the real bar height. Hidden outright in .full and outside
+       deskx — collapsing only ever applies to the docked filmstrip. */
+    #lib-dock-reopen{display:none;position:fixed;left:8px;top:calc(var(--deskx-topbar-h,44px) + 8px);
+      width:28px;height:28px;border-radius:var(--r);align-items:center;justify-content:center;
+      background:var(--sur);border:1px solid var(--bdr);color:var(--txt);cursor:pointer;z-index:2600}
+    #lib-dock-reopen:hover{background:var(--bg)}
+    body.deskx.lib-dock-collapsed:not(.lib-full) #lib-dock-reopen{display:flex}
   `;
   document.head.appendChild(style);
 
@@ -1942,6 +1964,16 @@
   const fxLayoutEl = document.querySelector('.fx-layout');
   if (fxLayoutEl) fxLayoutEl.insertBefore(overlay, fxLayoutEl.firstChild);
   else document.body.appendChild(overlay);
+
+  // Reopen affordance for a fully-collapsed docked filmstrip (see the #lib-dock-reopen CSS
+  // comment) — deliberately appended to <body> directly, NOT into .fx-layout/#lib-overlay: it
+  // has to stay clickable while the dock column it reopens is display:none.
+  const dockReopenBtn = document.createElement('button');
+  dockReopenBtn.id = 'lib-dock-reopen';
+  dockReopenBtn.title = 'Show the filmstrip';
+  dockReopenBtn.setAttribute('aria-label', 'Show the filmstrip');
+  dockReopenBtn.innerHTML = ic('library', 15); // no dedicated sidebar/panel icon in ICONS; reuses the Library tab's own glyph — this IS what it reopens
+  document.body.appendChild(dockReopenBtn);
 
   // No JS-computed padding/width to keep in sync anymore — chromasmith-22.html's own
   // body.lib-docked/body.lib-full selectors (toggled below) size the reserved grid column
@@ -6564,16 +6596,45 @@
   const fxLayout = document.querySelector('.fx-layout'); // chromasmith-22.html's grid, not this file's own markup
   const savedDockW = parseInt(localStorage.getItem('chromasmith_lib_dock_w'), 10);
   if (fxLayout && savedDockW >= LIB_DOCK_MIN && savedDockW <= LIB_DOCK_MAX) fxLayout.style.setProperty('--dock-w-user', savedDockW + 'px');
-  let dockResizing = false;
-  dockResizer.addEventListener('mousedown', (e) => { dockResizing = true; dockResizer.classList.add('active'); e.preventDefault(); });
+
+  // Fully closing the dock (not just narrowing to LIB_DOCK_MIN) — see the CSS comment on
+  // body.deskx.lib-dock-collapsed. Applied as a body class so it composes with .full/.lib-full
+  // for free (the reopen button's own CSS already excludes .lib-full) rather than needing its
+  // own interaction with every mode this file has.
+  let dockCollapsed = localStorage.getItem('chromasmith_lib_dock_collapsed') === '1';
+  function setDockCollapsed(v) {
+    dockCollapsed = v;
+    document.body.classList.toggle('lib-dock-collapsed', v);
+    localStorage.setItem('chromasmith_lib_dock_collapsed', v ? '1' : '0');
+    // Reopening: #lib-grid was display:none (its ancestor was) while collapsed, and renderGrid()
+    // never ran for it in the meantime — same staleness toggleExpandedView()'s own renderGrid()
+    // call exists to prevent (see that comment). Re-measure the tab labels too: the column's
+    // width didn't change while hidden, so nothing would otherwise re-trigger that check.
+    if (v === false) { renderGrid(); syncSideTabsCompact(); }
+  }
+  document.body.classList.toggle('lib-dock-collapsed', dockCollapsed);
+  dockReopenBtn.onclick = () => setDockCollapsed(false);
+
+  let dockResizing = false, dockWantsClose = false;
+  // Dragging all the way to the dock's own left edge (well inside the LIB_DOCK_MIN floor the
+  // width itself is clamped to below) is the "drag to close" gesture — reported missing
+  // entirely; there was previously no way to close the dock at all, only to narrow it to 90px.
+  const LIB_DOCK_CLOSE_ZONE = 40;
+  dockResizer.addEventListener('mousedown', (e) => {
+    if (dockCollapsed) return; // nothing to drag — resizer/dock are both hidden while collapsed
+    dockResizing = true; dockWantsClose = false; dockResizer.classList.add('active'); e.preventDefault();
+  });
   window.addEventListener('mousemove', (e) => {
     if (!dockResizing || !fxLayout) return;
-    const w = Math.min(LIB_DOCK_MAX, Math.max(LIB_DOCK_MIN, e.clientX - overlay.getBoundingClientRect().left));
+    const raw = e.clientX - overlay.getBoundingClientRect().left;
+    dockWantsClose = raw < LIB_DOCK_CLOSE_ZONE;
+    const w = Math.min(LIB_DOCK_MAX, Math.max(LIB_DOCK_MIN, raw));
     fxLayout.style.setProperty('--dock-w-user', w + 'px');
   });
   window.addEventListener('mouseup', () => {
     if (!dockResizing) return;
     dockResizing = false; dockResizer.classList.remove('active');
+    if (dockWantsClose) { setDockCollapsed(true); return; }
     const w = fxLayout ? parseInt(getComputedStyle(fxLayout).getPropertyValue('--dock-w-user'), 10) : 0;
     if (w) localStorage.setItem('chromasmith_lib_dock_w', w);
   });
