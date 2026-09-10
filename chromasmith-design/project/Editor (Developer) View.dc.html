@@ -173,6 +173,28 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
 .hint-x>summary svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2}
 .hint-x>div{padding:0 9px 9px;display:flex;flex-direction:column;gap:10px}
 .cond-block{display:flex;flex-direction:column;gap:10px;padding:8px 0 0;border-top:1px dashed rgba(255,255,255,.14)}
+.subhead{font-size:13px;font-weight:600;color:var(--ink-on-dark-muted);margin:4px 0 4px;padding-top:6px;border-top:1px solid rgba(255,255,255,.12)}
+.subhead:first-child{border-top:none;padding-top:0;margin-top:0}
+.chiprow{display:flex;flex-wrap:wrap;gap:4px}
+.chip{height:28px;padding:0 10px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:11px;cursor:pointer}
+.chip.on{background:var(--primary-on-dark);color:#10222a;border-color:var(--primary-on-dark);font-weight:600}
+.iconrow{display:flex;gap:4px}
+.ibtn2{flex:1;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ibtn2 svg{width:15px;height:15px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.curve{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2);position:relative;overflow:hidden}
+.curve svg{position:absolute;inset:0;width:100%;height:100%}
+.bands{display:flex;gap:4px}
+.band{flex:1;height:26px;border-radius:5px;border:1px solid transparent;background:var(--b);cursor:pointer;padding:0}
+.band.on{border-color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.wheels{display:flex;gap:10px}
+.wheel{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.wheel .disc{width:100%;aspect-ratio:1;border-radius:50%;position:relative;background:conic-gradient(#e05454,#e0c454,#63d17a,#57c9d4,#5b7fe0,#c25fd4,#e05454);box-shadow:inset 0 0 18px 12px var(--surface-tile-1)}
+.wheel .disc::after{content:'';position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.wheel .nm{font-size:11px;text-align:center;line-height:1.25}
+.wheel .nm em{display:block;font-style:normal;font-size:10px;color:var(--ink-on-dark-muted)}
+.pick-btn{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
+.pick-btn svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wide-btn.danger{background:rgba(135,15,19,.16);border-color:rgba(135,15,19,.5)}
 
 .autoenhance{height:34px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:var(--weight-semibold)}
 .autoenhance:hover{background:rgba(255,255,255,.08)}
@@ -411,7 +433,34 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
         </div>
       </div>
 
-      <div class="tp-panel" data-panel="crop"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Crop &amp; straighten tools live here.</p></div>
+      <div class="tp-panel" data-panel="crop">
+<div class="grp" data-fxsec="crop">
+  <div class="grp-hd"><span class="fieldlabel">Transform</span><span class="rst">Reset</span></div>
+  <div class="grp-bd">
+    <div class="subhead">Aspect ratio</div>
+    <div><span class="fieldlabel">Aspect</span></div>
+    <div class="chiprow">
+      <button class="chip">As shot</button><button class="chip on">Free</button><button class="chip">Custom</button>
+      <button class="chip">1:1 Square</button><button class="chip">3:2</button><button class="chip">4:3</button>
+      <button class="chip">5:4</button><button class="chip">7:5</button><button class="chip">16:9 Widescreen</button>
+      <button class="chip">1.414:1 ISO A4</button><button class="chip">11:8.5 US Letter</button>
+    </div>
+    <div><span class="fieldlabel">Orientation</span><button class="wide-btn ghost">Swap portrait/landscape</button></div>
+    <div class="subhead">Transform</div>
+    <div class="iconrow">
+      <button class="ibtn2" title="Rotate left"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg></button>
+      <button class="ibtn2" title="Rotate right"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></button>
+      <button class="ibtn2" title="Flip horizontal"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3v18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
+      <button class="ibtn2" title="Flip vertical"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4"/></svg></button>
+    </div>
+    <div class="slider-row"><div class="sr-top"><span>Straighten</span><span class="sr-val">0</span></div><input type="range" min="-45" max="45" value="0"></div>
+    <button class="wide-btn ghost" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button>
+    <button class="wide-btn ghost">Set region…</button>
+    <div><span class="fieldlabel">Grid</span><button class="select-btn"><span>3×3 (Rule of thirds)</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+    <button class="wide-btn primary">Crop</button>
+  </div>
+</div>
+      </div>
       <div class="tp-panel" data-panel="detail">
 <div class="grp" data-fxsec="nr">
   <div class="grp-hd"><span class="fieldlabel">Noise reduction</span><span class="rst">Reset</span></div>
@@ -429,7 +478,33 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
   <div class="grp-bd"><p class="hint">Recovers real detail lost to lens/sensor blur, instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</p><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">20</span></div><input type="range" min="0" max="100" value="20"></div></div>
 </div>
       </div>
-      <div class="tp-panel" data-panel="color"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Color grading tools live here.</p></div>
+      <div class="tp-panel" data-panel="color">
+<div class="grp off" data-fxsec="curves">
+  <div class="grp-hd"><span class="fieldlabel">Tone curve</span><span class="rst">Reset <i>|</i> All</span><button class="sw" aria-label="Tone curve off"></button></div>
+  <div class="grp-bd"><div class="seg"><button class="on">Point</button><button class="">Parametric</button></div><div class="seg"><button class="on">RGB</button><button class="">R</button><button class="">G</button><button class="">B</button></div><div class="curve"><svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" stroke="rgba(255,255,255,.06)" stroke-width=".6" fill="none"/>
+              <path d="M0 100 L100 0" stroke="rgba(255,255,255,.14)" stroke-width=".8" fill="none"/>
+              <path d="M0 100 C30 78 62 30 100 0" stroke="#fff" stroke-width="1.6" fill="none" vector-effect="non-scaling-stroke"/>
+              <circle cx="32" cy="74" r="2.6" fill="#fff"/><circle cx="68" cy="28" r="2.6" fill="#fff"/>
+            </svg></div></div>
+</div>
+<div class="grp off" data-fxsec="hsl">
+  <div class="grp-hd"><span class="fieldlabel">Color mixer</span><span class="rst">Reset <i>|</i> All</span><button class="sw" aria-label="Color mixer off"></button></div>
+  <div class="grp-bd"><div class="bands"><button class="band on" style="--b:#ff5b5b" title="Red" aria-label="Red"></button><button class="band" style="--b:#ff9f43" title="Orange" aria-label="Orange"></button><button class="band" style="--b:#ffd43b" title="Yellow" aria-label="Yellow"></button><button class="band" style="--b:#51cf66" title="Green" aria-label="Green"></button><button class="band" style="--b:#3bc9db" title="Aqua" aria-label="Aqua"></button><button class="band" style="--b:#4d8bff" title="Blue" aria-label="Blue"></button><button class="band" style="--b:#9775fa" title="Purple" aria-label="Purple"></button><button class="band" style="--b:#f06595" title="Magenta" aria-label="Magenta"></button></div><div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div></div>
+</div>
+<div class="grp off" data-fxsec="pointcolor">
+  <div class="grp-hd"><span class="fieldlabel">Point color</span><span class="rst">Reset <i>|</i> All</span><button class="sw" aria-label="Point color off"></button></div>
+  <div class="grp-bd"><button class="pick-btn"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Pick from photo <button class="info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button></button><div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Range</span><span class="sr-val">35</span></div><input type="range" min="0" max="100" value="35"></div><button class="wide-btn danger">Delete point</button></div>
+</div>
+<div class="grp off" data-fxsec="wheels">
+  <div class="grp-hd"><span class="fieldlabel">Colour wheels</span><button class="sw" aria-label="Colour wheels off"></button></div>
+  <div class="grp-bd"><div class="wheels">
+            <div class="wheel"><div class="disc"></div><div class="nm">Shadows<em>Lift</em></div></div>
+            <div class="wheel"><div class="disc"></div><div class="nm">Midtones<em>Gamma</em></div></div>
+            <div class="wheel"><div class="disc"></div><div class="nm">Highlights<em>Gain</em></div></div>
+          </div><div class="slider-row"><div class="sr-top"><span>Shadow brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Midtone brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Highlight brightness</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div></div>
+</div>
+      </div>
       <div class="tp-panel" data-panel="retouch">
         <div class="grp off">
           <div class="grp-hd"><span class="fieldlabel">Retouch</span><span class="rst">Reset</span><button class="sw" aria-label="Retouch off"></button></div>
@@ -445,8 +520,53 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
         </div>
       </div>
       <div class="tp-panel" data-panel="masks"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Masking tools live here.</p></div>
-      <div class="tp-panel" data-panel="film"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Film emulation tools live here.</p></div>
-      <div class="tp-panel" data-panel="frame"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Frame &amp; border tools live here.</p></div>
+      <div class="tp-panel" data-panel="film">
+<div class="grp off" data-fxsec="grain">
+  <div class="grp-hd"><span class="fieldlabel">Film grain</span><span class="rst">Reset</span><button class="sw" aria-label="Film grain off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">30</span></div><input type="range" min="0" max="100" value="30"></div><div><span class="fieldlabel">Film format</span><button class="select-btn"><span>65mm — fine</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div class="slider-row"><div class="sr-top"><span>Size</span><span class="sr-val">3</span></div><input type="range" min="1" max="20" value="3"></div><div class="slider-row"><div class="sr-top"><span>Grain motion</span><span class="sr-val">75</span></div><input type="range" min="0" max="100" value="75"></div><div class="slider-row"><div class="sr-top"><span>Gate weave</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Film breath</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div></div>
+</div>
+<div class="grp off" data-fxsec="hal">
+  <div class="grp-hd"><span class="fieldlabel">Halation</span><span class="rst">Reset</span><button class="sw" aria-label="Halation off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">70</span></div><input type="range" min="0" max="100" value="70"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">6</span></div><input type="range" min="2" max="40" value="6"></div><div class="slider-row"><div class="sr-top"><span>Shadow protect <button class="info-i" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behaviour.">i</button></span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="cb-row"><button class="sw"></button><span>White glow</span><button class="info-i" title="Neutral white halation instead of the warm film glow — best for black-and-white photos.">i</button></div><div class="cb-row"><button class="sw"></button><span>No remjet</span><button class="info-i" title="Film with no anti-halation backing — much stronger, bloomier halos with a yellow to orange to red edge.">i</button></div><div class="cb-row"><button class="sw"></button><span>Extreme</span><button class="info-i" title="The no-remjet glow pushed roughly 5-6x stronger, for a heavy stylised bloom. Implies No remjet.">i</button></div></div>
+</div>
+<div class="grp off" data-fxsec="bloom">
+  <div class="grp-hd"><span class="fieldlabel">Bloom</span><span class="rst">Reset</span><button class="sw" aria-label="Bloom off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">40</span></div><input type="range" min="0" max="100" value="40"></div><div class="slider-row"><div class="sr-top"><span>Threshold</span><span class="sr-val">10</span></div><input type="range" min="2" max="60" value="10"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">12</span></div><input type="range" min="2" max="50" value="12"></div></div>
+</div>
+<div class="grp off" data-fxsec="art">
+  <div class="grp-hd"><span class="fieldlabel">Film artifacts</span><span class="rst">Reset</span><button class="sw" aria-label="Film artifacts off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Dust</span><span class="sr-val">30</span></div><input type="range" min="0" max="100" value="30"></div><div class="slider-row"><div class="sr-top"><span>Scratches</span><span class="sr-val">20</span></div><input type="range" min="0" max="100" value="20"></div><div class="slider-row"><div class="sr-top"><span>Light leak</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div><span class="fieldlabel">Dust colour</span><div class="seg"><button class="on">Both</button><button class="">Black</button><button class="">White</button></div></div><button class="wide-btn"><svg viewBox="0 0 24 24" stroke-width="2" fill="none"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>Re-roll</button></div>
+</div>
+<div class="grp off" data-fxsec="vig">
+  <div class="grp-hd"><span class="fieldlabel">Vignette</span><span class="rst">Reset</span><button class="sw" aria-label="Vignette off"></button></div>
+  <div class="grp-bd"><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">50</span></div><input type="range" min="0" max="100" value="50"></div></div>
+</div>
+      </div>
+      <div class="tp-panel" data-panel="frame">
+<div class="grp off" data-fxsec="borders">
+  <div class="grp-hd"><span class="fieldlabel">Border</span><span class="rst">Reset</span><button class="sw" aria-label="Border off"></button></div>
+  <div class="grp-bd"><div class="swatch-row"><span class="swatch" style="background:#000000"></span><span>Inner colour</span><span class="hex">#000000</span></div><div class="slider-row"><div class="sr-top"><span>Inner thickness</span><span class="sr-val">1</span></div><input type="range" min="0" max="10" value="1"></div><div class="swatch-row"><span class="swatch" style="background:#ffffff"></span><span>Outer colour</span><span class="hex">#FFFFFF</span></div><div class="slider-row"><div class="sr-top"><span>Outer thickness</span><span class="sr-val">2</span></div><input type="range" min="0" max="10" value="2"></div><div><span class="fieldlabel">Style</span><button class="select-btn"><span>None</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div><span class="fieldlabel">Edge text</span><input class="txt" value="" placeholder="e.g. KODAK PORTRA 400   12A"></div></div>
+</div>
+<div class="grp off" data-fxsec="canvas">
+  <div class="grp-hd"><span class="fieldlabel">Canvas</span><span class="rst">Reset</span><button class="sw" aria-label="Canvas off"></button></div>
+  <div class="grp-bd"><div class="rlist"><div class="rrow sel"><span class="rtick"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+      <span class="rlb">Fit</span><span class="rval">no matte</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">1:1</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">4:5</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">3:4</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">4:3</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">9:16</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">16:9</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">3:2</span></div><div class="rrow"><span class="rtick"></span>
+      <span class="rlb">2:3</span></div></div><div class="slider-row"><div class="sr-top"><span>Zoom</span><span class="sr-val">100</span></div><input type="range" min="50" max="150" value="100"></div><div><span class="fieldlabel">Background</span><div class="swatchgrid">
+              <button class="chipsw" style="background:#000"></button><button class="chipsw" style="background:#fff"></button>
+              <button class="chipsw" style="background:#141414"></button><button class="chipsw" style="background:#f5f0e8"></button>
+              <button class="chipsw" style="background:#d4903a"></button><button class="chipsw" style="background:#4a5d73"></button>
+              <button class="chipsw" style="background:#7a3b3b"></button>
+              <button class="chipsw blur" title="Blurred photo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z"/></svg></button>
+            </div></div><div class="swatch-row"><span class="swatch" style="background:#000000"></span><span>Custom colour</span><span class="hex">#000000</span></div></div>
+</div>
+      </div>
       <div class="tp-panel" data-panel="export"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Export settings live here.</p></div>
       <div class="tp-panel" data-panel="info"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Photo info &amp; EXIF live here.</p></div>
 

@@ -498,6 +498,69 @@
       "check": "editor_wireframe_behaviour.mjs: frame-border-color-order, frame-border-reset-colors",
       "note": "Frame groups two pre-existing app sections (borders, canvas). Borders section restructured per the proposal: title renamed Borders->Border; the two mono-caps sub-headings ('Inner border'/'Outer border') and the standalone hint paragraph (sprocket-accuracy + Load-frame caveat) are dropped from the proposal's layout — the hint's real content is preserved as a fx-info-i tooltip on the Style field rather than silently deleted, since the proposal itself gives no equivalent for it (unlike DT1/F1 where the proposal's own info-i was just copied). Row order swapped to colour-then-thickness per border (was thickness-then-colour) to match the proposal exactly; real ids/values (cl-b1 #000000, sl-b1-t 1, cl-b2 #ffffff, sl-b2-t 2, sel-film-frame, in-frame-edge) all verified against chromasmith-22.html and preserved verbatim. Real bug found and fixed while exposing this section's header Reset: fxResetSection() only ever reset sliders and toggles ([id^=\"sl-\"]/[id^=\"tg-\"]) since every earlier section using it was slider/toggle-only — Borders is the first with a colour input (cl-b1/cl-b2), so Reset would previously have restored thickness while silently leaving a changed border colour untouched. Extended the generic reset to also walk input[type=color][id^=\"cl-\"] against _fxPristineDefault.colors. Known gap (not fixed this pass, tracked as R5 below): changing ONLY a border colour (no slider touch) does not mark .fx-mod on any row, so the header Reset button never becomes visible for a colour-only edit — fxMarkModifiedSliders only tracks _FX_SNAP_SLIDERS, not _FX_SNAP_COLORS. Canvas section left structurally as-is this pass: its aspect-ratio picker is a chip row (cvBuildChips/#cv-ar-chips), while the proposal shows a checklist-style .rlist — a real UI redesign, not a markup move, and Crop's ratio list was already corrected once this session after being drawn from a wrong reference screenshot (see CLAUDE.md's editor-redesign lessons), so this was deferred rather than risked without a fresh design review. Tracked as R6 below."
     },
+    "T1": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[found while implementing 6 panels in one session, 2026-09-10] test/editor_wireframe_inventory.mjs's ZONES list only has a structural atom-count entry for the 'looks' panel — Retouch/Detail/Film/Frame/Crop/Color have none",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A control silently dropped inside any of these 6 panels during a future edit would pass editor:inventory clean; only a hand-written behaviour test for that exact control would catch it. Add one ZONES entry per implemented panel ({ label: '<panel>-panel', wf: '.tp-panel[data-panel=<panel>]', app: '.fx-panel' } scoped to the panel's member sections) so atom-count drift is caught generically, the same way 'looks' already is."
+    },
+    "T2": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[found while fixing the deconv/wheels homeless-section bugs, 2026-09-10] nothing cross-checks _FX_SNAP_SLIDERS/_FX_SNAP_COLORS/_FX_SNAP_TOGGLES (chromasmith-22.html) against the DOM's actual sl-/cl-/tg- ids",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "deconv-amt/deconv-rad sat unregistered in _FX_SNAP_SLIDERS for a long time with zero test failure anywhere, silently breaking undo, session persistence, and reset-visibility (fixed this session). A script that walks every .fx-ctrl[data-fxsec] for input[id^=sl-]/input[type=color][id^=cl-]/[id^=tg-] and asserts each appears in the matching _FX_SNAP_* list (or an explicit allowlist of deliberate exceptions) would have caught this the day it was introduced instead of an unknown time later."
+    },
+    "T3": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[found while implementing the Detail/Film/Frame panels, 2026-09-10] fxMarkModifiedSliders()/.fx-mod (chromasmith-22.html), which gates every header Reset button's visibility, only ever tracks _FX_SNAP_SLIDERS — no colour inputs, no toggles-as-content",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Concretely: R5 (Borders header Reset never becomes visible from a colour-only edit, since cl-b1/cl-b2 aren't tracked). No tool asserts the general invariant 'every control type that can appear in a resettable .fx-ctrl participates in its own changed-state signal' — it can only be checked per-section by hand, the way R5 was found. Worth its own gate once a second colour-bearing section exists."
+    },
+    "T4": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[found while implementing the Color panel, 2026-09-10] neither editor:inventory nor editor:wireframe-diff parses generated/authored markup for HTML validity",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "test/panel_proposals.mjs's Point Color proposal literally nested a <button> inside another <button> (invalid HTML — the outer button silently closes early under real parsing) and no gate caught it; it was found by eye (R8, fixed in the real implementation as CO1). A cheap DOMParser-based check for interactive-inside-interactive nesting, run over both panel_proposals.mjs's raw HTML and chromasmith-22.html's own .fx-ctrl markup, would catch this class of defect for free."
+    },
+    "T5": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[found while implementing 6 panels in one session, 2026-09-10] the 'never invent a colour' rule (docs/editor-redesign-plan.md §3) is enforced entirely by manual re-reading of DESIGN 2.md before every colour choice, not by any script",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "editor:wireframe-diff only diffs computed style on the specific elements named in PAIRS, so a hard-coded hex anywhere ELSE in chromasmith-22.html has no gate at all — every invented-colour bug this project has hit (HSL bands, curve-channel dots, danger-button tint, Retouch's .bpri, Frame Border's invented #101014) was caught by a human re-audit, never a tool. A static-analysis pass over chromasmith-22.html's inline style/CSS for hex/rgb literals not present in :root's token list (or an explicit verbatim-copy allowlist) would catch a future violation automatically instead of depending on the next reviewer's diligence."
+    },
+    "T6": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[re-confirmed while running the full behaviour suite after this session's 6-panel pass, 2026-09-10] editor:wireframe-diff's documented E7 flake (light-theme colour reads intermittently returning dark-theme values) is worked around by a 6x retry, but the plan doc itself says the CSS-transition-race root cause is 'not proven live'",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "This is a live blind spot, not a tolerated flake: a real light-theme colour regression that happens to fail all 6 retries would be caught, but the mechanism causing the FALSE positives has never been confirmed with a dedicated non-headless run, so nobody actually knows how close a real regression could get to looking like this flake before being missed. Needs the non-headless confirmation pass the plan already calls for."
+    },
+    "T7": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[found while writing/debugging this session's header-Reset behaviour tests, 2026-09-10] no shared test helper encapsulates fxMarkModifiedSliders()'s 120ms debounce before a header Reset button becomes clickable — several tests raced it and flaked (F1's vig/bloom test, DT1's nr/deconv tests, FR1's border-colour test), each fixed individually with an ad-hoc page.waitForTimeout(200)",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A reusable waitForFxMod(page, rowSelector) helper in test/wireframe_diff_lib.mjs (or a new shared test-utils file) that polls the row's classList instead of a fixed timeout would be both faster and immune to future debounce-duration changes — the ad-hoc fixed waits are a stopgap, not a real fix for the underlying test-authoring gap."
+    },
     "CO1": {
       "category": "panel-design",
       "status": "fixed",
