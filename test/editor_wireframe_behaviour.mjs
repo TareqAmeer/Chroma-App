@@ -746,6 +746,44 @@ test.describe('masks panel (MA1) — baseline, pre-redesign', () => {
   });
 });
 
+// Point Color (#pc-list) and Export Styles (#style-list) — T29 (editor_ux_spec.json,
+// 2026-09-10): editor_coverage.mjs's structural fully-dynamic-panel detector found these two the
+// same way it found Masks — an empty list container built entirely by JS, so nothing under it can
+// be structurally inventoried and a behaviour test is the ONLY safety net. Each test proves the
+// container's item count goes up (add) and back down (delete), same shape as the masks tests
+// above, so `editor_coverage.mjs`'s smoke-test check (`#container...toHaveCount` at least twice)
+// picks them up as covered.
+test.describe('point color panel — dynamic #pc-list (T29)', () => {
+  test('picking a point color from the photo adds a chip, and Delete point removes it', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="color"]');
+    await page.click('#tg-pointcolor');
+    const before = await page.locator('#pc-list button').count();
+    await page.click('#btn-pc-eye');
+    await page.locator('#fx-canvas').click({ position: { x: 60, y: 60 } });
+    await expect(page.locator('#pc-list button')).toHaveCount(before + 1);
+
+    await page.click('#pc-list button >> nth=0');
+    await page.click('button:has-text("Delete point")');
+    await expect(page.locator('#pc-list button')).toHaveCount(before);
+  });
+});
+
+test.describe('export panel — dynamic #style-list (T29)', () => {
+  test('Save as Style… adds an entry, deleting it removes it', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="export"]');
+    const before = await page.locator('#style-list .btn-row').count();
+
+    await page.click('button:has-text("Save as Style…")');
+    await page.fill('#fx-ask-input', 'T29 smoke test style');
+    await page.click('#fx-ask-ok');
+    await expect(page.locator('#style-list .btn-row')).toHaveCount(before + 1);
+
+    await page.click('#style-list button[onclick*="styleDelete"]');
+    await page.click('#fx-confirm-ok');
+    await expect(page.locator('#style-list .btn-row')).toHaveCount(before);
+  });
+});
+
 // ════════════════════════════════════════════════════════════════════════════════════════════
 // OTHER DROPDOWNS / POPOVERS — every remaining "click a control, something floats open" surface
 // that isn't the settings menu: the canvas-background right-click context menu (desktop mode,
