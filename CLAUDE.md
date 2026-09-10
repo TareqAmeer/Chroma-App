@@ -89,8 +89,9 @@ Deploy the folder as-is to GitHub Pages or any static host.
   `<head>` script) enables isolation client-side and reloads once on first visit. Everything
   else works without it.
 - **Build stamp:** `chromasmith-22.html` has `const BUILD='YYYY-MM-DDx'` near the top of its
-  `<script>`, shown in the header + startup log. **Bump it in every session that edits the
-  file** so users can spot a stale Pages/Safari cache. Current: `2026-08-14a`.
+  `<script>`, shown in the header + startup log, so users can spot a stale Pages/Safari cache.
+  A `PostToolUse` hook (`.claude/settings.json`) auto-bumps it to today's date on any Edit/Write
+  to the file — nothing to remember manually.
 - ⚠️ **Watch the payload.** "Single-file" is about the app CODE, not about inlining bulk data.
   The preset library grew 11 → 113 as base64 string literals and took the file to **17.7 MB
   (10.2 MB gzipped)** — parsed in full on every web cold load, every iOS launch and every

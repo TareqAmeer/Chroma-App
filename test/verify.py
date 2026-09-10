@@ -41,15 +41,14 @@ FAST_GATES = [
     ("library:responsive-test", ["node", "test/library_responsive_qa.mjs"]),
     ("mask:test", ["node", "test/mask_raster.mjs"]),
 ]
+# Delegates to editor_gates.mjs instead of listing individual gates here. This used to hand-list
+# a subset (wireframe-diff/inventory/responsive/snap-check/html-check) that silently drifted from
+# editor_gates.mjs's own GATES array as new gates were added there (coverage, self-reschedule-
+# check, native-gate-check were all missing from this file) — one real gate set, not two that can
+# diverge. editor_gates.mjs already rebuilds desktop/dist/ itself, so no separate --no-build
+# plumbing is needed here.
 EDITOR_GATES = [
-    ("editor:wireframe-test", ["node", "test/editor_wireframe_diff.mjs"]),
-    ("editor:inventory", ["node", "test/editor_wireframe_inventory.mjs"]),
-    ("editor:responsive-test", ["node", "test/editor_responsive_qa.mjs"]),
-    # snap-check/html-check existed as npm scripts (and ran via editor:gates/npm test) but were
-    # never reachable from this wrapper's --editor flag — added so `verify.py --editor` actually
-    # covers the same gate set as `npm run editor:gates`, not a subset of it.
-    ("editor:snap-check", ["node", "test/editor_snap_lists_check.mjs"]),
-    ("editor:html-check", ["node", "test/editor_html_validity_check.mjs"]),
+    ("editor:gates", ["node", "test/editor_gates.mjs"]),
 ]
 FULL_GATE = ("behaviour:test", ["npx", "playwright", "test", "--config=playwright.config.mjs"])
 

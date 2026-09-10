@@ -89,7 +89,19 @@ async function main() {
   try {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
     page.on('pageerror', (e) => console.error('  [pageerror]', e.message));
-    page.on('console', (msg) => { if (msg.type() === 'error') console.error('  [console.error]', msg.text()); });
+    // ⚠️ GLSL compile/link failures (CLAUDE.md's "quieter" bug class — a reserved-word uniform
+    // name or similar silently kills one shader program while the page renders fine and stays
+    // interactive, so nothing here goes blank) used to only be printed, never failed — this
+    // harness "watching for [console.error] GLSL compile error" was advice for a human reading
+    // the log, not an actual gate. glslErrors below makes it one: any matching console.error now
+    // fails the run after the current fixture x recipe combo finishes, same as a real render bug.
+    const glslErrors = [];
+    page.on('console', (msg) => {
+      if (msg.type() !== 'error') return;
+      const text = msg.text();
+      console.error('  [console.error]', text);
+      if (/GLSL compile error|LINK FAILED|SHADER_COMPILE|program.*link/i.test(text)) glslErrors.push(text);
+    });
 
     // Determinism fix: the FX render pipeline calls Math.random() directly for the grain
     // uniform whenever processToCanvas()/render() isn't given an explicit opts.seed (see
@@ -248,6 +260,9 @@ async function main() {
         console.log(`ok (${path.relative(ROOT, outPath)})`);
         results.push(outName);
       }
+    }
+    if (glslErrors.length) {
+      throw new Error(`GLSL compile/link error(s) during render — a shader program silently failed:\n  ` + glslErrors.join('\n  '));
     }
   } finally {
     await browser.close();

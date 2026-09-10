@@ -63,7 +63,12 @@ jobs:
         run: bash build-desktop.sh
 
       - name: Fast gates (lint, formats, masks, perf, UI audit, Library perf, Editor gates)
-        run: npm test
+        # test:ui, not test — `npm test`'s scorecard step needs numpy/Pillow/scipy (calib/requirements.txt),
+        # which this job never installs, so it always died here before any UI check ran (0 green runs on this
+        # workflow, confirmed via `gh run list`). The export+scorecard half is already covered by
+        # export-gate.yml on ubuntu. test:ui also runs lint:library-content/wireframe:test/
+        # library:responsive-test, which existed only in test/verify.py and githooks/pre-commit — never in CI.
+        run: npm run test:ui
 
       - name: Behaviour suite (Editor + Library click-through tests)
         run: npx playwright test --config=playwright.config.mjs
