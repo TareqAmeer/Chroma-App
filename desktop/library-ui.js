@@ -826,7 +826,15 @@
        5-row full-mode one: a stale 6-row override here once put #lib-main in the 0 track and
        collapsed the whole photo grid). :not(.full) scoping keeps the two modes from crossing. */
     #lib-overlay.tree-collapsed:not(.full){grid-template-rows:auto auto auto 0 1fr 28px}
-    #lib-overlay.tree-collapsed #lib-side{display:none}
+    /* :not(.full) rule above already zeroes the docked row when collapsed — this display:none was
+       previously UNSCOPED, so a "Show sidebar" preference toggled off in full mode (localStorage
+       chromasmith_lib_sidebar=collapsed) also hid #lib-side while DOCKED, where it no longer holds
+       the collapsible folder tree at all, only the always-visible Library/Develop tab pair (see the
+       .lib-fullview-only comment below) — the docked filmstrip's tabs (and with them the filmstrip
+       itself, both live in #lib-side/#lib-grid) silently disappeared the moment a photo was opened,
+       reading as "the sidebar closes when you open an image". Scope to .full, where tree-collapsed
+       actually means something. */
+    #lib-overlay.full.tree-collapsed #lib-side{display:none}
     #lib-tree-toggle.on{border-color:var(--acc2);color:var(--acc2)}
     @keyframes lib-lr-slide{from{transform:translateX(-100%)}to{transform:translateX(350%)}}
     #lib-lr-chip{display:none;align-items:center;gap:6px;margin-left:auto;font-size:10px;color:var(--ok,#59c98a)}
@@ -5800,6 +5808,12 @@
     syncDockPadding();
     syncListViewAvailability(); // HANDOVER §3.12 — docked-ness just changed, re-sync the list button
     syncSideTabs(); // the Library/Develop tab pair's active state was static — see that function
+    // renderGrid() itself detects docked vs. full (the `docked` const inside it) and re-lays-out
+    // #lib-grid accordingly — but nothing forced a rebuild when THIS toggle is what changes that
+    // detection. Without it, #lib-grid kept whatever markup/columns it had from the mode you were
+    // just in (often empty, if the grid never rendered while full-view was still loading), so the
+    // docked filmstrip could read as "no photos in this folder" for a folder that plainly has some.
+    renderGrid();
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
   // The Library/Develop tabs (#lib-side header) previously had a hardcoded `on` class on Library
