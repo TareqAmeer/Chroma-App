@@ -450,7 +450,8 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
    internal scroll for the rest, matching the wireframe's own .preset-grid (Editor (Developer)
    View.dc.html:149 — 172px for its narrower panel/tile size; this panel's tiles measure ~96px
    square at the ~300px panel width, so 2*96+6px gap ≈ 198px here). */
-.looks-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:198px;overflow-y:auto}
+.looks-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:198px;overflow-y:auto;outline:none}
+.look-cell.kbd-focus{box-shadow:0 0 0 2px var(--acc)}
 /* 3.4.9: collapse/expand chevron for the preset filter+grid specifically (Preset section only —
    independent of the whole panel's own section-level collapse, fxSecToggle further down). */
 .fx-preset-chev{display:inline-flex;width:14px;height:14px;color:var(--mut);transition:transform .15s}
@@ -962,13 +963,28 @@ body.deskx header,body.deskx .tabs,body.deskx #fx-filmstrip{display:none}
 body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
 body.deskx.fx-deskb main{overflow:hidden;height:100vh}
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 100px}
-body.deskx #fx-deskbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:3000;height:var(--deskx-topbar-h);
+/* 2026-09-10 (3.1.9/3.1.10): a real 3-column grid — Editor (Developer) View.dc.html's own
+   .topbar is 1fr auto auto 1fr-ish grid, not a flex row with the title floated on top. Grid
+   tracks physically cannot overlap, so this fixes the collision class rather than just today's
+   specific one (see the long comment on #fx-deskbar-left/-right in the HTML for the history).
+   Only overridden here, under body.deskx — #fx-deskbar-title's own base rule (above) keeps its
+   position:absolute centering for the older body.fx-deskb-only flex layout, untouched. */
+body.deskx #fx-deskbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:8px;
+  position:fixed;top:0;left:0;right:0;z-index:3000;height:var(--deskx-topbar-h);
   margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
   background:var(--glass-bg);
   /* Only the bottom edge has real width, but with border-color unset on the other three sides
      it computes to currentColor, not var(--bdr-panel) — see the identical #lib-overlay fix and
      its comment (library-ui.js). Set explicitly so getComputedStyle().borderColor is uniform. */
   border-color:var(--bdr-panel)}
+body.deskx #fx-deskbar-left{display:flex;align-items:center;gap:8px;grid-column:1;justify-self:start;min-width:0}
+body.deskx #fx-deskbar-right{display:flex;align-items:center;gap:8px;grid-column:3;justify-self:end;min-width:0}
+/* The title's own base rule (above #fx-deskbar-title) centers it by ABSOLUTE positioning against
+   the bar — correct for the older flex layout, but that's exactly the mechanism that could
+   overlap its neighbours instead of being physically kept apart from them. Under the grid, it's
+   just the middle column's content: back to normal flow, centered in its own track instead. */
+body.deskx #fx-deskbar-title{position:static;left:auto;top:auto;transform:none;pointer-events:auto;
+  grid-column:2;justify-self:center}
 /* The full-window Library (library-ui.js's #lib-overlay.full) is a genuine takeover — its own
    top bar already reserves the same traffic-light drag space #fx-deskbar does — so this editor-
    only bar (undo/redo, the current photo's title, All FX, Export) would just be a second,
@@ -1532,58 +1548,70 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
 <div class="panel active" id="panel-fx">
   <!-- DESKTOP persistent quick-access bar -->
   <div id="fx-deskbar">
-    <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
-    <!-- 3.1.1: undo/redo used to be two bare .fx-db buttons, reading as unaligned with the rest
-         of the bar's filled-tile buttons — wrapped in a bordered pill matching the wireframe's
-         own .undogrp (Editor (Developer) View.dc.html:41-43): one outer border, square inner
-         corners, a hairline divider between the two. -->
-    <div class="fx-undogrp">
-      <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndoBtnClick(event)" onmousedown="fxUndoMousedown(event)" onmouseup="fxUndoMouseup()" onmouseleave="fxUndoMouseup()" title="Undo (⌘Z) · hold for edit history · shift-click to reset"><span class="fx-db-ic" id="db-undo"></span></button>
-      <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+    <!-- 2026-09-10 (3.1.9/3.1.10): #fx-deskbar-left/-right exist so body.deskx can lay the bar
+         out as a real 3-column grid (1fr auto 1fr — Editor (Developer) View.dc.html's own
+         .topbar) instead of one flex row with the title absolutely centred on top of it. The
+         centred title only ever LOOKED right by coincidence, whenever the two side clusters
+         happened to weigh about the same — shrinking the left cluster and moving Export/All FX
+         (this file's own history: 045993e removed 6 always-visible buttons, 6627253 removed 4
+         more) made the actual overlap LESS likely, but never addressed the root cause, and
+         editor_responsive_qa.mjs's OVERLAP check still failed it at plain 1440×900 with nothing
+         narrow or unusual about the window. Grid columns can't overlap by construction, so this
+         fixes the class of bug, not just today's specific collision. -->
+    <div id="fx-deskbar-left">
+      <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
+      <!-- 3.1.1: undo/redo used to be two bare .fx-db buttons, reading as unaligned with the rest
+           of the bar's filled-tile buttons — wrapped in a bordered pill matching the wireframe's
+           own .undogrp (Editor (Developer) View.dc.html:41-43): one outer border, square inner
+           corners, a hairline divider between the two. -->
+      <div class="fx-undogrp">
+        <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndoBtnClick(event)" onmousedown="fxUndoMousedown(event)" onmouseup="fxUndoMouseup()" onmouseleave="fxUndoMouseup()" title="Undo (⌘Z) · hold for edit history · shift-click to reset"><span class="fx-db-ic" id="db-undo"></span></button>
+        <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+      </div>
+      <div style="position:relative;display:inline-flex" id="db-history-wrap">
+        <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit &amp; export history for this photo" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
+      </div>
     </div>
-    <div style="position:relative;display:inline-flex" id="db-history-wrap">
-      <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit &amp; export history for this photo" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
-    </div>
-    <!-- The title used to need two flex:1 spacers to center itself in the space left over
-         between the two clusters — now redundant, it positions off #fx-deskbar directly (see
-         #fx-deskbar-title's own comment). "Reset all edits" moved into the ⋯ overflow menu
-         (ovfBuild()) — the one genuinely rare, semi-destructive action in the always-visible
-         cluster; Undo/Redo already cover the common "I changed my mind" case. -->
+    <!-- "Reset all edits" moved into the ⋯ overflow menu (ovfBuild()) — the one genuinely rare,
+         semi-destructive action in the always-visible cluster; Undo/Redo already cover the
+         common "I changed my mind" case. -->
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
-    <div id="fx-deskbar-tools"></div>
-    <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button>
-    <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
-         window.chromasmithEditInPath and un-hides this) — writes the render straight back over
-         the file Lightroom handed us instead of the normal share-sheet save. -->
-    <button class="fx-db fx-db-pri" id="db-save-lr" style="display:none" onclick="chromasmithSaveToLightroom()" title="Save back to the file Lightroom handed off — Lightroom will re-import and sync it"><span class="fx-db-ic" id="db-export-lr"></span>Save to Lightroom</button>
-    <button class="fx-db fx-db-pri" id="btn-export-db" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span><span class="fx-db-lb">Export</span></button>
-    <!-- 2026-09-09: Tools + View + ⋯ merged into ONE settings menu, docked last (far right) —
-         matches the Library top bar's own …zoom → flags → All FX → Export → gear order. Each
-         inner div below is still built/owned by its original function (toolsBuild/viewMenuBuild/
-         ovfBuild) — only the trigger button and outer dropdown are new; see settingsBuild(). -->
-    <div id="fx-settings">
-      <button class="fx-db fx-db-icon" onclick="settingsToggle(event)" title="Settings — transform, edit settings, view, appearance"><span class="fx-db-ic" id="db-settings"></span></button>
-      <div id="fx-settings-menu">
-        <div id="fx-tools-menu"></div>
-        <div class="fx-ovf-sep"></div>
-        <div id="fx-view-menu"></div>
-        <div class="fx-ovf-sep"></div>
-        <!-- 2026-09-09: split-view and edit history used to be a topbar icon each, opening a
-             floating popover anchored to that specific button (#fx-split-popover /
-             #fx-timeline-popover, still there for web/mobile mode — see the body.deskx hide
-             rules near .fx-zoom-ctrl). On desktop they're inline "submenus" here instead: the
-             settings dropdown already scrolls, so there's no separate floating layer or
-             viewport-clamping to get right, and settingsSplitBuild()/settingsHistoryBuild()
-             (called from settingsBuild(), same one-source-of-truth pattern as every other
-             section) render the exact same list-building code as the web popovers, just into a
-             plain block instead of a positioned one. -->
-        <div class="fx-ovf-grp-label">Compare</div>
-        <div id="fx-settings-split-list"></div>
-        <div class="fx-ovf-sep"></div>
-        <div class="fx-ovf-grp-label">Edit &amp; export history</div>
-        <div id="fx-settings-history-list" style="padding:0 8px 4px"></div>
-        <div class="fx-ovf-sep"></div>
-        <div id="fx-overflow-menu"></div>
+    <div id="fx-deskbar-right">
+      <div id="fx-deskbar-tools"></div>
+      <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button>
+      <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
+           window.chromasmithEditInPath and un-hides this) — writes the render straight back over
+           the file Lightroom handed us instead of the normal share-sheet save. -->
+      <button class="fx-db fx-db-pri" id="db-save-lr" style="display:none" onclick="chromasmithSaveToLightroom()" title="Save back to the file Lightroom handed off — Lightroom will re-import and sync it"><span class="fx-db-ic" id="db-export-lr"></span>Save to Lightroom</button>
+      <button class="fx-db fx-db-pri" id="btn-export-db" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span><span class="fx-db-lb">Export</span></button>
+      <!-- 2026-09-09: Tools + View + ⋯ merged into ONE settings menu, docked last (far right) —
+           matches the Library top bar's own …zoom → flags → All FX → Export → gear order. Each
+           inner div below is still built/owned by its original function (toolsBuild/viewMenuBuild/
+           ovfBuild) — only the trigger button and outer dropdown are new; see settingsBuild(). -->
+      <div id="fx-settings">
+        <button class="fx-db fx-db-icon" onclick="settingsToggle(event)" title="Settings — transform, edit settings, view, appearance"><span class="fx-db-ic" id="db-settings"></span></button>
+        <div id="fx-settings-menu">
+          <div id="fx-tools-menu"></div>
+          <div class="fx-ovf-sep"></div>
+          <div id="fx-view-menu"></div>
+          <div class="fx-ovf-sep"></div>
+          <!-- 2026-09-09: split-view and edit history used to be a topbar icon each, opening a
+               floating popover anchored to that specific button (#fx-split-popover /
+               #fx-timeline-popover, still there for web/mobile mode — see the body.deskx hide
+               rules near .fx-zoom-ctrl). On desktop they're inline "submenus" here instead: the
+               settings dropdown already scrolls, so there's no separate floating layer or
+               viewport-clamping to get right, and settingsSplitBuild()/settingsHistoryBuild()
+               (called from settingsBuild(), same one-source-of-truth pattern as every other
+               section) render the exact same list-building code as the web popovers, just into a
+               plain block instead of a positioned one. -->
+          <div class="fx-ovf-grp-label">Compare</div>
+          <div id="fx-settings-split-list"></div>
+          <div class="fx-ovf-sep"></div>
+          <div class="fx-ovf-grp-label">Edit &amp; export history</div>
+          <div id="fx-settings-history-list" style="padding:0 8px 4px"></div>
+          <div class="fx-ovf-sep"></div>
+          <div id="fx-overflow-menu"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1678,7 +1706,7 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
                    oninput="fxLookSearchChanged(this.value)" style="width:100%;margin-bottom:6px"
                    title="Filter the looks by name — matches letters in order, so &quot;p800&quot; finds Portra 800.">
             <div class="btn-row chip-tap" id="fx-looks-cats" style="margin-bottom:8px"></div>
-            <div class="looks-grid" id="fx-looks"></div>
+            <div class="looks-grid" id="fx-looks" tabindex="0"></div>
           </div>
         </div>
       </div>
@@ -4682,7 +4710,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-09d';
+const BUILD='2026-09-10a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -6560,13 +6588,10 @@ void main(){
   // convention for "this would clip") — verified in isolation (a synthetic WebGL2 program fed a
   // deliberately out-of-range vec3 through this exact branch) to actually zebra rather than emit
   // the clamped colour.
-  // ⚠️ KNOWN SCOPE LIMIT: the "lut" FBO defaults to an 8-bit RGBA texture, so basicAdjust/curves/
-  // masks clipping (e.g. a big Exposure push) is already hard-clamped by the GPU texture write
-  // BEFORE this shader ever reads it — invisible to this check by construction, not a bug here.
-  // Only clipping that originates AFTER that point (grain's unclamped addition, print-LUT output,
-  // stacked effects) is genuinely catchable this way. A future pass could force hdrIntermediate
-  // (RGBA16F) whenever this toggle is on to extend coverage upstream; not done here to keep this
-  // the "small, scoped" version rather than a step toward full ICC soft-proofing.
+  // render() now forces hdrIntermediate whenever opts.gamutWarn is set (see the _initBufs call
+  // site), so the "lut" FBO is RGBA16F while this toggle is on and basicAdjust/curves/masks
+  // clipping is caught here too, not just clipping introduced after the lut pass. Falls back to
+  // the old 8-bit-only scope silently on hardware without EXT_color_buffer_float (_hdrSupported()).
   if(gamutWarn>0.5&&(any(lessThan(res,vec3(0.0)))||any(greaterThan(res,vec3(1.0))))){
     float stripe=mod(floor((gl_FragCoord.x+gl_FragCoord.y)/4.0),2.0);
     o=vec4(vec3(stripe),1.0);return;
@@ -6906,7 +6931,12 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // forces the float chain + shoulder on its own — the manual P.tonemap flag stays available
     // for testing/demo purposes independent of real source data.
     const tonemapOn=P.tonemap||this.usingSceneLinear;
-    this._initBufs(w,h,gs,(opts&&opts.hdrIntermediate)||tonemapOn);
+    // 3.1.5 fix: the gamut-warning overlay reads the `lut` FBO after basicAdjust/curves/masks —
+    // if that FBO is 8-bit those stages' clipping is already GPU-clamped before the check ever
+    // runs, so the toggle could never catch anything but post-lut clipping. Force the float
+    // intermediate whenever gamutWarn is requested; _initBufs still falls back to RGBA8 on
+    // hardware without EXT_color_buffer_float, so this is a silent no-op there, not a crash.
+    this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn);
     const w2=this.w2,h2=this.h2;
     const iw2=1/w2,ih2=1/h2;          // texel step in the REDUCED-res glow buffers
     // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
@@ -7790,7 +7820,7 @@ function fxFullResPreviewToggle(){
 // Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no
 // backing-store change), so crossing the fxZoom>1 threshold needs an explicit re-render to
 // actually swap backing-store resolution — but not on every wheel/pinch tick (60+/s mid-gesture).
-let _fxZoomRenderTimer=null;
+let _fxZoomRenderTimer=null, _fxZoomInteractTimer=null;
 function _fxZoomRenderDebounced(){
   if(!fxFullResPreview)return;
   clearTimeout(_fxZoomRenderTimer);
@@ -15260,6 +15290,14 @@ function initZoomPan(){
   wrap.addEventListener('wheel',e=>{
     if(!fxWork||fxLoupe)return;        // loupe is a fixed 1:1 — scroll doesn't change its scale
     e.preventDefault();
+    // E1: a trackpad delivers wheel ticks in bursts with brief pauses between them, and each
+    // pause was long enough to let _fxZoomRenderDebounced's 90ms settle timer fire a full
+    // renderFullResCrop — so a single scroll gesture could trigger several expensive full-res
+    // renders instead of one. Mirror the slider path's _fxPreviewInteracting gate: stay
+    // "interacting" (cheap capped preview) for the whole burst, then render once for real.
+    _fxPreviewInteracting=true;
+    clearTimeout(_fxZoomInteractTimer);
+    _fxZoomInteractTimer=setTimeout(()=>{_fxPreviewInteracting=false;if(fxFullResPreview)renderPreview();},150);
     const r=wrap.getBoundingClientRect();
     const ox=(e.clientX-r.left)/r.width;
     const oy=(e.clientY-r.top)/r.height;
@@ -15285,6 +15323,7 @@ function initZoomPan(){
     if(_wbEyedropperActive||mskPaintMode||(!fxLoupe&&fxZoom===1))return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
+    _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
   });
   // Loupe pan used to call renderPreview() — a full re-render through the WHOLE effects
   // pipeline (LUT/HSL/curves/masks/halation's multi-pass blur/grain/artifacts) at full loupe
@@ -15316,7 +15355,9 @@ function initZoomPan(){
   });
   const pup=()=>{
     pd=null;zw.classList.remove('dragging');
+    _fxPreviewInteracting=false;
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';renderPreview();}
+    else if(fxFullResPreview)renderPreview();
   };
   zw.addEventListener('pointerup',pup);zw.addEventListener('pointercancel',pup);
   // Double-click to reset
@@ -15331,6 +15372,7 @@ function initZoomPan(){
       // paint/AI-scribble stroke on that first touch — discard it now that this is clearly a
       // 2-finger zoom, not a mask gesture.
       if(typeof window.chromasmithAbortMaskStroke==='function')window.chromasmithAbortMaskStroke();
+      _fxPreviewInteracting=true;  // E1: pinch never set this — see the wheel handler above
       const [t0,t1]=[e.touches[0],e.touches[1]];
       const dist=Math.hypot(t0.clientX-t1.clientX,t0.clientY-t1.clientY);
       const p0=_pt[t0.identifier]||{x:t0.clientX,y:t0.clientY};
@@ -15342,7 +15384,10 @@ function initZoomPan(){
     }
     [...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});
   },{passive:false});
-  wrap.addEventListener('touchend',e=>{[...e.changedTouches].forEach(t=>delete _pt[t.identifier]);},{passive:true});
+  wrap.addEventListener('touchend',e=>{
+    [...e.changedTouches].forEach(t=>delete _pt[t.identifier]);
+    if(e.touches.length<2){_fxPreviewInteracting=false;if(fxFullResPreview)renderPreview();}
+  },{passive:true});
 }
 
 // ── WB Eyedropper ──────────────────────────────────────────────────────────────
@@ -17861,8 +17906,7 @@ function buildLookGallery(){
     const cv=document.createElement('canvas');cv.width=w;cv.height=h;
     cell.appendChild(cv);
     const nm=document.createElement('div');nm.className='look-nm';nm.textContent=label;cell.appendChild(nm);
-    cell.onclick=()=>{const sel=document.getElementById('sel-lut');if(sel)sel.value=val;selectLUT(val);
-      host.querySelectorAll('.look-cell').forEach(c=>c.classList.remove('sel'));cell.classList.add('sel');};
+    cell.onclick=()=>{fxPickLookCell(cell,val);};
     host.appendChild(cell);
     cell._lookJob={val,cv};
     // ⚠️ observe AFTER appendChild — an unattached element never intersects anything, so
@@ -17871,6 +17915,46 @@ function buildLookGallery(){
   });
   if(io)buildLookGallery._reseed();              // paint whatever is already on screen, without waiting on the observer
   else pump();                                   // no IntersectionObserver at all: render them all, as before
+}
+// Shared by click and arrow-key nav so both paths apply the look + update .sel identically.
+function fxPickLookCell(cell,val){
+  const sel=document.getElementById('sel-lut');if(sel)sel.value=val;selectLUT(val);
+  const host=document.getElementById('fx-looks');
+  if(host)host.querySelectorAll('.look-cell').forEach(c=>c.classList.remove('sel'));
+  cell.classList.add('sel');
+}
+// 3.4.10: arrow keys move the preset selection through the live grid. The column count is
+// READ from the grid's own computed style every keypress (grid-template-columns token count)
+// rather than hardcoded — .looks-grid is 3 cols by default but 2 cols under .fx-deskb (CSS
+// above), and mobile/tablet widths could add more break points later; a hardcoded stride would
+// silently navigate diagonally the moment the CSS column count changes.
+function initLookGalleryKeyNav(){
+  const host=document.getElementById('fx-looks');if(!host||host._kbdWired)return;host._kbdWired=true;
+  const liveCols=()=>{
+    const tmpl=getComputedStyle(host).gridTemplateColumns.trim();
+    const n=tmpl?tmpl.split(/\s+/).length:0;
+    return n>0?n:1;
+  };
+  host.addEventListener('keydown',e=>{
+    if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter',' '].includes(e.key))return;
+    const cells=[...host.querySelectorAll('.look-cell')];if(!cells.length)return;
+    let idx=cells.findIndex(c=>c.classList.contains('kbd-focus'));
+    if(idx<0)idx=Math.max(0,cells.findIndex(c=>c.classList.contains('sel')));
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();const c=cells[idx];if(c)fxPickLookCell(c,c._lookJob?c._lookJob.val:'');return;}
+    e.preventDefault();
+    const cols=liveCols();
+    let next=idx;
+    if(e.key==='ArrowLeft')next=idx-1;
+    else if(e.key==='ArrowRight')next=idx+1;
+    else if(e.key==='ArrowUp')next=idx-cols;
+    else if(e.key==='ArrowDown')next=idx+cols;
+    next=Math.max(0,Math.min(cells.length-1,next));
+    cells.forEach(c=>c.classList.remove('kbd-focus'));
+    cells[next].classList.add('kbd-focus');
+    cells[next].scrollIntoView({block:'nearest'});
+    fxPickLookCell(cells[next],cells[next]._lookJob?cells[next]._lookJob.val:'');
+  });
+  host.addEventListener('focusout',()=>{host.querySelectorAll('.look-cell.kbd-focus').forEach(c=>c.classList.remove('kbd-focus'));});
 }
 
 // ── "hold to compare" before/after ──
@@ -20609,6 +20693,24 @@ function fxLiveFit(ms){
   };
   _lfRaf=requestAnimationFrame(step);
 }
+// E4 fix (2026-09-10): a plain OS window resize (drag the window edge/titlebar — NOT the
+// sheet/panel-toggle transitions fxLiveFit already tracks above) had NO listener at all.
+// renderPreview() pins #fx-canvas's CSS width/height to explicit px on every render (see its
+// "pin CSS size; backing store is dpr-scaled" comment) computed from #fx-wrap's dimensions AT
+// THAT MOMENT — it never re-runs on window resize. Continuous resize left that pinned px height
+// stale while `#fx-canvas{max-width:100%}` (only width, not height) kept clamping the WIDTH down
+// to the shrinking wrap — an increasing width/height mismatch = the reported "squeeze". Discrete
+// breakpoint snapshots (test/ui_audit.mjs) never see it because each load calls renderPreview
+// fresh at that one viewport with no resize in between. fxLiveFit already exists for exactly
+// this continuous-rescale job (cheap CSS-only, no WebGL re-render each frame); reuse it here,
+// then land one crisp renderPreview() once the drag settles, mirroring the sheet/panel pattern.
+let _fxWinResizeT=0;
+window.addEventListener('resize',()=>{
+  if(cropMode||fxLoupe)return; // both own the canvas / have their own resize handling
+  fxLiveFit(220);
+  clearTimeout(_fxWinResizeT);
+  _fxWinResizeT=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
+});
 // Re-fit the render when the sheet finishes opening/closing (the photo's flex space changed).
 (function(){
   const p=document.querySelector('.fx-panel');
