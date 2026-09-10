@@ -450,7 +450,12 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-zoom-ctrl #fx-zoom-slider{width:70px}
 .fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px 7px;border-radius:4px;line-height:1}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
-.fx-zoom-ctrl button#btn-loupe.on,.fx-zoom-ctrl button#btn-fx-fullres.on{background:var(--acc);color:#000}
+/* 2026-09-10: dropped #btn-fx-fullres from this selector — it no longer lives inside
+   .fx-zoom-ctrl under deskx (relocatePreviewTools() moves it to the left cluster instead), so
+   the compound selector never matched there any more; .db-btn.on now covers its .on state. Web/
+   mobile mode (where it's still inside .fx-zoom-ctrl) falls back to that same .db-btn.on rule
+   too, since #btn-fx-fullres was never given the plain .zc-ic-only look outside deskx either. */
+.fx-zoom-ctrl button#btn-loupe.on{background:var(--acc);color:#000}
 /* Drag-only percentage (wireframe: .zpct opacity 0 by default, 1 on .active) — only shown while
    the value is actually CHANGING, not on hover/permanently (2026-09-09: dropped the :hover
    reveal — matching the Library's own zoom row, which shows no number at all, means the one
@@ -857,11 +862,15 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-db:hover{border-color:var(--mut)}
 /* 3.1.2 — matches the wireframe's .ibtn.disabled (Editor (Developer) View.dc.html:40). */
 .fx-db:disabled{opacity:.35;pointer-events:none;cursor:default}
-/* 3.1.1 — matches the wireframe's .undogrp (Editor (Developer) View.dc.html:41-43): one outer
-   border/radius around both buttons, square inner corners, a hairline divider between them. */
-.fx-undogrp{display:inline-flex;flex:0 0 auto;border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
-.fx-undogrp .fx-db{border-radius:0;border:none}
-.fx-undogrp .fx-db+.fx-db{border-left:1px solid var(--bdr)}
+/* "Show original" is a .db-btn, not a .fx-db, so it needs its own disabled treatment — wired
+   alongside Undo/Redo in fxSyncTopbarDisabled() (2026-09-10), same fxHistIdx<=0 signal ("nothing
+   to compare against yet" = the same state that disables Undo). */
+.db-btn:disabled{opacity:.35;pointer-events:none;cursor:default}
+/* 3.1.1 originally matched the wireframe's bordered .undogrp pill (one outer border/radius, a
+   hairline divider between the two buttons). 2026-09-10: dropped per explicit request — plain
+   adjacent icon buttons, same as every other pair in the bar, no enclosing box. */
+.fx-undogrp{display:inline-flex;flex:0 0 auto;gap:2px}
+.fx-undogrp .fx-db{border-radius:8px}
 .fx-db .fx-db-ic{display:inline-flex;color:var(--mut)}
 /* Editor (Developer) View.dc.html:46's .btn-export uses --primary-on-dark (Mist Blue #61a0af),
    not the app's own amber --acc brand color — per explicit decision, matched literally here. */
@@ -917,14 +926,18 @@ body.deskx .fx-zoom-ctrl .flag-btn{width:32px;height:32px;min-width:32px;padding
    .zc-ic footprint instead of the 0 9px text padding every other zoom-ctrl button uses. */
 body.deskx .fx-zoom-ctrl #btn-zoom-out,body.deskx .fx-zoom-ctrl #btn-zoom-in{padding:0;min-width:28px}
 body.deskx #fx-zoom-slider{width:80px}
-/* 2026-09-09: 1:1 view, full-res preview, editor background colour and the scope-overlay toggle
-   moved OFF the always-visible desktop bar and into the settings menu's View section
-   (viewMenuBuild()) — occasional preview-quality toggles, not everyday actions, and (for the
-   zoom cluster pair) what pushed the bar wide enough to collide with the centred title. Hidden
-   here rather than deleted from the HTML: #fx-zoom-ctrl/#fx-preview-tools are the SAME nodes
-   relocatePreviewTools() moves onto the floating over-canvas spot in web/mobile mode, so deleting
-   would remove them there too — this selector only fires under body.deskx. */
-body.deskx #btn-loupe,body.deskx #btn-fx-fullres,body.deskx #btn-editor-bg,body.deskx #btn-hist{display:none!important}
+/* 2026-09-09: 1:1 view, editor background colour and the scope-overlay toggle moved OFF the
+   always-visible desktop bar and into the settings menu's View section (viewMenuBuild()) —
+   occasional preview-quality toggles, not everyday actions. Hidden here rather than deleted from
+   the HTML: #fx-zoom-ctrl/#fx-preview-tools are the SAME nodes relocatePreviewTools() moves onto
+   the floating over-canvas spot in web/mobile mode, so deleting would remove them there too —
+   this selector only fires under body.deskx.
+   2026-09-10: Full resolution (#btn-fx-fullres) un-hidden and moved back OUT of this list —
+   relocatePreviewTools() now parks it in the LEFT cluster next to Show original instead,
+   matching the wireframe's left-cluster pair. It was removed from the always-visible bar
+   entirely in 6627253, which overcorrected: the wireframe (Editor (Developer) View.dc.html's
+   .tb-left) always showed it as a standing icon, not a menu row. */
+body.deskx #btn-loupe,body.deskx #btn-editor-bg,body.deskx #btn-hist{display:none!important}
 /* 2026-09-09: split-view + edit/export history move off the always-visible bar too, into the
    settings menu's Compare/History sections (settingsSplitBuild()/settingsHistoryBuild(), built
    from the exact same code the web/mobile floating popovers use — see _fxSplitListInto()/
@@ -1026,7 +1039,13 @@ body.deskx #fx-deskbar-right{display:flex;align-items:center;gap:8px;grid-column
    overlap its neighbours instead of being physically kept apart from them. Under the grid, it's
    just the middle column's content: back to normal flow, centered in its own track instead. */
 body.deskx #fx-deskbar-title{position:static;left:auto;top:auto;transform:none;pointer-events:auto;
-  grid-column:2;justify-self:center}
+  grid-column:2;justify-self:center;
+  /* 2026-09-10: the base rule (above) lays the filename and dimensions out side-by-side on one
+     line — the wireframe stacks them (Editor (Developer) View.dc.html .fn/.meta), filename bold
+     on top, capture details smaller and muted underneath. Column instead of row, both lines
+     centered under the (already horizontally centered) title block. */
+  flex-direction:column;align-items:center;gap:1px;text-align:center}
+body.deskx #db-title-status{font-size:var(--fs-1)}
 /* The full-window Library (library-ui.js's #lib-overlay.full) is a genuine takeover — its own
    top bar already reserves the same traffic-light drag space #fx-deskbar does — so this editor-
    only bar (undo/redo, the current photo's title, All FX, Export) would just be a second,
@@ -1156,7 +1175,12 @@ body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;
   background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
-body.deskx #db-lib-btn{display:inline-flex!important} /* library button hidden outside deskx (inline display:none) */
+/* 2026-09-10: was force-shown under deskx ("display:inline-flex!important") — the wireframe's
+   left cluster has no library/folder icon at all. The settings menu's ⋯ section already carries
+   an identical "Library (L)" row (ovfBuild()) calling the exact same chromasmithToggleLibrary(),
+   so this isn't a lost feature, just a second entry point for it. Left display:none (the base,
+   non-deskx rule) so it also stays gone here. */
+body.deskx #db-lib-btn{display:none}
 /* Skin/AI Select used to be individual buttons gated by a rule here; mskAddMenu() now checks
    body.deskx itself (see the Masks panel's own comment) so this rule has nothing left to gate. */
 /* Settings menu (deskbar) — 2026-09-09: the ⋯ overflow / Tools / View triggers used to be three
@@ -2443,7 +2467,14 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
           <button class="zc-ic" id="btn-zoom-in" onclick="zoomBy(1.15)" title="Zoom in"><span class="fx-db-ic" id="ic-zoom-in"></span></button>
           <span id="fx-zoom-pct" title="Scroll to zoom · drag to pan · double-click to fit">100%</span>
           <button id="btn-loupe" onclick="toggleLoupe()" title="True 1:1 view — renders a native-resolution crop through the full pipeline so grain &amp; halation appear at real export scale">1:1</button>
-          <button id="btn-fx-fullres" class="zc-ic" onclick="fxFullResPreviewToggle()" title="Full resolution — renders the whole preview at full source resolution instead of the usual capped size. Costs more GPU time; drops to the capped size automatically while dragging a slider"><span class="fx-db-ic" id="ic-fullres"></span></button>
+          <!-- 2026-09-10: "zc-ic" alone has no background/border/color of its own — relies
+               entirely on the parent ".fx-zoom-ctrl button" rule for its actual look, which
+               isn't there once relocatePreviewTools() parks this in the left cluster under
+               deskx. Added "db-btn" alongside it for that reset (matches its new neighbour, Show
+               original); zc-ic's own 28px sizing still wins by source order so web/mobile mode
+               (where it stays inside .fx-zoom-ctrl, sized like its zoom-cluster siblings) is
+               visually unchanged. -->
+          <button id="btn-fx-fullres" class="zc-ic db-btn" onclick="fxFullResPreviewToggle()" title="Full resolution — renders the whole preview at full source resolution instead of the usual capped size. Costs more GPU time; drops to the capped size automatically while dragging a slider"><span class="fx-db-ic" id="ic-fullres"></span></button>
           <button id="btn-flag-red" class="flag-btn flag-btn-red" onclick="fxToggleFlag('Red')" title="Reject (Library)" style="margin-left:4px;display:none"></button>
           <button id="btn-flag-green" class="flag-btn flag-btn-green" onclick="fxToggleFlag('Green')" title="Green flag (Library)" style="display:none"></button>
           <button id="btn-favorite" class="flag-btn flag-btn-fav" onclick="fxToggleFavorite()" title="Favorite (Library)" style="display:none"></button>
@@ -4758,7 +4789,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-10b';
+const BUILD='2026-09-10c';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -14825,6 +14856,10 @@ function fxSyncTopbarDisabled(){
   const undo=document.getElementById('btn-undo-db'),redo=document.getElementById('btn-redo-db');
   if(undo)undo.disabled=fxHistIdx<=0;
   if(redo)redo.disabled=fxHistIdx>=fxHistory.length-1;
+  // 2026-09-10: "Show original" has nothing to compare against in the same state Undo does —
+  // reuse that exact signal rather than a second one that could drift out of sync with it.
+  const before=document.getElementById('btn-before');
+  if(before)before.disabled=fxHistIdx<=0;
 }
 async function fxResetAll(){
   if(!fxHistory.length)return;
@@ -15274,10 +15309,10 @@ function zoomBy(factor){
   const prev=fxZoom;
   fxZoom=Math.max(0.25,Math.min(8,fxZoom*factor));
   if(fxZoom<=1){fxPanX=0;fxPanY=0;}
-  else{ // keep the centre fixed (ox=oy=0.5 in the cursor-zoom formula)
+  else{ // keep the frame centre fixed under the new zoom (ox=oy=0.5 in the cursor-zoom invariant)
     const cv=document.getElementById('fx-canvas');
     const cw=parseFloat(cv.style.width)||cv.clientWidth,ch=parseFloat(cv.style.height)||cv.clientHeight;
-    fxPanX-=0*cw*(fxZoom-prev)/fxZoom;fxPanY-=0*ch*(fxZoom-prev)/fxZoom; // centre anchor → no shift
+    fxPanX+=0.5*cw*(1/fxZoom-1/prev);fxPanY+=0.5*ch*(1/fxZoom-1/prev);
   }
   _applyZoom(true);
 }
@@ -15356,12 +15391,16 @@ function initZoomPan(){
     // reaches the same 1x-8x range, it just takes noticeably more travel to get there.
     fxZoom=Math.max(0.25,Math.min(8,fxZoom*(e.deltaY<0?1.025:0.975)));
     if(fxZoom<=1){fxPanX=0;fxPanY=0;}else{
-      // Zoom toward cursor
+      // Zoom toward cursor: keep the local point under the cursor fixed on screen.
+      // transform is scale(z)·translate(pan) about origin (0,0), so a local point p maps to
+      // screen z*(p+pan) — invariant p ⇒ pan_new = pan_old + o*size*(1/z_new − 1/z_old), same
+      // "anchor = mouse position in unscaled content space" identity used by OpenSeadragon's
+      // zoomBy/Google Maps/Figma-style canvas zoom.
       const cv=document.getElementById('fx-canvas');
       const cw=parseFloat(cv.style.width)||cv.clientWidth;
       const ch=parseFloat(cv.style.height)||cv.clientHeight;
-      fxPanX-=(ox-0.5)*cw*(fxZoom-prev)/fxZoom;
-      fxPanY-=(oy-0.5)*ch*(fxZoom-prev)/fxZoom;
+      fxPanX+=ox*cw*(1/fxZoom-1/prev);
+      fxPanY+=oy*ch*(1/fxZoom-1/prev);
     }
     _applyZoom();
   },{passive:false});
@@ -20297,13 +20336,15 @@ function viewMenuBuild(){
   const chk='<svg class="fx-ovf-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
   const curLight=document.body.classList.contains('light');
   let h='';
-  // 2026-09-09: 1:1 view / full-res preview / editor background / scope overlay moved here from
-  // four separate always-visible topbar buttons (body.deskx #btn-loupe etc. are display:none —
-  // see that CSS comment). Each still calls the exact same standalone function the old button
-  // did; only the entry point moved, so hold-to-compare/renderPreview/etc. behavior is untouched.
+  // 2026-09-09: 1:1 view / editor background / scope overlay moved here from three separate
+  // always-visible topbar buttons (body.deskx #btn-loupe etc. are display:none — see that CSS
+  // comment). Each still calls the exact same standalone function the old button did; only the
+  // entry point moved, so hold-to-compare/renderPreview/etc. behavior is untouched. Full
+  // resolution preview moved back OUT of this menu 2026-09-10 — it's a standing left-cluster
+  // icon again (relocatePreviewTools()), not a menu row; a row here too would just be a second
+  // control for the same action.
   h+='<div class="fx-ovf-grp-label">Preview</div>';
   h+=`<button class="fx-ovf-item${fxLoupe?' on':''}" onclick="viewMenuClose();toggleLoupe()"><span>True 1:1 view</span>${chk}</button>`;
-  h+=`<button class="fx-ovf-item${fxFullResPreview?' on':''}" onclick="viewMenuClose();fxFullResPreviewToggle()"><span>Full resolution preview</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Editor background…</span></button>`;
   h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
@@ -20373,8 +20414,11 @@ const ICONS={
  export:'<path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/>',
  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
  diag:'<circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.5 7.5 0 0 0-1.7-1L14 3h-4l-.4 2.6a7.5 7.5 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7.5 7.5 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.5 7.5 0 0 0 1.7 1L10 21h4l.4-2.6a7.5 7.5 0 0 0 1.7-1l2.3 1 2-3.4z"/>',
- undo:'<path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/>',
- redo:'<path d="M15 7l5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h1"/>',
+ // 2026-09-10: swapped for a plain right-angle hook (Feather's corner-up-left/-right shape) —
+ // the previous curved-hook path read as too thin/ambiguous at 18px in the topbar; this one has
+ // a sharper, more legible corner and arrowhead at the sizes the deskbar actually renders it.
+ undo:'<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
+ redo:'<polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>',
  enableAll:'<path d="M5 3v3M3.5 4.5h3"/><path d="M18 14v3M16.5 15.5h3"/><path d="M13 4l2 5.5 5.5 2-5.5 2L13 19l-2-5.5L5.5 11.5 11 9.5z"/>',
  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>',
  moon:'<path d="M21 13a8 8 0 1 1-9.9-9.9 7 7 0 1 0 9.9 9.9z"/>',
@@ -20992,6 +21036,23 @@ function relocatePreviewTools(mob,desk){
   if(!bar||!wrap||!zc||!pt)return;
   if(desk){bar.appendChild(pt);bar.appendChild(zc);}
   else{wrap.appendChild(zc);wrap.appendChild(pt);}
+  // 2026-09-10: "Show original" and "Full resolution" move further under desktop mode, into the
+  // LEFT cluster next to undo/redo — matches Editor (Developer) View.dc.html's own left-cluster
+  // order (undo/redo, Show original, Full resolution). Same appendChild-move idiom as above: the
+  // SAME nodes, not clones, so btn-before's hold-to-compare wiring (gated on a one-time `_wired`
+  // flag, see the comment at that wiring code) travels with it instead of needing rewiring, and
+  // fxFullResPreviewToggle()'s existing getElementById('btn-fx-fullres') lookups keep working
+  // unchanged regardless of which parent currently holds the button.
+  const before=document.getElementById('btn-before'), fullres=document.getElementById('btn-fx-fullres');
+  const left=document.getElementById('fx-deskbar-left'), loupe=document.getElementById('btn-loupe');
+  if(before&&left){
+    if(desk)left.appendChild(before);
+    else if(pt)pt.insertBefore(before,pt.firstChild.nextSibling); // back after btn-editor-bg, its original spot
+  }
+  if(fullres&&left){
+    if(desk)left.appendChild(fullres);
+    else if(zc&&loupe)zc.insertBefore(fullres,loupe.nextSibling); // back right after btn-loupe
+  }
 }
 const applyMobileFx=applyFxLayout; // legacy alias
 _mqMobile.addEventListener('change',applyFxLayout);
