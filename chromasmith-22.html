@@ -1536,7 +1536,12 @@ window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)cl
   // is wanted later; console.warn still logs the stall for anyone actually debugging.
   console.warn(`[boot] watchdog fired: stalled on "${window._bootLastPhase||'walk'}" after ${Math.round(elapsed/1000)}s`);
 },graceMs||8000);};
-window.bumpBootSplashWatchdog(10000); // initial grace period before any progress event has arrived yet
+window.bumpBootSplashWatchdog(16000); // initial grace period before any progress event has arrived yet
+// ⚠️ Bumped 10000→16000 (2026-09-10): chromasmithForceLibraryReady() racing the wireframe-diff
+// harness's own load/settle window was the confirmed cause of E7 (test/editor_ux_spec.json) —
+// intermittent light-theme white-text findings were really the Library being force-flipped into
+// full-view takeover (body.lib-full, hides #fx-deskbar) mid-harness-run, not a CSS bug. A wider
+// initial grace gives real boot more room before the safety valve fires. See test/editor_wireframe_diff.mjs.
 </script>
 <div id="status-cap"></div>
 <header>
@@ -1952,8 +1957,9 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="pointcolor">
         <div class="fx-ctrl-title">Point Color <div class="fx-toggle" id="tg-pointcolor" onclick="toggleFX('pointcolor')"></div></div>
         <div class="fx-fields ff-off" id="ff-pointcolor">
-          <div class="btn-row">
-            <button class="btn bgh" id="btn-pc-eye" onclick="pcEyedropper()" title="Click a color in the photo to target it precisely, then dial in how it shifts">Pick Color</button>
+          <div class="btn-row" style="align-items:center;gap:6px">
+            <button class="btn bgh" id="btn-pc-eye" onclick="pcEyedropper()" style="flex:1">Pick from photo</button>
+            <button class="fx-info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button>
           </div>
           <div class="btn-row" id="pc-list" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
           <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px" id="pc-empty-hint">Pick a color from the photo, then dial in Hue/Saturation/Luminance and how wide a Range around it is affected.</div>
@@ -2042,34 +2048,15 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
       <!-- CROP & ROTATE -->
       <div class="fx-ctrl" data-fxsec="crop">
         <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--sans)">Reset</div></div>
-        <div class="btn-row" style="justify-content:center;gap:14px">
-          <button class="btn-icon" onclick="geomRotate(-90)" title="Rotate left" data-ic="rotateLeft"></button>
-          <button class="btn-icon" onclick="geomRotate(90)" title="Rotate right" data-ic="rotateRight"></button>
-          <button class="btn-icon" onclick="geomFlip('h')" title="Flip horizontal" data-ic="flipH"></button>
-          <button class="btn-icon" onclick="geomFlip('v')" title="Flip vertical" data-ic="flipV"></button>
-        </div>
-        <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
-          <button class="btn bgh" id="btn-geom-apply-all" onclick="geomApplyToAll()" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
-        </div>
-        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraighten(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
-        <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
-        <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
-          <button class="btn" id="btn-ah-roi" onclick="ahRoiArm()" style="flex:1">Set region…</button>
-          <button class="btn" id="btn-ah-roi-clear" onclick="ahRoiClear()" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"></span></button>
-        </div>
-        <div class="fx-row"><div class="fx-label">Grid</div>
-          <select class="fx-select" id="sel-crop-grid" onchange="cropSetGrid(this.value)">
-            <option value="3x3">3×3 (Rule of thirds)</option>
-            <option value="4x4">4×4</option>
-            <option value="golden">Golden ratio</option>
-            <option value="off">Off</option>
-          </select>
-        </div>
+        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Aspect ratio</div>
         <div class="fx-row"><div class="fx-label">Aspect</div>
           <!-- A list of tap chips, not a dropdown — same convention as the Input/Print profile
                chips above (selectToChips) and the Canvas ratio chips (cvBuildChips): the <select>
                stays the one source of truth (still dispatches its own onchange, still restorable
-               from a session/snapshot) and is just visually replaced. -->
+               from a session/snapshot) and is just visually replaced. Panel redesign (FR1/R6
+               precedent): the proposal's checklist-style .rlist is a genuine picker-widget swap,
+               not a markup move, so it's deferred (tracked as R7) — this keeps the existing,
+               already-correct chip mechanism and only regroups it under an "Aspect ratio" heading. -->
           <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value)" style="display:none">
             <option value="shot">As shot</option>
             <option value="0">Free</option>
@@ -2094,6 +2081,30 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
           <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-w" style="width:56px" oninput="cropCustomChanged()">
           <span style="color:var(--mut)">:</span>
           <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-h" style="width:56px" oninput="cropCustomChanged()">
+        </div>
+        <div class="fx-sub">Transform</div>
+        <div class="btn-row" style="justify-content:center;gap:14px">
+          <button class="btn-icon" onclick="geomRotate(-90)" title="Rotate left" data-ic="rotateLeft"></button>
+          <button class="btn-icon" onclick="geomRotate(90)" title="Rotate right" data-ic="rotateRight"></button>
+          <button class="btn-icon" onclick="geomFlip('h')" title="Flip horizontal" data-ic="flipH"></button>
+          <button class="btn-icon" onclick="geomFlip('v')" title="Flip vertical" data-ic="flipV"></button>
+        </div>
+        <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
+          <button class="btn bgh" id="btn-geom-apply-all" onclick="geomApplyToAll()" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
+        </div>
+        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraighten(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
+        <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
+        <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
+          <button class="btn" id="btn-ah-roi" onclick="ahRoiArm()" style="flex:1">Set region…</button>
+          <button class="btn" id="btn-ah-roi-clear" onclick="ahRoiClear()" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"></span></button>
+        </div>
+        <div class="fx-row"><div class="fx-label">Grid</div>
+          <select class="fx-select" id="sel-crop-grid" onchange="cropSetGrid(this.value)">
+            <option value="3x3">3×3 (Rule of thirds)</option>
+            <option value="4x4">4×4</option>
+            <option value="golden">Golden ratio</option>
+            <option value="off">Off</option>
+          </select>
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bsec" id="btn-crop" onclick="cropToggle()">Crop</button>
@@ -2139,7 +2150,7 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
           <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck color — Both is the real-film mix (mostly light specks); Black/White forces one color."></div>
           <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" oninput="fxUpdate()"><div class="fx-val" id="vl-art-sc">20</div></div>
           <div class="fx-row" title="A warm light leak flooding in from one edge."><div class="fx-label">Light leak</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-art-lk" oninput="fxUpdate()"><div class="fx-val" id="vl-art-lk">0</div></div>
-          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="artReshuffle()" title="Re-roll the random dust/scratch/leak placement">Reshuffle</button></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="artReshuffle()" title="Re-roll the random dust/scratch/leak placement">Re-roll</button></div>
         </div>
       </div>
       <!-- HALATION -->
@@ -2148,10 +2159,10 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
         <div class="fx-fields ff-off" id="ff-hal">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-hal-a">70</div></div>
           <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
-          <div class="fx-row" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior."><div class="fx-label">Shadow protect</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-p">0</div></div>
-          <div class="fx-row" title="Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded)."><div class="fx-label">White glow</div><div class="fx-toggle" id="tg-hal-white" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
-          <div class="fx-row" title="Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look."><div class="fx-label">No remjet</div><div class="fx-toggle" id="tg-hal-noremjet" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
-          <div class="fx-row" title="Extreme halation — the no-remjet glow pushed ≈5–6× stronger for a heavy, stylised bloom. Implies No remjet."><div class="fx-label">Extreme</div><div class="fx-toggle" id="tg-hal-extreme" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div class="fx-row"><div class="fx-label">Shadow protect <button class="fx-info-i" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-p">0</div></div>
+          <div class="fx-row"><div class="fx-label">White glow <button class="fx-info-i" title="Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded).">i</button></div><div class="fx-toggle" id="tg-hal-white" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div class="fx-row"><div class="fx-label">No remjet <button class="fx-info-i" title="Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look.">i</button></div><div class="fx-toggle" id="tg-hal-noremjet" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div class="fx-row"><div class="fx-label">Extreme <button class="fx-info-i" title="Extreme halation — the no-remjet glow pushed ≈5–6× stronger for a heavy, stylised bloom. Implies No remjet.">i</button></div><div class="fx-toggle" id="tg-hal-extreme" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
         </div>
       </div>
       <!-- BLOOM -->
@@ -2172,17 +2183,14 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
       </div>
       <!-- BORDERS -->
       <div class="fx-ctrl" data-fxsec="borders">
-        <div class="fx-ctrl-title">Borders <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
+        <div class="fx-ctrl-title">Border <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
         <div class="fx-fields ff-off" id="ff-borders">
-        <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:8px">Inner border</div>
-        <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
-        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Color</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Outer border</div>
-        <div class="fx-row"><div class="fx-label">Thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
-        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Color</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin:10px 0 8px">Film frame</div>
-        <div class="fx-row"><div class="fx-label">Style</div>
-          <select class="fx-select" id="sel-film-frame" onchange="filmFrameChanged(this.value)">
+        <div class="fx-row"><div class="fx-label">Inner colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
+        <div class="fx-row"><div class="fx-label">Inner thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Outer colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
+        <div class="fx-row"><div class="fx-label">Outer thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
+        <div class="fx-row"><div class="fx-label">Style <button class="fx-info-i" title="The sprocket styles are drawn to the real 35mm standard, so they stay correct at any aspect ratio. Load frame… takes any scanned rebate PNG you have a licence to use.">i</button></div>
+          <select class="fx-select" id="sel-film-frame" onchange="filmFrameChanged(this.value)" style="flex:1">
             <option value="none">None</option>
             <option value="sprocket35">35mm sprockets</option>
             <option value="sprocket35-wide">35mm sprocket bleed</option>
@@ -2196,7 +2204,6 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
         <div class="fx-row" id="row-frame-edge"><div class="fx-label">Edge text</div>
           <input class="fx-select" type="text" id="in-frame-edge" placeholder="e.g. KODAK PORTRA 400   12A" style="flex:1;min-width:0" oninput="fxUpdate()">
         </div>
-        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">The sprocket styles are drawn to the real 35mm standard, so they stay correct at any aspect ratio. <b>Load frame…</b> takes any scanned rebate PNG you have a licence to use.</div>
         </div>
       </div>
       <!-- RETOUCH (heal / clone) -->
@@ -4787,7 +4794,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-10d';
+const BUILD='2026-09-10e';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -20612,7 +20619,7 @@ function _eachSection(cb){
 // the rail button and the tool. Members are listed in FX_SECTIONS order for readability; the
 // button is emitted at whichever member buildToolRail reaches first, and the cards stack in
 // DOM order regardless of this array.
-const FX_GROUPS={color:{label:'Color',icon:'curves',members:['curves','hsl','pointcolor']},
+const FX_GROUPS={color:{label:'Color',icon:'curves',members:['curves','hsl','pointcolor','wheels']},
   detail:{label:'Detail',icon:'lens',members:['nr','deconv','lens']},
   film:{label:'Film',icon:'grain',members:['grain','hal','bloom','art','vig']},
   frame:{label:'Frame',icon:'borders',members:['borders','canvas']}};
@@ -21354,6 +21361,20 @@ function fxResetSection(cardOrName){
       const ff=document.getElementById('ff-'+id);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}
     }
   });
+  // Frame panel redesign (2026-09-10, F1): Borders is the first section whose header Reset had
+  // to cover a colour input too (cl-b1/cl-b2) — every earlier section this generic path served
+  // was slider/toggle-only. Without this, Reset would restore thickness but leave a changed
+  // border colour untouched.
+  card.querySelectorAll('input[type=color][id^="cl-"]').forEach(cl=>{
+    // ⚠️ Unlike sliders/toggles (_FX_SNAP_SLIDERS/_FX_SNAP_TOGGLES, bare ids without their
+    // "sl-"/"tg-" prefix), _FX_SNAP_COLORS stores FULL prefixed ids ('cl-b1', not 'b1') —
+    // getUISnapshot() keys s.colors by the literal id list entries. Look up by the full id.
+    const id=cl.id;
+    if(_fxPristineDefault.colors&&_fxPristineDefault.colors[id]!==undefined){
+      cl.value=_fxPristineDefault.colors[id];
+      if(typeof cvSetBg==='function'&&id==='cl-canvas-bg')cvSetBg(cl.value);
+    }
+  });
   // Retouch's meaningful "edited" state is its spots, not its brush-size sliders (see
   // healSyncUI's own comment on why those two are tracked separately) — reset the sliders
   // above AND clear spots here, or the reset button would stay visible (fx-has-heal) after a
@@ -21551,7 +21572,22 @@ document.addEventListener('keydown',e=>{
   // (except Esc) when a modifier is held, so they never fight text fields or browser combos.
   const inInput=e.target&&e.target.closest&&e.target.closest('input,textarea,select,[contenteditable]');
   if(e.key==='Escape'){
-    // Exit whatever modal-ish editing state is active, most specific first.
+    // Exit whatever modal-ish editing state is active, most specific first. The settings menu
+    // (chromasmith-22.html's #fx-settings-menu) previously had no Escape handling at all — only
+    // click-outside closed it, unlike every gear/sort menu in the Library (library-ui.js), which
+    // already supports Escape. Confirmed missing live via editor_wireframe_behaviour.mjs's
+    // ported a11y `quality` block before adding this.
+    const _settingsMenuEl=document.getElementById('fx-settings-menu');
+    if(_settingsMenuEl&&_settingsMenuEl.classList.contains('on')){e.preventDefault();if(typeof settingsClose==='function')settingsClose();return;}
+    // Same "only click-outside closes it" gap, same fix, on every other floating menu/popover in
+    // the Editor — found by checking sibling surfaces once the settings-menu case turned up real
+    // (CLAUDE.md §10's "audit the bug pattern across the codebase in one pass" rule).
+    const _splitPop=document.getElementById('fx-split-popover');
+    if(_splitPop&&_splitPop.style.display!=='none'){e.preventDefault();_splitPop.style.display='none';return;}
+    const _timelinePop=document.getElementById('fx-timeline-popover');
+    if(_timelinePop&&_timelinePop.style.display!=='none'){e.preventDefault();_timelinePop.style.display='none';return;}
+    const _bgMenu=document.querySelector('.fx-bgmenu');
+    if(_bgMenu){e.preventDefault();document.querySelectorAll('.fx-bgmenu').forEach(m=>m.remove());return;}
     if(typeof _wbEyedropperActive!=='undefined'&&_wbEyedropperActive&&typeof wbEyedropper==='function'){e.preventDefault();wbEyedropper();return;}
     if(typeof cropMode!=='undefined'&&cropMode){e.preventDefault();cropCancel();return;}
     if(typeof fxLoupe!=='undefined'&&fxLoupe&&typeof toggleLoupe==='function'){e.preventDefault();toggleLoupe();return;}
