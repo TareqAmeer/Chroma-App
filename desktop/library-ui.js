@@ -998,6 +998,12 @@
     .lib-menu{position:absolute;top:36px;right:0;width:230px;background:var(--bg);border:1px solid var(--bdr);
       border-radius:var(--r);box-shadow:0 3px 30px rgba(0,0,0,.35);padding:6px;z-index:4600;display:none;
       max-height:80vh;overflow-y:auto}
+    /* Topbar Parity pass: the sort menu's own wrapper (position:relative around #lib-sort-btn)
+       moved from the right cluster into #lib-top-left, so right:0 no longer anchors it under the
+       button — it anchored 230px off the LEFT edge of the screen instead. Every .lib-menu still
+       in the right cluster keeps right:0 (unaffected); only the one now living in the left group
+       needs its own edge flipped. */
+    body.deskx #lib-overlay #lib-top-left .lib-menu{left:0;right:auto}
     .lib-menu.open{display:block}
     .lib-menu .grp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);padding:8px 8px 4px;font-weight:var(--weight-semibold)}
     .lib-menu .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;
@@ -1581,15 +1587,88 @@
     .lib-dock-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
     body.deskx #lib-overlay:not(.full) .lib-dock-resizer{display:block}
     /* Same "glow line" removal as .lib-side-resizer above — no hover/drag background wash. */
-    /* padding-top 22px (not the tighter horizontal 8px/6px): #lib-overlay already sits below the
-       fixed deskbar (top:44px above), so this is the ONLY breathing room between the deskbar and
-       the folder/cloud/history icons — 8px read as flush against the bar. Matches the same 22px
-       bump on body.deskx .fx-panel / #fx-toolrail in chromasmith-22.html for the tools panel and
-       right rail, so all three top-of-shell rows get equal clearance. #lib-top itself is now
-       display:none while docked (.lib-fullview-only above), so only the FULL-view padding rule
-       is still live — the docked-only #lib-top padding/logo/btn overrides below it were dead
+    /* Topbar Parity pass (2026-09-10): Library's #lib-top used to be 61px tall with 22px of TOP
+       padding for macOS traffic-light clearance — a different strategy from the Editor's own
+       #fx-deskbar (chromasmith-22.html), which is 44px tall with 84px of LEFT padding instead.
+       Switching Library↔Develop shifted every pixel under the topbar by 17px on every tab change,
+       and the two bars' right-hand clusters (zoom/flags/All FX/Export/gear) never lined up. This
+       adopts the Editor's exact numbers instead of inventing a second one: 44px tall, 84px left
+       padding — #lib-top itself is display:none while docked (.lib-fullview-only above), so only
+       the FULL-view rule here is live; the docked-only overrides that used to follow it are dead
        code once #lib-top stopped rendering at all in dock mode, and were removed with it. */
-    body.deskx #lib-overlay #lib-top{padding:22px 8px 6px;-webkit-app-region:no-drag}
+    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px 0 84px;-webkit-app-region:no-drag}
+    /* .full-scoped (not just body.deskx #lib-overlay #lib-top) so this never fights the
+       body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none} rule above that keeps
+       #lib-top hidden while DOCKED — two ids beat that rule's one, so a bare display:grid here
+       would have silently un-hidden the docked topbar. */
+    body.deskx #lib-overlay.full #lib-top{display:grid;grid-template-columns:1fr minmax(0,280px) 1fr;
+      column-gap:8px;align-items:center}
+    /* Width-driven responsive fold, same rule as the Editor's own #fx-deskbar (chromasmith-22.html:
+       All FX loses its label before Export does, both fold to icon-only rather than the search box
+       ever colliding with the side clusters) — distinct class names (#lib-top's own ResizeObserver
+       vs #fx-deskbar's) because #fx-deskbar keeps observing even while hidden behind a full-window
+       Library and would otherwise drive Library's fold state off a 0-width, invisible bar; same
+       900px/820px thresholds and same two-stage order, so the two bars degrade identically even
+       though each tracks its own state. */
+    body.deskx #lib-overlay #lib-top.lib-top-tight1 #lib-allfx-btn .lbl{display:none}
+    body.deskx #lib-overlay #lib-top.lib-top-tight1 #lib-allfx-btn{padding:0;width:28px}
+    body.deskx #lib-overlay #lib-top.lib-top-tight2 #lib-export-btn .lbl{display:none}
+    body.deskx #lib-overlay #lib-top.lib-top-tight2 #lib-export-btn{padding:0;width:28px}
+    /* Sort/Filters have no Editor equivalent (the Editor's left cluster is 4 plain icon buttons,
+       already narrow) — Library's left cluster carries two text pills that are wide enough to
+       collide with the centred search box before All FX/Export even reach their own fold
+       points, so they fold FIRST (tight1) rather than never folding at all. */
+    body.deskx #lib-overlay #lib-top.lib-top-tight1 #lib-sort-btn .lbl,
+    body.deskx #lib-overlay #lib-top.lib-top-tight1 #lib-filters-btn .lbl{display:none}
+    body.deskx #lib-overlay #lib-top.lib-top-tight1 #lib-sort-btn,
+    body.deskx #lib-overlay #lib-top.lib-top-tight1 #lib-filters-btn{padding:0;width:28px}
+    /* Search is the one control with no Editor equivalent (the Editor's centre slot only ever
+       holds a short filename), so it also needs to genuinely shrink rather than just fold a
+       label — width:100% of its minmax(0,280px) grid track instead of a fixed 280px. */
+    body.deskx #lib-overlay .lib-search-wrap{width:100%}
+    /* .lib-logo-gap/.lib-spacer only exist to soak up extra width in the old single-row flex
+       flow (non-deskx) — the deskx grid above places left/center/right groups explicitly, so
+       both spacers are dead weight here and would otherwise sit in the grid as stray auto-sized
+       items. */
+    body.deskx #lib-overlay .lib-logo-gap,body.deskx #lib-overlay .lib-spacer{display:none}
+    /* #lib-top-left/#lib-top-center/#lib-top-right — same 3-group shape as #fx-deskbar-left/
+       #fx-deskbar-title/#fx-deskbar-right in chromasmith-22.html, so the two bars' structure
+       reads as one design rather than two independent ones that happen to look similar. */
+    body.deskx #lib-overlay #lib-top-left{grid-column:1;justify-self:start;display:flex;
+      align-items:center;gap:8px;min-width:0}
+    body.deskx #lib-overlay #lib-top-center{grid-column:2;justify-self:center;display:flex;
+      width:100%;min-width:0}
+    body.deskx #lib-overlay #lib-top-right{grid-column:3;justify-self:end;display:flex;
+      align-items:center;gap:8px;min-width:0}
+    /* Search moves into the centre column, same slot the Editor uses for its filename/status
+       title — sized off its minmax(0,280px) grid track (see #lib-top's grid-template-columns
+       and .lib-search-wrap's width:100% further down) instead of the non-deskx flex-grow
+       behaviour, since it's no longer soaking up leftover row width. */
+    body.deskx #lib-overlay .lib-search-wrap{flex:none;min-width:0;max-width:none}
+    /* Thumbnail-size zoom row moves into the right cluster next to the flags, same grouping as
+       the Editor's own preview-zoom + flag cluster — no longer needs to grow into empty row
+       space, so the flex-grow / 90px floor that existed for the old single-row layout is dropped
+       in favour of a fixed, compact width matching the Editor's zoom slider. */
+    body.deskx #lib-overlay .lib-zoomrow{flex:none;min-width:0;gap:4px}
+    body.deskx #lib-overlay .lib-zoomrow input[type=range]{width:70px}
+    /* Flags restyled to the Editor's own flag-button language (30x30, no divider borders, 2px
+       gaps) instead of the bracketed/divided group the old mid-bar position used — see
+       .flag-btn/.ib in chromasmith-22.html. */
+    body.deskx #lib-overlay .lib-flagrow{border-left:none;border-right:none;padding:0;gap:2px}
+    body.deskx #lib-overlay .lib-flagrow .lib-btn-icon{width:30px!important;height:30px!important;
+      border-radius:8px}
+    /* Sort/Filters pills and All FX drop to the Editor's 28px control height (was 30px) so the
+       whole right-hand cluster is one consistent height, matching #fx-deskbar-right. */
+    body.deskx #lib-overlay #lib-top-left .lib-pill,body.deskx #lib-overlay #lib-top-right .lib-pill{
+      height:28px}
+    /* Export: literally the Editor's Mist Blue (#fx-db-pri in chromasmith-22.html), not the
+       Library DS's own --blue-slate token — same explicit "stay literal, don't re-derive"
+       decision already made for --blue-slate itself (see the comment on .lib-btn-export above),
+       now extended so the SAME control looks like the same control in both bars. */
+    body.deskx #lib-overlay .lib-btn-export{background:#61a0af;border-color:#61a0af;color:#0b1215;
+      height:28px}
+    body.deskx #lib-overlay .lib-btn-export:hover{background:#72aebb;border-color:#72aebb}
+    body.deskx #lib-overlay .lib-btn-export svg{stroke:#0b1215}
     /* The tree toggle only means anything in full mode (the filmstrip already force-hides
        #lib-side's tree children via .lib-fullview-only above) — its text label doesn't fit the
        120px filmstrip's icon-only top bar. */
@@ -1672,47 +1751,24 @@
   const overlay = document.createElement('div');
   overlay.id = 'lib-overlay';
   overlay.innerHTML = `
-    <!-- Top bar, transplanted from chromasmith-design/project/Library View.html's .topbar:
-         logo -> search -> view toggle -> zoom -> flag row -> sort -> filters -> spacer ->
-         All FX -> Export -> gear. Everything the wireframe's bar has no room for (folder
-         picker, Google Photos import, recent folders, Get Info, full-window toggle, sidebar
-         show/hide, display options, theme) relocates into the gear's View menu below, per
-         Tareq's own call on where displaced controls go. -->
+    <!-- Top bar. Two layouts share this one markup:
+         - non-deskx (web/iOS, no Editor counterpart to match): original flex flow, unchanged —
+           logo-gap -> search -> view toggle -> zoom -> flag row -> sort -> filters -> spacer ->
+           All FX -> Export -> gear.
+         - body.deskx (macOS shell): a 3-column grid (#lib-top-left/#lib-top-center/#lib-top-right
+           below), matching #fx-deskbar's own left/title/right structure in chromasmith-22.html
+           exactly — see the Topbar Parity comparison this was built from (Library vs Editor
+           topbar, both measured live). Sort/Filters/view-toggle move into the left group at the
+           same x the Editor's undo button starts from; search moves into the centre, same slot
+           as the Editor's filename/status title; zoom, flags, All FX, Export and the gear share
+           one right-hand order with the Editor: zoom -> flags -> All FX -> Export -> gear.
+           Everything the wireframe's bar has no room for (folder picker, Google Photos import,
+           recent folders, Get Info, full-window toggle, sidebar show/hide, display options,
+           theme) relocates into the gear's View menu below, per Tareq's own call on where
+           displaced controls go. -->
     <div id="lib-top" class="lib-fullview-only">
       <div class="lib-logo-gap"></div>
-      <!-- Single search feature, one icon: plain filename/keyword search and AI/CLIP semantic
-           search (e.g. "a dog on a beach") both live in this one box — typing filters live
-           (plain match), and Enter with non-empty text ALWAYS also runs the AI/CLIP semantic
-           search (runClipTextSearch, wired below), not only when the plain match is empty.
-           HANDOVER §3.11 — this comment previously claimed the empty-match condition. Per
-           explicit decision, there is no separate AI-search button/icon: two search icons read
-           as two features when there's really only one. -->
-      <div class="lib-search-wrap">
-        ${ic('search', 14)}
-        <input id="lib-search" placeholder="Search name, keyword, or filter" />
-      </div>
-      <!-- Grid/List only, matching Library View.html's 2-button toggle — Compare moved into the
-           gear's View menu (below) per explicit decision: it's a real feature but not common
-           enough to earn a permanent topbar slot next to the two everyday view modes. -->
-      <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg">
-        <button data-v="grid" title="Grid view">${ic('gridView',14)}</button>
-        <button data-v="list" title="List view">${ic('tableView',14)}</button>
-      </div>
-      <div class="lib-zoomrow">
-        ${ic('zoomOut',12)}
-        <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size">
-        ${ic('zoomIn',12)}
-      </div>
-      <!-- Flag row: rates state.openedPath — whichever single photo is open in the Editor —
-           same window.chromasmithToggle*() bridge the Editor's own top-bar flag buttons already
-           use, so the two stay in sync automatically. HANDOVER §3.11 — this comment previously
-           claimed a multi-selection fallback; chromasmithToggleFlag/Favorite (below) read
-           state.openedPath only and ignore state.selected entirely. -->
-      <div class="lib-flagrow" id="lib-flagrow">
-        <button class="lib-btn lib-btn-icon" id="lib-flag-reject" title="Reject">${ic('close',15)}</button>
-        <button class="lib-btn lib-btn-icon" id="lib-flag-pick" title="Pick">${ic('flagGreen',15)}</button>
-        <button class="lib-btn lib-btn-icon" id="lib-flag-fav" title="Favorite">${ic('heart',15)}</button>
-      </div>
+      <div id="lib-top-left">
       <div style="position:relative">
         <button class="lib-btn lib-pill" id="lib-sort-btn" title="Sort by">${ic('sortAsc',13)}<span class="lbl" id="lib-sort-label">Date taken</span></button>
         <div class="lib-menu" id="lib-sort-menu">
@@ -1749,7 +1805,45 @@
       <div id="lib-filters-btn-wrap">
         <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="9" cy="18" r="2" fill="var(--bg)"/></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
       </div>
+      <!-- Grid/List only, matching Library View.html's 2-button toggle — Compare moved into the
+           gear's View menu (below) per explicit decision: it's a real feature but not common
+           enough to earn a permanent topbar slot next to the two everyday view modes. -->
+      <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg">
+        <button data-v="grid" title="Grid view">${ic('gridView',14)}</button>
+        <button data-v="list" title="List view">${ic('tableView',14)}</button>
+      </div>
+      </div>
       <div class="lib-spacer"></div>
+      <!-- Single search feature, one icon: plain filename/keyword search and AI/CLIP semantic
+           search (e.g. "a dog on a beach") both live in this one box — typing filters live
+           (plain match), and Enter with non-empty text ALWAYS also runs the AI/CLIP semantic
+           search (runClipTextSearch, wired below), not only when the plain match is empty.
+           HANDOVER §3.11 — this comment previously claimed the empty-match condition. Per
+           explicit decision, there is no separate AI-search button/icon: two search icons read
+           as two features when there's really only one. Under deskx this sits centred in
+           #lib-top-center, same slot as the Editor's filename/status title. -->
+      <div id="lib-top-center">
+      <div class="lib-search-wrap">
+        ${ic('search', 14)}
+        <input id="lib-search" placeholder="Search name, keyword, or filter" />
+      </div>
+      </div>
+      <div id="lib-top-right">
+      <div class="lib-zoomrow">
+        ${ic('zoomOut',12)}
+        <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size">
+        ${ic('zoomIn',12)}
+      </div>
+      <!-- Flag row: rates state.openedPath — whichever single photo is open in the Editor —
+           same window.chromasmithToggle*() bridge the Editor's own top-bar flag buttons already
+           use, so the two stay in sync automatically. HANDOVER §3.11 — this comment previously
+           claimed a multi-selection fallback; chromasmithToggleFlag/Favorite (below) read
+           state.openedPath only and ignore state.selected entirely. -->
+      <div class="lib-flagrow" id="lib-flagrow">
+        <button class="lib-btn lib-btn-icon" id="lib-flag-reject" title="Reject">${ic('close',15)}</button>
+        <button class="lib-btn lib-btn-icon" id="lib-flag-pick" title="Pick">${ic('flagGreen',15)}</button>
+        <button class="lib-btn lib-btn-icon" id="lib-flag-fav" title="Favorite">${ic('heart',15)}</button>
+      </div>
       <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo">${ic('looks',14)}<span class="lbl">All FX</span></button>
       <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E">${ic('export',14)}<span class="lbl">Export</span></button>
       <div style="position:relative">
@@ -1789,6 +1883,7 @@
           <div class="opt" data-theme="dark"><span>Dark</span>${LIB_CHECK_SVG}</div>
           <div class="opt" data-theme="light"><span>Light</span>${LIB_CHECK_SVG}</div>
         </div>
+      </div>
       </div>
     </div>
     <!-- Retired: every control this row used to hold moved into #lib-top above or the gear's
@@ -6544,6 +6639,27 @@
   }
   new ResizeObserver(syncTopCompact).observe(libTop);
   window.addEventListener('resize', syncTopCompact);
+
+  // ── deskx-only: same width-threshold fold as the Editor's own #fx-deskbar (chromasmith-22.html
+  // — body.fx-deskbar-tight1/2, driven by a ResizeObserver on #fx-deskbar). Kept as a SEPARATE
+  // observer/class pair rather than sharing the Editor's classes: #fx-deskbar keeps observing
+  // even while hidden behind a full-window Library, so sharing its classes would drive Library's
+  // fold state off a 0-width, invisible bar. Same 900px/820px thresholds and same two-stage
+  // order (All FX label first, then Export label) as the Editor, so both bars degrade by
+  // identical rules even though each tracks its own state. Library's own #lib-top-compact
+  // (above) still exists for the non-deskx/web layout — this only fires under deskx, and only
+  // once the grid layout is active (.full), same guard as syncTopCompact.
+  function syncTopTight() {
+    if (!document.body.classList.contains('deskx') || !overlay.classList.contains('full')) {
+      libTop.classList.remove('lib-top-tight1', 'lib-top-tight2');
+      return;
+    }
+    const w = libTop.getBoundingClientRect().width;
+    libTop.classList.toggle('lib-top-tight1', w < 900);
+    libTop.classList.toggle('lib-top-tight2', w < 820);
+  }
+  new ResizeObserver(syncTopTight).observe(libTop);
+  window.addEventListener('resize', syncTopTight);
 
   // ── Docked filmstrip Library/Develop tabs: icon-only once the dock is dragged too narrow for
   // the label text — same overflow-measurement approach as syncTopCompact() above, applied to

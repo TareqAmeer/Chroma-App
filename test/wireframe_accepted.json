@@ -1,5 +1,10 @@
 [
   {
+    "match": "order@0: wireframe icon vs app button",
+    "zone": "topbar",
+    "reason": "2026-09-10: deliberate change per Tareq — Library's topbar was rebuilt to match the Editor's own #fx-deskbar under body.deskx (see desktop/library-ui.js's Topbar Parity pass comment): sort/filters/view-toggle moved to the left group ahead of the search bar, so the first topbar atom is now the sort pill's icon instead of the logo/search wireframe order. The design wireframe (Library View.html) reflects the OLD single-row layout and has not been updated to match; this diff is the intended new order, not a regression."
+  },
+  {
     "match": "MISSING 1x  icon",
     "zone": "topbar",
     "reason": "2026-09-10: deliberate change per Tareq — the Library top bar's app-logo image is removed so Library matches the Editor view, which no longer shows the wordmark in its own top bar either. Shifts the topbar atom count and every subsequent icon index by one; the icon-shape diffs below are the same root cause, not independent regressions."
