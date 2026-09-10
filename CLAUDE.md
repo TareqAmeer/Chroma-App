@@ -10,6 +10,21 @@ This document is the entry point for anyone (human or AI) continuing the work. I
 the architecture, the calibration science behind the film effects, the Python tooling,
 and the hard-won lessons from building it.
 
+**Contract — the handful of rules most worth not missing:**
+1. Never blind-`Read` `chromasmith-22.html` in full (17.7MB) — `grep -n` first, then `Read` with
+   `offset`/`limit`. A hook blocks a full read anyway; this is just so you don't hit it.
+2. Reload the real page after ANY shader-string edit, even a comment — §3's backtick-truncation
+   class doesn't show up any other way. Run `node test/export_harness.mjs` after too — it now
+   fails on a GLSL compile error, not just a blank canvas.
+3. For any live-app bug report (freeze, slow op, silent-wrong-behavior, memory growth, indexing
+   stall) where the cause isn't already obvious from a stack trace or failing test, use the
+   `chromasmith-debugger` subagent — don't investigate inline in the main thread. It's built
+   around `diagnostics/` as primary evidence and verifies the fix live before declaring it done;
+   several past sessions burned multiple rounds investigating inline what this now exists to do.
+4. Commit and push after every real edit (`auto-commit` memory) — the user checks the live GitHub
+   Pages build, so unpushed work isn't testable.
+5. Bump `BUILD` in `chromasmith-22.html` — automatic via a hook, nothing to do here.
+
 ---
 
 ## 1. Repository layout
