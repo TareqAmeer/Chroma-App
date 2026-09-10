@@ -1,0 +1,112 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check *)",
+      "Bash(npm test *)",
+      "Bash(node test/export_harness.mjs*)",
+      "Bash(git status --short*)",
+      "Bash(git diff --stat*)",
+      "Bash(git log --oneline*)",
+      "Bash(npm run video:test *)",
+      "Bash(npm run lint:ai *)",
+      "Bash(cargo build --release --example dump_rw2*)",
+      "Bash(node test/mask_raster.mjs*)",
+      "Bash(node test/perf_bench.mjs*)",
+      "Bash(npm run ui:test *)",
+      "Bash(npm run perf:test *)",
+      "Bash(npm run scorecard *)",
+      "Bash(cargo test --bin chromasmith*)",
+      "Bash(npm run dev*)",
+      "Bash(npm run build*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/autostart-diagnostics.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-full-html-read.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/nudge-explore-delegation.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/nudge-explore-delegation.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/reset-explore-counter.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/reset-explore-counter.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bump-build-stamp.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/warn-claude-md-size.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/stop-editor-gate-check.sh"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/precompact-snapshot.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

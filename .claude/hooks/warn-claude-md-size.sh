@@ -5,7 +5,7 @@
 # already solved for the app file. This is advisory (exit 0, stderr only) rather than a hard
 # block: CLAUDE.md size is a judgment call about what to hive off to docs/*.md, not an objective
 # pass/fail the way the Read-size gate is.
-repo="/Users/tareqameer/Documents/GitHub/Chroma-App"
+repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 f="$repo/CLAUDE.md"
 edited=$(jq -r '.tool_input.file_path // empty' 2>/dev/null)
 [ "$edited" = "$f" ] || exit 0

@@ -15,7 +15,8 @@
 # Not a hard block: unlike the chromasmith-22.html read-size gate, "should this have been
 # delegated" isn't objectively checkable, so this only nudges (exit 0, stderr note) rather than
 # blocking (exit 2) — a false positive here would wrongly stop legitimate focused work.
-state="/Users/tareqameer/Documents/GitHub/Chroma-App/.claude/.explore-nudge-count"
+repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+state="$repo/.claude/.explore-nudge-count"
 threshold=12
 
 count=$(cat "$state" 2>/dev/null || echo 0)

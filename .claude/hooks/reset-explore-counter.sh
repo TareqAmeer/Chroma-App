@@ -4,5 +4,6 @@
 #     (or wasn't needed); don't nag again immediately after.
 #   - UserPromptSubmit — a new task/turn starts; don't let a count from an unrelated earlier
 #     task carry over and fire mid-way through something small.
-rm -f "/Users/tareqameer/Documents/GitHub/Chroma-App/.claude/.explore-nudge-count" 2>/dev/null
+repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+rm -f "$repo/.claude/.explore-nudge-count" 2>/dev/null
 exit 0

@@ -4,7 +4,7 @@
 # post-compact session a concrete anchor (what's actually changed on disk, what's still open)
 # instead of relying entirely on the summary having captured it. Appended, not overwritten, so a
 # session with several compactions keeps a trail.
-repo="/Users/tareqameer/Documents/GitHub/Chroma-App"
+repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 out="$repo/.claude/last-compact-snapshot.md"
 cd "$repo" 2>/dev/null || exit 0
 

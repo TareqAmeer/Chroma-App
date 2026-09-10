@@ -4,7 +4,7 @@
 # having to remember to start it. Narrowed 2026-09-10 to just install/launch commands — it used
 # to also match plain `npm run build`/`tauri build`/`cargo build --bin`, so a compile-only build
 # started a 20-minute watcher for no reason.
-repo="/Users/tareqameer/Documents/GitHub/Chroma-App"
+repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 active="$repo/diagnostics/reports/.active_run"
 cmd=$(jq -r '.tool_input.command // empty' 2>/dev/null)
 

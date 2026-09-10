@@ -2,7 +2,12 @@
 # PostToolUse/Write|Edit hook: bumps chromasmith-22.html's BUILD stamp to today's date whenever
 # an edit lands and the stamp is stale. Extracted from the inline one-liner that used to live in
 # settings.json, for readability — behavior unchanged. See CLAUDE.md §2's build-stamp note.
-f="/Users/tareqameer/Documents/GitHub/Chroma-App/chromasmith-22.html"
+#
+# repo is $CLAUDE_PROJECT_DIR (set by Claude Code for every hook) with a fallback that derives it
+# from this script's own location — so it also works when run by hand for testing, and carries no
+# machine-specific path, so it works the same from any clone.
+repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+f="$repo/chromasmith-22.html"
 edited=$(jq -r '.tool_input.file_path // empty' 2>/dev/null)
 [ "$edited" = "$f" ] || exit 0
 

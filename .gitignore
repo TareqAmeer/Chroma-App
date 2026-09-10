@@ -7,14 +7,20 @@ __pycache__/
 # OS / editor cruft
 .DS_Store
 
-# .claude/: settings*.json (machine-specific paths, personal permissions) and worktrees/ stay
-# local-only, but skills/agents/hooks are project knowledge meant to ship with the repo (see
-# https://code.claude.com/docs/en/skills — "every teammate who clones the repo gets the skill").
+# .claude/: settings.local.json (personal permission history, some genuinely machine-specific
+# paths) and worktrees/ stay local-only. settings.json now uses $CLAUDE_PROJECT_DIR for every
+# hook path (no machine-specific paths left in it) and is committed alongside the hook scripts it
+# wires up — skills/agents/hooks are project knowledge meant to ship with the repo (see
+# https://code.claude.com/docs/en/skills — "every teammate who clones the repo gets the skill"),
+# and settings.json without those hooks actually wired is just as much a gap as the scripts alone.
 .claude/*
 .claude/.DS_Store
+.claude/.explore-nudge-count
+.claude/last-compact-snapshot.md
 !.claude/skills/
 !.claude/agents/
 !.claude/hooks/
+!.claude/settings.json
 
 # Large or regenerable calibration assets (you supply your own captures):
 # original RAW/JPEG/TIFF captures + the validation/proof renders the scripts emit
