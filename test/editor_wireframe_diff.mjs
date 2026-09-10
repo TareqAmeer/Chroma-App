@@ -98,6 +98,18 @@ const PAIRS = {
   '.tp-panel[data-panel="color"] .grp[data-fxsec="hsl"]': { app: '.fx-ctrl[data-fxsec="hsl"]', label: 'color mixer section', zone: 'color-panel' },
   '.tp-panel[data-panel="color"] .grp[data-fxsec="pointcolor"]': { app: '.fx-ctrl[data-fxsec="pointcolor"]', label: 'point color section', zone: 'color-panel' },
   '.tp-panel[data-panel="color"] .grp[data-fxsec="wheels"]': { app: '.fx-ctrl[data-fxsec="wheels"]', label: 'colour wheels section', zone: 'color-panel' },
+  // Adjust panel — one flat panel (exposure/contrast/tone-region sliders + demosaic select), one
+  // real app section. Same whole-panel-to-whole-card shape as retouch/export/info above.
+  '.tp-panel[data-panel="adjust"]': { app: '.fx-ctrl[data-fxsec="adjust"]', label: 'adjust panel', zone: 'adjust-panel' },
+  // Looks panel — the preset gallery. Whole panel to whole card; the 113-entry preset LIST itself
+  // is dynamic content, same "nothing to structurally diff" shape as Masks (T29) — this PAIRS
+  // entry only covers the panel's own static chrome (search box, gallery grid container etc.).
+  '.tp-panel[data-panel="looks"]': { app: '.fx-ctrl[data-fxsec="looks"]', label: 'looks panel', zone: 'looks-panel' },
+  // Masks panel — app key is 'local' (PANEL_ALIAS in editor_coverage.mjs), wireframe key is
+  // 'masks'. Whole panel to whole card, same reasoning as Looks: mskRebuild()'s actual mask-row
+  // content is 100% dynamic (T29, editor_ux_spec.json) — editor_wireframe_behaviour.mjs's MA1
+  // baseline tests are the real coverage for what's inside, this entry just anchors the container.
+  '.tp-panel[data-panel="masks"]': { app: '.fx-ctrl[data-fxsec="local"]', label: 'masks panel', zone: 'masks-panel' },
 };
 // T9 (editor_ux_spec.json): 'width' added 2026-09-10 — a row could match on every OTHER
 // property yet still be visibly cramped or oversized because its spacing drifted from the
