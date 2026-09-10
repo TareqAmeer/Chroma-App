@@ -1084,6 +1084,13 @@
     .lib-side-tab svg{flex:none}
     .lib-side-tab span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
     .lib-side-tab.on{background:var(--bg);border-color:var(--bdr);color:var(--txt)}
+    /* Icon-only at the narrow end of the dock resize range: ellipsis alone just leaves a sliver
+       of a clipped glyph once "Library"/"Develop" has no room at all (reported live — a stray
+       letter next to each icon, not a clean icon). syncSideTabsCompact() below toggles this the
+       same scrollWidth>clientWidth way syncTopCompact() already does for #lib-top, so it reacts
+       to the ACTUAL rendered width (drag-resize, window resize) instead of a guessed px cutoff. */
+    .lib-side-tabs.compact .lib-side-tab span{display:none}
+    .lib-side-tabs.compact .lib-side-tab{gap:0}
     /* Docked filmstrip only: tighter padding/gap than the full-view sidebar (which is never
        narrower than DOCK_W=356px) — the extra breathing room there was itself eating into the
        ~66px two buttons have to share at the 90px floor. */
@@ -1858,15 +1865,17 @@
         <!-- "on" was a static class here, always Library, even while docked next to an open
              photo (i.e. actually in Develop) — the active tab now genuinely tracks which view
              you're in (syncSideTabs(), called on every toggleExpandedView + photo open). Icons
-             kept for visual consistency with the full-view tabs — the docked filmstrip always
-             has room for the label now (spec: fs-tabs is never width-gated), so this is no
-             longer a narrow-width fallback. -->
-        <button class="lib-side-tab" id="lib-side-tab-library" title="Switch to Library">${ic('library',13)}<span>Library</span></button>
+             kept for visual consistency with the full-view tabs. The dock CAN be resized down to
+             LIB_DOCK_MIN (90px), where the label genuinely has no room — syncSideTabsCompact()
+             hides the <span> at that point (see its own comment). aria-label is set explicitly
+             to the plain tab name (not the title's "Switch to X" phrasing) so hiding the span
+             doesn't change what a screen reader announces this button as. -->
+        <button class="lib-side-tab" id="lib-side-tab-library" title="Switch to Library" aria-label="Library">${ic('library',13)}<span>Library</span></button>
         <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
              performs a real navigation (closes the Library, same as the header button / L key).
              The wiring is correct — Develop simply IS the editor you land back in — so the
              stale "not yet available" title was the lie, not the handler. -->
-        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop">${ic('tools',13)}<span>Develop</span></button>
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop" aria-label="Develop">${ic('tools',13)}<span>Develop</span></button>
       </div>
       <div id="lib-collections" class="lib-fullview-only"></div><div id="lib-folders-header" class="lib-fullview-only"></div><div id="lib-tree" class="lib-fullview-only"></div><div id="lib-collections-post" class="lib-fullview-only"></div>
     </div>
@@ -6474,6 +6483,35 @@
   }
   new ResizeObserver(syncTopCompact).observe(libTop);
   window.addEventListener('resize', syncTopCompact);
+
+  // ── Docked filmstrip Library/Develop tabs: icon-only once the dock is dragged too narrow for
+  // the label text — same overflow-measurement approach as syncTopCompact() above, applied to
+  // .lib-side-tabs instead of #lib-top. Runs in BOTH modes (unlike syncTopCompact) because the
+  // dock width the tabs live in is resizable in docked mode too, via #lib-dock-resizer. ──
+  const libSideTabs = overlay.querySelector('.lib-side-tabs');
+  // ⚠️ Measure the LABEL <span>s, not .lib-side-tab or .lib-side-tabs itself: each tab is
+  // flex:1;min-width:0, so the flex algorithm already shrinks the button's own box to fit its
+  // track before layout — its scrollWidth reports that already-shrunk box, never the clipped
+  // child's true content width, so it never reads as overflowing (same false-negative as
+  // HANDOVER §8 item #13's 2-line label, different mechanism). The span's own overflow:hidden;
+  // text-overflow:ellipsis DOES still report a real scrollWidth>clientWidth once its text is
+  // clipped, which is what makes it a reliable signal here.
+  function syncSideTabsCompact() {
+    if (!libSideTabs) return;
+    // Always measure with labels temporarily VISIBLE first — once .compact hides a span, its
+    // scrollWidth/clientWidth both read 0 (display:none), which reads as "not clipped" and would
+    // flip .compact straight back off on the very next call, re-showing text that still doesn't
+    // fit. Re-checking from a clean slate every time is what makes this idempotent under a live
+    // drag-resize, not just on the first narrowing pass.
+    libSideTabs.classList.remove('compact');
+    const spans = libSideTabs.querySelectorAll('.lib-side-tab span');
+    const clipped = [...spans].some((s) => s.scrollWidth > s.clientWidth + 1);
+    libSideTabs.classList.toggle('compact', clipped);
+  }
+  if (libSideTabs) {
+    new ResizeObserver(syncSideTabsCompact).observe(libSideTabs);
+    window.addEventListener('resize', syncSideTabsCompact);
+  }
 
   // ── Sidebar drag-resize (design transplant: Library View.html's #resizer) — .full mode only,
   // where #lib-side is a real left column; a no-op elsewhere since the resizer is display:none.
