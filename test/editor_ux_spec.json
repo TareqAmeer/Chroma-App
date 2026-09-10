@@ -398,6 +398,15 @@
       "wireframeRef": "Editor (Developer) View.dc.html:374 (tp-panel crop) vs the .rail button list",
       "check": "editor:coverage (rail column)",
       "note": "DECIDED 2026-09-09 by the user: the APP is right \u2014 crop keeps its own rail entry and the WIREFRAME was missing the button. Fixed in the wireframe (Editor (Developer) View.dc.html, .rail), inserted between Retouch and Masks to match the app's own rail order (see the RAIL_GROUP_BREAK comment in chromasmith-22.html: [Image Looks] [Adjust] [Color] [Detail Retouch] [Crop] [Masks] [Film] [Frame] [Export Info]). Icon is the Lucide crop glyph at the same 24x24 / stroke-width 2 / round-cap spec as the rail's other icons. No app change."
+    },
+    "R1": {
+      "category": "retouch-panel",
+      "status": "backlog",
+      "source": "rather than undo spot, it should be a delete spot with a selection similar to retouch",
+      "wireframeRef": null,
+      "check": null,
+      "panel": "retouch",
+      "note": "Interaction change, not a layout one \u2014 deferred out of the Retouch panel redesign (test/panel_proposals.mjs) for exactly this reason: proposal removed the old \"Undo spot\" button rather than restyling it, since replacing it with a real delete-a-specific-spot flow needs new interaction design (select a placed spot on the photo, then remove just that one) that a compare-page mockup cannot decide. Until this lands, undo is still \u2318Z / the gear-menu undo, same as every other tool."
     }
   }
 }
