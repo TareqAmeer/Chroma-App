@@ -103,6 +103,19 @@ The spec file can track them together; the work must not.
 
 ## 3. Rules that come from things that already went wrong
 
+- **Never invent a colour. Strict rule, no exceptions.** Every colour used in implementation
+  must be an existing design-system token (`var(--acc)`, `var(--mut)`, `var(--bdr)`, `var(--txt)`,
+  etc. — see `DESIGN 2.md`'s palette) or copied verbatim from the wireframe. If the wireframe
+  didn't specify a colour for something, that is not license to pick one — use the token the
+  nearest equivalent real control already uses, or ask. Caught once already: Retouch's primary
+  button reused the app's pre-existing `.bpri` class (an amber/orange gradient) because it
+  already existed and looked like a plausible "primary button" — but it predates the design
+  system and violates its own explicit "one interactive color" principle. `.bpri` is legacy;
+  never reach for it in new redesign work. The fix, `.fx-btn-primary`, uses `var(--acc)` alone
+  — the same solid-fill recipe `#fx-add-btn` already uses elsewhere in the app — precisely
+  because that recipe was independently verified against `DESIGN 2.md`, not assumed compliant
+  from precedent. Verify every new colour choice against the design doc before using it, the
+  same way — "an existing class already does this" is not verification.
 - **Move markup; do not rewrite it.** The Editor is 51 hand-written `.fx-ctrl` panels with
   behaviour wired through inline handlers and 317 distinct element IDs referenced from JS.
   Relocating a node keeps its ID and its handlers. Re-authoring it re-wires all of that by hand,

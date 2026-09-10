@@ -82,9 +82,12 @@ const swatchRow = (label, hex) =>
   `<div class="swatch-row"><span class="swatch" style="background:${hex}"></span><span>${esc(label)}</span><span class="hex">${hex.toUpperCase()}</span></div>`;
 
 // ── Colour-mixer bands: the actual colours, not their names (feedback: COLOR 3) ─────────────
+// Values copied VERBATIM from the app's own HSL_COLS constant (chromasmith-22.html) — never
+// invent a colour, especially one the app already has a real value for. An earlier draft used
+// approximated red/orange/yellow/etc that didn't match; caught before implementation.
 const HSL_BANDS = [
-  ['Red', '#e04b4b'], ['Orange', '#e08b3a'], ['Yellow', '#ddc73f'], ['Green', '#5fbf5f'],
-  ['Aqua', '#4fc3c9'], ['Blue', '#4f7fd4'], ['Purple', '#8a63cc'], ['Magenta', '#cc5fa8'],
+  ['Red', '#ff5b5b'], ['Orange', '#ff9f43'], ['Yellow', '#ffd43b'], ['Green', '#51cf66'],
+  ['Aqua', '#3bc9db'], ['Blue', '#4d8bff'], ['Purple', '#9775fa'], ['Magenta', '#f06595'],
 ];
 const bandStrip = (activeIdx = 0) =>
   `<div class="bands">${HSL_BANDS.map(([name, hex], i) =>
@@ -99,8 +102,11 @@ export const PROPOSALS = {
       sec('Tone curve', {
         edited: true, reset: 'all',
         body: seg(['Point', 'Parametric'], 0)
-          + `<div class="chrow">${['#fff', '#e05454', '#63d17a', '#5b7fe0'].map((c, i) =>
-            `<button class="ch${i === 0 ? ' on' : ''}"${i === 0 ? '>RGB' : `><i style="background:${c}"></i>`}</button>`).join('')}</div>`
+          // No colour dots: the app's real crv-chip row is plain text (RGB/R/G/B) with no
+          // per-channel colour today, and neither the wireframe nor any app constant defines
+          // one — inventing red/green/blue approximations here would be exactly the mistake
+          // this file already got called out for once (HSL_BANDS). Segmented control only.
+          + seg(['RGB', 'R', 'G', 'B'], 0)
           + `<div class="curve"><svg viewBox="0 0 100 100" preserveAspectRatio="none">
               <path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" stroke="rgba(255,255,255,.06)" stroke-width=".6" fill="none"/>
               <path d="M0 100 L100 0" stroke="rgba(255,255,255,.14)" stroke-width=".8" fill="none"/>
@@ -139,33 +145,55 @@ export const PROPOSALS = {
   },
 
   // ══ DETAIL ═════════════════════════════════════════════════════════════════════════════
+  // NOTE: none of Noise reduction / Lens correction / Deconvolution have a section on/off
+  // switch in the real app — all three are "driven by a value > 0" tools with no enable toggle
+  // (chromasmith-22.html's own comment on Deconvolution: "same pattern as the Lens/NR cards, no
+  // enable toggle"). An earlier draft wrapped all three in sec() (which always renders a switch)
+  // — wrong shape, fixed to secPlain() throughout, matching Crop/Export/Info's existing pattern
+  // for real always-on tools.
   detail: {
     html: [
-      sec('Noise reduction', {
+      secPlain('Noise reduction', {
         edited: true, reset: 'one',
-        body: field('RAW noise reduction', seg(['Off', 'Fast', 'High'], 0),
-          'High-tier (neural) noise reduction only applies to RAW files. On a JPEG or TIFF this setting has no effect.')
+        body: field('RAW noise reduction', seg(['Off', 'Fast', 'High'], 1),
+          'Fast (default): native shadow + chroma-wavelet denoise on linear RAW data, a few seconds, applies automatically. High: additionally runs a neural denoiser, 25-90s at 24MP — never automatic, press Denoise now or it runs once at export. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.')
+          // High Strength + the Denoise now/Cancel/progress row are shown only when RAW NR is
+          // set to High, exactly as the app already gates them (row-nr-high-strength/row-nr-high)
+          // — represented here in their real conditional state, not invented as always-visible.
+          + `<div class="cond-block">
+              ${sl('High strength', 70, 0, 100, 'Real-photo review found full strength can soften fine hair/fur more than a reference tool, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep.')}
+              <div class="btn2"><button class="wide-btn ghost" style="flex:1">Denoise now</button><button class="wide-btn ghost">Cancel</button></div>
+            </div>`
+          + `<div class="cb-row"><button class="sw"></button><span>Sparkle-optimized RAW <button class="info-i" title="Uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but trades away some general chroma-noise headroom elsewhere. Opt-in per photo. Requires reopening this photo. Desktop only.">i</button></span></div>`
           + sl('Luminance', 0, 0, 100) + sl('Color', 0, 0, 100) + sl('Detail', 50, 0, 100)
-          + sl('Sharpen', 0, 0, 100) + sl('Highlight desaturation', 0, 0, 100),
+          + sl('Sharpen', 0, 0, 100)
+          + sl('Highlight desaturation', 0, 0, 100, 'Bright specular highlights sometimes show green/magenta false colour that Luminance/Color NR alone can\'t remove — this fades toward neutral from mid-tones through highlights. Per-photo only.')
+          + `<p class="hint">Tames RAW sensor noise (especially high ISO) before the film look.</p>`,
       }),
-      sec('Lens correction', {
-        on: false, reset: 'one',
-        body: `<div class="cb-row"><button class="sw"></button><span>Auto (lens profile)</span></div>`
+      secPlain('Lens correction', {
+        reset: 'one',
+        body: `<div class="cb-row"><button class="sw"></button><span>Auto (lens profile) <button class="info-i" title="Desktop only: looks up this exact camera+lens+focal length in a bundled lens-profile database and geometrically corrects distortion automatically.">i</button></span></div>`
           + sl('Distortion', 0) + sl('Vignette', 0) + sl('Chromatic aberration', 0, 0, 100)
           + sl('Vertical', 0) + sl('Horizontal', 0) + sl('Rotate', 0) + sl('Scale', 0, 0, 100) + sl('Defringe', 0, 0, 100)
           + `<details class="hint-x"><summary>${icon('M4 22V10M4 10l8-6 8 6M4 10h16v12H4Z', ' fill="none" stroke-width="2"')}Manual lens (no EXIF)</summary>`
           + field('Lens', select('None (auto-detect)')) + field('Focal length (mm)', `<input class="txt" value="35">`) + `</details>`,
       }),
-      sec('Deconvolution', { on: false, reset: 'one', body: sl('Amount', 0, 0, 100) + sl('Radius', 20, 0, 100) }),
+      secPlain('Deconvolution', {
+        reset: 'one',
+        body: `<p class="hint">Recovers real detail lost to lens/sensor blur, instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</p>`
+          + sl('Amount', 0, 0, 100) + sl('Radius', 20, 0, 100),
+      }),
     ].join('\n'),
     changes: [
-      ['merged', 'DETAIL 1 — RAW noise reduction becomes an Off | Fast | High segmented control instead of a dropdown. Three mutually exclusive options that fit on one row should not cost a click to see.'],
-      ['demoted', 'DETAIL 2 — "High-tier noise reduction only applies to RAW files" becomes an ⓘ on the RAW noise reduction label. It is a caveat about one setting, not a standing sentence in the panel.'],
+      ['merged', 'DETAIL 1 — RAW noise reduction becomes an Off | Fast | High segmented control instead of a dropdown. Three mutually exclusive options that fit on one row should not cost a click to see. Default is Fast (matches the app\'s own selected option).'],
+      ['demoted', 'DETAIL 2 — The long neural-NR explanation and the High Strength caveat both move to ⓘ tooltips. "High-tier noise reduction only applies to RAW files" — the specific line the feedback named — is folded into the first of those.'],
       ['moved', 'Deconvolution arrives here from its own rail section (spec D2) and sits below Lens correction, since it is the last sharpening-adjacent step.'],
-      ['moved', 'COLOR 1 rule applied — per-section Reset in the header, hidden until edited. Noise reduction is shown edited.'],
-      ['cut', 'The section-local "Cancel" and "Reset" buttons under Noise reduction. Cancel belongs to the neural NR job\'s progress state, not to the panel at rest — it should appear only while a job is running.'],
-      ['kept', 'Every slider, its range and default. The "High Strength" slider is shown only when RAW noise reduction is set to High, which is what the app already does.'],
-      ['kept', 'Lens correction now shows every real control: Auto (lens profile) toggle, Distortion, Vignette, Chromatic aberration, Vertical, Horizontal, Rotate, Scale, Defringe, plus Manual lens + Focal length folded into a disclosure since both are hidden by default (EXIF auto-detect covers almost every lens). An earlier draft replaced this whole section with three invented placeholder sliders that do not exist in the app — caught and fixed before implementation, same class of error as Retouch\'s dropped button.'],
+      ['moved', 'COLOR 1 rule applied — per-section Reset in the header for all three sections, hidden until edited. Each defers to the section\'s own existing reset function (resetNR/resetDeconv), which already has RAW-aware defaults the generic reset does not know about.'],
+      ['kept', 'Denoise now / Cancel / the progress bar, and the High Strength slider — all conditionally shown only when RAW NR is High, exactly as the app already gates them. An earlier draft of this proposal both invented placeholder sliders in place of the real ones AND separately cut this whole job-UI as "belongs to a progress state" without actually keeping it anywhere — caught and fixed before implementation: it is real, necessary UI, not something to remove.'],
+      ['kept', 'The Sparkle-optimized RAW (AHD demosaic) toggle and its hint — missing entirely from an earlier draft.'],
+      ['kept', 'The permanent "Tames RAW sensor noise..." caption at the bottom of Noise reduction, and Sharpen\'s real id (sl-adj-sharp — it is a Basic Adjustments slider relocated into this panel by the app already, not an NR-owned one).'],
+      ['kept', 'Lens correction shows every real control: Auto (lens profile) toggle, Distortion, Vignette, Chromatic aberration, Vertical, Horizontal, Rotate, Scale, Defringe, plus Manual lens + Focal length folded into a disclosure since both are hidden by default (EXIF auto-detect covers almost every lens). An earlier draft replaced this whole section with three invented placeholder sliders that do not exist in the app.'],
+      ['kept', 'Deconvolution\'s own explanatory paragraph, verbatim (it is short enough to stay inline rather than move to a tooltip).'],
     ],
   },
 
@@ -174,7 +202,7 @@ export const PROPOSALS = {
     html: [
       sec('Film grain', {
         edited: true, reset: 'one',
-        body: sl('Amount', 30, 0, 100) + field('Film format', select('35mm — standard'))
+        body: sl('Amount', 30, 0, 100) + field('Film format', select('65mm — fine'))
           + sl('Size', 3, 1, 20) + sl('Grain motion', 75, 0, 100) + sl('Gate weave', 0, 0, 100) + sl('Film breath', 0, 0, 100),
       }),
       sec('Halation', {
@@ -185,14 +213,14 @@ export const PROPOSALS = {
           + `<div class="cb-row"><button class="sw"></button><span>No remjet</span><button class="info-i" title="Film with no anti-halation backing — much stronger, bloomier halos with a yellow to orange to red edge.">i</button></div>`
           + `<div class="cb-row"><button class="sw"></button><span>Extreme</span><button class="info-i" title="The no-remjet glow pushed roughly 5-6x stronger, for a heavy stylised bloom. Implies No remjet.">i</button></div>`,
       }),
-      sec('Bloom', { on: false, reset: 'one', body: sl('Strength', 0, 0, 100) + sl('Radius', 0, 0, 100) + sl('Threshold', 0, 0, 100) }),
+      sec('Bloom', { on: false, reset: 'one', body: sl('Amount', 40, 0, 100) + sl('Threshold', 10, 2, 60) + sl('Radius', 12, 2, 50) }),
       sec('Film artifacts', {
         on: false, reset: 'one',
         body: sl('Dust', 30, 0, 100) + sl('Scratches', 20, 0, 100) + sl('Light leak', 0, 0, 100)
           + field('Dust colour', seg(['Both', 'Black', 'White'], 0))
           + `<button class="wide-btn">${icon('M3 12a9 9 0 1 0 3-6.7M3 4v5h5', ' stroke-width="2" fill="none"')}Re-roll</button>`,
       }),
-      sec('Vignette', { on: false, reset: 'one', body: sl('Amount', 0) }),
+      sec('Vignette', { on: false, reset: 'one', body: sl('Amount', 50, 0, 100) }),
     ].join('\n'),
     changes: [
       ['moved', 'FILM 2 — Film format moves to the top of Film grain, directly under Amount. It sets what the other four sliders mean, so it belongs above them rather than buried after Film breath.'],
@@ -209,10 +237,16 @@ export const PROPOSALS = {
     html: [
       sec('Border', {
         edited: true, reset: 'one',
-        body: swatchRow('Outer colour', '#ffffff') + sl('Outer thickness', 1, 0, 10)
-          + swatchRow('Inner colour', '#101014') + sl('Inner thickness', 2, 0, 10)
+        // Real ids/defaults, verified against chromasmith-22.html: cl-b1 (Inner) is #000000 at
+        // thickness 1%, cl-b2 (Outer) is #ffffff at thickness 2% — an earlier draft swapped
+        // Inner/Outer's colours AND invented #101014 for one of them. Real order is Inner
+        // first, then Outer (matches the app's own section headings); this proposal keeps that
+        // order and only reorders colour-before-thickness WITHIN each, which is what FRAME 1
+        // actually asked for.
+        body: swatchRow('Inner colour', '#000000') + sl('Inner thickness', 1, 0, 10)
+          + swatchRow('Outer colour', '#ffffff') + sl('Outer thickness', 2, 0, 10)
           + field('Style', select('None'))
-          + field('Edge text', `<input class="txt" value="" placeholder="KODAK PORTRA 400">`),
+          + field('Edge text', `<input class="txt" value="" placeholder="e.g. KODAK PORTRA 400   12A">`),
       }),
       sec('Canvas', {
         on: false, reset: 'one',
@@ -228,12 +262,12 @@ export const PROPOSALS = {
               <button class="chipsw" style="background:#7a3b3b"></button>
               <button class="chipsw blur" title="Blurred photo">${icon('M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z', ' fill="none" stroke-width="1.6"')}</button>
             </div></div>`
-          + swatchRow('Custom colour', '#141414'),
+          + swatchRow('Custom colour', '#000000'),
       }),
     ].join('\n'),
     changes: [
-      ['moved', 'FRAME 1 — Reordered to outer colour → outer thickness → inner colour → inner thickness, so each colour sits directly above the thickness it belongs to. Today both colours and both thicknesses are separated, and neither pair says which is which.'],
-      ['new', 'FRAME 1 — The two colour rows are named Outer and Inner. Today both are labelled just "Color", which is unreadable once two dark swatches sit next to each other.'],
+      ['moved', 'FRAME 1 — Within each border, colour now sits directly above its own thickness (Inner colour → Inner thickness, then Outer colour → Outer thickness) instead of both thicknesses being grouped separately from both colours. Inner-then-outer order is unchanged — it already matches the app\'s own "Inner border"/"Outer border" section headings.'],
+      ['new', 'FRAME 1 — The two colour rows are named Inner and Outer (matching the app\'s own real section headings) instead of both being labelled just "Color", which is unreadable once two dark swatches sit next to each other.'],
       ['merged', 'FRAME 2 — Canvas\'s nine ratio buttons become a Darkroom-style option list: one row each, tick on the selected one, room for a right-hand value. A wrapped grid of nine differently-sized chips was the single worst instance of the ragged-chip problem in the app. Labels are the app\'s real bare ratios (CV_ARS) — an earlier draft invented suffixes ("4:5 Instagram", "3:4 Classic", "3:2 35mm") the app does not have; caught and fixed before implementation.'],
       ['kept', 'Canvas background stays the real 7-colour swatch grid plus the blurred-photo option (CV_BGS), now with a separate Custom colour swatch alongside it for the one-off picker (cl-canvas-bg) that was missing from an earlier draft.'],
       ['new', 'The colour swatches gain a hex readout and grow to 28px, clearing the pointer-target floor test/ui_audit.mjs enforces (the current 32×22 fails on height).'],
@@ -456,6 +490,16 @@ export const PROPOSALS = {
 // Extra CSS the proposals need, injected into every generated page by panel_compare_build.mjs.
 // Kept here rather than in the builder so a component and the markup that uses it live together.
 export const PROPOSAL_CSS = `
+/* Collapsed long-form explanation, closed by default — for real detail worth reading in full
+   (exact timing, exact behaviour) rather than a short caveat that fits an ⓘ tooltip. */
+.wf .hint-x{border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-sm);margin-top:4px;overflow:hidden}
+.wf .hint-x>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:7px 9px;font-size:11px;color:var(--ink-on-dark-muted)}
+.wf .hint-x>summary::-webkit-details-marker{display:none}
+.wf .hint-x>summary svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2}
+.wf .hint-x>div{padding:0 9px 9px;display:flex;flex-direction:column;gap:10px}
+/* Marks a group of controls that only apply in one state of a sibling control (RAW NR = High)
+   — a dashed rule reads as "conditional" without needing JS to actually show/hide it here. */
+.wf .cond-block{display:flex;flex-direction:column;gap:10px;padding:8px 0 0;border-top:1px dashed rgba(255,255,255,.14)}
 /* Reset control: borderless, and only visible once the section has been edited (feedback COLOR 1).
    .grp.edited is the state switch — every proposal shows at least one edited section so the
    rule is visible in review rather than only described. */
@@ -468,10 +512,6 @@ export const PROPOSAL_CSS = `
 .wf .seg button{flex:1;height:24px;border-radius:6px;font-size:11px;color:var(--ink-on-dark-muted);background:none;border:none;cursor:pointer;white-space:nowrap}
 .wf .seg button.on{background:rgba(255,255,255,.1);color:var(--ink-on-dark)}
 .wf .info-i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:none;color:var(--ink-on-dark-muted);font-size:9px;font-style:italic;line-height:1;cursor:help;padding:0;vertical-align:middle}
-.wf .chrow{display:flex;gap:6px}
-.wf .ch{width:34px;height:22px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);font-size:10px;color:var(--ink-on-dark-muted);display:flex;align-items:center;justify-content:center}
-.wf .ch.on{border-color:var(--primary-on-dark);color:var(--ink-on-dark)}
-.wf .ch i{width:7px;height:7px;border-radius:50%;display:block}
 .wf .curve{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2);position:relative;overflow:hidden}
 .wf .curve svg{position:absolute;inset:0;width:100%;height:100%}
 /* Colour-mixer bands: the colours themselves, names on the tooltip (feedback COLOR 3). */
@@ -513,7 +553,11 @@ export const PROPOSAL_CSS = `
 .wf .wide-btn,.wf .add-btn,.wf .pick-btn{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
 .wf .wide-btn svg,.wf .add-btn svg,.wf .pick-btn svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .wf .wide-btn.ghost{background:none}
-.wf .wide-btn.danger{color:#e79a9d;border-color:rgba(231,154,157,.3)}
+/* Real token only (--red-oxide, DESIGN 2.md) — no invented lighter tint. --red-oxide itself is
+   too dark for readable text on this dark surface, so it washes the background/border instead
+   (a translucent tint of the SAME real colour, not a new hue) while the label stays the normal
+   ink-on-dark text colour every other button uses. */
+.wf .wide-btn.danger{background:rgba(135,15,19,.16);border-color:rgba(135,15,19,.5)}
 .wf .wide-btn.primary{background:var(--primary-on-dark);color:#10222a;border-color:var(--primary-on-dark);font-weight:600}
 .wf .btn2{display:flex;gap:6px}
 .wf .txt{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font:inherit;font-size:12px;padding:0 9px}

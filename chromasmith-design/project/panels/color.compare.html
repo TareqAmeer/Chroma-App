@@ -99,6 +99,16 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .cb-row{display:flex;align-items:center;gap:8px;font-size:12px}
 .wf .unlabeled-flag{outline:1.5px dashed #e8c07a;outline-offset:2px}
 
+/* Collapsed long-form explanation, closed by default — for real detail worth reading in full
+   (exact timing, exact behaviour) rather than a short caveat that fits an ⓘ tooltip. */
+.wf .hint-x{border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-sm);margin-top:4px;overflow:hidden}
+.wf .hint-x>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:7px 9px;font-size:11px;color:var(--ink-on-dark-muted)}
+.wf .hint-x>summary::-webkit-details-marker{display:none}
+.wf .hint-x>summary svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2}
+.wf .hint-x>div{padding:0 9px 9px;display:flex;flex-direction:column;gap:10px}
+/* Marks a group of controls that only apply in one state of a sibling control (RAW NR = High)
+   — a dashed rule reads as "conditional" without needing JS to actually show/hide it here. */
+.wf .cond-block{display:flex;flex-direction:column;gap:10px;padding:8px 0 0;border-top:1px dashed rgba(255,255,255,.14)}
 /* Reset control: borderless, and only visible once the section has been edited (feedback COLOR 1).
    .grp.edited is the state switch — every proposal shows at least one edited section so the
    rule is visible in review rather than only described. */
@@ -111,10 +121,6 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .seg button{flex:1;height:24px;border-radius:6px;font-size:11px;color:var(--ink-on-dark-muted);background:none;border:none;cursor:pointer;white-space:nowrap}
 .wf .seg button.on{background:rgba(255,255,255,.1);color:var(--ink-on-dark)}
 .wf .info-i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:none;color:var(--ink-on-dark-muted);font-size:9px;font-style:italic;line-height:1;cursor:help;padding:0;vertical-align:middle}
-.wf .chrow{display:flex;gap:6px}
-.wf .ch{width:34px;height:22px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);font-size:10px;color:var(--ink-on-dark-muted);display:flex;align-items:center;justify-content:center}
-.wf .ch.on{border-color:var(--primary-on-dark);color:var(--ink-on-dark)}
-.wf .ch i{width:7px;height:7px;border-radius:50%;display:block}
 .wf .curve{width:100%;aspect-ratio:1;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.12);background:var(--surface-tile-2);position:relative;overflow:hidden}
 .wf .curve svg{position:absolute;inset:0;width:100%;height:100%}
 /* Colour-mixer bands: the colours themselves, names on the tooltip (feedback COLOR 3). */
@@ -156,7 +162,11 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .wf .wide-btn,.wf .add-btn,.wf .pick-btn{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
 .wf .wide-btn svg,.wf .add-btn svg,.wf .pick-btn svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .wf .wide-btn.ghost{background:none}
-.wf .wide-btn.danger{color:#e79a9d;border-color:rgba(231,154,157,.3)}
+/* Real token only (--red-oxide, DESIGN 2.md) — no invented lighter tint. --red-oxide itself is
+   too dark for readable text on this dark surface, so it washes the background/border instead
+   (a translucent tint of the SAME real colour, not a new hue) while the label stays the normal
+   ink-on-dark text colour every other button uses. */
+.wf .wide-btn.danger{background:rgba(135,15,19,.16);border-color:rgba(135,15,19,.5)}
 .wf .wide-btn.primary{background:var(--primary-on-dark);color:#10222a;border-color:var(--primary-on-dark);font-weight:600}
 .wf .btn2{display:flex;gap:6px}
 .wf .txt{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font:inherit;font-size:12px;padding:0 9px}
@@ -269,7 +279,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
       <div class="spec wf">
         <div class="grp edited">
   <div class="grp-hd"><span class="fieldlabel">Tone curve</span><span class="rst">Reset <i>|</i> All</span><button class="sw on" aria-label="Tone curve on"></button></div>
-  <div class="grp-bd"><div class="seg"><button class="on">Point</button><button class="">Parametric</button></div><div class="chrow"><button class="ch on">RGB</button><button class="ch"><i style="background:#e05454"></i></button><button class="ch"><i style="background:#63d17a"></i></button><button class="ch"><i style="background:#5b7fe0"></i></button></div><div class="curve"><svg viewBox="0 0 100 100" preserveAspectRatio="none">
+  <div class="grp-bd"><div class="seg"><button class="on">Point</button><button class="">Parametric</button></div><div class="seg"><button class="on">RGB</button><button class="">R</button><button class="">G</button><button class="">B</button></div><div class="curve"><svg viewBox="0 0 100 100" preserveAspectRatio="none">
               <path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100" stroke="rgba(255,255,255,.06)" stroke-width=".6" fill="none"/>
               <path d="M0 100 L100 0" stroke="rgba(255,255,255,.14)" stroke-width=".8" fill="none"/>
               <path d="M0 100 C30 78 62 30 100 0" stroke="#fff" stroke-width="1.6" fill="none" vector-effect="non-scaling-stroke"/>
@@ -278,7 +288,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 </div>
 <div class="grp off">
   <div class="grp-hd"><span class="fieldlabel">Color mixer</span><span class="rst">Reset <i>|</i> All</span><button class="sw" aria-label="Color mixer off"></button></div>
-  <div class="grp-bd"><div class="bands"><button class="band on" style="--b:#e04b4b" title="Red" aria-label="Red"></button><button class="band" style="--b:#e08b3a" title="Orange" aria-label="Orange"></button><button class="band" style="--b:#ddc73f" title="Yellow" aria-label="Yellow"></button><button class="band" style="--b:#5fbf5f" title="Green" aria-label="Green"></button><button class="band" style="--b:#4fc3c9" title="Aqua" aria-label="Aqua"></button><button class="band" style="--b:#4f7fd4" title="Blue" aria-label="Blue"></button><button class="band" style="--b:#8a63cc" title="Purple" aria-label="Purple"></button><button class="band" style="--b:#cc5fa8" title="Magenta" aria-label="Magenta"></button></div><div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div></div>
+  <div class="grp-bd"><div class="bands"><button class="band on" style="--b:#ff5b5b" title="Red" aria-label="Red"></button><button class="band" style="--b:#ff9f43" title="Orange" aria-label="Orange"></button><button class="band" style="--b:#ffd43b" title="Yellow" aria-label="Yellow"></button><button class="band" style="--b:#51cf66" title="Green" aria-label="Green"></button><button class="band" style="--b:#3bc9db" title="Aqua" aria-label="Aqua"></button><button class="band" style="--b:#4d8bff" title="Blue" aria-label="Blue"></button><button class="band" style="--b:#9775fa" title="Purple" aria-label="Purple"></button><button class="band" style="--b:#f06595" title="Magenta" aria-label="Magenta"></button></div><div class="slider-row"><div class="sr-top"><span>Hue</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Saturation</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div></div>
 </div>
 <div class="grp off">
   <div class="grp-hd"><span class="fieldlabel">Point color</span><span class="rst">Reset <i>|</i> All</span><button class="sw" aria-label="Point color off"></button></div>
