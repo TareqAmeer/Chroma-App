@@ -1524,7 +1524,30 @@ window.showBootStallBanner=function(phase,elapsedMs){
   b.innerHTML='';b.appendChild(msg);b.appendChild(close);
   console.warn(`[boot] watchdog fired: stalled on "${phase}" after ${secs}s`);
 };
-window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>{
+// ⚠️ E7 (test/editor_ux_spec.json) root-caused 2026-09-10: chromasmithForceLibraryReady() (this
+// watchdog's fallback) racing the wireframe-diff harness's own load/settle window force-flipped
+// the Library into full-view takeover (body.lib-full, hides #fx-deskbar) mid-run — intermittent
+// light-theme white-text findings were really that takeover, not a CSS bug. Widening the grace
+// 10000ms→16000ms only made the race rarer (editor_wireframe_diff.mjs still carried a 6x retry
+// after the widen, and its own comment called the fix a mitigation, not a close). The watchdog
+// exists to catch a REAL stalled boot for a real user; the `?libtest=1` harness (same LIBTEST
+// detection as desktop/library-ui.js) resolves its mocked boot synchronously and never
+// legitimately stalls, so there is nothing for this safety valve to catch in that mode — only a
+// race to lose. The guard lives HERE, inside the function, not at the one call site below:
+// library-ui.js:8328's catalog-scan progress listener also calls bumpBootSplashWatchdog()
+// directly (re-arming it on every progress event, by design, for a real boot) and is not gated on
+// LIBTEST itself, so a guard only at the initial call below would still let that later call
+// re-arm and fire it. Verified no test relies on the watchdog actually FIRING under ?libtest=1:
+// every reference to it in test/*.mjs documents working around its unwanted firing
+// (editor_wireframe_diff.mjs, editor_wireframe_inventory.mjs, editor_responsive_qa.mjs,
+// editor_wireframe_behaviour.mjs, library_dock_states.mjs), and library_perf.mjs's boot-readiness
+// assertions key off firstPaintReady()/hideBootSplash() resolving through the real boot path.
+window.bumpBootSplashWatchdog=function(graceMs){
+  if(!window.__TAURI__ && /[?&]libtest=1/.test(location.search)){
+    if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);
+    return;
+  }
+  if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>{
   const elapsed=performance.now()-(window._bootSplashArmedAt||performance.now());
   if(typeof window.chromasmithForceLibraryReady==='function'){try{window.chromasmithForceLibraryReady();}catch(e){}}
   window.hideBootSplash();
@@ -1537,11 +1560,6 @@ window.bumpBootSplashWatchdog=function(graceMs){if(window._bootSplashWatchdog)cl
   console.warn(`[boot] watchdog fired: stalled on "${window._bootLastPhase||'walk'}" after ${Math.round(elapsed/1000)}s`);
 },graceMs||8000);};
 window.bumpBootSplashWatchdog(16000); // initial grace period before any progress event has arrived yet
-// ⚠️ Bumped 10000→16000 (2026-09-10): chromasmithForceLibraryReady() racing the wireframe-diff
-// harness's own load/settle window was the confirmed cause of E7 (test/editor_ux_spec.json) —
-// intermittent light-theme white-text findings were really the Library being force-flipped into
-// full-view takeover (body.lib-full, hides #fx-deskbar) mid-harness-run, not a CSS bug. A wider
-// initial grace gives real boot more room before the safety valve fires. See test/editor_wireframe_diff.mjs.
 </script>
 <div id="status-cap"></div>
 <header>
@@ -4795,7 +4813,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-10e';
+const BUILD='2026-09-10f';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -12360,13 +12378,26 @@ function fxHasDepthMap(){
   return !!(it&&it.img&&it.img._depthMap);
 }
 async function fxEnsureDepthMap(){
-  if(!capNative())return null;             // browser build has no Rust depth_run — see README
+  // ⚠️ Was `if(!capNative())return null` — capNative() checks window.Capacitor (the iOS shell),
+  // but depth_run is a TAURI desktop command (main.rs/depth.rs), exactly like every other
+  // Tauri-only invoke in this file (_samFramedInvoke's own SAM/faceparse callers all gate on
+  // window.__TAURI__, never capNative()). Because Capacitor is never present in the desktop
+  // Tauri shell, that check made this function return null immediately, every single call, on
+  // the REAL desktop app — so Depth Range never worked there, AND each no-op null resolved so
+  // fast that mskRebuild()'s own `.then(()=>mskRebuild())` at its Depth Range UI block re-fired
+  // on every rebuild, forming an unbounded rebuild loop (confirmed: 20+ recursive calls/second,
+  // pinning the renderer indefinitely) the instant a mask panel with any mask was opened on
+  // Tauri. See the _depthMapAttempted guard below for the second, independent fix (don't retry
+  // forever even on a genuine depth_run failure).
+  if(!window.__TAURI__)return null;        // browser/iOS build has no Rust depth_run — see README
   const it=(typeof curItem==='function')?curItem():null;
   const img=it&&it.img;
   if(!img)return null;
   if(img._depthMap)return img._depthMap;
+  if(img._depthMapAttempted)return null;   // already tried (and failed) for this photo — see caller
   if(_depthRunning)return null;
   _depthRunning=true;
+  img._depthMapAttempted=true;
   try{
     const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
     if(!sw||!sh)return null;
@@ -14052,12 +14083,24 @@ function mskRebuild(){
   // per CLAUDE.md §10.13 (a switched-off section reads better dimmed than vanished).
   if(window.__TAURI__){
     const hasMap=fxHasDepthMap();
+    const attemptedImg=(typeof curItem==='function'&&curItem()&&curItem().img);
+    const alreadyAttempted=!!(attemptedImg&&attemptedImg._depthMapAttempted);
+    const failed=!hasMap&&alreadyAttempted&&!_depthRunning;   // attempted, not still running, still no map
     selBody+='<div class="fx-row" title="Restricts this mask to a near/far band of the photo\'s estimated depth."><div class="fx-label">Depth range</div>'
       +'<input type="checkbox" '+(m.depOn?'checked':'')+(hasMap?'':' disabled')+' onchange="mskDepToggle(this)"></div>'
-      +(!hasMap?'<div class="msk-hint">Computing depth map… (first use per photo takes a moment)</div>'
+      +(!hasMap?'<div class="msk-hint">'+(failed?'Depth estimate unavailable for this photo.':'Computing depth map… (first use per photo takes a moment)')+'</div>'
         :(m.depOn?_mskRow('Depth floor','depLo',m.depLo!=null?m.depLo:0,0,100,0.01,false,'0 = farthest pixel in the photo')
           +_mskRow('Depth ceiling','depHi',m.depHi!=null?m.depHi:1,0,100,0.01,false,'100 = nearest pixel in the photo'):''));
-    if(!hasMap)fxEnsureDepthMap().then(()=>{if(typeof mskRebuild==='function')mskRebuild();});
+    // ⚠️ Must ALSO gate here on alreadyAttempted, not just inside fxEnsureDepthMap(): "hasMap is
+    // false" is a STABLE condition while depth_run is pending or has failed, and mskRebuild()
+    // runs constantly (every mask edit). Without this check, EVERY mskRebuild() call — including
+    // the one this very .then() schedules — would re-enter this branch and chain another
+    // mskRebuild() after it, forever, even though fxEnsureDepthMap() itself no-ops internally
+    // after the first attempt. That internal no-op alone was NOT sufficient: this call site still
+    // re-fired the .then(mskRebuild) chain on every rebuild regardless, which was the actual
+    // infinite loop (confirmed live via CDP Debugger.pause sampling — 20+ recursive mskRebuild()
+    // calls/second). One real attempt per image, full stop.
+    if(!hasMap&&!alreadyAttempted)fxEnsureDepthMap().then(()=>{if(typeof mskRebuild==='function')mskRebuild();});
   }
 
   // ── "+ Coat"'s two direct one-slider controls ─────────────────────────────────────────────

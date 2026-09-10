@@ -667,23 +667,17 @@ test.describe('masks panel (MA1) — baseline, pre-redesign', () => {
     await page.mouse.click(5, 5);
   });
 
-  // ⚠️ CONFIRMED REAL BUG, not a test flake (isolated via a standalone Playwright script that
-  // called mskAdd('radial') directly, bypassing the click entirely): adding the FIRST local
-  // mask hangs the whole renderer. mskAdd()'s own synchronous body (mskRebuild + fxUpdate)
-  // completes fine — console.log calls placed immediately after it fire — but fxUpdate()
-  // schedules the next renderPreview() via requestAnimationFrame (fxScheduleRender), and that
-  // rAF-triggered render (the first one with a real mask in fxState.masks, so the first one to
-  // exercise the shader's local-adjust/mask code path) never returns: the renderer process
-  // pins at 100%+ CPU indefinitely (observed 2+ minutes, still climbing, had to SIGKILL) and
-  // stops responding to CDP entirely. Reproduced 3x standalone, independent of Playwright's
-  // click machinery. Root cause NOT diagnosed yet — plausibly a SwiftShader shader-compile
-  // hang on the mask-uniform-loop GLSL variant (same software-renderer family as the documented
-  // export_harness "WebGL context lost" flake in CLAUDE.md), or a real infinite loop in the
-  // render/uniform-packing path that only triggers once fxState.masks.length>0. Needs its own
-  // dedicated debugging session (WebGL/shader expertise, ideally with a real GPU to rule out
-  // SwiftShader). Skipped rather than left red/flaky so this baseline suite stays trustworthy
-  // for everything that DOES work; do not silently increase timeouts to paper over this again.
-  test.skip('adding a Radial mask creates a row and selects it, showing the Selection group', async ({ editor: { page } }) => {
+  // ⚠️ Was a CONFIRMED infinite loop, not a test flake: adding the first mask called mskRebuild(),
+  // whose Depth Range UI block (gated on window.__TAURI__, which the desktop dist build sets)
+  // called fxEnsureDepthMap(). That function's native-platform guard checked capNative() — the
+  // CAPACITOR/iOS check — instead of window.__TAURI__, so on desktop it always returned null
+  // immediately, every call, with no memoization. mskRebuild()'s own `.then(()=>mskRebuild())`
+  // then re-entered the same dead branch, forming an unbounded recursive rebuild loop (measured:
+  // 20+ recursive calls/second, pinning the renderer indefinitely — see git history for the full
+  // isolation trail via CDP Debugger.pause sampling). Fixed in chromasmith-22.html's
+  // fxEnsureDepthMap(): correct window.__TAURI__ guard + an img._depthMapAttempted memo so a
+  // genuine depth_run failure can't retrigger the same loop either.
+  test('adding a Radial mask creates a row and selects it, showing the Selection group', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="local"]');
     const before = await page.locator('#local-list button').count();
     await page.click('.fx-ctrl[data-fxsec="local"] button[onclick*="mskAddMenu"]');
@@ -692,9 +686,8 @@ test.describe('masks panel (MA1) — baseline, pre-redesign', () => {
     await expect(page.locator('#local-ctl')).toContainText('Selection');
   });
 
-  // Same underlying hang as above (adding a mask never returns from render) — skipped for the
-  // same reason.
-  test.skip('the "..." menu can mute and delete the selected mask', async ({ editor: { page } }) => {
+  // Same underlying loop as above — fixed the same way.
+  test('the "..." menu can mute and delete the selected mask', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="local"]');
     await page.click('.fx-ctrl[data-fxsec="local"] button[onclick*="mskAddMenu"]');
     await page.click('.msk-more-menu button:has-text("Radial")');
