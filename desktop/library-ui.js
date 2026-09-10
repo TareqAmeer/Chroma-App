@@ -5843,7 +5843,35 @@
   // opened — only the I key (which does toggle, below) could. Toggle here too.
   overlay.querySelector('#lib-info-btn').onclick = () => window.__libInfo(!state.showInfo);
   function toggleExpandedView(force) {
-    state.expanded_view = force !== undefined ? force : !state.expanded_view;
+    const goingFull = force !== undefined ? force : !state.expanded_view;
+    // Full mode's sidebar (--lib-side-w, 150-420px, default 230) and the docked filmstrip
+    // (--dock-w-user, 90-420px, default 120) are two independently-resizable widths — so
+    // switching the Library/Develop tabs (full <-> docked) previously made the left column
+    // visibly jump every time, even though nothing the user did asked for a resize. Carry the
+    // width that's actually ON SCREEN right now across the switch instead of falling back to
+    // the OTHER mode's own last-saved value. Clamped to each mode's own floor/ceiling — same
+    // numbers as LIB_DOCK_MIN/MAX and the #lib-side-resizer range below, since neither is in
+    // scope yet at this point in the file (both are consts declared further down, resolved by
+    // closure only once this function is actually CALLED, well after setup finishes).
+    if (goingFull !== state.expanded_view) {
+      const fxLayoutEl = document.querySelector('.fx-layout');
+      if (goingFull) {
+        const dockW = fxLayoutEl ? parseInt(getComputedStyle(fxLayoutEl).getPropertyValue('--dock-w-user'), 10) : NaN;
+        if (dockW) {
+          const w = Math.max(150, Math.min(420, dockW));
+          overlay.style.setProperty('--lib-side-w', w + 'px');
+          localStorage.setItem('chromasmith_lib_side_w', w);
+        }
+      } else {
+        const sideW = parseInt(getComputedStyle(overlay).getPropertyValue('--lib-side-w'), 10);
+        if (fxLayoutEl && sideW) {
+          const w = Math.max(90, Math.min(420, sideW));
+          fxLayoutEl.style.setProperty('--dock-w-user', w + 'px');
+          localStorage.setItem('chromasmith_lib_dock_w', w);
+        }
+      }
+    }
+    state.expanded_view = goingFull;
     overlay.classList.toggle('full', state.expanded_view);
     document.body.classList.toggle('lib-full', state.expanded_view);
     syncDockPadding();
