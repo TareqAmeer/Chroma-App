@@ -229,9 +229,25 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
 /* Round info button — sits on a label or a button, never on its own line (panel redesign,
    feedback: MULTIPLE). Long explanatory text that used to be a standing sentence in the panel
    collapses to this tooltip instead. */
+/* Panel redesign primary action button — the approved design system's one interactive colour
+   (--acc, already the real Blue Mist per DESIGN 2.md, confirmed live) is a SOLID fill, same
+   recipe #fx-add-btn already uses elsewhere in the app. NOT .bpri: that class's amber/orange
+   gradient predates the design system and doesn't match it — every new primary button this
+   redesign adds must use this class, never .bpri. */
+.fx-btn-primary{background:var(--acc);color:#000;border-color:var(--acc);font-weight:600}
+.fx-btn-primary:hover{filter:brightness(1.08)}
 .fx-info-i{width:14px;height:14px;border-radius:50%;border:1px solid var(--bdr);background:none;
   color:var(--mut);font-size:9px;font-style:italic;line-height:1;cursor:help;padding:0;
   display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;flex:none}
+/* Collapsed long-form explanation — for a paragraph too long to sit comfortably on an ⓘ tooltip
+   (real per-photo timing/behaviour detail a user may want to actually read, not just a caveat).
+   Closed by default so it doesn't cost permanent panel space; the summary line is the same
+   .fx-hint typography so it doesn't look like a heading. */
+.fx-hint-x{border:1px solid var(--bdr);border-radius:6px;margin:-2px 0 8px;overflow:hidden}
+.fx-hint-x>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;
+  padding:6px 8px;font-size:11px;color:var(--mut)}
+.fx-hint-x>summary::-webkit-details-marker{display:none}
+.fx-hint-x p{padding:0 8px 8px;font-size:11px;color:var(--mut);line-height:1.45}
 /* Sub-group heading INSIDE a panel (e.g. Skin Tone vs Local Adjustments in the mask panel) —
    lighter than .fx-ctrl-title, which is the panel's own header. */
 .fx-sub{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin:4px 0 4px;padding-top:6px;border-top:1px solid var(--bdr)}
@@ -2179,7 +2195,7 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
              as R1 (editor_ux_spec.json) since a real per-spot delete needs new interaction
              design, not a layout change — ⌘Z still undoes a spot in the meantime. -->
         <div class="btn-row" style="margin-top:2px">
-          <button class="btn bpri" id="btn-heal-paint" onclick="healToggle()" style="flex:1">Retouch</button>
+          <button class="btn fx-btn-primary" id="btn-heal-paint" onclick="healToggle()" style="flex:1">Retouch</button>
         </div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</div>
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
@@ -21211,6 +21227,11 @@ function fxResetSection(cardOrName){
   fxUpdate();
   log('Section reset','info');
 }
+// Several sections already had their OWN bespoke reset function (RAW-aware defaults, etc.) —
+// far older and more correct than the generic fxResetSection() above for those specific cases.
+// The header injector below prefers one of these when the section has one, rather than
+// silently replacing already-correct behaviour with the generic sliders-and-toggles walk.
+const _fxSectionResetOverride={nr:'resetNR',deconv:'resetDeconv',adjust:'resetAdjust'};
 // Panel redesign (docs/editor-redesign-plan.md, feedback COLOR 1): the desktop reset button
 // is no longer mobile-only (see .fx-ctrl-title-reset's CSS — it now shows on desktop too, but
 // only once .fx-mod marks something in the section as changed from default; visibility logic
@@ -21219,10 +21240,16 @@ function fxResetSection(cardOrName){
 // getting a second reset control glued on next to it.
 document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title=>{
   if(title.querySelector(':scope > .fx-toggle-lb'))return;
+  const fxsec=title.parentElement.dataset.fxsec;
   const b=document.createElement('button');
   b.type='button';b.className='fx-ctrl-title-reset';b.title='Reset this section';
   b.innerHTML=icon('reset',14)+'<span class="fx-ctrl-title-reset-lb">Reset</span>';
-  b.onclick=(e)=>{e.stopPropagation();fxResetSection(title.parentElement);};
+  b.onclick=(e)=>{
+    e.stopPropagation();
+    const override=_fxSectionResetOverride[fxsec];
+    if(override&&typeof window[override]==='function')window[override]();
+    else fxResetSection(title.parentElement);
+  };
   // Reset and the on/off toggle (if any) are wrapped together so both sit flush at the title's
   // right edge — appending reset as a bare third flex child would land it BETWEEN the title
   // text and the toggle under the existing justify-content:space-between rule instead of next
