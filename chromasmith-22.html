@@ -14536,8 +14536,13 @@ window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskO
 
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
 const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
+  // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
+  // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
+  // (Detail panel redesign, D1) so its header Reset button, gated on :has(.fx-row.fx-mod), can
+  // ever actually appear; resetDeconv() itself already worked, only the visibility signal didn't.
+  'deconv-amt','deconv-rad',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig','lut-mix'];
 const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
@@ -20858,6 +20863,27 @@ window.addEventListener('resize',()=>{
   clearTimeout(_fxWinResizeT);
   _fxWinResizeT=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
 });
+// HARD RULE (2026-09-10, after the sidebar-drag squeeze turned out to be the same bug as E4
+// under a different trigger): every past "photo gets squeezed/stretched" report has been a NEW
+// event source changing #fx-wrap's box size with nobody telling the canvas — window resize (E4),
+// the panel/rail drag (this report), and there is no reason to believe those are the last two.
+// Patching triggers one at a time is exactly the failure mode that produced two of these; a
+// ResizeObserver on #fx-wrap itself is trigger-agnostic — it fires for ANY cause of a size
+// change (window resize, sidebar/rail drag, sheet open/close, deskx breakpoint flip, a future
+// dock/split-view feature, zoom, devtools opening) without needing its own listener. It is the
+// single source of truth for "the wrap changed size, keep the photo in sync" and should not be
+// duplicated by adding yet another one-off resize/transition listener for a future container.
+(function(){
+  const wrap=document.getElementById('fx-wrap');
+  if(!wrap||typeof ResizeObserver==='undefined')return;
+  let _rt=0;
+  new ResizeObserver(()=>{
+    if(cropMode||fxLoupe)return; // both own the canvas / have their own resize handling
+    fxLiveFit(220);
+    clearTimeout(_rt);
+    _rt=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
+  }).observe(wrap);
+})();
 // Re-fit the render when the sheet finishes opening/closing (the photo's flex space changed).
 (function(){
   const p=document.querySelector('.fx-panel');
