@@ -248,6 +248,10 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
   padding:6px 8px;font-size:11px;color:var(--mut)}
 .fx-hint-x>summary::-webkit-details-marker{display:none}
 .fx-hint-x p{padding:0 8px 8px;font-size:11px;color:var(--mut);line-height:1.45}
+/* Groups controls that only apply conditionally (e.g. High-tier NR strength/Denoise job UI,
+   shown only while RAW Noise Reduction = High) — dashed top border sets it apart from the
+   always-visible rows above it, matching the wireframe's .cond-block. */
+.fx-cond-block{border-top:1px dashed var(--bdr);margin-top:2px;padding-top:6px}
 /* Sub-group heading INSIDE a panel (e.g. Skin Tone vs Local Adjustments in the mask panel) —
    lighter than .fx-ctrl-title, which is the panel's own header. */
 .fx-sub{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin:4px 0 4px;padding-top:6px;border-top:1px solid var(--bdr)}
@@ -1187,16 +1191,27 @@ body.deskx #db-lib-btn{display:none}
    separate buttons in the middle of the bar (three menus, 18 rows between them, some actions
    reachable from two). They're now one gear, docked at the FAR RIGHT after Export — matching the
    Library top bar's own zoom → flags → All FX → Export → gear order (desktop/library-ui.js).
-   settingsBuild() below fills the three sections (Tools/View/⋯) that live inside this one
-   dropdown; toolsBuild()/viewMenuBuild()/ovfBuild() are unchanged and still each own their
-   section, so nothing about what each item DOES had to move, only where the trigger sits. */
+   2026-09-10: restructured again into the approved two-column design (a narrow category list on
+   the left, the selected category's content on the right — settingsShowCat()) instead of one
+   long flat scroll with every section's rows concatenated end to end. toolsBuild()/
+   viewMenuBuild()/ovfBuild()/settingsSplitBuild()/settingsHistoryBuild() are STILL unchanged —
+   each still fills its own content pane exactly as before; only how those panes are PRESENTED
+   (one at a time, switched by category, instead of all five stacked and always visible) is new. */
 #fx-settings{display:none;position:relative}
 body.deskx #fx-settings{display:inline-flex}
-#fx-settings-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;min-width:220px;
-  max-height:80vh;overflow-y:auto;
+#fx-settings-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;
   background:var(--glass-bg);
-  border:1px solid var(--bdr);border-radius:10px;padding:5px;box-shadow:var(--lift-2)}
-#fx-settings-menu.on{display:block}
+  border:1px solid var(--bdr);border-radius:10px;box-shadow:var(--lift-2);overflow:hidden}
+#fx-settings-menu.on{display:flex;align-items:stretch}
+#fx-settings-cats{display:flex;flex-direction:column;gap:2px;width:150px;flex:0 0 auto;
+  border-right:1px solid var(--bdr);padding:5px;overflow-y:auto;max-height:70vh}
+.fx-settings-cat{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;
+  color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;padding:9px 10px}
+.fx-settings-cat:hover{background:var(--sur2)}
+.fx-settings-cat.active{background:var(--sur2);color:var(--acc);font-weight:600}
+#fx-settings-page{width:260px;flex:0 0 auto;padding:5px;overflow-y:auto;max-height:70vh}
+.fx-settings-pane{display:none}
+.fx-settings-pane.active{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
   color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;
   padding:9px 10px;text-align:left}
@@ -1656,27 +1671,27 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
            ovfBuild) — only the trigger button and outer dropdown are new; see settingsBuild(). -->
       <div id="fx-settings">
         <button class="fx-db fx-db-icon" onclick="settingsToggle(event)" title="Settings — transform, edit settings, view, appearance"><span class="fx-db-ic" id="db-settings"></span></button>
+        <!-- 2026-09-10: two-column drill-down (the approved design) — #fx-settings-cats lists
+             the categories, #fx-settings-page holds all five content panes stacked but only the
+             ACTIVE one visible (settingsShowCat()). Each pane is still filled by its own
+             pre-existing function exactly as before (toolsBuild/viewMenuBuild/ovfBuild/
+             settingsSplitBuild/settingsHistoryBuild) — split-view and edit history still render
+             the same "submenu, not a floating popover" content described below, just inside a
+             selected pane instead of concatenated into one long scroll. -->
         <div id="fx-settings-menu">
-          <div id="fx-tools-menu"></div>
-          <div class="fx-ovf-sep"></div>
-          <div id="fx-view-menu"></div>
-          <div class="fx-ovf-sep"></div>
-          <!-- 2026-09-09: split-view and edit history used to be a topbar icon each, opening a
-               floating popover anchored to that specific button (#fx-split-popover /
-               #fx-timeline-popover, still there for web/mobile mode — see the body.deskx hide
-               rules near .fx-zoom-ctrl). On desktop they're inline "submenus" here instead: the
-               settings dropdown already scrolls, so there's no separate floating layer or
-               viewport-clamping to get right, and settingsSplitBuild()/settingsHistoryBuild()
-               (called from settingsBuild(), same one-source-of-truth pattern as every other
-               section) render the exact same list-building code as the web popovers, just into a
-               plain block instead of a positioned one. -->
-          <div class="fx-ovf-grp-label">Compare</div>
-          <div id="fx-settings-split-list"></div>
-          <div class="fx-ovf-sep"></div>
-          <div class="fx-ovf-grp-label">Edit &amp; export history</div>
-          <div id="fx-settings-history-list" style="padding:0 8px 4px"></div>
-          <div class="fx-ovf-sep"></div>
-          <div id="fx-overflow-menu"></div>
+          <div id="fx-settings-cats"></div>
+          <div id="fx-settings-page">
+            <div id="fx-tools-menu" class="fx-settings-pane"></div>
+            <div id="fx-view-menu" class="fx-settings-pane"></div>
+            <!-- Split-view and edit history used to be a topbar icon each, opening a floating
+                 popover anchored to that specific button (#fx-split-popover/#fx-timeline-popover,
+                 still there for web/mobile mode — see the body.deskx hide rules near
+                 .fx-zoom-ctrl). On desktop they render inline here instead — no separate floating
+                 layer or viewport-clamping to get right, since this pane already scrolls. -->
+            <div id="fx-settings-split-list" class="fx-settings-pane"></div>
+            <div id="fx-settings-history-list" class="fx-settings-pane"></div>
+            <div id="fx-overflow-menu" class="fx-settings-pane"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1811,54 +1826,32 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
            enable toggle — it's driven by the sliders being >0, same as Lens). -->
       <div class="fx-ctrl" data-fxsec="nr">
         <div class="fx-ctrl-title">Noise Reduction</div>
-        <div class="fx-row" title="Desktop only. Native denoise before the tone curve; High also runs a neural pass.">
-          <div class="fx-label">RAW Noise Reduction</div>
-          <select class="fx-select" id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="flex:1"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High (neural)</option></select>
+        <div class="fx-row">
+          <div class="fx-label">RAW Noise Reduction <button class="fx-info-i" title="Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser, 25–90s at 24MP — never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.">i</button></div>
+          <select id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="display:none"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High</option></select>
+          <div class="seg" id="seg-raw-nr" style="flex:1"></div>
         </div>
-        <!-- Was a single 419-char title= — unreadable as a tooltip, and invisible on touch
-             entirely. Moved into a real .fx-hint (already used elsewhere for shorter cases);
-             the title above keeps just enough to place the control before you click into it. -->
-        <div class="fx-hint">Off: untouched decode. Fast (default): the native Rust-side shadow +
-          chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds,
-          applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser,
-          25–90s at 24MP — never automatic; press "Denoise now" below, or it runs once at export
-          if selected. Requires reopening this photo (or Denoise now) to take effect.</div>
-        <div class="fx-row" id="row-nr-high-strength" style="display:none" title="Blends the neural denoiser back toward the untouched decode.">
-          <div class="fx-label">High Strength</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-nr-high-strength" oninput="fxRawNrHighStrengthChanged(this.value)"><div class="fx-val" id="vl-nr-high-strength">70</div>
+        <div class="fx-cond-block">
+          <div class="fx-row" id="row-nr-high-strength" style="display:none">
+            <div class="fx-label">High Strength <button class="fx-info-i" title="Real-photo review (5 ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands more than DxO does, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise now / re-applies at next export.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-nr-high-strength" oninput="fxRawNrHighStrengthChanged(this.value)"><div class="fx-val" id="vl-nr-high-strength">70</div>
+          </div>
+          <div class="fx-row" id="row-nr-high" style="display:none">
+            <button class="btn bgh" id="btn-denoise-now" onclick="fxDenoiseNowClicked()" style="flex:1">Denoise now</button>
+            <button class="btn" id="btn-denoise-cancel" onclick="fxDenoiseCancelClicked()" style="display:none;margin-left:6px">Cancel</button>
+          </div>
+          <div id="row-nr-high-progress" style="display:none;margin:2px 0 4px">
+            <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width .15s"></div></div>
+          </div>
         </div>
-        <div class="fx-hint" id="hint-nr-high-strength" style="display:none">Real-photo review (5
-          ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands
-          more than DxO does, even though flat-area noise removal is comparable or better —
-          lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise
-          now / re-applies at next export.</div>
-        <div class="fx-row" id="row-nr-high" style="display:none">
-          <button class="btn bgh" id="btn-denoise-now" onclick="fxDenoiseNowClicked()" style="flex:1">Denoise now</button>
-          <button class="btn" id="btn-denoise-cancel" onclick="fxDenoiseCancelClicked()" style="display:none;margin-left:6px">Cancel</button>
+        <div class="fx-row">
+          <div class="fx-label">Sparkle-optimized RAW <button class="fx-info-i" title="Uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect. Desktop only.">i</button></div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
         </div>
-        <div id="row-nr-high-progress" style="display:none;margin:2px 0 4px">
-          <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width .15s"></div></div>
-        </div>
-        <div class="fx-row" title="Desktop only: switches the RAW demosaic algorithm. Standard is safest across all photos.">
-          <div class="fx-label">Sparkle-optimized RAW</div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
-        </div>
-        <div class="fx-hint">Uses AHD interpolation, which cleans up dense green/magenta
-          false-color speckle on sunlit water/specular highlights much further than Standard —
-          but it trades away some general chroma-noise headroom elsewhere in the frame, so it's
-          opt-in per photo rather than a global default. Requires reopening this photo to take
-          effect.</div>
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
         <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
-        <div class="fx-row nr-gated" id="row-nr-hldesat" title="Manual, off by default — a real pipeline limit, not a slider you forgot to raise."><div class="fx-label">Highlight Desaturation</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
-        <div class="fx-hint nr-gated" id="hint-nr-hldesat">Bright specular highlights (sunlit water, glints)
-          sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR
-          fully removes. Since real highlight color is usually near-neutral anyway, this fades
-          Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to
-          cover where the fringing actually sits, so it WILL flatten real color in bright areas
-          too at high amounts. Per-photo only, so it never touches other images.</div>
+        <div class="fx-row nr-gated" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
-        <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetNR()">Reset</button></div>
       </div>
       <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
            Gaussian PSF and inverts it with a few iterations of damped Richardson-Lucy, unlike
@@ -1871,7 +1864,6 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
           see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</div>
         <div class="fx-row" title="Blend between the original and the deconvolved result."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-deconv-amt" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-amt">0</div></div>
         <div class="fx-row" title="Size of the assumed lens/sensor blur (Gaussian PSF) to invert."><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-deconv-rad" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-rad">20</div></div>
-        <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="resetDeconv()">Reset</button></div>
       </div>
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
@@ -2016,21 +2008,27 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
       </div>
       <!-- LENS CORRECTION -->
       <div class="fx-ctrl" data-fxsec="lens">
-        <div class="fx-ctrl-title" title="Manual sliders — dial to taste while looking at a straight edge or the frame corners. Or try Auto above (desktop app only) if this camera+lens is in the bundled profile database.">Lens Correction</div>
-        <div class="fx-row" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">
-          <div class="fx-label">Auto (lens profile)</div><div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div>
+        <div class="fx-ctrl-title">Lens Correction</div>
+        <div class="fx-row">
+          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div><div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div>
         </div>
         <div id="lens-auto-status" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.5;margin:2px 0 8px"></div>
         <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
              EXIF at all, so auto-detection has nothing to recover — this lets you pick a lens
-             directly from the bundled lensfun database instead. Desktop only; hidden elsewhere. -->
-        <div class="fx-row" id="row-lens-manual" style="display:none" title="Overrides EXIF auto-detection with a lens you pick directly — for manual/adapted lenses that write no lens EXIF at all. Picking one also turns Auto on.">
-          <div class="fx-label">Manual lens</div>
-          <select class="fx-select" id="sel-lens-manual" onchange="fxLensManualChanged()" style="flex:1"><option value="">None (auto-detect)</option></select>
-        </div>
-        <div class="fx-row" id="row-lens-manual-focal" style="display:none" title="Focal length in mm — required for distortion correction. Auto-filled for fixed (prime) lenses.">
-          <div class="fx-label">Focal length (mm)</div>
-          <input class="fx-slider" type="number" min="1" max="2000" step="0.1" id="in-lens-manual-focal" oninput="fxLensManualFocalChanged()" style="max-width:80px;flex:0 0 auto">
+             directly from the bundled lensfun database instead. Desktop only; hidden elsewhere.
+             Grouped in a dashed .fx-cond-block (matches the wireframe's disclosure grouping)
+             rather than the wireframe's literal <details> — visibility here is STATE-driven
+             (fxLensAutoToggled/fxLensManualChanged toggle each row's own display), not a manual
+             expand/collapse, so a <details> element would fight that existing logic. -->
+        <div class="fx-cond-block">
+          <div class="fx-row" id="row-lens-manual" style="display:none" title="Overrides EXIF auto-detection with a lens you pick directly — for manual/adapted lenses that write no lens EXIF at all. Picking one also turns Auto on.">
+            <div class="fx-label">Manual lens</div>
+            <select class="fx-select" id="sel-lens-manual" onchange="fxLensManualChanged()" style="flex:1"><option value="">None (auto-detect)</option></select>
+          </div>
+          <div class="fx-row" id="row-lens-manual-focal" style="display:none" title="Focal length in mm — required for distortion correction. Auto-filled for fixed (prime) lenses.">
+            <div class="fx-label">Focal length (mm)</div>
+            <input class="fx-slider" type="number" min="1" max="2000" step="0.1" id="in-lens-manual-focal" oninput="fxLensManualFocalChanged()" style="max-width:80px;flex:0 0 auto">
+          </div>
         </div>
         <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-dist" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-dist">0</div></div>
         <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-vig">0</div></div>
@@ -4789,7 +4787,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-10c';
+const BUILD='2026-09-10d';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -7761,7 +7759,7 @@ try{window.chromasmithRawNr=localStorage.getItem('chromasmithRawNr')||(localStor
 try{window.chromasmithRawNrHighStrength=parseInt(localStorage.getItem('chromasmithRawNrHighStrength'),10);if(!(window.chromasmithRawNrHighStrength>=0&&window.chromasmithRawNrHighStrength<=100))window.chromasmithRawNrHighStrength=70;}catch(e){window.chromasmithRawNrHighStrength=70;}
 function fxRawNrSyncUI(){
   const sel=document.getElementById('sel-raw-nr');
-  if(sel)sel.value=window.chromasmithRawNr;
+  if(sel){sel.value=window.chromasmithRawNr;sel._chipsRender&&sel._chipsRender();}
   const isHigh=window.chromasmithRawNr==='high';
   const rowHigh=document.getElementById('row-nr-high');
   if(rowHigh)rowHigh.style.display=isHigh?'':'none';
@@ -20360,7 +20358,36 @@ function viewMenuClose(){settingsClose();}
 // comment at #fx-settings and the CSS comment above #fx-settings-menu for why Tools/View/⋯
 // collapsed into one gear. Building all three sections on every open (rather than caching) keeps
 // the checkmarks/labels current with zero extra invalidation logic, same as each did standalone.
-function settingsBuild(){toolsBuild();viewMenuBuild();ovfBuild();settingsSplitBuild();settingsHistoryBuild();}
+// 2026-09-10: the two-column drill-down — a fixed, short category list on the left
+// (SETTINGS_CATS), one pane visible at a time on the right (settingsShowCat()). _settingsCat
+// persists across opens (a plain module var, not reset in settingsBuild()) so reopening the
+// menu lands back where you left it instead of always snapping to Transform.
+const SETTINGS_CATS=[
+  {key:'tools',label:'Transform'},
+  {key:'view',label:'View'},
+  {key:'split',label:'Compare'},
+  {key:'history',label:'History'},
+  {key:'overflow',label:'More'},
+];
+const SETTINGS_PANE_ID={tools:'fx-tools-menu',view:'fx-view-menu',split:'fx-settings-split-list',
+  history:'fx-settings-history-list',overflow:'fx-overflow-menu'};
+let _settingsCat='tools';
+function settingsCatsBuild(){
+  const host=document.getElementById('fx-settings-cats');if(!host)return;
+  host.innerHTML=SETTINGS_CATS.map(c=>
+    `<button type="button" class="fx-settings-cat${c.key===_settingsCat?' active':''}" onclick="settingsShowCat('${c.key}')">${c.label}</button>`
+  ).join('');
+}
+function settingsShowCat(key){
+  if(!SETTINGS_PANE_ID[key])return;
+  _settingsCat=key;
+  settingsCatsBuild();
+  document.querySelectorAll('.fx-settings-pane').forEach(p=>p.classList.toggle('active',p.id===SETTINGS_PANE_ID[key]));
+}
+function settingsBuild(){
+  toolsBuild();viewMenuBuild();ovfBuild();settingsSplitBuild();settingsHistoryBuild();
+  settingsCatsBuild();settingsShowCat(_settingsCat);
+}
 function settingsClose(){const m=document.getElementById('fx-settings-menu');if(m)m.classList.remove('on');}
 function settingsToggle(e){
   if(e)e.stopPropagation();
@@ -21224,6 +21251,7 @@ hslSyncUI();     // HSL mixer band chips + slider values/gradient tracks
 mskRebuild();        // local-adjustment mask list
 cvBuildChips();      // canvas ratio chips + background swatches
 selectToSeg('sel-heal-mode','seg-heal-mode'); // Retouch Heal|Clone (panel redesign)
+selectToSeg('sel-raw-nr','seg-raw-nr'); // Detail panel redesign: RAW NR Off|Fast|High
 selectToChips('sel-input','chips-input'); // input-profile tap chips
 selectToChips('sel-tonemap','chips-tonemap'); // ROADMAP.md R2 — highlight-response tap chips
 // 3.4.6 fix: the rolloff itself is correct — AgX/Standard/Film-stock only diverge on pixels ABOVE

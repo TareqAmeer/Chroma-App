@@ -1,5 +1,95 @@
 [
   {
+    "match": "MISSING 1x  icon",
+    "zone": "topbar",
+    "reason": "2026-09-10: deliberate change per Tareq — the Library top bar's app-logo image is removed so Library matches the Editor view, which no longer shows the wordmark in its own top bar either. Shifts the topbar atom count and every subsequent icon index by one; the icon-shape diffs below are the same root cause, not independent regressions."
+  },
+  {
+    "match": "atom count: wireframe 30 vs app 29",
+    "zone": "topbar",
+    "reason": "Downstream of the logo removal above."
+  },
+  {
+    "match": "x-offset of icon: wireframe 0px vs app 263px",
+    "zone": "topbar",
+    "reason": "Downstream of the logo removal above — the first remaining icon now sits where the logo used to end."
+  },
+  {
+    "match": "order@1: wireframe icon vs app input",
+    "zone": "topbar",
+    "reason": "Downstream of the logo removal above — the search input now sits at the position the logo occupied."
+  },
+  {
+    "match": "topbar#0: shape",
+    "zone": "icons",
+    "reason": "2026-09-10: downstream of the Library top-bar logo removal (see topbar zone entry) — every icon after the removed logo shifted one index, so each now diffs against the PREVIOUS icon's baseline shape rather than a real shape regression."
+  },
+  {
+    "match": "topbar#1: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#2: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#3: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#4: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#5: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#6: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#7: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#8: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#9: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#10: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#11: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#12: shape",
+    "zone": "icons",
+    "reason": "Downstream of the logo removal — see topbar#0 entry."
+  },
+  {
+    "match": "topbar#13: removed — present in baseline, absent now",
+    "zone": "icons",
+    "reason": "2026-09-10: the last topbar icon baseline slot has no successor after the logo removal shifted everything down by one — same root cause as topbar#0."
+  },
+  {
     "match": "MISSING 1x  button:\"Library\"",
     "reason": "2026-09-09: the Library/Develop tab buttons now carry an icon (ICONS.library/tools) alongside their text, so each is a container atom with a nested text child rather than a leaf button:\"Library\" — same kind-classification split seen elsewhere (wireframe rows are often leaf text, the app's real buttons carry icons). Functionally present and correctly active-state-synced; see EXTRA text:\"Library\" below.",
     "zone": "sidebar"

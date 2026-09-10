@@ -164,6 +164,15 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
 .wide-btn.ghost{background:none}
 .wide-btn.primary{background:var(--primary-on-dark);color:#10222a;border-color:var(--primary-on-dark);font-weight:600}
 .wide-btn.primary svg{stroke:#10222a}
+.cb-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.txt{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font:inherit;font-size:12px;padding:0 9px}
+.btn2{display:flex;gap:6px}
+.hint-x{border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-sm);margin-top:4px;overflow:hidden}
+.hint-x>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:7px 9px;font-size:11px;color:var(--ink-on-dark-muted)}
+.hint-x>summary::-webkit-details-marker{display:none}
+.hint-x>summary svg{width:13px;height:13px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2}
+.hint-x>div{padding:0 9px 9px;display:flex;flex-direction:column;gap:10px}
+.cond-block{display:flex;flex-direction:column;gap:10px;padding:8px 0 0;border-top:1px dashed rgba(255,255,255,.14)}
 
 .autoenhance{height:34px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:var(--weight-semibold)}
 .autoenhance:hover{background:rgba(255,255,255,.08)}
@@ -403,7 +412,23 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
       </div>
 
       <div class="tp-panel" data-panel="crop"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Crop &amp; straighten tools live here.</p></div>
-      <div class="tp-panel" data-panel="detail"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Sharpening &amp; noise reduction live here.</p></div>
+      <div class="tp-panel" data-panel="detail">
+<div class="grp" data-fxsec="nr">
+  <div class="grp-hd"><span class="fieldlabel">Noise reduction</span><span class="rst">Reset</span></div>
+  <div class="grp-bd"><div><span class="fieldlabel">RAW noise reduction <button class="info-i" title="Fast (default): native shadow + chroma-wavelet denoise on linear RAW data, a few seconds, applies automatically. High: additionally runs a neural denoiser, 25-90s at 24MP — never automatic, press Denoise now or it runs once at export. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.">i</button></span><div class="seg"><button class="">Off</button><button class="on">Fast</button><button class="">High</button></div></div><div class="cond-block">
+              <div class="slider-row"><div class="sr-top"><span>High strength <button class="info-i" title="Real-photo review found full strength can soften fine hair/fur more than a reference tool, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep.">i</button></span><span class="sr-val">70</span></div><input type="range" min="0" max="100" value="70"></div>
+              <div class="btn2"><button class="wide-btn ghost" style="flex:1">Denoise now</button><button class="wide-btn ghost">Cancel</button></div>
+            </div><div class="cb-row"><button class="sw"></button><span>Sparkle-optimized RAW <button class="info-i" title="Uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but trades away some general chroma-noise headroom elsewhere. Opt-in per photo. Requires reopening this photo. Desktop only.">i</button></span></div><div class="slider-row"><div class="sr-top"><span>Luminance</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Color</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Detail</span><span class="sr-val">50</span></div><input type="range" min="0" max="100" value="50"></div><div class="slider-row"><div class="sr-top"><span>Sharpen</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Highlight desaturation <button class="info-i" title="Bright specular highlights sometimes show green/magenta false colour that Luminance/Color NR alone can't remove — this fades toward neutral from mid-tones through highlights. Per-photo only.">i</button></span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><p class="hint">Tames RAW sensor noise (especially high ISO) before the film look.</p></div>
+</div>
+<div class="grp" data-fxsec="lens">
+  <div class="grp-hd"><span class="fieldlabel">Lens correction</span><span class="rst">Reset</span></div>
+  <div class="grp-bd"><div class="cb-row"><button class="sw"></button><span>Auto (lens profile) <button class="info-i" title="Desktop only: looks up this exact camera+lens+focal length in a bundled lens-profile database and geometrically corrects distortion automatically.">i</button></span></div><div class="slider-row"><div class="sr-top"><span>Distortion</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Vignette</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Chromatic aberration</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Vertical</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Horizontal</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Rotate</span><span class="sr-val">0</span></div><input type="range" min="-100" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Scale</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Defringe</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><details class="hint-x"><summary><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 22V10M4 10l8-6 8 6M4 10h16v12H4Z"/></svg>Manual lens (no EXIF)</summary><div><span class="fieldlabel">Lens</span><button class="select-btn"><span>None (auto-detect)</span><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button></div><div><span class="fieldlabel">Focal length (mm)</span><input class="txt" value="35"></div></details></div>
+</div>
+<div class="grp" data-fxsec="deconv">
+  <div class="grp-hd"><span class="fieldlabel">Deconvolution</span><span class="rst">Reset</span></div>
+  <div class="grp-bd"><p class="hint">Recovers real detail lost to lens/sensor blur, instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</p><div class="slider-row"><div class="sr-top"><span>Amount</span><span class="sr-val">0</span></div><input type="range" min="0" max="100" value="0"></div><div class="slider-row"><div class="sr-top"><span>Radius</span><span class="sr-val">20</span></div><input type="range" min="0" max="100" value="20"></div></div>
+</div>
+      </div>
       <div class="tp-panel" data-panel="color"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Color grading tools live here.</p></div>
       <div class="tp-panel" data-panel="retouch">
         <div class="grp off">

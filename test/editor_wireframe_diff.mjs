@@ -59,6 +59,12 @@ const PAIRS = {
   // real container straight to the app's real container rather than to any specific child —
   // per-control fidelity is what editor_wireframe_behaviour.mjs's new retouch tests check.
   '.tp-panel[data-panel="retouch"]': { app: '.fx-ctrl[data-fxsec="retouch"]', label: 'retouch panel', zone: 'retouch-panel' },
+  // 2026-09-10 — Detail panel (Stage 4 merge). Unlike Retouch, this panel groups three
+  // pre-existing app sections (nr/lens/deconv) rather than one — no single app container spans
+  // them, so each wireframe .grp maps to its own real .fx-ctrl card.
+  '.tp-panel[data-panel="detail"] .grp[data-fxsec="nr"]': { app: '.fx-ctrl[data-fxsec="nr"]', label: 'noise reduction section', zone: 'detail-panel' },
+  '.tp-panel[data-panel="detail"] .grp[data-fxsec="lens"]': { app: '.fx-ctrl[data-fxsec="lens"]', label: 'lens correction section', zone: 'detail-panel' },
+  '.tp-panel[data-panel="detail"] .grp[data-fxsec="deconv"]': { app: '.fx-ctrl[data-fxsec="deconv"]', label: 'deconvolution section', zone: 'detail-panel' },
 };
 const PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight',
   'backgroundColor', 'color', 'borderRadius', 'borderColor', 'borderWidth', 'boxShadow', 'height'];

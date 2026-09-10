@@ -274,3 +274,52 @@ test.describe('retouch panel (RT1)', () => {
     expect(spotsLeft).toBe(0);
   });
 });
+
+test.describe('detail panel (D1)', () => {
+  test('RAW noise reduction segmented control still drives sel-raw-nr', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="detail"]');
+    await page.click('#seg-raw-nr button:has-text("High")');
+    await expect(page.locator('#sel-raw-nr')).toHaveValue('high');
+    // High-tier conditional block (strength slider + Denoise now/Cancel) becomes visible.
+    await expect(page.locator('#row-nr-high-strength')).toBeVisible();
+    await expect(page.locator('#row-nr-high')).toBeVisible();
+    await page.click('#seg-raw-nr button:has-text("Fast")');
+    await expect(page.locator('#sel-raw-nr')).toHaveValue('fast');
+    await expect(page.locator('#row-nr-high-strength')).toBeHidden();
+  });
+
+  test('Sparkle-optimized RAW toggle still calls fxDemosaicToggled', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="detail"]');
+    const tg = page.locator('#tg-demosaic-ahd');
+    await tg.click();
+    await expect(tg).toHaveClass(/\bon\b/);
+    await tg.click();
+    await expect(tg).not.toHaveClass(/\bon\b/);
+  });
+
+  test('lens Auto toggle still calls fxLensAutoToggled without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="detail"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.click('.fx-ctrl[data-fxsec="lens"] #tg-lens-auto');
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+
+  test('header Reset still resets Noise Reduction via resetNR', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="detail"]');
+    const slider = page.locator('#sl-nr-lum');
+    await slider.fill('60');
+    await page.click('.fx-ctrl[data-fxsec="nr"] .fx-ctrl-title-reset');
+    await expect(slider).toHaveValue('0');
+  });
+
+  test('header Reset still resets Deconvolution via resetDeconv', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="detail"]');
+    const slider = page.locator('#sl-deconv-amt');
+    await slider.scrollIntoViewIfNeeded();
+    await slider.fill('40');
+    await page.click('.fx-ctrl[data-fxsec="deconv"] .fx-ctrl-title-reset');
+    await expect(slider).toHaveValue('0');
+  });
+});
