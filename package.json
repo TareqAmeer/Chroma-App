@@ -36,6 +36,8 @@
     "editor:coverage": "node test/editor_coverage.mjs",
     "editor:snap-check": "node test/editor_snap_lists_check.mjs",
     "editor:html-check": "node test/editor_html_validity_check.mjs",
+    "editor:self-reschedule-check": "node test/editor_self_reschedule_check.mjs",
+    "editor:native-gate-check": "node test/editor_native_gate_check.mjs",
     "editor:gates": "node test/editor_gates.mjs"
   },
   "dependencies": {

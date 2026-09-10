@@ -611,6 +611,34 @@
       "wireframeRef": null, "check": null, "panel": null,
       "note": "Same class of risk T2 fixed for _FX_SNAP_*: two lists meant to describe the same thing, maintained by hand in two files, can silently drift. Confirmed this session in miniature — when 'wheels' was added to FX_GROUPS.color.members, editor_coverage.mjs's own report picked it up correctly, which is reassuring, but only because someone (this session) remembered to check both places; nothing would have flagged a drift if editor_coverage.mjs's copy had been forgotten."
     },
+    "T28": {
+      "category": "tooling-gap",
+      "status": "fixed",
+      "source": "[audit of the testing tools, 2026-09-10, from the mskRebuild()/fxEnsureDepthMap() infinite-loop hang] every existing Editor gate assumes an action either succeeds or fails within its own timeout — nothing distinguishes 'genuinely slow' from 'looping forever', and once the renderer is wedged like that it also stops responding to CDP, so Playwright's own failure screenshot/trace capture can hang too, leaving a bare timeout with no diagnostic artifact",
+      "wireframeRef": null, "check": "test/editor_hang_diagnose.mjs",
+      "note": "Diagnosing the mskRebuild() loop this session took a sequence of hand-written throwaway Node+Playwright+CDP scripts (fire the suspect action un-awaited, poll Debugger.pause every second, print the call-stack sample) before the actual loop (fxEnsureDepthMap().then(()=>mskRebuild()) re-entering its own dead branch forever) was visible. Built as a reusable tool (test/editor_hang_diagnose.mjs) instead of leaving that process to be reinvented by hand next time: point it at any exported function name, it fires it un-awaited against the live app and polls Debugger.pause on a timer, printing the call stack each tick so a real loop (stack keeps returning to the same few frames) is visually distinct from real, if slow, progress (stack keeps changing / eventually settles)."
+    },
+    "T29": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[audit of the testing tools, 2026-09-10, from the Masks/MA1 baseline pass] Masks (mskRebuild()) is the ONLY Editor panel built entirely dynamically from JS with no static markup, and it was also the first panel anyone actually clicked through end-to-end (add/edit/delete a mask) in this whole redesign — which is exactly why the mskRebuild() infinite-loop bug (T28) survived undetected until this session",
+      "wireframeRef": null, "check": null, "panel": null,
+      "note": "T24 already flags that per-control behaviour coverage is a boolean (a panel counts as 'covered' once ANY test exists for it), but this is a sharper, narrower case worth its own item: a panel with NO static markup at all cannot be structurally inventoried by editor_wireframe_inventory.mjs the normal way (there is nothing to walk until JS builds it), so behaviour tests are its ONLY coverage mechanism, full stop — there is no structural-diff safety net underneath it the way every other panel has. editor_coverage.mjs should flag 'fully dynamic panel, zero static inventory possible' as its own category distinct from ordinary 'behav: no', and require at minimum an add/edit/delete-shaped smoke test (not just 'a test exists') before such a panel counts as covered at all."
+    },
+    "T30": {
+      "category": "tooling-gap",
+      "status": "fixed",
+      "source": "[audit of the testing tools, 2026-09-10, from the mskRebuild()/fxEnsureDepthMap() infinite-loop hang] the actual bug shape — a rebuild function chaining `somePromise().then(()=>rebuildSameThing())` with no attempt/memoization guard, where the promise's own failure condition is a STABLE condition the rebuild re-observes on every call — is a generic footgun, not specific to Depth Range, and nothing in the testing tools looks for this pattern anywhere else in chromasmith-22.html",
+      "wireframeRef": null, "check": "test/editor_self_reschedule_check.mjs",
+      "note": "Same class of two-things-drift risk as T2/T27 but for a CONTROL-FLOW shape instead of a data list: a function that calls itself again (directly or by name) inside a `.then()` off its own return value, with no local guard variable checked before the call, will loop forever the instant that promise's resolution doesn't change the condition that triggered it — exactly what fxEnsureDepthMap()/mskRebuild() did. Built a static source-text check (test/editor_self_reschedule_check.mjs) that flags `X(...)` calls inside `.then(()=>{...})` bodies where `X` matches the name of the function the `.then()` chain's own call sits inside AND no identifier containing 'attempt'/'running'/'pending' appears anywhere in that function's body — a heuristic, not a proof, but it would have flagged this exact function on sight."
+    },
+    "T31": {
+      "category": "tooling-gap",
+      "status": "fixed",
+      "source": "[audit of the testing tools, 2026-09-10, from the mskRebuild()/fxEnsureDepthMap() infinite-loop hang] fxEnsureDepthMap() gated its one native `_samFramedInvoke('depth_run',...)` call on capNative() (the CAPACITOR/iOS flag) instead of window.__TAURI__ (the desktop flag depth_run actually requires) — every OTHER _samFramedInvoke/`.core.invoke` call site in the file gates on window.__TAURI__, so this was a copy-paste-able mistake with no check catching the mismatch",
+      "wireframeRef": null, "check": "test/editor_native_gate_check.mjs",
+      "note": "A grep-based consistency check: every function whose body calls _samFramedInvoke(...) or window.__TAURI__.core.invoke(...) must also reference window.__TAURI__ somewhere in that same function (directly, or via a caller already known to gate on it) and must NOT gate its own native-availability check on capNative() instead — capNative() is Capacitor/iOS-only and every one of these commands is a Tauri/main.rs desktop command. Built as test/editor_native_gate_check.mjs; it would have caught fxEnsureDepthMap() on sight."
+    },
     "R12": {
       "category": "panel-design",
       "status": "backlog",

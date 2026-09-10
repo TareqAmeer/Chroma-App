@@ -82,6 +82,14 @@ const GATES = [
   // silently mis-parses) in both the shipped app and the review-only panel_proposals.mjs.
   { name: 'editor:snap-check', cmd: ['node', 'test/editor_snap_lists_check.mjs'] },
   { name: 'editor:html-check', cmd: ['node', 'test/editor_html_validity_check.mjs'] },
+  // T30/T31 (editor_ux_spec.json, 2026-09-10): built after diagnosing the mskRebuild()/
+  // fxEnsureDepthMap() infinite-render-loop hang. Both are pure text-scans of chromasmith-22.html
+  // (no Playwright/browser needed, no known flake — same zero-retries convention as snap-check/
+  // html-check per T21) and both are fail-tested against the actual pre-fix source from git
+  // history: self-reschedule-check flags mskRebuild()'s unguarded `.then(()=>mskRebuild())`,
+  // native-gate-check flags fxEnsureDepthMap()'s capNative()-instead-of-__TAURI__ mismatch.
+  { name: 'editor:self-reschedule-check', cmd: ['node', 'test/editor_self_reschedule_check.mjs'] },
+  { name: 'editor:native-gate-check', cmd: ['node', 'test/editor_native_gate_check.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');
