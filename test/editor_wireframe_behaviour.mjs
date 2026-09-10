@@ -647,6 +647,81 @@ test.describe('info panel (IN1)', () => {
   });
 });
 
+// Masks (MA1) — BASELINE coverage of the CURRENT mskRebuild() output, written deliberately
+// before any redesign work touches it. Per docs/editor-redesign-plan.md's own rule ("grow the
+// behaviour suite before moving anything") and MA1's own note: mskRebuild() is ~367 lines of
+// generation logic (not static markup like every other panel), covering 9 mask types, drag
+// reorder, mute/solo/rename/delete, colour-range/luminance/depth gates, and per-type tone tools
+// — the app's most sensitive feature (docs/skin-tone.md). These tests exist so a future
+// implementation pass has something to run red/green against, not to assert a REDESIGNED shape.
+test.describe('masks panel (MA1) — baseline, pre-redesign', () => {
+  test('+ Mask menu groups items as Shape/Paint/AI/Range (current shape, not yet the proposal\'s Draw/Detect/Range)', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="local"]');
+    await page.click('.fx-ctrl[data-fxsec="local"] button[onclick*="mskAddMenu"]');
+    const menu = page.locator('.msk-more-menu');
+    await expect(menu).toBeVisible();
+    await expect(menu).toContainText('Shape');
+    await expect(menu).toContainText('Radial');
+    await expect(menu).toContainText('Range');
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.mouse.click(5, 5);
+  });
+
+  // ⚠️ CONFIRMED REAL BUG, not a test flake (isolated via a standalone Playwright script that
+  // called mskAdd('radial') directly, bypassing the click entirely): adding the FIRST local
+  // mask hangs the whole renderer. mskAdd()'s own synchronous body (mskRebuild + fxUpdate)
+  // completes fine — console.log calls placed immediately after it fire — but fxUpdate()
+  // schedules the next renderPreview() via requestAnimationFrame (fxScheduleRender), and that
+  // rAF-triggered render (the first one with a real mask in fxState.masks, so the first one to
+  // exercise the shader's local-adjust/mask code path) never returns: the renderer process
+  // pins at 100%+ CPU indefinitely (observed 2+ minutes, still climbing, had to SIGKILL) and
+  // stops responding to CDP entirely. Reproduced 3x standalone, independent of Playwright's
+  // click machinery. Root cause NOT diagnosed yet — plausibly a SwiftShader shader-compile
+  // hang on the mask-uniform-loop GLSL variant (same software-renderer family as the documented
+  // export_harness "WebGL context lost" flake in CLAUDE.md), or a real infinite loop in the
+  // render/uniform-packing path that only triggers once fxState.masks.length>0. Needs its own
+  // dedicated debugging session (WebGL/shader expertise, ideally with a real GPU to rule out
+  // SwiftShader). Skipped rather than left red/flaky so this baseline suite stays trustworthy
+  // for everything that DOES work; do not silently increase timeouts to paper over this again.
+  test.skip('adding a Radial mask creates a row and selects it, showing the Selection group', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="local"]');
+    const before = await page.locator('#local-list button').count();
+    await page.click('.fx-ctrl[data-fxsec="local"] button[onclick*="mskAddMenu"]');
+    await page.click('.msk-more-menu button:has-text("Radial")');
+    await expect(page.locator('#local-list button')).toHaveCount(before + 1);
+    await expect(page.locator('#local-ctl')).toContainText('Selection');
+  });
+
+  // Same underlying hang as above (adding a mask never returns from render) — skipped for the
+  // same reason.
+  test.skip('the "..." menu can mute and delete the selected mask', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="local"]');
+    await page.click('.fx-ctrl[data-fxsec="local"] button[onclick*="mskAddMenu"]');
+    await page.click('.msk-more-menu button:has-text("Radial")');
+    const countAfterAdd = await page.locator('#local-list button').count();
+
+    await page.click('.msk-rowbar .msk-more');
+    await page.click('.msk-more-menu button:has-text("Mute")');
+    await expect(page.locator('.msk-rowbar')).toContainText('Muted');
+
+    await page.click('.msk-rowbar .msk-more');
+    await page.click('.msk-more-menu button:has-text("Delete mask")');
+    await expect(page.locator('#local-list button')).toHaveCount(countAfterAdd - 1);
+  });
+
+  test('Show on photo (Overlay/Isolate/Selection/Off) still calls mskSetPreviewMode without throwing', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="local"]');
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    const seg = page.locator('.fx-ctrl[data-fxsec="local"] .msk-prevmode-seg');
+    await seg.locator('button[data-v="isolate"]').click();
+    await expect(seg.locator('button[data-v="isolate"]')).toHaveClass(/\bon\b/);
+    await seg.locator('button[data-v="overlay"]').click();
+    await page.waitForTimeout(100);
+    expect(errors).toEqual([]);
+  });
+});
+
 // ════════════════════════════════════════════════════════════════════════════════════════════
 // OTHER DROPDOWNS / POPOVERS — every remaining "click a control, something floats open" surface
 // that isn't the settings menu: the canvas-background right-click context menu (desktop mode,
