@@ -345,11 +345,11 @@
     },
     "3.4.10": {
       "category": "looks-panel",
-      "status": "open",
+      "status": "fixed",
       "source": "arrow keys while selecting a preset should change the preset",
       "wireframeRef": ".dc.html preset arrow-key nav",
       "check": "editor_wireframe_behaviour.mjs: preset arrow-key nav",
-      "note": "Derive column count from the live grid (virtMetrics lesson), don't hardcode the wireframe's 3."
+      "note": "Fixed 2026-09-10: #fx-looks (looks-grid) is now tabindex=0 with a keydown handler (initLookGalleryKeyNav) that moves a .kbd-focus cell Left/Right by 1 and Up/Down by the grid's LIVE column count, read every keypress via getComputedStyle(host).gridTemplateColumns.split(/\\s+/).length -- not hardcoded -- so it tracks the existing 3-col default and the 2-col .fx-deskb override without separate wiring (same lesson as virtMetrics in library_perf.mjs). Enter/Space applies the focused cell. Click and arrow-nav now share one fxPickLookCell() so .sel/selectLUT stay in sync either way."
     },
     "E9": {
       "category": "bug",
@@ -365,7 +365,7 @@
       "source": "[found by tooling, 2026-09-09] tool panel carries 2 icons where the wireframe's panel carries 8",
       "wireframeRef": "Editor (Developer) View.dc.html: .toolpanel / .tp-panel[data-panel=looks]",
       "check": "editor:inventory ([panel] MISSING 6x icon)",
-      "note": "Surfaced when editor_gates.mjs first ran the inventory as part of npm test. Allowlisted in test/editor_wireframe_inventory_accepted.json pending this item. Confirm WHICH icons before adding any: the wireframe's Looks panel shows per-tile/per-row affordances the app renders as text, so this may resolve as several small row-level changes rather than one 'add 6 icons' edit."
+      "note": "Surfaced when editor_gates.mjs first ran the inventory as part of npm test. Allowlisted in test/editor_wireframe_inventory_accepted.json pending this item. 2026-09-10: root cause confirmed, not yet fixed. [panel] maps to [data-fxsec=\"looks\"] (editor_wireframe_inventory.mjs:43), vs the wireframe's .tp-panel[data-panel=looks] (Editor (Developer) View.dc.html:290-352). The wireframe's 8 icons are 2 select-btn chevrons (Raw profile, Input) + 1 presetbox-head chevron + a lutrow with a LUT select-btn chevron and 4 ibtn icons (chart/save/delete/download) -- ALL of that lutrow plus the Raw-profile select currently live in the app's data-fxsec=\"image\" section (chromasmith-22.html ~1642-1675: sel-dcp, btn-lut-save/btn-lut-del/\"LUT chart\"/btn-lut-dl, all TEXT buttons), a different fx-ctrl than data-fxsec=\"looks\". The app's 2 current icons in-panel are the fx-ctrl-title section chevron and #fx-preset-chev (3.4.9). Real fix needs a decision, not just code: either move the Raw-profile select + the 4 LUT action buttons into data-fxsec=\"looks\" (matching the wireframe's panel grouping) and give the 4 action buttons icons, or accept the cross-section layout as a deliberate difference and re-baseline. Don't move code blind -- fxDesktopFoldImageIntoLooks() already relocates part of this section at runtime and depends on the current DOM split."
     },
     "3.4.12": {
       "category": "looks-panel",
@@ -373,7 +373,7 @@
       "source": "[found by tooling, 2026-09-09] tool panel atom count: wireframe 24 vs app 25",
       "wireframeRef": "Editor (Developer) View.dc.html: .toolpanel",
       "check": "editor:inventory ([panel] atom count)",
-      "note": "One extra atom in the app. Likely the same root cause as 3.4.11 (text where the wireframe has an icon, or an extra wrapper). Diff the two atom lists before treating it as a separate defect \u2014 a single structural change may clear both."
+      "note": "One extra atom in the app. 2026-09-10: confirmed NOT the same root cause as 3.4.11 \u2014 it's independent of the missing-icons gap (fixing 3.4.11 by moving/iconifying the LUT row would change this count again, so re-diff after, don't assume it clears automatically). Current extra-atom candidates from the live report (test/output/editor_wireframe_inventory_report.json): app's \"Presets & Looks\" fx-ctrl-title text has no wireframe counterpart, and the panel's Input/Print rows render as custom chip-row buttons (chips-input/chips-tonemap/chips-print, each option a real <button>) where the wireframe has plain <select> dropdowns \u2014 that's a deliberate, already-shipped UX choice (chips > native select for touch), not a bug, so the fix is narrowing which atoms the comparison counts for that row rather than changing the UI."
     },
     "D1": {
       "category": "panel-design",
