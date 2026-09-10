@@ -326,21 +326,66 @@ function auditInPage({ minTap, minTapInline, inlineSel, edgeSel, minFont, minCon
   });
 
   // ── 4. OVERLAP — two visible siblings whose boxes intersect by more than a hairline.
+  // Generic on purpose: instead of a hand-maintained list of bar/panel selectors (which silently
+  // stops covering a NEW bar the day it's added — exactly how the Library topbar redesign shipped
+  // with no automated overlap check at all), this walks every element in the document and treats
+  // ANY flex/grid container as a "control row" worth checking. Every overlap bug this file has on
+  // record (§10.8/§10.9 in CLAUDE.md, the deskbar title spill, the Library topbar's own left/
+  // right clusters) was a flex or grid layout mistake, so keying off `display` instead of a
+  // selector list covers the whole app — current bars AND any future one — for free.
   const OVERLAP_TOL = 2;
-  document.querySelectorAll('.fx-panel, #fx-deskbar, #fx-toolrail, .fx-ctrl.sec-active').forEach((parent) => {
+  document.querySelectorAll('body *').forEach((parent) => {
+    if (!vis(parent)) return;
+    const d = getComputedStyle(parent).display;
+    if (d !== 'flex' && d !== 'inline-flex' && d !== 'grid' && d !== 'inline-grid') return;
     const kids = [...parent.children].filter(vis);
     for (let i = 0; i < kids.length; i++) {
       for (let j = i + 1; j < kids.length; j++) {
         const a = kids[i].getBoundingClientRect(), b = kids[j].getBoundingClientRect();
-        // Absolutely-positioned overlays are legitimately stacked — skip them.
+        // Absolutely/fixed-positioned overlays are legitimately stacked — skip them.
         if (getComputedStyle(kids[i]).position !== 'static' || getComputedStyle(kids[j]).position !== 'static') continue;
         const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
         const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
         if (ox > OVERLAP_TOL && oy > OVERLAP_TOL) {
-          out.push({ kind: 'OVERLAP', el: desc(kids[i]), detail: `overlaps ${desc(kids[j])} by ${Math.round(ox)}x${Math.round(oy)}px` });
+          out.push({ kind: 'OVERLAP', el: desc(kids[i]), detail: `overlaps ${desc(kids[j])} by ${Math.round(ox)}x${Math.round(oy)}px in ${desc(parent)}` });
         }
       }
     }
+  });
+
+  // ── 4b. MENU — every dropdown/popover must (a) stay fully on-screen and (b) open directly under
+  // the button that triggered it, not float off in some unrelated corner. Written after shipping
+  // the Library topbar redesign with a sort-menu that anchored `right:0` off a wrapper which had
+  // moved to the LEFT of the bar — the popover rendered 230px off the left edge of the window, and
+  // nothing in the test suite would have caught it short of a human clicking it.
+  //
+  // Generic by naming convention, not a hardcoded id list: every dropdown/popover in this codebase
+  // already has "menu" in its class or id (.lib-menu, #fx-settings-menu, .msk-more-menu, …) and
+  // sits as a sibling of its trigger <button> inside a shared `position:relative` wrapper — that
+  // structural pattern, not a specific selector, is what this walks. A future menu only needs to
+  // follow the same two conventions (name contains "menu", lives next to its trigger button) to be
+  // covered automatically.
+  document.querySelectorAll('[class*="menu" i], [id*="menu" i]').forEach((menu) => {
+    if (vis(menu)) return; // only interested in menus that start closed, so opening them is a real state change
+    const wrap = menu.parentElement;
+    if (!wrap) return;
+    const trigger = wrap.querySelector(':scope > button') || wrap.previousElementSibling;
+    if (!trigger || trigger.tagName !== 'BUTTON' || !vis(trigger)) return;
+    trigger.click();
+    const opened = vis(menu);
+    if (opened) {
+      const m = menu.getBoundingClientRect(), t = trigger.getBoundingClientRect();
+      if (m.left < -OVERLAP_TOL || m.top < -OVERLAP_TOL || m.right > innerWidth + OVERLAP_TOL || m.bottom > innerHeight + OVERLAP_TOL) {
+        out.push({ kind: 'MENU', el: desc(menu), detail: `off-screen: ${Math.round(m.left)},${Math.round(m.top)} to ${Math.round(m.right)},${Math.round(m.bottom)} in a ${innerWidth}x${innerHeight} viewport` });
+      }
+      const belowGap = m.top - t.bottom;
+      const hOverlap = Math.min(m.right, t.right) - Math.max(m.left, t.left);
+      if (belowGap < -2 || belowGap > 12 || hOverlap < -2) {
+        out.push({ kind: 'MENU', el: desc(menu), detail: `not anchored under ${desc(trigger)} — gap ${Math.round(belowGap)}px, h-overlap ${Math.round(hOverlap)}px` });
+      }
+    }
+    trigger.click(); // close again — leave state clean for every check that runs after this one
+    if (vis(menu)) menu.classList.remove('open', 'on'); // belt-and-suspenders if the second click didn't toggle it closed
   });
 
   // ── 5. CONTRAST — WCAG 2.1 relative luminance against the nearest opaque painted ancestor.
@@ -509,7 +554,7 @@ async function main() {
   // ── report ──
   const byKind = {};
   findings.forEach(f => { (byKind[f.kind] ||= []).push(f); });
-  const KINDS = ['TOKEN', 'FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'TAP', 'FONT', 'CONTRAST', 'FOCUS'];
+  const KINDS = ['TOKEN', 'FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'MENU', 'TAP', 'FONT', 'CONTRAST', 'FOCUS'];
   // The same defect is re-reported once per (section, viewport) it is visible in, so every count
   // — table, baseline and comparison alike — is over DISTINCT defects. Mixing raw and deduped
   // counts would make the "vs baseline" delta meaningless.

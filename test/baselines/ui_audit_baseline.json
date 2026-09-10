@@ -1,11 +1,12 @@
 {
-  "capturedAt": "2026-08-16",
+  "capturedAt": "2026-09-10",
   "counts": {
     "TOKEN": 0,
     "FRAGMENT": 0,
     "ORDER": 0,
     "SPILL": 0,
     "OVERLAP": 0,
+    "MENU": 0,
     "TAP": 0,
     "FONT": 0,
     "CONTRAST": 0,
@@ -17,6 +18,7 @@
     "ORDER": [],
     "SPILL": [],
     "OVERLAP": [],
+    "MENU": [],
     "TAP": [],
     "FONT": [],
     "CONTRAST": [],
