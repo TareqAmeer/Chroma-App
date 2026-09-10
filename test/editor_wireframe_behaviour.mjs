@@ -395,6 +395,22 @@ test.describe('detail panel (DT1)', () => {
     await expect(page.locator('#row-nr-high-strength')).toBeHidden();
   });
 
+  // T20 (editor_ux_spec.json): the test above only proves a USER CLICK on the seg control updates
+  // the underlying select. It says nothing about the reverse direction this same control also
+  // needs — a PROGRAMMATIC write to window.chromasmithRawNr (session restore, undo/redo,
+  // copy-paste, or the real native RAW-load path this mirrors) going through fxRawNrSyncUI(),
+  // whose whole job is calling sel._chipsRender() so the seg control doesn't silently show the
+  // WRONG selection while the real underlying state is actually correct. Nothing exercised that
+  // path before this.
+  test('a programmatic RAW-NR write (fxRawNrSyncUI) re-renders the seg control, not just the select', async ({ editor: { page } }) => {
+    await page.click('#fx-toolrail [data-sec="detail"]');
+    await expect(page.locator('#seg-raw-nr button:has-text("Fast")')).toHaveClass(/\bon\b/);
+    await page.evaluate(() => { window.chromasmithRawNr = 'high'; fxRawNrSyncUI(); });
+    await expect(page.locator('#sel-raw-nr')).toHaveValue('high');
+    await expect(page.locator('#seg-raw-nr button:has-text("High")')).toHaveClass(/\bon\b/);
+    await expect(page.locator('#seg-raw-nr button:has-text("Fast")')).not.toHaveClass(/\bon\b/);
+  });
+
   test('Sparkle-optimized RAW toggle still calls fxDemosaicToggled', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="detail"]');
     const tg = page.locator('#tg-demosaic-ahd');
