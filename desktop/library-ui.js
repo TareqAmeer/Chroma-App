@@ -1064,7 +1064,9 @@
        no rest-state visual effect — the permanent 1px divider line is #lib-side's own
        border-right (:796), not this element; the resizer only ever paints on hover/drag. */
     .lib-side-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
-    .lib-side-resizer:hover,.lib-side-resizer.active{background:rgba(97,160,175,.25)}
+    /* Reported as an unwanted "glow line" — an 11px-wide translucent accent-colour wash the full
+       width of the hit target, not a thin resize indicator. col-resize cursor is the only
+       hover/drag feedback now, matching a plain splitter rather than a highlighted one. */
     #lib-overlay.full .lib-side-resizer{display:block}
     /* Was full-view only — the docked filmstrip (next to an open photo, i.e. Develop) showed no
        Library/Develop indicator at all, so the two views didn't read as one consistent toggle.
@@ -1578,7 +1580,7 @@
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
     .lib-dock-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
     body.deskx #lib-overlay:not(.full) .lib-dock-resizer{display:block}
-    .lib-dock-resizer:hover,.lib-dock-resizer.active{background:rgba(97,160,175,.25)}
+    /* Same "glow line" removal as .lib-side-resizer above — no hover/drag background wash. */
     /* padding-top 22px (not the tighter horizontal 8px/6px): #lib-overlay already sits below the
        fixed deskbar (top:44px above), so this is the ONLY breathing room between the deskbar and
        the folder/cloud/history icons — 8px read as flush against the bar. Matches the same 22px
