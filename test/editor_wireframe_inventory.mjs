@@ -207,8 +207,8 @@ function tally(list) { const m = new Map(); list.forEach((k) => m.set(k, (m.get(
 // committed baseline of the APP's OWN icon shapes over time catches a wrong glyph swapped in
 // silently, which a mere icon COUNT can never see.
 const ICON_BASELINE = path.join(ROOT, 'test/baselines/editor_wireframe_icons.json');
-function iconSignatures(zoneLabel, atoms) {
-  return atoms.filter((a) => a.kind === 'icon').map((a, i) => [`${zoneLabel}#${i}`, a.iconSig || '(empty)']);
+function iconSignatures(zoneLabel, photoState, atoms) {
+  return atoms.filter((a) => a.kind === 'icon').map((a, i) => [`${zoneLabel}/${photoState}#${i}`, a.iconSig || '(empty)']);
 }
 
 // T8 (editor_ux_spec.json): same architecture as the icon-shape baseline above, applied to
@@ -222,8 +222,8 @@ function iconSignatures(zoneLabel, atoms) {
 // disabled when it should gate is invisible to a single snapshot but shows up the moment this
 // baseline was taken while it was in the other state.
 const DISABLED_BASELINE = path.join(ROOT, 'test/baselines/editor_wireframe_disabled.json');
-function disabledSignatures(zoneLabel, atoms) {
-  return atoms.filter((a) => a.disabled !== null).map((a, i) => [`${zoneLabel}#${i}(${a.text || a.kind})`, a.disabled]);
+function disabledSignatures(zoneLabel, photoState, atoms) {
+  return atoms.filter((a) => a.disabled !== null).map((a, i) => [`${zoneLabel}/${photoState}#${i}(${a.text || a.kind})`, a.disabled]);
 }
 
 const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
@@ -235,60 +235,76 @@ const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTION
 await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
 await settleForCapture(wf);
 
-const app = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-app.on('pageerror', (e) => console.log('[pageerror]', e.message));
-await app.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-await app.waitForTimeout(1500);
-await app.evaluate(() => {
-  document.querySelectorAll('button').forEach((btn) => { if (btn.textContent.trim() === 'Got it') btn.click(); });
-  if (typeof applyFxLayout === 'function') applyFxLayout(); // see editor_wireframe_diff.mjs's note on __TAURI__ timing
-});
-// ⚠️ chromasmithForceLibraryReady() (library-ui.js:5655) forces the Library into its FULL
-// window takeover (body.lib-full) as a splash-hiding fallback if a boot watchdog
-// (bumpBootSplashWatchdog, chromasmith-22.html:1265) fires before boot settles — a TIMING race,
-// not a deterministic state. When it wins, every editor zone (topbar/rail/panel) renders at
-// 0x0 because body.lib-full hides #fx-deskbar entirely, and every finding downstream is that
-// artifact, not a real defect (confirmed live: #fx-tools computed display was inline-flex but
-// its rect was 0x0 solely because of this). Escape reliably exits full-view
-// (library-ui.js:5924 `state.expanded_view` branch) regardless of which side of the race fired,
-// so press it unconditionally rather than trying to win a timing race.
-await app.keyboard.press('Escape');
-await app.waitForTimeout(150);
-// Load a real photo so #fx-zoom-ctrl/#fx-tools (display:none until then) are inventoried, and
-// switch the rail to Looks so the panel zone measures real content, not whatever section was
-// last active (the wireframe defaults to Looks — Editor (Developer) View.dc.html:290).
-// ⚠️ An in-page fetch('test/fixtures/portrait.png') resolves relative to the APP's own origin
-// (…/desktop/dist/index.html), not the repo root — it 404s, the photo never loads, #fx-tools
-// stays invisible, and every menu-content finding downstream reads as "MISSING everything"
-// purely from that, not a real defect (confirmed live: the button was `visible: false`).
-// Read the fixture from disk and hand it in as base64, same as editor_wireframe_diff.mjs.
-// ⚠️ #btn-flag-red/green/#btn-favorite (chromasmith-22.html's fxUpdateFlagBtns) stay
-// display:none unless window.chromasmithOpenedFlag exists — a real Tauri-only hook this
-// libtest=1 harness never stubs, so every prior run of this file inventoried the topbar with
-// three real, always-shipping controls invisible and never flagged it (confirmed live: a
-// Topbar Parity pass built a "complete" reproduction from exactly this harness and missed all
-// three). Stubbed here, unconditionally, so the topbar/rail zones below always measure the
-// bar as it renders once opened from the Library — the state every real launch reaches, not
-// the strictly-narrower one a bare `?deskx=1` tab happens to start in.
-await app.evaluate(() => {
-  window.chromasmithOpenedFlag = () => null;
-  window.chromasmithOpenedFavorite = () => false;
-  window.chromasmithToggleFlag = async () => {};
-  window.chromasmithToggleFavorite = async () => {};
-});
-const fixtureB64 = (await readFile('test/fixtures/portrait.png')).toString('base64');
-await app.evaluate(async (b64) => {
-  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const file = new File([bytes], 'portrait.png', { type: 'image/png' });
-  if (typeof window.loadFXImages === 'function') await window.loadFXImages([file]);
-}, fixtureB64);
-await app.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
-await app.evaluate(() => { if (typeof fxUpdateFlagBtns === 'function') fxUpdateFlagBtns(); });
-await app.evaluate(() => { if (typeof fxSection === 'function') fxSection('looks', true); });
-await app.waitForTimeout(300);
-await settleForCapture(app);
+// User-reported gap (2026-09-10, from a screenshot comparing the topbar with no photo open
+// against the wireframe's always-has-a-photo mockup): this file used to load a photo ONCE,
+// unconditionally, before measuring anything — every one of its findings (all 253 on a clean
+// tree) reflected only the "photo loaded" state. editor_wireframe_diff.mjs already swept both
+// no-photo and photo states per zone; this file never did, so a real difference that only shows
+// up (or only DISAPPEARS) with no photo open was structurally invisible to it. Now sweeps both,
+// same convention as editor_wireframe_diff.mjs: a FRESH `app` page per state (mirrors that
+// file's proven approach rather than trying to unload a photo from a live page, which nothing in
+// the app supports), findings tagged `[zone] [photoState] ...` (state bracket AFTER the zone
+// bracket, so the shared allowlist's ZONE_RE — which only anchors on the FIRST bracket — still
+// scopes correctly), and the icon-shape/disabled-state baselines keyed by `zone/photoState#i` so
+// the two states' signatures can't collide. The wireframe side doesn't change per state (a
+// static mockup has no "no photo" rendering to switch to), so `wf` is created once and reused.
+async function runForPhotoState(photoState) {
+  const app = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
+  app.on('pageerror', (e) => console.log('[pageerror]', e.message));
+  await app.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await app.waitForTimeout(1500);
+  await app.evaluate(() => {
+    document.querySelectorAll('button').forEach((btn) => { if (btn.textContent.trim() === 'Got it') btn.click(); });
+    if (typeof applyFxLayout === 'function') applyFxLayout(); // see editor_wireframe_diff.mjs's note on __TAURI__ timing
+  });
+  // ⚠️ chromasmithForceLibraryReady() (library-ui.js:5655) forces the Library into its FULL
+  // window takeover (body.lib-full) as a splash-hiding fallback if a boot watchdog
+  // (bumpBootSplashWatchdog, chromasmith-22.html:1265) fires before boot settles — a TIMING race,
+  // not a deterministic state. When it wins, every editor zone (topbar/rail/panel) renders at
+  // 0x0 because body.lib-full hides #fx-deskbar entirely, and every finding downstream is that
+  // artifact, not a real defect (confirmed live: #fx-tools computed display was inline-flex but
+  // its rect was 0x0 solely because of this). Escape reliably exits full-view
+  // (library-ui.js:5924 `state.expanded_view` branch) regardless of which side of the race fired,
+  // so press it unconditionally rather than trying to win a timing race.
+  await app.keyboard.press('Escape');
+  await app.waitForTimeout(150);
+  // ⚠️ #btn-flag-red/green/#btn-favorite (chromasmith-22.html's fxUpdateFlagBtns) stay
+  // display:none unless window.chromasmithOpenedFlag exists — a real Tauri-only hook this
+  // libtest=1 harness never stubs, so every prior run of this file inventoried the topbar with
+  // three real, always-shipping controls invisible and never flagged it (confirmed live: a
+  // Topbar Parity pass built a "complete" reproduction from exactly this harness and missed all
+  // three). Stubbed here, unconditionally, so the topbar/rail zones below always measure the
+  // bar as it renders once opened from the Library — the state every real launch reaches, not
+  // the strictly-narrower one a bare `?deskx=1` tab happens to start in.
+  await app.evaluate(() => {
+    window.chromasmithOpenedFlag = () => null;
+    window.chromasmithOpenedFavorite = () => false;
+    window.chromasmithToggleFlag = async () => {};
+    window.chromasmithToggleFavorite = async () => {};
+  });
+  if (photoState === 'photo') {
+    // Load a real photo so #fx-zoom-ctrl/#fx-tools (display:none until then) are inventoried.
+    // ⚠️ An in-page fetch('test/fixtures/portrait.png') resolves relative to the APP's own origin
+    // (…/desktop/dist/index.html), not the repo root — it 404s, the photo never loads, #fx-tools
+    // stays invisible, and every menu-content finding downstream reads as "MISSING everything"
+    // purely from that, not a real defect (confirmed live: the button was `visible: false`).
+    // Read the fixture from disk and hand it in as base64, same as editor_wireframe_diff.mjs.
+    const fixtureB64 = (await readFile('test/fixtures/portrait.png')).toString('base64');
+    await app.evaluate(async (b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const file = new File([bytes], 'portrait.png', { type: 'image/png' });
+      if (typeof window.loadFXImages === 'function') await window.loadFXImages([file]);
+    }, fixtureB64);
+    await app.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
+    await app.evaluate(() => { if (typeof fxUpdateFlagBtns === 'function') fxUpdateFlagBtns(); });
+  }
+  // Switch the rail to Looks so the panel zone measures real content, not whatever section was
+  // last active (the wireframe defaults to Looks — Editor (Developer) View.dc.html:290).
+  await app.evaluate(() => { if (typeof fxSection === 'function') fxSection('looks', true); });
+  await app.waitForTimeout(300);
+  await settleForCapture(app);
 
-async function diffZone(zone) {
+  async function diffZone(zone) {
   // T1 (editor_ux_spec.json): panel zones for sections stacked under a deskx rail GROUP button
   // need that group activated first, or every member card measures 0x0 (sec-active not applied
   // yet — same class of trap editor_wireframe_diff.mjs already documents for the boot-watchdog
@@ -330,72 +346,76 @@ async function diffZone(zone) {
   }
   const w = await wf.evaluate(`(${INVENTORY_FN})(${JSON.stringify(zone.wf)})`);
   const a = await app.evaluate(`(${INVENTORY_FN})(${JSON.stringify(zone.app)})`);
-  if (!w) { findings.push(`[${zone.label}] wireframe container ${zone.wf} not found`); return; }
-  if (!a) { findings.push(`[${zone.label}] app container ${zone.app} NOT FOUND`); return; }
+  if (!w) { findings.push(`[${zone.label}] [${photoState}] wireframe container ${zone.wf} not found`); return; }
+  if (!a) { findings.push(`[${zone.label}] [${photoState}] app container ${zone.app} NOT FOUND`); return; }
 
-  for (const [k, sig] of iconSignatures(zone.label, a.atoms)) iconsNow[k] = sig;
-  for (const [k, dis] of disabledSignatures(zone.label, a.atoms)) disabledNow[k] = dis;
+  for (const [k, sig] of iconSignatures(zone.label, photoState, a.atoms)) iconsNow[k] = sig;
+  for (const [k, dis] of disabledSignatures(zone.label, photoState, a.atoms)) disabledNow[k] = dis;
 
   const wClean = w.atoms.filter((x) => !isDataNoise(x));
   const aClean = a.atoms.filter((x) => !isDataNoise(x));
   const wSig = summarize(wClean), aSig = summarize(aClean);
 
   const wNoise = w.atoms.filter(isDataNoise).length, aNoise = a.atoms.filter(isDataNoise).length;
-  if (wNoise !== aNoise) findings.push(`[${zone.label}] dynamic-data row count: wireframe ${wNoise} vs app ${aNoise}`);
+  if (wNoise !== aNoise) findings.push(`[${zone.label}] [${photoState}] dynamic-data row count: wireframe ${wNoise} vs app ${aNoise}`);
 
   const wT = tally(wSig), aT = tally(aSig);
-  for (const [k, n] of wT) { const have = aT.get(k) || 0; if (have < n) findings.push(`[${zone.label}] MISSING ${n - have}x  ${k}   (wireframe has ${n}, app has ${have})`); }
-  for (const [k, n] of aT) { const want = wT.get(k) || 0; if (n > want) findings.push(`[${zone.label}] EXTRA   ${n - want}x  ${k}   (app has ${n}, wireframe has ${want})`); }
-  if (wSig.length !== aSig.length) findings.push(`[${zone.label}] atom count: wireframe ${wSig.length} vs app ${aSig.length}`);
+  for (const [k, n] of wT) { const have = aT.get(k) || 0; if (have < n) findings.push(`[${zone.label}] [${photoState}] MISSING ${n - have}x  ${k}   (wireframe has ${n}, app has ${have})`); }
+  for (const [k, n] of aT) { const want = wT.get(k) || 0; if (n > want) findings.push(`[${zone.label}] [${photoState}] EXTRA   ${n - want}x  ${k}   (app has ${n}, wireframe has ${want})`); }
+  if (wSig.length !== aSig.length) findings.push(`[${zone.label}] [${photoState}] atom count: wireframe ${wSig.length} vs app ${aSig.length}`);
 
   const fsOf = (atoms) => tally(atoms.filter((x) => x.text).map((x) => x.fs));
   const wFs = fsOf(wClean), aFs = fsOf(aClean);
   for (const size of new Set([...wFs.keys(), ...aFs.keys()])) {
     const wn = wFs.get(size) || 0, an = aFs.get(size) || 0;
-    if (wn !== an) findings.push(`[${zone.label}] font-size ${size}: wireframe uses it on ${wn} text atom(s), app on ${an}`);
+    if (wn !== an) findings.push(`[${zone.label}] [${photoState}] font-size ${size}: wireframe uses it on ${wn} text atom(s), app on ${an}`);
   }
 
   for (let i = 0; i < Math.min(6, wSig.length, aSig.length); i++) {
-    if (wSig[i] !== aSig[i]) { findings.push(`[${zone.label}] order@${i}: wireframe ${wSig[i]} vs app ${aSig[i]}`); break; }
+    if (wSig[i] !== aSig[i]) { findings.push(`[${zone.label}] [${photoState}] order@${i}: wireframe ${wSig[i]} vs app ${aSig[i]}`); break; }
     const dx = Math.abs(wClean[i].x - aClean[i].x);
-    if (dx > 12) findings.push(`[${zone.label}] x-offset of ${wSig[i]}: wireframe ${wClean[i].x}px vs app ${aClean[i].x}px (Δ${dx})`);
+    if (dx > 12) findings.push(`[${zone.label}] [${photoState}] x-offset of ${wSig[i]}: wireframe ${wClean[i].x}px vs app ${aClean[i].x}px (Δ${dx})`);
   }
 
   const ICON_CENTER_TOLERANCE = 1.5;
   for (const icon of aClean.filter((x) => x.kind === 'icon' && x.centerOffset != null)) {
-    if (icon.centerOffset > ICON_CENTER_TOLERANCE) findings.push(`[${zone.label}] icon off-center by ${icon.centerOffset}px within its hit-shape (icon#${aClean.indexOf(icon)})`);
+    if (icon.centerOffset > ICON_CENTER_TOLERANCE) findings.push(`[${zone.label}] [${photoState}] icon off-center by ${icon.centerOffset}px within its hit-shape (icon#${aClean.indexOf(icon)})`);
   }
 
   // T26: undo exactly what this call turned on above, so state never leaks into the next zone.
   for (const tg of _turnedOn) {
     await app.evaluate((id) => { const el = document.getElementById(id); if (el) el.click(); }, tg);
   }
+  }
+  for (const zone of ZONES) await diffZone(zone);
+
+  for (const m of OPEN_MENUS) {
+    await wf.click(m.wfTrigger).catch(() => {});
+    await wf.waitForTimeout(150);
+    const w = await wf.evaluate(`(${INVENTORY_FN})(${JSON.stringify(m.wfContainer)})`);
+    await wf.click(m.wfTrigger).catch(() => {});
+
+    await app.click(m.appTrigger).catch(() => {});
+    if (m.appCatClick) { await app.click(m.appCatClick).catch(() => {}); await app.waitForTimeout(100); }
+    await app.waitForTimeout(150);
+    const a = await app.evaluate(`(${INVENTORY_FN})(${JSON.stringify(m.appContainer)})`);
+    await app.click(m.appTrigger).catch(() => {});
+
+    if (!w) { findings.push(`[${m.label}] [${photoState}] wireframe menu ${m.wfContainer} did not open via ${m.wfTrigger}`); continue; }
+    if (!a) { findings.push(`[${m.label}] [${photoState}] app menu ${m.appContainer} did not open via ${m.appTrigger}`); continue; }
+    const wSig = summarize(w.atoms.filter((x) => !isDataNoise(x)));
+    const aSig = summarize(a.atoms.filter((x) => !isDataNoise(x)));
+    const wT = tally(wSig), aT = tally(aSig);
+    for (const [k, n] of wT) { const have = aT.get(k) || 0; if (have < n) findings.push(`[${m.label}] [${photoState}] MISSING ${n - have}x  ${k}`); }
+    for (const [k, n] of aT) { const want = wT.get(k) || 0; if (n > want) findings.push(`[${m.label}] [${photoState}] EXTRA   ${n - want}x  ${k}`); }
+  }
+
+  await app.close();
 }
-for (const zone of ZONES) await diffZone(zone);
-
-for (const m of OPEN_MENUS) {
-  await wf.click(m.wfTrigger).catch(() => {});
-  await wf.waitForTimeout(150);
-  const w = await wf.evaluate(`(${INVENTORY_FN})(${JSON.stringify(m.wfContainer)})`);
-  await wf.click(m.wfTrigger).catch(() => {});
-
-  await app.click(m.appTrigger).catch(() => {});
-  if (m.appCatClick) { await app.click(m.appCatClick).catch(() => {}); await app.waitForTimeout(100); }
-  await app.waitForTimeout(150);
-  const a = await app.evaluate(`(${INVENTORY_FN})(${JSON.stringify(m.appContainer)})`);
-  await app.click(m.appTrigger).catch(() => {});
-
-  if (!w) { findings.push(`[${m.label}] wireframe menu ${m.wfContainer} did not open via ${m.wfTrigger}`); continue; }
-  if (!a) { findings.push(`[${m.label}] app menu ${m.appContainer} did not open via ${m.appTrigger}`); continue; }
-  const wSig = summarize(w.atoms.filter((x) => !isDataNoise(x)));
-  const aSig = summarize(a.atoms.filter((x) => !isDataNoise(x)));
-  const wT = tally(wSig), aT = tally(aSig);
-  for (const [k, n] of wT) { const have = aT.get(k) || 0; if (have < n) findings.push(`[${m.label}] MISSING ${n - have}x  ${k}`); }
-  for (const [k, n] of aT) { const want = wT.get(k) || 0; if (n > want) findings.push(`[${m.label}] EXTRA   ${n - want}x  ${k}`); }
-}
+await runForPhotoState('no-photo');
+await runForPhotoState('photo');
 
 await wf.close();
-await app.close();
 await b.close();
 server.close();
 
