@@ -882,6 +882,16 @@ body.deskx #fx-zoom-slider{width:80px}
    relocatePreviewTools() moves onto the floating over-canvas spot in web/mobile mode, so deleting
    would remove them there too — this selector only fires under body.deskx. */
 body.deskx #btn-loupe,body.deskx #btn-fx-fullres,body.deskx #btn-editor-bg,body.deskx #btn-hist{display:none!important}
+/* 2026-09-09: split-view + edit/export history move off the always-visible bar too, into the
+   settings menu's Compare/History sections (settingsSplitBuild()/settingsHistoryBuild(), built
+   from the exact same code the web/mobile floating popovers use — see _fxSplitListInto()/
+   _fxTimelineListInto()'s own comments). Both topbar history triggers fold: btn-export-history
+   (next to Undo/Redo) AND btn-history (inside the preview-tools cluster) are the SAME popover
+   today (already unified 2026-09-09 per the comment above fxTimelineScrub()) — removing both
+   from the bar loses no distinct feature, and the hold-Undo gesture (fxUndoMousedown, see
+   btn-undo-db's own title) still reaches edit history in one motion without opening any menu.
+   Hidden, not deleted, for the same shared-DOM-node reason as the zoom-cluster rules above. */
+body.deskx #btn-split,body.deskx #btn-split-menu,body.deskx #db-history-wrap,body.deskx #btn-history{display:none!important}
 /* 2026-09-09: width-driven responsive fold, cheapest-first — All FX loses its label before
    Export does, both fold to icon-only (not hidden — they're the two most-used actions in the
    bar) rather than the title/flags/zoom ever having to give up space. Driven by a ResizeObserver
@@ -1557,6 +1567,21 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
         <div id="fx-tools-menu"></div>
         <div class="fx-ovf-sep"></div>
         <div id="fx-view-menu"></div>
+        <div class="fx-ovf-sep"></div>
+        <!-- 2026-09-09: split-view and edit history used to be a topbar icon each, opening a
+             floating popover anchored to that specific button (#fx-split-popover /
+             #fx-timeline-popover, still there for web/mobile mode — see the body.deskx hide
+             rules near .fx-zoom-ctrl). On desktop they're inline "submenus" here instead: the
+             settings dropdown already scrolls, so there's no separate floating layer or
+             viewport-clamping to get right, and settingsSplitBuild()/settingsHistoryBuild()
+             (called from settingsBuild(), same one-source-of-truth pattern as every other
+             section) render the exact same list-building code as the web popovers, just into a
+             plain block instead of a positioned one. -->
+        <div class="fx-ovf-grp-label">Compare</div>
+        <div id="fx-settings-split-list"></div>
+        <div class="fx-ovf-sep"></div>
+        <div class="fx-ovf-grp-label">Edit &amp; export history</div>
+        <div id="fx-settings-history-list" style="padding:0 8px 4px"></div>
         <div class="fx-ovf-sep"></div>
         <div id="fx-overflow-menu"></div>
       </div>
@@ -4657,7 +4682,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-09c';
+const BUILD='2026-09-09d';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -14795,45 +14820,63 @@ function fxSetSplitSrc(src){
   const pop=document.getElementById('fx-split-popover');if(pop)pop.style.display='none';
   renderPreview();
 }
-async function fxToggleSplitMenu(e){
-  if(e)e.stopPropagation();
-  const pop=document.getElementById('fx-split-popover');
-  if(!pop)return;
-  if(pop.style.display!=='none'){pop.style.display='none';return;}
-  pop.innerHTML='';
-  pop.appendChild(_fxSplitRow('Original',()=>fxSetSplitSrc('orig'),fxSplitSrc==='orig'));
-  pop.appendChild(_fxSplitRow(fxPinned?'Pinned':'Pinned (none yet)',()=>{if(fxPinned)fxSetSplitSrc('pin');},fxSplitSrc==='pin'));
-  pop.appendChild(_fxSplitRow('Pin current state',()=>{fxPinned=getUISnapshot();fxSetSplitSrc('pin');}));
+// 2026-09-09: content-building split out of fxToggleSplitMenu so the SAME list can render
+// into either the floating web/mobile popover (#fx-split-popover, unchanged behaviour below) or
+// a plain inline block inside the merged settings menu on desktop (settingsSplitBuild()) — a
+// "submenu" in the sense of just being static content in the dropdown, no second floating layer
+// or viewport-clamping math needed there since the whole menu already scrolls.
+async function _fxSplitListInto(container,closeFn){
+  container.innerHTML='';
+  const pick=(src)=>{fxSetSplitSrc(src);closeFn();};
+  container.appendChild(_fxSplitRow('Original',()=>pick('orig'),fxSplitSrc==='orig'));
+  container.appendChild(_fxSplitRow(fxPinned?'Pinned':'Pinned (none yet)',()=>{if(fxPinned)pick('pin');},fxSplitSrc==='pin'));
+  container.appendChild(_fxSplitRow('Pin current state',()=>{fxPinned=getUISnapshot();pick('pin');}));
   const hist=fxHistory;
   if(hist.length>1){
-    pop.appendChild(_fxSplitHead('History'));
+    container.appendChild(_fxSplitHead('History'));
     [...hist].map((h,i)=>({h,i})).reverse().forEach(({h,i})=>{
-      pop.appendChild(_fxSplitRow(`${i}: ${h.label}`,()=>fxSetSplitSrc({hist:i}),fxSplitSrc&&fxSplitSrc.hist===i));
+      container.appendChild(_fxSplitRow(`${i}: ${h.label}`,()=>pick({hist:i}),fxSplitSrc&&fxSplitSrc.hist===i));
     });
   }
   const styles=stylesList();
   if(styles.length){
-    pop.appendChild(_fxSplitHead('Styles'));
-    styles.forEach(s=>{pop.appendChild(_fxSplitRow(s.name,()=>fxSetSplitSrc({style:s.name}),fxSplitSrc&&fxSplitSrc.style===s.name));});
+    container.appendChild(_fxSplitHead('Styles'));
+    styles.forEach(s=>{container.appendChild(_fxSplitRow(s.name,()=>pick({style:s.name}),fxSplitSrc&&fxSplitSrc.style===s.name));});
   }
   if(typeof window.chromasmithGetExportHistory==='function'){
-    pop.appendChild(_fxSplitHead('Exports'));
+    container.appendChild(_fxSplitHead('Exports'));
     try{
       const list=await window.chromasmithGetExportHistory();
       if(list&&list.length){
         [...list].reverse().forEach(entry=>{
-          pop.appendChild(_fxSplitRow(`v${entry.version}`,()=>{
+          container.appendChild(_fxSplitRow(`v${entry.version}`,()=>{
             try{
               const recipe=JSON.parse(decodeURIComponent(escape(atob(entry.recipe))));
-              fxSetSplitSrc({export:entry.version,recipe});
+              pick({export:entry.version,recipe});
             }catch(err){log('Could not read that export recipe: '+(err&&err.message||err),'err');}
           },fxSplitSrc&&fxSplitSrc.export===entry.version));
         });
       }
     }catch(err){/* desktop-only feature — silently skip if it errors */}
   }
+}
+async function fxToggleSplitMenu(e){
+  if(e)e.stopPropagation();
+  const pop=document.getElementById('fx-split-popover');
+  if(!pop)return;
+  if(pop.style.display!=='none'){pop.style.display='none';return;}
+  await _fxSplitListInto(pop,()=>{pop.style.display='none';});
   pop.style.display='block';
   fxClampPopoverToViewport(pop);
+}
+// Desktop-only: same list, rendered inline into the settings menu (see settingsBuild()).
+async function settingsSplitBuild(){
+  const container=document.getElementById('fx-settings-split-list');
+  if(!container)return;
+  await _fxSplitListInto(container,()=>settingsClose());
+  const chk='<svg class="fx-ovf-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  container.insertAdjacentHTML('afterbegin',
+    `<button class="fx-ovf-item${fxSplit?' on':''}" onclick="viewMenuClose();toggleSplit()"><span>Split before / after</span>${chk}</button>`);
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-split-popover');
@@ -14851,17 +14894,20 @@ async function fxTimelineScrub(idx){
   fxHistIdx=idx;
   await _fxHistoryRestore(idx);   // shared rasters must be re-attached — see fxHistoryPush
 }
-async function fxToggleTimelinePopover(){
-  const pop=document.getElementById('fx-timeline-popover');
-  if(!pop)return;
-  if(pop.style.display!=='none'){pop.style.display='none';return;}
-  pop.innerHTML='';
+// 2026-09-09: same split as the split-compare menu above — content-building factored out of
+// fxToggleTimelinePopover so it can render into either the floating web/mobile popover
+// (unchanged below) or inline into the desktop settings menu (settingsHistoryBuild()).
+// showReset is false for the settings-menu render: ovfBuild()'s own "Reset all edits" row
+// already covers it there, and repeating it would be a second control for the same action in
+// the same dropdown.
+async function _fxTimelineListInto(container,closeFn,showReset){
+  container.innerHTML='';
   const rail=document.createElement('input');
   rail.type='range';rail.min=0;rail.max=Math.max(0,fxHistory.length-1);rail.value=fxHistIdx;
   rail.style.cssText='width:100%';
   rail.oninput=()=>fxTimelineScrub(parseInt(rail.value,10));
-  rail.onchange=()=>{fxToggleTimelinePopover();fxToggleTimelinePopover();}; // cheap refresh of the list below after a scrub settles
-  pop.appendChild(rail);
+  rail.onchange=()=>_fxTimelineListInto(container,closeFn,showReset); // refresh the list below once a scrub settles
+  container.appendChild(rail);
   const list=document.createElement('div');
   list.style.cssText='margin-top:6px';
   // Edit-history rows (in-session undo stack) — ts is already ms (Date.now() at push time).
@@ -14891,25 +14937,39 @@ async function fxToggleTimelinePopover(){
     const escLbl=String(row.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); // matches log()'s own inline escape — no shared esc() helper in this file
     el.innerHTML=`<span>${tag}${row.kind==='edit'?row.i+': '+escLbl:escLbl}</span><span style="color:var(--mut)">${timeStr}</span>`;
     el.onclick=async()=>{
-      if(row.kind==='edit'){fxTimelineScrub(row.i);fxToggleTimelinePopover();fxToggleTimelinePopover();return;}
+      if(row.kind==='edit'){fxTimelineScrub(row.i);_fxTimelineListInto(container,closeFn,showReset);return;}
       try{const snap=JSON.parse(decodeURIComponent(escape(atob(row.entry.recipe))));await applyUISnapshot(snap);fxUpdate();log(`Restored v${row.entry.version} recipe`,'info');}
       catch(e){log('Failed to restore that version: '+(e&&e.message||e),'err');}
-      pop.style.display='none';
+      closeFn();
     };
     list.appendChild(el);
   });
-  pop.appendChild(list);
-  // 3.1.14: reset also lives here, not just behind shift-click on Undo — a discoverable path to
-  // the same fxResetAll() (no confirmation dialog: undo can recover it, see E3).
-  const resetRow=document.createElement('div');
-  resetRow.style.cssText='margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr);padding-left:8px;padding-right:8px;padding-bottom:6px;font-size:11px;cursor:pointer;border-radius:5px;color:var(--err)';
-  resetRow.textContent='Reset all edits';
-  resetRow.onmouseenter=()=>resetRow.style.background='var(--hov)';
-  resetRow.onmouseleave=()=>resetRow.style.background='';
-  resetRow.onclick=()=>{pop.style.display='none';fxResetAll();};
-  pop.appendChild(resetRow);
+  container.appendChild(list);
+  if(showReset){
+    // 3.1.14: reset also lives here, not just behind shift-click on Undo — a discoverable path to
+    // the same fxResetAll() (no confirmation dialog: undo can recover it, see E3).
+    const resetRow=document.createElement('div');
+    resetRow.style.cssText='margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr);padding-left:8px;padding-right:8px;padding-bottom:6px;font-size:11px;cursor:pointer;border-radius:5px;color:var(--err)';
+    resetRow.textContent='Reset all edits';
+    resetRow.onmouseenter=()=>resetRow.style.background='var(--hov)';
+    resetRow.onmouseleave=()=>resetRow.style.background='';
+    resetRow.onclick=()=>{closeFn();fxResetAll();};
+    container.appendChild(resetRow);
+  }
+}
+async function fxToggleTimelinePopover(){
+  const pop=document.getElementById('fx-timeline-popover');
+  if(!pop)return;
+  if(pop.style.display!=='none'){pop.style.display='none';return;}
+  await _fxTimelineListInto(pop,()=>{pop.style.display='none';},true);
   pop.style.display='block';
   fxClampPopoverToViewport(pop);
+}
+// Desktop-only: same combined edit+export list, inline in the settings menu.
+async function settingsHistoryBuild(){
+  const container=document.getElementById('fx-settings-history-list');
+  if(!container)return;
+  await _fxTimelineListInto(container,()=>settingsClose(),false);
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-timeline-popover');
@@ -20119,7 +20179,7 @@ function viewMenuClose(){settingsClose();}
 // comment at #fx-settings and the CSS comment above #fx-settings-menu for why Tools/View/⋯
 // collapsed into one gear. Building all three sections on every open (rather than caching) keeps
 // the checkmarks/labels current with zero extra invalidation logic, same as each did standalone.
-function settingsBuild(){toolsBuild();viewMenuBuild();ovfBuild();}
+function settingsBuild(){toolsBuild();viewMenuBuild();ovfBuild();settingsSplitBuild();settingsHistoryBuild();}
 function settingsClose(){const m=document.getElementById('fx-settings-menu');if(m)m.classList.remove('on');}
 function settingsToggle(e){
   if(e)e.stopPropagation();
