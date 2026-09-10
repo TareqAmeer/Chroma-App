@@ -24,6 +24,14 @@ const GATES = [
   { name: 'editor:responsive', cmd: ['node', 'test/editor_responsive_qa.mjs'] },
   { name: 'editor:coverage', cmd: ['node', 'test/editor_coverage.mjs'] },
   { name: 'editor:wireframe-diff', cmd: ['node', 'test/editor_wireframe_diff.mjs'], retries: FLAKE_RETRIES },
+  // T2/T4 (editor_ux_spec.json, 2026-09-10): neither existed before this session. T2 catches a
+  // slider/colour/toggle that's live in the DOM but missing from _FX_SNAP_SLIDERS/_FX_SNAP_COLORS/
+  // _FX_SNAP_TOGGLES (silently breaking undo/session-persistence/reset-visibility — how
+  // deconv-amt/deconv-rad and adj-dehaze sat broken for a long time with zero test failure
+  // anywhere). T4 catches a <button> nested inside another <button> (invalid HTML the browser
+  // silently mis-parses) in both the shipped app and the review-only panel_proposals.mjs.
+  { name: 'editor:snap-check', cmd: ['node', 'test/editor_snap_lists_check.mjs'] },
+  { name: 'editor:html-check', cmd: ['node', 'test/editor_html_validity_check.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

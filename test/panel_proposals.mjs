@@ -120,7 +120,7 @@ export const PROPOSALS = {
       }),
       sec('Point color', {
         on: false, reset: 'all',
-        body: `<button class="pick-btn">${icon('M12 2v3M12 19v3M2 12h3M19 12h3', ' stroke-width="2"')}Pick from photo <button class="info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button></button>`
+        body: `<div class="btn2"><button class="pick-btn" style="flex:1">${icon('M12 2v3M12 19v3M2 12h3M19 12h3', ' stroke-width="2"')}Pick from photo</button><button class="info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button></div>`
           + sl('Hue', 0) + sl('Saturation', 0) + sl('Luminance', 0) + sl('Range', 35, 0, 100)
           + `<button class="wide-btn danger">Delete point</button>`,
       }),
@@ -299,7 +299,7 @@ export const PROPOSALS = {
               <button class="ibtn2" title="Flip vertical">${icon('M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4', ' fill="none" stroke-width="2"')}</button>
             </div>`
           + field('Grid', select('3×3 (Rule of thirds)'))
-          + `<button class="wide-btn">Auto level <button class="info-i" title="Finds the dominant horizontal or vertical line and levels the photo to it. Set a region to limit the search.">i</button></button>`
+          + `<div class="btn2"><button class="wide-btn" style="flex:1">Auto level</button><button class="info-i" title="Finds the dominant horizontal or vertical line and levels the photo to it. Set a region to limit the search.">i</button></div>`
           + `<button class="wide-btn ghost">Set region…</button>`
           + `<button class="wide-btn ghost">Apply to all photos</button>`
           + `<button class="wide-btn primary">Crop</button>`,
@@ -370,7 +370,7 @@ export const PROPOSALS = {
         body: `<div class="cov">Covers 34% of the frame</div>`
           + sl('Feather', 50, 0, 100) + sl('Range', 35, 0, 100)
           + `<div class="cb-row"><button class="sw"></button><span>Invert</span></div>`
-          + `<button class="wide-btn">Refine edges <button class="info-i" title="Snaps the mask's edges to the photo's own boundaries using a guided filter.">i</button></button>`
+          + `<div class="btn2"><button class="wide-btn" style="flex:1">Refine edges</button><button class="info-i" title="Snaps the mask's edges to the photo's own boundaries using a guided filter.">i</button></div>`
           + `<div class="combine">${seg(['Add', 'Subtract', 'Intersect'], 0)}</div>`,
       }),
       secPlain('Sky — adjust', {

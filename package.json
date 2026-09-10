@@ -34,6 +34,8 @@
     "lib:test": "node test/library_perf.mjs",
     "preview": "node test/preview_server.mjs",
     "editor:coverage": "node test/editor_coverage.mjs",
+    "editor:snap-check": "node test/editor_snap_lists_check.mjs",
+    "editor:html-check": "node test/editor_html_validity_check.mjs",
     "editor:gates": "node test/editor_gates.mjs"
   },
   "dependencies": {

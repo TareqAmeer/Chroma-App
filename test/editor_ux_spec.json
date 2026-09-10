@@ -455,12 +455,12 @@
     },
     "R8": {
       "category": "bug",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[found while implementing the Color panel, 2026-09-10] test/panel_proposals.mjs's raw HTML for Point Color literally nests a <button class=info-i> inside a <button class=pick-btn> — invalid HTML that browsers auto-correct by closing the outer button early",
       "wireframeRef": null,
-      "check": null,
+      "check": "editor:html-check (T4, test/editor_html_validity_check.mjs)",
       "panel": "color",
-      "note": "Fixed in the real chromasmith-22.html implementation (info-i moved to a sibling of the button, CO1) and in the merged wireframe's Crop panel (Auto level button, CR1's merge). Not yet audited across the OTHER panel_proposals.mjs authored panels or the still-unimplemented ones (export, info, masks) — worth a grep for `<button[^>]*>[^<]*<button` across panel_proposals.mjs and the comparison pages before implementing those, so the same mis-parse isn't copied forward again."
+      "note": "Fixed in the real chromasmith-22.html implementation (info-i moved to a sibling of the button, CO1) and in the merged wireframe's Crop panel (Auto level button, CR1's merge). The full audit this note called for is now automated as T4's editor:html-check rather than a one-off grep — running it found two more instances in panel_proposals.mjs (Crop's Auto level, Masks' Refine edges) that this note hadn't caught by eye; all fixed directly in panel_proposals.mjs."
     },
     "R9": {
       "category": "panel-design",
@@ -470,6 +470,15 @@
       "check": null,
       "panel": "color",
       "note": "Deferred because these are the first sections with a DUAL reset (e.g. curves' 'Reset channel' vs 'Reset all', hsl/pointcolor/wheels' 'Reset band/point' vs 'Reset all') — collapsing that into one header slot (the proposal's 'Reset | All' link) needs new per-section override logic, not just reusing _fxSectionResetOverride's single-action pattern. Bottom buttons still work correctly in the meantime."
+    },
+    "R10": {
+      "category": "panel-design",
+      "status": "backlog",
+      "source": "[found while implementing T1's new editor:inventory panel zones, 2026-09-10] editor:inventory now reports real structural findings across all 6 implemented panels (retouch/detail/film/frame/crop/color) that were previously invisible — mostly title casing (app keeps Title Case, e.g. 'Noise Reduction'; wireframe grp-hd labels are sentence case, e.g. 'Noise reduction' — a deliberate choice explained in each panel's own spec note) and Detail's conditional High-tier NR rows (wireframe shows them unconditionally, app correctly hides them until High is selected)",
+      "wireframeRef": null,
+      "check": "editor:inventory (retouch-panel/detail-panel/film-panel/frame-panel/crop-panel/color-panel zones)",
+      "panel": null,
+      "note": "None of these are allowlisted yet. Two ways to close this: (a) allowlist each with a one-line reason referencing the spec item that already explains the deliberate divergence (RT1/DT1/F1/FR1/CR1/CO1), or (b) for the casing ones specifically, just rename the app's fx-ctrl-title text to match the wireframe's sentence case — a trivial, zero-risk text change that would remove most of these findings outright rather than allowlisting them. Prefer (b) where it's purely cosmetic; use (a) only for genuine, intentional behavioural differences like the conditional NR rows."
     },
     "R7": {
       "category": "panel-design",
@@ -500,21 +509,21 @@
     },
     "T1": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[found while implementing 6 panels in one session, 2026-09-10] test/editor_wireframe_inventory.mjs's ZONES list only has a structural atom-count entry for the 'looks' panel — Retouch/Detail/Film/Frame/Crop/Color have none",
       "wireframeRef": null,
       "check": null,
       "panel": null,
-      "note": "A control silently dropped inside any of these 6 panels during a future edit would pass editor:inventory clean; only a hand-written behaviour test for that exact control would catch it. Add one ZONES entry per implemented panel ({ label: '<panel>-panel', wf: '.tp-panel[data-panel=<panel>]', app: '.fx-panel' } scoped to the panel's member sections) so atom-count drift is caught generically, the same way 'looks' already is."
+      "note": "Implemented 2026-09-10: added a ZONES entry per panel (retouch/detail/film/frame/crop/color), each activating the panel's rail group first (appSection) and, for members in _ALLFX (grain/hal/bloom/borders — inline display:none until first toggled, not just dimmed), clicking their toggle on (appToggleOn) before measuring; the wireframe side needed the same treatment (wfPanel switches its own .tp-panel.active class, since only 'looks' is active by default there too). INVENTORY_FN itself was extended from single-selector (document.querySelector) to comma-separated multi-root (querySelectorAll + combine), since Detail/Film/Frame/Color group several sibling .fx-ctrl cards with no shared wrapper — no single selector could span exactly them before. Running it immediately surfaced real, previously-invisible findings across all 6 panels (casing differences the app deliberately keeps — e.g. 'Noise Reduction' vs the wireframe's sentence-case 'Noise reduction' — plus Detail's conditional High-tier rows, which the wireframe shows unconditionally but the app correctly hides until High is selected, and Frame/Crop's chip-vs-checklist picker already tracked as R6/R7). None of these are allowlisted yet — that triage is its own pass (tracked as R10 below), not part of building the check itself. editor:inventory currently fails on these plus the unrelated concurrent topbar work; the point of this fix was making the findings visible, not silently suppressing them with a rubber-stamp allowlist."
     },
     "T2": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[found while fixing the deconv/wheels homeless-section bugs, 2026-09-10] nothing cross-checks _FX_SNAP_SLIDERS/_FX_SNAP_COLORS/_FX_SNAP_TOGGLES (chromasmith-22.html) against the DOM's actual sl-/cl-/tg- ids",
       "wireframeRef": null,
-      "check": null,
+      "check": "editor:snap-check (test/editor_snap_lists_check.mjs)",
       "panel": null,
-      "note": "deconv-amt/deconv-rad sat unregistered in _FX_SNAP_SLIDERS for a long time with zero test failure anywhere, silently breaking undo, session persistence, and reset-visibility (fixed this session). A script that walks every .fx-ctrl[data-fxsec] for input[id^=sl-]/input[type=color][id^=cl-]/[id^=tg-] and asserts each appears in the matching _FX_SNAP_* list (or an explicit allowlist of deliberate exceptions) would have caught this the day it was introduced instead of an unknown time later."
+      "note": "Implemented 2026-09-10 as test/editor_snap_lists_check.mjs (npm run editor:snap-check, wired into editor:gates). Loads the app, walks every input[id^=sl-]/input[type=color][id^=cl-]/[id^=tg-] inside a .fx-ctrl[data-fxsec] card, and asserts each id (minus its prefix, except colours which keep 'cl-' since _FX_SNAP_COLORS itself stores full ids) appears in the matching _FX_SNAP_* list or an explicit KNOWN_EXCLUSIONS entry with a one-line reason. First run found adj-dehaze had the EXACT same gap as deconv-amt/deconv-rad (present in _SESS_SLIDERS for session save/restore, absent from _FX_SNAP_SLIDERS — undo/copy-paste/.fx-mod silently skipped it) — fixed alongside the check. The rest of the first run's ~26 findings were false positives from structured state (curves/hsl/wheels/point-color/masks each have their OWN getUISnapshot() field, e.g. s.curveParam/s.hsl/s.wheels/s.pointColors — the live slider is just today's editing widget for whichever band/point is selected, not the value of record) plus video-only and Export-tab-setting sliders/toggles that were never meant to be in the graded-photo snapshot; each got a verified KNOWN_EXCLUSIONS reason rather than being silently ignored. Also checks the reverse direction (a snapshot entry naming an id no longer in the DOM)."
     },
     "T3": {
       "category": "tooling-gap",
@@ -527,12 +536,12 @@
     },
     "T4": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[found while implementing the Color panel, 2026-09-10] neither editor:inventory nor editor:wireframe-diff parses generated/authored markup for HTML validity",
       "wireframeRef": null,
-      "check": null,
+      "check": "editor:html-check (test/editor_html_validity_check.mjs)",
       "panel": null,
-      "note": "test/panel_proposals.mjs's Point Color proposal literally nested a <button> inside another <button> (invalid HTML — the outer button silently closes early under real parsing) and no gate caught it; it was found by eye (R8, fixed in the real implementation as CO1). A cheap DOMParser-based check for interactive-inside-interactive nesting, run over both panel_proposals.mjs's raw HTML and chromasmith-22.html's own .fx-ctrl markup, would catch this class of defect for free."
+      "note": "Implemented 2026-09-10 as test/editor_html_validity_check.mjs (npm run editor:html-check, wired into editor:gates). A plain-text tag tokenizer (no HTML-parsing npm dependency exists in this project) walks chromasmith-22.html's <body> (scripts stripped) and every test/panel_proposals.mjs PROPOSALS.<key>.html string, flagging a <button> opened while another <button> is already open. Deliberately narrowed to just 'button' — an earlier version also tracked a/select/textarea/label with a naive stack and produced ~150 false positives, because the app's real-world HTML has enough irregularity (some <select> this tokenizer's simple tag-boundary regex doesn't parse correctly) to make a multi-tag stack unreliable; <button> nesting alone was unambiguous and every hit was a genuine defect. First run found chromasmith-22.html itself was already clean (R8's CO1/FR1 fixes held), but panel_proposals.mjs still had the SAME bug in three more places: Point Color (already known, R8), Crop's Auto level button, and — new — Masks' Refine edges button. All three fixed in panel_proposals.mjs directly (cheap, and Masks is still upcoming work, so this closes the gap before it gets copied forward into that implementation)."
     },
     "T5": {
       "category": "tooling-gap",

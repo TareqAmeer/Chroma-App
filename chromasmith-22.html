@@ -14543,7 +14543,11 @@ window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskO
 
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
 const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat',
+  // adj-dehaze was missing here (T2, editor_ux_spec.json: a script cross-checking this list
+  // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
+  // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
+  // gap as deconv-amt/deconv-rad before DT1.
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','nr-lum','nr-col','nr-det','nr-hldesat',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10

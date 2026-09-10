@@ -42,6 +42,22 @@ const ZONES = [
   { label: 'rail', wf: '.rail', app: '#fx-toolrail' },
   { label: 'panel', wf: '.tp-panel[data-panel="looks"]', app: '[data-fxsec="looks"]' },
   { label: 'statusbar', wf: '.statusbar', app: '#fx-statusbar' }, // real "missing" until Phase F builds it
+  // T1 (editor_ux_spec.json): one zone per panel implemented in the 2026-09-10 redesign pass —
+  // 'looks' above was the only panel with atom-count coverage; a control silently dropped inside
+  // any of these 6 during a future edit previously passed editor:inventory clean. `appSection`
+  // activates the deskx rail group first (body.fx-single hides every non-.sec-active .fx-ctrl —
+  // see chromasmith-22.html:813); `appToggleOn` additionally clicks any member that's in _ALLFX
+  // (grain/hal/bloom/borders), which start hidden with an inline display:none rather than just
+  // dimmed, until first toggled on. Single-section panels (retouch, crop) compare the whole
+  // .tp-panel against its one real card, same shape as 'looks' above; multi-section panels
+  // compare each wireframe .grp[data-fxsec] against its matching real card via the INVENTORY_FN's
+  // comma-selector support (see that function's own 2026-09-10 comment).
+  { label: 'retouch-panel', wf: '.tp-panel[data-panel="retouch"]', app: '[data-fxsec="retouch"]', appSection: 'retouch', wfPanel: 'retouch' },
+  { label: 'detail-panel', wf: '.tp-panel[data-panel="detail"] .grp[data-fxsec="nr"],.tp-panel[data-panel="detail"] .grp[data-fxsec="lens"],.tp-panel[data-panel="detail"] .grp[data-fxsec="deconv"]', app: '[data-fxsec="nr"],[data-fxsec="lens"],[data-fxsec="deconv"]', appSection: 'detail', wfPanel: 'detail' },
+  { label: 'film-panel', wf: '.tp-panel[data-panel="film"] .grp[data-fxsec="grain"],.tp-panel[data-panel="film"] .grp[data-fxsec="hal"],.tp-panel[data-panel="film"] .grp[data-fxsec="bloom"],.tp-panel[data-panel="film"] .grp[data-fxsec="art"],.tp-panel[data-panel="film"] .grp[data-fxsec="vig"]', app: '[data-fxsec="grain"],[data-fxsec="hal"],[data-fxsec="bloom"],[data-fxsec="art"],[data-fxsec="vig"]', appSection: 'film', appToggleOn: ['tg-grain', 'tg-hal', 'tg-bloom'], wfPanel: 'film' },
+  { label: 'frame-panel', wf: '.tp-panel[data-panel="frame"] .grp[data-fxsec="borders"],.tp-panel[data-panel="frame"] .grp[data-fxsec="canvas"]', app: '[data-fxsec="borders"],[data-fxsec="canvas"]', appSection: 'frame', appToggleOn: ['tg-borders'], wfPanel: 'frame' },
+  { label: 'crop-panel', wf: '.tp-panel[data-panel="crop"]', app: '[data-fxsec="crop"]', appSection: 'crop', wfPanel: 'crop' },
+  { label: 'color-panel', wf: '.tp-panel[data-panel="color"] .grp[data-fxsec="curves"],.tp-panel[data-panel="color"] .grp[data-fxsec="hsl"],.tp-panel[data-panel="color"] .grp[data-fxsec="pointcolor"],.tp-panel[data-panel="color"] .grp[data-fxsec="wheels"]', app: '[data-fxsec="curves"],[data-fxsec="hsl"],[data-fxsec="pointcolor"],[data-fxsec="wheels"]', appSection: 'color', wfPanel: 'color' },
 ];
 // Menus whose CONTENTS are invisible until opened — same principle as Library's OPEN_MENUS.
 // 2026-09-10: Tools + View + ⋯ merged into ONE settings menu (#fx-settings/#fx-settings-menu),
@@ -71,16 +87,21 @@ function isDataNoise(atom) {
 // Same INVENTORY_FN as Library's — copied verbatim (not re-derived) since it's the actual
 // mechanism that makes a class-name-free comparison possible: icon shape signature, icon
 // centering, kind/text/geometry per visible atom.
+// T1 (editor_ux_spec.json): originally single-root only (document.querySelector). Extended
+// 2026-09-10 to accept a comma-separated selector and walk EVERY match, combining their atoms
+// into one list — needed for panels like Detail/Film/Frame/Color that group several sibling
+// .fx-ctrl cards with no shared wrapper element, so no single selector can span exactly them.
+// Single-selector zones (topbar/rail/looks/statusbar) are unaffected: querySelectorAll on a
+// selector with no comma returns the same one element querySelector would have, so their
+// baselines don't need re-recording.
 const INVENTORY_FN = `(sel) => {
   // Force a layout/style flush before reading anything — editor_wireframe_diff.mjs found
   // (2026-09-08) that a getComputedStyle read right after a theme toggle + photo load can return
   // a genuinely STALE value even though the underlying custom property already resolved
   // correctly; a synchronous reflow immediately before reading fixed it 10/10 in that harness.
   void document.body.offsetHeight;
-  const root = document.querySelector(sel);
-  if (!root) return null;
-  const rootBox = root.getBoundingClientRect();
-  const out = [];
+  const roots = Array.from(document.querySelectorAll(sel));
+  if (!roots.length) return null;
   // Same reasoning as Library's grid exclusion: the wireframe's preset grid (#preset-grid) is a
   // small hand-picked mock (~6 tiles); the app's Looks gallery (#fx-looks) renders the real
   // 113-entry preset library. Comparing their atom counts/tallies is comparing two unrelated
@@ -99,68 +120,75 @@ const INVENTORY_FN = `(sel) => {
     const b = el.getBoundingClientRect();
     return b.width > 0 && b.height > 0;
   };
-  const walk = (el) => {
-    for (const child of el.children) {
-      if (!visible(child)) continue;
-      if (NOISY_CONTAINERS.some((s) => child.matches && child.matches(s))) {
-        const tileCount = child.children.length;
-        out.push({ iconSig: '', kind: 'noisy-grid', text: \`\${tileCount} tile(s)\`, x: Math.round(child.getBoundingClientRect().left - rootBox.left), y: Math.round(child.getBoundingClientRect().top - rootBox.top), w: 0, h: 0, fs: '', ff: '', centerOffset: null });
-        continue; // do not recurse into it
-      }
-      const tag = child.tagName.toLowerCase();
-      const b = child.getBoundingClientRect();
-      const cs = getComputedStyle(child);
-      const ownText = Array.from(child.childNodes)
-        .filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(' ').trim();
-      const isControl = ['button', 'input', 'select', 'textarea', 'a'].includes(tag);
-      const isIcon = tag === 'svg' || tag === 'img';
-      const iconSig = isIcon ? (() => {
-        const parts = [];
-        for (const g of child.querySelectorAll('path,rect,line,circle,polyline,polygon,ellipse')) {
-          const n = g.tagName.toLowerCase();
-          const d = (g.getAttribute('d') || g.getAttribute('points') || '').replace(/\\s+/g, ' ').trim();
-          const box = ['x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'x1', 'y1', 'x2', 'y2']
-            .map((a) => g.getAttribute(a)).filter(Boolean).join(',');
-          parts.push(n + ':' + (d || box));
+  const collect = (root) => {
+    const rootBox = root.getBoundingClientRect();
+    const out = [];
+    const walk = (el) => {
+      for (const child of el.children) {
+        if (!visible(child)) continue;
+        if (NOISY_CONTAINERS.some((s) => child.matches && child.matches(s))) {
+          const tileCount = child.children.length;
+          out.push({ iconSig: '', kind: 'noisy-grid', text: \`\${tileCount} tile(s)\`, x: Math.round(child.getBoundingClientRect().left - rootBox.left), y: Math.round(child.getBoundingClientRect().top - rootBox.top), w: 0, h: 0, fs: '', ff: '', centerOffset: null });
+          continue; // do not recurse into it
         }
-        return parts.sort().join('|') || (child.getAttribute('src') || '').slice(-40);
-      })() : '';
-      const centerOffset = isIcon ? (() => {
-        let host = child.parentElement;
-        for (let i = 0; i < 3 && host && host !== root; i++) {
-          const hcs = getComputedStyle(host);
-          const hb = host.getBoundingClientRect();
-          const isSquareish = hb.width > 0 && Math.abs(hb.width - hb.height) < Math.max(4, hb.width * 0.15);
-          const looksLikeHitShape = isSquareish &&
-            (['BUTTON', 'A'].includes(host.tagName) || parseFloat(hcs.borderRadius) > 0);
-          if (looksLikeHitShape) {
-            const iconCx = b.left + b.width / 2, iconCy = b.top + b.height / 2;
-            const hostCx = hb.left + hb.width / 2, hostCy = hb.top + hb.height / 2;
-            return Math.round(Math.hypot(iconCx - hostCx, iconCy - hostCy) * 10) / 10;
+        const tag = child.tagName.toLowerCase();
+        const b = child.getBoundingClientRect();
+        const cs = getComputedStyle(child);
+        const ownText = Array.from(child.childNodes)
+          .filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(' ').trim();
+        const isControl = ['button', 'input', 'select', 'textarea', 'a'].includes(tag);
+        const isIcon = tag === 'svg' || tag === 'img';
+        const iconSig = isIcon ? (() => {
+          const parts = [];
+          for (const g of child.querySelectorAll('path,rect,line,circle,polyline,polygon,ellipse')) {
+            const n = g.tagName.toLowerCase();
+            const d = (g.getAttribute('d') || g.getAttribute('points') || '').replace(/\\s+/g, ' ').trim();
+            const box = ['x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'x1', 'y1', 'x2', 'y2']
+              .map((a) => g.getAttribute(a)).filter(Boolean).join(',');
+            parts.push(n + ':' + (d || box));
           }
-          host = host.parentElement;
+          return parts.sort().join('|') || (child.getAttribute('src') || '').slice(-40);
+        })() : '';
+        const centerOffset = isIcon ? (() => {
+          let host = child.parentElement;
+          for (let i = 0; i < 3 && host && host !== root; i++) {
+            const hcs = getComputedStyle(host);
+            const hb = host.getBoundingClientRect();
+            const isSquareish = hb.width > 0 && Math.abs(hb.width - hb.height) < Math.max(4, hb.width * 0.15);
+            const looksLikeHitShape = isSquareish &&
+              (['BUTTON', 'A'].includes(host.tagName) || parseFloat(hcs.borderRadius) > 0);
+            if (looksLikeHitShape) {
+              const iconCx = b.left + b.width / 2, iconCy = b.top + b.height / 2;
+              const hostCx = hb.left + hb.width / 2, hostCy = hb.top + hb.height / 2;
+              return Math.round(Math.hypot(iconCx - hostCx, iconCy - hostCy) * 10) / 10;
+            }
+            host = host.parentElement;
+          }
+          return null;
+        })() : null;
+        if (isControl || isIcon || ownText) {
+          out.push({
+            iconSig,
+            kind: isIcon ? 'icon' : (isControl ? tag : 'text'),
+            text: (ownText || child.getAttribute('placeholder') || '').replace(/\\s+/g, ' ').slice(0, 40),
+            x: Math.round(b.left - rootBox.left),
+            y: Math.round(b.top - rootBox.top),
+            w: Math.round(b.width),
+            h: Math.round(b.height),
+            fs: cs.fontSize,
+            ff: cs.fontFamily.split(',')[0].replace(/['"]/g, ''),
+            centerOffset,
+          });
         }
-        return null;
-      })() : null;
-      if (isControl || isIcon || ownText) {
-        out.push({
-          iconSig,
-          kind: isIcon ? 'icon' : (isControl ? tag : 'text'),
-          text: (ownText || child.getAttribute('placeholder') || '').replace(/\\s+/g, ' ').slice(0, 40),
-          x: Math.round(b.left - rootBox.left),
-          y: Math.round(b.top - rootBox.top),
-          w: Math.round(b.width),
-          h: Math.round(b.height),
-          fs: cs.fontSize,
-          ff: cs.fontFamily.split(',')[0].replace(/['"]/g, ''),
-          centerOffset,
-        });
+        walk(child);
       }
-      walk(child);
-    }
+    };
+    walk(root);
+    return out;
   };
-  walk(root);
-  return { atoms: out, box: { w: Math.round(rootBox.width), h: Math.round(rootBox.height) } };
+  const out = roots.flatMap(collect);
+  const firstBox = roots[0].getBoundingClientRect();
+  return { atoms: out, box: { w: Math.round(firstBox.width), h: Math.round(firstBox.height) } };
 }`;
 
 function summarize(atoms) { return atoms.map((a) => `${a.kind}${a.text ? `:"${a.text}"` : ''}`); }
@@ -222,6 +250,32 @@ await app.waitForTimeout(300);
 await settleForCapture(app);
 
 async function diffZone(zone) {
+  // T1 (editor_ux_spec.json): panel zones for sections stacked under a deskx rail GROUP button
+  // need that group activated first, or every member card measures 0x0 (sec-active not applied
+  // yet — same class of trap editor_wireframe_diff.mjs already documents for the boot-watchdog
+  // race). Some members are ALSO in _ALLFX (chromasmith-22.html) — inline display:none until
+  // first toggled on, a stronger hide than the ff-off dim class — so those need an explicit
+  // toggle click too, or they measure as entirely absent rather than just dim.
+  if (zone.appSection) {
+    await app.evaluate((sec) => { if (typeof fxSection === 'function') fxSection(sec, true); }, zone.appSection);
+    await app.waitForTimeout(150);
+  }
+  if (zone.appToggleOn) {
+    for (const tg of zone.appToggleOn) {
+      await app.evaluate((id) => { const el = document.getElementById(id); if (el && !el.classList.contains('on')) el.click(); }, tg);
+    }
+    await app.waitForTimeout(150);
+  }
+  // Mirror image of appSection: the wireframe's OWN .tp-panel{display:none}/.active toggle
+  // (Editor (Developer) View.dc.html:106-107, driven by its #rail click handler) defaults to
+  // 'looks' — every other panel collapses to a 0x0 rect until switched, which silently zeroed
+  // every atom for these zones the first time this ran (all reported "wireframe 0").
+  if (zone.wfPanel) {
+    await wf.evaluate((panel) => {
+      document.querySelectorAll('#rail button').forEach((b) => b.classList.toggle('active', b.dataset.tab === panel));
+      document.querySelectorAll('.tp-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === panel));
+    }, zone.wfPanel);
+  }
   const w = await wf.evaluate(`(${INVENTORY_FN})(${JSON.stringify(zone.wf)})`);
   const a = await app.evaluate(`(${INVENTORY_FN})(${JSON.stringify(zone.app)})`);
   if (!w) { findings.push(`[${zone.label}] wireframe container ${zone.wf} not found`); return; }
