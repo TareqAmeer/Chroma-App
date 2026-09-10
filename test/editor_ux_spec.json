@@ -434,6 +434,15 @@
       "check": null,
       "panel": "info",
       "note": "chromasmith-22.html: fxRenderPeoplePanel() returns early to el.innerHTML='' in both cases. Nobody reported this as a bug because the feature is invisible either way, which is exactly the problem \u2014 the redesigned Info panel (test/panel_proposals.mjs) adds a \"Scan this photo for faces\" affordance for the no-detection-yet case (see R3 for wiring it up), but the no-path case (drag-dropped photo) has no proposed treatment yet \u2014 worth deciding whether that state gets an explanation (\"open from your Library to use faces\") or stays silent."
+    },
+    "RT1": {
+      "category": "retouch-panel",
+      "status": "fixed",
+      "panel": "retouch",
+      "source": "implement the reviewed Retouch panel proposal (test/panel_proposals.mjs)",
+      "wireframeRef": "Editor (Developer) View.dc.html: .tp-panel[data-panel=retouch]",
+      "check": "editor_wireframe_behaviour.mjs: retouch-mode-segmented, retouch-primary-action, retouch-clear",
+      "note": "Mode select -> Heal|Clone segmented control (same sel-heal-mode value underneath); Reset moves into the header, borderless, hidden until edited; Retouch/Clear all spots/hint line all kept verbatim per the proposal. Undo spot is cut (tracked separately as R1). Implemented 2026-09-10: Mode -> selectToSeg (Heal|Clone), long explanation -> fx-info-i tooltip, Retouch button promoted to .bpri primary + own row, Undo spot removed. Desktop per-section Reset (feedback COLOR 1) implemented as a SHARED mechanism, not retouch-specific: the existing mobile-only fxResetSection()/.fx-ctrl-title-reset was extended to desktop, gated on :has(.fx-row.fx-mod) for sliders that already use that tracking, plus a retouch-specific .fx-has-heal class (driven by spot count via healSyncUI) since brush-size sliders are intentionally outside the _FX_SNAP_SLIDERS/undo system. Benefits all 22 sections, not just Retouch. Verified live: hidden by default, appears after a spot is added, click resets sliders AND clears spots, adjacent sections layout unaffected. 4 Playwright behaviour tests added/updated (RT1 describe block)."
     }
   }
 }

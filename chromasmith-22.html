@@ -226,6 +226,12 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
 .fx-fields.ff-off{opacity:.42}
 .fx-fields.ff-off .fx-ctrl-title,.fx-fields.ff-off .msk-group-hd{color:var(--mut)}
 .fx-hint{font-size:11px;color:var(--mut);line-height:1.45;margin:-2px 0 8px}
+/* Round info button — sits on a label or a button, never on its own line (panel redesign,
+   feedback: MULTIPLE). Long explanatory text that used to be a standing sentence in the panel
+   collapses to this tooltip instead. */
+.fx-info-i{width:14px;height:14px;border-radius:50%;border:1px solid var(--bdr);background:none;
+  color:var(--mut);font-size:9px;font-style:italic;line-height:1;cursor:help;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;flex:none}
 /* Sub-group heading INSIDE a panel (e.g. Skin Tone vs Local Adjustments in the mask panel) —
    lighter than .fx-ctrl-title, which is the panel's own header. */
 .fx-sub{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin:4px 0 4px;padding-top:6px;border-top:1px solid var(--bdr)}
@@ -686,6 +692,21 @@ body.mobile-fx.sheet-open .fx-act-ic{font-size:19px}
 body.mobile-fx.sheet-open .fx-ctrl-title-reset{display:inline-flex;align-items:center;justify-content:center;
   width:26px;height:26px;border-radius:6px;background:none;border:none;color:var(--mut);cursor:pointer}
 body.mobile-fx.sheet-open .fx-ctrl-title-reset:active{background:var(--sur2);color:var(--txt)}
+.fx-ctrl-title-reset-lb{display:none} /* the mobile button is icon-only; label text is desktop-only, see below */
+/* Desktop per-section reset (panel redesign, feedback COLOR 1) — plain text, no border, and
+   invisible until the section actually has something to reset. ".fx-mod" is the SAME per-row
+   "differs from default" flag that already drives a modified slider's amber fill (see the CSS
+   comment a few lines above this block) — reusing it here means a section's reset visibility
+   can never disagree with what its own rows already say about themselves. :has() is already
+   used elsewhere in this file (grep for precedent before assuming it's unsupported). */
+.fx-title-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+body.fx-deskb .fx-ctrl-title-reset{display:none;font-size:var(--fs-1);font-weight:400;letter-spacing:0;
+  text-transform:none;color:var(--mut);background:none;border:none;padding:0;cursor:pointer}
+body.fx-deskb .fx-ctrl-title-reset svg{display:none} /* icon glyph is mobile-only; desktop reads as plain text */
+body.fx-deskb .fx-ctrl-title-reset-lb{display:inline}
+body.fx-deskb .fx-ctrl-title-reset:hover{color:var(--txt)}
+body.fx-deskb .fx-ctrl:has(.fx-row.fx-mod) > .fx-ctrl-title .fx-ctrl-title-reset,
+body.fx-deskb .fx-ctrl.fx-has-heal > .fx-ctrl-title .fx-ctrl-title-reset{display:inline-block}
 #fx-sheet-handle{display:none}
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
@@ -2144,18 +2165,24 @@ window.bumpBootSplashWatchdog(10000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="retouch">
         <div class="fx-ctrl-title">Retouch <div class="fx-toggle" id="tg-retouch" onclick="toggleFX('retouch')"></div></div>
         <div class="fx-fields ff-off" id="ff-retouch">
-        <div class="fx-row"><div class="fx-label">Mode</div>
-          <select class="fx-select" id="sel-heal-mode"><option value="heal">Heal (blend color)</option><option value="clone">Clone (copy exactly)</option></select>
+        <div class="fx-row" style="align-items:flex-start"><div class="fx-label">Mode <button class="fx-info-i" type="button" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></div>
+          <select class="fx-select" id="sel-heal-mode" style="display:none"><option value="heal" data-short="Heal">Heal (blend color)</option><option value="clone" data-short="Clone">Clone (copy exactly)</option></select>
+          <div class="seg" id="seg-heal-mode" style="flex:1"></div>
         </div>
         <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-size">4%</div></div>
         <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-feather">50</div></div>
         <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
-        <div class="fx-row" style="gap:6px">
-          <button class="btn bgh" id="btn-heal-paint" onclick="healToggle()">Retouch</button>
-          <button class="btn bgh" onclick="healUndoLast()">Undo spot</button>
-          <button class="btn bgh" onclick="healClear()">Clear all</button>
+        <!-- "Retouch" is the tool's actual primary action (arms paint mode), so it gets the
+             filled/primary treatment and its own full-width row — panel redesign, feedback
+             "kept" note in test/panel_proposals.mjs on why an earlier draft that dropped this
+             button was wrong. Undo spot is cut per that same review (RT1): tracked separately
+             as R1 (editor_ux_spec.json) since a real per-spot delete needs new interaction
+             design, not a layout change — ⌘Z still undoes a spot in the meantime. -->
+        <div class="btn-row" style="margin-top:2px">
+          <button class="btn bpri" id="btn-heal-paint" onclick="healToggle()" style="flex:1">Retouch</button>
         </div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
         </div>
       </div>
       <!-- CANVAS (aspect-ratio matte around image + borders) -->
@@ -17528,6 +17555,14 @@ function healSyncUI(){
   const lbl=document.getElementById('heal-count');
   if(lbl)lbl.textContent=n?`${n} spot${n===1?'':'s'} removed${healMode?' · click to add another':''}`
     :'No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.';
+  // Drives the desktop "Reset" visibility (panel redesign, feedback COLOR 1) for this section.
+  // Size/Feather/Opacity are brush TOOL settings, not tracked in _FX_SNAP_SLIDERS (they aren't
+  // part of the saved/undo photo state the way Basic Adjustments sliders are — see getUISnapshot's
+  // own comment on why spots, not brush size, are what actually needs to survive undo/session
+  // save), so the shared .fx-mod mechanism the rest of this feature relies on never fires for
+  // them. Spot count is the real "is there anything here to reset" signal for this panel.
+  const card=document.querySelector('.fx-ctrl[data-fxsec="retouch"]');
+  if(card)card.classList.toggle('fx-has-heal',n>0);
 }
 function healToggle(){
   healMode=!healMode;
@@ -21084,6 +21119,26 @@ function selectToChips(selectId,chipsId){
   render();
   sel._chipsRender=render; // re-synced after programmatic sel.value writes (session/snapshot restore)
 }
+// Same pattern as selectToChips (a real <select> stays the source of truth, still dispatches
+// its own onchange, still restorable from a session/snapshot — just visually replaced) but into
+// the app's existing equal-width .seg control instead of a row of .btn chips. For a small,
+// mutually-exclusive choice (2-4 options) where a ragged chip row would be the wrong shape —
+// panel redesign, feedback: "text in borders that are different sizes" applies to ROWS of them.
+function selectToSeg(selectId,segId){
+  const sel=document.getElementById(selectId),row=document.getElementById(segId);
+  if(!sel||!row)return;
+  const render=()=>{
+    row.innerHTML='';
+    Array.from(sel.options).forEach(o=>{
+      const b=document.createElement('button');b.className=o.value===sel.value?'on':'';
+      b.textContent=o.dataset.short||o.textContent;
+      b.onclick=()=>{sel.value=o.value;sel.dispatchEvent(new Event('change',{bubbles:true}));render();};
+      row.appendChild(b);
+    });
+  };
+  render();
+  sel._chipsRender=render;
+}
 refreshLUTSelect(); // populate built-in + saved LUTs
 initDcpSelect();    // populate RAW profile dropdown (persisted choice)
 initCompareButton(); // wire "hold to compare" before/after
@@ -21091,6 +21146,7 @@ _crvInit();          // tone-curve editor (pointer handlers + initial bake/draw)
 hslSyncUI();     // HSL mixer band chips + slider values/gradient tracks
 mskRebuild();        // local-adjustment mask list
 cvBuildChips();      // canvas ratio chips + background swatches
+selectToSeg('sel-heal-mode','seg-heal-mode'); // Retouch Heal|Clone (panel redesign)
 selectToChips('sel-input','chips-input'); // input-profile tap chips
 selectToChips('sel-tonemap','chips-tonemap'); // ROADMAP.md R2 — highlight-response tap chips
 // 3.4.6 fix: the rolloff itself is correct — AgX/Standard/Film-stock only diverge on pixels ABOVE
@@ -21146,16 +21202,36 @@ function fxResetSection(cardOrName){
       const ff=document.getElementById('ff-'+id);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}
     }
   });
+  // Retouch's meaningful "edited" state is its spots, not its brush-size sliders (see
+  // healSyncUI's own comment on why those two are tracked separately) — reset the sliders
+  // above AND clear spots here, or the reset button would stay visible (fx-has-heal) after a
+  // click that visibly did nothing to the photo.
+  if(card.dataset.fxsec==='retouch'&&typeof healClear==='function')healClear();
   if(typeof hapt==='function')hapt();
   fxUpdate();
   log('Section reset','info');
 }
+// Panel redesign (docs/editor-redesign-plan.md, feedback COLOR 1): the desktop reset button
+// is no longer mobile-only (see .fx-ctrl-title-reset's CSS — it now shows on desktop too, but
+// only once .fx-mod marks something in the section as changed from default; visibility logic
+// lives entirely in CSS via :has(), no JS needed there). Crop's own hand-built "Reset" link
+// (.fx-toggle-lb) already does the same job and predates this, so it's left alone rather than
+// getting a second reset control glued on next to it.
 document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title=>{
+  if(title.querySelector(':scope > .fx-toggle-lb'))return;
   const b=document.createElement('button');
   b.type='button';b.className='fx-ctrl-title-reset';b.title='Reset this section';
-  b.innerHTML=icon('reset',14);
+  b.innerHTML=icon('reset',14)+'<span class="fx-ctrl-title-reset-lb">Reset</span>';
   b.onclick=(e)=>{e.stopPropagation();fxResetSection(title.parentElement);};
-  title.appendChild(b);
+  // Reset and the on/off toggle (if any) are wrapped together so both sit flush at the title's
+  // right edge — appending reset as a bare third flex child would land it BETWEEN the title
+  // text and the toggle under the existing justify-content:space-between rule instead of next
+  // to the toggle, which is what was actually asked for.
+  const right=document.createElement('span');right.className='fx-title-right';
+  const toggle=title.querySelector(':scope > .fx-toggle');
+  title.appendChild(right);
+  right.appendChild(b);
+  if(toggle)right.appendChild(toggle);
 });
 // Sidebar sections collapse independently of their on/off state (a section can be OFF and
 // expanded, or ON and collapsed) — clicking the header (anywhere but the toggle/reset controls)

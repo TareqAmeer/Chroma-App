@@ -121,7 +121,12 @@ The spec file can track them together; the work must not.
 - **`editor:wireframe-diff` has a documented flake (E7)** — light-theme colour reads on
   `#fx-deskbar` descendants intermittently return dark-theme values. It retries 6× in both the
   pre-commit hook and `editor_gates.mjs`. A real regression fails all six. Never "fix" a red gate
-  by raising the retry count.
+  by raising the retry count. ⚠️ **STILL NEEDS a dedicated non-headless confirmation pass**
+  (2026-09-10): analysis so far points to a CSS transition read-race (`getComputedStyle` sampled
+  mid `color`/`all` transition on `.hdr-btn`/`.tab`/`.fx-rail-btn`, disagreeing with the
+  already-updated `--txt` custom property) rather than a theme-class reset during photo load — no
+  code path was found anywhere that removes/reapplies `.light` or `body.className` on photo load.
+  Not proven live; do not treat as resolved.
 - **Another session may be editing this repo concurrently.** Check `git status` before
   committing and commit only your own files.
 

@@ -54,6 +54,11 @@ const PAIRS = {
   '.toolpanel': { app: '.fx-panel', label: 'tool panel', zone: 'panel' },
   '.filmstrip': { app: '#lib-overlay:not(.full)', label: 'filmstrip (docked library)', zone: 'filmstrip' },
   '.statusbar': { app: '#fx-statusbar', label: 'status bar', zone: 'statusbar' }, // app equivalent added in Phase F — until then this is a real "missing" finding, not a placeholder mapping
+  // 2026-09-10 — first implemented panel of the redesign (docs/editor-redesign-plan.md). The
+  // wireframe panel IS the spec now (Stage 4 merge, test/panel_proposals.mjs), so this maps its
+  // real container straight to the app's real container rather than to any specific child —
+  // per-control fidelity is what editor_wireframe_behaviour.mjs's new retouch tests check.
+  '.tp-panel[data-panel="retouch"]': { app: '.fx-ctrl[data-fxsec="retouch"]', label: 'retouch panel', zone: 'retouch-panel' },
 };
 const PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight',
   'backgroundColor', 'color', 'borderRadius', 'borderColor', 'borderWidth', 'boxShadow', 'height'];

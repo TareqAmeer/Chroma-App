@@ -134,6 +134,37 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
 .slider-row input[type=range]{width:100%;accent-color:var(--primary-on-dark);height:4px;margin-top:2px}
 .slider-row.disabled{opacity:.4;pointer-events:none}
 
+/* ── Panel redesign components (added per-panel as each is implemented — see
+      docs/editor-redesign-plan.md and test/panel_proposals.mjs, the source these are copied
+      from verbatim). A section switch + borderless Reset in the header, shown only once the
+      section has been edited (feedback COLOR 1); an equal-width segmented control replacing
+      ragged rows of bordered chips; a round ⓘ info button that sits on a title or a button,
+      never on its own line. ───────────────────────────────────────────────────────────── */
+.grp{display:flex;flex-direction:column;gap:10px}
+.grp-hd{display:flex;align-items:center;gap:8px;min-height:22px}
+.grp-hd .fieldlabel{margin-bottom:0;flex:1}
+.rst{font-size:11px;color:var(--ink-on-dark-muted);cursor:pointer;opacity:0;transition:opacity .15s ease;white-space:nowrap}
+.grp.edited .rst{opacity:1}
+.rst:hover{color:var(--ink-on-dark)}
+.rst i{font-style:normal;opacity:.4;margin:0 3px}
+.sw{width:30px;height:18px;border-radius:var(--radius-pill);background:rgba(255,255,255,.14);position:relative;flex:none;border:none;padding:0}
+.sw::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .18s cubic-bezier(.34,1.4,.64,1);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.sw.on{background:var(--primary-on-dark)}
+.sw.on::after{left:14px}
+.grp-bd{display:flex;flex-direction:column;gap:14px}
+.grp.off .grp-bd{opacity:.4}
+.grp.off .grp-hd .fieldlabel{color:rgba(204,204,204,.6)}
+.seg{display:flex;background:var(--surface-tile-2);border:1px solid rgba(255,255,255,.14);border-radius:var(--radius-sm);padding:2px;gap:2px}
+.seg button{flex:1;height:24px;border-radius:6px;font-size:11px;color:var(--ink-on-dark-muted);background:none;border:none;cursor:pointer;white-space:nowrap}
+.seg button.on{background:rgba(255,255,255,.1);color:var(--ink-on-dark)}
+.info-i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:none;color:var(--ink-on-dark-muted);font-size:9px;font-style:italic;line-height:1;cursor:help;padding:0;vertical-align:middle}
+.hint{font-size:var(--type-fine-print-size);color:var(--ink-on-dark-muted);line-height:1.5}
+.wide-btn{width:100%;height:30px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);background:var(--surface-tile-2);color:var(--ink-on-dark);font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
+.wide-btn svg{width:14px;height:14px;stroke:var(--ink-on-dark-muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wide-btn.ghost{background:none}
+.wide-btn.primary{background:var(--primary-on-dark);color:#10222a;border-color:var(--primary-on-dark);font-weight:600}
+.wide-btn.primary svg{stroke:#10222a}
+
 .autoenhance{height:34px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:var(--weight-semibold)}
 .autoenhance:hover{background:rgba(255,255,255,.08)}
 .autoenhance svg{width:14px;height:14px;stroke:var(--primary-on-dark)}
@@ -374,7 +405,20 @@ a{color:var(--primary-on-dark)}a:hover{color:var(--blue-mist)}
       <div class="tp-panel" data-panel="crop"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Crop &amp; straighten tools live here.</p></div>
       <div class="tp-panel" data-panel="detail"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Sharpening &amp; noise reduction live here.</p></div>
       <div class="tp-panel" data-panel="color"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Color grading tools live here.</p></div>
-      <div class="tp-panel" data-panel="retouch"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Retouch &amp; heal tools live here.</p></div>
+      <div class="tp-panel" data-panel="retouch">
+        <div class="grp off">
+          <div class="grp-hd"><span class="fieldlabel">Retouch</span><span class="rst">Reset</span><button class="sw" aria-label="Retouch off"></button></div>
+          <div class="grp-bd">
+            <div><span class="fieldlabel">Mode <button class="info-i" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></span><div class="seg"><button class="on">Heal</button><button>Clone</button></div></div>
+            <div class="slider-row"><div class="sr-top"><span>Size</span><span class="sr-val">4</span></div><input type="range" min="1" max="20" value="4"></div>
+            <div class="slider-row"><div class="sr-top"><span>Feather</span><span class="sr-val">50</span></div><input type="range" min="0" max="100" value="50"></div>
+            <div class="slider-row"><div class="sr-top"><span>Opacity</span><span class="sr-val">100</span></div><input type="range" min="10" max="100" value="100"></div>
+            <button class="wide-btn primary"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 6 9m9-6-3 3M3 21l6-2 8-8-4-4-8 8-2 6Z"/></svg>Retouch</button>
+            <p class="hint">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</p>
+            <button class="wide-btn ghost">Clear all spots</button>
+          </div>
+        </div>
+      </div>
       <div class="tp-panel" data-panel="masks"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Masking tools live here.</p></div>
       <div class="tp-panel" data-panel="film"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Film emulation tools live here.</p></div>
       <div class="tp-panel" data-panel="frame"><p style="font-size:12px;color:var(--ink-on-dark-muted)">Frame &amp; border tools live here.</p></div>
