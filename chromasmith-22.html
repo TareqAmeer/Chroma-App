@@ -30,6 +30,11 @@
    the Tauri shell has actually settled into the Library. visibility (not display:none) so
    layout/measurements that happen during startup are unaffected — only paint is suppressed. */
 html.cs-boot-tauri body>header,html.cs-boot-tauri body>.tabs,html.cs-boot-tauri body>main{visibility:hidden}
+/* Splash-over-desktop: while the boot gate is up, html/body must be transparent (not the app's
+   --bg) so the OS window itself (tauri.conf.json "transparent":true) shows the real desktop
+   through the margins around the splash card — not the app's own background color. Reverts the
+   instant cs-boot-tauri is removed (hideBootSplash), so the editor/Library paint opaque as normal. */
+html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
 /* ══ EMBEDDED TYPEFACES ══════════════════════════════════════════════════════════════════════
    The app is a single offline file — there is no CDN and no second request to make, so both
    faces are base64 data URIs, Latin-subset WOFF2 (~80KB combined).
