@@ -179,6 +179,13 @@ const INVENTORY_FN = `(sel) => {
             fs: cs.fontSize,
             ff: cs.fontFamily.split(',')[0].replace(/['"]/g, ''),
             centerOffset,
+            // T8 (editor_ux_spec.json): a control that's visually present but disabled reads
+            // IDENTICALLY to an enabled one to every check above — 'disabled' in child is only
+            // meaningful for the form-control tags that actually support it (button/input/
+            // select/textarea), not text/icon atoms or an <a>, hence the isControl-and-property
+            // guard rather than a bare \`!!child.disabled\` (which is always false on non-form
+            // elements and would silently claim they're all "enabled").
+            disabled: (isControl && 'disabled' in child) ? !!child.disabled : null,
           });
         }
         walk(child);
@@ -204,9 +211,25 @@ function iconSignatures(zoneLabel, atoms) {
   return atoms.filter((a) => a.kind === 'icon').map((a, i) => [`${zoneLabel}#${i}`, a.iconSig || '(empty)']);
 }
 
+// T8 (editor_ux_spec.json): same architecture as the icon-shape baseline above, applied to
+// disabled state instead of glyph shape — a control that's disabled=true (e.g. #btn-denoise-now
+// before a RAW photo loads) reads identically to an enabled one to every other check this file
+// does. Diffing against the WIREFRAME's own disabled markup would be near-pure noise (a static
+// mockup has essentially no legitimately-disabled controls, since it can't model "disabled until
+// X" state at all — every real, correct disabled control in the app would report as a spurious
+// mismatch), so this instead tracks the APP's OWN disabled/enabled state over time, the same way
+// the icon baseline tracks the app's own icon shapes: a control that's ALWAYS disabled or NEVER
+// disabled when it should gate is invisible to a single snapshot but shows up the moment this
+// baseline was taken while it was in the other state.
+const DISABLED_BASELINE = path.join(ROOT, 'test/baselines/editor_wireframe_disabled.json');
+function disabledSignatures(zoneLabel, atoms) {
+  return atoms.filter((a) => a.disabled !== null).map((a, i) => [`${zoneLabel}#${i}(${a.text || a.kind})`, a.disabled]);
+}
+
 const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 const findings = [];
 const iconsNow = {};
+const disabledNow = {};
 
 const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
 await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
@@ -296,6 +319,7 @@ async function diffZone(zone) {
   if (!a) { findings.push(`[${zone.label}] app container ${zone.app} NOT FOUND`); return; }
 
   for (const [k, sig] of iconSignatures(zone.label, a.atoms)) iconsNow[k] = sig;
+  for (const [k, dis] of disabledSignatures(zone.label, a.atoms)) disabledNow[k] = dis;
 
   const wClean = w.atoms.filter((x) => !isDataNoise(x));
   const aClean = a.atoms.filter((x) => !isDataNoise(x));
@@ -373,6 +397,23 @@ if (process.argv.includes('--icons-baseline')) {
   await mkdir(path.dirname(ICON_BASELINE), { recursive: true });
   await writeFile(ICON_BASELINE, JSON.stringify(iconsNow, null, 2));
   console.log(`Wrote ${Object.keys(iconsNow).length} icon signatures to ${ICON_BASELINE}`);
+}
+
+// T8: disabled-state baseline diff — see comment above DISABLED_BASELINE. Reuses the same
+// --icons-baseline flag to write both baselines together rather than adding a second flag for a
+// near-identical purpose; --disabled-baseline is accepted too as an explicit alias.
+let disabledBefore = {};
+try { disabledBefore = JSON.parse(await readFile(DISABLED_BASELINE, 'utf8')); } catch { /* first run */ }
+const disabledKeys = new Set([...Object.keys(disabledBefore), ...Object.keys(disabledNow)]);
+for (const k of disabledKeys) {
+  if (k in disabledBefore && k in disabledNow && disabledBefore[k] !== disabledNow[k]) {
+    findings.push(`[disabledstate] ${k}: was ${disabledBefore[k] ? 'disabled' : 'enabled'} at the last committed baseline, now ${disabledNow[k] ? 'disabled' : 'enabled'} — verify this is intentional, not a broken disabled-state gate`);
+  }
+}
+if (process.argv.includes('--icons-baseline') || process.argv.includes('--disabled-baseline')) {
+  await mkdir(path.dirname(DISABLED_BASELINE), { recursive: true });
+  await writeFile(DISABLED_BASELINE, JSON.stringify(disabledNow, null, 2));
+  console.log(`Wrote ${Object.keys(disabledNow).length} disabled-state signatures to ${DISABLED_BASELINE}`);
 }
 
 const records = { mismatches: findings.map((raw) => ({ raw })), missing: [] };
