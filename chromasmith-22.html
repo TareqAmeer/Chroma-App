@@ -1271,10 +1271,10 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
      asset path: the iOS/desktop build scripts only stage chromasmith-22.html + vendor/, not a
      top-level assets/ folder, and this must render with zero fetch()/network dependency on the
      very first paint — see §2's payload note before growing this further. -->
-<div id="boot-splash" style="position:fixed;inset:0;z-index:99999;background:#17171b;display:flex;
+<div id="boot-splash" style="position:fixed;inset:0;z-index:99999;background:transparent;display:flex;
   align-items:center;justify-content:center;transition:opacity .4s ease-out;opacity:1">
   <div style="position:relative;width:min(640px,92vw);height:300px;background:#0f1c24;
-    border-radius:12px;overflow:hidden;display:grid;grid-template-columns:220px 1fr;
+    border-radius:0;overflow:hidden;display:grid;grid-template-columns:220px 1fr;
     box-shadow:0 24px 70px rgba(0,0,0,.85),0 8px 24px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.12)">
     <!-- Left pane: wordmark, progress, version -->
     <div style="position:relative;display:flex;flex-direction:column;justify-content:space-between;
@@ -4710,7 +4710,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-10a';
+const BUILD='2026-09-10b';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -21088,6 +21088,19 @@ mskRebuild();        // local-adjustment mask list
 cvBuildChips();      // canvas ratio chips + background swatches
 selectToChips('sel-input','chips-input'); // input-profile tap chips
 selectToChips('sel-tonemap','chips-tonemap'); // ROADMAP.md R2 — highlight-response tap chips
+// 3.4.6 fix: the rolloff itself is correct — AgX/Standard/Film-stock only diverge on pixels ABOVE
+// 1.0 (real headroom), so picking a style on an ordinary 8-bit photo is a genuine, by-design no-op
+// (see the shader comment at useTonemap's declaration and ROADMAP.md R1). That's invisible unless
+// FX.usingSceneLinear (set in setImage from real measured RAW headroom) is true, so users read it
+// as a dead control. Surface the reason once per change instead of silently doing nothing.
+(function(){
+  const sel=document.getElementById('sel-tonemap');if(!sel)return;
+  sel.addEventListener('change',()=>{
+    if(sel.value&&typeof FX!=='undefined'&&!FX.usingSceneLinear&&typeof toast==='function'){
+      toast('Highlight response only changes the image once real RAW highlight headroom is present — this photo has none to roll off',false);
+    }
+  });
+})();
 selectToChips('sel-print','chips-print'); // print-profile tap chips
 selectToChips('sel-crop-ar','crop-ar-chips'); // crop aspect-ratio tap chips
 function dustModeBuildChips(){
