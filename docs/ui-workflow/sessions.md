@@ -73,13 +73,16 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 >
 > **Scenario states** (extra, both themes at 1400×900 only, on the surfaces they affect): keyboard focus, pressed, modified (`.fx-mod`); portrait / landscape / panorama photos (fixtures in `test/fixtures/`, generate if missing); multi-photo batch (filmstrip + export-scope toggle); RAW loaded if a fixture exists (T11 says none — list as skipped); video loaded; masks none / one selected / several; export progress overlay, loading, error, empty; split view, 1:1 loupe, crop mode; Library empty / large / Lightroom-connected (`window.libtestLrConnect()`) / grid and list / multi-select; mobile sheet open and closed, landscape phone; browser zoom 125% and 200%, forced-colors, reduced motion; Editor rest in Playwright WebKit (see `test/editor_webkit_smoke.mjs`). Reach each state through real functions and fixtures.
 >
+> **Chrome surfaces first:** `node test/surface_coverage_check.mjs` lists every layout region with no `design/surfaces.json` entry of its own (Editor top bar, tool rail, docked filmstrip, Library top bar / sidebar / filters panel / status bar, phone action bar and section nav, and anything else it finds). Add each as its own surface (its `selector` must be the region itself, not a page that contains it), then capture it like any other. Done only when that check passes; then remove `editor:surface-coverage` from ADVISORY_GATES in `test/editor_gates.mjs`.
+> **Resizer positions are widths too:** for every surface, include the layout axes `test/editor_responsive_qa.mjs`'s LAYOUT_AXES uses (rail labels/icons; panel 220/320/440/closed; docked filmstrip 90/120/420) and the Library sidebar 150/230/420, crossed with every viewport.
+>
 > Rules:
 > 1. Skip impossible combinations; list each with its reason in `spec.json`.
 > 2. Deduplicate: hash each screenshot, store identical images once, and have `spec.json` map each combination to its image.
 > 3. Full-size images go to `design/asbuilt-full/<id>/` (gitignored). Commit only `design/asbuilt/<id>/contact-<theme>.webp` (labelled grids; split if too big to read) plus the `spec.json` index.
 > 4. Resumable: skip combinations that already have an image.
 > 5. One run per group (A–E, the `group` field). A Haiku subagent runs each and reports only counts (captured / duplicate / skipped / failed) plus failures. After 2 failed attempts on the same failure, record it in STATE.md and move on.
-> 6. Update S7's review page to show both themes' sheets per surface, with the total under 255 files.
+> 6. Update S7's review page to show both themes' sheets per surface, including the new chrome surfaces, with the total under 255 files.
 >
 > Done when every surface has every possible combination captured or listed with a reason. Log totals per group in STATE.md, then commit and push.
 

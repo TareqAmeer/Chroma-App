@@ -455,6 +455,81 @@ export async function checkAspectRatioInvariant(page, sel, widths, height) {
   return findings;
 }
 
+// ── Check: CLIPPING — a visible control/icon partly cut off by its container or the window ──
+// Built 2026-09-11 after the narrowed tool rail shipped with every icon half off-screen
+// (#fx-toolrail kept a hardcoded width:72px while its grid track went to 44px). The overlap/wrap
+// checks above could never see it: nothing overlapped and no label wrapped — the icons were just
+// cut off by the window edge. Only PARTIAL clipping is reported: an element entirely outside its
+// clip rect is deliberately hidden (a closed panel), one straddling the edge is a defect.
+// Horizontal clipping is checked against the viewport and every ancestor with overflow-x
+// hidden/clip; vertical only against ancestors with overflow-y hidden/clip (a vertically
+// scrolling panel is not a clip). `rootSel` scopes the scan.
+export const CLIP_FN = `(rootSel) => {
+  const SEL = 'button,input,select,textarea,a[href],svg,img,[role=button],canvas';
+  const roots = [...document.querySelectorAll(rootSel)];
+  const seen = new Set(), out = [];
+  const nm = (el) => {
+    if (el.id) return '#' + el.id;
+    const t = el.getAttribute && (el.getAttribute('title') || el.getAttribute('aria-label'));
+    const host = el.closest('[id]');
+    const lbl = (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 18);
+    return el.tagName.toLowerCase() + (t ? ' "' + t + '"' : (lbl ? ' "' + lbl + '"' : '')) + (host ? ' in #' + host.id : '');
+  };
+  for (const root of roots) for (const el of root.querySelectorAll(SEL)) {
+    if (seen.has(el)) continue; seen.add(el);
+    // Icons are checked on their own too: an icon can be cut off inside a button that itself fits.
+    if (el.tagName !== 'svg' && el.closest('svg')) continue;
+    if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
+    const b = el.getBoundingClientRect();
+    if (b.width < 2 || b.height < 2) continue;
+    // Content inside a SCROLLING container may legitimately sit part-way out of view (a
+    // thumbnail half-scrolled in the filmstrip) — so once the walk passes a scroller on an
+    // axis, that axis is no longer checked against anything further out, window included.
+    const clips = [];
+    let freeX = false, freeY = false;
+    for (let a = el.parentElement; a && a !== document.documentElement; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      const sx = (cs.overflowX === 'auto' || cs.overflowX === 'scroll') && a.scrollWidth > a.clientWidth;
+      const sy = (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && a.scrollHeight > a.clientHeight;
+      const cx = !freeX && (cs.overflowX === 'hidden' || cs.overflowX === 'clip');
+      const cy = !freeY && (cs.overflowY === 'hidden' || cs.overflowY === 'clip');
+      if (sx) freeX = true;
+      if (sy) freeY = true;
+      if (!cx && !cy) continue;
+      const ab = a.getBoundingClientRect();
+      const l = ab.left + a.clientLeft, t = ab.top + a.clientTop;
+      clips.push({ who: a.id ? '#' + a.id : a.tagName.toLowerCase() + (a.className && typeof a.className === 'string' ? '.' + a.className.trim().split(/\\s+/)[0] : ''),
+        l: cx ? l : -Infinity, r: cx ? l + a.clientWidth : Infinity, t: cy ? t : -Infinity, btm: cy ? t + a.clientHeight : Infinity });
+    }
+    if (!freeX) clips.push({ who: 'window', l: 0, r: innerWidth, t: -Infinity, btm: Infinity });
+    for (const c of clips) {
+      const inter = Math.min(b.right, c.r) - Math.max(b.left, c.l) > 0 && Math.min(b.bottom, c.btm) - Math.max(b.top, c.t) > 0;
+      if (!inter) break; // fully outside this clip = deliberately hidden, not a partial cut
+      const px = Math.max(c.l - b.left, b.right - c.r, c.t - b.top, b.bottom - c.btm);
+      if (px > 1) { out.push({ el: nm(el), by: c.who, px: Math.round(px) }); break; }
+    }
+  }
+  return out;
+}`;
+
+export async function checkClipping(page, rootSel, label) {
+  const hits = await page.evaluate(`(${CLIP_FN})(${JSON.stringify(rootSel)})`);
+  return hits.map((h) => ({ viewport: label, kind: 'CLIP', detail: `${h.el} is cut off by ${h.by} (${h.px}px hidden)` }));
+}
+
+// ── Check: every RESIZER / layout mode in the page is covered by a test's layout matrix ─────
+// The rail bug above survived because every check ran the rail only at its default width —
+// CLAUDE.md lesson #16 (state-matrix, not default-state) written down but not enforced. This
+// makes it enforced: any drag handle in the DOM that the calling test's matrix doesn't name is
+// itself a finding, so adding a new resizable region fails the gate until it is tested at its
+// min / default / max. `covered` = the resizer ids the caller's matrix exercises.
+export async function checkResizerCoverage(page, covered, label) {
+  const ids = await page.evaluate(() => [...document.querySelectorAll('[id$="-resizer"], .fx-edge')]
+    .filter((el) => el.id && getComputedStyle(el).display !== 'none').map((el) => el.id));
+  return [...new Set(ids)].filter((id) => !covered.includes(id))
+    .map((id) => ({ viewport: label, kind: 'UNTESTED_RESIZER', detail: `#${id} can resize the layout but no layout-matrix axis in this test exercises it — add its min/default/max` }));
+}
+
 // A HARD gate: fails on any finding not explicitly allowlisted. This replaces the older
 // "gate on regressions only" pattern (compare against the previous run, then overwrite that
 // same report in the same run) — which let a new defect fail exactly once and read as

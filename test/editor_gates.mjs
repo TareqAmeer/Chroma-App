@@ -101,7 +101,10 @@ const ADVISORY_MODE = process.argv.includes('--advisory');
 // simulation-shaped check built the same day, several with a documented, known scope limit
 // (an element not visible in this harness's default panel state isn't a confirmed pass OR fail —
 // see each script's own header comment) rather than a clean green/red structural check.
-const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak', 'editor:icon-check', 'editor:motion-token-check', 'editor:axe-check', 'editor:hover-focus-matrix', 'editor:empty-error-states', 'editor:zoom-check', 'editor:long-string-check', 'editor:hidpi-check', 'editor:cvd-check']);
+// editor:responsive LEFT the advisory set 2026-09-11: its topbar-overlap backlog had cleared (0 of
+// the 5 allowlisted overlaps still fired), and it now carries the CLIP + layout-matrix checks that
+// would have blocked the clipped narrow tool rail — a check that can't block can't prevent anything.
+const ADVISORY_GATES = new Set(['editor:surface-coverage', 'editor:inventory', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak', 'editor:icon-check', 'editor:motion-token-check', 'editor:axe-check', 'editor:hover-focus-matrix', 'editor:empty-error-states', 'editor:zoom-check', 'editor:long-string-check', 'editor:hidpi-check', 'editor:cvd-check']);
 
 const GATES = [
   { name: 'editor:inventory', cmd: ['node', 'test/editor_wireframe_inventory.mjs'] },
@@ -189,6 +192,12 @@ const GATES = [
   { name: 'editor:hidpi-check', cmd: ['node', 'test/editor_hidpi_check.mjs', '--strict'] },
   // T50 (editor_ux_spec.json): CVD simulation matrices against paired design tokens (ok/err,
   // acc/mut) + a markup check that colour-coded controls also carry a non-colour signal.
+  // T60 (editor_ux_spec.json, 2026-09-11): every layout region (top bars, tool rail, docked
+  // filmstrip, Library sidebar/status bar, phone action bar...) must have its OWN entry in
+  // design/surfaces.json — the S5 inventory omitted all app chrome, so the review page and the
+  // capture pipeline never saw the clipped tool rail. Advisory only until S6b adds those
+  // entries; then remove it from ADVISORY_GATES so a new region can never go uninventoried.
+  { name: 'editor:surface-coverage', cmd: ['node', 'test/surface_coverage_check.mjs'] },
   { name: 'editor:cvd-check', cmd: ['node', 'test/editor_cvd_check.mjs', '--strict'] },
 ];
 

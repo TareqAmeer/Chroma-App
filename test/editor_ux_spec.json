@@ -1097,6 +1097,33 @@
       "check": "test/wireframe_inventory.mjs \u2014 MISSING 'Square crops' / 'Original dimensions' (remove the two wireframe_accepted.json entries once fixed)",
       "panel": null,
       "note": "Two parts: (1) UI \u2014 present it as the wireframe's two-option choice in the Thumbnails pane; (2) behaviour \u2014 make original-aspect work for virtualised (400+) folders, or at minimum show a visible in-grid note instead of tooltip-only. (2) needs a design for variable-height virtualised rows; research prior art (justified/masonry virtual grids) before building."
+    },
+    "T58": {
+      "category": "ui-fix",
+      "status": "backlog",
+      "source": "[found 2026-09-11 by the new CLIP check in editor_responsive_qa.mjs] At a 700px-wide window with the tool panel closed, the preview canvas #fx-canvas is cut off by its wrapper #fx-wrap (9px with the rail labelled, 58px with the rail narrowed). Below the wireframe's own 760px floor, but the photo itself being cropped is a real defect, not just 'cramped'.",
+      "wireframeRef": null,
+      "check": "test/editor_responsive_qa.mjs CLIP (allowlisted in editor_responsive_accepted.json until fixed)",
+      "panel": null,
+      "note": null
+    },
+    "T59": {
+      "category": "ui-fix",
+      "status": "backlog",
+      "source": "[found 2026-09-11 by the new CLIP check in library_responsive_qa.mjs] At a 640px window with the Library sidebar dragged to its 420px max, grid thumbnails are cut off horizontally (45px) \u2014 the sidebar's max isn't clamped relative to the window, leaving the grid narrower than one card.",
+      "wireframeRef": null,
+      "check": "test/library_responsive_qa.mjs CLIP",
+      "panel": null,
+      "note": "Likely fix: clamp --lib-side-w to min(420px, window - one card width)."
+    },
+    "T60": {
+      "category": "tooling",
+      "status": "backlog",
+      "source": "[2026-09-11] design/surfaces.json (S5 inventory) has no entries for the app's CHROME \u2014 Editor top bar, tool rail, tool panel frame, docked filmstrip, Library top bar, sidebar, status bars \u2014 so the S7 review page can't show them and there's nowhere to give feedback on them. test/surface_coverage_check.mjs now fails while any such region is missing; S6b adds them.",
+      "wireframeRef": null,
+      "check": "test/surface_coverage_check.mjs (editor:surface-coverage, advisory until S6b lands, then hard)",
+      "panel": null,
+      "note": null
     }
   }
 }

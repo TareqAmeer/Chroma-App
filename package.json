@@ -60,6 +60,7 @@
     "editor:long-string-check": "node test/editor_long_string_check.mjs",
     "editor:hidpi-check": "node test/editor_hidpi_check.mjs",
     "editor:cvd-check": "node test/editor_cvd_check.mjs",
+    "editor:surface-coverage": "node test/surface_coverage_check.mjs",
     "editor:gates": "node test/editor_gates.mjs",
     "tokens:check": "node scripts/build-tokens.mjs --check",
     "tokens:verify": "if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 design/verify_tokens.py; else python3 design/verify_tokens.py; fi",

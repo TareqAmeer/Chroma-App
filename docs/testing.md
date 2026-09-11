@@ -125,3 +125,27 @@ by running the CLEAN tree repeatedly, so neither is caused by whatever you just 
 - **The seeded `Math.random` stream resets per combo**, not per page. Per-page, each combo's grain
   depended on how many renders preceded it, so merely ADDING a recipe invalidated the grain
   goldens of every later fixture — a spurious "regression" with no code change behind it.
+
+## Layout coverage: every width, every resizer, every region (added 2026-09-11)
+
+**Requirement:** any layout check tests *every available width* — every viewport in its list ×
+every resizable region at its min, default and max × every layout mode (rail labels/icons, panel
+open/closed). This is enforced, not advisory:
+
+- `checkClipping(page, rootSel, label)` (test/wireframe_checks_lib.mjs) — a visible control, icon,
+  image or canvas that is PARTLY cut off by an overflow-hidden container or the window edge.
+  Fully hidden elements are ignored (a closed panel), and content inside a scrolling container is
+  allowed to be half-scrolled out of view.
+- `checkResizerCoverage(page, coveredIds, label)` — fails if the DOM has a drag handle
+  (`[id$="-resizer"]`, `.fx-edge`) that the calling test's layout matrix doesn't name. Adding a new
+  resizable region fails the gate until it is tested at min/default/max.
+- `editor_responsive_qa.mjs` — 8 viewports × rail (labels, icons) × panel (220, 320, 440, closed) ×
+  docked filmstrip (90, 120, 420) = 192 layouts; overlap + wrap + clip on each. Blocking gate.
+  Ranges come from the app's own clamps (`fxPanelWidth`, `LIB_DOCK_MIN/MAX`) — update the matrix if
+  those change.
+- `library_responsive_qa.mjs` — 11 viewports × sidebar (150, 230, 420) clip sweep.
+- `surface_coverage_check.mjs` (`npm run editor:surface-coverage`) — every layout region (id'd
+  child of body/main/.fx-layout/#lib-overlay, or chrome-named) must have its OWN
+  `design/surfaces.json` entry; being inside a bigger surface doesn't count. Advisory until S6b
+  adds the chrome entries (T60), then blocking.
+

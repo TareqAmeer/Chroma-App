@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture } from './wireframe_diff_lib.mjs';
-import { checkAspectRatioInvariant } from './wireframe_checks_lib.mjs';
+import { checkAspectRatioInvariant, checkClipping, checkResizerCoverage } from './wireframe_checks_lib.mjs';
 
 const ROOT = process.cwd();
 const DUMP_JSON = process.argv.includes('--json');
@@ -148,17 +148,46 @@ await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && 
 await settleForCapture(page);
 
 const CONTAINERS = ['fx-deskbar', 'fx-toolrail'];
+// ── Layout matrix: every resizable region at its min / default / max, crossed with every
+// viewport. Added 2026-09-11: the narrowed ("icons") rail shipped with every icon half
+// off-screen because this sweep only ever ran the rail at its default width. Each axis names the
+// resizer it covers; checkResizerCoverage() fails the gate if the page grows a resizer that no
+// axis names, so a new resizable region can't go untested. Ranges come from the app's own clamps:
+// fxPanelWidth() 220-440 (default 320), library-ui.js LIB_DOCK_MIN/MAX 90-420 (default 120).
+const LAYOUT_AXES = [
+  { resizer: 'fx-rail-resizer', name: 'rail', states: [
+    ['labels', `railMode('labels')`], ['icons', `railMode('icons')`]] },
+  { resizer: 'fx-panel-resizer', name: 'panel', states: [
+    ['220', `document.body.classList.remove('panel-closed');fxPanelWidth(220)`],
+    ['320', `document.body.classList.remove('panel-closed');fxPanelWidth(320)`],
+    ['440', `document.body.classList.remove('panel-closed');fxPanelWidth(440)`],
+    ['closed', `document.body.classList.add('panel-closed')`]] },
+  { resizer: 'lib-dock-resizer', name: 'dock', states: [
+    ['90', `document.querySelector('.fx-layout').style.setProperty('--dock-w-user','90px')`],
+    ['120', `document.querySelector('.fx-layout').style.setProperty('--dock-w-user','120px')`],
+    ['420', `document.querySelector('.fx-layout').style.setProperty('--dock-w-user','420px')`]] },
+];
+// Every combination of axis states (2 x 4 x 3 = 24 layouts per viewport).
+const combos = LAYOUT_AXES.reduce((acc, ax) => acc.flatMap((c) => ax.states.map((s) => [...c, [ax.name, ...s]])), [[]]);
+findings.push(...await checkResizerCoverage(page, LAYOUT_AXES.map((a) => a.resizer), 'page load'));
 for (const vp of VIEWPORTS) {
   await page.setViewportSize({ width: vp.w, height: vp.h });
-  await page.waitForTimeout(200);
-  const result = await page.evaluate(`(${AUDIT_FN})(${JSON.stringify(CONTAINERS)})`);
-  for (const [cid, a, bId, overlapPx] of result.overlaps) {
-    findings.push({ viewport: vp.label, kind: 'OVERLAP', detail: `[${cid}] "${a}" overlaps "${bId}" by ${overlapPx}px` });
-  }
-  for (const w of result.wrapped) {
-    findings.push({ viewport: vp.label, kind: 'WRAP', detail: `[${w.id}] label "${w.text}" wrapped to a second line (${w.h}px tall vs ${w.lineH}px line-height)` });
+  for (const combo of combos) {
+    await page.evaluate(combo.map(([, , js]) => js).join(';'));
+    await page.waitForTimeout(60);
+    const where = `${vp.label} | ${combo.map(([n, s]) => n + '=' + s).join(' ')}`;
+    const result = await page.evaluate(`(${AUDIT_FN})(${JSON.stringify(CONTAINERS)})`);
+    for (const [cid, a, bId, overlapPx] of result.overlaps) {
+      findings.push({ viewport: vp.label, where, kind: 'OVERLAP', detail: `[${cid}] "${a}" overlaps "${bId}" by ${overlapPx}px` });
+    }
+    for (const w of result.wrapped) {
+      findings.push({ viewport: vp.label, where, kind: 'WRAP', detail: `[${w.id}] label "${w.text}" wrapped to a second line (${w.h}px tall vs ${w.lineH}px line-height)` });
+    }
+    for (const f of await checkClipping(page, '#fx-deskbar, .fx-layout', vp.label)) findings.push({ ...f, where });
   }
 }
+// Back to defaults so the aspect sweep below measures the normal layout.
+await page.evaluate(`railMode('labels');document.body.classList.remove('panel-closed');fxPanelWidth(320);document.querySelector('.fx-layout').style.setProperty('--dock-w-user','120px')`);
 
 // E4 — the preview canvas's aspect ratio must stay constant as the window narrows (squeeze vs
 // scale). Reuses wireframe_checks_lib.mjs's checkAspectRatioInvariant so Library gets it free.
@@ -169,6 +198,11 @@ await page.close();
 await b.close();
 server.close();
 
+{ // collapse the same defect across many layouts into one finding
+  const m = new Map();
+  for (const f of findings) { const k = f.viewport + '|' + f.kind + '|' + f.detail; const e = m.get(k); if (e) { e.layouts++; } else m.set(k, { ...f, layouts: 1 }); }
+  findings.length = 0; for (const f of m.values()) findings.push(f);
+}
 const live = findings.filter((f) => !isAcceptedFinding(f));
 const suppressed = findings.length - live.length;
 
@@ -180,7 +214,7 @@ if (DUMP_JSON) {
   console.log(`editor_responsive_qa: ${findings.length} finding(s) across ${VIEWPORTS.length} viewports (${suppressed} allowlisted)\n`);
   for (const [kind, list] of byKind) {
     console.log(`  ${kind} (${list.length})`);
-    for (const f of list.slice(0, 15)) console.log(`    [${f.viewport}] ${f.detail}`);
+    for (const f of list.slice(0, 15)) console.log(`    [${f.viewport}] ${f.detail}${f.where ? `  (e.g. ${f.where.split(' | ')[1]}${f.layouts > 1 ? `, +${f.layouts - 1} more layouts` : ''})` : ''}`);
     if (list.length > 15) console.log(`    ...and ${list.length - 15} more`);
   }
   if (suppressed) console.log(`  (+${suppressed} allowlisted — see ${ACCEPTED_PATH}, each entry names its editor_ux_spec.json item)`);

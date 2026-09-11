@@ -95,6 +95,16 @@ everything the wireframe specifies. If you find yourself checking a
 region/state these tools don't cover, extend the tool, don't just note it
 by hand and move on — that's exactly how the 3-zone version went stale.
 
+## Step 3b — verify at EVERY width, not the default one
+
+A layout change is verified only when `node test/editor_responsive_qa.mjs` (Library:
+`test/library_responsive_qa.mjs`) passes: every viewport × every resizable region at its
+min/default/max × every mode, with the clipping check on. If you ADD a resizable region or a
+layout mode, add it as an axis of that test's layout matrix in the same commit —
+`checkResizerCoverage` fails the gate otherwise. If you add a new region (bar, rail, panel,
+sidebar), give it its own entry in `design/surfaces.json` (`surface_coverage_check.mjs`).
+See docs/process-lessons.md #18 for the bug that made this a rule.
+
 ## Step 4 — verify against the real app build, not just the harness
 
 `bash build-desktop.sh` stages `desktop/dist/` for the `?libtest=1`

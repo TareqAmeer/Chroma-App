@@ -1,37 +1,9 @@
 [
   {
-    "viewport": "1440x900 (normal)",
-    "kind": "OVERLAP",
-    "match": "\"#db-title-name\" overlaps \"#btn-flag-red\"",
-    "spec": "3.1.10",
-    "reason": "Seeded 2026-09-09 when this gate was first wired into `npm test`. REAL DEFECT, not a justified difference: the absolutely-centred topbar title overruns the flag/favourite cluster at normal desktop width. Tracked as 3.1.10 (\"make sure the title is centered\") — the correct fix is centring the title within the space actually left by .tb-left/.tb-right rather than the full bar, which is topbar redesign work, not a spot fix. Remove this entry as part of 3.1.10."
-  },
-  {
-    "viewport": "1440x900 (normal)",
-    "kind": "OVERLAP",
-    "match": "\"#db-title-name\" overlaps \"#btn-flag-green\"",
-    "spec": "3.1.10",
-    "reason": "Same root cause and same fix as the #btn-flag-red entry above — one overrun reported once per element it collides with. Remove all five together under 3.1.10."
-  },
-  {
-    "viewport": "1440x900 (normal)",
-    "kind": "OVERLAP",
-    "match": "\"#db-title-status\" overlaps \"#btn-favorite\"",
-    "spec": "3.1.10",
-    "reason": "Same root cause as the #db-title-name entries: the status line shares the centred title block's geometry. Remove under 3.1.10."
-  },
-  {
-    "viewport": "1440x900 (normal)",
-    "kind": "OVERLAP",
-    "match": "\"#db-title-status\" overlaps \"#fx-tools\"",
-    "spec": "3.1.10",
-    "reason": "Same root cause. Note this one also moves under 3.1.8 (Tools button consolidation), which changes what sits at that end of the bar — re-measure after 3.1.8 lands before assuming 3.1.10 alone clears it."
-  },
-  {
-    "viewport": "1440x900 (normal)",
-    "kind": "OVERLAP",
-    "match": "\"#db-title-status\" overlaps \"#fx-view\"",
-    "spec": "3.1.10",
-    "reason": "Same root cause, same caveat as the #fx-tools entry: 3.1.9 (move export and all fx to the right) also reflows this end of the bar. Remove under 3.1.10 once 3.1.8/3.1.9 have settled."
+    "viewport": "700x700 (below the wireframe's floor — must degrade, not overlap)",
+    "kind": "CLIP",
+    "match": "#fx-canvas is cut off by #fx-wrap",
+    "spec": "T58",
+    "reason": "Real defect found 2026-09-11 by the new CLIP check; tracked as T58. Remove once fixed."
   }
 ]

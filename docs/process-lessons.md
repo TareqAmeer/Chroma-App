@@ -90,3 +90,21 @@ Learned the hard/expensive way:
    confirming it live (a console.log, a live property read, a screenshot at the failure moment)
    BEFORE building a fix, and don't call it fixed off one clean run — rerun it enough times to
    actually see the failure rate move.
+
+18. **Completeness has to be measured from the running app, never from a hand-written list — and a
+   check only counts once it has failed on the defect it claims to prevent.** 2026-09-11: the
+   narrowed tool rail shipped with every icon half off-screen (`#fx-toolrail` kept a hardcoded
+   `width:72px` while its grid track went to 44px). Four things let it through, each "covered" on
+   paper: (a) the surface inventory (S5) and the capture pass (S6) were driven by a list of what to
+   include, and the list left out all app chrome (top bars, rail, filmstrip, status bars); (b) the
+   `panel-fx` page entry CONTAINED the rail, so anything asking "is this inside a listed surface?"
+   said yes; (c) `editor_responsive_qa.mjs` swept 8 window widths but only ever ran the rail at its
+   default width, and checked overlap/wrap but not clipping, so nothing could fail; (d) the gate was
+   advisory at commit. Lesson #16 (state matrix, not default state) was already written down —
+   unenforced. Now enforced mechanically: `checkClipping` (partial cut-off by a container or the
+   window), `checkResizerCoverage` (every drag handle in the DOM must be an axis of the test's layout
+   matrix at min/default/max, crossed with every viewport), `test/surface_coverage_check.mjs` (every
+   layout region needs its OWN surfaces.json entry — containment doesn't count), and
+   `editor:responsive` is a blocking gate. Rule: **every width** = every viewport × every resizable
+   region at its min, default and max × every mode (e.g. rail labels/icons) — and prove a new check
+   by running it on the broken build first.

@@ -15,6 +15,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture } from './wireframe_diff_lib.mjs';
+import { checkClipping, checkResizerCoverage } from './wireframe_checks_lib.mjs';
 
 const ROOT = process.cwd();
 const DUMP_JSON = process.argv.includes('--json');
@@ -179,8 +180,21 @@ await page.evaluate(() => {
 });
 await settleForCapture(page);
 
+// ── Layout matrix (added 2026-09-11, same reason as editor_responsive_qa.mjs's): CLIP runs at
+// every viewport x every sidebar width (library-ui.js clamps --lib-side-w to 150-420, default
+// 230), and checkResizerCoverage fails if the page has a resizer this list doesn't name.
+// lib-dock-resizer belongs to the DOCKED filmstrip, which editor_responsive_qa.mjs's matrix covers.
+const SIDE_WIDTHS = [150, 230, 420];
+// fx-panel-resizer / fx-rail-resizer are the Editor's, present in this DOM too; editor_responsive_qa.mjs covers them.
+findings.push(...await checkResizerCoverage(page, ['lib-side-resizer', 'lib-dock-resizer', 'fx-panel-resizer', 'fx-rail-resizer'], 'page load'));
 for (const vp of VIEWPORTS) {
   await page.setViewportSize({ width: vp.w, height: vp.h });
+  for (const sw of SIDE_WIDTHS) {
+    await page.evaluate((w) => document.getElementById('lib-overlay')?.style.setProperty('--lib-side-w', w + 'px'), sw);
+    await page.waitForTimeout(80);
+    for (const f of await checkClipping(page, '#lib-overlay', vp.label)) findings.push({ ...f, detail: `${f.detail} (sidebar ${sw}px)` });
+  }
+  await page.evaluate(() => document.getElementById('lib-overlay')?.style.setProperty('--lib-side-w', '230px'));
   await page.waitForTimeout(200); // let any resize-driven layout (fxPreviewMaxH etc.) settle
   const result = await page.evaluate(`(${AUDIT_FN})()`);
 
@@ -255,6 +269,11 @@ await page.close();
 await b.close();
 server.close();
 
+{ // the same cut-off repeated once per thumbnail is one defect, not forty
+  const seen = new Set(); const uniq = [];
+  for (const f of findings) { const k = f.viewport + '|' + f.kind + '|' + f.detail; if (!seen.has(k)) { seen.add(k); uniq.push(f); } }
+  findings.length = 0; findings.push(...uniq);
+}
 if (DUMP_JSON) {
   console.log(JSON.stringify(findings, null, 2));
 } else {

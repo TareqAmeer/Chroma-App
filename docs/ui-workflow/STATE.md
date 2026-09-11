@@ -229,3 +229,19 @@ call `ui:test`) will currently fail on that until it's fixed.
   T55, panel 300px → T56, app's rail order is right (update the wireframe), Square crops/Original dimensions →
   T57 (exists as a hidden, 400-photo-limited "Real aspect ratio" toggle). All in editor_ux_spec.json.
 
+**Tool-rail clipping — 2026-09-11 — root cause + prevention (planning session)**
+- Bug: `#fx-toolrail` had hardcoded `width:72px`; narrow mode shrinks its grid track to 44px, so 28px
+  (half of every icon) hung off the window. Fixed: `width:var(--rail-w)`.
+- Why every step missed it: S5's prompt (written in planning) listed surface kinds and left out ALL
+  app chrome; S5 verified only what it listed. S6/S6's prompt captured one theme at one width. S7 shows
+  what S6 captured. On the test side, editor_responsive_qa ran the rail at its default width only, had
+  no clipping check, and was advisory at commit. Completeness was never measured against the app.
+- Prevention (all proven on the broken build first — 100 rail CLIP findings, then PASS after the fix):
+  checkClipping + checkResizerCoverage (wireframe_checks_lib.mjs); editor_responsive_qa now 192 layouts
+  (8 viewports × rail × panel × dock) and BLOCKING; library_responsive_qa sidebar × viewport clip sweep;
+  test/surface_coverage_check.mjs (editor:surface-coverage, advisory until S6b) finds 11 uninventoried
+  regions incl. both top bars and the Library status bar (#lib-bottom). The Editor has no status bar
+  yet (#fx-statusbar unbuilt). New backlog: T58 canvas cut off at 700px, T59 Library grid cut off at
+  640px + 420px sidebar, T60 chrome missing from surfaces.json. Lesson #18 in docs/process-lessons.md.
+- responsive allowlist: 5 stale topbar-overlap entries removed (verified none fire), +1 for T58.
+

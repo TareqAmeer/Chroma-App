@@ -28,7 +28,7 @@ and the hard-won lessons from building it.
    those (and library-ui.js's DS block) are generated between `/* TOKENS:*:START/END */` markers by
    `node scripts/build-tokens.mjs`. Edit tokens.json, regenerate; a hand edit inside the markers is lost.
 7. **Read [docs/process-lessons.md](docs/process-lessons.md) before any UI/layout, test, or flaky-bug
-   work** — 17 lessons that each cost real time. The one-line versions are in §6 below.
+   work** — 18 lessons that each cost real time. The one-line versions are in §6 below.
 
 ---
 
@@ -223,6 +223,7 @@ carrying it in every turn:
 - Before toggling a container's display/visibility, read ALL its children (#15).
 - Resizable/breakpoint UI needs a state-matrix test at min/threshold/max, with hand-written expectations (#16).
 - Never act on a written-up flaky-bug theory without reproducing it live first; rerun enough to see the rate move (#17).
+- Completeness is measured from the running app, not a hand-written list; test every width = every viewport × every resizer at min/default/max × every mode; a check counts only after it fails on the real defect (#18).
 
 ---
 
