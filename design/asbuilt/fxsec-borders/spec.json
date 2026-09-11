@@ -1,8 +1,7 @@
 {
   "id": "fxsec-borders",
   "group": "A",
-  "generatedAt": "2026-09-11T17:47:21.667Z",
-  "hasToggle": true,
+  "generatedAt": "2026-09-11T21:35:06.432Z",
   "tree": {
     "tag": "div",
     "dataFxsec": "borders",
@@ -974,7 +973,8 @@
                 "id": "tg-borders",
                 "dataFxsec": "borders",
                 "classes": [
-                  "fx-toggle"
+                  "fx-toggle",
+                  "on"
                 ],
                 "style": {
                   "color": {
@@ -984,8 +984,10 @@
                     "role": "surface.page"
                   },
                   "backgroundColor": {
-                    "value": "rgba(255, 255, 255, 0.12)",
-                    "token": null
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "borderColor": {
                     "value": "rgba(0, 0, 0, 0)",
@@ -1074,7 +1076,7 @@
                     "token": null
                   },
                   "boxShadow": {
-                    "value": "rgba(0, 0, 0, 0.25) 0px 1px 2px 0px inset",
+                    "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset",
                     "token": null
                   }
                 },
@@ -1089,8 +1091,7 @@
         "id": "ff-borders",
         "dataFxsec": "borders",
         "classes": [
-          "fx-fields",
-          "ff-off"
+          "fx-fields"
         ],
         "style": {
           "color": {
@@ -4644,16 +4645,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
-      ],
-      "prop": "backgroundColor",
-      "value": "rgba(255, 255, 255, 0.12)"
-    },
-    {
-      "tag": "div",
-      "id": "tg-borders",
-      "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderColor",
       "value": "rgba(0, 0, 0, 0)"
@@ -4662,7 +4655,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontSize",
       "value": "11px"
@@ -4671,7 +4665,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontWeight",
       "value": "600"
@@ -4680,7 +4675,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontFamily",
       "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
@@ -4689,7 +4685,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "lineHeight",
       "value": "16.5px"
@@ -4698,7 +4695,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "letterSpacing",
       "value": "1.1px"
@@ -4707,7 +4705,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingTop",
       "value": "0px"
@@ -4716,7 +4715,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingRight",
       "value": "0px"
@@ -4725,7 +4725,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingBottom",
       "value": "0px"
@@ -4734,7 +4735,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingLeft",
       "value": "0px"
@@ -4743,7 +4745,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "gap",
       "value": "normal"
@@ -4752,7 +4755,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "rowGap",
       "value": "normal"
@@ -4761,7 +4765,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "columnGap",
       "value": "normal"
@@ -4770,7 +4775,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderRadius",
       "value": "9px"
@@ -4779,7 +4785,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderTopLeftRadius",
       "value": "9px"
@@ -4788,7 +4795,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderTopRightRadius",
       "value": "9px"
@@ -4797,7 +4805,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderBottomLeftRadius",
       "value": "9px"
@@ -4806,7 +4815,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderBottomRightRadius",
       "value": "9px"
@@ -4815,7 +4825,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "transitionDuration",
       "value": "0s"
@@ -4824,7 +4835,8 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
@@ -4833,17 +4845,17 @@
       "tag": "div",
       "id": "tg-borders",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "boxShadow",
-      "value": "rgba(0, 0, 0, 0.25) 0px 1px 2px 0px inset"
+      "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset"
     },
     {
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "backgroundColor",
       "value": "rgba(0, 0, 0, 0)"
@@ -4852,8 +4864,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "fontSize",
       "value": "16px"
@@ -4862,8 +4873,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "fontWeight",
       "value": "400"
@@ -4872,8 +4882,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "fontFamily",
       "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
@@ -4882,8 +4891,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "lineHeight",
       "value": "24px"
@@ -4892,8 +4900,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "letterSpacing",
       "value": "normal"
@@ -4902,8 +4909,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingTop",
       "value": "0px"
@@ -4912,8 +4918,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingRight",
       "value": "0px"
@@ -4922,8 +4927,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingBottom",
       "value": "0px"
@@ -4932,8 +4936,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingLeft",
       "value": "0px"
@@ -4942,8 +4945,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "gap",
       "value": "6px"
@@ -4952,8 +4954,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "rowGap",
       "value": "6px"
@@ -4962,8 +4963,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "columnGap",
       "value": "6px"
@@ -4972,8 +4972,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "transitionDuration",
       "value": "0s"
@@ -4982,8 +4981,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "transitionTimingFunction",
       "value": "cubic-bezier(0.2, 0.8, 0.3, 1)"
@@ -4992,8 +4990,7 @@
       "tag": "div",
       "id": "ff-borders",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "boxShadow",
       "value": "none"
@@ -8108,1124 +8105,5 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ],
-  "matrix": {
-    "dimensions": {
-      "states": [
-        "rest",
-        "hover",
-        "longText"
-      ],
-      "themes": [
-        "dark",
-        "light"
-      ],
-      "widths": [
-        "1440x900",
-        "1200x800",
-        "1024x768",
-        "960x760",
-        "900x760",
-        "820x700",
-        "768x1024",
-        "760x700",
-        "700x700",
-        "390x844"
-      ],
-      "sidebars": [
-        "expanded",
-        "collapsed"
-      ]
-    },
-    "entries": [
-      {
-        "key": "rest|dark|1440x900|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|1440x900|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|1200x800|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|1200x800|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|1024x768|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|1024x768|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|960x760|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|960x760|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|900x760|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|900x760|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|820x700|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|820x700|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|768x1024|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|768x1024|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|760x700|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "rest|dark|760x700|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|700x700|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f2408982e01b2005",
-        "path": "design/asbuilt-full/fxsec-borders/f2408982e01b2005.webp"
-      },
-      {
-        "key": "rest|dark|390x844|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "fc03db83434db4fe",
-        "path": "design/asbuilt-full/fxsec-borders/fc03db83434db4fe.webp"
-      },
-      {
-        "key": "rest|light|1440x900|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|1440x900|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|1200x800|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|1200x800|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|1024x768|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|1024x768|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|960x760|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|960x760|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|900x760|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|900x760|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|820x700|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|820x700|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|768x1024|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|768x1024|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|760x700|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "rest|light|760x700|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|700x700|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "04fa469c7ac57150",
-        "path": "design/asbuilt-full/fxsec-borders/04fa469c7ac57150.webp"
-      },
-      {
-        "key": "rest|light|390x844|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "bc18e91fb411776e",
-        "path": "design/asbuilt-full/fxsec-borders/bc18e91fb411776e.webp"
-      },
-      {
-        "key": "hover|dark|1440x900|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|1440x900|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|1200x800|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|1200x800|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|1024x768|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|1024x768|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|960x760|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|960x760|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|900x760|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|900x760|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|820x700|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|820x700|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|768x1024|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|768x1024|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|760x700|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "hover|dark|760x700|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|700x700|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f2408982e01b2005",
-        "path": "design/asbuilt-full/fxsec-borders/f2408982e01b2005.webp"
-      },
-      {
-        "key": "hover|dark|390x844|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "fc03db83434db4fe",
-        "path": "design/asbuilt-full/fxsec-borders/fc03db83434db4fe.webp"
-      },
-      {
-        "key": "hover|light|1440x900|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|1440x900|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|1200x800|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|1200x800|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|1024x768|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|1024x768|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|960x760|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|960x760|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|900x760|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|900x760|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|820x700|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|820x700|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|768x1024|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|768x1024|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|760x700|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "hover|light|760x700|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|700x700|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "04fa469c7ac57150",
-        "path": "design/asbuilt-full/fxsec-borders/04fa469c7ac57150.webp"
-      },
-      {
-        "key": "hover|light|390x844|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "bc18e91fb411776e",
-        "path": "design/asbuilt-full/fxsec-borders/bc18e91fb411776e.webp"
-      },
-      {
-        "key": "longText|dark|1440x900|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|1440x900|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|1200x800|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|1200x800|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|1024x768|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|1024x768|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|960x760|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|960x760|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|900x760|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|900x760|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|820x700|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|820x700|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|768x1024|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|768x1024|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|760x700|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f662778a12a0e46b",
-        "path": "design/asbuilt-full/fxsec-borders/f662778a12a0e46b.webp"
-      },
-      {
-        "key": "longText|dark|760x700|collapsed",
-        "state": "longText",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|dark|700x700|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "f2408982e01b2005",
-        "path": "design/asbuilt-full/fxsec-borders/f2408982e01b2005.webp"
-      },
-      {
-        "key": "longText|dark|390x844|expanded",
-        "state": "longText",
-        "theme": "dark",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "fc03db83434db4fe",
-        "path": "design/asbuilt-full/fxsec-borders/fc03db83434db4fe.webp"
-      },
-      {
-        "key": "longText|light|1440x900|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|1440x900|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|1200x800|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|1200x800|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|1024x768|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|1024x768|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|960x760|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|960x760|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|900x760|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|900x760|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|820x700|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|820x700|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|768x1024|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|768x1024|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|760x700|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "499065e1cf9c054b",
-        "path": "design/asbuilt-full/fxsec-borders/499065e1cf9c054b.webp"
-      },
-      {
-        "key": "longText|light|760x700|collapsed",
-        "state": "longText",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "longText|light|700x700|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "04fa469c7ac57150",
-        "path": "design/asbuilt-full/fxsec-borders/04fa469c7ac57150.webp"
-      },
-      {
-        "key": "longText|light|390x844|expanded",
-        "state": "longText",
-        "theme": "light",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "bc18e91fb411776e",
-        "path": "design/asbuilt-full/fxsec-borders/bc18e91fb411776e.webp"
-      }
-    ]
-  },
-  "contactSheets": {
-    "dark": [
-      "contact-dark.webp"
-    ],
-    "light": [
-      "contact-light.webp"
-    ]
-  }
+  ]
 }

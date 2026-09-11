@@ -1,7 +1,7 @@
 {
   "id": "splash",
   "group": "C",
-  "generatedAt": "2026-09-11T17:41:13.265Z",
-  "note": "No live DOM route to capture — this surface is the \"Splash Screen.html\" wireframe used verbatim as its as-built stand-in, per user instruction. No screenshots, no computed-value spec.",
+  "generatedAt": "2026-09-11T21:36:55.174Z",
+  "note": "No live DOM route to capture — \"Splash Screen.html\" used verbatim as its as-built stand-in. No screenshots, no computed-value spec.",
   "wireframeSource": "chromasmith-design/project/Splash Screen.html"
 }

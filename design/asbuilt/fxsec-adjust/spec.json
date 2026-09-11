@@ -1,8 +1,7 @@
 {
   "id": "fxsec-adjust",
   "group": "A",
-  "generatedAt": "2026-09-11T17:42:47.653Z",
-  "hasToggle": true,
+  "generatedAt": "2026-09-11T21:34:50.221Z",
   "tree": {
     "tag": "div",
     "dataFxsec": "adjust",
@@ -974,7 +973,8 @@
                 "id": "tg-adjust",
                 "dataFxsec": "adjust",
                 "classes": [
-                  "fx-toggle"
+                  "fx-toggle",
+                  "on"
                 ],
                 "style": {
                   "color": {
@@ -984,8 +984,10 @@
                     "role": "surface.page"
                   },
                   "backgroundColor": {
-                    "value": "rgba(255, 255, 255, 0.12)",
-                    "token": null
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "borderColor": {
                     "value": "rgba(0, 0, 0, 0)",
@@ -1074,7 +1076,7 @@
                     "token": null
                   },
                   "boxShadow": {
-                    "value": "rgba(0, 0, 0, 0.25) 0px 1px 2px 0px inset",
+                    "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset",
                     "token": null
                   }
                 },
@@ -1212,8 +1214,7 @@
         "id": "ff-adjust",
         "dataFxsec": "adjust",
         "classes": [
-          "fx-fields",
-          "ff-off"
+          "fx-fields"
         ],
         "style": {
           "color": {
@@ -9051,16 +9052,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
-      ],
-      "prop": "backgroundColor",
-      "value": "rgba(255, 255, 255, 0.12)"
-    },
-    {
-      "tag": "div",
-      "id": "tg-adjust",
-      "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderColor",
       "value": "rgba(0, 0, 0, 0)"
@@ -9069,7 +9062,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontSize",
       "value": "11px"
@@ -9078,7 +9072,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontWeight",
       "value": "600"
@@ -9087,7 +9082,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontFamily",
       "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
@@ -9096,7 +9092,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "lineHeight",
       "value": "16.5px"
@@ -9105,7 +9102,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "letterSpacing",
       "value": "1.1px"
@@ -9114,7 +9112,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingTop",
       "value": "0px"
@@ -9123,7 +9122,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingRight",
       "value": "0px"
@@ -9132,7 +9132,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingBottom",
       "value": "0px"
@@ -9141,7 +9142,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingLeft",
       "value": "0px"
@@ -9150,7 +9152,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "gap",
       "value": "normal"
@@ -9159,7 +9162,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "rowGap",
       "value": "normal"
@@ -9168,7 +9172,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "columnGap",
       "value": "normal"
@@ -9177,7 +9182,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderRadius",
       "value": "9px"
@@ -9186,7 +9192,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderTopLeftRadius",
       "value": "9px"
@@ -9195,7 +9202,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderTopRightRadius",
       "value": "9px"
@@ -9204,7 +9212,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderBottomLeftRadius",
       "value": "9px"
@@ -9213,7 +9222,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderBottomRightRadius",
       "value": "9px"
@@ -9222,7 +9232,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "transitionDuration",
       "value": "0s"
@@ -9231,7 +9242,8 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
@@ -9240,10 +9252,11 @@
       "tag": "div",
       "id": "tg-adjust",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "boxShadow",
-      "value": "rgba(0, 0, 0, 0.25) 0px 1px 2px 0px inset"
+      "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset"
     },
     {
       "tag": "div",
@@ -9393,8 +9406,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "backgroundColor",
       "value": "rgba(0, 0, 0, 0)"
@@ -9403,8 +9415,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "fontSize",
       "value": "16px"
@@ -9413,8 +9424,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "fontWeight",
       "value": "400"
@@ -9423,8 +9433,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "fontFamily",
       "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
@@ -9433,8 +9442,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "lineHeight",
       "value": "24px"
@@ -9443,8 +9451,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "letterSpacing",
       "value": "normal"
@@ -9453,8 +9460,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingTop",
       "value": "0px"
@@ -9463,8 +9469,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingRight",
       "value": "0px"
@@ -9473,8 +9478,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingBottom",
       "value": "0px"
@@ -9483,8 +9487,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "paddingLeft",
       "value": "0px"
@@ -9493,8 +9496,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "gap",
       "value": "6px"
@@ -9503,8 +9505,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "rowGap",
       "value": "6px"
@@ -9513,8 +9514,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "columnGap",
       "value": "6px"
@@ -9523,8 +9523,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "transitionDuration",
       "value": "0s"
@@ -9533,8 +9532,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "transitionTimingFunction",
       "value": "cubic-bezier(0.2, 0.8, 0.3, 1)"
@@ -9543,8 +9541,7 @@
       "tag": "div",
       "id": "ff-adjust",
       "classes": [
-        "fx-fields",
-        "ff-off"
+        "fx-fields"
       ],
       "prop": "boxShadow",
       "value": "none"
@@ -18641,763 +18638,5 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ],
-  "matrix": {
-    "dimensions": {
-      "states": [
-        "rest",
-        "hover"
-      ],
-      "themes": [
-        "dark",
-        "light"
-      ],
-      "widths": [
-        "1440x900",
-        "1200x800",
-        "1024x768",
-        "960x760",
-        "900x760",
-        "820x700",
-        "768x1024",
-        "760x700",
-        "700x700",
-        "390x844"
-      ],
-      "sidebars": [
-        "expanded",
-        "collapsed"
-      ]
-    },
-    "entries": [
-      {
-        "key": "rest|dark|1440x900|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "b3460d3870d9b6b0",
-        "path": "design/asbuilt-full/fxsec-adjust/b3460d3870d9b6b0.webp"
-      },
-      {
-        "key": "rest|dark|1440x900|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|1200x800|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "3d571ae6b2d29631",
-        "path": "design/asbuilt-full/fxsec-adjust/3d571ae6b2d29631.webp"
-      },
-      {
-        "key": "rest|dark|1200x800|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|1024x768|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "e18645cc1be9fc36",
-        "path": "design/asbuilt-full/fxsec-adjust/e18645cc1be9fc36.webp"
-      },
-      {
-        "key": "rest|dark|1024x768|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|960x760|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "6ad196448cb5db67",
-        "path": "design/asbuilt-full/fxsec-adjust/6ad196448cb5db67.webp"
-      },
-      {
-        "key": "rest|dark|960x760|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|900x760|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "6ad196448cb5db67",
-        "path": "design/asbuilt-full/fxsec-adjust/6ad196448cb5db67.webp"
-      },
-      {
-        "key": "rest|dark|900x760|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|820x700|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "0184ede0528a4a89",
-        "path": "design/asbuilt-full/fxsec-adjust/0184ede0528a4a89.webp"
-      },
-      {
-        "key": "rest|dark|820x700|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|768x1024|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "b48bf8ad05f4d5a8",
-        "path": "design/asbuilt-full/fxsec-adjust/b48bf8ad05f4d5a8.webp"
-      },
-      {
-        "key": "rest|dark|768x1024|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|760x700|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "0184ede0528a4a89",
-        "path": "design/asbuilt-full/fxsec-adjust/0184ede0528a4a89.webp"
-      },
-      {
-        "key": "rest|dark|760x700|collapsed",
-        "state": "rest",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|dark|700x700|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "1e8a8ff5187f2b43",
-        "path": "design/asbuilt-full/fxsec-adjust/1e8a8ff5187f2b43.webp"
-      },
-      {
-        "key": "rest|dark|390x844|expanded",
-        "state": "rest",
-        "theme": "dark",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "4c624c4c7e8f57bb",
-        "path": "design/asbuilt-full/fxsec-adjust/4c624c4c7e8f57bb.webp"
-      },
-      {
-        "key": "rest|light|1440x900|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "6c697c343644dd0a",
-        "path": "design/asbuilt-full/fxsec-adjust/6c697c343644dd0a.webp"
-      },
-      {
-        "key": "rest|light|1440x900|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|1200x800|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "67a8f748d32b75e3",
-        "path": "design/asbuilt-full/fxsec-adjust/67a8f748d32b75e3.webp"
-      },
-      {
-        "key": "rest|light|1200x800|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|1024x768|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "3486d558a1da0ff9",
-        "path": "design/asbuilt-full/fxsec-adjust/3486d558a1da0ff9.webp"
-      },
-      {
-        "key": "rest|light|1024x768|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|960x760|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "81127be2cc881dc0",
-        "path": "design/asbuilt-full/fxsec-adjust/81127be2cc881dc0.webp"
-      },
-      {
-        "key": "rest|light|960x760|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|900x760|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "81127be2cc881dc0",
-        "path": "design/asbuilt-full/fxsec-adjust/81127be2cc881dc0.webp"
-      },
-      {
-        "key": "rest|light|900x760|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|820x700|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "a80ae3ed85cb97d5",
-        "path": "design/asbuilt-full/fxsec-adjust/a80ae3ed85cb97d5.webp"
-      },
-      {
-        "key": "rest|light|820x700|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|768x1024|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "ef93f7c7e7c7c172",
-        "path": "design/asbuilt-full/fxsec-adjust/ef93f7c7e7c7c172.webp"
-      },
-      {
-        "key": "rest|light|768x1024|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|760x700|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "a80ae3ed85cb97d5",
-        "path": "design/asbuilt-full/fxsec-adjust/a80ae3ed85cb97d5.webp"
-      },
-      {
-        "key": "rest|light|760x700|collapsed",
-        "state": "rest",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "rest|light|700x700|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "a4ab0823a1968009",
-        "path": "design/asbuilt-full/fxsec-adjust/a4ab0823a1968009.webp"
-      },
-      {
-        "key": "rest|light|390x844|expanded",
-        "state": "rest",
-        "theme": "light",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "81d848f1da6cbc41",
-        "path": "design/asbuilt-full/fxsec-adjust/81d848f1da6cbc41.webp"
-      },
-      {
-        "key": "hover|dark|1440x900|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "b3460d3870d9b6b0",
-        "path": "design/asbuilt-full/fxsec-adjust/b3460d3870d9b6b0.webp"
-      },
-      {
-        "key": "hover|dark|1440x900|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|1200x800|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "3d571ae6b2d29631",
-        "path": "design/asbuilt-full/fxsec-adjust/3d571ae6b2d29631.webp"
-      },
-      {
-        "key": "hover|dark|1200x800|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|1024x768|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "e18645cc1be9fc36",
-        "path": "design/asbuilt-full/fxsec-adjust/e18645cc1be9fc36.webp"
-      },
-      {
-        "key": "hover|dark|1024x768|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|960x760|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "6ad196448cb5db67",
-        "path": "design/asbuilt-full/fxsec-adjust/6ad196448cb5db67.webp"
-      },
-      {
-        "key": "hover|dark|960x760|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|900x760|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "6ad196448cb5db67",
-        "path": "design/asbuilt-full/fxsec-adjust/6ad196448cb5db67.webp"
-      },
-      {
-        "key": "hover|dark|900x760|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|820x700|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "0184ede0528a4a89",
-        "path": "design/asbuilt-full/fxsec-adjust/0184ede0528a4a89.webp"
-      },
-      {
-        "key": "hover|dark|820x700|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|768x1024|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "b48bf8ad05f4d5a8",
-        "path": "design/asbuilt-full/fxsec-adjust/b48bf8ad05f4d5a8.webp"
-      },
-      {
-        "key": "hover|dark|768x1024|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|760x700|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "0184ede0528a4a89",
-        "path": "design/asbuilt-full/fxsec-adjust/0184ede0528a4a89.webp"
-      },
-      {
-        "key": "hover|dark|760x700|collapsed",
-        "state": "hover",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|dark|700x700|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "1e8a8ff5187f2b43",
-        "path": "design/asbuilt-full/fxsec-adjust/1e8a8ff5187f2b43.webp"
-      },
-      {
-        "key": "hover|dark|390x844|expanded",
-        "state": "hover",
-        "theme": "dark",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "4c624c4c7e8f57bb",
-        "path": "design/asbuilt-full/fxsec-adjust/4c624c4c7e8f57bb.webp"
-      },
-      {
-        "key": "hover|light|1440x900|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "expanded",
-        "hash": "6c697c343644dd0a",
-        "path": "design/asbuilt-full/fxsec-adjust/6c697c343644dd0a.webp"
-      },
-      {
-        "key": "hover|light|1440x900|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|1200x800|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "expanded",
-        "hash": "67a8f748d32b75e3",
-        "path": "design/asbuilt-full/fxsec-adjust/67a8f748d32b75e3.webp"
-      },
-      {
-        "key": "hover|light|1200x800|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|1024x768|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "expanded",
-        "hash": "3486d558a1da0ff9",
-        "path": "design/asbuilt-full/fxsec-adjust/3486d558a1da0ff9.webp"
-      },
-      {
-        "key": "hover|light|1024x768|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|960x760|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "81127be2cc881dc0",
-        "path": "design/asbuilt-full/fxsec-adjust/81127be2cc881dc0.webp"
-      },
-      {
-        "key": "hover|light|960x760|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|900x760|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "expanded",
-        "hash": "81127be2cc881dc0",
-        "path": "design/asbuilt-full/fxsec-adjust/81127be2cc881dc0.webp"
-      },
-      {
-        "key": "hover|light|900x760|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|820x700|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "a80ae3ed85cb97d5",
-        "path": "design/asbuilt-full/fxsec-adjust/a80ae3ed85cb97d5.webp"
-      },
-      {
-        "key": "hover|light|820x700|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|768x1024|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "expanded",
-        "hash": "ef93f7c7e7c7c172",
-        "path": "design/asbuilt-full/fxsec-adjust/ef93f7c7e7c7c172.webp"
-      },
-      {
-        "key": "hover|light|768x1024|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|760x700|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "a80ae3ed85cb97d5",
-        "path": "design/asbuilt-full/fxsec-adjust/a80ae3ed85cb97d5.webp"
-      },
-      {
-        "key": "hover|light|760x700|collapsed",
-        "state": "hover",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "collapsed",
-        "skipped": true,
-        "reason": "not visible in this combo"
-      },
-      {
-        "key": "hover|light|700x700|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 700,
-        "height": 700,
-        "sidebar": "expanded",
-        "hash": "a4ab0823a1968009",
-        "path": "design/asbuilt-full/fxsec-adjust/a4ab0823a1968009.webp"
-      },
-      {
-        "key": "hover|light|390x844|expanded",
-        "state": "hover",
-        "theme": "light",
-        "width": 390,
-        "height": 844,
-        "sidebar": "expanded",
-        "hash": "81d848f1da6cbc41",
-        "path": "design/asbuilt-full/fxsec-adjust/81d848f1da6cbc41.webp"
-      }
-    ]
-  },
-  "contactSheets": {
-    "dark": [
-      "contact-dark.webp"
-    ],
-    "light": [
-      "contact-light.webp"
-    ]
-  }
+  ]
 }

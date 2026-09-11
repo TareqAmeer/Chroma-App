@@ -4,11 +4,11 @@
         <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Output</div>
         <div class="vrow">
           <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
-          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width: 140px; caret-color: transparent !important;">
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width: 140px;">
           <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" aria-label="Quality" style="--fillA: 0%; --fillB: 95%; caret-color: transparent !important;"><div class="fx-val" id="vl-exp-q" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="caret-color: transparent !important;">99</div></div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" aria-label="Quality" style="--fillA: 0%; --fillB: 95%;"><div class="fx-val" id="vl-exp-q" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">99</div></div>
         <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
           <select class="fx-select" id="sel-exp-fmt" aria-label="Format">
             <option value="auto">Auto (match source)</option>
@@ -43,19 +43,19 @@
              fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
         <div class="fx-row" id="fx-hdr-row" style="display:none" title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
           <div class="fx-label">HDR (gain map)</div>
-          <input type="checkbox" id="tg-exp-hdr" style="caret-color: transparent !important;">
+          <input type="checkbox" id="tg-exp-hdr" style="">
         </div>
         <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
         <div class="fx-sub">Watermark</div>
         <div class="fx-row" style="margin-top:0" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
           <div class="fx-label">Watermark</div>
-          <div class="fx-toggle on" id="tg-exp-wm" data-a11y="1" role="switch" aria-checked="true" tabindex="0" aria-label="Watermark"></div>
+          <div class="fx-toggle" id="tg-exp-wm" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Watermark"></div>
         </div>
-        <div id="exp-wm-row" style="display: block;">
+        <div id="exp-wm-row" style="display:none">
           <div class="vrow" style="margin-top:4px">
-            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex: 1 1 0%; caret-color: transparent !important;">
+            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex: 1 1 0%;">
           </div>
-          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" aria-label="Opacity" style="--fillA: 0%; --fillB: 50%; caret-color: transparent !important;"><div class="fx-val" id="vl-exp-wm-op" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="caret-color: transparent !important;">55</div></div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" aria-label="Opacity" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-exp-wm-op" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">55</div></div>
         </div>
         <!-- Named export presets: just the four controls above (format/quality/resize/sharpen),
              saved/recalled by name — distinct from Styles (the full edit recipe) and from Save
@@ -115,7 +115,7 @@
             <button class="btn bgh" title="Import a Style .json exported from Chromasmith">Import…</button>
           </div>
           <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"><div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No styles saved yet.</div></div>
-          <input type="file" id="style-import-input" accept="application/json,.json" style="display: none; caret-color: transparent !important;">
+          <input type="file" id="style-import-input" accept="application/json,.json" style="display: none;">
         </div>
         <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
           <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>

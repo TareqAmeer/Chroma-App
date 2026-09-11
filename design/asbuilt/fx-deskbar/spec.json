@@ -1,8 +1,7 @@
 {
   "id": "fx-deskbar",
   "group": "A",
-  "generatedAt": "2026-09-11T19:21:52.713Z",
-  "hasToggle": false,
+  "generatedAt": "2026-09-11T21:35:12.905Z",
   "tree": {
     "tag": "div",
     "id": "fx-deskbar",
@@ -8259,28 +8258,31 @@
             "tag": "button",
             "classes": [
               "fx-db",
-              "js-allfx"
+              "js-allfx",
+              "allon"
             ],
             "style": {
               "color": {
-                "value": "rgb(255, 255, 255)",
-                "token": "/color/surface/page",
-                "appVar": "--bg",
-                "role": "surface.page"
+                "value": "rgb(97, 160, 175)",
+                "token": "/color/action/primary",
+                "appVar": "--acc",
+                "role": "action.primary"
               },
               "backgroundColor": {
                 "value": "rgba(0, 0, 0, 0)",
                 "token": null
               },
               "borderColor": {
-                "value": "rgba(255, 255, 255, 0.14)",
-                "token": null
+                "value": "rgb(97, 160, 175)",
+                "token": "/color/action/primary",
+                "appVar": "--acc",
+                "role": "action.primary"
               },
               "outlineColor": {
-                "value": "rgb(255, 255, 255)",
-                "token": "/color/surface/page",
-                "appVar": "--bg",
-                "role": "surface.page"
+                "value": "rgb(97, 160, 175)",
+                "token": "/color/action/primary",
+                "appVar": "--acc",
+                "role": "action.primary"
               },
               "fontSize": {
                 "value": "12px",
@@ -8382,26 +8384,26 @@
                 ],
                 "style": {
                   "color": {
-                    "value": "rgb(204, 204, 204)",
-                    "token": "/color/text/muted",
-                    "appVar": "--mut",
-                    "role": "text.muted"
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "backgroundColor": {
                     "value": "rgba(0, 0, 0, 0)",
                     "token": null
                   },
                   "borderColor": {
-                    "value": "rgb(204, 204, 204)",
-                    "token": "/color/text/muted",
-                    "appVar": "--mut",
-                    "role": "text.muted"
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "outlineColor": {
-                    "value": "rgb(204, 204, 204)",
-                    "token": "/color/text/muted",
-                    "appVar": "--mut",
-                    "role": "text.muted"
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "fontSize": {
                     "value": "12px",
@@ -8499,26 +8501,26 @@
                     "tag": "svg",
                     "style": {
                       "color": {
-                        "value": "rgb(204, 204, 204)",
-                        "token": "/color/text/muted",
-                        "appVar": "--mut",
-                        "role": "text.muted"
+                        "value": "rgb(97, 160, 175)",
+                        "token": "/color/action/primary",
+                        "appVar": "--acc",
+                        "role": "action.primary"
                       },
                       "backgroundColor": {
                         "value": "rgba(0, 0, 0, 0)",
                         "token": null
                       },
                       "borderColor": {
-                        "value": "rgb(204, 204, 204)",
-                        "token": "/color/text/muted",
-                        "appVar": "--mut",
-                        "role": "text.muted"
+                        "value": "rgb(97, 160, 175)",
+                        "token": "/color/action/primary",
+                        "appVar": "--acc",
+                        "role": "action.primary"
                       },
                       "outlineColor": {
-                        "value": "rgb(204, 204, 204)",
-                        "token": "/color/text/muted",
-                        "appVar": "--mut",
-                        "role": "text.muted"
+                        "value": "rgb(97, 160, 175)",
+                        "token": "/color/action/primary",
+                        "appVar": "--acc",
+                        "role": "action.primary"
                       },
                       "fontSize": {
                         "value": "12px",
@@ -8616,26 +8618,26 @@
                         "tag": "path",
                         "style": {
                           "color": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "backgroundColor": {
                             "value": "rgba(0, 0, 0, 0)",
                             "token": null
                           },
                           "borderColor": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "outlineColor": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "fontSize": {
                             "value": "12px",
@@ -8734,26 +8736,26 @@
                         "tag": "path",
                         "style": {
                           "color": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "backgroundColor": {
                             "value": "rgba(0, 0, 0, 0)",
                             "token": null
                           },
                           "borderColor": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "outlineColor": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "fontSize": {
                             "value": "12px",
@@ -8852,26 +8854,26 @@
                         "tag": "path",
                         "style": {
                           "color": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "backgroundColor": {
                             "value": "rgba(0, 0, 0, 0)",
                             "token": null
                           },
                           "borderColor": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "outlineColor": {
-                            "value": "rgb(204, 204, 204)",
-                            "token": "/color/text/muted",
-                            "appVar": "--mut",
-                            "role": "text.muted"
+                            "value": "rgb(97, 160, 175)",
+                            "token": "/color/action/primary",
+                            "appVar": "--acc",
+                            "role": "action.primary"
                           },
                           "fontSize": {
                             "value": "12px",
@@ -8978,26 +8980,26 @@
                 "text": "All FX",
                 "style": {
                   "color": {
-                    "value": "rgb(255, 255, 255)",
-                    "token": "/color/surface/page",
-                    "appVar": "--bg",
-                    "role": "surface.page"
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "backgroundColor": {
                     "value": "rgba(0, 0, 0, 0)",
                     "token": null
                   },
                   "borderColor": {
-                    "value": "rgb(255, 255, 255)",
-                    "token": "/color/surface/page",
-                    "appVar": "--bg",
-                    "role": "surface.page"
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "outlineColor": {
-                    "value": "rgb(255, 255, 255)",
-                    "token": "/color/surface/page",
-                    "appVar": "--bg",
-                    "role": "surface.page"
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
                   },
                   "fontSize": {
                     "value": "12px",
@@ -19309,7 +19311,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "backgroundColor",
       "value": "rgba(0, 0, 0, 0)"
@@ -19318,16 +19321,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
-      ],
-      "prop": "borderColor",
-      "value": "rgba(255, 255, 255, 0.14)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "fontSize",
       "value": "12px"
@@ -19336,7 +19331,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "fontWeight",
       "value": "400"
@@ -19345,7 +19341,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "fontFamily",
       "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
@@ -19354,7 +19351,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "lineHeight",
       "value": "normal"
@@ -19363,7 +19361,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "letterSpacing",
       "value": "normal"
@@ -19372,7 +19371,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "paddingTop",
       "value": "5px"
@@ -19381,7 +19381,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "paddingRight",
       "value": "10px"
@@ -19390,7 +19391,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "paddingBottom",
       "value": "5px"
@@ -19399,7 +19401,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "paddingLeft",
       "value": "10px"
@@ -19408,7 +19411,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "gap",
       "value": "7px"
@@ -19417,7 +19421,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "rowGap",
       "value": "7px"
@@ -19426,7 +19431,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "columnGap",
       "value": "7px"
@@ -19435,7 +19441,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "transitionDuration",
       "value": "0s"
@@ -19444,7 +19451,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "transitionTimingFunction",
       "value": "cubic-bezier(0.2, 0.8, 0.3, 1), cubic-bezier(0.2, 0.8, 0.3, 1)"
@@ -19453,7 +19461,8 @@
       "tag": "button",
       "classes": [
         "fx-db",
-        "js-allfx"
+        "js-allfx",
+        "allon"
       ],
       "prop": "boxShadow",
       "value": "none"
@@ -22011,241 +22020,5 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ],
-  "matrix": {
-    "dimensions": {
-      "states": [
-        "rest"
-      ],
-      "themes": [
-        "dark",
-        "light"
-      ],
-      "widths": [
-        "1440x900",
-        "1200x800",
-        "1024x768",
-        "960x760",
-        "900x760",
-        "820x700",
-        "768x1024",
-        "760x700",
-        "700x700",
-        "390x844"
-      ],
-      "sidebars": [
-        "n/a"
-      ]
-    },
-    "entries": [
-      {
-        "key": "rest|dark|1440x900|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "n/a",
-        "hash": "a4f5901bbf9e3285",
-        "path": "design/asbuilt-full/fx-deskbar/a4f5901bbf9e3285.webp"
-      },
-      {
-        "key": "rest|dark|1200x800|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "n/a",
-        "hash": "f8c84bb57236b51e",
-        "path": "design/asbuilt-full/fx-deskbar/f8c84bb57236b51e.webp"
-      },
-      {
-        "key": "rest|dark|1024x768|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "n/a",
-        "hash": "fdbbab45478dff5b",
-        "path": "design/asbuilt-full/fx-deskbar/fdbbab45478dff5b.webp"
-      },
-      {
-        "key": "rest|dark|960x760|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 960,
-        "height": 760,
-        "sidebar": "n/a",
-        "hash": "5f55cb5df942aa45",
-        "path": "design/asbuilt-full/fx-deskbar/5f55cb5df942aa45.webp"
-      },
-      {
-        "key": "rest|dark|900x760|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 900,
-        "height": 760,
-        "sidebar": "n/a",
-        "hash": "bf65c0ff9b32f15c",
-        "path": "design/asbuilt-full/fx-deskbar/bf65c0ff9b32f15c.webp"
-      },
-      {
-        "key": "rest|dark|820x700|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 820,
-        "height": 700,
-        "sidebar": "n/a",
-        "hash": "0d7ba1c6a44855be",
-        "path": "design/asbuilt-full/fx-deskbar/0d7ba1c6a44855be.webp"
-      },
-      {
-        "key": "rest|dark|768x1024|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "n/a",
-        "hash": "3284cff90b79a7b4",
-        "path": "design/asbuilt-full/fx-deskbar/3284cff90b79a7b4.webp"
-      },
-      {
-        "key": "rest|dark|760x700|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 760,
-        "height": 700,
-        "sidebar": "n/a",
-        "hash": "54907127976721e1",
-        "path": "design/asbuilt-full/fx-deskbar/54907127976721e1.webp"
-      },
-      {
-        "key": "rest|dark|700x700|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 700,
-        "height": 700,
-        "sidebar": "n/a",
-        "hash": "272d1a343d788e73",
-        "path": "design/asbuilt-full/fx-deskbar/272d1a343d788e73.webp"
-      },
-      {
-        "key": "rest|dark|390x844|n/a",
-        "state": "rest",
-        "theme": "dark",
-        "width": 390,
-        "height": 844,
-        "sidebar": "n/a",
-        "hash": "d6d555b737838e56",
-        "path": "design/asbuilt-full/fx-deskbar/d6d555b737838e56.webp"
-      },
-      {
-        "key": "rest|light|1440x900|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 1440,
-        "height": 900,
-        "sidebar": "n/a",
-        "hash": "d258ec70c110337a",
-        "path": "design/asbuilt-full/fx-deskbar/d258ec70c110337a.webp"
-      },
-      {
-        "key": "rest|light|1200x800|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 1200,
-        "height": 800,
-        "sidebar": "n/a",
-        "hash": "a700e7147477e513",
-        "path": "design/asbuilt-full/fx-deskbar/a700e7147477e513.webp"
-      },
-      {
-        "key": "rest|light|1024x768|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 1024,
-        "height": 768,
-        "sidebar": "n/a",
-        "hash": "64325d41499b39b4",
-        "path": "design/asbuilt-full/fx-deskbar/64325d41499b39b4.webp"
-      },
-      {
-        "key": "rest|light|960x760|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 960,
-        "height": 760,
-        "sidebar": "n/a",
-        "hash": "88ec3b3a5ec3841b",
-        "path": "design/asbuilt-full/fx-deskbar/88ec3b3a5ec3841b.webp"
-      },
-      {
-        "key": "rest|light|900x760|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 900,
-        "height": 760,
-        "sidebar": "n/a",
-        "hash": "5ca779e5e943d2d0",
-        "path": "design/asbuilt-full/fx-deskbar/5ca779e5e943d2d0.webp"
-      },
-      {
-        "key": "rest|light|820x700|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 820,
-        "height": 700,
-        "sidebar": "n/a",
-        "hash": "aa90ceee3979a5de",
-        "path": "design/asbuilt-full/fx-deskbar/aa90ceee3979a5de.webp"
-      },
-      {
-        "key": "rest|light|768x1024|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 768,
-        "height": 1024,
-        "sidebar": "n/a",
-        "hash": "3d3a48fac5d7737c",
-        "path": "design/asbuilt-full/fx-deskbar/3d3a48fac5d7737c.webp"
-      },
-      {
-        "key": "rest|light|760x700|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 760,
-        "height": 700,
-        "sidebar": "n/a",
-        "hash": "3f079a92499ceec0",
-        "path": "design/asbuilt-full/fx-deskbar/3f079a92499ceec0.webp"
-      },
-      {
-        "key": "rest|light|700x700|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 700,
-        "height": 700,
-        "sidebar": "n/a",
-        "hash": "014a7c2e508a69ca",
-        "path": "design/asbuilt-full/fx-deskbar/014a7c2e508a69ca.webp"
-      },
-      {
-        "key": "rest|light|390x844|n/a",
-        "state": "rest",
-        "theme": "light",
-        "width": 390,
-        "height": 844,
-        "sidebar": "n/a",
-        "hash": "6657c1f574d37c74",
-        "path": "design/asbuilt-full/fx-deskbar/6657c1f574d37c74.webp"
-      }
-    ]
-  },
-  "contactSheets": {
-    "dark": [
-      "contact-dark.webp"
-    ],
-    "light": [
-      "contact-light.webp"
-    ]
-  }
+  ]
 }

@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture } from './wireframe_diff_lib.mjs';
 import { checkAspectRatioInvariant, checkClipping, checkResizerCoverage } from './wireframe_checks_lib.mjs';
+import { LAYOUT_AXES } from './layout_axes.mjs';
 
 const ROOT = process.cwd();
 const DUMP_JSON = process.argv.includes('--json');
@@ -154,19 +155,8 @@ const CONTAINERS = ['fx-deskbar', 'fx-toolrail'];
 // resizer it covers; checkResizerCoverage() fails the gate if the page grows a resizer that no
 // axis names, so a new resizable region can't go untested. Ranges come from the app's own clamps:
 // fxPanelWidth() 220-440 (default 320), library-ui.js LIB_DOCK_MIN/MAX 90-420 (default 120).
-const LAYOUT_AXES = [
-  { resizer: 'fx-rail-resizer', name: 'rail', states: [
-    ['labels', `railMode('labels')`], ['icons', `railMode('icons')`]] },
-  { resizer: 'fx-panel-resizer', name: 'panel', states: [
-    ['220', `document.body.classList.remove('panel-closed');fxPanelWidth(220)`],
-    ['320', `document.body.classList.remove('panel-closed');fxPanelWidth(320)`],
-    ['440', `document.body.classList.remove('panel-closed');fxPanelWidth(440)`],
-    ['closed', `document.body.classList.add('panel-closed')`]] },
-  { resizer: 'lib-dock-resizer', name: 'dock', states: [
-    ['90', `document.querySelector('.fx-layout').style.setProperty('--dock-w-user','90px')`],
-    ['120', `document.querySelector('.fx-layout').style.setProperty('--dock-w-user','120px')`],
-    ['420', `document.querySelector('.fx-layout').style.setProperty('--dock-w-user','420px')`]] },
-];
+// LAYOUT_AXES now lives in test/layout_axes.mjs (shared with surface_capture.mjs so the two
+// scripts can never drift apart on resizer ranges — docs/ui-workflow/STATE.md S6c).
 // Every combination of axis states (2 x 4 x 3 = 24 layouts per viewport).
 const combos = LAYOUT_AXES.reduce((acc, ax) => acc.flatMap((c) => ax.states.map((s) => [...c, [ax.name, ...s]])), [[]]);
 findings.push(...await checkResizerCoverage(page, LAYOUT_AXES.map((a) => a.resizer), 'page load'));

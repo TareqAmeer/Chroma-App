@@ -20908,9 +20908,19 @@ function fxLayoutSettle(){
   fxLayoutSettle._t=setTimeout(()=>{try{renderPreview();}catch(e){}},240);
 }
 function fxPanelWidth(w){
-  const lay=document.querySelector('.fx-layout');if(!lay)return;
+  // ⚠️ Found via docs/ui-workflow/STATE.md S6c's width-assert capture pass (2026-09-11): this used
+  // to write --panel-w-user onto `.fx-layout` (a DIV, a descendant of <body>), but `--panel-w:
+  // var(--panel-w-user,320px)` is declared on `body.deskx` — custom properties only inherit
+  // parent->child, so body never saw a value set on its own descendant and --panel-w stayed at its
+  // 320px fallback forever. Net effect: the panel resizer (both this function and its drag handle)
+  // silently never resized anything, at any window width — caught only because the capture script
+  // now asserts the ELEMENT'S OWN measured width against the value just set, instead of trusting
+  // that setting the property means it worked. Dock/rail don't have this bug: --dock-w-user's real
+  // consumer (#lib-overlay's own `width:`) is a DIRECT child of .fx-layout, so parent->child
+  // inheritance already reaches it; --panel-w has no such shortcut, only the body-level indirection.
+  if(!document.body.classList.contains('deskx'))return;
   w=Math.min(440,Math.max(220,Math.round(w)));
-  lay.style.setProperty('--panel-w-user',w+'px');
+  document.body.style.setProperty('--panel-w-user',w+'px');
   try{localStorage.setItem('cs_panelw',w);}catch(e){}
   return w;
 }
@@ -20942,7 +20952,7 @@ function fxInitEdges(){
   // Restore both persisted sizes before the first paint of the editor.
   try{
     const w=parseInt(localStorage.getItem('cs_panelw'),10);
-    if(w>=220&&w<=440)lay.style.setProperty('--panel-w-user',w+'px');
+    if(w>=220&&w<=440)document.body.style.setProperty('--panel-w-user',w+'px'); // see fxPanelWidth's comment — must be on body, not .fx-layout
     const m=localStorage.getItem('cs_railmode');
     // A hidden rail is NOT restored: it leaves the editor with no visible tool affordance at all
     // beyond one 28px button, which is a hostile thing to launch into. Hiding stays per-session.

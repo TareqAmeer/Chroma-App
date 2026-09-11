@@ -345,3 +345,61 @@ call `ui:test`) will currently fail on that until it's fixed.
   didn't) updated: uploaded hero + contact-sheet images for all 13 new surfaces (26 assets) and
   spliced 13 new cards into its `SURFACES` array, leaving the existing 41 untouched. Total 54 cards,
   well under the 255-file instruction.
+
+**S6c — 2026-09-11 — done, re-capture with real asserts + a real app bugfix**
+- `test/surface_capture.mjs` rewritten from scratch: dropped S6b's full state x theme x width x
+  sidebar matrix (752+ skipped combos nobody could review) for a hand-scoped ~220-image plan
+  (printed and gated at >300 before capturing), and added asserts BEFORE every screenshot —
+  `assertTheme` (body.light + background luminance direction), `assertElementWidth`,
+  `openSectionAsserted` (section active + panel open + visible-control count against
+  `panel_inventory.json`, excluding controls statically gated by `.diag-only` or an inline
+  `style="display:none"` row — video-only Grain/RAW-only rows, not an open/closed signal), and
+  `assertVisibleTaller` for menus/dialogs. A failed assert fails that one capture instead of
+  silently saving a closed/empty shot — exactly the class of bug the prior captures shipped with.
+- Scope actually captured (desktop only, widths 760/1920, no phone/tablet, no full matrix): Editor
+  core whole-window (default + rail:narrow/full/hidden + panel:220/440/closed + dock:90/420/closed,
+  ×2 widths ×2 themes = 40) + Library core (default + sidebar:150/420/hidden, ×2×2 = 16) + 23
+  Editor sections open+enabled at panel 220/440 ×2 themes with a 1:1 crop each (92+92) + 10
+  menus/dialogs/toast + 4 other pages (Match/Copy/Collage/Guide) ×2 themes with crops (28+28) =
+  176 hero + 120 crop = 296 images total, under the 300 cap. splash stays the S6 wireframe
+  stand-in (no live route); 8 surfaces confirmed unreachable this pass (astro/collage modals,
+  offline/blocking-wait modals, lib-compare/lib-info, imp-bar) — 0 images for those is correct,
+  not a gap.
+- `test/layout_axes.mjs`: new shared `LAYOUT_AXES` (rail/panel/dock) + `LIBRARY_SIDEBAR_AXIS`
+  (150/230/420), imported by both `editor_responsive_qa.mjs` and `surface_capture.mjs` so the two
+  can never drift on resizer ranges again.
+- **Real app bug found and fixed, not just a capture-script bug**: `fxPanelWidth()` (and
+  `fxInitEdges`'s restore) wrote `--panel-w-user` onto `.fx-layout` — a DIV, a descendant of
+  `<body>` — but `--panel-w:var(--panel-w-user,320px)` is declared on `body.deskx`. Custom
+  properties only inherit parent→child, so body never saw a value set by its own descendant and
+  `--panel-w` stayed at its 320px fallback forever: the tool-panel resizer (drag handle AND any
+  programmatic caller) has never actually resized anything, at any window width, since the day it
+  shipped — every `panel=220`/`panel=440` shot before this session was pixel-identical to default.
+  Confirmed by direct `getBoundingClientRect()` measurement before/after the fix. Dock/sidebar
+  don't have this bug: their real visual consumer (`#lib-overlay`'s own `width:`) is a DIRECT
+  child of `.fx-layout`, so parent→child inheritance already reached it — only `--panel-w` had no
+  such shortcut. Fixed by writing `--panel-w-user` onto `document.body` in both places (matches
+  where `body.panel-closed{--panel-w:0px}` already lives, per the function's own pre-existing
+  comment about needing the class-rule to be able to "outrank" it). Rebuilt `desktop/dist/` and
+  re-captured groups A/B/C/E after the fix; `panel=220` vs `panel=440` crops now visibly differ
+  (measured 269px → 346px on `fxsec-grain`). `node test/export_harness.mjs` 18/18 after, no GLSL
+  errors (unrelated to shaders, but checked per CLAUDE.md's own reminder).
+- `test/capture_audit.mjs` (new): per surface, checks image count against the plan, decodes every
+  webp via a Playwright canvas (no PIL/sharp/cwebp available on this machine) to catch
+  blank/near-uniform frames and theme-luminance mismatches, and flags any `whole_*` filename using
+  a layout-axis label not in the real vocabulary. 62/62 surfaces PASS after the re-capture.
+- Visual review: 12 Haiku subagents in parallel over the 176 hero images (crops skipped — mostly
+  re-crops of already-reviewed content). One real defect caught (the panel-width bug above, via
+  the "panel=440 looks identical to panel=220" flag) and fixed; a few "canvas is dark in light
+  theme" flags were confirmed false positives — the app deliberately keeps the photo workspace a
+  neutral dark grey in both themes (verified against the correctly-switched panel/title-bar chrome
+  in the same screenshots), a real, intentional editor convention, not a bug.
+- Output: `design/asbuilt/<id>/` images recompressed lossy webp at full resolution, committed
+  directly (no `design/asbuilt-full/`, no contact sheets this pass — S6c dropped both per the
+  instruction: "No contact sheets", small enough to review individually). `spec.json`/
+  `block.dc.html` regenerated per surface (rest state, dark theme, default layout) — unchanged in
+  shape from S6/S6b.
+- Not done: `lib-grid`'s spec.json/block.dc.html generation still fails (its `openSteps` is a
+  human-readable description, not runnable JS, same class of thing S6b already special-cased for
+  `mobile-sheet` — this surface wasn't added to that special-case list). Pre-existing gap, not
+  part of what this session was asked to fix; left for whoever next touches `lib-grid`.

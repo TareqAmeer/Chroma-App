@@ -31,9 +31,9 @@
         </div>
         <div class="fx-row" id="crop-custom-row" style="display:none">
           <div class="fx-label">Custom</div>
-          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-w" style="width: 56px; caret-color: transparent !important;">
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-w" style="width: 56px;">
           <span style="color:var(--mut)">:</span>
-          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-h" style="width: 56px; caret-color: transparent !important;">
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-h" style="width: 56px;">
         </div>
         <div class="fx-sub">Transform</div>
         <div class="btn-row" style="justify-content:center;gap:14px">
@@ -45,7 +45,7 @@
         <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
           <button class="btn bgh" id="btn-geom-apply-all" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
         </div>
-        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider fx-slider-bi" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" aria-label="Straighten" style="--fillA: 50%; --fillB: 50%; caret-color: transparent !important;"><div class="fx-val" id="vl-straighten" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="caret-color: transparent !important;">0°</div></div>
+        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider fx-slider-bi" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" aria-label="Straighten" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-straighten" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0°</div></div>
         <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
         <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
           <button class="btn" id="btn-ah-roi" style="flex:1">Set region…</button>
