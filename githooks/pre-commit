@@ -26,6 +26,31 @@ if needs_check "desktop/library-ui.js"; then
   fi
 fi
 
+if needs_check "chromasmith-22.html" || needs_check "desktop/library-ui.js" || needs_check "design/tokens.json" || needs_check "scripts/build-tokens.mjs" || needs_check "scripts/token-layout.json"; then
+  # Token generator drift gate: design/tokens.json + scripts/build-tokens.mjs generate the
+  # :root/body.light blocks in chromasmith-22.html and the DS block in desktop/library-ui.js
+  # (docs/ui-workflow/STATE.md S4). Both scripts existed but nothing ran them — a direct edit to
+  # a colour/spacing literal in either generated block would sit unnoticed until the next
+  # `node scripts/build-tokens.mjs` run silently overwrote it back to tokens.json's value. This
+  # blocks that: --check fails if regenerating from tokens.json would change either file (i.e.
+  # someone edited the generated block by hand, or tokens.json/token-layout.json drifted from
+  # it), and verify_tokens.py fails if any declared app var is neither a token nor a documented
+  # conflict (design/token-conflicts.md).
+  echo "chromasmith-22.html / desktop/library-ui.js / design/tokens.json changed — checking token generator..."
+  if ! npm run tokens:check --silent; then
+    echo ""
+    echo "BLOCKED: chromasmith-22.html or desktop/library-ui.js has drifted from design/tokens.json."
+    echo "If you edited a colour/spacing value directly in the generated block, move that edit to"
+    echo "design/tokens.json instead and run \`node scripts/build-tokens.mjs\` to regenerate."
+    exit 1
+  fi
+  if ! npm run tokens:verify --silent; then
+    echo ""
+    echo "BLOCKED: a declared app CSS var is neither in design/tokens.json nor design/token-conflicts.md."
+    exit 1
+  fi
+fi
+
 if needs_check "chromasmith-22.html"; then
   echo "chromasmith-22.html changed — running all Editor gates (test/editor_gates.mjs)..."
   # Was: only editor_wireframe_diff.mjs, hand-retried 6x here for the documented E7 flake

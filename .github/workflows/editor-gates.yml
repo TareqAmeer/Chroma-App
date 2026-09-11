@@ -22,6 +22,11 @@ on:
       - 'desktop/desktop-native.js'
       - 'test/**'
       - 'chromasmith-design/**'
+      - 'design/tokens.json'
+      - 'design/token-conflicts.md'
+      - 'design/verify_tokens.py'
+      - 'scripts/build-tokens.mjs'
+      - 'scripts/token-layout.json'
       - 'playwright.config.mjs'
       - 'build-desktop.sh'
       - 'package.json'
@@ -34,6 +39,11 @@ on:
       - 'desktop/desktop-native.js'
       - 'test/**'
       - 'chromasmith-design/**'
+      - 'design/tokens.json'
+      - 'design/token-conflicts.md'
+      - 'design/verify_tokens.py'
+      - 'scripts/build-tokens.mjs'
+      - 'scripts/token-layout.json'
       - 'playwright.config.mjs'
       - 'build-desktop.sh'
       - 'package.json'
@@ -58,6 +68,9 @@ jobs:
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+
+      - name: Token generator drift check (design/tokens.json vs generated blocks)
+        run: npm run tokens:gates
 
       - name: Stage desktop build
         run: bash build-desktop.sh
