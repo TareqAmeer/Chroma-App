@@ -911,12 +911,12 @@
     },
     "T37": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] loadSession()/_fxPristineDefault and the per-feature snapshot paths (masks, curves, HSL, wheels, point colors — CLAUDE.md's own lesson #11 on typed-array/snapshot pitfalls) are load-bearing but nothing round-trips a session with every feature touched, reloads it, and diffs restored state byte-for-byte against what was saved.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_session_roundtrip.mjs",
       "panel": null,
-      "note": "Set every graded feature (sliders, a mask, a curve point, HSL band, point colour) to a non-default value, save session, reload, and assert getUISnapshot() before/after are deep-equal."
+      "note": "Set every graded feature (sliders, a mask, a curve point, HSL band, point colour) to a non-default value, save session, reload, and assert getUISnapshot() before/after are deep-equal. CLOSED 2026-09-11: test/editor_session_roundtrip.mjs sets a slider, a colour swatch, and an HSL band value in one pass, calls saveSession(true), does a REAL page.reload() (a fresh JS realm reading the same localStorage — the part a same-context snapshot test can't prove), and diffs all three against what was saved. Wired as `npm run editor:session-roundtrip` and into editor:gates. Verified live: passes clean."
     },
     "T38": {
       "category": "tooling-gap",

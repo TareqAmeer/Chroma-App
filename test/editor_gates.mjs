@@ -119,6 +119,9 @@ const GATES = [
   // T36 (editor_ux_spec.json): hammers undo/redo (30 edits, past the 20-entry cap) and verifies
   // the cap actually holds plus an exact round-trip, not just a single-click smoke test.
   { name: 'editor:undo-stress', cmd: ['node', 'test/editor_undo_stress.mjs'] },
+  // T37 (editor_ux_spec.json): saves a session with several feature families touched, does a
+  // REAL page reload (not a same-context snapshot re-apply), and diffs restored state.
+  { name: 'editor:session-roundtrip', cmd: ['node', 'test/editor_session_roundtrip.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');
