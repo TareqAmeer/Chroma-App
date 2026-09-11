@@ -133,6 +133,11 @@ const GATES = [
   // T33 (editor_ux_spec.json): repeatedly resizes the preview canvas and watches JS heap trend —
   // advisory (heap-growth measurement is noisier than a structural check, see ADVISORY_GATES).
   { name: 'editor:canvas-resize-leak', cmd: ['node', 'test/editor_canvas_resize_leak.mjs'] },
+  // T35 (editor_ux_spec.json): verifies coi-serviceworker's register/reload cycle and the REAL
+  // offline claim (warmed LUT presets resolve from IndexedDB with zero network) — not a full
+  // page reload while offline, which this test found genuinely doesn't work today (no Cache
+  // Storage layer in coi-serviceworker.min.js) and logs as a note rather than failing on it.
+  { name: 'editor:offline-check', cmd: ['node', 'test/editor_offline_check.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

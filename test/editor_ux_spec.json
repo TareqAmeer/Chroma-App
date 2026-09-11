@@ -893,12 +893,12 @@
     },
     "T35": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] coi-serviceworker.min.js is load-bearing for RAW decode (SharedArrayBuffer/COOP-COEP on GitHub Pages) but nothing verifies actual offline behaviour: cache-hit on repeat load, correct fallback on a stale cache, or a genuine offline reload after first visit — the standard failure signature ('repeat load as slow as first load') is exactly what's untested.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_offline_check.mjs",
       "panel": null,
-      "note": "A Playwright test that loads the page once, goes into `context.setOffline(true)`, reloads, and asserts the app still boots and crossOriginIsolated stays true — plus a load-timing comparison between first and second load to catch a service worker that isn't actually intercepting."
+      "note": "A Playwright test that loads the page once, goes into `context.setOffline(true)`, reloads, and asserts the app still boots and crossOriginIsolated stays true — plus a load-timing comparison between first and second load to catch a service worker that isn't actually intercepting. CLOSED 2026-09-11: test/editor_offline_check.mjs verifies coi-serviceworker.min.js's register/self-reload cycle actually lands on crossOriginIsolated=true, then verifies the REAL offline claim (lutWarmCache() populates IndexedDB; a warmed preset resolves via presetBytes() with genuine network offline and zero errors). Found along the way that coi-serviceworker.min.js has NO Cache Storage layer at all (pure fetch-passthrough header rewriting) — a full page reload while offline fails with net::ERR_FAILED. That's a real, separate product-level finding, not a testing-tool gap, so it's tracked as new item T54 rather than silently fixed or hidden; this test logs it as a note without failing the gate on something outside coi-serviceworker's actual documented scope. Wired as `npm run editor:offline-check` and into editor:gates. Verified live: passes clean."
     },
     "T36": {
       "category": "tooling-gap",
@@ -1061,6 +1061,15 @@
       "check": null,
       "panel": null,
       "note": "A static scan of every icon(name,size) call site in chromasmith-22.html, asserting size is in {16,20,22} and the referenced name exists in the ICONS map — same shape as T5/T10's token-drift check, applied to the icon system instead of colour/spacing."
+    },
+    "T54": {
+      "category": "app-bug",
+      "status": "backlog",
+      "source": "[found while building T35's offline test, 2026-09-11] coi-serviceworker.min.js has no Cache Storage usage at all — its fetch handler is pure passthrough (fetch(request).then(rewrite headers)). A full page reload while genuinely offline fails outright (net::ERR_FAILED), even after a first successful visit. CLAUDE.md §2's 'genuinely offline-capable after one visit' claim is true only for LUT preset DATA (via lutWarmCache()->IndexedDB), not for the HTML/JS app shell surviving a cold reload with no network.",
+      "wireframeRef": null,
+      "check": "test/editor_offline_check.mjs (documents/detects; does not fix)",
+      "panel": null,
+      "note": "This is a product-scope decision, not an obvious bug fix: either (a) accept 'stay on the page while offline, don't rely on reload' as the real guarantee and adjust the CLAUDE.md claim to be precise about what's cached (LUT data) vs not (the shell), or (b) extend the service worker with an actual Cache Storage app-shell strategy (cache chromasmith-22.html + its same-origin assets on install, serve from cache when the network fetch fails) — a bigger, deliberate change to a vendored third-party file that should be a conscious choice, not a side effect of a testing pass. Left open for the user to decide which."
     }
   }
 }
