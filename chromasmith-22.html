@@ -21714,7 +21714,48 @@ function a11yEnhanceTabs(){
     });
   }
 }
-a11yEnhanceToggles();a11yEnhanceTabs();
+// T41 (editor_ux_spec.json, 2026-09-11): an axe-core sweep found 33 serious/critical violations
+// across the Editor's panels — every plain slider/select/colour input had NO accessible name at
+// all (label:CRITICAL), and every section-master .fx-toggle had no aria-label despite
+// a11yEnhanceToggles() already giving it role="switch"+tabindex (aria-toggle-field-name:SERIOUS)
+// — exactly the "keyboard-reachable but announces nothing" gap T41's own ticket predicted.
+// The app's whole convention is a SIBLING `.fx-label` div next to the control inside one
+// `.fx-row` (never a real `<label for>`), so this derives an aria-label from that sibling text
+// instead of hand-authoring one per control — same "derive, don't hand-maintain" shape as
+// a11yEnhanceToggles() itself, and it covers every row this way builds, present and future.
+function a11yLabelText(row){
+  const lb=row.querySelector(':scope > .fx-label');
+  if(!lb)return null;
+  // Strip nested interactive children (the fx-info-i tooltip button reads "i") — clone and remove
+  // them rather than a fragile textContent-minus-substring subtraction.
+  const clone=lb.cloneNode(true);
+  clone.querySelectorAll('button,.fx-toggle').forEach(el=>el.remove());
+  const txt=clone.textContent.trim();
+  return txt||null;
+}
+function a11yEnhanceFormLabels(){
+  document.querySelectorAll('.fx-row').forEach(row=>{
+    const txt=a11yLabelText(row);
+    if(!txt)return;
+    const ctrl=row.querySelector(':scope > input.fx-slider, :scope > input[type=color], :scope > select.fx-select, :scope > .fx-toggle');
+    if(ctrl&&!ctrl.hasAttribute('aria-label'))ctrl.setAttribute('aria-label',txt);
+  });
+  // Section-master toggles live in .fx-ctrl-title, not a .fx-row — same fix, different source
+  // text (the title's own first text node, e.g. "Film Grain" from "Film Grain <toggle>").
+  // NOT a direct child: the header-reset injector (_fxSectionResetOverride's caller) wraps it
+  // together with .fx-ctrl-title-reset inside a `.fx-title-right` span, so this must be a
+  // descendant query, not `:scope > .fx-toggle` (confirmed live — the direct-child form silently
+  // matched nothing and left every section-master toggle unlabelled).
+  document.querySelectorAll('.fx-ctrl-title').forEach(title=>{
+    const tg=title.querySelector('.fx-toggle');
+    if(!tg||tg.hasAttribute('aria-label'))return;
+    const clone=title.cloneNode(true);
+    clone.querySelectorAll('.fx-toggle,.fx-ctrl-title-reset,button').forEach(el=>el.remove());
+    const txt=clone.textContent.trim();
+    if(txt)tg.setAttribute('aria-label',txt);
+  });
+}
+a11yEnhanceToggles();a11yEnhanceTabs();a11yEnhanceFormLabels();
 // Panels rebuild their own subtrees via innerHTML at runtime (mskRebuild, curve chips, the
 // Looks gallery, …) — a one-shot boot pass would miss every .fx-toggle those create afterward.
 // One body-level observer catches all of them at the source instead of re-running the enhancer
