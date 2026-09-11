@@ -57,10 +57,42 @@ def gen_portrait_like():
     img.save(os.path.join(OUT, "portrait.png"), optimize=True)
 
 
+def gen_orientation_portrait():
+    """TALLER-than-wide (384x512) — every existing fixture above is 512x384 (landscape
+    orientation, "portrait.png" just means "portrait-like content"), so no fixture actually
+    exercises a portrait-ORIENTED photo (crop/rotate/canvas aspect logic). Added for
+    docs/ui-workflow/STATE.md's layout-matrix scenario states."""
+    w, h = 384, 512
+    img = Image.new("RGB", (w, h), (150, 130, 150))
+    d = ImageDraw.Draw(img)
+    d.ellipse([w // 2 - 70, h // 2 - 100, w // 2 + 70, h // 2 + 40], fill=(250, 235, 210))
+    d.rectangle([0, h - 60, w - 1, h - 1], fill=(60, 50, 70))
+    img.save(os.path.join(OUT, "orientation_portrait.png"), optimize=True)
+
+
+def gen_orientation_panorama():
+    """Very wide (1600x400, 4:1) — no fixture with a panorama aspect ratio existed."""
+    w, h = 1600, 400
+    img = Image.new("RGB", (w, h))
+    px = img.load()
+    for x in range(w):
+        t = x / (w - 1)
+        r = int(40 + 180 * t)
+        g = int(120 + 60 * (1 - abs(t - 0.5) * 2))
+        b = int(200 - 160 * t)
+        for y in range(h):
+            px[x, y] = (r, g, b)
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, h - 40, w - 1, h - 1], fill=(20, 20, 25))
+    img.save(os.path.join(OUT, "orientation_panorama.png"), optimize=True)
+
+
 if __name__ == "__main__":
     gen_gradient()
     gen_chart()
     gen_portrait_like()
-    for f in ("gradient.png", "chart.png", "portrait.png"):
+    gen_orientation_portrait()
+    gen_orientation_panorama()
+    for f in ("gradient.png", "chart.png", "portrait.png", "orientation_portrait.png", "orientation_panorama.png"):
         p = os.path.join(OUT, f)
         print(f, os.path.getsize(p), "bytes")

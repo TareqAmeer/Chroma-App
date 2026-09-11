@@ -114,3 +114,9 @@ diagnostics/baseline.json
 # @playwright/test artifacts (behaviour suite) — traces/screenshots from failing runs
 test-results/
 playwright-report/
+
+# Full-size layout-matrix screenshots (docs/ui-workflow/STATE.md, surface_capture.mjs) —
+# content-addressed by hash, one file per DISTINCT image (state/theme/width/sidebar combos that
+# render identically share a file), but the matrix is thousands of images per surface group.
+# Only the generated contact-sheet grids + spec.json (design/asbuilt/) are committed.
+design/asbuilt-full/
