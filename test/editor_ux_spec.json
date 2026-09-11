@@ -884,12 +884,12 @@
     },
     "T34": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] docs/testing.md already documents that every gate here drives Chromium via Playwright, never the real WKWebView engine the shipping desktop (Tauri) and iOS (Capacitor) apps render with — the single largest structural blind spot: a shader/CSS/JS bug specific to WebKit ships invisible to every gate.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_webkit_smoke.mjs",
       "panel": null,
-      "note": "Playwright's webkit browser channel is the closest automatable approximation (still not the exact WKWebView build, but far closer than Chromium) — running export_harness.mjs/editor_wireframe_behaviour.mjs against it too would catch a real class of engine-specific regression current gates cannot see at all."
+      "note": "Playwright's webkit browser channel is the closest automatable approximation (still not the exact WKWebView build, but far closer than Chromium) — running export_harness.mjs/editor_wireframe_behaviour.mjs against it too would catch a real class of engine-specific regression current gates cannot see at all. CLOSED 2026-09-11: test/editor_webkit_smoke.mjs boots the real desktop/dist build under Playwright's webkit channel, loads a fixture, and confirms crossOriginIsolated + a real non-transparent WebGL render + zero console errors. Wired as `npm run editor:webkit-smoke` and into editor:gates (skips gracefully, exit 0, if webkit isn't installed locally rather than faking pass/fail). Verified live: passes clean against the current build."
     },
     "T35": {
       "category": "tooling-gap",

@@ -110,6 +110,12 @@ const GATES = [
   // sail through every other check while being unusable by keyboard. Passes clean today.
   { name: 'editor:keyboard-check', cmd: ['node', 'test/editor_keyboard_check.mjs'] },
   { name: 'editor:token-check', cmd: ['node', 'test/editor_token_check.mjs', '--strict'] },
+  // T34 (editor_ux_spec.json): every gate above drives Chromium; this is the one gate that drives
+  // WebKit (the real engine family behind the shipping desktop/iOS app). Skips (exit 0) rather
+  // than fails when WebKit isn't installed locally (`npx playwright install webkit`) — an
+  // environment gap, not an app regression, and CI should install it rather than this gate faking
+  // a pass/fail either way.
+  { name: 'editor:webkit-smoke', cmd: ['node', 'test/editor_webkit_smoke.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');
