@@ -97,7 +97,11 @@ const ADVISORY_MODE = process.argv.includes('--advisory');
 // (a11yEnhanceFormLabels(), chromasmith-22.html) — the remaining findings are all color-contrast
 // on DIMMED off-section labels (.fx-fields.ff-off, CLAUDE.md §3b's intentional dim-not-hidden
 // pattern), a real but pre-existing design-token decision, not a regression this pass introduced.
-const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak', 'editor:icon-check', 'editor:motion-token-check', 'editor:axe-check']);
+// T43/T44/T46/T47/T48/T50 (editor_ux_spec.json) all join advisory: each is a NEW state-matrix/
+// simulation-shaped check built the same day, several with a documented, known scope limit
+// (an element not visible in this harness's default panel state isn't a confirmed pass OR fail —
+// see each script's own header comment) rather than a clean green/red structural check.
+const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak', 'editor:icon-check', 'editor:motion-token-check', 'editor:axe-check', 'editor:hover-focus-matrix', 'editor:empty-error-states', 'editor:zoom-check', 'editor:long-string-check', 'editor:hidpi-check', 'editor:cvd-check']);
 
 const GATES = [
   { name: 'editor:inventory', cmd: ['node', 'test/editor_wireframe_inventory.mjs'] },
@@ -165,6 +169,27 @@ const GATES = [
   // against --dur-1/--dur-2/--ease. Does not measure actual jank/frame-timing (larger lift, not
   // attempted here).
   { name: 'editor:motion-token-check', cmd: ['node', 'test/editor_motion_token_check.mjs', '--strict'] },
+  // T45 (editor_ux_spec.json): forced-colors (Windows High Contrast) mode — a control with no
+  // border/outline/content that relies purely on background-colour can vanish entirely once the
+  // browser strips custom backgrounds. Found and fixed one real instance (.fx-toggle) building
+  // this; passes clean now (border:1px solid transparent, switched to CanvasText under
+  // forced-colors — the property forced-colors mode does NOT strip).
+  { name: 'editor:forced-colors-check', cmd: ['node', 'test/editor_forced_colors_check.mjs'] },
+  // T43 (editor_ux_spec.json): resting/hover/focus computed-style snapshot diff across component
+  // classes. Found .fx-select shows no visible hover or focus change.
+  { name: 'editor:hover-focus-matrix', cmd: ['node', 'test/editor_hover_focus_matrix.mjs', '--strict'] },
+  // T44 (editor_ux_spec.json): empty/loading/error state legibility (visibility + WCAG contrast).
+  { name: 'editor:empty-error-states', cmd: ['node', 'test/editor_empty_error_states.mjs', '--strict'] },
+  // T46 (editor_ux_spec.json): real browser-chrome zoom (CDP DeviceMetricsOverride) at 150%/200%
+  // — overlap + unmarked-clipping check against the deskbar/toolrail.
+  { name: 'editor:zoom-check', cmd: ['node', 'test/editor_zoom_check.mjs', '--strict'] },
+  // T47 (editor_ux_spec.json): oversized filename/preset-name injection — clipping/overlap check.
+  { name: 'editor:long-string-check', cmd: ['node', 'test/editor_long_string_check.mjs', '--strict'] },
+  // T48 (editor_ux_spec.json): canvas backing-store resolution vs emulated deviceScaleFactor.
+  { name: 'editor:hidpi-check', cmd: ['node', 'test/editor_hidpi_check.mjs', '--strict'] },
+  // T50 (editor_ux_spec.json): CVD simulation matrices against paired design tokens (ok/err,
+  // acc/mut) + a markup check that colour-coded controls also carry a non-colour signal.
+  { name: 'editor:cvd-check', cmd: ['node', 'test/editor_cvd_check.mjs', '--strict'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

@@ -37,6 +37,16 @@ const SCENARIOS = [
   { name: 'color', section: 'color' },
   { name: 'local_masks', section: 'local', seedMask: true },
   { name: 'crop', section: 'crop' },
+  // T51 (editor_ux_spec.json): widening this SAME harness's coverage from one baseline per
+  // component/panel to a small state matrix (theme x viewport), rather than building a new
+  // commercial-visual-AI-shaped tool — exactly what the spec item asked for. Not attempting the
+  // FULL default/hover/active/disabled/error x light/dark x desktop/mobile cross product in one
+  // pass (that's a much larger baseline set to maintain) — this adds the two axes (theme,
+  // viewport) that had ZERO coverage before, on the one panel state (default) most likely to
+  // regress silently under either.
+  { name: 'default_light', section: null, theme: 'light' },
+  { name: 'default_mobile', section: null, viewport: { w: 390, h: 844 }, mobile: true },
+  { name: 'adjust_hover', section: 'adjust', hoverSelector: '.fx-row' },
 ];
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
@@ -125,6 +135,13 @@ async function main() {
     await page.evaluate(() => { if (typeof fxState !== 'undefined') fxState.artSeed = 7.7; });
 
     for (const scenario of SCENARIOS) {
+      // Reset any per-scenario state from a PRIOR iteration (theme/viewport/mobile-class) so
+      // scenarios don't leak into each other — every scenario before T51's additions ran at the
+      // same fixed viewport/theme/class, so this reset never mattered until state-varying
+      // scenarios existed.
+      await page.setViewportSize({ width: VIEWPORT.w, height: VIEWPORT.h });
+      await page.evaluate(() => { document.body.classList.remove('light', 'mobile-fx'); });
+
       if (scenario.section) {
         const ok = await page.evaluate((s) => {
           if (typeof fxSection !== 'function') return false;
@@ -136,6 +153,16 @@ async function main() {
       }
       if (scenario.seedMask) await page.evaluate(seedMaskFn);
 
+      // Finish any in-flight CSSTransition after toggling theme/mobile classes — same fix as
+      // editor_gates.mjs's E7 (wireframe_diff_lib.mjs's settleForCapture): reading rendered state
+      // while a colour transition is still interpolating gives a flaky, run-to-run-different
+      // screenshot. Confirmed live here too: default_light initially came back ~2.4% different
+      // between two BACK-TO-BACK captures of identical state, before this fix.
+      const finishAnimations = () => document.getAnimations().forEach((a) => a.finish());
+      if (scenario.theme === 'light') { await page.evaluate(() => document.body.classList.add('light')); await page.evaluate(finishAnimations); }
+      if (scenario.viewport) await page.setViewportSize({ width: scenario.viewport.w, height: scenario.viewport.h });
+      if (scenario.mobile) { await page.evaluate(() => document.body.classList.add('mobile-fx')); await page.evaluate(finishAnimations); }
+
       // Reseed THEN force one fresh render — the canvas already holds whatever grain the last
       // (unseeded, pre-reseed) render painted, and reseeding Math.random alone doesn't repaint it.
       await page.evaluate(() => {
@@ -143,6 +170,11 @@ async function main() {
         if (typeof renderPreview === 'function') renderPreview();
       });
       await page.waitForTimeout(150);
+
+      if (scenario.hoverSelector) {
+        const el = page.locator(scenario.hoverSelector).locator('visible=true').first();
+        if (await el.count()) { await el.hover({ timeout: 5000 }).catch(() => {}); await page.waitForTimeout(150); }
+      }
 
       const outPath = path.join(OUT_DIR, `${scenario.name}.png`);
       await page.screenshot({ path: outPath });

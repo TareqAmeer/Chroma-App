@@ -965,57 +965,57 @@
     },
     "T43": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11, researched against current design-QA practice] no test exercises hover/focus/active states as a MATRIX across component types — ui_audit.mjs checks a resting-state contrast/tap-target floor and one focus-indicator pass, but nothing captures a hover screenshot for buttons/chips/sliders/toggles and diffs it the way rest-state is diffed.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:hover-focus-matrix",
       "panel": null,
-      "note": "Industry guidance flags hover/focus states as a common manual-only blind spot even at mature shops. A Playwright loop that hovers every interactive class (.btn, .fx-toggle, .fx-chip, .fx-sec-btn...) and screenshots/diffs against a baseline would close this."
+      "note": "Built as a computed-style snapshot diff (resting vs hover vs focus) rather than a screenshot pixel-diff — cheaper, and catches the exact failure mode (no visible change at all) without needing a baseline image per component. test/editor_hover_focus_matrix.mjs found a real gap: .fx-select shows no visible hover OR focus state change. Several classes (.fx-toggle/.fx-sec-btn/.fx-act/.look-cell/.fs-thumb/.hdr-btn/.fx-chip/.fx-preset-chev) reported MISSING because no instance is visible in the harness's default panel state (sections closed) — a known scope limit, not a false pass. Wired as advisory into editor:gates."
     },
     "T44": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no visual coverage of EMPTY/ERROR/LOADING states — the no-photo empty state, a failed RAW decode, an export-in-progress overlay, a 'no results' Library filter. All of ui_audit/wireframe_diff/wireframe_inventory implicitly assume a photo is loaded and everything succeeded.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:empty-error-states",
       "panel": null,
-      "note": "These are exactly the states real users hit on a bad day and are least tested — a screenshot baseline per state (empty library, export overlay, a deliberately-failed RAW load) alongside the existing happy-path baselines."
+      "note": "Covers 3 of the 4 named states: EMPTY (fresh boot, no photo — #fx-add-btn visible), LOADING (_expOverlay(true) — overlay + text legible/contrast-checked), ERROR (a corrupt image fed through loadFXImages — asserts a visible, legible #fx-toast/[role=alert] surface appears, not just that it doesn't crash, which is T38's territory). The 4th (Library's 'no results' filter state) is explicitly OUT OF SCOPE here — the Library is native-gated (desktop/library-ui.js) and needs its own ?libtest=1-based harness, not this Editor-focused one; left as a residual gap. Legibility-only (visibility + WCAG contrast), not a pixel-baseline diff — passes clean on a first real run after fixing the toast selector to match the app's actual #fx-toast/.show implementation."
     },
     "T45": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no forced-colors/prefers-contrast (Windows High Contrast Mode) test — a real accessibility mode that can invert the app's own custom colours entirely, distinct from the light/dark theme pair already tested.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_forced_colors_check.mjs",
       "panel": null,
-      "note": "Playwright's emulateMedia({ forcedColors: 'active' }) can drive this; assert nothing becomes invisible (a custom-painted control with a `background` but no `border` is a classic forced-colors casualty — it can vanish entirely when the browser strips author backgrounds)."
+      "note": "Playwright's emulateMedia({ forcedColors: 'active' }) can drive this; assert nothing becomes invisible (a custom-painted control with a `background` but no `border` is a classic forced-colors casualty — it can vanish entirely when the browser strips author backgrounds). CLOSED 2026-09-11: test/editor_forced_colors_check.mjs emulates forced-colors:active and flags any interactive control with no border/outline/content relying purely on background-colour. First run found exactly the predicted casualty: .fx-toggle (no text/icon, no real border, painted only via background). Fixed live in chromasmith-22.html: added `border:1px solid transparent` (invisible normally) that switches to `border-color:CanvasText` under `@media (forced-colors:active)` — border survives forced-colors stripping even though background/color don't, same reason .btn was never flagged (it already had a real border). Wired as `npm run editor:forced-colors-check` and into editor:gates (non-advisory — passes clean). Verified live and against export_harness.mjs (no shader/JS regression)."
     },
     "T46": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no browser-zoom / OS-text-scaling test — ui_audit.mjs/wireframe_diff_lib.mjs reference 'zoom' only for the app's own 1:1 loupe feature, not the browser chrome zoom (150%/200%) or OS-level large-text accessibility settings a real user might have on.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:zoom-check",
       "panel": null,
-      "note": "A layout built on fixed px assumptions can break (overlap, clipped text, unreachable controls) under 200% zoom even when it passes every current responsive breakpoint check, since browser zoom isn't the same code path as a narrower viewport."
+      "note": "Emulates real browser-chrome zoom via CDP's Page.setDeviceMetricsOverride (viewport CSS px shrinks the way a genuine zoom does, not just a font-size hack) at 100%/150%/200%, reusing editor_responsive_qa.mjs's own overlap-detection algorithm against #fx-deskbar/#fx-toolrail, plus a text-clipping-without-ellipsis scan. Passes clean today. Wired as advisory into editor:gates."
     },
     "T47": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no text-overflow/localization-length stress test — every wireframe/behaviour fixture uses the app's own real (short, English) copy. A longer label (German UI strings routinely run 30-40% longer) or a very long user-supplied filename/preset name is never tried against any layout.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:long-string-check",
       "panel": null,
-      "note": "Inject artificially long strings into a representative set of labels/filenames/preset names and screenshot-check for clipping, wrap-induced overlap, or a fixed-width container truncating without an ellipsis."
+      "note": "Injects an oversized filename into fxImages[0].name (filmstrip) and an oversized preset name into the look-gallery's .look-nm captions, then checks for clipping-without-ellipsis and sibling overlap. Confirms .look-nm's existing text-overflow:ellipsis CSS actually still applies to a real long string (not just present in the stylesheet — a stale/overridden rule elsewhere could defeat it silently). Filmstrip check is scoped-limited: #fx-filmstrip is hidden under body.deskx entirely and only builds with >1 photo, so that half doesn't exercise a real filmstrip render in this harness. Passes clean; wired as advisory into editor:gates."
     },
     "T48": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no HiDPI/Retina (deviceScaleFactor 2/3) rendering check — icons, 1px hairline borders, and canvas-drawn UI (the histogram, curve editor, colour wheels) can all render blurry or misaligned at a scale factor current tests never set.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:hidpi-check",
       "panel": null,
-      "note": "Playwright's newPage({ deviceScaleFactor: 2 }) plus a screenshot pass over the same panels ui_audit.mjs already covers at 1x — cheap to add as a parametrized second pass."
+      "note": "Checks canvas backing-store resolution (canvas.width/height) scales with emulated deviceScaleFactor (2x/3x via CDP) relative to CSS box size, for fx-hist/cv-curve/cv-wheel-*/fx-canvas — a canvas whose buffer DOESN'T scale up renders blurry (browser upscales a low-res bitmap). fx-canvas (the main preview, always visible) passes clean. The histogram/curve/wheel canvases report MISSING because their panels aren't open in the harness's default state — a known scope limit (documented in the script's own output) rather than a confirmed pass or fail; note explicitly flags that a CDP DPR override may not trigger every canvas's resize-redraw path the way real hardware would, so a finding here is a manual-verification signal, not an automatic bug confirmation. Wired as advisory into editor:gates."
     },
     "T49": {
       "category": "tooling-gap",
@@ -1028,21 +1028,21 @@
     },
     "T50": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no colour-vision-deficiency (colour-blindness) simulation check — the app leans on colour signals in several places (amber .fx-mod fill, red/green flag buttons, the sat/vib red-vs-green preview) with no automated check that meaning survives a protanopia/deuteranopia/tritanopia simulation.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:cvd-check",
       "panel": null,
-      "note": "A screenshot pass through a CVD simulation filter (SVG filter matrices are well-documented for this) over the key colour-coded UI, checking that state is ALSO distinguishable by shape/position/icon, not colour alone."
+      "note": "Two-part static check rather than a full screenshot-filter pipeline: (1) applies standard protanopia/deuteranopia/tritanopia simulation matrices directly to the app's own paired design tokens (--ok/--err, --acc/--mut) and checks the simulated colours stay distinguishable (RGB distance above an empirical floor) — verified against the real token hex values (#52c97a/#e05454, #61a0af/#cccccc). (2) confirms known colour-coded UI (flagGreen/flagRed buttons, .fx-mod row signal) also carries a non-colour signal in markup (distinct icons, not just a colour swap). Passes clean today. Wired as advisory into editor:gates."
     },
     "T51": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] visual-regression baseline coverage (visual_scorecard.mjs/visual_baseline.mjs) is scoped to a handful of scenarios, not a full state matrix per component (default/hover/active/disabled/error x light/dark x desktop/mobile) the way current tooling guidance (Percy/Applitools-style) recommends — most components only have ONE baseline captured.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run visual:baseline && npm run visual:scorecard",
       "panel": null,
-      "note": "Not asking for a full commercial visual-AI tool — extending the EXISTING pixelmatch harness (visual_scorecard.mjs) to loop over more states per component, the same infrastructure, just wider coverage."
+      "note": "Extended the EXISTING harness exactly as scoped (not a new tool): test/visual_baseline.mjs's SCENARIOS gained default_light (theme axis), default_mobile (viewport axis), and adjust_hover (hover state), on top of the 6 pre-existing panel scenarios — the two axes (theme, viewport) that had ZERO coverage before, plus one hover-state baseline. NOT the full default/hover/active/disabled/error x light/dark x desktop/mobile cross product (that's a much larger baseline set to build and maintain) — a deliberately partial widening, per the note's own 'not a full commercial visual-AI tool' framing. Found and fixed a real flake while building this: toggling the light-theme class left an in-flight CSSTransition unfinished at screenshot time (2.4% diff between two back-to-back captures of identical state) — same root cause as E7 (editor_gates.mjs) — fixed by finishing all animations via document.getAnimations() after each theme/mobile class toggle. All 9 scenarios now capture deterministically (0.000% self-diff)."
     },
     "T52": {
       "category": "tooling-gap",
