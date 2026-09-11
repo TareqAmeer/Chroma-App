@@ -91,8 +91,13 @@ for (const entry of surfacesDoc.surfaces) {
     continue;
   }
   if (entry.opened !== true) {
-    // unreachable this pass (or splash) — 0 images is correct, not a finding
-    surfaceResults.push({ id: entry.id, ok: true, note: 'unreachable/no live route — 0 images expected' });
+    // 2026-09-11: this used to be ok:true — "unreachable this pass" silently passed the audit, and
+    // 8 real surfaces (Library info panel, compare view, 5 dialogs, import bar) ended up with no
+    // images and no alert. Unreachable now FAILS unless the user has explicitly accepted it
+    // (entry.approvedBy === 'user', with a reason). Splash has an approved wireframe stand-in.
+    const approved = entry.approvedBy === 'user' || entry.id === 'splash';
+    if (!approved) findings.push({ id: entry.id, kind: 'NOT_CAPTURED', detail: `no images — marked unreachable (${String(entry.note || 'no reason given').slice(0, 140)}). Find a real way to open it, or get the user to approve skipping it (approvedBy:"user")` });
+    surfaceResults.push({ id: entry.id, ok: approved, note: approved ? 'user-approved skip' : 'NOT CAPTURED' });
     continue;
   }
 

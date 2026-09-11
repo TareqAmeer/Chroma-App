@@ -123,6 +123,31 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 >
 > Done when `capture_audit.mjs` passes for every surface and the visual review has no open flags. Log counts and what the review caught in STATE.md, then commit and push.
 
+**S6d: Capture the 56 hidden surfaces** (Sonnet 5 + Haiku helpers; alone on the machine; if the same failure repeats twice, stop and continue in a new Opus 5 chat)
+> Read docs/ui-workflow/STATE.md and follow its rules. `node test/surface_coverage_check.mjs` now fails with 56 surfaces that were counted as covered but never captured open:
+> - **46 `COVERS_HIDES_SURFACE`:** an id listed in a parent's `covers` that is hidden or absent when the parent is shown. Examples: crop, mask, guides and brush overlays; the before/after split line; the multi-photo filmstrip; the video strip; the background menu; the history list; the Library sort and view menus; the empty Library; the batch bar; the review grid; the offline bar.
+> - **10 `NOT_CAPTURED`:** marked unreachable with no images. These are the Library info panel, compare view, 5 Library dialogs, the import bar and `lib-grid`.
+>
+> `node test/capture_audit.mjs` fails on the same 10. Run `node test/surface_coverage_check.mjs --json` for the exact list; it's the only to-do list.
+> Task, for each item:
+> 1. **Decide how it's captured.** Either it becomes its own surface in `design/surfaces.json` (`selector` = the element itself, plus `openSteps`), or a **named state** of its parent whose `openSteps` make it visible (for example `library` with state `empty`, or `fx-deskbar` with state `history-open`). Remove it from `covers` either way. `covers` is only for parts visible whenever the parent is.
+> 2. **Find the real way to open it.** grep for the function or button that shows it and read that code. Ways to try:
+>    - the app's own buttons and keyboard shortcuts: click the real control (`#lib-info-btn` / I for Info, `#lib-compare-btn` / C for Compare) rather than calling closure-local functions
+>    - the libtest mocks: `?libtest=1`, `window.libtestLrConnect()`
+>    - fixtures in `test/fixtures/`: several photos, a video, an empty library
+>    - `page.route` to simulate offline or slow network
+>    - for dialogs only triggered by a backend flow, find the function that builds the dialog and call it with realistic arguments
+>
+>    "Ran out of time" is not a reason to mark something unreachable.
+> 3. **If it truly can't be opened** after both approaches, leave `unreachable` with the exact reason, and list it in STATE.md under "Needs user approval to skip". Don't set `approvedBy` yourself; only the user approves. The gate stays red until they do.
+> 4. **Capture only the new surfaces and states** with `test/surface_capture.mjs --only=<ids>`, using the S6c scope: desktop, photo loaded, both themes, 1920 wide at the default layout; add 760 wide only for bars that stretch with the window. Don't re-capture existing surfaces. A Haiku subagent runs it and reports failures only. Open 3 of the new captures yourself with Read to confirm they show the thing open.
+> 5. **Update the review page** (https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61; read it first so saved choices are kept):
+>    - Add the new cards.
+>    - Put a line at the top: "N of M surfaces captured", with every uncaptured one listed and its reason, so a gap is never silent again.
+>    - Mind the platform's 256-file cap per artifact (see the S7c log); use the Crops artifact for crops.
+>
+> Done when `node test/surface_coverage_check.mjs` and `node test/capture_audit.mjs` both pass, or fail only on items listed in STATE.md as waiting for user approval. Log counts in STATE.md, then commit and push.
+
 **S7c: Republish the review page** (Sonnet 5; after S6c)
 > Read docs/ui-workflow/STATE.md and follow its rules. Republish https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61 from the S6c captures.
 > - **Read it first** (`action: "read"`) so its saved Keep/Redesign choices and notes are kept.

@@ -108,3 +108,8 @@ Learned the hard/expensive way:
    `editor:responsive` is a blocking gate. Rule: **every width** = every viewport × every resizable
    region at its min, default and max × every mode (e.g. rail labels/icons) — and prove a new check
    by running it on the broken build first.
+   Addendum (same day): the loophole moved rather than closed — a "covers" list and an "unreachable" flag
+   let 56 surfaces pass without ever being captured. Any escape hatch in a completeness check must itself
+   be verified (a covered part must be visible inside its parent) or require the user's explicit approval;
+   a session may never grant itself an exemption.
+

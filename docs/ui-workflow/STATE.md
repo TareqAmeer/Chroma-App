@@ -433,3 +433,16 @@ call `ui:test`) will currently fail on that until it's fixed.
   wireframe screenshot stand-in it used to have; regenerated it fresh (Playwright screenshot of
   `chromasmith-design/project/Splash Screen.html` at the app's 1400×900 desktop viewport) rather
   than leaving splash uncapturable on the review page.
+
+
+**Coverage loopholes closed — 2026-09-11 (planning session)**
+- User found the review page still missing many elements, with no alert. Two loopholes: (1) the gap-fill
+  (946f6b1) put 46 hidden surfaces (overlays, filmstrip, history, Library menus, empty Library, batch bar…)
+  in big parents' `covers`, so they "counted" without ever being captured open; (2) `capture_audit.mjs`
+  passed `unreachable` surfaces as ok, and 10 were given up on ("time budget").
+- Fixed in the tools: surface_coverage_check.mjs integrity pass opens each parent and fails any covered id
+  that is hidden/absent/outside it (COVERS_HIDES_SURFACE); both scripts fail NOT_CAPTURED unless the user
+  set approvedBy:"user". Current: 46 + 10 = 56 failures. editor:surface-coverage is blocking, so app
+  commits are held until S6d fixes them — intended, this is the alert that was missing.
+- S6d prompt added to sessions.md. Review page must now show "N of M captured" + the uncaptured list.
+

@@ -129,13 +129,74 @@ server.close();
     }
   }
 }
+// ── Integrity pass (added 2026-09-11): a clean result above can still hide surfaces two ways,
+// and both happened. (1) `covers` — the gap-fill session listed the crop/mask/guides overlays,
+// filmstrip, history list, sort/view menus and the empty Library as "parts" of big surfaces, so
+// they counted as covered while never being captured open. A covered id is only a real sub-part
+// if it is VISIBLE, inside its parent, when the parent is shown with its own openSteps; anything
+// that has to be opened separately needs its own surface. (2) `unreachable` — 8 surfaces were
+// given up on and silently passed. Both now fail here.
+const integrity = [];
+for (const s of surfaces) {
+  if (s.opened !== true && s.id !== 'splash' && s.approvedBy !== 'user') {
+    integrity.push({ id: s.id, kind: 'NOT_CAPTURED', detail: `marked unreachable: ${String(s.note || 'no reason').slice(0, 120)}` });
+  }
+}
+{
+  const b2 = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
+  const pg = await b2.newPage({ ...DETERMINISTIC_CONTEXT_OPTIONS });
+  const port = (await new Promise((r) => { const sv = createServer(async (req, res) => {
+    try { const u = decodeURIComponent(req.url.split('?')[0]); const d = await readFile(path.join(ROOT, u.slice(1)));
+      res.writeHead(200, { 'Content-Type': u.endsWith('.html') ? 'text/html' : u.endsWith('.js') ? 'text/javascript' : 'application/octet-stream' }); res.end(d);
+    } catch { res.writeHead(404); res.end(); } }).listen(0, '127.0.0.1', () => r(sv)); globalThis.__sv2 = sv; })).address().port;
+  for (const s of surfaces.filter((x) => (x.covers || []).length && x.opened === true)) {
+    await pg.setViewportSize({ width: 1440, height: 900 });
+    await pg.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await pg.waitForTimeout(1200);
+    await pg.evaluate(() => document.querySelectorAll('button').forEach((x) => { if (x.textContent.trim() === 'Got it') x.click(); }));
+    await pg.keyboard.press('Escape');
+    await pg.evaluate(async (b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      if (typeof window.loadFXImages === 'function') await window.loadFXImages([new File([bytes], 'portrait.png', { type: 'image/png' })]);
+    }, fixtureB64);
+    await pg.waitForTimeout(600);
+    for (const st of s.openSteps || []) {
+      try {
+        if (st.eval) await pg.evaluate(`void (${st.eval})`);
+        else if (st.click) await pg.click(st.click, { timeout: 2000 });
+        else if (st.wait) await pg.waitForTimeout(st.wait);
+      } catch { /* a broken step shows up as the parent not being visible below */ }
+    }
+    await pg.waitForTimeout(300);
+    const res = await pg.evaluate(({ sel, ids }) => {
+      const vis = (el) => el && (!el.checkVisibility || el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) && el.getBoundingClientRect().width > 1 && el.getBoundingClientRect().height > 1;
+      let parent = null; try { parent = document.querySelector(sel); } catch {}
+      const pb = parent && parent.getBoundingClientRect();
+      return ids.map((id) => {
+        const el = document.getElementById(id);
+        if (!el) return { id, why: 'not in the DOM when the parent is shown' };
+        if (!vis(el)) return { id, why: 'hidden when the parent is shown — it opens separately' };
+        const b = el.getBoundingClientRect();
+        if (pb && (b.right < pb.left || b.left > pb.right || b.bottom < pb.top || b.top > pb.bottom)) return { id, why: 'visible but outside the parent' };
+        return null;
+      }).filter(Boolean);
+    }, { sel: s.selector || '#' + s.id, ids: s.covers });
+    for (const r of res) integrity.push({ id: r.id, kind: 'COVERS_HIDES_SURFACE', detail: `listed as part of "${s.id}" but ${r.why} — capture it: its own surface with openSteps, or a named state of "${s.id}" whose capture opens it` });
+  }
+  await b2.close(); globalThis.__sv2.close();
+}
 const all = [...regions.values()];
 const missing = all.filter((r) => !r.covered);
-if (process.argv.includes('--json')) console.log(JSON.stringify({ regions: all, missing }, null, 2));
+const failCount = missing.length + integrity.length;
+if (process.argv.includes('--json')) console.log(JSON.stringify({ regions: all, missing, integrity }, null, 2));
 else {
   console.log(`surface_coverage_check: ${all.length} layout regions found, ${missing.length} with no design/surfaces.json entry of their own\n`);
   for (const r of missing) console.log(`  MISSING  #${r.id}  (${r.w}x${r.h}, seen in: ${r.layouts.join(', ')})`);
-  console.log(missing.length ? '\nAdd each as its own surface (selector = the region itself, or list its id in a surface\'s "covers").\nRESULT: FAIL' : '\nRESULT: PASS');
+  if (integrity.length) {
+    console.log(`\n${integrity.length} surface(s) counted as covered but never captured open:`);
+    for (const f of integrity) console.log(`  ${f.kind.padEnd(21)} #${f.id}  ${f.detail}`);
+  }
+  console.log(failCount ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 }
-process.exit(missing.length ? 1 : 0);
+process.exit(failCount ? 1 : 0);
 
