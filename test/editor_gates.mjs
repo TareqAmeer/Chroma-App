@@ -81,7 +81,11 @@ const ADVISORY_MODE = process.argv.includes('--advisory');
 // editor:token-check (T5/T10) joins the advisory set: 225 pre-existing findings on a clean tree
 // the moment it started running (same shape as inventory/responsive/coverage's own 253) — a
 // human sees the noise every commit without being blocked by someone else's unrelated backlog.
-const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check']);
+// editor:canvas-resize-leak (T33) also joins advisory: a heap-growth trend measurement is
+// inherently noisier than a structural/DOM check (allocator timing, SwiftShader software-GL
+// variance) — a human should see a FAIL and look, but a transient false alarm shouldn't block a
+// commit the way a real structural regression should.
+const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak']);
 
 const GATES = [
   { name: 'editor:inventory', cmd: ['node', 'test/editor_wireframe_inventory.mjs'] },
@@ -126,6 +130,9 @@ const GATES = [
   // asserting a bounded settle time and no uncaught error — the before-ship half of what
   // editor_hang_diagnose.mjs (T28) exists to clean up after a hang is already reported live.
   { name: 'editor:fuzz-input', cmd: ['node', 'test/editor_fuzz_input.mjs'] },
+  // T33 (editor_ux_spec.json): repeatedly resizes the preview canvas and watches JS heap trend —
+  // advisory (heap-growth measurement is noisier than a structural check, see ADVISORY_GATES).
+  { name: 'editor:canvas-resize-leak', cmd: ['node', 'test/editor_canvas_resize_leak.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

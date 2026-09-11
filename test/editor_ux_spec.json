@@ -875,12 +875,12 @@
     },
     "T33": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] resizing an on-screen WebGL canvas is a documented WebKit/iOS Safari memory-leak trigger (Apple Developer Forums thread 668999) — directly relevant since the shipping desktop/iOS engine IS WebKit — and nothing here resizes the FXR canvas repeatedly and checks for growth.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_canvas_resize_leak.mjs",
       "panel": null,
-      "note": "A loop that resizes the preview canvas (window resize / panel open-close / loupe toggle, all of which resize the backing store) N times and checks performance.memory doesn't grow monotonically."
+      "note": "A loop that resizes the preview canvas (window resize / panel open-close / loupe toggle, all of which resize the backing store) N times and checks performance.memory doesn't grow monotonically. CLOSED 2026-09-11: test/editor_canvas_resize_leak.mjs resizes the viewport (4 sizes, 15 cycles) with a forced GC before each JS-heap sample, comparing early-run vs late-run mean heap size (trend, not a single delta, to tolerate normal allocator noise). Wired as `npm run editor:canvas-resize-leak` and into editor:gates as advisory (heap-growth measurement is inherently noisier than a structural check). Verified live: 15 cycles, 1.7% growth, well under the 40% threshold. Chromium doesn't reproduce the WebKit-specific bug this was researched from, but does catch a genuine leak in the app's OWN resize handling; T34's webkit-smoke is the complementary engine-specific gate."
     },
     "T34": {
       "category": "tooling-gap",
