@@ -124,6 +124,24 @@ export function printRecheck(rc) {
 // Call after a repair pass with the file(s) the fix was SUPPOSED to touch. Reports any changed
 // file outside that set — cheap, and it's exactly the check that would have caught a repair
 // pass drifting into files nobody asked it to touch.
+// T7 (editor_ux_spec.json): fxMarkModifiedSliders() (chromasmith-22.html) debounces 120ms before
+// flagging a row .fx-mod, which every header Reset button's visibility is gated on via :has().
+// Several editor_wireframe_behaviour.mjs tests independently re-derived this as an ad-hoc
+// `page.waitForTimeout(200)` after a slider/colour/toggle edit and before asserting Reset is
+// visible — each one a magic number with no shared name, and a couple flaked before landing on
+// 200ms empirically. This is the one place that knowledge should live: poll the target row for
+// `.fx-mod` (or, with no selector, just wait out the debounce) instead of a flat sleep, so a test
+// doesn't need to guess a safety margin and isn't tied to the literal 120ms if it's ever retuned.
+export async function waitForFxMod(page, rowSelector, { timeout = 2000 } = {}) {
+  if (!rowSelector) { await page.waitForTimeout(200); return; }
+  await page.locator(rowSelector).evaluate((el) => el.offsetHeight); // force layout before polling
+  await page.waitForFunction(
+    (sel) => { const el = document.querySelector(sel); return el && el.classList.contains('fx-mod'); },
+    rowSelector,
+    { timeout },
+  );
+}
+
 export function reportChangeScope(expectedFiles) {
   const changed = execSync('git diff --name-only && git diff --cached --name-only', { cwd: process.cwd() })
     .toString().split('\n').map((l) => l.trim()).filter(Boolean);

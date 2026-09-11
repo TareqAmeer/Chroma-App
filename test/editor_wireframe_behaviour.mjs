@@ -16,7 +16,7 @@ import { test as base, expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { settleForCapture } from './wireframe_diff_lib.mjs';
+import { settleForCapture, waitForFxMod } from './wireframe_diff_lib.mjs';
 
 const ROOT = process.cwd();
 
@@ -449,10 +449,9 @@ test.describe('detail panel (DT1)', () => {
     await expect(reset).toBeHidden();
     const slider = page.locator('#sl-nr-lum');
     await slider.fill('60');
-    // fxMarkModifiedSliders() debounces 120ms before flagging .fx-mod, which gates the reset
-    // button's visibility via :has() — wait it out before clicking (see the vig test's comment
-    // in the film-panel block for the failure this caused when there was no buffer).
-    await page.waitForTimeout(200);
+    // T7 (editor_ux_spec.json): poll the actual .fx-mod flag instead of a flat sleep — see
+    // waitForFxMod's own comment in wireframe_diff_lib.mjs for why this replaced waitForTimeout.
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="nr"] .fx-row:has(#sl-nr-lum)');
     await page.click('.fx-ctrl[data-fxsec="nr"] .fx-ctrl-title-reset');
     await expect(slider).toHaveValue('0');
   });
@@ -464,7 +463,7 @@ test.describe('detail panel (DT1)', () => {
     const slider = page.locator('#sl-deconv-amt');
     await slider.scrollIntoViewIfNeeded();
     await slider.fill('40');
-    await page.waitForTimeout(200);
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="deconv"] .fx-row:has(#sl-deconv-amt)'); // T7
     await page.click('.fx-ctrl[data-fxsec="deconv"] .fx-ctrl-title-reset');
     await expect(slider).toHaveValue('0');
   });
@@ -508,17 +507,13 @@ test.describe('film panel (F1)', () => {
     const bloomSlider = page.locator('#sl-bloom-a');
     await bloomSlider.scrollIntoViewIfNeeded();
     await bloomSlider.fill('80');
-    await page.waitForTimeout(200); // fx-mod debounce
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="bloom"] .fx-row:has(#sl-bloom-a)'); // T7
     await page.click('.fx-ctrl[data-fxsec="bloom"] .fx-ctrl-title-reset');
     await expect(bloomSlider).toHaveValue('40');
     const vigSlider = page.locator('#sl-vig');
     await vigSlider.scrollIntoViewIfNeeded();
     await vigSlider.fill('90');
-    // fxMarkModifiedSliders() debounces 120ms before it flags the row .fx-mod (chromasmith-22.html)
-    // — the reset button's visibility is gated on that class via :has(), so a click right after
-    // fill() can race it. The bloom assertion above happens to give enough time by coincidence;
-    // vig has no such buffer, so wait explicitly.
-    await page.waitForTimeout(200);
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="vig"] .fx-row:has(#sl-vig)'); // T7
     await page.click('.fx-ctrl[data-fxsec="vig"] .fx-ctrl-title-reset');
     await expect(vigSlider).toHaveValue('50');
   });
@@ -545,7 +540,7 @@ test.describe('frame panel (FR1)', () => {
     const color = page.locator('#cl-b1');
     const slider = page.locator('#sl-b1-t');
     await slider.fill('5');
-    await page.waitForTimeout(200); // fx-mod debounce, see the film-panel vig test's comment
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="borders"] .fx-row:has(#sl-b1-t)'); // T7
     await page.evaluate(() => {
       const c = document.getElementById('cl-b1');
       c.value = '#ff0000';
