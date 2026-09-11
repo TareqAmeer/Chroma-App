@@ -404,6 +404,76 @@ call `ui:test`) will currently fail on that until it's fixed.
   `mobile-sheet` — this surface wasn't added to that special-case list). Pre-existing gap, not
   part of what this session was asked to fix; left for whoever next touches `lib-grid`.
 
+**Token gates in editor:gates + allowlist audit (§1/§2) + gate baseline — 2026-09-12 — done**
+- Added `editor:tokens-check` (`node scripts/build-tokens.mjs --check`) and `editor:tokens-verify`
+  (`design/verify_tokens.py`) as blocking entries in `test/editor_gates.mjs`'s `GATES` array (not
+  in `ADVISORY_GATES`). `githooks/pre-commit` already ran both blocking (unconditionally, whenever
+  `chromasmith-22.html`/`desktop/library-ui.js`/`design/tokens.json`/the two build scripts change —
+  from the earlier "Token generator gates" session) — no hook change needed, just confirmed.
+- Allowlist audit (`docs/ui-workflow/allowlist-audit.md`) §1 (delete/re-baseline, confident):
+  - Re-recorded the Library icon-shape baseline (`npm run wireframe:icons`, after a fresh
+    `build-desktop.sh`) — 58 glyphs written to `test/baselines/wireframe_icons.json` — then deleted
+    the 14 `topbar#0..13: shape` entries from `test/wireframe_accepted.json`. Confirmed clean:
+    `npm run wireframe:test` still PASSes (65 findings, all allowlisted, 0 new/persisting/resolved
+    vs the pre-edit run).
+  - Deleted the 1 stale duplicate "rail order/content (older entry)" from
+    `test/editor_wireframe_accepted.json` (its own reason already said "left for history").
+  - `test/editor_responsive_accepted.json` had only 1 entry left (T58) going in — the audit doc's
+    "2 delete" for this file were already gone (removed in the earlier "Tool-rail clipping"
+    session's cleanup); nothing to do.
+- §2 (verify-then-delete, 28 total across `editor_wireframe_accepted.json` (8) and
+  `editor_wireframe_inventory_accepted.json` (20)): removed all 28, rebuilt `desktop/dist/`, reran
+  `node test/editor_wireframe_inventory.mjs` and `node test/editor_wireframe_diff.mjs` via a Haiku
+  subagent, checked the unallowlisted-findings list line by line against what was removed.
+  - Inventory's 20 (Gamut warning / Show gamut warning / EXTRA 7x·3x·8x·2x button / the
+    ✓Editor·Match & Refine·Color Copy·Collage·Guide·Library(L)·Reset all edits·About rows /
+    topbar aggregates): **none reappeared** — confirmed genuinely fixed by the settings-menu
+    consolidation. Stayed deleted.
+  - Wireframe-diff's 8 (undo/redo cluster borderRadius+borderColor, and the 6 borderColor
+    "token-drift" entries for topbar/tool rail/tool panel/docked filmstrip ×2): **all 8 still
+    fired**, byte-for-byte the same mismatched values as before (app's border-color/-radius
+    literals haven't actually changed since the audit doc was written) — restored all 8.
+    `editor_wireframe_accepted.json`: 20 → 19 net (1 deleted in §1, 20 removed then 8 restored
+    in §2 nets to −9, but the earlier full-list read already accounted for both passes).
+- §3 (real fix needed, 39 — left in place, not touched beyond backlog bookkeeping): checked every
+  named item against `test/editor_ux_spec.json`; T55/T56/T57/T58/T11 and items 3.1.6/3.1.10/
+  3.4.1/3.4.3/3.4.5–3.4.9/3.4.11/3.4.12 already existed. Added 5 new backlog items for the ones
+  that didn't: **T61** (#fx-statusbar not built), **T62** (topbar height 44→48px), **T63** (title
+  block overlaps flag/favourite buttons), **T64** (Library gear icon hardcoded 15×15), **T65**
+  (rail label font-size tallies, downstream of T55). `editor_ux_spec.json`: 131 → 136 items.
+- §4 (intended, 92) and §5 (checker fixes) untouched, per instruction.
+- **Before/after allowlist counts**: `editor_wireframe_accepted.json` 20→19,
+  `editor_responsive_accepted.json` 1→1 (no change), `editor_wireframe_inventory_accepted.json`
+  68→48, `test/wireframe_accepted.json` 92→78. Total 181→146 (audit doc's own "roughly 140"
+  estimate was close; the 6-entry gap is the 8 wireframe-diff entries restored after verification
+  that the doc's table didn't anticipate failing verification).
+- **Gate baseline recorded 2026-09-12** (via Haiku subagents running `npm run editor:gates` and
+  `npm run ui:test` against the post-audit tree, plus a direct `node test/surface_coverage_check.mjs`
+  run to see the actual findings): "gates pass" from now on means **no failures beyond this list**:
+  - `editor:inventory` — FAIL, advisory. Hundreds of unallowlisted findings, mostly the Looks/
+    Adjust panel (Phase H) restructuring the audit doc's §3 already tracks, plus new detail-panel/
+    film-panel (Noise Reduction, Lens Correction, RAW controls) and rail/topbar atom-count drift
+    not previously catalogued in the allowlist at all. Pre-existing; not introduced by this
+    session's edits (none of the 20 verified-deleted entries reappeared in this list — it's a
+    separate, larger backlog). Not itemized further here — out of scope for this task.
+  - `editor:token-check` — FAIL, advisory. Unchanged from the 2026-09-11 baseline (role-mismatch
+    heuristic backlog, S4).
+  - `editor:axe-check`, `editor:icon-check`, `editor:motion-token-check`, `editor:hover-focus-matrix`,
+    `editor:hidpi-check` — FAIL, all advisory. Unchanged from the 2026-09-11 baseline (same 7
+    advisory WARNs as recorded there, now 6 of the original 7 plus inventory = still 7).
+  - `editor:surface-coverage` — FAIL, **not advisory** (removed from `ADVISORY_GATES` in the
+    "Coverage gap-fill" session). 28 `COVERS_HIDES_SURFACE` findings — sub-elements of already-
+    inventoried surfaces (settings sub-panes, Library empty-state variants, deskbar history
+    popover, split/timeline popover internals, etc.) that the checker wants captured as their own
+    named states rather than as `covers` metadata. Confirmed via a direct run (not just the
+    subagent's PASS/FAIL line) that this is a real, structural finding — not a flake or something
+    broken by this session's edits (untouched `design/surfaces.json`/`test/surface_capture.mjs`).
+    New to this baseline (wasn't in the 2026-09-11 gate-baseline note, which predates the coverage
+    gate going blocking) — flagged here as the actual current state, not silently inherited.
+  - `ui:test` — FAIL. Same single pre-existing gap as 2026-09-11: `button.fx-info-i` "i" 14×14 <
+    28px tap target, 9px < 11px font minimum.
+  - Everything else in `editor:gates` (21 of 29 named gates, including the 2 new token gates) PASS.
+
 **S7c — 2026-09-11 — done, republished from S6c captures, split into two artifacts**
 - Republished the Surface Triage artifact (`https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61`)
   from S6c's re-capture: a Layouts section (56 whole-window shots — panel-fx 40 + library 16 —

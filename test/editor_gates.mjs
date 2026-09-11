@@ -203,6 +203,15 @@ const GATES = [
   // entries; then remove it from ADVISORY_GATES so a new region can never go uninventoried.
   { name: 'editor:surface-coverage', cmd: ['node', 'test/surface_coverage_check.mjs'] },
   { name: 'editor:cvd-check', cmd: ['node', 'test/editor_cvd_check.mjs', '--strict'] },
+  // Token generator drift gate (S3/S4/"Token generator gates" session): design/tokens.json is
+  // the source of truth for chromasmith-22.html's :root/body.light and library-ui.js's DS block;
+  // --check fails if regenerating from tokens.json would change either file (hand-edit or
+  // tokens.json/token-layout.json drift). Blocking — a drifted token silently reverts on the
+  // next build-tokens run otherwise.
+  { name: 'editor:tokens-check', cmd: ['node', 'scripts/build-tokens.mjs', '--check'] },
+  // verify_tokens.py re-parses all three source blocks and asserts every declared CSS var is
+  // either in design/tokens.json or documented in design/token-conflicts.md. Blocking.
+  { name: 'editor:tokens-verify', cmd: ['bash', '-c', 'if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 design/verify_tokens.py; else python3 design/verify_tokens.py; fi'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

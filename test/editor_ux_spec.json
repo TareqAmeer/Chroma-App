@@ -1124,6 +1124,46 @@
       "check": "test/surface_coverage_check.mjs (editor:surface-coverage, advisory until S6b lands, then hard)",
       "panel": null,
       "note": null
+    },
+    "T61": {
+      "category": "editor-chrome",
+      "status": "open",
+      "source": "[allowlist-audit.md, 2026-09-11] #fx-statusbar not built \u2014 the wireframe's empty 26px status bar has no app counterpart yet.",
+      "wireframeRef": "Editor (Developer) View.dc.html: #fx-statusbar",
+      "check": "editor:inventory ([topbar]/[panel] app container #fx-statusbar NOT FOUND), editor:wireframe-test (status bar not found in app)",
+      "note": "Real, scheduled UI work (plan Phase F). Allowlisted in test/editor_wireframe_accepted.json and test/editor_wireframe_inventory_accepted.json until built."
+    },
+    "T62": {
+      "category": "editor-chrome",
+      "status": "open",
+      "source": "[allowlist-audit.md, 2026-09-11] topbar height: wireframe \"48px\" vs app \"44px\" (--deskx-topbar-h).",
+      "wireframeRef": "Editor (Developer) View.dc.html: topbar",
+      "check": "editor:wireframe-test (topbar: height)",
+      "note": "Real, scheduled: bump --deskx-topbar-h 44->48px (plan Phase F item 1, copied from the wireframe). Allowlisted in test/editor_wireframe_accepted.json until fixed."
+    },
+    "T63": {
+      "category": "editor-chrome",
+      "status": "open",
+      "source": "[allowlist-audit.md, 2026-09-11] title block overlaps flag/favourite buttons at desktop width.",
+      "wireframeRef": "Editor (Developer) View.dc.html: topbar title block",
+      "check": "editor:responsive",
+      "note": "3 accepted findings (item 3.1.10). Real layout overlap, not yet fixed."
+    },
+    "T64": {
+      "category": "library-chrome",
+      "status": "open",
+      "source": "[allowlist-audit.md, 2026-09-11] Library gear icon hardcoded at 15x15 instead of using the icon-size token.",
+      "wireframeRef": "Library View.html: gear icon",
+      "check": "wireframe:test",
+      "note": "Tiny fix, low priority. Allowlisted in test/wireframe_accepted.json until fixed."
+    },
+    "T65": {
+      "category": "editor-chrome",
+      "status": "open",
+      "source": "[allowlist-audit.md, 2026-09-11] rail label font-size tallies (font-size 9px/11px) drift from the wireframe, tied to the rail-geometry change tracked in T55.",
+      "wireframeRef": "Editor (Developer) View.dc.html: tool rail labels",
+      "check": "editor:inventory ([rail] font-size N)",
+      "note": "Downstream of T55 (tool rail width). Re-verify once T55 is fixed; may clear on its own."
     }
   }
 }
