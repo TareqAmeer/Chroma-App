@@ -96,14 +96,19 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > - *Open:* Editor sections have a photo loaded and are expanded and switched on ("off" is its own state), and the number of visible controls equals that section's count in panel_inventory.json. Menus and dialogs: the element is visible and taller than when closed.
 > - *Theme:* switch with `fxSetTheme('light'|'dark')`, then assert `body.light` matches and the page background brightness matches the theme.
 > - *Layout:* after applying each axis value, assert the element's computed width equals it, and label the image with the real values (for example "1024×768 · rail=icons · panel=220").
-> **2. A sensible matrix, not every combination multiplied together.** Multiplying every axis gives about 90k images, which isn't feasible. Per surface, in both themes:
-> - (i) every state at 1440×900 with the default layout
-> - (ii) the rest state at every viewport in the axes file, default layout
-> - (iii) the rest state at 1440 and at 760 wide, for each value of each axis that changes that surface's size. The rail axis applies to the rail; the panel axis to sections and the panel; the dock axis to the filmstrip; the sidebar axis to Library surfaces. Change one axis at a time; don't combine them.
+> **2. Scope: desktop only, about 220 images in total. The user will review these by eye, so keep it small.** Every shot has a photo loaded, in both **dark and light**. No phone or tablet sizes, no hover or other states, and nothing multiplied together. Window widths are only **760** (the desktop minimum) and **1920** (the maximum).
+> - **Whole-window shots (the core set).** At both window widths × both themes, capture the default layout plus, one change at a time:
+>   - tool rail: narrow, full, hidden
+>   - tool panel: 220, 440, closed
+>   - docked filmstrip: 90, 420, closed
 >
-> Print the total image count before capturing, and if it's over 6,000, stop and report.
-> **3. Two images per combination, both at full resolution.** The whole app window, for context, and a 1:1 crop of the surface with a 24px margin. Full-size images go in the gitignored `design/asbuilt-full/<id>/`, and identical images are stored once.
-> **4. Readable sheets.** At most 8 cells per sheet, each at least 480px wide, with a sheet background matching the theme. Split into as many sheets as needed and commit them to `design/asbuilt/<id>/`.
+>   That's 10 layouts × 2 widths × 2 themes = 40 shots. The top bars are judged from these at their narrowest (760) and widest (1920). Do the same for the Library full view with its sidebar at 150, 420 and hidden (use its real "Show sidebar" option), plus the default: 16 shots.
+> - **Editor sections:** each section open and switched on, 1920 wide, panel at 220 and at 440, both themes. That's 4 shots per section.
+> - **Menus, dialogs, overlays and other surfaces:** each open once per theme, at the default layout, 1920 wide.
+>
+> Print the total before capturing; if it's over 300, stop and report. Clipping at in-between widths is covered by the automated layout tests (`editor_responsive_qa.mjs`), not by images.
+> **3. Images.** Whole-window shots are the review images. For sections, menus and dialogs, also save a 1:1 crop of the surface with a 24px margin. Everything at full resolution. Full-size images go in the gitignored `design/asbuilt-full/<id>/`, and identical images are stored once.
+> **4. No contact sheets.** At this size every image is shown individually. Commit the images, compressed, to `design/asbuilt/<id>/` with their labels in `spec.json`.
 > **5. Smoke test before the full run.** Capture 3 surfaces only (`fxsec-grain`, `fx-toolrail`, one Library dialog), then open their sheets yourself with Read. Fix anything wrong before capturing the rest; this is the step that saves the hour.
 > **6. Full run in Haiku subagents.** One group (A–E) per subagent, one at a time, since parallel browser runs overload this Intel Mac. Each reports only counts (captured, duplicate, skipped-with-reason, failed-assert) plus the failures. Also capture anything `node test/surface_coverage_check.mjs` reports.
 > **7. Audit.** Write `test/capture_audit.mjs`. Per surface it checks:
@@ -121,7 +126,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 **S7c: Republish the review page** (Sonnet 5; after S6c)
 > Read docs/ui-workflow/STATE.md and follow its rules. Republish https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61 from the S6c captures.
 > - **Read it first** (`action: "read"`) so its saved Keep/Redesign choices and notes are kept.
-> - **Cards:** each card's main image is the full-window capture at 1440×900, with a Dark/Light toggle for the whole page, large enough to read. Clicking a card opens a gallery of all its sheets, filterable by theme, width and layout.
+> - **Cards:** first a **Layouts** section with the 56 whole-window shots, grouped by layout (default, rail narrow/full/hidden, panel 220/440/closed, filmstrip 90/420/closed, Library sidebar), with the 760 and 1920 shots side by side. Then one card per surface. A page-wide Dark/Light toggle switches every image. Images are shown large enough to read, and clicking opens full size. About 220 images fits a single publish (255 files or fewer).
 > - **Every surface appears**, including the 8 new ones.
 > - **Publishing images:** use the publish call's `files` map, not `upload_asset`, which would mean one tool call per image. Each publish takes up to 255 files, and files left out of a later publish are kept, so publish in batches of 255 or fewer until every image is up, keeping each version under 64MB. Load the `artifact-design` skill before editing the page.
 >
