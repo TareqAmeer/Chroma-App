@@ -965,102 +965,102 @@
     },
     "T43": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11, researched against current design-QA practice] no test exercises hover/focus/active states as a MATRIX across component types \u2014 ui_audit.mjs checks a resting-state contrast/tap-target floor and one focus-indicator pass, but nothing captures a hover screenshot for buttons/chips/sliders/toggles and diffs it the way rest-state is diffed.",
       "wireframeRef": null,
       "check": "npm run editor:hover-focus-matrix",
       "panel": null,
-      "note": "Built as a computed-style snapshot diff (resting vs hover vs focus) rather than a screenshot pixel-diff \u2014 cheaper, and catches the exact failure mode (no visible change at all) without needing a baseline image per component. test/editor_hover_focus_matrix.mjs found a real gap: .fx-select shows no visible hover OR focus state change. Several classes (.fx-toggle/.fx-sec-btn/.fx-act/.look-cell/.fs-thumb/.hdr-btn/.fx-chip/.fx-preset-chev) reported MISSING because no instance is visible in the harness's default panel state (sections closed) \u2014 a known scope limit, not a false pass. Wired as advisory into editor:gates. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Built as a computed-style snapshot diff (resting vs hover vs focus) rather than a screenshot pixel-diff \u2014 cheaper, and catches the exact failure mode (no visible change at all) without needing a baseline image per component. test/editor_hover_focus_matrix.mjs found a real gap: .fx-select shows no visible hover OR focus state change. Several classes (.fx-toggle/.fx-sec-btn/.fx-act/.look-cell/.fs-thumb/.hdr-btn/.fx-chip/.fx-preset-chev) reported MISSING because no instance is visible in the harness's default panel state (sections closed) \u2014 a known scope limit, not a false pass. Wired as advisory into editor:gates."
     },
     "T44": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no visual coverage of EMPTY/ERROR/LOADING states \u2014 the no-photo empty state, a failed RAW decode, an export-in-progress overlay, a 'no results' Library filter. All of ui_audit/wireframe_diff/wireframe_inventory implicitly assume a photo is loaded and everything succeeded.",
       "wireframeRef": null,
       "check": "npm run editor:empty-error-states",
       "panel": null,
-      "note": "Covers 3 of the 4 named states: EMPTY (fresh boot, no photo \u2014 #fx-add-btn visible), LOADING (_expOverlay(true) \u2014 overlay + text legible/contrast-checked), ERROR (a corrupt image fed through loadFXImages \u2014 asserts a visible, legible #fx-toast/[role=alert] surface appears, not just that it doesn't crash, which is T38's territory). The 4th (Library's 'no results' filter state) is explicitly OUT OF SCOPE here \u2014 the Library is native-gated (desktop/library-ui.js) and needs its own ?libtest=1-based harness, not this Editor-focused one; left as a residual gap. Legibility-only (visibility + WCAG contrast), not a pixel-baseline diff \u2014 passes clean on a first real run after fixing the toast selector to match the app's actual #fx-toast/.show implementation. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Covers 3 of the 4 named states: EMPTY (fresh boot, no photo \u2014 #fx-add-btn visible), LOADING (_expOverlay(true) \u2014 overlay + text legible/contrast-checked), ERROR (a corrupt image fed through loadFXImages \u2014 asserts a visible, legible #fx-toast/[role=alert] surface appears, not just that it doesn't crash, which is T38's territory). The 4th (Library's 'no results' filter state) is explicitly OUT OF SCOPE here \u2014 the Library is native-gated (desktop/library-ui.js) and needs its own ?libtest=1-based harness, not this Editor-focused one; left as a residual gap. Legibility-only (visibility + WCAG contrast), not a pixel-baseline diff \u2014 passes clean on a first real run after fixing the toast selector to match the app's actual #fx-toast/.show implementation."
     },
     "T45": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "fixed",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no forced-colors/prefers-contrast (Windows High Contrast Mode) test \u2014 a real accessibility mode that can invert the app's own custom colours entirely, distinct from the light/dark theme pair already tested.",
       "wireframeRef": null,
       "check": "test/editor_forced_colors_check.mjs",
       "panel": null,
-      "note": "Playwright's emulateMedia({ forcedColors: 'active' }) can drive this; assert nothing becomes invisible (a custom-painted control with a `background` but no `border` is a classic forced-colors casualty \u2014 it can vanish entirely when the browser strips author backgrounds). CLOSED 2026-09-11: test/editor_forced_colors_check.mjs emulates forced-colors:active and flags any interactive control with no border/outline/content relying purely on background-colour. First run found exactly the predicted casualty: .fx-toggle (no text/icon, no real border, painted only via background). Fixed live in chromasmith-22.html: added `border:1px solid transparent` (invisible normally) that switches to `border-color:CanvasText` under `@media (forced-colors:active)` \u2014 border survives forced-colors stripping even though background/color don't, same reason .btn was never flagged (it already had a real border). Wired as `npm run editor:forced-colors-check` and into editor:gates (non-advisory \u2014 passes clean). Verified live and against export_harness.mjs (no shader/JS regression). DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Playwright's emulateMedia({ forcedColors: 'active' }) can drive this; assert nothing becomes invisible (a custom-painted control with a `background` but no `border` is a classic forced-colors casualty \u2014 it can vanish entirely when the browser strips author backgrounds). CLOSED 2026-09-11: test/editor_forced_colors_check.mjs emulates forced-colors:active and flags any interactive control with no border/outline/content relying purely on background-colour. First run found exactly the predicted casualty: .fx-toggle (no text/icon, no real border, painted only via background). Fixed live in chromasmith-22.html: added `border:1px solid transparent` (invisible normally) that switches to `border-color:CanvasText` under `@media (forced-colors:active)` \u2014 border survives forced-colors stripping even though background/color don't, same reason .btn was never flagged (it already had a real border). Wired as `npm run editor:forced-colors-check` and into editor:gates (non-advisory \u2014 passes clean). Verified live and against export_harness.mjs (no shader/JS regression)."
     },
     "T46": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no browser-zoom / OS-text-scaling test \u2014 ui_audit.mjs/wireframe_diff_lib.mjs reference 'zoom' only for the app's own 1:1 loupe feature, not the browser chrome zoom (150%/200%) or OS-level large-text accessibility settings a real user might have on.",
       "wireframeRef": null,
       "check": "npm run editor:zoom-check",
       "panel": null,
-      "note": "Emulates real browser-chrome zoom via CDP's Page.setDeviceMetricsOverride (viewport CSS px shrinks the way a genuine zoom does, not just a font-size hack) at 100%/150%/200%, reusing editor_responsive_qa.mjs's own overlap-detection algorithm against #fx-deskbar/#fx-toolrail, plus a text-clipping-without-ellipsis scan. Passes clean today. Wired as advisory into editor:gates. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Emulates real browser-chrome zoom via CDP's Page.setDeviceMetricsOverride (viewport CSS px shrinks the way a genuine zoom does, not just a font-size hack) at 100%/150%/200%, reusing editor_responsive_qa.mjs's own overlap-detection algorithm against #fx-deskbar/#fx-toolrail, plus a text-clipping-without-ellipsis scan. Passes clean today. Wired as advisory into editor:gates."
     },
     "T47": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no text-overflow/localization-length stress test \u2014 every wireframe/behaviour fixture uses the app's own real (short, English) copy. A longer label (German UI strings routinely run 30-40% longer) or a very long user-supplied filename/preset name is never tried against any layout.",
       "wireframeRef": null,
       "check": "npm run editor:long-string-check",
       "panel": null,
-      "note": "Injects an oversized filename into fxImages[0].name (filmstrip) and an oversized preset name into the look-gallery's .look-nm captions, then checks for clipping-without-ellipsis and sibling overlap. Confirms .look-nm's existing text-overflow:ellipsis CSS actually still applies to a real long string (not just present in the stylesheet \u2014 a stale/overridden rule elsewhere could defeat it silently). Filmstrip check is scoped-limited: #fx-filmstrip is hidden under body.deskx entirely and only builds with >1 photo, so that half doesn't exercise a real filmstrip render in this harness. Passes clean; wired as advisory into editor:gates. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Injects an oversized filename into fxImages[0].name (filmstrip) and an oversized preset name into the look-gallery's .look-nm captions, then checks for clipping-without-ellipsis and sibling overlap. Confirms .look-nm's existing text-overflow:ellipsis CSS actually still applies to a real long string (not just present in the stylesheet \u2014 a stale/overridden rule elsewhere could defeat it silently). Filmstrip check is scoped-limited: #fx-filmstrip is hidden under body.deskx entirely and only builds with >1 photo, so that half doesn't exercise a real filmstrip render in this harness. Passes clean; wired as advisory into editor:gates."
     },
     "T48": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no HiDPI/Retina (deviceScaleFactor 2/3) rendering check \u2014 icons, 1px hairline borders, and canvas-drawn UI (the histogram, curve editor, colour wheels) can all render blurry or misaligned at a scale factor current tests never set.",
       "wireframeRef": null,
       "check": "npm run editor:hidpi-check",
       "panel": null,
-      "note": "Checks canvas backing-store resolution (canvas.width/height) scales with emulated deviceScaleFactor (2x/3x via CDP) relative to CSS box size, for fx-hist/cv-curve/cv-wheel-*/fx-canvas \u2014 a canvas whose buffer DOESN'T scale up renders blurry (browser upscales a low-res bitmap). fx-canvas (the main preview, always visible) passes clean. The histogram/curve/wheel canvases report MISSING because their panels aren't open in the harness's default state \u2014 a known scope limit (documented in the script's own output) rather than a confirmed pass or fail; note explicitly flags that a CDP DPR override may not trigger every canvas's resize-redraw path the way real hardware would, so a finding here is a manual-verification signal, not an automatic bug confirmation. Wired as advisory into editor:gates. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Checks canvas backing-store resolution (canvas.width/height) scales with emulated deviceScaleFactor (2x/3x via CDP) relative to CSS box size, for fx-hist/cv-curve/cv-wheel-*/fx-canvas \u2014 a canvas whose buffer DOESN'T scale up renders blurry (browser upscales a low-res bitmap). fx-canvas (the main preview, always visible) passes clean. The histogram/curve/wheel canvases report MISSING because their panels aren't open in the harness's default state \u2014 a known scope limit (documented in the script's own output) rather than a confirmed pass or fail; note explicitly flags that a CDP DPR override may not trigger every canvas's resize-redraw path the way real hardware would, so a finding here is a manual-verification signal, not an automatic bug confirmation. Wired as advisory into editor:gates."
     },
     "T49": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] design-token drift is checked once per run (T5/T10's editor:token-check) but nothing tracks it OVER TIME \u2014 current guidance recommends a periodic (e.g. monthly/per-release) token-drift report to catch slow reintroduction of hand-typed colours as new code lands, distinct from a point-in-time gate.",
       "wireframeRef": null,
       "check": "npm run editor:token-drift-report",
       "panel": null,
-      "note": "Built exactly as scoped: test/editor_token_drift_report.mjs runs editor:token-check, appends {date,colorFindings,spacingFindings,total} to test/token_drift_history.json (tracked in git), and FAILs if total increased since the last recorded run. --check mode reports without recording (for CI/pre-push use without growing the history file every run). First recorded baseline: 225 findings on 2026-09-11 \u2014 matches token-check's own documented count. Deliberately NOT wired into editor:gates (per-commit) \u2014 this is a periodic/per-release check per the source note, run manually or from a separate cron/CI step. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Built exactly as scoped: test/editor_token_drift_report.mjs runs editor:token-check, appends {date,colorFindings,spacingFindings,total} to test/token_drift_history.json (tracked in git), and FAILs if total increased since the last recorded run. --check mode reports without recording (for CI/pre-push use without growing the history file every run). First recorded baseline: 225 findings on 2026-09-11 \u2014 matches token-check's own documented count. Deliberately NOT wired into editor:gates (per-commit) \u2014 this is a periodic/per-release check per the source note, run manually or from a separate cron/CI step."
     },
     "T50": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no colour-vision-deficiency (colour-blindness) simulation check \u2014 the app leans on colour signals in several places (amber .fx-mod fill, red/green flag buttons, the sat/vib red-vs-green preview) with no automated check that meaning survives a protanopia/deuteranopia/tritanopia simulation.",
       "wireframeRef": null,
       "check": "npm run editor:cvd-check",
       "panel": null,
-      "note": "Two-part static check rather than a full screenshot-filter pipeline: (1) applies standard protanopia/deuteranopia/tritanopia simulation matrices directly to the app's own paired design tokens (--ok/--err, --acc/--mut) and checks the simulated colours stay distinguishable (RGB distance above an empirical floor) \u2014 verified against the real token hex values (#52c97a/#e05454, #61a0af/#cccccc). (2) confirms known colour-coded UI (flagGreen/flagRed buttons, .fx-mod row signal) also carries a non-colour signal in markup (distinct icons, not just a colour swap). Passes clean today. Wired as advisory into editor:gates. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Two-part static check rather than a full screenshot-filter pipeline: (1) applies standard protanopia/deuteranopia/tritanopia simulation matrices directly to the app's own paired design tokens (--ok/--err, --acc/--mut) and checks the simulated colours stay distinguishable (RGB distance above an empirical floor) \u2014 verified against the real token hex values (#52c97a/#e05454, #61a0af/#cccccc). (2) confirms known colour-coded UI (flagGreen/flagRed buttons, .fx-mod row signal) also carries a non-colour signal in markup (distinct icons, not just a colour swap). Passes clean today. Wired as advisory into editor:gates."
     },
     "T51": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] visual-regression baseline coverage (visual_scorecard.mjs/visual_baseline.mjs) is scoped to a handful of scenarios, not a full state matrix per component (default/hover/active/disabled/error x light/dark x desktop/mobile) the way current tooling guidance (Percy/Applitools-style) recommends \u2014 most components only have ONE baseline captured.",
       "wireframeRef": null,
       "check": "npm run visual:baseline && npm run visual:scorecard",
       "panel": null,
-      "note": "Extended the EXISTING harness exactly as scoped (not a new tool): test/visual_baseline.mjs's SCENARIOS gained default_light (theme axis), default_mobile (viewport axis), and adjust_hover (hover state), on top of the 6 pre-existing panel scenarios \u2014 the two axes (theme, viewport) that had ZERO coverage before, plus one hover-state baseline. NOT the full default/hover/active/disabled/error x light/dark x desktop/mobile cross product (that's a much larger baseline set to build and maintain) \u2014 a deliberately partial widening, per the note's own 'not a full commercial visual-AI tool' framing. Found and fixed a real flake while building this: toggling the light-theme class left an in-flight CSSTransition unfinished at screenshot time (2.4% diff between two back-to-back captures of identical state) \u2014 same root cause as E7 (editor_gates.mjs) \u2014 fixed by finishing all animations via document.getAnimations() after each theme/mobile class toggle. All 9 scenarios now capture deterministically (0.000% self-diff). DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Extended the EXISTING harness exactly as scoped (not a new tool): test/visual_baseline.mjs's SCENARIOS gained default_light (theme axis), default_mobile (viewport axis), and adjust_hover (hover state), on top of the 6 pre-existing panel scenarios \u2014 the two axes (theme, viewport) that had ZERO coverage before, plus one hover-state baseline. NOT the full default/hover/active/disabled/error x light/dark x desktop/mobile cross product (that's a much larger baseline set to build and maintain) \u2014 a deliberately partial widening, per the note's own 'not a full commercial visual-AI tool' framing. Found and fixed a real flake while building this: toggling the light-theme class left an in-flight CSSTransition unfinished at screenshot time (2.4% diff between two back-to-back captures of identical state) \u2014 same root cause as E7 (editor_gates.mjs) \u2014 fixed by finishing all animations via document.getAnimations() after each theme/mobile class toggle. All 9 scenarios now capture deterministically (0.000% self-diff)."
     },
     "T52": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "partial",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no animation/motion QA beyond the binary prefers-reduced-motion check (editor_wireframe_behaviour.mjs's existing test) \u2014 nothing verifies a transition's actual DURATION/EASING matches --dur-1/--dur-2/--ease tokens, or that an animation doesn't jank (dropped frames) on a real interaction like the mobile sheet opening.",
       "wireframeRef": null,
       "check": "npm run editor:motion-token-check",
       "panel": null,
-      "note": "Cheap first step built as scoped: test/editor_motion_token_check.mjs statically scans transition/animation/transition-duration/transition-timing-function/animation-duration/animation-timing-function declarations for durations/easings that don't resolve to --dur-1/--dur-2/--ease. Found 39 pre-existing hand-typed literals on 2026-09-11 (e.g. .btn's .15s/ease instead of var(--dur-1)/var(--ease)) \u2014 added to editor:gates as advisory (--strict), same posture as editor:token-check. Frame-timing jank measurement (the larger lift, a real DevTools Performance trace over a live interaction like the mobile sheet opening) is still NOT built \u2014 remains backlog. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Cheap first step built as scoped: test/editor_motion_token_check.mjs statically scans transition/animation/transition-duration/transition-timing-function/animation-duration/animation-timing-function declarations for durations/easings that don't resolve to --dur-1/--dur-2/--ease. Found 39 pre-existing hand-typed literals on 2026-09-11 (e.g. .btn's .15s/ease instead of var(--dur-1)/var(--ease)) \u2014 added to editor:gates as advisory (--strict), same posture as editor:token-check. Frame-timing jank measurement (the larger lift, a real DevTools Performance trace over a live interaction like the mobile sheet opening) is still NOT built \u2014 remains backlog."
     },
     "T53": {
       "category": "tooling-gap",
-      "status": "deferred",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no icon/glyph rendering-consistency check across the ICONS stroke set (CLAUDE.md 3b: one Lucide-shaped set at 16/20/22px only) \u2014 nothing asserts every icon actually renders (no broken/empty SVG path), is used at only those 3 documented sizes, or stays visually aligned (stroke-width consistency) across the set.",
       "wireframeRef": null,
       "check": "npm run editor:icon-check",
       "panel": null,
-      "note": "Built exactly as scoped: test/editor_icon_check.mjs statically scans ICONS (92 entries) for empty/degenerate drawable bodies and stroke-width drift, and every literal icon(name,size) call site (42 of 53 total; 11 use a dynamic name/size and are skipped, can't be statically resolved) for a missing ICONS key or a size outside {16,20,22}. Real finding on 2026-09-11: CLAUDE.md 3b's '16/20/22px only' claim is FALSE in the current app \u2014 28 call sites use 12/14/18/34px (pause/play/nr/wand/flagGreen/star/chevron/etc). Missing-icon-key and empty-ICONS-entry findings hard-fail (a real blank-icon render); bad-size and stroke-width findings are advisory, wired into editor:gates. DEFERRED 2026-09-11: superseded by the component catalogue and per-panel spec work."
+      "note": "Built exactly as scoped: test/editor_icon_check.mjs statically scans ICONS (92 entries) for empty/degenerate drawable bodies and stroke-width drift, and every literal icon(name,size) call site (42 of 53 total; 11 use a dynamic name/size and are skipped, can't be statically resolved) for a missing ICONS key or a size outside {16,20,22}. Real finding on 2026-09-11: CLAUDE.md 3b's '16/20/22px only' claim is FALSE in the current app \u2014 28 call sites use 12/14/18/34px (pause/play/nr/wand/flagGreen/star/chevron/etc). Missing-icon-key and empty-ICONS-entry findings hard-fail (a real blank-icon render); bad-size and stroke-width findings are advisory, wired into editor:gates."
     },
     "T54": {
       "category": "app-bug",
