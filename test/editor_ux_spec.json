@@ -962,6 +962,105 @@
       "check": null,
       "panel": null,
       "note": "Blocked on the same real-RAW-fixture gap as T11: no .RW2 capture exists in the repo (deliberately gitignored) to decode and diff against a reference. Needs the user to supply one before this can be built for real, same reasoning as T11 — do not fabricate a fake RW2, it wouldn't exercise the real decode path."
+    },
+    "T43": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11, researched against current design-QA practice] no test exercises hover/focus/active states as a MATRIX across component types — ui_audit.mjs checks a resting-state contrast/tap-target floor and one focus-indicator pass, but nothing captures a hover screenshot for buttons/chips/sliders/toggles and diffs it the way rest-state is diffed.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Industry guidance flags hover/focus states as a common manual-only blind spot even at mature shops. A Playwright loop that hovers every interactive class (.btn, .fx-toggle, .fx-chip, .fx-sec-btn...) and screenshots/diffs against a baseline would close this."
+    },
+    "T44": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no visual coverage of EMPTY/ERROR/LOADING states — the no-photo empty state, a failed RAW decode, an export-in-progress overlay, a 'no results' Library filter. All of ui_audit/wireframe_diff/wireframe_inventory implicitly assume a photo is loaded and everything succeeded.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "These are exactly the states real users hit on a bad day and are least tested — a screenshot baseline per state (empty library, export overlay, a deliberately-failed RAW load) alongside the existing happy-path baselines."
+    },
+    "T45": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no forced-colors/prefers-contrast (Windows High Contrast Mode) test — a real accessibility mode that can invert the app's own custom colours entirely, distinct from the light/dark theme pair already tested.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Playwright's emulateMedia({ forcedColors: 'active' }) can drive this; assert nothing becomes invisible (a custom-painted control with a `background` but no `border` is a classic forced-colors casualty — it can vanish entirely when the browser strips author backgrounds)."
+    },
+    "T46": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no browser-zoom / OS-text-scaling test — ui_audit.mjs/wireframe_diff_lib.mjs reference 'zoom' only for the app's own 1:1 loupe feature, not the browser chrome zoom (150%/200%) or OS-level large-text accessibility settings a real user might have on.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A layout built on fixed px assumptions can break (overlap, clipped text, unreachable controls) under 200% zoom even when it passes every current responsive breakpoint check, since browser zoom isn't the same code path as a narrower viewport."
+    },
+    "T47": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no text-overflow/localization-length stress test — every wireframe/behaviour fixture uses the app's own real (short, English) copy. A longer label (German UI strings routinely run 30-40% longer) or a very long user-supplied filename/preset name is never tried against any layout.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Inject artificially long strings into a representative set of labels/filenames/preset names and screenshot-check for clipping, wrap-induced overlap, or a fixed-width container truncating without an ellipsis."
+    },
+    "T48": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no HiDPI/Retina (deviceScaleFactor 2/3) rendering check — icons, 1px hairline borders, and canvas-drawn UI (the histogram, curve editor, colour wheels) can all render blurry or misaligned at a scale factor current tests never set.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Playwright's newPage({ deviceScaleFactor: 2 }) plus a screenshot pass over the same panels ui_audit.mjs already covers at 1x — cheap to add as a parametrized second pass."
+    },
+    "T49": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] design-token drift is checked once per run (T5/T10's editor:token-check) but nothing tracks it OVER TIME — current guidance recommends a periodic (e.g. monthly/per-release) token-drift report to catch slow reintroduction of hand-typed colours as new code lands, distinct from a point-in-time gate.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Could be as simple as editor:token-check's finding COUNT written to a tracked file each release, with a report script that flags an increase — turns the existing advisory gate into a trend instead of a static snapshot."
+    },
+    "T50": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no colour-vision-deficiency (colour-blindness) simulation check — the app leans on colour signals in several places (amber .fx-mod fill, red/green flag buttons, the sat/vib red-vs-green preview) with no automated check that meaning survives a protanopia/deuteranopia/tritanopia simulation.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A screenshot pass through a CVD simulation filter (SVG filter matrices are well-documented for this) over the key colour-coded UI, checking that state is ALSO distinguishable by shape/position/icon, not colour alone."
+    },
+    "T51": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] visual-regression baseline coverage (visual_scorecard.mjs/visual_baseline.mjs) is scoped to a handful of scenarios, not a full state matrix per component (default/hover/active/disabled/error x light/dark x desktop/mobile) the way current tooling guidance (Percy/Applitools-style) recommends — most components only have ONE baseline captured.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Not asking for a full commercial visual-AI tool — extending the EXISTING pixelmatch harness (visual_scorecard.mjs) to loop over more states per component, the same infrastructure, just wider coverage."
+    },
+    "T52": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no animation/motion QA beyond the binary prefers-reduced-motion check (editor_wireframe_behaviour.mjs's existing test) — nothing verifies a transition's actual DURATION/EASING matches --dur-1/--dur-2/--ease tokens, or that an animation doesn't jank (dropped frames) on a real interaction like the mobile sheet opening.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "getComputedStyle().transitionDuration/transitionTimingFunction against the app's own --dur-1/--dur-2/--ease token values (same drift-detection shape as T5/T10's colour/spacing check, applied to motion tokens) would be a cheap first step; frame-timing jank measurement is a larger lift (Chrome DevTools Performance trace)."
+    },
+    "T53": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[UI/UX design-testing gap audit, 2026-09-11] no icon/glyph rendering-consistency check across the ICONS stroke set (CLAUDE.md 3b: one Lucide-shaped set at 16/20/22px only) — nothing asserts every icon actually renders (no broken/empty SVG path), is used at only those 3 documented sizes, or stays visually aligned (stroke-width consistency) across the set.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A static scan of every icon(name,size) call site in chromasmith-22.html, asserting size is in {16,20,22} and the referenced name exists in the ICONS map — same shape as T5/T10's token-drift check, applied to the icon system instead of colour/spacing."
     }
   }
 }
