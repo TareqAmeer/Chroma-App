@@ -1,6 +1,6 @@
 # UI workflow rebuild — session prompts
 
-Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first message (switching mid-chat re-reads everything uncached). Run in order; S6 and S13 repeat per group/panel. S1 may revise prompts below — always copy from this file, not an older copy.
+Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first message (switching mid-chat re-reads everything uncached). Run in order (S6 → S6b → S7 → S7b → S8 …); S13 repeats per panel. S6 groups: A editor-sections, B editor-overlays, C other-pages (+splash via its wireframe), D mobile, E library. S1 may revise prompts below — always copy from this file, not an older copy.
 
 ## Prompts
 **S1: Spike** (Opus 5, high effort)
@@ -64,9 +64,35 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > You write/fix the script; a Haiku subagent runs it and reports only counts per surface, missing states and errors — never read the captures or spec files yourself beyond spot checks.
 > Done when every surface in the group has captures for all its states. Add a group row to STATE.md.
 
+**S6b: Full scenario capture** (Sonnet 5 + Haiku helpers; long; run before your triage and before S8, alone on the machine)
+> Read docs/ui-workflow/STATE.md and follow its rules. Task: extend `test/surface_capture.mjs` to capture **every combination** for every surface in `design/surfaces.json`:
+> - **State:** every state the surface supports (per `surfaces.json`).
+> - **Theme:** dark and light — use the app's real theme switch; read how `body.light` is set, don't guess.
+> - **Width:** the viewport list in `test/editor_responsive_qa.mjs`, plus 390 (phone) and 768 (tablet) if missing. Don't invent other sizes.
+> - **Sidebars:** every collapsible Editor panel/sidebar expanded and collapsed, and every Library dock state in `test/library_dock_states.mjs`. Read the real toggle functions first.
+>
+> **Scenario states** (extra, both themes at 1400×900 only, on the surfaces they affect): keyboard focus, pressed, modified (`.fx-mod`); portrait / landscape / panorama photos (fixtures in `test/fixtures/`, generate if missing); multi-photo batch (filmstrip + export-scope toggle); RAW loaded if a fixture exists (T11 says none — list as skipped); video loaded; masks none / one selected / several; export progress overlay, loading, error, empty; split view, 1:1 loupe, crop mode; Library empty / large / Lightroom-connected (`window.libtestLrConnect()`) / grid and list / multi-select; mobile sheet open and closed, landscape phone; browser zoom 125% and 200%, forced-colors, reduced motion; Editor rest in Playwright WebKit (see `test/editor_webkit_smoke.mjs`). Reach each state through real functions and fixtures.
+>
+> Rules:
+> 1. Skip impossible combinations; list each with its reason in `spec.json`.
+> 2. Deduplicate: hash each screenshot, store identical images once, and have `spec.json` map each combination to its image.
+> 3. Full-size images go to `design/asbuilt-full/<id>/` (gitignored). Commit only `design/asbuilt/<id>/contact-<theme>.webp` (labelled grids; split if too big to read) plus the `spec.json` index.
+> 4. Resumable: skip combinations that already have an image.
+> 5. One run per group (A–E, the `group` field). A Haiku subagent runs each and reports only counts (captured / duplicate / skipped / failed) plus failures. After 2 failed attempts on the same failure, record it in STATE.md and move on.
+> 6. Update S7's review page to show both themes' sheets per surface, with the total under 255 files.
+>
+> Done when every surface has every possible combination captured or listed with a reason. Log totals per group in STATE.md, then commit and push.
+
 **S7: Triage page** (Sonnet 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: build one review page that shows every captured surface in `design/asbuilt/` with a Keep / Redesign / Unsure choice and a notes field. Publish it as an Artifact that saves the choices, so they persist. Then write the choices back to `design/surfaces.json` (`triage` field).
 > Done when the user has made their choices and `surfaces.json` reflects them.
+
+**S7b: Baseline + token gates** (Sonnet 5; after S6b, before S8, on a quiet machine)
+> Read docs/ui-workflow/STATE.md and follow its rules. Task:
+> (1) Add `node scripts/build-tokens.mjs --check` and `python3 design/verify_tokens.py` to `test/editor_gates.mjs` as blocking gates, and to `githooks/pre-commit`.
+> (2) Apply `docs/ui-workflow/allowlist-audit.md`: do §1 (delete; re-record the Library icon-shape baseline first), then §2 one entry at a time (remove, re-run its gate, restore it only if it still fires). Leave §3 in place but make sure each is a backlog item in `test/editor_ux_spec.json`. Don't touch §4. Record the before/after counts in STATE.md. §5's checker fixes are out of scope here.
+> (3) Run `npm run editor:gates` and `npm run ui:test` via a Haiku subagent. Record every still-failing gate or check as the known baseline in STATE.md (name and a one-line reason). From then on, "gates pass" means "no failures beyond this baseline".
+> Log it in STATE.md, then commit and push.
 
 **S8: Spec extract + generated PAIRS** (Opus 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: make `design/asbuilt/<id>/spec.json` plus the wireframe the source for the Editor gates:

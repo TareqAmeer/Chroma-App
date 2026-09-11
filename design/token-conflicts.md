@@ -46,26 +46,23 @@ silently leaving them unexplained:
 | `--lift-1` / `--lift-2` | multi-layer panel shadows | DS reserves its one shadow for photography only — this is a concept the DS deliberately doesn't model, not a value to reconcile. |
 | `--sat` / `--sab` | `env(safe-area-inset-*)` | Device geometry, not a design decision — excluded from the token source's design intent, kept only because it's a real custom property in the app. |
 
-## Proposed only — no app call site, not applied
+## Adopted 2026-09-11 — defined in tokens.json, NOT yet wired (user: "go with your recommendations")
 
-These are families the DS defines that the app currently has no variable for at all. There's
-nothing to change visually yet — adopting them means picking *which* app rule should start using
-them, which is exactly the kind of call you said you'd rather make after seeing where
-inconsistencies actually show up. Left as proposed entries in `design/tokens.json` for when that
-need appears:
+Defined so wireframe/as-built values map to a named token (S8 specs), but deliberately not emitted
+into `:root` and not used at any call site yet — zero visual change. Each carries
+`status: "proposed-unwired"`. Wiring = add the var to `scripts/token-layout.json`, regenerate, then
+replace literals at call sites (UI work, check visually).
 
-- `typography.weight.*` (300/400/600/700) — app sets font-weight ad hoc per rule today.
-- `layout.height.*` (44/52/64px control heights) — app hardcodes heights per rule today.
-- `radius.pill` (9999px) — app's pill shapes use literal `9999px`/`50%` per rule today.
-- On-primary text colour — `.bpri` (the primary button) hardcodes `color:#000`, not a token; the
-  DS's `--on-primary` is `#ffffff`. Not changed here because `.bpri`'s current amber-to-accent
-  gradient background is legible with black text specifically — swapping to DS's white on-primary
-  needs the button's fill re-checked for contrast first, which is UI work, not a token-value
-  decision.
-- A "subtle danger" background tint — the app already has three different ad hoc red tints
-  (`rgba(224,84,84,…)`, `rgba(229,72,77,…)`, `rgba(224,90,78,…)`) for flag/badge states. Worth
-  consolidating into one `state.danger-subtle` token, but that's a genuine three-way pick, not a
-  DS-vs-app call.
+| Family | Tokens | Why these values |
+|---|---|---|
+| Font weight | `--fw-regular` 400, `--fw-medium` 500, `--fw-semibold` 600, `--fw-bold` 700 | Matches actual app usage (5/10/28/4 uses). DS has no 500 but the dense UI uses it 10×; the one 300 use folds into 400. |
+| Control height | `--h-ctrl-sm` 28px, `--h-ctrl` 32px, `--h-touch` 44px | The app's real heights by frequency; 44px = touch floor = DS. DS 52/64px are marketing scale, unused. |
+| Radius | `--r-pill` 9999px, `--r-circle` 50% | Pill = DS; circle kept separate because 50% on a non-square isn't a pill. |
+| On-primary text | `--on-acc` #10222a | The approved wireframe's value. DS white fails contrast on the light accent; today's #000 reads the same. |
+| Danger subtle | `--err-subtle` dark rgba(224,84,84,.16) / light rgba(135,15,19,.16) | Consolidates 3 ad hoc reds onto `--err`'s own hue; light value is the wireframe's. |
+
+Still unmapped (not in the five families; S1 saw them in the wireframe): letter-spacing .8px,
+0.15s duration (app has 120/200ms), off-grid spacing 2/6/7/9/10/14px. Decide when S8 reports counts.
 
 ---
 

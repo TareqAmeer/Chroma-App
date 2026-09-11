@@ -215,3 +215,14 @@ is why the advisory 7 don't block locally either); `npm test`/CI run them non-ad
 `editor:gates` and `ui:test` respectively — `editor:gates` still exits 0 since the 7 are advisory,
 but `npm run ui:test` on its own exits 1 (the fx-info-i gap), and `npm run test`/`test:ui` (which
 call `ui:test`) will currently fail on that until it's fixed.
+
+**Between S6 and S6b — 2026-09-11 — planning-session additions**
+- sessions.md: added S6b (full scenario capture: every state × theme × width × sidebar + scenario states;
+  full images gitignored, contact sheets committed) and S7b (token gates + allowlist cleanup + failure baseline).
+  Order: S6 → S6b → S7 → S7b → S8.
+- design/tokens.json: 5 families ADOPTED but unwired (status "proposed-unwired", not in token-layout.json, so
+  :root unchanged — build-tokens --check still clean): --fw-regular/medium/semibold/bold, --h-ctrl-sm/--h-ctrl/
+  --h-touch, --r-pill/--r-circle, --on-acc (#10222a, the wireframe's value), --err-subtle. Details in token-conflicts.md.
+- docs/ui-workflow/allowlist-audit.md: 185 allowlist entries → 17 delete, 28 verify-then-delete, 39 real fix,
+  92 intended, 9 checker artifacts. Needs user decisions: filmstrip/rail/panel widths, rail order, Square crops.
+
