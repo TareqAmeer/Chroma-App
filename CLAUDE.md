@@ -29,6 +29,10 @@ and the hard-won lessons from building it.
    `node scripts/build-tokens.mjs`. Edit tokens.json, regenerate; a hand edit inside the markers is lost.
 7. **Read [docs/process-lessons.md](docs/process-lessons.md) before any UI/layout, test, or flaky-bug
    work** — 18 lessons that each cost real time. The one-line versions are in §6 below.
+8. **Plans must define completeness from the running app, not a hand-typed list.** A plan that says
+   "cover every X" names the scan that lists every X and makes that scan its done-criterion; it
+   covers themes, every width, every resizer min/default/max and every state, and gets a
+   fresh-context gap review. A hook blocks ExitPlanMode until the plan has a "## Completeness check".
 
 ---
 
