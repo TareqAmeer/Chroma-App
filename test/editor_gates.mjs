@@ -85,7 +85,19 @@ const ADVISORY_MODE = process.argv.includes('--advisory');
 // inherently noisier than a structural/DOM check (allocator timing, SwiftShader software-GL
 // variance) — a human should see a FAIL and look, but a transient false alarm shouldn't block a
 // commit the way a real structural regression should.
-const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak']);
+// editor:icon-check (T53) joins advisory: --strict fails on stroke-width drift, and a pre-
+// existing backlog of icon() calls at sizes outside the documented 16/20/22 set (14/12/18/34,
+// found the day this gate was built) is a real doc-vs-code gap worth surfacing every commit, not
+// a regression this commit introduced — same reasoning as token-check/canvas-resize-leak above.
+// editor:motion-token-check (T52's cheap first step) joins advisory too: a pre-existing backlog
+// of hand-typed transition/animation durations+easings found the day this gate was built, same
+// reasoning as token-check.
+// editor:axe-check (T41) joins advisory: a real axe-core sweep of the Editor's panels. Building
+// it also fixed every CRITICAL label/select-name and SERIOUS aria-toggle-field-name violation
+// (a11yEnhanceFormLabels(), chromasmith-22.html) — the remaining findings are all color-contrast
+// on DIMMED off-section labels (.fx-fields.ff-off, CLAUDE.md §3b's intentional dim-not-hidden
+// pattern), a real but pre-existing design-token decision, not a regression this pass introduced.
+const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak', 'editor:icon-check', 'editor:motion-token-check', 'editor:axe-check']);
 
 const GATES = [
   { name: 'editor:inventory', cmd: ['node', 'test/editor_wireframe_inventory.mjs'] },
@@ -141,6 +153,18 @@ const GATES = [
   // T40 (editor_ux_spec.json): two tabs against the same IndexedDB — a real user mistake — write/
   // read/race-checked for corruption, not just "does it throw".
   { name: 'editor:crosstab-check', cmd: ['node', 'test/editor_crosstab_check.mjs'] },
+  // T41 (editor_ux_spec.json): real axe-core WCAG 2.0/2.1 A+AA sweep across 11 panels — broader
+  // than editor:keyboard-check's (T14) tag/role/tabindex heuristic, which says nothing about
+  // whether a control announces sensibly to a screen reader.
+  { name: 'editor:axe-check', cmd: ['node', 'test/editor_axe_check.mjs'] },
+  // T53 (editor_ux_spec.json): icon() call sites resolve to a real ICONS entry at an approved
+  // size, and every ICONS entry itself has a non-empty drawable body. --strict here also checks
+  // stroke-width drift, which is advisory (see ADVISORY_GATES).
+  { name: 'editor:icon-check', cmd: ['node', 'test/editor_icon_check.mjs', '--strict'] },
+  // T52 (editor_ux_spec.json) cheap first step: transition/animation duration+easing drift
+  // against --dur-1/--dur-2/--ease. Does not measure actual jank/frame-timing (larger lift, not
+  // attempted here).
+  { name: 'editor:motion-token-check', cmd: ['node', 'test/editor_motion_token_check.mjs', '--strict'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

@@ -47,8 +47,12 @@
     "editor:canvas-resize-leak": "node test/editor_canvas_resize_leak.mjs",
     "editor:offline-check": "node test/editor_offline_check.mjs",
     "editor:crosstab-check": "node test/editor_crosstab_check.mjs",
+    "editor:axe-check": "node test/editor_axe_check.mjs",
     "editor:fast-check": "node test/editor_snap_lists_check.mjs && node test/editor_html_validity_check.mjs",
     "editor:token-check": "node test/editor_token_check.mjs",
+    "editor:icon-check": "node test/editor_icon_check.mjs",
+    "editor:token-drift-report": "node test/editor_token_drift_report.mjs",
+    "editor:motion-token-check": "node test/editor_motion_token_check.mjs",
     "editor:gates": "node test/editor_gates.mjs"
   },
   "dependencies": {
@@ -59,6 +63,7 @@
     "@capacitor/share": "^8.0.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@capacitor/cli": "^8.4.1",
     "@playwright/test": "^1.63.0",
     "patch-package": "^8.0.1",

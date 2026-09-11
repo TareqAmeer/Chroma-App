@@ -947,12 +947,12 @@
     },
     "T41": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] editor:keyboard-check (T14) only proves a control is tabbable; nothing asserts it announces sensibly to a screen reader — no axe-core/full ARIA-semantics audit across the Editor. A role=\"switch\" with no accessible name passes T14 today but is useless to VoiceOver.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_axe_check.mjs",
       "panel": null,
-      "note": "Run @axe-core/playwright (or axe-core injected directly) against the Editor's main panels, asserting zero serious/critical violations — a broader pass than T14's tag/role/tabindex heuristic."
+      "note": "Run @axe-core/playwright (or axe-core injected directly) against the Editor's main panels, asserting zero serious/critical violations — a broader pass than T14's tag/role/tabindex heuristic. CLOSED 2026-09-11: test/editor_axe_check.mjs runs a real @axe-core/playwright WCAG 2.0/2.1 A+AA sweep across 11 panels. First run found 33 serious/critical violations (every plain slider/select/colour input had NO accessible name; every section-master toggle had role=switch+tabindex from a11yEnhanceToggles() but still no name). Fixed live: added a11yEnhanceFormLabels() (chromasmith-22.html) deriving aria-label from each row's sibling .fx-label text (stripping nested buttons), same 'derive don't hand-maintain' shape as a11yEnhanceToggles() itself, with a MutationObserver-covered boot pass. Found and fixed a real bug in the process: section-master toggles are NOT a direct child of .fx-ctrl-title (a header-reset injector wraps them in a .fx-title-right span), so the first version's `:scope >` selector silently matched nothing — fixed to a descendant query. This closed all 23 label/select-name/aria-toggle-field-name violations; 10 color-contrast findings remain (all on intentionally-dimmed .fx-fields.ff-off labels, CLAUDE.md §3b's off-section dim pattern — a real but pre-existing design-token decision, not a regression). Wired as `npm run editor:axe-check` and into editor:gates as advisory (same reasoning as the contrast backlog). Verified live: 33->10 violations, all remaining are the known contrast pattern."
     },
     "T42": {
       "category": "tooling-gap",
@@ -1019,12 +1019,12 @@
     },
     "T49": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] design-token drift is checked once per run (T5/T10's editor:token-check) but nothing tracks it OVER TIME — current guidance recommends a periodic (e.g. monthly/per-release) token-drift report to catch slow reintroduction of hand-typed colours as new code lands, distinct from a point-in-time gate.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:token-drift-report",
       "panel": null,
-      "note": "Could be as simple as editor:token-check's finding COUNT written to a tracked file each release, with a report script that flags an increase — turns the existing advisory gate into a trend instead of a static snapshot."
+      "note": "Built exactly as scoped: test/editor_token_drift_report.mjs runs editor:token-check, appends {date,colorFindings,spacingFindings,total} to test/token_drift_history.json (tracked in git), and FAILs if total increased since the last recorded run. --check mode reports without recording (for CI/pre-push use without growing the history file every run). First recorded baseline: 225 findings on 2026-09-11 — matches token-check's own documented count. Deliberately NOT wired into editor:gates (per-commit) — this is a periodic/per-release check per the source note, run manually or from a separate cron/CI step."
     },
     "T50": {
       "category": "tooling-gap",
@@ -1046,21 +1046,21 @@
     },
     "T52": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "partial",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no animation/motion QA beyond the binary prefers-reduced-motion check (editor_wireframe_behaviour.mjs's existing test) — nothing verifies a transition's actual DURATION/EASING matches --dur-1/--dur-2/--ease tokens, or that an animation doesn't jank (dropped frames) on a real interaction like the mobile sheet opening.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:motion-token-check",
       "panel": null,
-      "note": "getComputedStyle().transitionDuration/transitionTimingFunction against the app's own --dur-1/--dur-2/--ease token values (same drift-detection shape as T5/T10's colour/spacing check, applied to motion tokens) would be a cheap first step; frame-timing jank measurement is a larger lift (Chrome DevTools Performance trace)."
+      "note": "Cheap first step built as scoped: test/editor_motion_token_check.mjs statically scans transition/animation/transition-duration/transition-timing-function/animation-duration/animation-timing-function declarations for durations/easings that don't resolve to --dur-1/--dur-2/--ease. Found 39 pre-existing hand-typed literals on 2026-09-11 (e.g. .btn's .15s/ease instead of var(--dur-1)/var(--ease)) — added to editor:gates as advisory (--strict), same posture as editor:token-check. Frame-timing jank measurement (the larger lift, a real DevTools Performance trace over a live interaction like the mobile sheet opening) is still NOT built — remains backlog."
     },
     "T53": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "done",
       "source": "[UI/UX design-testing gap audit, 2026-09-11] no icon/glyph rendering-consistency check across the ICONS stroke set (CLAUDE.md 3b: one Lucide-shaped set at 16/20/22px only) — nothing asserts every icon actually renders (no broken/empty SVG path), is used at only those 3 documented sizes, or stays visually aligned (stroke-width consistency) across the set.",
       "wireframeRef": null,
-      "check": null,
+      "check": "npm run editor:icon-check",
       "panel": null,
-      "note": "A static scan of every icon(name,size) call site in chromasmith-22.html, asserting size is in {16,20,22} and the referenced name exists in the ICONS map — same shape as T5/T10's token-drift check, applied to the icon system instead of colour/spacing."
+      "note": "Built exactly as scoped: test/editor_icon_check.mjs statically scans ICONS (92 entries) for empty/degenerate drawable bodies and stroke-width drift, and every literal icon(name,size) call site (42 of 53 total; 11 use a dynamic name/size and are skipped, can't be statically resolved) for a missing ICONS key or a size outside {16,20,22}. Real finding on 2026-09-11: CLAUDE.md 3b's '16/20/22px only' claim is FALSE in the current app — 28 call sites use 12/14/18/34px (pause/play/nr/wand/flagGreen/star/chevron/etc). Missing-icon-key and empty-ICONS-entry findings hard-fail (a real blank-icon render); bad-size and stroke-width findings are advisory, wired into editor:gates."
     },
     "T54": {
       "category": "app-bug",
