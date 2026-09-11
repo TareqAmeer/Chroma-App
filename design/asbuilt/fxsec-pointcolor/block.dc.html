@@ -1,0 +1,23 @@
+<div class="tp-panel active" data-panel="pointcolor">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Point Color <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle on" id="tg-pointcolor" data-a11y="1" role="switch" aria-checked="true" tabindex="0" aria-label="Point Color"></div></span></div>
+        <div class="fx-fields" id="ff-pointcolor">
+          <div class="btn-row" style="align-items:center;gap:6px">
+            <button class="btn bgh" id="btn-pc-eye" style="flex:1">Pick from photo</button>
+            <button class="fx-info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button>
+          </div>
+          <div class="btn-row" id="pc-list" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+          <div style="font-size: var(--fs-1); color: var(--mut); font-family: var(--sans); margin-top: 6px; display: block;" id="pc-empty-hint">Pick a color from the photo, then dial in Hue/Saturation/Luminance and how wide a Range around it is affected.</div>
+          <div id="pc-ctl" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
+            <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-pc-h" aria-label="Hue" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-pc-h" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-pc-s" aria-label="Saturation" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-pc-s" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-pc-l" aria-label="Luminance" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-pc-l" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" aria-label="Range" style="--fillA: 0%; --fillB: 35%;"><div class="fx-val" id="vl-pc-r" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">35</div></div>
+            <div class="btn-row" style="margin-top:4px">
+              <button class="btn bgh">Delete point</button>
+              <button class="btn bgh">Reset all</button>
+            </div>
+          </div>
+        </div>
+      
+</div>

@@ -1,0 +1,25 @@
+<div class="tp-panel active" data-panel="retouch">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Retouch <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle on" id="tg-retouch" data-a11y="1" role="switch" aria-checked="true" tabindex="0" aria-label="Retouch"></div></span></div>
+        <div class="fx-fields" id="ff-retouch">
+        <div class="fx-row" style="align-items:flex-start"><div class="fx-label">Mode <button class="fx-info-i" type="button" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></div>
+          <select class="fx-select" id="sel-heal-mode" style="display:none" aria-label="Mode"><option value="heal" data-short="Heal">Heal (blend color)</option><option value="clone" data-short="Clone">Clone (copy exactly)</option></select>
+          <div class="seg" id="seg-heal-mode" style="flex:1"><button class="on">Heal</button><button class="">Clone</button></div>
+        </div>
+        <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" aria-label="Size" style="--fillA: 0%; --fillB: 15.789473684210526%;"><div class="fx-val" id="vl-heal-size" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">4%</div></div>
+        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" aria-label="Feather" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-heal-feather" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">50</div></div>
+        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" aria-label="Opacity" style="--fillA: 0%; --fillB: 100%;"><div class="fx-val" id="vl-heal-opacity" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">100</div></div>
+        <!-- "Retouch" is the tool's actual primary action (arms paint mode), so it gets the
+             filled/primary treatment and its own full-width row — panel redesign, feedback
+             "kept" note in test/panel_proposals.mjs on why an earlier draft that dropped this
+             button was wrong. Undo spot is cut per that same review (RT1): tracked separately
+             as R1 (editor_ux_spec.json) since a real per-spot delete needs new interaction
+             design, not a layout change — ⌘Z still undoes a spot in the meantime. -->
+        <div class="btn-row" style="margin-top:2px">
+          <button class="btn fx-btn-primary" id="btn-heal-paint" style="flex:1">Retouch</button>
+        </div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1">Clear all spots</button></div>
+        </div>
+      
+</div>

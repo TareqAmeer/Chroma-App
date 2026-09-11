@@ -132,8 +132,27 @@ async function closeAnyOverlay() {
   await page.waitForTimeout(80);
 }
 
+// Capture groups per docs/ui-workflow/sessions.md S6 (A→E, one per session). Assigned here so
+// design/surfaces.json stays the single source of truth instead of a second lookup file.
+const GROUPS = {
+  A: (id, kind) => id === 'panel-fx' || kind === 'fxsec',
+  B: (id, kind) => ['menu', 'modal', 'confirm', 'toast'].includes(kind),
+  C: (id) => ['panel-match', 'panel-copy', 'panel-collage', 'panel-guide', 'splash'].includes(id),
+  D: (id) => id === 'mobile-sheet',
+  E: (id) => id === 'library',
+};
+function groupFor(id, kind) {
+  for (const [g, test] of Object.entries(GROUPS)) if (test(id, kind)) return g;
+  return null; // flagged below if any entry doesn't fit
+}
+
 const surfaces = [];
-function add(entry) { surfaces.push(entry); console.log(`[surface] ${entry.id} opened=${entry.opened} states=${JSON.stringify(entry.states)}`); }
+function add(entry) {
+  entry.group = groupFor(entry.id, entry.kind);
+  surfaces.push(entry);
+  const flag = entry.group ? '' : '  [UNGROUPED]';
+  console.log(`[surface] ${entry.id} opened=${entry.opened} states=${JSON.stringify(entry.states)}${flag}`);
+}
 
 // ── 1. Pages ─────────────────────────────────────────────────────────────────────────────────
 const PAGES = [
@@ -401,7 +420,9 @@ if (DUMP_JSON) {
   }
   console.log('-'.repeat(90));
   const failed = surfaces.filter((s) => s.opened === false);
-  console.log(`${surfaces.length} surfaces, ${failed.length} failed to open, ${pageErrors.length} page errors`);
+  const ungrouped = surfaces.filter((s) => !s.group);
+  console.log(`${surfaces.length} surfaces, ${failed.length} failed to open, ${pageErrors.length} page errors, ${ungrouped.length} ungrouped`);
   if (failed.length) { console.log('\nFAILED TO OPEN:'); for (const s of failed) console.log(`  ${s.id}: ${s.note || '(no note)'}`); }
+  if (ungrouped.length) { console.log('\nUNGROUPED (fix GROUPS in this script):'); for (const s of ungrouped) console.log(`  ${s.id} (${s.kind})`); }
   console.log(`\nWrote ${path.relative(ROOT, outPath)}`);
 }

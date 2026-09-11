@@ -1,0 +1,10 @@
+<div class="tp-panel active" data-panel="deconv">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Deconvolution<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-hint">Recovers real detail lost to lens/sensor blur (Richardson-Lucy),
+          instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll
+          see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</div>
+        <div class="fx-row" title="Blend between the original and the deconvolved result."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-deconv-amt" aria-label="Amount" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-deconv-amt" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Size of the assumed lens/sensor blur (Gaussian PSF) to invert."><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-deconv-rad" aria-label="Radius" style="--fillA: 0%; --fillB: 20%;"><div class="fx-val" id="vl-deconv-rad" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">20</div></div>
+      
+</div>

@@ -1,0 +1,31 @@
+<div class="tp-panel active" data-panel="wheels">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Colour Wheels <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle on" id="tg-wheels" data-a11y="1" role="switch" aria-checked="true" tabindex="0" aria-label="Colour Wheels"></div></span></div>
+        <div class="fx-fields" id="ff-wheels">
+          <div class="fx-hint">Drag each wheel off-centre to tint that tonal region; the slider underneath is an independent brightness for the same region. Double-click a wheel to reset it.</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between;margin-top:6px">
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-lift" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair" width="96" height="96"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Shadows (Lift)</div>
+              <input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-wheel-lift-l" style="width: 100%; margin-top: 4px; --fillA: 50%; --fillB: 50%;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-lift-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gamma" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair" width="96" height="96"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Midtones (Gamma)</div>
+              <input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-wheel-gamma-l" style="width: 100%; margin-top: 4px; --fillA: 50%; --fillB: 50%;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gamma-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gain" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair" width="96" height="96"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Highlights (Gain)</div>
+              <input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-wheel-gain-l" style="width: 100%; margin-top: 4px; --fillA: 50%; --fillB: 50%;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gain-l">0</div>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn bgh">Reset all</button>
+          </div>
+        </div>
+      
+</div>

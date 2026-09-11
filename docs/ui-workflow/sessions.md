@@ -48,8 +48,17 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > For each entry record: the id, how to open it (the click steps), its states (rest, hover, disabled, empty, loaded, long text), and whether a wireframe exists.
 > Done when `surfaces.json` exists and a Haiku subagent can confirm every "how to open" step actually opens its surface.
 
-**S6: As-built capture, repeat per group** (Sonnet 5 + Haiku helpers). Run once per group: Editor sections, Editor menus and overlays, the Match/Copy/Collage/Guide pages, mobile, Library.
-> Read docs/ui-workflow/STATE.md and follow its rules. Task: capture the as-built wireframes for group **{GROUP}** from `design/surfaces.json`.
+**S6: As-built capture, repeat per group** (Sonnet 5 + Haiku helpers). Run A→E, one per session.
+>
+> | Group | Surfaces |
+> |---|---|
+> | A: editor-sections | the `#panel-fx` page plus all 23 `fxsec` sections |
+> | B: editor-overlays | the 6 menus, the 2 modal/confirm dialogs, the toast |
+> | C: other-pages | `#panel-match`, `#panel-copy`, `#panel-collage`, `#panel-guide`, and splash — splash can't be opened in the running app (no live DOM route); use `chromasmith-design/project/Splash Screen.html` as its wireframe/as-built stand-in instead of capturing it |
+> | D: mobile | the mobile sheet, in all its states |
+> | E: library | Library, via `?libtest=1` |
+>
+> Read docs/ui-workflow/STATE.md and follow its rules. Task: capture the as-built wireframes for group **{GROUP}** (A–E per the table above) from `design/surfaces.json` (each entry now carries a `group` field, assigned by `test/surface_inventory.mjs`'s `GROUPS` map — flag any entry with `group: null` instead of guessing where it belongs).
 > Write (or reuse, if it already exists) `test/surface_capture.mjs`. For each surface and state it saves `design/asbuilt/<id>/<state>.webp`, and a `spec.json` holding the element tree and computed values mapped to `design/tokens.json` names (value + property role, as in S3). Also generate a `.dc.html`-format block, the same structure as the `.tp-panel` blocks in `Editor (Developer) View.dc.html`.
 > Nothing is drawn by hand. Anything that doesn't map to a token goes in `spec.json` as `unmapped`.
 > You write/fix the script; a Haiku subagent runs it and reports only counts per surface, missing states and errors — never read the captures or spec files yourself beyond spot checks.

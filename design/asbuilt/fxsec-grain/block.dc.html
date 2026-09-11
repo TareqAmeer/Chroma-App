@@ -1,0 +1,33 @@
+<div class="tp-panel active" data-panel="grain">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Film Grain <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle on" id="tg-grain" data-a11y="1" role="switch" aria-checked="true" tabindex="0" aria-label="Film Grain"></div></span></div>
+        <div class="fx-fields" id="ff-grain" style="">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" aria-label="Amount" style="--fillA: 0%; --fillB: 30%;"><div class="fx-val" id="vl-grain-a" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">30</div></div>
+          <div class="fx-row" title="Fine-tune the grain clump size on top of the film format (5 = format-accurate)."><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="3" id="sl-grain-sz" aria-label="Size" style="--fillA: 0%; --fillB: 10.526315789473683%;"><div class="fx-val" id="vl-grain-sz" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">3</div></div>
+          <div class="fx-row" title="Dehancer film-format grain: smaller formats are coarser/stronger, 65mm is the finest &amp; weakest."><div class="fx-label">Film format</div>
+            <select class="fx-select" id="sel-grain-fmt" aria-label="Film format">
+              <option value="8mm">8mm — coarse</option>
+              <option value="16mm">16mm</option>
+              <option value="35mm">35mm — standard</option>
+              <option value="65mm" selected="">65mm — fine</option>
+            </select>
+          </div>
+          <!-- VIDEO ONLY (fxSyncVideoUI shows/hides this row). 0 = grain frozen to the screen
+               (looks fake/stuck), 100 = every frame independently reseeded (looks like digital
+               boil at high Amount). See CLAUDE.md §12: real film grain differs frame to frame at
+               similar intensity — neither extreme is what real stock looks like. -->
+          <div class="fx-row" id="row-grain-motion" style="display:none" title="0 = grain frozen to the screen. 100 = fully independent every frame (can boil at high Amount). Real film sits in between.">
+            <div class="fx-label">Grain motion</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-grain-motion" aria-label="Grain motion" style="--fillA: 0%; --fillB: 75%;"><div class="fx-val" id="vl-grain-motion" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">75</div>
+          </div>
+          <!-- VIDEO ONLY, same row group. A projector gate never holds a frame perfectly still and
+               the lamp never repeats an exposure exactly; without these a clip reads as digital
+               however good the grain is. Both default OFF so nothing changes unless asked for. -->
+          <div class="fx-row" id="row-gate-weave" style="display:none" title="Sub-pixel frame-to-frame wobble, the way a projector gate holds film. A little goes a long way — past about 30 it reads as a shaky camera rather than a projector.">
+            <div class="fx-label">Gate weave</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-gate-weave" aria-label="Gate weave" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-gate-weave" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div>
+          </div>
+          <div class="fx-row" id="row-film-breath" style="display:none" title="Per-frame exposure flicker, the way a projector lamp and shutter never deliver exactly the same light twice.">
+            <div class="fx-label">Film breath</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-film-breath" aria-label="Film breath" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-film-breath" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div>
+          </div>
+        </div>
+      
+</div>

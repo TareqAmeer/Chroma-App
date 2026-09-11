@@ -1,0 +1,136 @@
+<div class="tp-panel active" data-panel="export">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Export<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Output</div>
+        <div class="vrow">
+          <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width: 140px;">
+          <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
+          <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
+        </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" aria-label="Quality" style="--fillA: 0%; --fillB: 95%;"><div class="fx-val" id="vl-exp-q" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">99</div></div>
+        <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
+          <select class="fx-select" id="sel-exp-fmt" aria-label="Format">
+            <option value="auto">Auto (match source)</option>
+            <option value="jpg">JPG</option>
+            <option value="png">PNG (lossless)</option>
+            <option value="webp">WebP</option>
+          </select>
+        </div>
+        <!-- Resize + output sharpening. These belong together: any downscale throws away the
+             detail the sharpening was judged on, so resampling without re-sharpening always
+             looks soft. Full size + Off is the default and leaves the export byte-identical. -->
+        <div class="fx-row" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
+          <select class="fx-select" id="sel-exp-size" aria-label="Resize (long edge)">
+            <option value="0">Full size</option>
+            <option value="4096">4096 px</option>
+            <option value="2560">2560 px</option>
+            <option value="2048">2048 px</option>
+            <option value="1600">1600 px</option>
+            <option value="1080">1080 px (social)</option>
+          </select>
+        </div>
+        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
+          <select class="fx-select" id="sel-exp-sharp" aria-label="Output sharpening">
+            <option value="0">Off</option>
+            <option value="1">Low</option>
+            <option value="2">Standard</option>
+            <option value="3">High</option>
+          </select>
+        </div>
+        <!-- HDR (gain map). Hidden unless the ORIGINAL file actually carries HDR headroom — a gain
+             map over an SDR source encodes nothing, so offering it there would be a lie. Shown by
+             fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
+        <div class="fx-row" id="fx-hdr-row" style="display:none" title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
+          <div class="fx-label">HDR (gain map)</div>
+          <input type="checkbox" id="tg-exp-hdr" style="">
+        </div>
+        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
+        <div class="fx-sub">Watermark</div>
+        <div class="fx-row" style="margin-top:0" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
+          <div class="fx-label">Watermark</div>
+          <div class="fx-toggle" id="tg-exp-wm" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Watermark"></div>
+        </div>
+        <div id="exp-wm-row" style="display: none;">
+          <div class="vrow" style="margin-top:4px">
+            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex: 1 1 0%;">
+          </div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" aria-label="Opacity" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-exp-wm-op" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">55</div></div>
+        </div>
+        <!-- Named export presets: just the four controls above (format/quality/resize/sharpen),
+             saved/recalled by name — distinct from Styles (the full edit recipe) and from Save
+             session (one auto-restored slot). The common case this exists for: "small JPG for
+             the web" vs "full-res PNG for print" as one click instead of four each time. -->
+        <div class="fx-sub">Preset</div>
+        <div style="margin-top:0">
+          <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
+            <select class="fx-select" id="sel-exp-preset" aria-label="Export preset"><option value="">— none —</option></select>
+          </div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn bgh" title="Save the current Quality/Format/Resize/Sharpening as a named preset">Save preset…</button>
+            <button class="btn bgh" id="btn-exp-preset-del" disabled="" title="Delete the selected preset">Delete</button>
+          </div>
+        </div>
+        <div id="fx-match-series-row" style="margin-top:8px;display:none">
+          <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn bgh">Match to this photo</button>
+            <button class="btn bgh">Clear</button>
+          </div>
+        </div>
+        <div class="fx-sub">Export</div>
+        <div id="fx-export-scope-row" style="margin-top:0;display:none">
+          <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope (1 photos loaded)</div>
+          <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
+            <button class="btn bsec" id="btn-scope-all" style="flex:1;padding-left:6px;padding-right:6px">All photos</button>
+            <button class="btn bgh" id="btn-scope-cur" style="flex:1;padding-left:6px;padding-right:6px">Current photo</button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn bpri" id="btn-fx-export">Export</button>
+          <button class="btn bgh" id="btn-fx-cancel" style="display:none">Cancel</button>
+        </div>
+        <div id="fx-export-prog" style="display:none;margin-top:8px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:4px" id="fx-export-prog-txt"></div>
+          <div style="height:4px;background:var(--bdr);border-radius:2px;overflow:hidden"><div id="fx-export-prog-bar" style="height:100%;width:0;background:var(--acc);transition:width .15s"></div></div>
+          <!-- Per-photo status list — only populated (see setExportPhotoStatus) for a >1-photo
+               export, so a partial/mixed-result batch is visible at a glance instead of a single
+               bar that just reads "done" whether 1 or all-but-one photos actually saved. -->
+          <div id="fx-export-photolist" style="display:none;margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mono);font-size:10px"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" title="Save all slider settings to localStorage">Save session</button>
+          <button class="btn bgh" title="Restore saved slider settings">Load session</button>
+        </div>
+        <!-- STYLES: named, reusable, re-editable recipes (curves/HSL/masks/grain/halation/bloom/
+             adjust/etc — everything a LUT preset does NOT capture, since a LUT is a baked 3D
+             lookup table). Distinct from "Save session" above (session is one slot, auto-
+             restored on relaunch); a Style is a permanent, named, list entry you apply on demand
+             to ANY photo, and can export/import as a .json to share between devices. Modelled on
+             darktable's Styles (a saved history-stack, separate from per-module presets). -->
+        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
+          <div class="fx-label" style="width:auto;margin-bottom:6px">Styles</div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn bgh" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
+            <button class="btn bgh" title="Import a Style .json exported from Chromasmith">Import…</button>
+          </div>
+          <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"><div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No styles saved yet.</div></div>
+          <input type="file" id="style-import-input" accept="application/json,.json" style="display: none;">
+        </div>
+        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
+          <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>
+          <!-- Was a button reading "Upload exports: Off" — the state was baked into its own
+               label rather than shown the way every other on/off control in the app is. Real
+               .fx-toggle switch instead, matching e.g. "Sparkle-optimized RAW". -->
+          <div class="fx-row" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><div class="fx-label">Upload exports to Google Photos</div><div class="fx-toggle" id="tg-gp-save" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Upload exports to Google Photos"></div></div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn bgh" id="btn-gp-connect" title="Sign in to Google Photos (lasts ~1 hour)">Connect</button>
+            <button class="btn bgh" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px">ID…</button>
+          </div>
+        </div>
+        <!-- Lightroom cloud browsing moved into the desktop LIBRARY sidebar (see library-ui.js's
+             Cloud section + window.lrCloud below) — the old cramped Export-panel widget
+             (#lr-section: Connect button + album dropdown + 72px grid) is gone. -->
+
+      
+</div>

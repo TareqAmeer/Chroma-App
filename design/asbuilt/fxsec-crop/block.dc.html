@@ -1,0 +1,66 @@
+<div class="tp-panel active" data-panel="crop">
+
+        <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Transform <div class="fx-toggle-lb" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--sans)" data-a11y="1" role="button" tabindex="0">Reset</div></div>
+        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Aspect ratio</div>
+        <div class="fx-row"><div class="fx-label">Aspect</div>
+          <!-- A list of tap chips, not a dropdown — same convention as the Input/Print profile
+               chips above (selectToChips) and the Canvas ratio chips (cvBuildChips): the <select>
+               stays the one source of truth (still dispatches its own onchange, still restorable
+               from a session/snapshot) and is just visually replaced. Panel redesign (FR1/R6
+               precedent): the proposal's checklist-style .rlist is a genuine picker-widget swap,
+               not a markup move, so it's deferred (tracked as R7) — this keeps the existing,
+               already-correct chip mechanism and only regroups it under an "Aspect ratio" heading. -->
+          <select class="fx-select" id="sel-crop-ar" style="display:none" aria-label="Aspect">
+            <option value="shot">As shot</option>
+            <option value="0">Free</option>
+            <option value="custom">Custom</option>
+            <option value="1">1:1 Square</option>
+            <option value="1.5">3:2</option>
+            <option value="1.3333">4:3</option>
+            <option value="1.25">5:4</option>
+            <option value="1.4">7:5</option>
+            <option value="1.7778">16:9 Widescreen</option>
+            <option value="0.7071">1.414:1 ISO A4</option>
+            <option value="1.2941">11:8.5 US Letter</option>
+          </select>
+        </div>
+        <div class="btn-row chip-tap" id="crop-ar-chips" style="margin-bottom:2px"><button class="btn bgh on">As shot</button><button class="btn bgh">Free</button><button class="btn bgh">Custom</button><button class="btn bgh">1:1 Square</button><button class="btn bgh">3:2</button><button class="btn bgh">4:3</button><button class="btn bgh">5:4</button><button class="btn bgh">7:5</button><button class="btn bgh">16:9 Widescreen</button><button class="btn bgh">1.414:1 ISO A4</button><button class="btn bgh">11:8.5 US Letter</button></div>
+        <div class="fx-row" title="Swap the picked aspect ratio between portrait and landscape (e.g. 3:2 ↔ 2:3) — the chip list above only lists one orientation each.">
+          <div class="fx-label">Orientation</div>
+          <button class="btn bgh" id="btn-crop-orient">Swap portrait/landscape</button>
+        </div>
+        <div class="fx-row" id="crop-custom-row" style="display:none">
+          <div class="fx-label">Custom</div>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-w" style="width: 56px;">
+          <span style="color:var(--mut)">:</span>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-h" style="width: 56px;">
+        </div>
+        <div class="fx-sub">Transform</div>
+        <div class="btn-row" style="justify-content:center;gap:14px">
+          <button class="btn-icon" title="Rotate left" data-ic="rotateLeft"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg></button>
+          <button class="btn-icon" title="Rotate right" data-ic="rotateRight"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 0-3 6.7"></path><path d="M21 21v-6h-6"></path></svg></button>
+          <button class="btn-icon" title="Flip horizontal" data-ic="flipH"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"></path><path d="M18 8l3 4-3 4M6 8l-3 4 3 4"></path></svg></button>
+          <button class="btn-icon" title="Flip vertical" data-ic="flipV"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"></path><path d="M8 18l4 3 4-3M8 6l4-3 4 3"></path></svg></button>
+        </div>
+        <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
+          <button class="btn bgh" id="btn-geom-apply-all" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
+        </div>
+        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider fx-slider-bi" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" aria-label="Straighten" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-straighten" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0°</div></div>
+        <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
+        <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
+          <button class="btn" id="btn-ah-roi" style="flex:1">Set region…</button>
+          <button class="btn" id="btn-ah-roi-clear" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></span></button>
+        </div>
+        <div class="fx-row"><div class="fx-label">Grid</div>
+          <select class="fx-select" id="sel-crop-grid" aria-label="Grid">
+            <option value="3x3">3×3 (Rule of thirds)</option>
+            <option value="4x4">4×4</option>
+            <option value="golden">Golden ratio</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bsec" id="btn-crop">Crop</button>
+        </div>
+      
+</div>

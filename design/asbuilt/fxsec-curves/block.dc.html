@@ -1,0 +1,39 @@
+<div class="tp-panel active" data-panel="curves">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Tone Curves <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle on" id="tg-curves" data-a11y="1" role="switch" aria-checked="true" tabindex="0" aria-label="Tone Curves"></div></span></div>
+        <div class="fx-fields" id="ff-curves">
+          <div class="btn-row" id="curve-mode-chips">
+            <button class="btn bgh crv-mode-chip on" data-mode="point">Point</button>
+            <button class="btn bgh crv-mode-chip" data-mode="param">Parametric</button>
+          </div>
+          <div id="curve-point-block">
+            <div class="btn-row" id="curve-chips" style="margin-top:6px">
+              <button class="btn bgh crv-chip on" data-ch="m">RGB</button>
+              <button class="btn bgh crv-chip" data-ch="r">R</button>
+              <button class="btn bgh crv-chip" data-ch="g">G</button>
+              <button class="btn bgh crv-chip" data-ch="b">B</button>
+            </div>
+            <div style="max-width:280px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px">
+              <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+            </div>
+            <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:2px" width="275" height="275"></canvas>
+            <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
+              <span>Blacks</span><span>Midtones</span><span>Whites</span>
+            </div>
+            <div class="btn-row" style="margin-top:6px">
+              <button class="btn bgh">Reset channel</button>
+              <button class="btn bgh">Reset all</button>
+            </div>
+          </div>
+          <div id="curve-param-block" style="display:none;margin-top:6px">
+            <div class="fx-row" title="Lifts/lowers the darkest tones."><div class="fx-label">Shadows</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-s" aria-label="Shadows" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-s" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the low-midtones."><div class="fx-label">Darks</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-d" aria-label="Darks" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-d" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the high-midtones."><div class="fx-label">Lights</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-l" aria-label="Lights" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-l" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the brightest tones."><div class="fx-label">Highlights</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-h" aria-label="Highlights" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-h" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="btn-row" style="margin-top:6px">
+              <button class="btn bgh">Reset all</button>
+            </div>
+          </div>
+        </div>
+      
+</div>

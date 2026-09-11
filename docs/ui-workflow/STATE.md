@@ -115,3 +115,33 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   actions each, which can silently stack to 10+ min with no signal) and a `[surface] ...` log
   line per entry as it's collected — the original hang produced zero output for 10+ minutes,
   which is what made it look identical to "still working" until debugged. Pushed.
+
+**S6 group A — editor-sections — 2026-09-11 — done**
+- Added a `group` field (A–E) to every `design/surfaces.json` entry, via a `GROUPS` map added to
+  `test/surface_inventory.mjs` (re-run to regenerate); 0/41 ungrouped. Filled `docs/ui-workflow/
+  sessions.md`'s S6 `{GROUP}` placeholder with the A–E table (user-specified), plus a note that
+  splash has no live DOM route — use `chromasmith-design/project/Splash Screen.html` as its
+  as-built stand-in when group C runs, not a capture.
+- `test/surface_capture.mjs` (new): for each of group A's 24 surfaces (`panel-fx` + 23 `fxsec-*`),
+  captures `noPhoto.webp` (before any photo loads — user flagged only 4/41 surfaces.json entries
+  have a recorded "loaded" state, so most sections would otherwise be captured empty by default),
+  then loads `test/fixtures/portrait.png` and captures every state `surfaces.json` recorded as
+  actually firing (rest/hover/longText/…), plus an explicit `on.webp`/`off.webp` pair for any
+  surface with a `.fx-toggle` (sections dim rather than disappear when off, so "off" needs its own
+  shot, not just the boolean surfaces.json recorded). Writes `spec.json` (element tree, `id` +
+  nearest-ancestor `data-fxsec` per node — the only hooks S1 found the wireframe can be matched
+  against later — and computed values for color/typography/spacing/radius/motion/elevation props,
+  each matched to a `design/tokens.json` token by VALUE + property-role family, S1(a)'s approach,
+  not `_ds` var() names) and `block.dc.html` (the surface's real outerHTML, scripts/on* attrs
+  stripped, wrapped in a `.tp-panel[data-panel]` shell matching `Editor (Developer) View.dc.html`'s
+  structure — generated from the live DOM, nothing hand-drawn).
+- Result: 24/24 surfaces, 0 missing states, 24/24 noPhoto captures. 32,531 unmapped style decls
+  across the group (expected per S1(a)/S3 — no tokens yet for control heights, font weights, pill
+  radii, most off-grid spacing/colour literals); left as `unmapped` in each spec.json, no tokens
+  invented. `fxsec-looks` (6,472) and `panel-fx` (13,029) dominate — both are large composite
+  surfaces (preset grid; whole page containing all 23 sections), not signs of a mapping bug.
+  Known imprecision: `panel-fx`'s on/off pair toggles whichever `.fx-toggle` is first in DOM order
+  under the whole-page selector (not a specific section) — harmless for the page-level shot but
+  don't read `panel-fx/on.webp` vs `off.webp` as "the page's own toggle state".
+  Output: `design/asbuilt/<id>/{noPhoto,rest,hover,…,on,off}.webp`, `spec.json`, `block.dc.html`
+  (14 MB total, gitignored-check: not excluded, committed as-is). Groups B–E not yet run.

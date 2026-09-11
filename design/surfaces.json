@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T16:06:22.582Z",
+  "generatedAt": "2026-09-11T16:18:11.233Z",
   "pageErrors": [],
   "surfaces": [
     {
@@ -17,7 +17,8 @@
         "rest": true
       },
       "wireframe": true,
-      "wireframeFile": "Editor (Developer) View.dc.html"
+      "wireframeFile": "Editor (Developer) View.dc.html",
+      "group": "A"
     },
     {
       "id": "panel-match",
@@ -34,7 +35,8 @@
         "rest": true
       },
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "C"
     },
     {
       "id": "panel-copy",
@@ -51,7 +53,8 @@
         "rest": true
       },
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "C"
     },
     {
       "id": "panel-collage",
@@ -68,7 +71,8 @@
         "rest": true
       },
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "C"
     },
     {
       "id": "panel-guide",
@@ -85,7 +89,8 @@
         "rest": true
       },
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "C"
     },
     {
       "id": "fxsec-image",
@@ -105,7 +110,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-looks",
@@ -126,7 +132,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-adjust",
@@ -148,7 +155,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-nr",
@@ -170,7 +178,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-deconv",
@@ -191,7 +200,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-curves",
@@ -213,7 +223,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-hsl",
@@ -235,7 +246,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-wheels",
@@ -257,7 +269,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-pointcolor",
@@ -279,7 +292,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-local",
@@ -301,7 +315,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-lens",
@@ -323,7 +338,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-crop",
@@ -344,7 +360,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-grain",
@@ -366,7 +383,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-art",
@@ -388,7 +406,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-hal",
@@ -410,7 +429,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-bloom",
@@ -432,7 +452,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-vig",
@@ -454,7 +475,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-borders",
@@ -477,7 +499,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-retouch",
@@ -499,7 +522,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-canvas",
@@ -521,7 +545,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-diag",
@@ -542,7 +567,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-export",
@@ -565,7 +591,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-info",
@@ -586,7 +613,8 @@
       "note": null,
       "kind": "fxsec",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fx-settings-menu",
@@ -606,7 +634,8 @@
       "note": null,
       "kind": "menu",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-tools-menu",
@@ -626,7 +655,8 @@
       "note": null,
       "kind": "menu",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-view-menu",
@@ -646,7 +676,8 @@
       "note": null,
       "kind": "menu",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-overflow-menu",
@@ -666,7 +697,8 @@
       "note": null,
       "kind": "menu",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-split-popover",
@@ -688,7 +720,8 @@
       "note": null,
       "kind": "menu",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-timeline-popover",
@@ -710,7 +743,8 @@
       "note": null,
       "kind": "menu",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "cs-modal",
@@ -731,7 +765,8 @@
       "note": null,
       "kind": "modal",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-confirm-modal",
@@ -752,7 +787,8 @@
       "note": null,
       "kind": "confirm",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-ask-modal",
@@ -774,7 +810,8 @@
       "note": null,
       "kind": "modal",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-toast",
@@ -795,7 +832,8 @@
       "note": null,
       "kind": "toast",
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "mobile-sheet",
@@ -813,7 +851,8 @@
         }
       ],
       "wireframe": false,
-      "wireframeFile": null
+      "wireframeFile": null,
+      "group": "D"
     },
     {
       "id": "library",
@@ -831,7 +870,8 @@
         "empty": false
       },
       "wireframe": true,
-      "wireframeFile": "Library View.html"
+      "wireframeFile": "Library View.html",
+      "group": "E"
     },
     {
       "id": "splash",
@@ -842,7 +882,8 @@
       "states": {},
       "note": "no live DOM route — first-load native splash, not part of the SPA panel switch",
       "wireframe": true,
-      "wireframeFile": "Splash"
+      "wireframeFile": "Splash",
+      "group": "C"
     }
   ]
 }

@@ -1,0 +1,7401 @@
+{
+  "id": "fxsec-art",
+  "group": "A",
+  "generatedAt": "2026-09-11T16:24:19.443Z",
+  "hasToggle": true,
+  "tree": {
+    "tag": "div",
+    "dataFxsec": "art",
+    "classes": [
+      "fx-ctrl",
+      "sec-active"
+    ],
+    "style": {
+      "color": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "backgroundColor": {
+        "value": "rgb(42, 42, 44)",
+        "token": "/color/surface/panel",
+        "appVar": "--sur",
+        "role": "surface.panel"
+      },
+      "borderColor": {
+        "value": "rgba(255, 255, 255, 0.12)",
+        "token": null
+      },
+      "outlineColor": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "fontSize": {
+        "value": "16px",
+        "token": null
+      },
+      "fontWeight": {
+        "value": "400",
+        "token": null
+      },
+      "fontFamily": {
+        "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+        "token": null
+      },
+      "lineHeight": {
+        "value": "24px",
+        "token": null
+      },
+      "letterSpacing": {
+        "value": "normal",
+        "token": null
+      },
+      "paddingTop": {
+        "value": "10px",
+        "token": null
+      },
+      "paddingRight": {
+        "value": "10px",
+        "token": null
+      },
+      "paddingBottom": {
+        "value": "10px",
+        "token": null
+      },
+      "paddingLeft": {
+        "value": "10px",
+        "token": null
+      },
+      "gap": {
+        "value": "normal",
+        "token": null
+      },
+      "rowGap": {
+        "value": "normal",
+        "token": null
+      },
+      "columnGap": {
+        "value": "normal",
+        "token": null
+      },
+      "borderRadius": {
+        "value": "8px",
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
+      },
+      "borderTopLeftRadius": {
+        "value": "8px",
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
+      },
+      "borderTopRightRadius": {
+        "value": "8px",
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
+      },
+      "borderBottomLeftRadius": {
+        "value": "8px",
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
+      },
+      "borderBottomRightRadius": {
+        "value": "8px",
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
+      },
+      "transitionDuration": {
+        "value": "0s",
+        "token": null
+      },
+      "transitionTimingFunction": {
+        "value": "ease",
+        "token": null
+      },
+      "boxShadow": {
+        "value": "rgba(255, 255, 255, 0.043) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.3) 0px 1px 2px 0px, rgba(0, 0, 0, 0.35) 0px 6px 16px -4px",
+        "token": null
+      }
+    },
+    "children": [
+      {
+        "tag": "div",
+        "dataFxsec": "art",
+        "classes": [
+          "fx-ctrl-title"
+        ],
+        "style": {
+          "color": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "backgroundColor": {
+            "value": "rgba(0, 0, 0, 0)",
+            "token": null
+          },
+          "borderColor": {
+            "value": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.12)",
+            "token": null
+          },
+          "outlineColor": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "fontSize": {
+            "value": "11px",
+            "token": null
+          },
+          "fontWeight": {
+            "value": "600",
+            "token": null
+          },
+          "fontFamily": {
+            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "token": null
+          },
+          "lineHeight": {
+            "value": "16.5px",
+            "token": null
+          },
+          "letterSpacing": {
+            "value": "1.1px",
+            "token": null
+          },
+          "paddingTop": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingRight": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingBottom": {
+            "value": "10px",
+            "token": null
+          },
+          "paddingLeft": {
+            "value": "0px",
+            "token": null
+          },
+          "gap": {
+            "value": "6px",
+            "token": null
+          },
+          "rowGap": {
+            "value": "6px",
+            "token": null
+          },
+          "columnGap": {
+            "value": "6px",
+            "token": null
+          },
+          "borderRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "transitionDuration": {
+            "value": "0s",
+            "token": null
+          },
+          "transitionTimingFunction": {
+            "value": "ease",
+            "token": null
+          },
+          "boxShadow": {
+            "value": "none",
+            "token": null
+          }
+        },
+        "children": [
+          {
+            "tag": "span",
+            "dataFxsec": "art",
+            "classes": [
+              "fx-ctrl-chev"
+            ],
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "fontSize": {
+                "value": "11px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "600",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "16.5px",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "1.1px",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "0px",
+                "token": null
+              },
+              "gap": {
+                "value": "normal",
+                "token": null
+              },
+              "rowGap": {
+                "value": "normal",
+                "token": null
+              },
+              "columnGap": {
+                "value": "normal",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "cubic-bezier(0.2, 0.8, 0.3, 1)",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": [
+              {
+                "tag": "svg",
+                "dataFxsec": "art",
+                "style": {
+                  "color": {
+                    "value": "rgb(255, 255, 255)",
+                    "token": "/color/surface/page",
+                    "appVar": "--bg",
+                    "role": "surface.page"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(255, 255, 255)",
+                    "token": "/color/surface/page",
+                    "appVar": "--bg",
+                    "role": "surface.page"
+                  },
+                  "outlineColor": {
+                    "value": "rgb(255, 255, 255)",
+                    "token": "/color/surface/page",
+                    "appVar": "--bg",
+                    "role": "surface.page"
+                  },
+                  "fontSize": {
+                    "value": "11px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "600",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "16.5px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "1.1px",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": [
+                  {
+                    "tag": "path",
+                    "dataFxsec": "art",
+                    "style": {
+                      "color": {
+                        "value": "rgb(255, 255, 255)",
+                        "token": "/color/surface/page",
+                        "appVar": "--bg",
+                        "role": "surface.page"
+                      },
+                      "backgroundColor": {
+                        "value": "rgba(0, 0, 0, 0)",
+                        "token": null
+                      },
+                      "borderColor": {
+                        "value": "rgb(255, 255, 255)",
+                        "token": "/color/surface/page",
+                        "appVar": "--bg",
+                        "role": "surface.page"
+                      },
+                      "outlineColor": {
+                        "value": "rgb(255, 255, 255)",
+                        "token": "/color/surface/page",
+                        "appVar": "--bg",
+                        "role": "surface.page"
+                      },
+                      "fontSize": {
+                        "value": "11px",
+                        "token": null
+                      },
+                      "fontWeight": {
+                        "value": "600",
+                        "token": null
+                      },
+                      "fontFamily": {
+                        "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                        "token": null
+                      },
+                      "lineHeight": {
+                        "value": "16.5px",
+                        "token": null
+                      },
+                      "letterSpacing": {
+                        "value": "1.1px",
+                        "token": null
+                      },
+                      "paddingTop": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "paddingRight": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "paddingBottom": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "paddingLeft": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "gap": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "rowGap": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "columnGap": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "borderRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderTopLeftRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderTopRightRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderBottomLeftRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderBottomRightRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "transitionDuration": {
+                        "value": "0s",
+                        "token": null
+                      },
+                      "transitionTimingFunction": {
+                        "value": "ease",
+                        "token": null
+                      },
+                      "boxShadow": {
+                        "value": "none",
+                        "token": null
+                      }
+                    },
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tag": "span",
+            "dataFxsec": "art",
+            "classes": [
+              "fx-title-right"
+            ],
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "fontSize": {
+                "value": "11px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "600",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "16.5px",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "1.1px",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "0px",
+                "token": null
+              },
+              "gap": {
+                "value": "8px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "8px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "8px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": [
+              {
+                "tag": "button",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-ctrl-title-reset"
+                ],
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "11px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "Arial",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": [
+                  {
+                    "tag": "svg",
+                    "dataFxsec": "art",
+                    "style": {
+                      "color": {
+                        "value": "rgb(204, 204, 204)",
+                        "token": "/color/text/muted",
+                        "appVar": "--mut",
+                        "role": "text.muted"
+                      },
+                      "backgroundColor": {
+                        "value": "rgba(0, 0, 0, 0)",
+                        "token": null
+                      },
+                      "borderColor": {
+                        "value": "rgb(204, 204, 204)",
+                        "token": "/color/text/muted",
+                        "appVar": "--mut",
+                        "role": "text.muted"
+                      },
+                      "outlineColor": {
+                        "value": "rgb(204, 204, 204)",
+                        "token": "/color/text/muted",
+                        "appVar": "--mut",
+                        "role": "text.muted"
+                      },
+                      "fontSize": {
+                        "value": "11px",
+                        "token": null
+                      },
+                      "fontWeight": {
+                        "value": "400",
+                        "token": null
+                      },
+                      "fontFamily": {
+                        "value": "Arial",
+                        "token": null
+                      },
+                      "lineHeight": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "letterSpacing": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "paddingTop": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "paddingRight": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "paddingBottom": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "paddingLeft": {
+                        "value": "0px",
+                        "token": null
+                      },
+                      "gap": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "rowGap": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "columnGap": {
+                        "value": "normal",
+                        "token": null
+                      },
+                      "borderRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderTopLeftRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderTopRightRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderBottomLeftRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "borderBottomRightRadius": {
+                        "value": "0px",
+                        "token": "/designSystem/radius_none",
+                        "appVar": "--radius-none",
+                        "role": "radius.none"
+                      },
+                      "transitionDuration": {
+                        "value": "0s",
+                        "token": null
+                      },
+                      "transitionTimingFunction": {
+                        "value": "ease",
+                        "token": null
+                      },
+                      "boxShadow": {
+                        "value": "none",
+                        "token": null
+                      }
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "tag": "div",
+                "id": "tg-art",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-toggle",
+                  "on"
+                ],
+                "style": {
+                  "color": {
+                    "value": "rgb(255, 255, 255)",
+                    "token": "/color/surface/page",
+                    "appVar": "--bg",
+                    "role": "surface.page"
+                  },
+                  "backgroundColor": {
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
+                  },
+                  "borderColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(255, 255, 255)",
+                    "token": "/color/surface/page",
+                    "appVar": "--bg",
+                    "role": "surface.page"
+                  },
+                  "fontSize": {
+                    "value": "11px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "600",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "16.5px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "1.1px",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "borderTopRightRadius": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "tag": "div",
+        "id": "ff-art",
+        "dataFxsec": "art",
+        "classes": [
+          "fx-fields"
+        ],
+        "style": {
+          "color": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "backgroundColor": {
+            "value": "rgba(0, 0, 0, 0)",
+            "token": null
+          },
+          "borderColor": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "outlineColor": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "fontSize": {
+            "value": "16px",
+            "token": null
+          },
+          "fontWeight": {
+            "value": "400",
+            "token": null
+          },
+          "fontFamily": {
+            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "token": null
+          },
+          "lineHeight": {
+            "value": "24px",
+            "token": null
+          },
+          "letterSpacing": {
+            "value": "normal",
+            "token": null
+          },
+          "paddingTop": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingRight": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingBottom": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingLeft": {
+            "value": "0px",
+            "token": null
+          },
+          "gap": {
+            "value": "6px",
+            "token": null
+          },
+          "rowGap": {
+            "value": "6px",
+            "token": null
+          },
+          "columnGap": {
+            "value": "6px",
+            "token": null
+          },
+          "borderRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "transitionDuration": {
+            "value": "0s",
+            "token": null
+          },
+          "transitionTimingFunction": {
+            "value": "cubic-bezier(0.2, 0.8, 0.3, 1)",
+            "token": null
+          },
+          "boxShadow": {
+            "value": "none",
+            "token": null
+          }
+        },
+        "children": [
+          {
+            "tag": "div",
+            "dataFxsec": "art",
+            "classes": [
+              "fx-row"
+            ],
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "fontSize": {
+                "value": "16px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "400",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "24px",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "normal",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "0px",
+                "token": null
+              },
+              "gap": {
+                "value": "2px 8px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "2px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "8px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": [
+              {
+                "tag": "div",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-label"
+                ],
+                "text": "Dust",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "input",
+                "id": "sl-art-du",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-slider"
+                ],
+                "style": {
+                  "color": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "fontSize": {
+                    "value": "13.3333px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "Arial",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "div",
+                "id": "vl-art-du",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-val"
+                ],
+                "text": "30",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "tag": "div",
+            "id": "chips-dustmode",
+            "dataFxsec": "art",
+            "classes": [
+              "btn-row",
+              "chip-tap"
+            ],
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "fontSize": {
+                "value": "16px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "400",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "24px",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "normal",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "0px",
+                "token": null
+              },
+              "gap": {
+                "value": "8px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "8px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "8px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": [
+              {
+                "tag": "button",
+                "dataFxsec": "art",
+                "classes": [
+                  "btn",
+                  "bgh",
+                  "on"
+                ],
+                "text": "Both",
+                "style": {
+                  "color": {
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(212, 144, 58, 0.12)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
+                  },
+                  "outlineColor": {
+                    "value": "rgb(97, 160, 175)",
+                    "token": "/color/action/primary",
+                    "appVar": "--acc",
+                    "role": "action.primary"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "500",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease, ease, ease, ease, ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "button",
+                "dataFxsec": "art",
+                "classes": [
+                  "btn",
+                  "bgh"
+                ],
+                "text": "Black",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgb(37, 37, 39)",
+                    "token": "/color/surface/panelAlt",
+                    "appVar": "--sur2",
+                    "role": "surface.panel-alt"
+                  },
+                  "borderColor": {
+                    "value": "rgba(255, 255, 255, 0.12)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "500",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease, ease, ease, ease, ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "button",
+                "dataFxsec": "art",
+                "classes": [
+                  "btn",
+                  "bgh"
+                ],
+                "text": "White",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgb(37, 37, 39)",
+                    "token": "/color/surface/panelAlt",
+                    "appVar": "--sur2",
+                    "role": "surface.panel-alt"
+                  },
+                  "borderColor": {
+                    "value": "rgba(255, 255, 255, 0.12)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "500",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease, ease, ease, ease, ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "tag": "div",
+            "dataFxsec": "art",
+            "classes": [
+              "fx-row"
+            ],
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "fontSize": {
+                "value": "16px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "400",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "24px",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "normal",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "0px",
+                "token": null
+              },
+              "gap": {
+                "value": "2px 8px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "2px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "8px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": [
+              {
+                "tag": "div",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-label"
+                ],
+                "text": "Scratches",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "input",
+                "id": "sl-art-sc",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-slider"
+                ],
+                "style": {
+                  "color": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "fontSize": {
+                    "value": "13.3333px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "Arial",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "div",
+                "id": "vl-art-sc",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-val"
+                ],
+                "text": "20",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "tag": "div",
+            "dataFxsec": "art",
+            "classes": [
+              "fx-row"
+            ],
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "fontSize": {
+                "value": "16px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "400",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "24px",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "normal",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "0px",
+                "token": null
+              },
+              "gap": {
+                "value": "2px 8px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "2px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "8px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": [
+              {
+                "tag": "div",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-label"
+                ],
+                "text": "Light leak",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "input",
+                "id": "sl-art-lk",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-slider"
+                ],
+                "style": {
+                  "color": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "fontSize": {
+                    "value": "13.3333px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "Arial",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "div",
+                "id": "vl-art-lk",
+                "dataFxsec": "art",
+                "classes": [
+                  "fx-val"
+                ],
+                "text": "0",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "tag": "div",
+            "dataFxsec": "art",
+            "classes": [
+              "btn-row"
+            ],
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "fontSize": {
+                "value": "16px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "400",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "24px",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "normal",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "0px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "0px",
+                "token": null
+              },
+              "gap": {
+                "value": "8px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "8px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "8px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderTopRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomLeftRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "borderBottomRightRadius": {
+                "value": "0px",
+                "token": "/designSystem/radius_none",
+                "appVar": "--radius-none",
+                "role": "radius.none"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": [
+              {
+                "tag": "button",
+                "dataFxsec": "art",
+                "classes": [
+                  "btn",
+                  "bgh"
+                ],
+                "text": "Re-roll",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgb(37, 37, 39)",
+                    "token": "/color/surface/panelAlt",
+                    "appVar": "--sur2",
+                    "role": "surface.panel-alt"
+                  },
+                  "borderColor": {
+                    "value": "rgba(255, 255, 255, 0.12)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "500",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "9px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "14px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease, ease, ease, ease, ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "unmapped": [
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "paddingTop",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "paddingRight",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "paddingBottom",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "paddingLeft",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl",
+        "sec-active"
+      ],
+      "prop": "boxShadow",
+      "value": "rgba(255, 255, 255, 0.043) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.3) 0px 1px 2px 0px, rgba(0, 0, 0, 0.35) 0px 6px 16px -4px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(255, 255, 255) rgb(255, 255, 255) rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "fontWeight",
+      "value": "600"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "lineHeight",
+      "value": "16.5px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "letterSpacing",
+      "value": "1.1px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "paddingBottom",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ctrl-title"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "fontWeight",
+      "value": "600"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "lineHeight",
+      "value": "16.5px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "letterSpacing",
+      "value": "1.1px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "cubic-bezier(0.2, 0.8, 0.3, 1)"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-ctrl-chev"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "svg",
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontWeight",
+      "value": "600"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "svg",
+      "prop": "lineHeight",
+      "value": "16.5px"
+    },
+    {
+      "tag": "svg",
+      "prop": "letterSpacing",
+      "value": "1.1px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "svg",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "svg",
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "path",
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "path",
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "path",
+      "prop": "fontWeight",
+      "value": "600"
+    },
+    {
+      "tag": "path",
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "path",
+      "prop": "lineHeight",
+      "value": "16.5px"
+    },
+    {
+      "tag": "path",
+      "prop": "letterSpacing",
+      "value": "1.1px"
+    },
+    {
+      "tag": "path",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "path",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "path",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "path",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "path",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "path",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "path",
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "path",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "path",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "path",
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "fontWeight",
+      "value": "600"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "lineHeight",
+      "value": "16.5px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "letterSpacing",
+      "value": "1.1px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "gap",
+      "value": "8px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "rowGap",
+      "value": "8px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "columnGap",
+      "value": "8px"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "span",
+      "classes": [
+        "fx-title-right"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "fx-ctrl-title-reset"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "svg",
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "svg",
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "svg",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "svg",
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "borderColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "fontWeight",
+      "value": "600"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "lineHeight",
+      "value": "16.5px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "letterSpacing",
+      "value": "1.1px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "borderRadius",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "borderTopLeftRadius",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "borderTopRightRadius",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "borderBottomLeftRadius",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "borderBottomRightRadius",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "id": "tg-art",
+      "classes": [
+        "fx-toggle",
+        "on"
+      ],
+      "prop": "boxShadow",
+      "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "cubic-bezier(0.2, 0.8, 0.3, 1)"
+    },
+    {
+      "tag": "div",
+      "id": "ff-art",
+      "classes": [
+        "fx-fields"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "gap",
+      "value": "2px 8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "rowGap",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "columnGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "color",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "outlineColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-du",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingTop",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingRight",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingBottom",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingLeft",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-du",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "gap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "rowGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "columnGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "id": "chips-dustmode",
+      "classes": [
+        "btn-row",
+        "chip-tap"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(212, 144, 58, 0.12)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "fontWeight",
+      "value": "500"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "paddingTop",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "paddingRight",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "paddingBottom",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "paddingLeft",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease, ease, ease, ease, ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh",
+        "on"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontWeight",
+      "value": "500"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingTop",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingRight",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingBottom",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingLeft",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease, ease, ease, ease, ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontWeight",
+      "value": "500"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingTop",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingRight",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingBottom",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingLeft",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease, ease, ease, ease, ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "gap",
+      "value": "2px 8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "rowGap",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "columnGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "color",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "outlineColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-sc",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingTop",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingRight",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingBottom",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingLeft",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-sc",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "gap",
+      "value": "2px 8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "rowGap",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "columnGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-row"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "color",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "outlineColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "input",
+      "id": "sl-art-lk",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingTop",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingRight",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingBottom",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingLeft",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "id": "vl-art-lk",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "gap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "rowGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "columnGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "btn-row"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontWeight",
+      "value": "500"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingTop",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingRight",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingBottom",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingLeft",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease, ease, ease, ease, ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    }
+  ]
+}

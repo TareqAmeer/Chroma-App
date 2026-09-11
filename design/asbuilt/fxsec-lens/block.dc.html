@@ -1,0 +1,34 @@
+<div class="tp-panel active" data-panel="lens">
+
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Lens Correction<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-row">
+          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div><div class="fx-toggle" id="tg-lens-auto" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Auto (lens profile)"></div>
+        </div>
+        <div id="lens-auto-status" style="font-size: var(--fs-1); font-family: var(--sans); line-height: 1.5; margin: 2px 0px 8px;"></div>
+        <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
+             EXIF at all, so auto-detection has nothing to recover — this lets you pick a lens
+             directly from the bundled lensfun database instead. Desktop only; hidden elsewhere.
+             Grouped in a dashed .fx-cond-block (matches the wireframe's disclosure grouping)
+             rather than the wireframe's literal <details> — visibility here is STATE-driven
+             (fxLensAutoToggled/fxLensManualChanged toggle each row's own display), not a manual
+             expand/collapse, so a <details> element would fight that existing logic. -->
+        <div class="fx-cond-block">
+          <div class="fx-row" id="row-lens-manual" style="display: flex;" title="Overrides EXIF auto-detection with a lens you pick directly — for manual/adapted lenses that write no lens EXIF at all. Picking one also turns Auto on.">
+            <div class="fx-label">Manual lens</div>
+            <select class="fx-select" id="sel-lens-manual" style="flex:1" aria-label="Manual lens"><option value="">None (auto-detect)</option></select>
+          </div>
+          <div class="fx-row" id="row-lens-manual-focal" style="display:none" title="Focal length in mm — required for distortion correction. Auto-filled for fixed (prime) lenses.">
+            <div class="fx-label">Focal length (mm)</div>
+            <input class="fx-slider" type="number" min="1" max="2000" step="0.1" id="in-lens-manual-focal" style="max-width: 80px; flex: 0 0 auto;" aria-label="Focal length (mm)">
+          </div>
+        </div>
+        <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-dist" aria-label="Distortion" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-dist" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-vig" aria-label="Vignette" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-vig" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Corrects red/blue fringing near high-contrast edges, worst in the corners."><div class="fx-label">Chromatic Aberration</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-ca" aria-label="Chromatic Aberration" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-ca" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Corrects converging verticals — the building-shot lean. A true perspective correction, so spacing stays right instead of just straightening the edges."><div class="fx-label">Vertical</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-pv" aria-label="Vertical" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-pv" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Same correction on the horizontal axis, for a wall or facade shot from one side."><div class="fx-label">Horizontal</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-ph" aria-label="Horizontal" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-ph" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Fine rotation, in tenths of a degree — for levelling a horizon without leaving the panel."><div class="fx-label">Rotate</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-rot" aria-label="Rotate" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-rot" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Zooms in to hide the empty wedges a perspective correction leaves at the frame edge."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" aria-label="Scale" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-lens-scale" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Removes purple/green color fringes on high-contrast edges — the local fringing that survives the geometric CA correction above, or that a fast lens makes wide open. Gated on edges, so flat purple or green subjects are left alone."><div class="fx-label">Defringe</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-lens-defr" aria-label="Defringe" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-lens-defr" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+      
+</div>

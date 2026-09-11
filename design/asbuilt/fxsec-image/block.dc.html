@@ -1,0 +1,45 @@
+<div class="tp-panel active" data-panel="image">
+
+        <div class="ctitle" style="margin-bottom:10px">Image Input</div>
+        <div class="dz loaded" id="dz-fx-img">
+          <input type="file" id="in-fx-img" accept="image/*,.3fr,.ari,.arw,.bay,.crw,.cr2,.cr3,.dcr,.dcs,.dng,.erf,.fff,.iiq,.k25,.kdc,.mef,.mos,.mrw,.nef,.nrw,.orf,.pef,.pro,.ptx,.raf,.raw,.rw2,.rwl,.sr2,.srf,.srw,.x3f,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.ico,.heic,.heif,.tif,.tiff,.exr,.hdr,.tga,.dds,.qoi,.ff,.pnm,.pbm,.pgm,.ppm,.pam,.jxl,video/*,.mp4,.mov,.m4v" multiple="" style="">
+          <div class="dz-ic" data-ic="image"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img">portrait</div>
+        </div>
+        <div id="fx-image-movable">
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
+          <select class="fx-select" id="sel-dcp" aria-label="RAW profile" disabled="" title="RAW profile only applies to RAW files"><option value="">None (LibRaw sRGB)</option><option value="Standard">Standard</option><option value="Natural">Natural</option><option value="Vivid">Vivid</option><option value="Flat">Flat</option><option value="Portrait">Portrait</option><option value="Landscape">Landscape</option><option value="Cinelike D2">Cinelike D2</option><option value="Cinelike V2">Cinelike V2</option><option value="L Classic Neo">L Classic Neo</option><option value="Monochrome">Monochrome</option><option value="L Monochrome">L Monochrome</option><option value="L Monochrome D">L Monochrome D</option><option value="L Monochrome S">L Monochrome S</option><option value="Leica Monochrome">Leica Monochrome</option><option value="Neutral">Neutral</option><option value="Clear">Clear</option><option value="Deep">Deep</option><option value="Light">Light</option></select>
+        </div>
+        <!-- Clip info — video only, hidden for photos (see fxSyncVideoUI/fxUpdateClipInfoUI).
+             Informational for V0 (no override controls yet — see CLAUDE.md §12 / the video plan's
+             B1″ probeClip design for the intended per-row overrides in a later phase). Flags a
+             clip the app can't yet grade correctly (HDR/VFR) instead of silently producing wrong
+             output that reads as "the LUTs are broken". -->
+        <div id="fx-clip-info" style="display:none;margin-top:8px;font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.6"></div>
+        <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut">
+          <input type="file" accept=".cube,image/*,.tif,.tiff" style="">
+          <div class="dz-ic" data-ic="looks"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v4M3 5h4"></path><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"></path></svg></div><div class="dz-lb">Apply LUT (.cube or processed LUT chart)</div><div class="dz-fn" id="fn-fx-lut"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <!-- "Load Test Photo" (a 4800x6400 calibration chart) lived here, in the first panel of
+               the editor, as the second thing after the drop zone. It is a calibration fixture,
+               not a photo anyone edits — it now appears only under diag-on, with the rest of the
+               developer surface. loadTestPhoto() itself is unchanged and still reachable there. -->
+          <button class="btn bgh diag-only" title="Loads the built-in calibration chart">Load test chart</button>
+          <!-- 3.4.4: hidden on desktop only (fxDesktopFoldImageIntoLooks, below, sets its own
+               display:none the same way it folds this whole card into Looks) — that's the "Looks
+               panel" the item refers to. Untouched on web/mobile, where it's still a real,
+               working import path (see the Guide's "Can I use Google Photos?" FAQ) and photos
+               come from the OS Library on desktop anyway, not this drop zone. -->
+          <button class="btn bgh" id="btn-gp-import" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)">Google Photos…</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" id="btn-lut-save" disabled="" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)">Save to library…</button>
+          <button class="btn bgh" id="btn-lut-del" disabled="">Delete</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" title="Replicate any Lightroom preset: download this chart, apply the preset to it in Lightroom, export (sRGB, full size), drop the export on the LUT zone above">LUT chart</button>
+          <button class="btn bgh" id="btn-lut-dl" disabled="">Download .cube</button>
+        </div>
+        </div>
+      
+</div>
