@@ -86,6 +86,47 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 >
 > Done when every surface has every possible combination captured or listed with a reason. Log totals per group in STATE.md, then commit and push.
 
+**S6c: Re-capture, done right** (Sonnet 5 + Haiku helpers; alone on the machine; if the same failure repeats twice, stop and continue in a new Opus 5 chat)
+> Read docs/ui-workflow/STATE.md and follow its rules. The as-built captures are wrong and must be redone. Verified 2026-09-11 by viewing `design/asbuilt/fxsec-grain/contact-{dark,light}.webp`: (a) Editor sections are captured closed, with only the title bar and no controls; (b) no layout variation was applied, and every cell says "expanded"; (c) cells are tiny crops with no context, on a dark sheet even for light mode; (d) 8 surfaces in `design/surfaces.json` have no captures at all. Fix `test/surface_capture.mjs`, which already has `--group`, `--id`, `--only` and `--smoke`. Reuse it; don't rewrite it.
+> **0. Setup.**
+> - Regenerate `test/output/panel_inventory.json` with `node test/panel_extract.mjs`. It's gitignored and may be stale.
+> - Move `LAYOUT_AXES` out of `test/editor_responsive_qa.mjs` into a shared `test/layout_axes.mjs`, and import it in both scripts so they can never drift apart. Add the Library sidebar axis (150/230/420).
+> - Delete the old images in `design/asbuilt/*/` except `spec.json`/`block.dc.html`; they're still in git history.
+> **1. Assert before every screenshot.** Any failed assert fails the capture; never save a closed, empty or wrong-theme shot.
+> - *Open:* Editor sections have a photo loaded and are expanded and switched on ("off" is its own state), and the number of visible controls equals that section's count in panel_inventory.json. Menus and dialogs: the element is visible and taller than when closed.
+> - *Theme:* switch with `fxSetTheme('light'|'dark')`, then assert `body.light` matches and the page background brightness matches the theme.
+> - *Layout:* after applying each axis value, assert the element's computed width equals it, and label the image with the real values (for example "1024×768 · rail=icons · panel=220").
+> **2. A sensible matrix, not every combination multiplied together.** Multiplying every axis gives about 90k images, which isn't feasible. Per surface, in both themes:
+> - (i) every state at 1440×900 with the default layout
+> - (ii) the rest state at every viewport in the axes file, default layout
+> - (iii) the rest state at 1440 and at 760 wide, for each value of each axis that changes that surface's size. The rail axis applies to the rail; the panel axis to sections and the panel; the dock axis to the filmstrip; the sidebar axis to Library surfaces. Change one axis at a time; don't combine them.
+>
+> Print the total image count before capturing, and if it's over 6,000, stop and report.
+> **3. Two images per combination, both at full resolution.** The whole app window, for context, and a 1:1 crop of the surface with a 24px margin. Full-size images go in the gitignored `design/asbuilt-full/<id>/`, and identical images are stored once.
+> **4. Readable sheets.** At most 8 cells per sheet, each at least 480px wide, with a sheet background matching the theme. Split into as many sheets as needed and commit them to `design/asbuilt/<id>/`.
+> **5. Smoke test before the full run.** Capture 3 surfaces only (`fxsec-grain`, `fx-toolrail`, one Library dialog), then open their sheets yourself with Read. Fix anything wrong before capturing the rest; this is the step that saves the hour.
+> **6. Full run in Haiku subagents.** One group (A–E) per subagent, one at a time, since parallel browser runs overload this Intel Mac. Each reports only counts (captured, duplicate, skipped-with-reason, failed-assert) plus the failures. Also capture anything `node test/surface_coverage_check.mjs` reports.
+> **7. Audit.** Write `test/capture_audit.mjs`. Per surface it checks:
+> - the image count equals the matrix minus the listed skips
+> - no image is blank or near-uniform
+> - each image's brightness matches its theme
+> - Editor section crops are well taller than the title bar
+> - labels name real layout values
+>
+> It prints pass/fail per surface.
+> **8. Visual review in parallel Haiku subagents.** Split all committed sheets into batches of about 10, one Haiku subagent per batch (these may run in parallel since they only look at images). Each opens its sheets with Read and returns only the ones that look wrong: closed or empty, wrong theme, cut off, blank, or a mislabelled layout. You re-check each flagged sheet yourself, fix, re-capture just that surface with `--id`, and re-review it.
+>
+> Done when `capture_audit.mjs` passes for every surface and the visual review has no open flags. Log counts and what the review caught in STATE.md, then commit and push.
+
+**S7c: Republish the review page** (Sonnet 5; after S6c)
+> Read docs/ui-workflow/STATE.md and follow its rules. Republish https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61 from the S6c captures.
+> - **Read it first** (`action: "read"`) so its saved Keep/Redesign choices and notes are kept.
+> - **Cards:** each card's main image is the full-window capture at 1440×900, with a Dark/Light toggle for the whole page, large enough to read. Clicking a card opens a gallery of all its sheets, filterable by theme, width and layout.
+> - **Every surface appears**, including the 8 new ones.
+> - **Publishing images:** use the publish call's `files` map, not `upload_asset`, which would mean one tool call per image. Each publish takes up to 255 files, and files left out of a later publish are kept, so publish in batches of 255 or fewer until every image is up, keeping each version under 64MB. Load the `artifact-design` skill before editing the page.
+>
+> Done when a single look at the published page shows light and dark full-window images for every surface. Log it in STATE.md.
+
 **S7: Triage page** (Sonnet 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: build one review page that shows every captured surface in `design/asbuilt/` with a Keep / Redesign / Unsure choice and a notes field. Publish it as an Artifact that saves the choices, so they persist. Then write the choices back to `design/surfaces.json` (`triage` field).
 > Done when the user has made their choices and `surfaces.json` reflects them.
