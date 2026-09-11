@@ -1,0 +1,848 @@
+{
+  "generatedAt": "2026-09-11T16:06:22.582Z",
+  "pageErrors": [],
+  "surfaces": [
+    {
+      "id": "panel-fx",
+      "kind": "page",
+      "label": "FX / Effects & Export",
+      "openSteps": [
+        {
+          "eval": "switchTab('fx')"
+        }
+      ],
+      "selector": "#panel-fx",
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": true,
+      "wireframeFile": "Editor (Developer) View.dc.html"
+    },
+    {
+      "id": "panel-match",
+      "kind": "page",
+      "label": "Match & Refine",
+      "openSteps": [
+        {
+          "eval": "switchTab('match')"
+        }
+      ],
+      "selector": "#panel-match",
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "panel-copy",
+      "kind": "page",
+      "label": "Colour Copy",
+      "openSteps": [
+        {
+          "eval": "switchTab('copy')"
+        }
+      ],
+      "selector": "#panel-copy",
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "panel-collage",
+      "kind": "page",
+      "label": "Collage",
+      "openSteps": [
+        {
+          "eval": "switchTab('collage')"
+        }
+      ],
+      "selector": "#panel-collage",
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "panel-guide",
+      "kind": "page",
+      "label": "Guide",
+      "openSteps": [
+        {
+          "eval": "switchTab('guide')"
+        }
+      ],
+      "selector": "#panel-guide",
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-image",
+      "openSteps": [
+        {
+          "eval": "fxSection('image', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"image\"]",
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-looks",
+      "openSteps": [
+        {
+          "eval": "fxSection('looks', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"looks\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-adjust",
+      "openSteps": [
+        {
+          "eval": "fxSection('adjust', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"adjust\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-nr",
+      "openSteps": [
+        {
+          "eval": "fxSection('nr', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"nr\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": null
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-deconv",
+      "openSteps": [
+        {
+          "eval": "fxSection('deconv', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"deconv\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-curves",
+      "openSteps": [
+        {
+          "eval": "fxSection('curves', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"curves\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-hsl",
+      "openSteps": [
+        {
+          "eval": "fxSection('hsl', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"hsl\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-wheels",
+      "openSteps": [
+        {
+          "eval": "fxSection('wheels', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"wheels\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-pointcolor",
+      "openSteps": [
+        {
+          "eval": "fxSection('pointcolor', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"pointcolor\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-local",
+      "openSteps": [
+        {
+          "eval": "fxSection('local', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"local\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-lens",
+      "openSteps": [
+        {
+          "eval": "fxSection('lens', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"lens\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": null
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-crop",
+      "openSteps": [
+        {
+          "eval": "fxSection('crop', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"crop\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-grain",
+      "openSteps": [
+        {
+          "eval": "fxSection('grain', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"grain\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-art",
+      "openSteps": [
+        {
+          "eval": "fxSection('art', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"art\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-hal",
+      "openSteps": [
+        {
+          "eval": "fxSection('hal', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"hal\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-bloom",
+      "openSteps": [
+        {
+          "eval": "fxSection('bloom', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"bloom\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-vig",
+      "openSteps": [
+        {
+          "eval": "fxSection('vig', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"vig\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-borders",
+      "openSteps": [
+        {
+          "eval": "fxSection('borders', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"borders\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false,
+        "longText": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-retouch",
+      "openSteps": [
+        {
+          "eval": "fxSection('retouch', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"retouch\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-canvas",
+      "openSteps": [
+        {
+          "eval": "fxSection('canvas', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"canvas\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": false
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-diag",
+      "openSteps": [
+        {
+          "eval": "fxSection('diag', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"diag\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-export",
+      "openSteps": [
+        {
+          "eval": "fxSection('export', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"export\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": null,
+        "longText": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fxsec-info",
+      "openSteps": [
+        {
+          "eval": "fxSection('info', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": ".fx-ctrl[data-fxsec=\"info\"]",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "fxsec",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-settings-menu",
+      "openSteps": [
+        {
+          "eval": "settingsToggle()"
+        }
+      ],
+      "selector": "#fx-settings-menu",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": true,
+        "empty": false
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-tools-menu",
+      "openSteps": [
+        {
+          "eval": "settingsToggle(); settingsShowCat('tools')"
+        }
+      ],
+      "selector": "#fx-tools-menu",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": true,
+        "empty": false
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-view-menu",
+      "openSteps": [
+        {
+          "eval": "settingsToggle(); settingsShowCat('view')"
+        }
+      ],
+      "selector": "#fx-view-menu",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": true,
+        "empty": false
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-overflow-menu",
+      "openSteps": [
+        {
+          "eval": "settingsToggle(); settingsShowCat('overflow')"
+        }
+      ],
+      "selector": "#fx-overflow-menu",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true,
+        "disabled": true,
+        "empty": false
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-split-popover",
+      "openSteps": [
+        {
+          "eval": "fxToggleSplitMenu()"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "selector": "#fx-split-popover",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "disabled": false,
+        "empty": true
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-timeline-popover",
+      "openSteps": [
+        {
+          "eval": "fxToggleTimelinePopover()"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "selector": "#fx-timeline-popover",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "disabled": false,
+        "empty": true
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "cs-modal",
+      "openSteps": [
+        {
+          "eval": "window.chromasmithShowShortcuts && window.chromasmithShowShortcuts()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": "#cs-modal-ov",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "loaded": true
+      },
+      "note": null,
+      "kind": "modal",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-confirm-modal",
+      "openSteps": [
+        {
+          "eval": "void (window.__surfInvConfirmPromise = confirmModal('Delete this?','Delete'))"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": "#fx-confirm-modal",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "confirm",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-ask-modal",
+      "openSteps": [
+        {
+          "eval": "void (window.__surfInvAskPromise = askTextModal('Name this','',''))"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": "#fx-ask-modal",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "longText": true,
+        "empty": true
+      },
+      "note": null,
+      "kind": "modal",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-toast",
+      "openSteps": [
+        {
+          "eval": "toast('Surface inventory test toast', true)"
+        },
+        {
+          "wait": 100
+        }
+      ],
+      "selector": "#fx-toast.show",
+      "opened": true,
+      "states": {
+        "loaded": true,
+        "rest": true
+      },
+      "note": null,
+      "kind": "toast",
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "mobile-sheet",
+      "kind": "layout",
+      "selector": ".fx-panel",
+      "states": {
+        "rest": true,
+        "loaded": true,
+        "empty": true
+      },
+      "opened": true,
+      "openSteps": [
+        {
+          "eval": "resize viewport to <=700px width, applyFxLayout()"
+        }
+      ],
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "library",
+      "kind": "page",
+      "selector": "#lib-overlay",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on')"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true,
+        "loaded": true,
+        "empty": false
+      },
+      "wireframe": true,
+      "wireframeFile": "Library View.html"
+    },
+    {
+      "id": "splash",
+      "kind": "page",
+      "selector": null,
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "note": "no live DOM route — first-load native splash, not part of the SPA panel switch",
+      "wireframe": true,
+      "wireframeFile": "Splash"
+    }
+  ]
+}

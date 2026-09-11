@@ -88,3 +88,30 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   stash from another in-progress fix already existed in the stack, so an un-named pop could have
   popped the WRONG one) that `editor:gates`' FAIL was pre-existing and identical (same 7 advisory
   gate names) before this change. `export_harness.mjs` 18/18, no GLSL errors. Pushed.
+
+**S5 — 2026-09-11 — done**
+- `test/surface_inventory.mjs` (extends panel_extract.mjs's live-DOM-walk pattern): live-drives
+  every surface and writes `design/surfaces.json` — 41 entries: 5 `#panel-*` pages, 23
+  `data-fxsec` sections, `fx-settings-menu`/`fx-tools-menu`/`fx-view-menu`/`fx-overflow-menu`
+  (all sub-panes of ONE settings menu, not independent popovers — see below), `fx-split-popover`,
+  `fx-timeline-popover`, `cs-modal`, `fx-confirm-modal`, `fx-ask-modal`, `fx-toast`, the mobile
+  (≤700px) sheet layout, and Library (`?libtest=1`). Per surface: how to open it (click/eval
+  steps, actually replayed, not asserted), which of rest/hover/disabled/empty/loaded/longText
+  actually fired, and `wireframe`/`wireframeFile` matched against STATE.md's known-3 list
+  (Editor/Library/Splash) — not a filename grep. Haiku-verified: 40/41 opened=true, `splash`
+  correctly opened=null with a note (no live DOM route — first-load native splash, not part of
+  the SPA), 5 spot-checked openSteps confirmed to match the script's actual calls.
+- 3 real bugs found and fixed while building it, all from guessing instead of reading source
+  first — don't repeat the pattern: (1) guessed panel-switch function names (`showPanel`/
+  `fxPanel`); the real one is `switchTab(name)`. (2) guessed that `fx-tools-menu`/`fx-view-menu`/
+  `fx-overflow-menu` were independent popovers with `.on`/inline-display toggles; they are
+  `.fx-settings-pane` sub-panes INSIDE `fx-settings-menu`, shown via `settingsShowCat(key)` per
+  `SETTINGS_PANE_ID`, and the popovers open via `fxToggleSplitMenu()`/`fxToggleTimelinePopover()`,
+  not manual style hacks. (3) `page.evaluate("window.x = confirmModal(...)")` HUNG THE WHOLE RUN
+  for 10+ minutes with zero output — Playwright's `evaluate` awaits any Promise the expression
+  resolves to, so assigning a still-pending user-input promise as the eval's return value blocks
+  until someone clicks OK/Cancel, which never happens. Fixed by wrapping in `void (...)`. Also
+  added `page.setDefaultTimeout(4000)` (was Playwright's 30s default × ~25 surfaces × several
+  actions each, which can silently stack to 10+ min with no signal) and a `[surface] ...` log
+  line per entry as it's collected — the original hang produced zero output for 10+ minutes,
+  which is what made it look identical to "still working" until debugged. Pushed.
