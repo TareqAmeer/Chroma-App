@@ -52,7 +52,18 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      --primary-on-dark/--primary pair (desktop/library-ui.js's DS token block). Verified >=4.5:1
      against every background it sits on as text/icon colour (measured, not eyeballed — see
      body.light's own --acc override below for the light-theme numbers). */
-  --acc:#61a0af;--acc2:#4a9ddc;--txt:#ffffff;--mut:#cccccc;--ok:#52c97a;--err:#e05454;--r:8px;
+  /* --acc2 was an invented off-palette blue (#4a9ddc/#1f68a0) — the DS is explicit that there is
+     no second brand accent (design.md: "There is no second brand accent"), so it now aliases
+     --acc directly rather than diverging. --ok/--err below are the DS's own --green-pine/
+     --red-oxide UNCHANGED for light mode; dark mode keeps its brighter values on purpose — DS's
+     literals are near-invisible on this near-black --bg (contrast ~1.3:1), so darkroom
+     readability wins there (see body.light's override for the light-mode DS values). */
+  --acc:#61a0af;--acc2:var(--acc);--txt:#ffffff;--mut:#cccccc;--ok:#52c97a;--err:#e05454;--r:8px;
+  /* Slider-thumb dark values, made explicit — previously only the CSS var()'s inline fallback
+     (chromasmith-22.html:302/304) supplied these, so --sl-thumb was never a real custom property
+     in dark mode even though body.light declared one. No visual change, just removes the hidden
+     fallback. */
+  --sl-thumb:#e9e6df;--sl-thumb-sh:inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.5);
   /* Wireframe border-alpha split (Editor (Developer) View.dc.html): one flat --bdr had been doing
      three jobs at one alpha (.12), so a panel/rail/topbar edge (wireframe: .1), a control border
      (wireframe: .12 — unchanged, still plain --bdr) and a pill/chip border (wireframe: .14) all
@@ -64,7 +75,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      to their hardcoded fallbacks — off-palette, and immune to the light theme. A hover has to
      be a translucent OVERLAY rather than a flat surface token: these rows sit ON --sur2
      already (the history/recents popovers), so hovering to --sur2 would be invisible. */
-  --r-sm:6px;--hov:rgba(255,255,255,.07);
+  --r-sm:6px;--hov:rgba(255,255,255,.08);
   /* ── TYPE ──────────────────────────────────────────────────────────────────────────────────
      ⚠️ --mono is for NUMERALS, code and the build stamp. It is not a UI voice. It used to be:
      81 uses against 8 of --sans, with 23 `text-transform:uppercase` rules on top, which made
@@ -1277,14 +1288,23 @@ body.light{
      value this comment used to document. Blue Slate against white/--sur2(#f5f5f7)/the old
      #f4f3ef reference is 10.4:1 / 9.5:1 / 9.3:1 — clears 4.5:1 with enormous margin (it's the
      DS's own dark, saturated brand navy, not a hue needing correction the way amber did), so no
-     further darkening was needed. --acc2/--ok/--err keep their previously-measured darkened
-     values; the existing rgba(212,144,58,…) chip/badge TINTS are untouched literals, so a chip's
-     translucent background stays the familiar warm amber while the text sitting on it stays
-     legible — the same "container / on-container" pairing Material Design uses for exactly this
-     problem, arrived at independently by measuring rather than by copying it.
+     further darkening was needed. --acc2 now aliases --acc (DS: "no second brand accent" —
+     see :root's comment). --ok/--err switched from their previously-measured darkened values to
+     the DS's own --green-pine/--red-oxide literals unchanged: against white they're 10:1+/8:1+,
+     clearing 4.5:1 with the same enormous margin as Blue Slate, so no re-darkening was needed
+     here either (dark mode keeps its brighter values — DS's literals go near-invisible on
+     near-black, see :root's comment); the existing rgba(212,144,58,…) chip/badge TINTS are
+     untouched literals, so a chip's translucent background stays the familiar warm amber while
+     the text sitting on it stays legible — the same "container / on-container" pairing Material
+     Design uses for exactly this problem, arrived at independently by measuring rather than by
+     copying it.
      Only text/icon color changes; --acc still paints .bpri's button gradient and .fx-toggle.on's
      track, both of which read FINE darker (only helps their contrast against black/white). */
-  --acc:#224455;--acc2:#1f68a0;--ok:#257740;--err:#a91f1f;
+  --acc:#224455;--acc2:var(--acc);--ok:#214e1d;--err:#870f13;
+  /* Popover/menu row hover — was undefined in light mode entirely (fell through to the dark
+     rgba(255,255,255,…) value, invisible against a near-white row), matched to
+     desktop/library-ui.js's own light-mode --hover-tint for the same role. */
+  --hov:rgba(0,0,0,.035);
   /* No white inset — on a light card it either vanishes (near-white on white) or, at any opacity
      high enough to show, reads as a stray pale rim rather than a highlight. A plain, much softer
      shadow is the whole treatment; light surfaces read as "raised" from the shadow alone. Alpha

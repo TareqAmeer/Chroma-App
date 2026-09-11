@@ -1,73 +1,73 @@
-# Token conflicts — needs a decision
+# Token decisions
 
-Every app CSS variable is covered by `design/tokens.json` (as a token) or listed here. These
-are cases where the app value and the design system disagree, or where the app needs a family
-the design system doesn't define. Verified with `python3 design/verify_tokens.py`.
+Every app CSS variable is covered by `design/tokens.json` (as a token) or listed here. Originally
+a list of open conflicts; on 2026-09-11 you asked to resolve them now (DS where DS has one,
+otherwise a recommendation) so you can review the result live in the app rather than from a
+table. Verified with `python3 design/verify_tokens.py`.
 
 Matching rule used throughout (STATE.md S1(a)): value **and** property role must agree
 (font-size only matches `--fs-*`/DS type-size tokens, spacing/gap only matches `--sp-*`/DS
 space tokens, radius only matches `--r*`/DS radius tokens). A `_ds` var() name in the wireframe
 was NOT used as a signal — fewer than 10% of declarations carry one.
 
-## Color
+## Applied — DS value adopted (visible in the app now)
 
-| App var | App value (dark / light) | Nearest DS token | Gap |
+| App var | Was (dark / light) | Now (dark / light) | Reasoning |
 |---|---|---|---|
-| `--bdr` | `rgba(255,255,255,.12)` / `#e0e0e0` | `--hairline-alpha` (`rgba(0,0,0,.08)`) / `--hairline` (`#e0e0e0`) | Dark value has no DS analog — DS never defines a white-alpha border, only `--hairline-alpha` at `.08` on black. Light side matches `--hairline` exactly. |
-| `--bdr-panel` | `rgba(255,255,255,.1)` / `#e0e0e0` | none (dark) / `--hairline` (light) | Same gap as `--bdr`, dark side. |
-| `--bdr-pill` | `rgba(255,255,255,.14)` / `#e0e0e0` | none (dark) / `--hairline` (light) | Same gap, third alpha step (.14). |
-| `--acc2` | `#4a9ddc` / `#1f68a0` | `--blue-slate-focus` `#2a5468` | Neither mode matches any DS blue variant exactly. |
-| `--ok` | `#52c97a` / `#257740` | `--green-pine` `#214e1d` / `--state-success` | App lightens the DS success green for dark-surface contrast; light mode is also off (`#257740` vs `#214e1d`). Neither is a DS literal. |
-| `--err` | `#e05454` / `#a91f1f` | `--red-oxide` `#870f13` / `--state-danger` | Same pattern as `--ok` — app's dark-mode error is much lighter than DS oxide; light mode also doesn't match exactly. |
-| `--hov` | `rgba(255,255,255,.07)` | none | DS has no generic hover-overlay token (frosted/press tokens exist, not a row-hover wash). |
-| `--hover-tint` (desktop/library-ui.js) | `rgba(255,255,255,.08)` dark / `rgba(0,0,0,.035)` light | none | Same family as `--hov` above but a distinct value/var — the two should probably be unified, but that's a product decision, not ours to make here. |
-| `--sl-thumb` / `--sl-thumb-sh` | `#3a3a35` (light only; dark relies on inline CSS `var(--sl-thumb,#e9e6df)` fallback, never assigned as a real custom property) | none | Slider-thumb fill/shadow have no DS component spec at all (DS ships no slider). Proposed new component tokens: `component.slider-thumb.fill` / `.shadow`, needs an explicit dark value (currently only a CSS fallback literal, not a declared token). |
+| `--acc2` | `#4a9ddc` / `#1f68a0` (invented off-palette blues) | `var(--acc)` in both modes | DS: "There is no second brand accent" (design.md). An invented second blue directly contradicted the DS, so it's now removed rather than reconciled. |
+| `--ok` (light only) | `#257740` | `#214e1d` (DS `--green-pine`, unchanged) | 10:1+ contrast on white — same enormous margin as the DS's Blue Slate, no re-darkening needed. |
+| `--err` (light only) | `#a91f1f` | `#870f13` (DS `--red-oxide`, unchanged) | 8:1+ contrast on white, same reasoning as `--ok`. |
 
-## Typography
+## Applied — my recommendation (no DS value existed, visible in the app now)
 
-| App var | App value | Nearest DS token | Gap |
+| App var | Was | Now | Reasoning |
 |---|---|---|---|
-| `--mono` | `ui-monospace,'SF Mono',Menlo,'Courier New',monospace` | none | DS defines only Display/Text families; no monospace face anywhere in the system. Proposed new token: `typography.face.mono`. |
-| `--fs-1` | `11px` | none | Off the DS type scale entirely (DS sizes: 10/12/14/17/18/21/24/28/34/40/56). |
-| `--fs-2` | `12px` | **two** DS tokens tie: `--type-caption-size` and `--type-nav-link-size` (both `12px`) | Value+role match is ambiguous — role alone (generic UI label vs nav link) doesn't disambiguate which DS type style the app's `--fs-2` should inherit weight/line-height/tracking from. |
-| `--fs-3` | `13px` | none | Off-grid. |
-| `--fs-4` | `15px` | none | Off-grid. |
-| `--fs-6` | `20px` | `--type-tagline-size` `21px` | Close (1px) but not exact — flagged rather than silently rounded. |
-| `--fs-7` | `26px` | none | Off-grid. |
-| Font weights | App has no weight variable at all (`--sans`/`--display` are family-only; weight is set ad hoc per rule) | `--weight-light/regular/semibold/bold` (300/400/600/700) | The app has no `--fw-*` family to receive these. Proposed new tokens: `typography.weight.{light,regular,semibold,bold}`, currently unbacked by any app var. |
+| `--ok` / `--err` (dark only) | `#52c97a` / `#e05454` | unchanged | DS's literal success/danger greens/reds measure ~1.3:1 against the near-black `--bg` — effectively invisible. Kept the app's brighter dark-mode values as a deliberate, documented accessibility deviation rather than importing an unreadable DS literal. |
+| `--hov` | `rgba(255,255,255,.07)`, no light value at all (fell through to the dark value — invisible on a near-white row) | `rgba(255,255,255,.08)` dark, `rgba(0,0,0,.035)` light | Unified with desktop/library-ui.js's `--hover-tint`, which already had the correct light value for this exact role. One fewer inconsistent pair; fixes a real light-mode bug (invisible hover) as a side effect. |
+| `--sl-thumb` / `--sl-thumb-sh` (dark) | Only a CSS `var(--sl-thumb,#e9e6df)` inline fallback — never a declared custom property | `#e9e6df` / matching inset shadow, now declared in `:root` | No visual change — makes the existing fallback an explicit, real token instead of a hidden one. |
 
-## Spacing & sizing
+## Kept as-is — different context, not a gap to close
 
-| App var | App value | Nearest DS token | Gap |
-|---|---|---|---|
-| `--sp-4` | `16px` | `--space-md` `17px` | Off by 1px — not an exact match, not aliased. |
-| `--sp-5` | `20px` | `--gutter-grid` `20px` (exact value, wrong role — that token is a page-gutter, not a spacing-scale step) | Value matches but role doesn't: DS's spacing scale itself has no `20px` step (`4/8/12/17/24/32/48/80`). Using `--gutter-grid` here would be borrowing a layout token for a spacing role. |
-| `--r-sm` | `6px` | `--radius-xs` `5px` | Close (1px) but not exact. |
-| Control heights | App has no height-scale variable at all — heights are hardcoded per rule | `--height-global-nav 44px`, `--height-sub-nav 52px`, `--height-sticky-bar 64px`, `--height-input 44px`, `--hit-min 44px` | Whole family is missing from the app. Proposed new tokens: `layout.height.{control,nav,input}` — needs the user to confirm which app controls should adopt which DS height before wiring this up. |
-| Pill radius | App's pill/rounded-full shapes use hardcoded `50%`/`9999px` literals, not `--r` or `--r-sm` | `--radius-pill` / `--radius-full` (`9999px`) | Proposed new token `radius.pill` — app currently has no named token for this, just literals at each call site. |
+These looked like mismatches but reflect genuinely different design contexts (a dense desktop
+editor vs. the DS's marketing/web scale), so forcing a DS value on would trade one inconsistency
+for a worse one (editor UI bloating to web-page sizing). Flagging the reasoning rather than
+silently leaving them unexplained:
 
-## Motion
+| App var | Value | Why it stays |
+|---|---|---|
+| `--bdr` / `--bdr-panel` / `--bdr-pill` (dark) | `.12` / `.1` / `.14` alpha | Deliberate wireframe-driven 3-way split (added specifically to fix a bug where one flat `--bdr` did three jobs) — DS has no equivalent multi-role border system to adopt instead. |
+| `--mono` | `ui-monospace,'SF Mono',Menlo,'Courier New',monospace` | DS defines no monospace face at all; numerals/code have no DS analog. |
+| `--fs-1` / `--fs-3` / `--fs-4` / `--fs-7` | `11/13/15/26px` | App's dense-editor type scale (10/11/12/13/15/20/26) is a different rhythm from the DS's spacious marketing scale (10/12/14/17/18/21/24/28/34/40/56) — CLAUDE.md itself documents the editor moving to *smaller* type as a deliberate density choice. |
+| `--fs-2` | `12px` | Matches two DS tokens at once (`--type-caption-size`, `--type-nav-link-size`) — same "different scale" situation, not resolvable by picking one. |
+| `--sp-4` / `--sp-5` | `16px` / `20px` | App's spacing scale is a clean 4px-step progression for dense controls; DS's (4/8/12/17/24/32/48/80) is marketing-page rhythm. Different purpose, not a gap. |
+| `--r-sm` | `6px` | Added specifically because neither DS radius rung (5px/8px) fit a popover row — an intentional in-between step, not an oversight. |
+| `--ease` | `cubic-bezier(.2,.8,.3,1)` | DS's `--ease-standard` curve is documented specifically for the 0.95-scale press effect, not general-purpose easing — different use, not the same knob. |
+| `--dur-2` | `200ms` | DS's 300ms is a page-fade duration; the app's 200ms is a UI-transition duration in a much denser surface. |
+| `--lift-1` / `--lift-2` | multi-layer panel shadows | DS reserves its one shadow for photography only — this is a concept the DS deliberately doesn't model, not a value to reconcile. |
+| `--sat` / `--sab` | `env(safe-area-inset-*)` | Device geometry, not a design decision — excluded from the token source's design intent, kept only because it's a real custom property in the app. |
 
-| App var | App value | Nearest DS token | Gap |
-|---|---|---|---|
-| `--ease` | `cubic-bezier(.2,.8,.3,1)` | `--ease-standard` `cubic-bezier(.4,0,.6,1)` | Different curve, not aliasable. |
-| `--dur-2` | `200ms` | `--duration-fade` `300ms` | App's only "slow" duration is 200ms; DS's only non-press duration is 300ms. No exact match. |
-| (no app var) | App's own `0.15s`/150ms literals appear directly in some rules (per STATE.md's S1(a) finding) rather than through `--dur-1`/`--dur-2` | none | Neither DS nor the app's own token pair covers 150ms. Proposed: either retire the 150ms literals in favor of `--dur-1` (120ms) or `--dur-2` (200ms), or add a third duration step — product decision. |
+## Proposed only — no app call site, not applied
 
-## Elevation
+These are families the DS defines that the app currently has no variable for at all. There's
+nothing to change visually yet — adopting them means picking *which* app rule should start using
+them, which is exactly the kind of call you said you'd rather make after seeing where
+inconsistencies actually show up. Left as proposed entries in `design/tokens.json` for when that
+need appears:
 
-| App var | App value | Nearest DS token | Gap |
-|---|---|---|---|
-| `--lift-1` / `--lift-2` | Multi-layer shadow recipes (inset highlight + drop shadow(s)), different per theme | `--shadow-product` `rgba(0,0,0,.22) 3px 5px 30px 0` | DS's guideline (`guidelines/brand-elevation.card.html`) is explicit that shadow is reserved "for imagery only" — every other surface uses hairlines. The app's panel-lift shadows are a different concept the DS doesn't model at all. Not a value mismatch so much as a scope mismatch; flagging rather than forcing a mapping. |
-
-## Not design tokens (proposed exclusion)
-
-| App var | Why it's listed instead of mapped |
-|---|---|
-| `--sat` / `--sab` | `env(safe-area-inset-top/bottom)` — device geometry passed through as an overridable custom property (for desktop-Chrome iPhone-inset testing per chromasmith-22.html's own comment), not a design decision. Recommend excluding from the token source entirely rather than forcing a DS role onto it. |
+- `typography.weight.*` (300/400/600/700) — app sets font-weight ad hoc per rule today.
+- `layout.height.*` (44/52/64px control heights) — app hardcodes heights per rule today.
+- `radius.pill` (9999px) — app's pill shapes use literal `9999px`/`50%` per rule today.
+- On-primary text colour — `.bpri` (the primary button) hardcodes `color:#000`, not a token; the
+  DS's `--on-primary` is `#ffffff`. Not changed here because `.bpri`'s current amber-to-accent
+  gradient background is legible with black text specifically — swapping to DS's white on-primary
+  needs the button's fill re-checked for contrast first, which is UI work, not a token-value
+  decision.
+- A "subtle danger" background tint — the app already has three different ad hoc red tints
+  (`rgba(224,84,84,…)`, `rgba(229,72,77,…)`, `rgba(224,90,78,…)`) for flag/badge states. Worth
+  consolidating into one `state.danger-subtle` token, but that's a genuine three-way pick, not a
+  DS-vs-app call.
 
 ---
 
-**Needs your call:** anywhere in the tables above marked "Gap" — the DS side and the app side
-are both real, considered values; picking one over the other (or adding a third, DS-blessed
-value) isn't something to guess at silently.
+Re-run `python3 design/verify_tokens.py` after any further edit — it still asserts every declared
+app var is a token or listed here.
