@@ -403,3 +403,33 @@ call `ui:test`) will currently fail on that until it's fixed.
   human-readable description, not runnable JS, same class of thing S6b already special-cased for
   `mobile-sheet` — this surface wasn't added to that special-case list). Pre-existing gap, not
   part of what this session was asked to fix; left for whoever next touches `lib-grid`.
+
+**S7c — 2026-09-11 — done, republished from S6c captures, split into two artifacts**
+- Republished the Surface Triage artifact (`https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61`)
+  from S6c's re-capture: a Layouts section (56 whole-window shots — panel-fx 40 + library 16 —
+  grouped by layout axis, 760px/1920px side by side) followed by one card per surface (62 total:
+  60 with images + panel-fx/library represented by their Layouts-section triage bar + splash as a
+  wireframe-stand-in card), all switchable dark/light via one page-wide toggle. Kept the existing
+  `triage` db collection (Keep/Redesign/Unsure + notes) — read the live artifact before editing so
+  nothing already decided was lost.
+- **Hard platform limit hit and worked around**: an artifact caps at 256 total published files
+  (not "255 per publish" as assumed going in — that phrasing describes one publish call's own
+  batch size, not the cumulative total). S6c's full asset set is 296 images; 296+index alone
+  blows the cap before counting anything else. Fix: split out the 120 zoomed-crop images
+  (`*-crop.webp`, one pair per surface-with-a-crop) into a second artifact, **Surface Triage —
+  Crops** (`https://claude.ai/code/artifact/5e25791a-0d72-475f-b4fe-73311f7db1fc`, 37 surfaces,
+  same dark/light toggle, no triage controls of its own), cross-linked from the main page's
+  subtitle. Main artifact now holds 177 images + index = 178 files, comfortably under the cap.
+  Also had to null out 53 stale `light/<id>.webp` files a still-open S6b-era version had left
+  published, and pass `contract: "latest"` once (0.2.45 → 0.2.46) after a 422 named it explicitly.
+  Confirmed via `list_files`: exactly the 177 expected paths, zero `-crop` entries, no leftovers.
+- Concurrent-session note (again, per `[[concurrent-session-git-collision]]`): this artifact was
+  independently republished twice by another session mid-turn while this one was still working
+  (once adding 13 real "chrome" surfaces this session hadn't captured, once adding light-mode
+  contact sheets) — both were legitimate, additive S6/coverage-gap-fill work, not a collision to
+  revert; re-read the live artifact each time before touching it rather than assuming staleness
+  meant corruption.
+- splash has no live DOM route (unchanged since S5) and S6c's own pass dropped even the S6-era
+  wireframe screenshot stand-in it used to have; regenerated it fresh (Playwright screenshot of
+  `chromasmith-design/project/Splash Screen.html` at the app's 1400×900 desktop viewport) rather
+  than leaving splash uncapturable on the review page.
