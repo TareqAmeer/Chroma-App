@@ -65,3 +65,26 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   text, danger-subtle) left unwired — no app call site yet. Applied directly to
   chromasmith-22.html's `:root`/`body.light`; verified pre-existing `ui:test` failure
   (fx-info-i tap target) is unrelated by diffing against pre-edit tree. Pushed (68f194f).
+
+**S4 — 2026-09-11 — done**
+- `scripts/build-tokens.mjs` writes chromasmith-22.html's `:root`/`body.light` and
+  desktop/library-ui.js's DS block between new `/* TOKENS:*:START/END */` markers (marker
+  pattern reused from site/build-page.mjs), from design/tokens.json values +
+  `$extensions.chromasmith.emit.<block>.commentBefore` (hand-written rationale comments, copied
+  verbatim including markers/indentation — user chose this over moving comments out of the
+  blocks). Mechanical layout (declaration order, inter-decl whitespace) lives in
+  `scripts/token-layout.json`, captured once from the file as it existed pre-generator — NOT
+  re-derived from tokens.json, so tokens.json only needs to change when a value/comment changes.
+  First run was byte-identical to the prior source (`--check` flag added for CI use). Surfaced
+  and fixed a real S3 data bug: tokens.json's `blue_mist_soft` held the DARK-REMAP override value
+  instead of the base DS token's own `#e3edf0`.
+- `test/editor_token_check.mjs`: added a role-mismatch pass (selector-name heuristic vs
+  design/tokens.json's `role` field) — advisory, same exit semantics as the existing check.
+- `.claude/hooks/token-lint-on-edit.sh` (PostToolUse/Edit, both files): lints only literals the
+  Edit's `new_string` adds vs `old_string` (not the 940 pre-existing `<style>` literals),
+  confirms containment via string search (S1(c)'s reasoning — no git diff), advisory/non-blocking.
+- Verified via a stashed-baseline `editor:gates` run (git stash / stash pop stash@{0} by name —
+  ⚠️ a bare `git stash pop` after a plain `git stash` is unsafe on this repo: an unrelated WIP
+  stash from another in-progress fix already existed in the stack, so an un-named pop could have
+  popped the WRONG one) that `editor:gates`' FAIL was pre-existing and identical (same 7 advisory
+  gate names) before this change. `export_harness.mjs` 18/18, no GLSL errors. Pushed.
