@@ -86,6 +86,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/warn-claude-md-size.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/token-lint-on-edit.sh"
+          }
+        ]
       }
     ],
     "Stop": [

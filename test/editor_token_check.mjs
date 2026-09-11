@@ -18,6 +18,14 @@
 // - This is advisory-shaped by design: legitimate one-off literals exist (e.g. a shadow's rgba
 //   black, `transparent`, `currentColor`, `#fff`/`#000` used as absolute white/black rather than a
 //   themed colour). Triage findings against ALLOWLIST below rather than assuming every hit is a bug.
+//
+// Role-mismatch pass (added alongside scripts/build-tokens.mjs): the checks above only catch a
+// literal that isn't ANY token. They miss a token used for the WRONG role — e.g. a legacy .bpri
+// primary-button rule painted with --err (state.danger) instead of --acc (action.primary). This
+// second pass reads design/tokens.json's $extensions.chromasmith.role per appVar and flags a
+// var(--x) reference whose role family doesn't match what the selector's name implies (primary/
+// danger/success/muted). Heuristic and selector-name-driven, so it only catches selectors that
+// self-describe their role in the class/id name — advisory, same as the rest of this file.
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync('chromasmith-22.html', 'utf8');
@@ -86,15 +94,61 @@ for (const { selector, body } of ruleBodies) {
   }
 }
 
+// --- Role-mismatch pass ---
+function loadRoleByVar() {
+  const doc = JSON.parse(readFileSync('design/tokens.json', 'utf8'));
+  const roleByVar = {};
+  (function walk(o) {
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    if (o && typeof o === 'object') {
+      const ext = o.$extensions && o.$extensions.chromasmith;
+      if (ext && ext.appVar && ext.role) roleByVar[ext.appVar] = ext.role;
+      for (const k of Object.keys(o)) walk(o[k]);
+    }
+  })(doc);
+  return roleByVar;
+}
+const roleByVar = loadRoleByVar();
+
+// selector-name hint -> the role family(ies) a token used there should belong to.
+const ROLE_HINTS = [
+  { hint: /\bprimary\b|\bbpri\b|-primary|btn-export/i, expect: /^action\.primary|^action\.accent/, label: 'primary' },
+  { hint: /danger|destructive|\berr\b|-error/i, expect: /^state\.danger/, label: 'danger' },
+  { hint: /success|\bok\b(?!\w)/i, expect: /^state\.success/, label: 'success' },
+  { hint: /warning|\bwarn\b/i, expect: /^state\.warning/, label: 'warning' },
+  { hint: /\bmuted\b|-muted|secondary-text/i, expect: /^text\.muted|^text\.secondary/, label: 'muted-text' },
+];
+const roleFindings = [];
+for (const { selector, body } of ruleBodies) {
+  const hinted = ROLE_HINTS.find((h) => h.hint.test(selector));
+  if (!hinted) continue;
+  const varRefs = [...body.matchAll(/var\((--[a-zA-Z0-9-]+)/g)].map((m) => m[1]);
+  for (const v of varRefs) {
+    const role = roleByVar[v];
+    if (!role) continue; // not a tokens.json-tracked var (e.g. a raw --acc2 alias not itself a role holder)
+    if (!hinted.expect.test(role)) {
+      roleFindings.push({ selector, var: v, role, expectedFamily: hinted.label });
+    }
+  }
+}
+
 console.log(`editor:token-check — ${colorTokens.size} colour tokens, ${pxTokens.size} spacing tokens in :root`);
+if (roleFindings.length) {
+  console.log(`\n${roleFindings.length} role mismatch(es) — token's role doesn't match what the selector implies:`);
+  for (const f of roleFindings.slice(0, 200)) {
+    console.log(`  [role] ${f.selector} uses ${f.var} (role: ${f.role}) but selector name implies "${f.expectedFamily}"`);
+  }
+}
 if (findings.length) {
   console.log(`\n${findings.length} literal(s) not matching any :root token:`);
   for (const f of findings.slice(0, 200)) {
     console.log(`  [${f.kind}] ${f.selector} { ${f.prop}: ${f.value} }`);
   }
   if (findings.length > 200) console.log(`  ... and ${findings.length - 200} more`);
-  console.log('\nADVISORY: not auto-failing — triage against ALLOWLIST_COLORS / token set (T5/T10, editor_ux_spec.json). Run with --strict to fail on any finding.');
+}
+if (findings.length || roleFindings.length) {
+  console.log('\nADVISORY: not auto-failing — triage against ALLOWLIST_COLORS / token set and role hints (T5/T10, editor_ux_spec.json). Run with --strict to fail on any finding.');
   if (process.argv.includes('--strict')) process.exit(1);
 } else {
-  console.log('PASS: no invented colour/spacing literals found outside :root tokens.');
+  console.log('PASS: no invented colour/spacing literals or role-mismatched tokens found.');
 }

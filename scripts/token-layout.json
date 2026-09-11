@@ -1,0 +1,629 @@
+{
+ "root": [
+  {
+   "var": "--bg",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sur",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sur2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--bdr",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--acc",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--acc2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--txt",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--mut",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--ok",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--err",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--r",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sl-thumb",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--sl-thumb-sh",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--bdr-panel",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--bdr-pill",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--r-sm",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--hov",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sans",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--display",
+   "pre": "\n  ",
+   "hadSemi": true
+  },
+  {
+   "var": "--serif",
+   "pre": "\n  ",
+   "hadSemi": true
+  },
+  {
+   "var": "--mono",
+   "pre": "\n  ",
+   "hadSemi": true
+  },
+  {
+   "var": "--fs-0",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--fs-1",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--fs-2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--fs-3",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--fs-4",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--fs-6",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--fs-7",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sp-1",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--sp-2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sp-3",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sp-4",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sp-5",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sp-6",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--ease",
+   "pre": "\n  ",
+   "hadSemi": true
+  },
+  {
+   "var": "--dur-1",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--dur-2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sat",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--sab",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--lift-1",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--lift-2",
+   "pre": "\n  ",
+   "hadSemi": true
+  },
+  {
+   "var": "--glass-bg",
+   "pre": "\n  ",
+   "hadSemi": false
+  }
+ ],
+ "bodyLight": [
+  {
+   "var": "--bg",
+   "pre": "  ",
+   "hadSemi": true
+  },
+  {
+   "var": "--sur",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--sur2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--bdr",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--txt",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--mut",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--bdr-panel",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--bdr-pill",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--acc",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--acc2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--ok",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--err",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--hov",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--lift-1",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--lift-2",
+   "pre": "\n  ",
+   "hadSemi": true
+  },
+  {
+   "var": "--sl-thumb",
+   "pre": null,
+   "hadSemi": true
+  },
+  {
+   "var": "--sl-thumb-sh",
+   "pre": "\n  ",
+   "hadSemi": true
+  },
+  {
+   "trailing": "\n"
+  }
+ ],
+ "ds": [
+  {
+   "var": "--blue-slate",
+   "pre": "      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--blue-slate-focus",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--blue-slate-press",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--blue-mist",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--blue-mist-soft",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--red-oxide",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--green-pine",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--orange-ember",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--ink",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--ink-muted-80",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--ink-muted-48",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--ink-on-dark",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--ink-on-dark-muted",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--canvas",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--canvas-parchment",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--canvas-linen",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-pearl",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-tile-1",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-tile-2",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-tile-3",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-black",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-chip-translucent",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-chip-alpha",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--divider-soft",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--hairline",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--hairline-alpha",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--primary",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--primary-focus",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--primary-active",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--primary-on-dark",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--accent",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--on-primary",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--on-dark",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-alt",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-ghost",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--surface-inverse",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--state-danger",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--state-success",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--state-warning",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--font-display",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--font-text",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--weight-light",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--weight-regular",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--weight-semibold",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--weight-bold",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--space-xxs",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--space-xs",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--space-sm",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--space-md",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--space-lg",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--space-xl",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--radius-none",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--radius-xs",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--radius-sm",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--radius-md",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--radius-lg",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--radius-pill",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--radius-full",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--shadow-product",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--ring-hairline",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--focus-ring",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--ease-standard",
+   "pre": "\n      ",
+   "hadSemi": true
+  },
+  {
+   "var": "--duration-press",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "var": "--duration-fade",
+   "pre": "",
+   "hadSemi": true
+  },
+  {
+   "trailing": "\n"
+  }
+ ]
+}
