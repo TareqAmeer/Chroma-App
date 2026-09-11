@@ -143,59 +143,109 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > (3) Run `npm run editor:gates` and `npm run ui:test` via a Haiku subagent. Record every still-failing gate or check as the known baseline in STATE.md (name and a one-line reason). From then on, "gates pass" means "no failures beyond this baseline".
 > Log it in STATE.md, then commit and push.
 
-**S8: Spec extract + generated PAIRS** (Opus 5)
-> Read docs/ui-workflow/STATE.md and follow its rules. Task: make `design/asbuilt/<id>/spec.json` plus the wireframe the source for the Editor gates:
-> (1) `test/wireframe_spec_extract.mjs` writes `design/specs/<panel>.json` from `Editor (Developer) View.dc.html` (the target design), in the same shape as the as-built specs.
-> (2) Generate the `PAIRS` entries for `test/editor_wireframe_diff.mjs` (S1 (b) rule: one entry per `.grp[data-fxsec]`, else whole panel→`.fx-ctrl[data-fxsec=<key>]`, alias masks→local; keep hand-written labels; Info's info-meta/info-people groups need an explicit override). Per-control pairs need a link the wireframe doesn't have — add `data-app="#sl-heal-size"`-style attributes to wireframe controls (preferred) or match by label text; ask the user which before building. Also generate the inventory expectations for `editor_wireframe_inventory.mjs`, and behaviour-test stubs from those specs.
-> (3) Point `editor:coverage` at `design/surfaces.json` instead of the 11 panels.
-> Run gates via a Haiku subagent that reports failures only.
-> Done when the generated `PAIRS` for the already-built panels (Retouch, Export) produce zero new mismatches compared with the hand-written ones, and `npm run editor:gates` passes.
+**Before S8:** S6c, S7c and **S7b** must be done. S7b records the known-failing baseline in STATE.md. Every "gates pass" below means **no failures beyond that baseline**.
+
+**S8: Wireframe → spec → generated gate wiring** (Opus 5)
+> Read docs/ui-workflow/STATE.md and follow its rules (the S1 (b) result and the S7b baseline).
+> Facts verified 2026-09-11, so don't re-derive them:
+> - The Editor wireframe (`chromasmith-design/project/Editor (Developer) View.dc.html`) has 11 `.tp-panel[data-panel]` blocks: adjust, color, crop, detail, export, film, frame, info, looks, masks, retouch.
+> - 17 of its `.grp` elements carry a `data-fxsec`. Two of those, `info-meta` and `info-people`, are NOT app sections.
+> - Wireframe `masks` = app `local`.
+> - `PAIRS` is a hand-written object near the top of `test/editor_wireframe_diff.mjs` (grep `const PAIRS`).
+> - Wireframe controls carry no ids.
+>
+> Task:
+> (1) **Link wireframe controls to app controls exactly, never by label text.** Add a `data-app="<app css selector>"` attribute to every wireframe control that has an app counterpart. Take each selector from `test/output/panel_inventory.json` (regenerate it first with `node test/panel_extract.mjs`). A wireframe control with no app counterpart gets `data-app="none"` plus a `data-note`, and is listed in STATE.md.
+> (2) Write `test/wireframe_spec_extract.mjs`. It writes `design/specs/<panel>.json` from the wireframe: element tree, computed values, each value's token (value + property role, the way `design/tokens.json` roles are matched in S3), and `data-app` links. Use the same field names as the S6c `design/asbuilt/<id>/spec.json` files; open one and copy its shape, don't invent one.
+> (3) Generate `PAIRS` (S1 (b)'s rule, keeping the hand-written labels) and the per-control pairs (from `data-app`) into a generated file that `editor_wireframe_diff.mjs` imports. Do the same for the inventory expectations in `test/editor_wireframe_inventory.mjs`. Behaviour-test stubs go in a new file, not in the existing 1003-line suite.
+> (4) Make `test/editor_coverage.mjs` report one row per surface in `design/surfaces.json` (has a wireframe? spec generated? pairs generated?). Surfaces without a wireframe show as "no design yet" and don't fail anything.
+>
+> Haiku subagents run gates and report failures only.
+> Done when the generated section-level `PAIRS` for Retouch and Export are identical to the hand-written ones (print the diff: zero fields changed), per-control pairs exist for every `data-app` link, and `npm run editor:gates` has no failures beyond the baseline.
 
 **S9: Build-time feedback loop** (Sonnet 5)
-> Read docs/ui-workflow/STATE.md and follow its rules. Task:
-> (1) Add `--panel <id> --json` to `test/editor_wireframe_diff.mjs`, outputting only `[{selector, prop, expected, actual, expectedToken}]`.
-> (2) Change `.claude/hooks/stop-editor-gate-check.sh` so that, when `.claude/state/active-panel` exists, it runs that scoped diff and blocks the turn from ending while mismatches remain. Cap it at 3 blocks per panel (a counter in the state file), then let the turn end with a "stopped after 3 rounds" message.
-> (3) `test/panel_pair_shots.mjs` writes one side-by-side wireframe-vs-app image per panel and state.
-> Run test scripts via a Haiku subagent that reports failures only.
-> Done when a deliberate 4px padding mismatch on a scratch branch triggers the block with one typed defect, clears once fixed, and gives up after 3 rounds.
+> Read docs/ui-workflow/STATE.md and follow its rules. Facts:
+> - A full `node test/editor_wireframe_diff.mjs` run takes about 21s on this Mac (measured 2026-09-11).
+> - `.claude/state/` is gitignored.
+> - `.claude/hooks/stop-editor-gate-check.sh` already rebuilds `desktop/dist` and runs the snap and html checks when the UI files are uncommitted.
+>
+> Task:
+> (1) Add `--panel <id> --json` to `test/editor_wireframe_diff.mjs`. It outputs only `[{selector, prop, expected, actual, expectedToken}]` for that panel's generated pairs; `expectedToken` comes from `design/specs/<panel>.json`.
+> (2) Extend the Stop hook. When `.claude/state/active-panel` exists:
+>    - Run the scoped diff and exit 2 with the JSON list while there are mismatches.
+>    - Skip the run when `chromasmith-22.html`'s hash hasn't changed since the last run (store the hash in `.claude/state/`), so a turn that didn't touch the app doesn't pay 20s.
+>    - Cap it at 3 blocks per panel (a counter in `.claude/state/`). After that, exit 0 with "stopped after 3 rounds — see the diff".
+> (3) Write `test/panel_pair_shots.mjs --panel <id>`. It writes wireframe and app side by side, in both themes, for the rest state and any other state the wireframe itself defines (read which it has; a static wireframe may only have rest).
+>
+> Test on the real file, then restore it with `git checkout -- chromasmith-22.html`; never commit the planted change.
+> Done when:
+> - a planted 4px padding mismatch in the Retouch panel blocks the turn with exactly one typed defect
+> - removing it clears the block
+> - planting it again three times ends in the "stopped after 3 rounds" message
+> - an unchanged-file turn skips the diff
 
-**S10: Design-stage tooling** (Opus 5)
-> Read docs/ui-workflow/STATE.md and follow its rules. Task: stop hand-written design proposals from inventing values.
-> (1) `test/proposal_validate.mjs` rejects any control or value in a proposal (a `.dc.html` block or a `panels/*.compare.html` PROPOSED column) that isn't in `test/output/panel_inventory.json` or `design/tokens.json`. Run it against the old `test/panel_proposals.mjs` and confirm it catches the invented values fixed in commits `247110c`/`8eed9f0`.
-> (2) Write `docs/ui-workflow/design-stage.md`, a one-page how-to for redesigning a surface marked "Redesign". It covers how to start a Claude Design canvas (the `design` skill) from the surface's as-built capture and `tokens.json`, the required state artboards, running the validator, and merging into the wireframe.
-> Run the validator via a Haiku subagent that returns only the flagged items.
-> Done when the validator flags the historical fabrications and passes on the current wireframe.
+**S10: Design-stage guardrails** (Opus 5)
+> Read docs/ui-workflow/STATE.md and follow its rules. Facts:
+> - Commits `247110c` ("fix substantial fabrication") and `8eed9f0` ("fix invented colours and wrong real-control values") show what invented values look like in `test/panel_proposals.mjs`; `git show` them.
+> - S1 found the approved wireframe itself is mostly literal values, and about a third of them match no app token.
+>
+> Task:
+> (1) Write `test/proposal_validate.mjs <file>`, which runs on a `.dc.html` block or a `panels/*.compare.html` PROPOSED column.
+>    - **Hard fail:** a control whose label, kind or range doesn't match `test/output/panel_inventory.json`, or a colour that isn't a `design/tokens.json` value.
+>    - **Report only:** spacing, size or radius values that aren't tokens. Show them, but don't fail on them.
+>
+>    Run it on the version of `panel_proposals.mjs` from just before each of the two commits, and confirm it flags what those commits fixed.
+> (2) Read the `design` skill first, then write `docs/ui-workflow/design-stage.md`: a one-page how-to for redesigning a surface marked "Redesign". It covers starting a canvas from that surface's S6c captures and `tokens.json`, the required state artboards, running the validator, and merging into the wireframe with `data-app` links (S8). Describe only what the `design` skill actually supports; if it can't import something, say so rather than assume.
+>
+> Done when the validator flags the historical fabrications, and its report on the current wireframe is written to STATE.md, with any hard failures listed for the user.
 
 **S11: Component catalogue** (Opus 5)
-> Read docs/ui-workflow/STATE.md and follow its rules, including the S1 result (d). Task: add a `?catalog=1` mode to `chromasmith-22.html`, following the `?libtest=1` pattern. It renders each shared component (`.fx-ctrl`, `.fx-row`, `.fx-toggle`, `.fx-sub`, `.fx-btn-primary`, the segmented control, `.fx-info-i`) in the states rest, hover, focus, disabled, modified (`.fx-mod`) and long label, in both themes. It can also render any single Editor panel on its own.
-> Add Playwright `toHaveScreenshot()` baselines per component and state (`test/catalog_visual.mjs`), wired into `npm run editor:gates`.
-> Run gates and screenshot checks via a Haiku subagent that reports failures only.
-> Per S1 (d) no refactor is needed: inject the app `<style>` + real section markup, add `.sec-active` (cards are hidden without it under `body.fx-single`), call `initEditableVals()` and `selectToSeg()`, and stub inline handlers. Locate `<style>` by searching for the tag, not by line numbers.
-> Done when the catalogue renders without console errors, the baselines are committed, and a 1px change to `.fx-row` padding fails the check.
+> Read docs/ui-workflow/STATE.md and follow its rules, including S1 (d).
+> Facts: the shared component classes in the app are:
+> - `.fx-ctrl` (section card)
+> - `.fx-row` (slider row)
+> - `.fx-toggle`
+> - `.fx-sub`
+> - `.btn.fx-btn-primary`, used once; the older `.bpri` is still used by 10 elements, so include both
+> - `.seg`, the segmented control built by `selectToSeg(selectId, segId)`, which sets `.on` on the active option
+> - `.fx-info-i`
+> - `.fx-mod`, the "changed" state
+>
+> Task: add a `?catalog=1` mode to `chromasmith-22.html`, following the `?libtest=1` pattern. Per S1 (d), no refactor: reuse the app's own `<style>` (find it by searching for the tag) and real section markup, add `.sec-active` (cards are hidden without it under `body.fx-single`), call `initEditableVals()` and `selectToSeg()`, and stub inline handlers.
+> - Show each component in these states: rest, hover, focus, disabled, modified and long label, in both themes.
+> - Also support `?catalog=1&panel=<fxsec>` to show one section on its own.
+>
+> Write `test/catalog_visual.mjs` as a Playwright test with `toHaveScreenshot()` per component and state. Add it to `testMatch` in `playwright.config.mjs`; the config only runs files that match there. Add it to `test/editor_gates.mjs`. Baselines are per-platform (Playwright adds the OS to the file name); commit this Mac's, and note in STATE.md that CI needs its own.
+> Done when the catalogue has no console errors, the baselines are committed, and a planted 1px `.fx-row` padding change fails the test (then revert it).
 
 **S12: Update the process docs** (Sonnet 5)
-> Read docs/ui-workflow/STATE.md and follow its rules. Task: rewrite §1 of `docs/editor-redesign-plan.md` and `.claude/skills/wireframe-transplant/SKILL.md` for the new per-panel loop:
-> 1. Set `.claude/state/active-panel`.
-> 2. Read `design/specs/<panel>.json` only.
-> 3. Implement.
+> Read docs/ui-workflow/STATE.md and follow its rules. Task: rewrite §1 of `docs/editor-redesign-plan.md` and the loop section of `.claude/skills/wireframe-transplant/SKILL.md` (keep its existing Step 3b, "every width") for the new per-panel loop:
+> 1. `echo <panel> > .claude/state/active-panel`
+> 2. Read only `design/specs/<panel>.json` plus the grep-located app section.
+> 3. Implement by moving existing markup.
 > 4. The Stop hook's typed diff blocks the turn from ending until mismatches are fixed.
-> 5. Run `panel_pair_shots`.
+> 5. Run `panel_pair_shots.mjs --panel <panel>`.
 > 6. A fresh-context reviewer subagent checks against the spec.
-> 7. Commit the design, implementation and tests separately.
+> 7. Commit implementation and tests separately.
 >
-> Add the per-panel prompt template (S13) to `docs/ui-workflow/sessions.md`.
-> Done when both files describe only tools that exist. Verify each named script runs (one Haiku subagent runs them all and reports which fail).
+> Also update CLAUDE.md §5's `editor-redesign-plan.md` pointer if its description changes.
+> Done when every script, flag and path named in both files exists. A Haiku subagent runs each named command with `--help`, or on one panel, and reports any that fail.
 
-**S13: Per-panel build, repeat per panel; pilot = Masks** (Sonnet 5, high effort; switch to Opus 5 in a new chat after 2 failed rounds)
+**S13: Per-panel build, repeat per panel; pilot = Masks** (Sonnet 5, high effort; after 2 failed rounds on the same mismatch, stop and continue in a new Opus 5 chat)
 > Read docs/ui-workflow/STATE.md and follow its rules. Build the **{PANEL}** panel.
-> (1) `echo {PANEL} > .claude/state/active-panel`.
-> (2) Read only `design/specs/{PANEL}.json` and the matching `chromasmith-22.html` section (use grep to find it; never read the whole file).
+> Wireframe panel keys: adjust, color, crop, detail, export, film, frame, info, looks, masks, retouch. Wireframe `masks` = app `local`.
+> (0) **List the backlog items that touch this panel.** Grep `test/editor_ux_spec.json` for items whose `panel` or `source` names it, and include every open one in this build. For Masks that includes MA1. A separate chrome run handles T55 (rail 64px), T56 (panel 300px) and T58 (canvas cut off at 700px).
+> (1) `echo {PANEL} > .claude/state/active-panel`
+> (2) Read only `design/specs/{PANEL}.json` and the matching `chromasmith-22.html` section; locate it with grep, never read the whole file.
 > (3) Implement by moving the existing markup, not rewriting it.
-> (4) Let the Stop hook's diff drive the fixes. Full `npm run editor:gates` runs go to a Haiku subagent that reports failures only.
-> (5) Run `node test/panel_pair_shots.mjs --panel {PANEL}`, and have a fresh-context Opus reviewer subagent compare the images with the spec.
-> (6) Commit the implementation and tests separately, then delete `active-panel`.
+> (4) Let the Stop hook's diff drive the fixes. Full `npm run editor:gates` runs go to a Haiku subagent that reports failures beyond the baseline only.
+> (5) Run `node test/panel_pair_shots.mjs --panel {PANEL}`, and have a fresh-context Opus reviewer subagent compare the images with the spec and report only real mismatches.
+> (6) Commit the implementation and tests separately, set each backlog item you finished to `fixed`, then delete `active-panel`.
 >
-> Record in STATE.md: rounds used, reviewer findings, and anything the spec got wrong.
+> Record in STATE.md: rounds used, reviewer findings, backlog items closed, and anything the spec got wrong.
+
+**S13-chrome: App frame fixes** (Sonnet 5; one run, after S9)
+> Same loop as S13, for the items that aren't a panel: T55 (tool rail 64px; the mismatch appears in light mode only, so find out why first), T56 (tool panel 300px, probably the same cause), T58 (photo preview cut off at a 700px window), T59 (Library thumbnails cut off at 640px with a 420px sidebar) and T57 (square / original-size thumbnails; read its note first). `editor_responsive_qa.mjs` and `library_responsive_qa.mjs` must stay clean, and each item's allowlist entry is removed when it's fixed.
 
 ## Model per session
 Relative cost per token: Haiku 4.5 = 1×, Sonnet 5 = 2×, Opus 5 = 5×, Fable 5.1 = 10×.
