@@ -225,4 +225,7 @@ call `ui:test`) will currently fail on that until it's fixed.
   --h-touch, --r-pill/--r-circle, --on-acc (#10222a, the wireframe's value), --err-subtle. Details in token-conflicts.md.
 - docs/ui-workflow/allowlist-audit.md: 185 allowlist entries → 17 delete, 28 verify-then-delete, 39 real fix,
   92 intended, 9 checker artifacts. Needs user decisions: filmstrip/rail/panel widths, rail order, Square crops.
+- User decisions 2026-09-11 recorded: filmstrip 120px (intended; gate must reset to default width), rail 64px →
+  T55, panel 300px → T56, app's rail order is right (update the wireframe), Square crops/Original dimensions →
+  T57 (exists as a hidden, 400-photo-limited "Real aspect ratio" toggle). All in editor_ux_spec.json.
 

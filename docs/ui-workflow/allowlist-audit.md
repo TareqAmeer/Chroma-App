@@ -34,10 +34,11 @@ but stale history — so the allowlists stop masking new regressions.
   settings menu, so the gate may map them differently now. Each needs re-running, not assuming.
 
 ## 3. Real fix needed (39) — keep until fixed; make sure each is a backlog item in editor_ux_spec.json
-- **Needs a design decision from you first** (wireframe vs app — which is right?):
-  docked filmstrip width 150 vs 120px; tool rail 64 vs 72px; tool panel 300 vs 320px (rail and panel differ in
-  light mode only — cause not understood); newer rail order/content entry; Library "Square crops /
-  Original dimensions" (a missing feature, 2).
+- **Decided by the user 2026-09-11**: docked filmstrip — app's 120px is right (it's resizable, so the gate must
+  measure the default width) → moved to intended; tool rail → 64px (T55) and tool panel → 300px (T56), both
+  light-theme-only mismatches, likely one root cause; rail order — the APP is right, update the wireframe →
+  intended; Library "Square crops / Original dimensions" must be in the app (T57 — it survives only as a
+  "Real aspect ratio" toggle hidden in Gear → Thumbnails that does nothing in folders of 400+ photos).
 - **Scheduled UI work**: status bar `#fx-statusbar` not built (2 entries, still absent); topbar height 44 → 48px
   (still 44); title block overlaps flag/favourite buttons at desktop width (3, item 3.1.10); rail label
   font-size tallies (2, Phase F); tool-panel icons 3.4.11 + atom count 3.4.12 (2); Library gear icon hardcoded

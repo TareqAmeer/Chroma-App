@@ -1070,6 +1070,33 @@
       "check": "test/editor_offline_check.mjs (documents/detects; does not fix)",
       "panel": null,
       "note": "This is a product-scope decision, not an obvious bug fix: either (a) accept 'stay on the page while offline, don't rely on reload' as the real guarantee and adjust the CLAUDE.md claim to be precise about what's cached (LUT data) vs not (the shell), or (b) extend the service worker with an actual Cache Storage app-shell strategy (cache chromasmith-22.html + its same-origin assets on install, serve from cache when the network fetch fails) \u2014 a bigger, deliberate change to a vendored third-party file that should be a conscious choice, not a side effect of a testing pass. Left open for the user to decide which."
+    },
+    "T55": {
+      "category": "ui-fix",
+      "status": "backlog",
+      "wireframeRef": "chromasmith-design/project/Editor (Developer) View.dc.html",
+      "panel": null,
+      "source": "User decision 2026-09-11: tool rail width = 64px (wireframe), not the app's 72px. Allowlist audit found the mismatch only in the LIGHT-theme states \u2014 check whether dark already computes 64px and light differs because of a theme-only rule (border/scrollbar) before changing the width token.",
+      "check": "test/editor_wireframe_diff.mjs \u2014 'tool rail: width' (remove its editor_wireframe_accepted.json entry once fixed)",
+      "note": "Wireframe's 64px may force fitRail() icons-only; verify rail labels still render (see allowlist rail font-size entries)."
+    },
+    "T56": {
+      "category": "ui-fix",
+      "status": "backlog",
+      "wireframeRef": "chromasmith-design/project/Editor (Developer) View.dc.html",
+      "panel": null,
+      "source": "User decision 2026-09-11: tool panel width = 300px (wireframe), not the app's 320px. Same light-theme-only pattern as T55 \u2014 likely the same root cause; fix together.",
+      "check": "test/editor_wireframe_diff.mjs \u2014 'tool panel: width' (remove its accepted entry once fixed)",
+      "note": null
+    },
+    "T57": {
+      "category": "app-bug",
+      "status": "backlog",
+      "source": "User decision 2026-09-11: Library thumbnails must offer 'Square crops' / 'Original dimensions' as the wireframe shows (Library View.html gear menu). User reports it 'disappeared when switching to the submenu layout'. Found 2026-09-11: it still exists as ONE toggle, 'Real aspect ratio' (#lib-aspect-toggle, desktop/library-ui.js ~1934), now hidden inside Gear \u2192 Thumbnails (the menu opens on the Library tab) \u2014 AND it silently does nothing in folders of 400+ photos (virtualised grid assumes uniform cells; the only signal is a tooltip, ~5155). On the user's real library that reads as 'gone'.",
+      "wireframeRef": "chromasmith-design/project/Library View.html",
+      "check": "test/wireframe_inventory.mjs \u2014 MISSING 'Square crops' / 'Original dimensions' (remove the two wireframe_accepted.json entries once fixed)",
+      "panel": null,
+      "note": "Two parts: (1) UI \u2014 present it as the wireframe's two-option choice in the Thumbnails pane; (2) behaviour \u2014 make original-aspect work for virtualised (400+) folders, or at minimum show a visible in-grid note instead of tooltip-only. (2) needs a design for variable-height virtualised rows; research prior art (justified/masonry virtual grids) before building."
     }
   }
 }

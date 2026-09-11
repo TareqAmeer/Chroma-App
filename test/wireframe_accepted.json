@@ -2,12 +2,12 @@
   {
     "match": "order@0: wireframe icon vs app button",
     "zone": "topbar",
-    "reason": "2026-09-10: deliberate change per Tareq — Library's topbar was rebuilt to match the Editor's own #fx-deskbar under body.deskx (see desktop/library-ui.js's Topbar Parity pass comment): sort/filters/view-toggle moved to the left group ahead of the search bar, so the first topbar atom is now the sort pill's icon instead of the logo/search wireframe order. The design wireframe (Library View.html) reflects the OLD single-row layout and has not been updated to match; this diff is the intended new order, not a regression."
+    "reason": "2026-09-10: deliberate change per Tareq \u2014 Library's topbar was rebuilt to match the Editor's own #fx-deskbar under body.deskx (see desktop/library-ui.js's Topbar Parity pass comment): sort/filters/view-toggle moved to the left group ahead of the search bar, so the first topbar atom is now the sort pill's icon instead of the logo/search wireframe order. The design wireframe (Library View.html) reflects the OLD single-row layout and has not been updated to match; this diff is the intended new order, not a regression."
   },
   {
     "match": "MISSING 1x  icon",
     "zone": "topbar",
-    "reason": "2026-09-10: deliberate change per Tareq — the Library top bar's app-logo image is removed so Library matches the Editor view, which no longer shows the wordmark in its own top bar either. Shifts the topbar atom count and every subsequent icon index by one; the icon-shape diffs below are the same root cause, not independent regressions."
+    "reason": "2026-09-10: deliberate change per Tareq \u2014 the Library top bar's app-logo image is removed so Library matches the Editor view, which no longer shows the wordmark in its own top bar either. Shifts the topbar atom count and every subsequent icon index by one; the icon-shape diffs below are the same root cause, not independent regressions."
   },
   {
     "match": "atom count: wireframe 30 vs app 29",
@@ -17,86 +17,86 @@
   {
     "match": "x-offset of icon: wireframe 0px vs app 263px",
     "zone": "topbar",
-    "reason": "Downstream of the logo removal above — the first remaining icon now sits where the logo used to end."
+    "reason": "Downstream of the logo removal above \u2014 the first remaining icon now sits where the logo used to end."
   },
   {
     "match": "order@1: wireframe icon vs app input",
     "zone": "topbar",
-    "reason": "Downstream of the logo removal above — the search input now sits at the position the logo occupied."
+    "reason": "Downstream of the logo removal above \u2014 the search input now sits at the position the logo occupied."
   },
   {
     "match": "topbar#0: shape",
     "zone": "icons",
-    "reason": "2026-09-10: downstream of the Library top-bar logo removal (see topbar zone entry) — every icon after the removed logo shifted one index, so each now diffs against the PREVIOUS icon's baseline shape rather than a real shape regression."
+    "reason": "2026-09-10: downstream of the Library top-bar logo removal (see topbar zone entry) \u2014 every icon after the removed logo shifted one index, so each now diffs against the PREVIOUS icon's baseline shape rather than a real shape regression."
   },
   {
     "match": "topbar#1: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#2: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#3: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#4: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#5: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#6: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#7: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#8: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#9: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#10: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#11: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
     "match": "topbar#12: shape",
     "zone": "icons",
-    "reason": "Downstream of the logo removal — see topbar#0 entry."
+    "reason": "Downstream of the logo removal \u2014 see topbar#0 entry."
   },
   {
-    "match": "topbar#13: removed — present in baseline, absent now",
+    "match": "topbar#13: removed \u2014 present in baseline, absent now",
     "zone": "icons",
-    "reason": "2026-09-10: the last topbar icon baseline slot has no successor after the logo removal shifted everything down by one — same root cause as topbar#0."
+    "reason": "2026-09-10: the last topbar icon baseline slot has no successor after the logo removal shifted everything down by one \u2014 same root cause as topbar#0."
   },
   {
     "match": "MISSING 1x  button:\"Library\"",
-    "reason": "2026-09-09: the Library/Develop tab buttons now carry an icon (ICONS.library/tools) alongside their text, so each is a container atom with a nested text child rather than a leaf button:\"Library\" — same kind-classification split seen elsewhere (wireframe rows are often leaf text, the app's real buttons carry icons). Functionally present and correctly active-state-synced; see EXTRA text:\"Library\" below.",
+    "reason": "2026-09-09: the Library/Develop tab buttons now carry an icon (ICONS.library/tools) alongside their text, so each is a container atom with a nested text child rather than a leaf button:\"Library\" \u2014 same kind-classification split seen elsewhere (wireframe rows are often leaf text, the app's real buttons carry icons). Functionally present and correctly active-state-synced; see EXTRA text:\"Library\" below.",
     "zone": "sidebar"
   },
   {
@@ -106,17 +106,17 @@
   },
   {
     "match": "EXTRA   2x  button",
-    "reason": "The Library/Develop tab pair itself — real, was previously hardcoded to always show \"Library\" active even while docked; now correctly tracks which view is active (syncSideTabs()). Not in the wireframe's static mock at all.",
+    "reason": "The Library/Develop tab pair itself \u2014 real, was previously hardcoded to always show \"Library\" active even while docked; now correctly tracks which view is active (syncSideTabs()). Not in the wireframe's static mock at all.",
     "zone": "sidebar"
   },
   {
     "match": "EXTRA   5x  icon",
-    "reason": "Library/Develop tab icons (2) plus the kind-classification split's own knock-on count — same root cause as the button entries above.",
+    "reason": "Library/Develop tab icons (2) plus the kind-classification split's own knock-on count \u2014 same root cause as the button entries above.",
     "zone": "sidebar"
   },
   {
     "match": "EXTRA   1x  text:\"Library\"",
-    "reason": "The Library tab's own label, now a nested text atom instead of the button's whole text content — see MISSING button:\"Library\" above.",
+    "reason": "The Library tab's own label, now a nested text atom instead of the button's whole text content \u2014 see MISSING button:\"Library\" above.",
     "zone": "sidebar"
   },
   {
@@ -126,60 +126,60 @@
   },
   {
     "match": "order@0: wireframe button:\"Library\" vs app button",
-    "reason": "Ordinal-position artifact of the same kind-classification split — the app's atom at this position is a container (button) not a leaf (button:\"Library\"), so the order comparison reads as a mismatch even though it's the same control in the same place.",
+    "reason": "Ordinal-position artifact of the same kind-classification split \u2014 the app's atom at this position is a container (button) not a leaf (button:\"Library\"), so the order comparison reads as a mismatch even though it's the same control in the same place.",
     "zone": "sidebar"
   },
   {
     "match": "[sidebar] font-family \"SF Pro Text\"",
-    "reason": "HANDOVER §8 item #15, investigated 2026-09-08: direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all deliberately monospace (var(--mono)) count badges on date/keyword tree rows — a real, intentional choice for tabular-number alignment, not a font bug. The wireframe-vs-app COUNT mismatch is downstream of the app rendering more real content (expanded folder/keyword trees, live counts) than the wireframe's sparse static mock — same superset reasoning as the sort/gear menu entries."
+    "reason": "HANDOVER \u00a78 item #15, investigated 2026-09-08: direct enumeration of every sidebar text element found only 3 non-SF-Pro-Text atoms, all deliberately monospace (var(--mono)) count badges on date/keyword tree rows \u2014 a real, intentional choice for tabular-number alignment, not a font bug. The wireframe-vs-app COUNT mismatch is downstream of the app rendering more real content (expanded folder/keyword trees, live counts) than the wireframe's sparse static mock \u2014 same superset reasoning as the sort/gear menu entries."
   },
   {
     "match": "EXTRA   1x  text:\"+\"",
-    "reason": "Albums \"+\" (new album) button — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "reason": "Albums \"+\" (new album) button \u2014 real app feature, not in the static wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
-    "match": "text:\"Free up space…\"",
-    "reason": "Drives-management block — real app feature (storage/library maintenance), not in the wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "match": "text:\"Free up space\u2026\"",
+    "reason": "Drives-management block \u2014 real app feature (storage/library maintenance), not in the wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
-    "match": "text:\"Verify library…\"",
-    "reason": "Drives-management block — see \"Free up space…\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "match": "text:\"Verify library\u2026\"",
+    "reason": "Drives-management block \u2014 see \"Free up space\u2026\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
-    "match": "text:\"Find duplicates…\"",
-    "reason": "Drives-management block — see \"Free up space…\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "match": "text:\"Find duplicates\u2026\"",
+    "reason": "Drives-management block \u2014 see \"Free up space\u2026\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
-    "match": "text:\"Rescan flags…\"",
-    "reason": "Drives-management block — see \"Free up space…\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "match": "text:\"Rescan flags\u2026\"",
+    "reason": "Drives-management block \u2014 see \"Free up space\u2026\" entry above. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
     "match": "text:\"Keywords\"",
-    "reason": "Keywords sidebar section — real app feature, not in the static wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "reason": "Keywords sidebar section \u2014 real app feature, not in the static wireframe mock. User decision 2026-09-07: keep. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
     "match": "text:\"No date\"",
-    "reason": "Date-tree bucket for photos with no EXIF date — a real completeness feature the wireframe's fixed sample data has no need for. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "reason": "Date-tree bucket for photos with no EXIF date \u2014 a real completeness feature the wireframe's fixed sample data has no need for. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
-    "match": "text:\"Syncing catalog files…\"",
-    "reason": "Statusbar sync-in-progress indicator — needs a real backend signal (catalog_scan progress) to be meaningful, not a quick fix. Deferred by explicit user decision 2026-09-07; build later, not now. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "match": "text:\"Syncing catalog files\u2026\"",
+    "reason": "Statusbar sync-in-progress indicator \u2014 needs a real backend signal (catalog_scan progress) to be meaningful, not a quick fix. Deferred by explicit user decision 2026-09-07; build later, not now. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "statusbar"
   },
   {
     "match": "[statusbar] MISSING 1x  icon",
-    "reason": "The sync-spinner icon that goes with \"Syncing catalog files…\" — deferred together with that text, see the entry above."
+    "reason": "The sync-spinner icon that goes with \"Syncing catalog files\u2026\" \u2014 deferred together with that text, see the entry above."
   },
   {
     "match": "[statusbar] dynamic-data row count",
-    "reason": "Downstream of the deferred sync-indicator decision above — the wireframe's row count includes the syncing text/icon this app doesn't render yet."
+    "reason": "Downstream of the deferred sync-indicator decision above \u2014 the wireframe's row count includes the syncing text/icon this app doesn't render yet."
   },
   {
     "match": "[statusbar] atom count",
@@ -187,11 +187,11 @@
   },
   {
     "match": "[statusbar] font-size 11px",
-    "reason": "Downstream of the deferred sync-indicator decision above — the missing \"Syncing catalog files…\" text was the only 11px atom the wireframe counts here."
+    "reason": "Downstream of the deferred sync-indicator decision above \u2014 the missing \"Syncing catalog files\u2026\" text was the only 11px atom the wireframe counts here."
   },
   {
     "match": "[sidebar] font-size 13px",
-    "reason": "Downstream of already-accepted extras (No date bucket + the 4 Drives-management rows, all 13px) inflating the aggregate count — verified by direct font enumeration, not a real size mismatch on any shared row."
+    "reason": "Downstream of already-accepted extras (No date bucket + the 4 Drives-management rows, all 13px) inflating the aggregate count \u2014 verified by direct font enumeration, not a real size mismatch on any shared row."
   },
   {
     "match": "[sidebar] font-size 12px",
@@ -211,11 +211,11 @@
   },
   {
     "match": "[sidebar] dynamic-data row count",
-    "reason": "The wireframe's People/Albums/Devices sample lists and the app's ?libtest mock are two independently-sized fake datasets — their row counts were never going to match by coincidence (same reasoning as the mock-name noise filter in wireframe_inventory.mjs)."
+    "reason": "The wireframe's People/Albums/Devices sample lists and the app's ?libtest mock are two independently-sized fake datasets \u2014 their row counts were never going to match by coincidence (same reasoning as the mock-name noise filter in wireframe_inventory.mjs)."
   },
   {
     "match": "order@3",
-    "reason": "Test-tool artifact, not a real UI difference: the wireframe's \"By date\" text is a bare text node sibling of its chevron <svg> (pushed as one atom for the container, icon found on recursion), while the app wraps both icon and text in their own <span>s (icon visited first, then the text span) — same visual icon-then-label order in both, different atom-visitation order in this walker. Verified live: both render identically. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone — `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
+    "reason": "Test-tool artifact, not a real UI difference: the wireframe's \"By date\" text is a bare text node sibling of its chevron <svg> (pushed as one atom for the container, icon found on recursion), while the app wraps both icon and text in their own <span>s (icon visited first, then the text span) \u2014 same visual icon-then-label order in both, different atom-visitation order in this walker. Verified live: both render identically. [zone-scoped 2026-09-08: this entry previously matched as a bare substring in EVERY zone \u2014 `order@3` alone was suppressing a real sortmenu finding (Date added vs Date modified).]",
     "zone": "sidebar"
   },
   {
@@ -226,62 +226,62 @@
   {
     "match": "sidebar row \"Archive T7\" renders an EMPTY count element",
     "zone": "selfconsist",
-    "reason": "Intentional: drive rows show a middle-dot ONLY when offline (library-ui.js ~6650: `v.online ? '' : '·'`), blank when online by design (an online drive has nothing to flag). Confirmed by reading the source, not guessed."
+    "reason": "Intentional: drive rows show a middle-dot ONLY when offline (library-ui.js ~6650: `v.online ? '' : '\u00b7'`), blank when online by design (an online drive has nothing to flag). Confirmed by reading the source, not guessed."
   },
   {
     "match": "[statusbar] EXTRA   1x  text:\"12 KB\"",
     "zone": "statusbar",
-    "reason": "#lib-status-size — a real disk-size readout for the current selection, not in the wireframe's static mock. Same superset reasoning as the sidebar's Drives-management rows."
+    "reason": "#lib-status-size \u2014 a real disk-size readout for the current selection, not in the wireframe's static mock. Same superset reasoning as the sidebar's Drives-management rows."
   },
   {
     "match": "[sidebar] EXTRA   3x  icon",
     "zone": "sidebar",
-    "reason": "Downstream of already-accepted sidebar extras (Drives-management rows, Keywords), each contributing its own icon — same reasoning as the already-accepted [sidebar] atom count / EXTRA icon entries."
+    "reason": "Downstream of already-accepted sidebar extras (Drives-management rows, Keywords), each contributing its own icon \u2014 same reasoning as the already-accepted [sidebar] atom count / EXTRA icon entries."
   },
   {
     "match": "text:\"Library\"",
     "zone": "gearmenu",
-    "reason": "The gear/View menu's \"Library\" action group (Choose folder/Import from Google Photos/Recent folders/Get Info/Full-window view/Compare view) is a real app feature superset — the wireframe's mock view-menu only covers Thumbnails/Metadata/Panels/Appearance. Same pattern as Filters/sidebar-collapse (HANDOVER §6.2/§6.3)."
+    "reason": "The gear/View menu's \"Library\" action group (Choose folder/Import from Google Photos/Recent folders/Get Info/Full-window view/Compare view) is a real app feature superset \u2014 the wireframe's mock view-menu only covers Thumbnails/Metadata/Panels/Appearance. Same pattern as Filters/sidebar-collapse (HANDOVER \u00a76.2/\u00a76.3)."
   },
   {
-    "match": "text:\"Choose folder…\"",
+    "match": "text:\"Choose folder\u2026\"",
     "zone": "gearmenu",
-    "reason": "Part of the Library action group — see \"Library\" entry above."
+    "reason": "Part of the Library action group \u2014 see \"Library\" entry above."
   },
   {
-    "match": "text:\"Import from Google Photos…\"",
+    "match": "text:\"Import from Google Photos\u2026\"",
     "zone": "gearmenu",
-    "reason": "Part of the Library action group — see \"Library\" entry above."
+    "reason": "Part of the Library action group \u2014 see \"Library\" entry above."
   },
   {
-    "match": "text:\"Recent folders…\"",
+    "match": "text:\"Recent folders\u2026\"",
     "zone": "gearmenu",
-    "reason": "Part of the Library action group — see \"Library\" entry above."
+    "reason": "Part of the Library action group \u2014 see \"Library\" entry above."
   },
   {
     "match": "text:\"Get Info\"",
     "zone": "gearmenu",
-    "reason": "Part of the Library action group — see \"Library\" entry above."
+    "reason": "Part of the Library action group \u2014 see \"Library\" entry above."
   },
   {
     "match": "text:\"Full-window view\"",
     "zone": "gearmenu",
-    "reason": "Part of the Library action group — see \"Library\" entry above."
+    "reason": "Part of the Library action group \u2014 see \"Library\" entry above."
   },
   {
     "match": "text:\"Compare view\"",
     "zone": "gearmenu",
-    "reason": "Part of the Library action group — see \"Library\" entry above."
+    "reason": "Part of the Library action group \u2014 see \"Library\" entry above."
   },
   {
     "match": "text:\"Show title\"",
     "zone": "gearmenu",
-    "reason": "Real Thumbnails-group option (toggle photo titles under grid cards) with no wireframe equivalent — now uses the SAME checkmark-glyph idiom as its siblings (HANDOVER #12, fixed 2026-09-08), only its presence is a superset, not its markup shape."
+    "reason": "Real Thumbnails-group option (toggle photo titles under grid cards) with no wireframe equivalent \u2014 now uses the SAME checkmark-glyph idiom as its siblings (HANDOVER #12, fixed 2026-09-08), only its presence is a superset, not its markup shape."
   },
   {
     "match": "text:\"Real aspect ratio\"",
     "zone": "gearmenu",
-    "reason": "Real Thumbnails-group option with no wireframe equivalent — its own inconsistency (a stray leading icon, HANDOVER #10/#11) was fixed 2026-09-08; only its presence as an extra row is a superset."
+    "reason": "Real Thumbnails-group option with no wireframe equivalent \u2014 its own inconsistency (a stray leading icon, HANDOVER #10/#11) was fixed 2026-09-08; only its presence as an extra row is a superset."
   },
   {
     "match": "EXTRA   8x  button",
@@ -296,156 +296,156 @@
   {
     "match": "atom count",
     "zone": "gearmenu",
-    "reason": "Downstream of the accepted Library action group and Show title/Real aspect ratio rows — same reasoning as every other already-accepted atom-count entry."
+    "reason": "Downstream of the accepted Library action group and Show title/Real aspect ratio rows \u2014 same reasoning as every other already-accepted atom-count entry."
   },
   {
     "match": "font-size 10px",
     "zone": "gearmenu",
-    "reason": "Downstream of the accepted Library action group's own font-size, inflating the aggregate tally — same reasoning as the sidebar's font-size entries."
+    "reason": "Downstream of the accepted Library action group's own font-size, inflating the aggregate tally \u2014 same reasoning as the sidebar's font-size entries."
   },
   {
     "match": "font-size 13px",
     "zone": "gearmenu",
-    "reason": "Downstream of the accepted Library action group's own font-size, inflating the aggregate tally — same reasoning as the sidebar's font-size entries."
+    "reason": "Downstream of the accepted Library action group's own font-size, inflating the aggregate tally \u2014 same reasoning as the sidebar's font-size entries."
   },
   {
     "match": "font-family \"SF Pro Text\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the accepted Library action group's own font-family, inflating the aggregate tally — same reasoning as the sidebar's font-family entry."
+    "reason": "Downstream of the accepted Library action group's own font-family, inflating the aggregate tally \u2014 same reasoning as the sidebar's font-family entry."
   },
   {
     "match": "order@0: wireframe text:\"Thumbnails\" vs app text:\"Library\"",
     "zone": "gearmenu",
-    "reason": "The accepted Library action group is the FIRST group in the menu (Library actions before display options reads correctly) — its presence necessarily shifts what atom sits at position 0 relative to the wireframe's Thumbnails-first mock, which has no Library group at all."
+    "reason": "The accepted Library action group is the FIRST group in the menu (Library actions before display options reads correctly) \u2014 its presence necessarily shifts what atom sits at position 0 relative to the wireframe's Thumbnails-first mock, which has no Library group at all."
   },
   {
     "match": "MISSING 1x  text:\"Square crops\"",
     "zone": "gearmenu",
-    "reason": "Investigated 2026-09-08: the app has no square-vs-original-dimensions crop-mode toggle at all (a real functional gap, not a markup/style difference) — out of scope for a wireframe-fidelity pass; would need a real feature decision from the user first, same as Filters/sidebar-collapse were."
+    "reason": "User decision 2026-09-11: must be in the app (was in an earlier build) \u2014 tracked as T57 in editor_ux_spec.json. Remove once the two-option choice exists."
   },
   {
     "match": "MISSING 1x  text:\"Original dimensions\"",
     "zone": "gearmenu",
-    "reason": "See \"Square crops\" entry above — same missing feature."
+    "reason": "User decision 2026-09-11: must be in the app (was in an earlier build) \u2014 tracked as T57 in editor_ux_spec.json. Remove once the two-option choice exists."
   },
   {
     "match": "MISSING 1x  text:\"Normal spacing\"",
     "zone": "gearmenu",
-    "reason": "The app's equivalent is the \"No spacing between photos\" checkbox-turned-checkmark row (HANDOVER #12) — a single toggle, not the wireframe's separate Normal/Zero two-option pair. Functionally equivalent, different interaction shape; same judgment-call category as the sort menu's key set."
+    "reason": "The app's equivalent is the \"No spacing between photos\" checkbox-turned-checkmark row (HANDOVER #12) \u2014 a single toggle, not the wireframe's separate Normal/Zero two-option pair. Functionally equivalent, different interaction shape; same judgment-call category as the sort menu's key set."
   },
   {
     "match": "topbar: one icon renders at 15x15",
     "zone": "selfconsist",
-    "reason": "2026-09-11: pre-existing, unrelated to the topbar parity pass — the odd-one-out is #lib-view-menu-btn's own gear icon, hardcoded width=15/height=15 in its inline <svg> since before this change (every other topbar icon goes through ic(name,14)). Confirmed present before the parity pass's edits; left as-is rather than folded into an unrelated commit."
+    "reason": "2026-09-11: pre-existing, unrelated to the topbar parity pass \u2014 the odd-one-out is #lib-view-menu-btn's own gear icon, hardcoded width=15/height=15 in its inline <svg> since before this change (every other topbar icon goes through ic(name,14)). Confirmed present before the parity pass's edits; left as-is rather than folded into an unrelated commit."
   },
   {
     "match": "dynamic-data row count: wireframe 1 vs app 0",
     "zone": "gearmenu",
-    "reason": "2026-09-11: deliberate, per Tareq — Library gear menu rebuilt into the Editor's two-column category drill-down (Library/Thumbnails/Metadata/Panels/Appearance tabs — see #lib-view-menu's HTML comment in desktop/library-ui.js). All findings below with this same date/reason are downstream of that one structural redesign; the wireframe (Library View.html) reflects the OLD flat-list gear menu and has not been updated to match."
+    "reason": "2026-09-11: deliberate, per Tareq \u2014 Library gear menu rebuilt into the Editor's two-column category drill-down (Library/Thumbnails/Metadata/Panels/Appearance tabs \u2014 see #lib-view-menu's HTML comment in desktop/library-ui.js). All findings below with this same date/reason are downstream of that one structural redesign; the wireframe (Library View.html) reflects the OLD flat-list gear menu and has not been updated to match."
   },
   {
     "match": "MISSING 1x  text:\"Thumbnails\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Thumbnails\" is now a category TAB (a button), not an inline group-label row."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"dynamic-data row count\" entry above. \"Thumbnails\" is now a category TAB (a button), not an inline group-label row."
   },
   {
     "match": "MISSING 1x  text:\"Hide flag & type icons\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — this row now lives inside the Thumbnails category pane, hidden until that tab is selected, so the flat-list scan finds it MISSING at the menu's default (Library) tab."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 this row now lives inside the Thumbnails category pane, hidden until that tab is selected, so the flat-list scan finds it MISSING at the menu's default (Library) tab."
   },
   {
     "match": "MISSING 1x  text:\"Metadata overlay\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Metadata\" is now a category tab, not an inline group-label row (shortened from \"Metadata overlay\" to fit the tab list)."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"dynamic-data row count\" entry above. \"Metadata\" is now a category tab, not an inline group-label row (shortened from \"Metadata overlay\" to fit the tab list)."
   },
   {
     "match": "MISSING 1x  text:\"Off\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — this option now lives inside the Metadata category pane, hidden until that tab is selected."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 this option now lives inside the Metadata category pane, hidden until that tab is selected."
   },
   {
     "match": "MISSING 1x  text:\"Always on\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — same Metadata-pane visibility as \"Off\" above."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 same Metadata-pane visibility as \"Off\" above."
   },
   {
     "match": "MISSING 1x  text:\"On hover\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — same Metadata-pane visibility as \"Off\" above."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 same Metadata-pane visibility as \"Off\" above."
   },
   {
     "match": "MISSING 1x  text:\"Panels\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Panels\" is now a category tab, not an inline group-label row."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"dynamic-data row count\" entry above. \"Panels\" is now a category tab, not an inline group-label row."
   },
   {
     "match": "MISSING 1x  text:\"Show sidebar\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — this row now lives inside the Panels category pane, hidden until that tab is selected."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 this row now lives inside the Panels category pane, hidden until that tab is selected."
   },
   {
     "match": "MISSING 1x  text:\"Appearance\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Appearance\" is now a category tab, not an inline group-label row."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"dynamic-data row count\" entry above. \"Appearance\" is now a category tab, not an inline group-label row."
   },
   {
     "match": "MISSING 1x  text:\"Light\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — this row now lives inside the Appearance category pane, hidden until that tab is selected."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 this row now lives inside the Appearance category pane, hidden until that tab is selected."
   },
   {
     "match": "MISSING 1x  text:\"Dark\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — same Appearance-pane visibility as \"Light\" above."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 same Appearance-pane visibility as \"Light\" above."
   },
   {
     "match": "EXTRA   1x  button:\"Library\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — the 5 category tab buttons (Library/Thumbnails/Metadata/Panels/Appearance) are new UI the flat-list wireframe has no equivalent for."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 the 5 category tab buttons (Library/Thumbnails/Metadata/Panels/Appearance) are new UI the flat-list wireframe has no equivalent for."
   },
   {
     "match": "EXTRA   1x  button:\"Thumbnails\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"EXTRA button:Library\" entry above."
   },
   {
     "match": "EXTRA   1x  button:\"Metadata\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"EXTRA button:Library\" entry above."
   },
   {
     "match": "EXTRA   1x  button:\"Panels\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"EXTRA button:Library\" entry above."
   },
   {
     "match": "EXTRA   1x  button:\"Appearance\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 see \"EXTRA button:Library\" entry above."
   },
   {
     "match": "EXTRA   6x  button",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — the 5 category tabs plus one net extra button from the restructure, none present in the flat-list wireframe."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 the 5 category tabs plus one net extra button from the restructure, none present in the flat-list wireframe."
   },
   {
     "match": "EXTRA   1x  icon",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — one option row's icon shifted zones during the restructure."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 one option row's icon shifted zones during the restructure."
   },
   {
     "match": "font-size 12px: wireframe uses it on 0 text atom(s), app on 5",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — the 5 new category tab labels render at the app's existing 12px UI-text size, which the flat-list wireframe never had text at."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 the 5 new category tab labels render at the app's existing 12px UI-text size, which the flat-list wireframe never had text at."
   },
   {
     "match": "order@0: wireframe text:\"Thumbnails\" vs app button:\"Library\"",
     "zone": "gearmenu",
-    "reason": "Downstream of the gear-menu drill-down redesign — the first atom is now the \"Library\" category tab instead of the flat list's first group-label."
+    "reason": "Downstream of the gear-menu drill-down redesign \u2014 the first atom is now the \"Library\" category tab instead of the flat list's first group-label."
   },
   {
     "match": "[icons] gearmenu#",
     "zone": "icons",
-    "reason": "Downstream of the gear-menu drill-down redesign above — the category tab buttons (Library/Thumbnails/Metadata/Panels/Appearance) have no icons and sit where the old flat list's leading option icons used to be, shifting every subsequent gearmenu icon's index against the pre-redesign baseline."
+    "reason": "Downstream of the gear-menu drill-down redesign above \u2014 the category tab buttons (Library/Thumbnails/Metadata/Panels/Appearance) have no icons and sit where the old flat list's leading option icons used to be, shifting every subsequent gearmenu icon's index against the pre-redesign baseline."
   }
 ]

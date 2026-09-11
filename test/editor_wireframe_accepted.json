@@ -3,25 +3,25 @@
     "zone": "filmstrip",
     "match": "filmstrip (docked library): width",
     "exact": false,
-    "reason": "T9 (editor_ux_spec.json, 2026-09-10): 'width' newly added to checked PROPS. Wireframe declares 150px, app computes 120px for the docked filmstrip in both themes/photo-states. Untriaged — real, small, pre-existing drift this session has no design context to rule on; not something to change blindly. Remove once someone confirms which width is correct."
+    "reason": "User decision 2026-09-11: app's 120px is correct, not the wireframe's 150px. The docked filmstrip is user-resizable, so its width also depends on saved state \u2014 the gate should measure it at the default size (reset persisted width first), not whatever the last session left. Intended; keep."
   },
   {
     "zone": "rail",
     "match": "tool rail: width",
     "exact": false,
-    "reason": "Same as the filmstrip width entry above — wireframe 64px vs app 72px, in BOTH light states (no-photo and photo) but not either dark state — reason not yet understood, possibly a theme-driven scrollbar/border difference. Untriaged; not scoped to one photo-state because both light states hit it identically."
+    "reason": "User decision 2026-09-11: go with the wireframe's 64px \u2014 tracked as T55 in editor_ux_spec.json. Remove this entry once fixed."
   },
   {
     "zone": "panel",
     "match": "tool panel: width",
     "exact": false,
-    "reason": "Same class as the rail entry above — wireframe 300px vs app 320px, both light states. Untriaged."
+    "reason": "User decision 2026-09-11: go with the wireframe's 300px \u2014 tracked as T56. Remove this entry once fixed."
   },
   {
     "zone": "filmstrip",
     "match": "[dark/no-photo] filmstrip (docked library): borderColor",
     "exact": false,
-    "reason": "Token drift only (dark theme) — same --bdr-panel (.1) vs --bdr-pill (.14) role confusion as the topbar/rail/panel borderColor entries below (#lib-overlay's dock border currently reuses a pill-role token), fixed by the same Phase D token split. Deliberately does NOT match the light-theme filmstrip borderColor findings — those are part of E6 (docked filmstrip doesn't re-theme at all) and stay live until fixed."
+    "reason": "Token drift only (dark theme) \u2014 same --bdr-panel (.1) vs --bdr-pill (.14) role confusion as the topbar/rail/panel borderColor entries below (#lib-overlay's dock border currently reuses a pill-role token), fixed by the same Phase D token split. Deliberately does NOT match the light-theme filmstrip borderColor findings \u2014 those are part of E6 (docked filmstrip doesn't re-theme at all) and stay live until fixed."
   },
   {
     "zone": "filmstrip",
@@ -31,19 +31,19 @@
   },
   {
     "zone": "statusbar",
-    "match": "status bar (#fx-statusbar) — not found in app",
+    "match": "status bar (#fx-statusbar) \u2014 not found in app",
     "exact": false,
-    "reason": "Genuinely missing — the empty 26px status bar has not been built yet (plan Phase F). Remove this entry once #fx-statusbar exists."
+    "reason": "Genuinely missing \u2014 the empty 26px status bar has not been built yet (plan Phase F). Remove this entry once #fx-statusbar exists."
   },
   {
     "zone": "topbar",
     "match": "topbar: borderColor",
     "exact": false,
-    "reason": "Token drift, not a per-element bug: app's --bdr is rgba(255,255,255,.12) doing triple duty as panel/control/pill border; wireframe uses three distinct roles (.1 panel edges, .12 control outlines, .14 pills — chromasmith-design/project/Editor (Developer) View.dc.html lines 31,71,99,102,108,157 vs 41,43 vs 44,56,76,116,123). Fixed by introducing --bdr-panel/--bdr-ctrl/--bdr-pill in plan Phase D, one edit for all borderColor findings below."
+    "reason": "Token drift, not a per-element bug: app's --bdr is rgba(255,255,255,.12) doing triple duty as panel/control/pill border; wireframe uses three distinct roles (.1 panel edges, .12 control outlines, .14 pills \u2014 chromasmith-design/project/Editor (Developer) View.dc.html lines 31,71,99,102,108,157 vs 41,43 vs 44,56,76,116,123). Fixed by introducing --bdr-panel/--bdr-ctrl/--bdr-pill in plan Phase D, one edit for all borderColor findings below."
   },
   {
     "zone": "topbar",
-    "match": "topbar: height — wireframe \"48px\" vs app \"44px\"",
+    "match": "topbar: height \u2014 wireframe \"48px\" vs app \"44px\"",
     "exact": false,
     "reason": "Real, scheduled: --deskx-topbar-h 44->48px is plan Phase F item 1, copied from Editor (Developer) View.dc.html:31."
   },
@@ -57,19 +57,19 @@
     "zone": "topbar",
     "match": "undo/redo cluster: borderColor",
     "exact": false,
-    "reason": "Same root cause as the .undogrp borderRadius entry above — building the wrapper fixes both."
+    "reason": "Same root cause as the .undogrp borderRadius entry above \u2014 building the wrapper fixes both."
   },
   {
     "zone": "zoom",
     "match": "zoom control: fontFamily",
     "exact": false,
-    "reason": "Mostly a false positive: Blink re-serializes the wireframe's BlinkMacSystemFont as \"system-ui\", making the two stacks the same after normFont() normalization used elsewhere in this file — but this SPECIFIC element's app font-family comes from --mono (chromasmith-22.html:404, .fx-zoom-ctrl{font-family:var(--mono)}), which is a real, different defect: numeric readouts should use tabular-nums, not a monospace family (user list item, wireframe's own answer is Editor (Developer) View.dc.html:133 .sr-val{font-variant-numeric:tabular-nums}). Scheduled in plan Phase D."
+    "reason": "Mostly a false positive: Blink re-serializes the wireframe's BlinkMacSystemFont as \"system-ui\", making the two stacks the same after normFont() normalization used elsewhere in this file \u2014 but this SPECIFIC element's app font-family comes from --mono (chromasmith-22.html:404, .fx-zoom-ctrl{font-family:var(--mono)}), which is a real, different defect: numeric readouts should use tabular-nums, not a monospace family (user list item, wireframe's own answer is Editor (Developer) View.dc.html:133 .sr-val{font-variant-numeric:tabular-nums}). Scheduled in plan Phase D."
   },
   {
     "zone": "topbar",
     "match": "Settings button (was Tools): fontSize",
     "exact": false,
-    "reason": "2026-09-09: Tools/View/⋯ merged into one settings gear (#fx-settings), docked last to match the Library top bar's zoom -> flags -> All FX -> Export -> gear order — no longer a placeholder. This is the same wireframe-has-no-CSS-reset pattern every .fx-db icon button in the bar carries (wireframe renders at the browser default 16px/400 with no border since it never links _ds/tokens/base.css) — shared root cause, not specific to this control."
+    "reason": "2026-09-09: Tools/View/\u22ef merged into one settings gear (#fx-settings), docked last to match the Library top bar's zoom -> flags -> All FX -> Export -> gear order \u2014 no longer a placeholder. This is the same wireframe-has-no-CSS-reset pattern every .fx-db icon button in the bar carries (wireframe renders at the browser default 16px/400 with no border since it never links _ds/tokens/base.css) \u2014 shared root cause, not specific to this control."
   },
   {
     "zone": "topbar",
@@ -87,36 +87,36 @@
     "zone": "topbar",
     "match": "All FX button: borderColor",
     "exact": false,
-    "reason": "Token drift — same --bdr-pill root cause as the topbar borderColor entry above (Editor (Developer) View.dc.html uses .14 for pills, app's single --bdr is .12). Fixed by the same Phase D token split."
+    "reason": "Token drift \u2014 same --bdr-pill root cause as the topbar borderColor entry above (Editor (Developer) View.dc.html uses .14 for pills, app's single --bdr is .12). Fixed by the same Phase D token split."
   },
   {
     "zone": "topbar",
     "match": "Export button: borderColor",
     "exact": false,
-    "reason": "Real, expected to move: the app's Export button already uses the app's own accent (rgb(97,160,175) = #61a0af blue-mist) as its border, not the wireframe's near-black literal (rgb(11,18,21)) — this is the accent-swap decision (plan Phase D) already partially in place for this control. Will re-verify after the full palette adoption lands; if it still mismatches then it's a real border-color bug, not a token gap."
+    "reason": "Real, expected to move: the app's Export button already uses the app's own accent (rgb(97,160,175) = #61a0af blue-mist) as its border, not the wireframe's near-black literal (rgb(11,18,21)) \u2014 this is the accent-swap decision (plan Phase D) already partially in place for this control. Will re-verify after the full palette adoption lands; if it still mismatches then it's a real border-color bug, not a token gap."
   },
   {
     "zone": "rail",
     "match": "tool rail: borderColor",
     "exact": false,
-    "reason": "Token drift — same --bdr-panel root cause as the topbar borderColor entry (rail is a panel-edge border, wireframe .1 vs app's single --bdr .12). Fixed by the same Phase D token split."
+    "reason": "Token drift \u2014 same --bdr-panel root cause as the topbar borderColor entry (rail is a panel-edge border, wireframe .1 vs app's single --bdr .12). Fixed by the same Phase D token split."
   },
   {
     "zone": "panel",
     "match": "tool panel: borderColor",
     "exact": false,
-    "reason": "Token drift — same --bdr-panel root cause as tool rail borderColor above."
+    "reason": "Token drift \u2014 same --bdr-panel root cause as tool rail borderColor above."
   },
   {
     "zone": "rail",
-    "match": "rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info]",
+    "match": "rail order/content \u2014 wireframe [Looks, Adjust, Color, Detail, Retouch, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info]",
     "exact": false,
-    "reason": "Stale (both sides changed since 2026-09-08 — the wireframe itself gained Crop, and the app gained a trailing Narrow item; see the newer entry below). Left for history rather than deleted."
+    "reason": "Stale (both sides changed since 2026-09-08 \u2014 the wireframe itself gained Crop, and the app gained a trailing Narrow item; see the newer entry below). Left for history rather than deleted."
   },
   {
     "zone": "rail",
-    "match": "rail order/content — wireframe [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info, Narrow]",
+    "match": "rail order/content \u2014 wireframe [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info] vs app [Looks, Adjust, Color, Detail, Retouch, Crop, Masks, Film, Frame, Export, Info, Narrow]",
     "exact": false,
-    "reason": "Untriaged — pending Editor alignment work (predates and is unrelated to the 2026-09-09 topbar/settings-menu change; found while verifying that change, spun off as its own follow-up task rather than fixed inline). The app's rail carries a trailing 'Narrow'/'Labels' collapse-expand toggle (chromasmith-22.html:20320, applyFxLayout()'s own rail-collapse affordance) that the wireframe's fixed-width rail has no equivalent for — real feature or a chrome addition the wireframe should also show is not yet decided."
+    "reason": "User decision 2026-09-11: the APP's rail order/content is correct; the wireframe is out of date and should be updated to match the app. Intended; keep until the wireframe is updated."
   }
 ]
