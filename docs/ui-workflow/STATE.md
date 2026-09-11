@@ -37,3 +37,22 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 - (c) Changed-line lint: 0.28–0.41s (git diff -U0 on the 17.7MB file is ~80% of it; regex 1–3ms). Edit-hook variant (lint the Edit's new_string, `str.find` to confirm it's inside `<style>`) 0.12–0.26s. But `<style>` already holds 940 raw literals (115 are `1px`): whole-line linting flags old debt, so lint only literals NEW vs old_string, allow `1px`, skip `--x:` definitions, strip multi-line comments.
 - (d) Bare page = app `<style>` + Retouch markup + `selectToSeg` matches 221/228 computed props (.fx-ctrl/.fx-row/.fx-toggle/seg buttons), no console errors, ~1.5s vs 5s app load. The 7 diffs are all `.fx-val`: `initEditableVals()` adds contenteditable at runtime. Copying the real ancestor chain HIDES the card — it needs `.sec-active` under `body.fx-single`. Inline handlers (toggleFX, healSyncUI…) need stubs.
 - Scripts were scratchpad-only (not kept). Prompts edited: S3, S4, S6, S8, S11.
+
+**S2 — 2026-09-11 — done, needs user decisions**
+- `design/tokens.json` (DTCG): every var in chromasmith-22.html's `:root` (50–98, 39 vars),
+  `body.light` override (1271–1301, 16 vars) and desktop/library-ui.js's DS block (695–776,
+  63 DS pass-through + 10 remapped app vars + 1 new `--hover-tint`) — 107 total, each with
+  `$extensions.chromasmith.{appVar,role,modes,source}`. Matched by value+role per S1(a), not
+  `_ds` var() names.
+- `design/token-conflicts.md`: every family where app and DS disagree or DS has no analog —
+  border alphas (dark `--bdr*` has no white-alpha DS token), `--acc2`/`--ok`/`--err` (app
+  lightens DS colours for dark-surface contrast, neither mode is an exact DS literal), `--mono`
+  (no DS family), off-grid `--fs-1/3/4/7` and `--sp-4/5`, `--fs-2`=12px ties two DS tokens,
+  `--r-sm` vs `--radius-xs` (1px off), missing control-height/pill-radius/font-weight families,
+  `--ease`/`--dur-2`, `--lift-1/2` vs `--shadow-product` (DS reserves shadow for imagery only),
+  `--sl-thumb*` (dark has no real value, only an inline CSS fallback), `--sat`/`--sab` (device
+  geometry, proposed exclusion).
+- `design/verify_tokens.py` re-parses all three source blocks and asserts every declared var is
+  in tokens.json or token-conflicts.md — passes (107/107). Re-run after any edit to the three
+  source blocks or the two files.
+- Not done: no decisions made on the conflicts table — that's explicitly for the user.
