@@ -1,0 +1,332 @@
+{
+  "id": "fx-toast",
+  "group": "B",
+  "generatedAt": "2026-09-11T16:38:27.220Z",
+  "hasToggle": false,
+  "tree": {
+    "tag": "div",
+    "id": "fx-toast",
+    "classes": [
+      "ok",
+      "show"
+    ],
+    "text": "Surface inventory test toast",
+    "style": {
+      "color": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "backgroundColor": {
+        "value": "rgb(39, 39, 41)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "borderColor": {
+        "value": "rgba(255, 255, 255, 0.12)",
+        "token": null
+      },
+      "outlineColor": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "fontSize": {
+        "value": "12px",
+        "token": null
+      },
+      "fontWeight": {
+        "value": "400",
+        "token": null
+      },
+      "fontFamily": {
+        "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+        "token": null
+      },
+      "lineHeight": {
+        "value": "16.8px",
+        "token": null
+      },
+      "letterSpacing": {
+        "value": "normal",
+        "token": null
+      },
+      "paddingTop": {
+        "value": "10px",
+        "token": null
+      },
+      "paddingRight": {
+        "value": "15px",
+        "token": null
+      },
+      "paddingBottom": {
+        "value": "10px",
+        "token": null
+      },
+      "paddingLeft": {
+        "value": "15px",
+        "token": null
+      },
+      "gap": {
+        "value": "9px",
+        "token": null
+      },
+      "rowGap": {
+        "value": "9px",
+        "token": null
+      },
+      "columnGap": {
+        "value": "9px",
+        "token": null
+      },
+      "borderRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderTopLeftRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderTopRightRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderBottomLeftRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderBottomRightRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "transitionDuration": {
+        "value": "0s",
+        "token": null
+      },
+      "transitionTimingFunction": {
+        "value": "ease, cubic-bezier(0.2, 0.8, 0.3, 1.15)",
+        "token": null
+      },
+      "boxShadow": {
+        "value": "rgba(255, 255, 255, 0.06) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.35) 0px 2px 4px 0px, rgba(0, 0, 0, 0.5) 0px 14px 32px -8px",
+        "token": null
+      }
+    },
+    "children": []
+  },
+  "unmapped": [
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "lineHeight",
+      "value": "16.8px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "paddingTop",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "paddingRight",
+      "value": "15px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "paddingBottom",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "paddingLeft",
+      "value": "15px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "gap",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "rowGap",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "columnGap",
+      "value": "9px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "borderRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "borderTopLeftRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "borderTopRightRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "borderBottomLeftRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "borderBottomRightRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease, cubic-bezier(0.2, 0.8, 0.3, 1.15)"
+    },
+    {
+      "tag": "div",
+      "id": "fx-toast",
+      "classes": [
+        "ok",
+        "show"
+      ],
+      "prop": "boxShadow",
+      "value": "rgba(255, 255, 255, 0.06) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.35) 0px 2px 4px 0px, rgba(0, 0, 0, 0.5) 0px 14px 32px -8px"
+    }
+  ]
+}

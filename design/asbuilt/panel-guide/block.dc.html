@@ -1,0 +1,185 @@
+<div class="tp-panel active" data-panel="guide">
+
+  <div class="guide">
+    <h1>Chromasmith — Guide</h1>
+    <p class="lede">A single-file film-emulation and color-grading tool that runs entirely in your browser. Nothing is uploaded — every image, LUT and export is processed locally on your device.</p>
+
+    <div class="toc">
+      <a href="#g-start">Getting started</a>
+      <a href="#g-fx">Effects &amp; Export</a>
+      <a href="#g-preview">Preview &amp; zoom</a>
+      <a href="#g-match">Match &amp; Refine</a>
+      <a href="#g-copy">Color Copy</a>
+      <a href="#g-faq">FAQ</a>
+    </div>
+
+    <h2 id="g-start">Getting started</h2>
+    <div class="gcard">
+      <p>The app has three working tabs plus this guide:</p>
+      <ul>
+        <li><b>Effects &amp; Export</b> — load a photo, apply a film look (LUT preset), grain, halation, bloom and basic adjustments, then export.</li>
+        <li><b>Match &amp; Refine</b> — feed it a before/after pair and it builds a <code>.cube</code> LUT that reproduces the look.</li>
+        <li><b>Color Copy</b> — copy the color/tone of any reference photo onto another.</li>
+      </ul>
+      <p>Drop an image anywhere onto a drop-zone, or click it to browse. Supported inputs: JPEG, PNG, TIFF, and Panasonic <b>RW2 / RAW</b> (decoded locally — large RAWs can take 15–30&nbsp;s).</p>
+      <div class="gnote">Everything runs offline. The <b>● OFFLINE</b> badge in the header is a feature, not an error — it confirms your photos never leave the device.</div>
+    </div>
+
+    <h2 id="g-fx">Effects &amp; Export tab</h2>
+
+    <h3>Image Input</h3>
+    <ul>
+      <li><b>Drop image</b> — load the photo you want to grade.</li>
+      <li><b>RAW profile</b> — for RW2 files, picks the in-camera color profile (default <b>Camera Standard</b>) so colors match Lightroom.</li>
+      <li><b>Apply LUT</b> — drop a <code>.cube</code> file or a processed LUT chart to apply a custom look.</li>
+      <li><b>Input</b> — set to <b>V-Log (Lumix)</b> for V-Log stills/frame grabs: converts V-Log/V-Gamut to Rec.709 <i>before</i> the film look, so any normal Rec.709 <code>.cube</code> then applies correctly on top. Leave on Standard for normal photos.</li>
+      <li><b>Preset</b> — pick one of the 11 built-in film looks (Velvia, Astia, Classic Neg, Provia, Reala Ace, the Beach preset, etc.).</li>
+      <li><b>Save to library / Delete</b> — store the current LUT in this browser, or remove a saved one.</li>
+      <li><b>LUT chart</b> — downloads a reference chart of every color. Apply your look to it in another app, drop the result back, and Chromasmith reverse-engineers it into a clean <code>.cube</code>.</li>
+      <li><b>Download .cube</b> — exports the active LUT (already formatted for the Lumix&nbsp;Lab app).</li>
+    </ul>
+    <div class="gnote"><b>Recommended way to turn any Lightroom preset or profile into a <code>.cube</code>:</b> use the <b>LUT&nbsp;chart</b>. Download it, apply your preset to the chart in Lightroom, export it (sRGB, full size), then drop that export back on the <b>Apply LUT</b> zone. Because it captures the <i>actual rendered look</i> empirically across the whole color cube, it's more faithful and gap-free than reconstructing a look from slider values — and the resulting <code>.cube</code> is ready to <b>Download</b> (Lumix&nbsp;Lab-compatible) or save to your library. Reads patch means, so any grain/sharpening/noise reduction in the export cancels out. <i>Tip: a LUT only carries global color &amp; tone — not local masks, sharpening or grain.</i></div>
+
+    <h3>Quick Actions &amp; One-tap Looks</h3>
+    <ul>
+      <li><b>Enable All FX</b> — turns on grain, halation, bloom and borders at once.</li>
+      <li><b>One-tap Looks</b> — live thumbnails of every preset; click one to apply it.</li>
+    </ul>
+
+    <h3>Basic Adjustments <span style="color:var(--mut);font-weight:400">(toggle)</span></h3>
+    <p>Exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, plus <b>Clarity</b> and <b>Sharpen</b>. <b>WB Eyedropper</b> sets white balance from a neutral grey/white you click. <b>Auto-enhance</b> sets levels and white balance automatically. This card's <b>Reset</b> zeroes them.</p>
+
+    <h3>Crop &amp; Rotate</h3>
+    <ul>
+      <li><b>⟲ / ⟳ 90°</b> rotate, <b>⇄ / ⇅ Flip</b> mirror, <b>Straighten</b> slider levels the horizon.</li>
+      <li><b>Crop</b> opens an interactive crop overlay with aspect presets; the <b>Transform</b> card's <b>Reset</b> link clears all of it.</li>
+    </ul>
+    <div class="gnote">Geometry applies to <b>every</b> loaded image (for batch exports). <kbd>⌘Z</kbd>/<kbd>⌘Y</kbd> undo and redo it.</div>
+
+    <h3>Tone Curves</h3>
+    <ul>
+      <li><b>RGB / R / G / B</b> tabs — master and per-channel point curves. Click the graph to add a point, drag to shape, double-click a point to remove it. Endpoints slide vertically (lift blacks / fade highlights).</li>
+    </ul>
+    <div class="gnote">Curves apply after Basic Adjustments and before the film FX, so halation &amp; grain react to the curved image — like shaping the negative.</div>
+
+    <h3>Color Mixer (HSL)</h3>
+    <ul>
+      <li>Eight color bands (Red → Magenta). Pick a band chip, then shift its <b>Hue</b>, <b>Saturation</b> and <b>Luminance</b> independently — e.g. tame orange skin, deepen a blue sky, mute distracting greens. Edited bands get a white ring.</li>
+    </ul>
+
+    <h3>Masks</h3>
+    <ul>
+      <li>Up to 4 <b>Radial</b> (faces, subjects) or <b>Linear</b> (skies, foregrounds) masks. Position/size with the X/Y/Width sliders, soften with <b>Feather</b>, flip with <b>Invert</b>, and restrict to a tonal range with <b>Lum floor/ceiling</b> (e.g. brighten only the shadows inside the mask).</li>
+      <li>Each mask carries its own Exposure, Contrast, Temp and Saturation. Masks are resolution-independent — exports and the 1:1 loupe match the preview exactly.</li>
+      <li>Set <b>Show on photo</b> to <b>Selection</b> to see the mask's <i>effective</i> selection in red — the shape combined with the Lum and Color range gates. Overlay and Isolate draw the shape only. <kbd>O</kbd> cycles the modes.</li>
+    </ul>
+
+    <h3>Skin Tone (even out an uneven tan)</h3>
+    <ul>
+      <li>Every other color control here <i>shifts</i> tones by a fixed amount, which is why a patchy tan resists them: raising warmth moves a pale chest and an already-tanned face equally, so the face over-cooks while the chest still looks pale next to it. <b>Uniformity</b> works the other way — it pulls the selected tones <i>toward one target</i>, so areas far from it move a lot and areas already close barely move. Uneven skin evens out instead of the dark parts getting darker.</li>
+      <li>Add a <b>+ Skin</b> mask, then click a mid-tone patch of skin. Drag the shape on the photo so it covers the person you mean — it starts in the middle of the frame, and the color range alone can't tell skin from anything sharing its hue, such as a pet, sand or bare wood. Use <b>+ Brush</b> or <b>− Subtract prev</b> for anything the ellipse can't isolate.</li>
+      <li>Switch <b>Show on photo</b> to <b>Selection</b>, then <b>shift-click</b> each different kind of skin — matte, shaded, paler, pinker — until it <i>all</i> reads red. One pick can't cover a body: skin sits on both sides of the red hue boundary, so a gate centered on a cheek can miss a sheeny chest almost entirely. This matters more than it looks: each pixel moves by weight × strength × distance-to-target, so a weakly-selected patch barely moves — and if it's the patch furthest from the target, the difference gets <i>worse</i> instead of better.</li>
+      <li>Keep <b>Feather</b> low-ish. It sets where the mask's fade <i>starts</i>, so a high value fades from the middle of the ellipse outward and makes position, rather than color, decide how much each area moves. A low feather gives a flat center and fades only near the edge, which is what lets the tones actually meet.</li>
+      <li><b>Target</b> is independent of what you picked, so you can aim at a tan that appears nowhere in the photo: <b>Match pick</b> just evens out the tone you clicked, <b>Swatch</b> offers the 10-shade Monk Skin Tone scale (4–6 is the useful span for tanning a light base), and <b>Custom</b> takes any color. <b>Tan Depth/Warmth</b> then nudge the target — never the pixels — so pushing them deepens the whole selection evenly.</li>
+      <li><b>Preserve modeling</b> only affects the Lightness slider. At 0 it collapses lightness onto the target, which evens out a hard tan <i>line</i> but flattens the shading that gives a body its form. At 100 it shifts the overall lightness level instead, leaving the shading intact. Start high.</li>
+    </ul>
+    <div class="gnote">Typefaces: <b>Inter</b> (Rasmus Andersson) and <b>Instrument Serif</b> (Rodrigo Fuenzalida / Instrument), both SIL Open Font License 1.1. Icons after <b>Lucide</b> (ISC). RAW decoding by <b>LibRaw</b>; MP4 handling by <b>Mediabunny</b> (MPL-2.0).</div>
+    <div class="gnote">Skin tone swatches use the <b>Monk Skin Tone scale</b> (Ellis Monk / Google, 2023), licensed CC BY 4.0.</div>
+
+    <h3>Film FX</h3>
+    <ul>
+      <li><b>Film Grain</b> — Amount, Size, and grain character. Rendered at true export scale in the 1:1 view (see below).</li>
+      <li><b>Film Artifacts</b> — dust &amp; hairs, vertical scratches and a warm light leak, applied to the "negative" before the print stock. Placement is seeded (export matches preview); <b>Reshuffle</b> re-rolls it.</li>
+      <li><b>Halation</b> — the red-orange glow real film gives bright edges. <b>Amount</b>, <b>Radius</b>, and <b>Shadow protect</b> (raise it if dark eyes surrounded by bright skin flood red).</li>
+      <li><b>Bloom</b> — soft highlight glow. Amount, Threshold, Radius.</li>
+      <li><b>Vignette</b> — darkens the corners.</li>
+      <li><b>Borders</b> — two stackable coloured frames with adjustable thickness.</li>
+      <li><b>Canvas</b> — mats the photo (with its borders) onto an aspect-ratio canvas: pick a ratio (4:5 keeps Instagram from cropping a 2:3 photo), zoom the photo on the canvas, and choose a background color or a blurred copy of the photo.</li>
+    </ul>
+    <div class="gnote">The halation &amp; bloom are calibrated to match Dehancer's film-emulation reference. Every effect is a toggle — off by default, so a bare LUT export stays clean.</div>
+
+    <h3>Export</h3>
+    <ul>
+      <li><b>Filename / Format / Quality</b> — Auto picks PNG for lossless sources and JPEG otherwise.</li>
+      <li><b>Export</b> renders at <b>full original resolution</b> (not the preview size). Batch exports show a progress bar and a <b>Cancel</b> button.</li>
+      <li>When more than one photo is loaded, an <b>All photos / Current photo</b> switch appears above Export — export the whole batch, or just the one you're previewing.</li>
+      <li><b>Save session / Load session</b> — remember all slider settings in this browser between visits.</li>
+    </ul>
+    <div class="gnote">Loading several photos shows a <b>filmstrip</b> of thumbnails below the preview — click one to switch which photo you're previewing/editing. The same effects and geometry (crop/rotate/straighten) apply to every loaded photo; if one photo in a batch export fails (e.g. too large for this device), the rest still export — check the log for which one was skipped.</div>
+
+    <h2 id="g-preview">Preview, zoom &amp; the 1:1 loupe</h2>
+    <div class="gcard">
+      <ul>
+        <li><b>Scroll / pinch</b> to zoom, <b>drag</b> to pan, <b>double-click</b> to reset. The image always stays inside the frame.</li>
+        <li>The bottom-left overlay has <b>−</b>, a <b>%</b> readout, <b>+</b>, <b>Fit</b>, and <b>1:1</b>.</li>
+        <li><b>1:1</b> renders a native-resolution crop through the full pipeline, so grain &amp; halation appear at their <b>true export size</b> — the regular zoom only magnifies the preview. Use it to pixel-peep before exporting.</li>
+        <li><b>Hold to compare</b> shows the untouched original while pressed; <b>Split</b> gives a draggable before/after divider; <b>Histogram</b> overlays live RGB levels.</li>
+      </ul>
+    </div>
+
+    <h2 id="g-match">Match &amp; Refine tab</h2>
+    <div class="gcard">
+      <p>Builds a LUT from an example. Best when you have the same photo before and after grading (e.g. a flat export and the Lightroom result).</p>
+      <ul>
+        <li><b>Before / Original</b> — the ungraded flat image.</li>
+        <li><b>After / Target</b> — the graded result you want to reproduce.</li>
+        <li><b>Starting LUT / Preset</b> (optional) — a <code>.cube</code> or <code>.xmp</code> to bootstrap the fit.</li>
+        <li><b>Name</b> auto-fills from the target filename.</li>
+        <li><b>Generate LUT &amp; XMP</b> — produces a downloadable <code>.cube</code> (plus an <code>.xmp</code>) and adds it to history with a per-color summary of what changed.</li>
+      </ul>
+      <div class="gnote">A LUT captures <b>global color &amp; tone only</b> — it can't reproduce sharpening, noise reduction, grain, or local masks. The output <code>.cube</code> is Lumix&nbsp;Lab-ready.</div>
+    </div>
+
+    <h2 id="g-copy">Color Copy tab</h2>
+    <div class="gcard">
+      <p>Transfers the overall color and tone of one photo onto another — no before/after pair needed.</p>
+      <ul>
+        <li><b>Source image</b> — the photo to grade.</li>
+        <li><b>Reference image</b> — the photo whose look you want.</li>
+        <li><b>Download .cube LUT</b> / <b>Download .xmp Preset</b> — export the matched grade, with a summary of the characteristics copied.</li>
+      </ul>
+      <p>This is a per-channel histogram match — great for a quick mood transfer, looser than a true Match &amp; Refine fit.</p>
+    </div>
+
+    <h2 id="g-faq">FAQ</h2>
+    <div class="gcard">
+      <div class="faq-q">Are my photos uploaded anywhere?</div>
+      <div class="faq-a">No. All decoding, grading and exporting runs in your browser with WebGL. The app works fully offline. The one exception is the optional <b>Google Photos</b> connection below — and only when you use it.</div>
+
+      <div class="faq-q">Why does the header say OFFLINE?</div>
+      <div class="faq-a">It's confirming local-only processing — that's the intended state, not a connection error.</div>
+
+      <div class="faq-q">Can I use Google Photos?</div>
+      <div class="faq-a">Yes — optional and off by default. <b>Google Photos…</b> (Image Input) opens Google's own picker so you can filter and select photos from your library, and <b>Upload exports</b> (Export panel) mirrors every export into a “Chromasmith” album. It needs a one-time free setup at <code>console.cloud.google.com</code>, and the steps differ slightly depending on whether you're using the browser/GitHub Pages build or the desktop app:
+      <br><br><b>1)</b> create a project, <b>2)</b> enable the <b>Google Photos Picker API</b> and <b>Photos Library API</b> (APIs &amp; Services → Library), <b>3)</b> configure the OAuth consent screen (External → stay in <b>Testing</b>, add your own Gmail as a test user), then:
+      <br><br><u>Browser / GitHub Pages:</u> create <b>Credentials → OAuth client ID → Web application</b> and add this app's address to BOTH lists — <i>Authorized JavaScript origins</i> gets the origin (e.g. <code>https://yourname.github.io</code>) and <i>Authorized redirect URIs</i> gets the full page URL (e.g. <code>https://yourname.github.io/Chroma-App/chromasmith-22.html</code>).
+      <br><br><u>Desktop app:</u> create <b>Credentials → OAuth client ID → Desktop app</b> instead — no origins or redirect URIs to register at all; sign-in opens your system's default browser and completes over a local loopback connection (127.0.0.1), then hands control back to the app.
+      <br><br>Either way, paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (the app re-prompts automatically); on the browser build, allow pop-ups for this site.</div>
+
+      <div class="faq-q">Can I edit a photo in Chromasmith from inside Lightroom?</div>
+      <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal — a new <b>Save to Lightroom</b> button appears next to the regular Export button while a handoff photo is open. Use it to write straight back over the file Lightroom gave you (Lightroom re-imports and syncs the result automatically); the normal Export button is still there too, unchanged, for a regular local export of the same photo.</div>
+
+      <div class="faq-q">Can I browse my Lightroom cloud photos?</div>
+      <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → Add API → <b>Lightroom Services</b> → OAuth credential type <b>Native App</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. A Native App credential redirects through a custom URL scheme (not a plain localhost port like Google's), which is fixed per-project — if you create your own Adobe integration rather than using an existing one, the app's redirect URI constant needs updating to match yours. Once connected (Image Input → <b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the editor.</div>
+
+      <div class="faq-q">My RW2 / RAW colors don't match Lightroom.</div>
+      <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
+
+      <div class="faq-q">A <code>.cube</code> looks wrong in the Lumix Lab app.</div>
+      <div class="faq-a">Lumix needs a <code>#LUMIXPHOTOSTYLE STD</code> tag; without it the camera assumes V-Log and the colors go off. Every <b>Download .cube</b> from Chromasmith already includes it.</div>
+
+      <div class="faq-q">Why is my grain bigger in the preview than the export?</div>
+      <div class="faq-a">The normal preview is downscaled, so effects look larger relative to the image. Use the <b>1:1</b> button to see grain &amp; halation at true export scale.</div>
+
+      <div class="faq-q">A preset looks broken on the LUT chart but fine on photos.</div>
+      <div class="faq-a">Some captured LUTs have garbage in fully-saturated corners that real photos rarely hit. Always sanity-check a captured preset on the <b>LUT chart</b>, which spans the whole color cube.</div>
+
+      <div class="faq-q">Will my settings persist?</div>
+      <div class="faq-a">Use <b>Save session</b> to store slider settings in this browser. Saved LUTs live in the browser too — Safari may clear them after ~7 days of disuse, so keep a <code>.cube</code> copy of anything important.</div>
+
+      <div class="faq-q">It looks like an old version.</div>
+      <div class="faq-a">The build date is shown in the header. If it's stale, hard-refresh to clear the cached page.</div>
+    </div>
+  </div>
+
+</div>

@@ -144,4 +144,29 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   under the whole-page selector (not a specific section) — harmless for the page-level shot but
   don't read `panel-fx/on.webp` vs `off.webp` as "the page's own toggle state".
   Output: `design/asbuilt/<id>/{noPhoto,rest,hover,…,on,off}.webp`, `spec.json`, `block.dc.html`
-  (14 MB total, gitignored-check: not excluded, committed as-is). Groups B–E not yet run.
+  (14 MB total, gitignored-check: not excluded, committed as-is).
+
+**S6 groups B–E — editor-overlays, other-pages, mobile, library — 2026-09-11 — done**
+- Extended `test/surface_capture.mjs` for the non-`fxsec` kinds: `mobile-sheet`'s
+  `surfaces.json` `openSteps` is a human-readable description, not runnable JS (viewport resize +
+  `applyFxLayout()` were driven with dedicated code, matching `surface_inventory.mjs`'s own
+  special-case, not `runStep()`/`eval`). Its sheet-open toggle needed a real fix, not a workaround:
+  `chromasmith-22.html`'s `fxSection(name)` returns early into a CLOSE branch (mobile sheet-close
+  or deskx panel-close) whenever the target section is already `sec-active` — calling it on
+  whichever section happens to be pre-selected closes something instead of opening the sheet. Now
+  picks a section key that ISN'T the currently-active one before opening. `splash` has no live DOM
+  route (confirmed in S5) — per user instruction, its capture is skipped entirely and
+  `chromasmith-design/project/Splash Screen.html` is copied verbatim into
+  `design/asbuilt/splash/block.dc.html` as its as-built stand-in, with a `spec.json` note
+  explaining why (no screenshots, no computed-value mapping — nothing to map from a static
+  wireframe file).
+- Result, all 4 groups: B (10 surfaces: 4 settings-menu panes, split/timeline popovers, cs-modal,
+  confirm/ask modals, toast) 0 missing states, 8/10 noPhoto (split/timeline popovers require a
+  photo to be enterable at all — real app behaviour, not a script gap). C (4 pages + splash
+  stand-in) 0 missing states; one noPhoto flake on `panel-guide` (timing, not a real gap — reran
+  `--id=panel-guide` alone, succeeded immediately). D (mobile-sheet) 0 missing — rest/loaded/empty
+  all captured, plus on/off (the mobile panel's own `.fx-toggle` sections). E (library) 0 missing.
+  Total across A–E: 41 surfaces (40 live-captured + splash stand-in), 58,339 unmapped style decls
+  overall — same expected causes as group A (no tokens yet for control heights/weights/pill radii/
+  off-grid literals), nothing invented. `design/asbuilt/` is 26 MB total, committed as-is (not
+  gitignored). All 5 groups (A–E) now complete.

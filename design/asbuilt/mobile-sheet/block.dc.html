@@ -1,0 +1,692 @@
+<div class="tp-panel active" data-panel="mobile-sheet">
+
+      <!-- tap OR drag-down to close — both handled by the pointer logic (no onclick: a
+           click also fires after a spring-back drag and would wrongly close the sheet) -->
+      <div id="fx-sheet-handle" title="Close" style="touch-action: none;"><div class="fx-sheet-bar"></div></div>
+      <!-- Image Input: on the desktop (Tauri) app this whole card is folded into the Looks card
+           at boot by fxDesktopFoldImageIntoLooks() below, because photos are loaded from the
+           native Library there, not by dragging onto this panel — a dedicated tab for it stood
+           out as dead weight. Left as its own tab on web/mobile, where drag/drop IS how a photo
+           gets in. The wrapper div (id="fx-image-movable") is what gets relocated; #dz-fx-img
+           itself (and its file input, used by fxPickPhotos/"+") always stays put right here. -->
+      <div class="fx-ctrl sec-active" data-fxsec="image">
+        <div class="ctitle" style="margin-bottom:10px">Image Input</div>
+        <div class="dz loaded" id="dz-fx-img">
+          <input type="file" id="in-fx-img" accept="image/*,.3fr,.ari,.arw,.bay,.crw,.cr2,.cr3,.dcr,.dcs,.dng,.erf,.fff,.iiq,.k25,.kdc,.mef,.mos,.mrw,.nef,.nrw,.orf,.pef,.pro,.ptx,.raf,.raw,.rw2,.rwl,.sr2,.srf,.srw,.x3f,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.ico,.heic,.heif,.tif,.tiff,.exr,.hdr,.tga,.dds,.qoi,.ff,.pnm,.pbm,.pgm,.ppm,.pam,.jxl,video/*,.mp4,.mov,.m4v" multiple="" style="">
+          <div class="dz-ic" data-ic="image"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img">portrait</div>
+        </div>
+        <div id="fx-image-movable">
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
+          <select class="fx-select" id="sel-dcp" aria-label="RAW profile" disabled="" title="RAW profile only applies to RAW files"><option value="">None (LibRaw sRGB)</option><option value="Standard">Standard</option><option value="Natural">Natural</option><option value="Vivid">Vivid</option><option value="Flat">Flat</option><option value="Portrait">Portrait</option><option value="Landscape">Landscape</option><option value="Cinelike D2">Cinelike D2</option><option value="Cinelike V2">Cinelike V2</option><option value="L Classic Neo">L Classic Neo</option><option value="Monochrome">Monochrome</option><option value="L Monochrome">L Monochrome</option><option value="L Monochrome D">L Monochrome D</option><option value="L Monochrome S">L Monochrome S</option><option value="Leica Monochrome">Leica Monochrome</option><option value="Neutral">Neutral</option><option value="Clear">Clear</option><option value="Deep">Deep</option><option value="Light">Light</option></select>
+        </div>
+        <!-- Clip info — video only, hidden for photos (see fxSyncVideoUI/fxUpdateClipInfoUI).
+             Informational for V0 (no override controls yet — see CLAUDE.md §12 / the video plan's
+             B1″ probeClip design for the intended per-row overrides in a later phase). Flags a
+             clip the app can't yet grade correctly (HDR/VFR) instead of silently producing wrong
+             output that reads as "the LUTs are broken". -->
+        <div id="fx-clip-info" style="display:none;margin-top:8px;font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.6"></div>
+        <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut">
+          <input type="file" accept=".cube,image/*,.tif,.tiff" style="">
+          <div class="dz-ic" data-ic="looks"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v4M3 5h4"></path><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"></path></svg></div><div class="dz-lb">Apply LUT (.cube or processed LUT chart)</div><div class="dz-fn" id="fn-fx-lut"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <!-- "Load Test Photo" (a 4800x6400 calibration chart) lived here, in the first panel of
+               the editor, as the second thing after the drop zone. It is a calibration fixture,
+               not a photo anyone edits — it now appears only under diag-on, with the rest of the
+               developer surface. loadTestPhoto() itself is unchanged and still reachable there. -->
+          <button class="btn bgh diag-only" title="Loads the built-in calibration chart">Load test chart</button>
+          <!-- 3.4.4: hidden on desktop only (fxDesktopFoldImageIntoLooks, below, sets its own
+               display:none the same way it folds this whole card into Looks) — that's the "Looks
+               panel" the item refers to. Untouched on web/mobile, where it's still a real,
+               working import path (see the Guide's "Can I use Google Photos?" FAQ) and photos
+               come from the OS Library on desktop anyway, not this drop zone. -->
+          <button class="btn bgh" id="btn-gp-import" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)">Google Photos…</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" id="btn-lut-save" disabled="" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)">Save to library…</button>
+          <button class="btn bgh" id="btn-lut-del" disabled="">Delete</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" title="Replicate any Lightroom preset: download this chart, apply the preset to it in Lightroom, export (sRGB, full size), drop the export on the LUT zone above">LUT chart</button>
+          <button class="btn bgh" id="btn-lut-dl" disabled="">Download .cube</button>
+        </div>
+        </div>
+      </div>
+      <!-- LOOKS GALLERY + PRESET -->
+      <div class="fx-ctrl" data-fxsec="looks">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Presets &amp; Looks<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-label" style="margin-bottom:4px">Input</div>
+        <select class="fx-select" id="sel-input" style="display:none"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
+        <div class="btn-row chip-tap" id="chips-input" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."><button class="btn bgh on">Standard (sRGB/Rec.709)</button><button class="btn bgh">V-Log (Lumix)</button></div>
+        <div class="fx-label" style="margin:10px 0 4px">Highlight response</div>
+        <select class="fx-select" id="sel-tonemap" style="display:none"><option value="">Standard (BT.2390)</option><option value="agx">AgX (filmic)</option><option value="native">Film stock (native)</option></select>
+        <div class="btn-row chip-tap" id="chips-tonemap" title="Only visible once real RAW highlight headroom survives to the render (a blown sky or window shot RAW) — otherwise there's nothing above white to roll off and both options render identically. AgX is a stronger filmic look with more shoulder compression; BT.2390 is a gentler broadcast-standard knee."><button class="btn bgh on">Standard (BT.2390)</button><button class="btn bgh">AgX (filmic)</button><button class="btn bgh">Film stock (native)</button></div>
+        <div class="fx-label" style="margin:10px 0 4px">Print</div>
+        <select class="fx-select" id="sel-print" style="display:none"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
+        <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."><button class="btn bgh on">None</button><button class="btn bgh">Kodak Print</button><button class="btn bgh">Fuji Print</button></div>
+        <select class="fx-select" id="sel-lut" style="display:none"><option value="">None</option><optgroup label="User Looks"><option value="p:a_beach_preset">A Beach Preset</option><option value="p:astia">Astia</option><option value="p:classic_chrome_composed">Classic Chrome Composed</option><option value="p:classic_neg">Classic Neg</option><option value="p:eterna_bleach_bypass_composed">Eterna Bleach Bypass Composed</option><option value="p:eterna_cinema_composed">Eterna Cinema Composed</option><option value="p:nostalgic_neg_composed">Nostalgic Neg Composed</option><option value="p:pro_neg_std_composed">Pro Neg Std Composed</option><option value="p:provia_composed">Provia Composed</option><option value="p:reala_ace_composed">Reala Ace Composed</option><option value="p:velvia">Velvia</option></optgroup><optgroup label="C41 Still"><option value="p:portra_160_endura_premier">Portra 160 Endura Premier</option><option value="p:portra_400_endura_premier">Portra 400 Endura Premier</option><option value="p:portra_800_endura_premier">Portra 800 Endura Premier</option><option value="p:portra_400_supra_endura">Portra 400 Supra Endura</option><option value="p:portra_400_portra_endura">Portra 400 Portra Endura</option><option value="p:ektar_100_endura_premier">Ektar 100 Endura Premier</option><option value="p:gold_200_endura_premier">Gold 200 Endura Premier</option><option value="p:ultramax_500_endura_premier">Ultramax 500 Endura Premier</option><option value="p:vericolor_iii_endura_premier">Vericolor Iii Endura Premier</option><option value="p:fuji_pro_400h_ca_maxima">Fuji Pro 400h Ca Maxima</option><option value="p:fuji_pro_160c_ca_maxima">Fuji Pro 160c Ca Maxima</option><option value="p:fuji_pro_160s_ca_dpii">Fuji Pro 160s Ca Dpii</option><option value="p:fuji_c200_ca_dpii">Fuji C200 Ca Dpii</option><option value="p:fuji_superia_reala_ca_pro_pdii">Fuji Superia Reala Ca Pro Pdii</option><option value="p:fuji_superia_xtra_400_ca_dpii">Fuji Superia Xtra 400 Ca Dpii</option><option value="p:fuji_natura_1600_ca_dpii">Fuji Natura 1600 Ca Dpii</option></optgroup><optgroup label="Cinema"><option value="p:vision3_50d_2383">Vision3 50d 2383</option><option value="p:vision3_200t_2383">Vision3 200t 2383</option><option value="p:vision3_250d_2383">Vision3 250d 2383</option><option value="p:vision3_250d_2393">Vision3 250d 2393</option><option value="p:vision3_500t_2383">Vision3 500t 2383</option><option value="p:vision3_500t_2393">Vision3 500t 2393</option></optgroup><optgroup label="Reversal"><option value="p:velvia_50_ilfochrome_m">Velvia 50 Ilfochrome M</option><option value="p:provia_100f_ilfochrome_m">Provia 100f Ilfochrome M</option><option value="p:ektachrome_100d_radiance_iii">Ektachrome 100d Radiance Iii</option><option value="p:kodachrome_64_radiance_iii">Kodachrome 64 Radiance Iii</option></optgroup><optgroup label="Instant"><option value="p:fp100c_fujiflex_new">Fp100c Fujiflex New</option><option value="p:instax_color_fujiflex_new">Instax Color Fujiflex New</option></optgroup><optgroup label="Niche"><option value="p:aerocolor_endura_premier">Aerocolor Endura Premier</option><option value="p:aerocolor_high_endura_premier">Aerocolor High Endura Premier</option><option value="p:agfa_vista_100_ca_dpii">Agfa Vista 100 Ca Dpii</option></optgroup><optgroup label="B&amp;W"><option value="p:trix_400_polymax_grade_2">Trix 400 Polymax Grade 2</option><option value="p:trix_400_polymax_grade_3">Trix 400 Polymax Grade 3</option><option value="p:kodak_5222_polymax_grade_2">Kodak 5222 Polymax Grade 2</option><option value="p:kodak_5222_2302_dev_5">Kodak 5222 2302 Dev 5</option><option value="p:agfa_scala_200x">Agfa Scala 200x</option><option value="p:fujifilm_neopan_acros_100">Fujifilm Neopan Acros 100</option><option value="p:ilford_hp5_plus_400">Ilford Hp5 Plus 400</option><option value="p:ilford_xp2_super_400">Ilford Xp2 Super 400</option><option value="p:kodak_eastman_double_x_5222">Kodak Eastman Double X 5222</option><option value="p:kodak_plus_x_pan_125_exp_1979">Kodak Plus X Pan 125 Exp 1979</option><option value="p:rollei_ortho_25">Rollei Ortho 25</option><option value="p:svema_type_42_exp_1991">Svema Type 42 Exp 1991</option></optgroup><optgroup label="Film"><option value="p:adox_color_implosion_100">Adox Color Implosion 100</option><option value="p:agfa_agfacolor_100">Agfa Agfacolor 100</option><option value="p:agfa_agfacolor_portrait_xps_160">Agfa Agfacolor Portrait Xps 160</option><option value="p:agfa_agfacolor_xrs_200_exp_1991">Agfa Agfacolor Xrs 200 Exp 1991</option><option value="p:agfa_chrome_rsx_ii_200_exp_2006">Agfa Chrome Rsx Ii 200 Exp 2006</option><option value="p:ambrotype_by_anatolee_green">Ambrotype By Anatolee Green</option><option value="p:astrum_color_negative_125">Astrum Color Negative 125</option><option value="p:cinestill_50d">Cinestill 50d</option><option value="p:cinestill_800t">Cinestill 800t</option><option value="p:fuji_eterna_vivid_500_exp_2013">Fuji Eterna Vivid 500 Exp 2013</option><option value="p:fuji_reala_500d_exp_2013">Fuji Reala 500d Exp 2013</option><option value="p:fujichrome_cdu_ii_cross">Fujichrome Cdu Ii Cross</option><option value="p:fujichrome_provia_100f">Fujichrome Provia 100f</option><option value="p:fujichrome_velvia_100">Fujichrome Velvia 100</option><option value="p:fujichrome_velvia_50">Fujichrome Velvia 50</option><option value="p:fujicolor_100">Fujicolor 100</option><option value="p:fujicolor_c200">Fujicolor C200</option><option value="p:fujicolor_natura_1600">Fujicolor Natura 1600</option><option value="p:fujicolor_print_industrial_100">Fujicolor Print Industrial 100</option><option value="p:fujicolor_print_industrial_400">Fujicolor Print Industrial 400</option><option value="p:fujicolor_pro_400h">Fujicolor Pro 400h</option><option value="p:fujicolor_superia_1600">Fujicolor Superia 1600</option><option value="p:fujicolor_superia_200">Fujicolor Superia 200</option><option value="p:fujifilm_fp_100c">Fujifilm Fp 100c</option><option value="p:fujifilm_fp_100c_digital_intermediate">Fujifilm Fp 100c Digital Intermediate</option><option value="p:fujifilm_instax">Fujifilm Instax</option><option value="p:fujifilm_instax_digital_intermediate">Fujifilm Instax Digital Intermediate</option><option value="p:ilford_hp5_plus_400_push_2">Ilford Hp5 Plus 400 Push 2</option><option value="p:kodak_aerocolor_iv_125">Kodak Aerocolor Iv 125</option><option value="p:kodak_color_plus_200">Kodak Color Plus 200</option><option value="p:kodak_ektachrome_e100_2017">Kodak Ektachrome E100 2017</option><option value="p:kodak_ektar_100">Kodak Ektar 100</option><option value="p:kodak_ektar_25_exp_1996">Kodak Ektar 25 Exp 1996</option><option value="p:kodak_gold_200">Kodak Gold 200</option><option value="p:kodak_kodachrome_64_experimental">Kodak Kodachrome 64 Experimental</option><option value="p:kodak_portra_160">Kodak Portra 160</option><option value="p:kodak_portra_160nc">Kodak Portra 160nc</option><option value="p:kodak_portra_160vc">Kodak Portra 160vc</option><option value="p:kodak_portra_400">Kodak Portra 400</option><option value="p:kodak_portra_800">Kodak Portra 800</option><option value="p:kodak_pro_image_100">Kodak Pro Image 100</option><option value="p:kodak_supra_100">Kodak Supra 100</option><option value="p:kodak_ultramax_400">Kodak Ultramax 400</option><option value="p:kodak_vision3_200t">Kodak Vision3 200t</option><option value="p:kodak_vision3_250d">Kodak Vision3 250d</option><option value="p:kodak_vision3_500t">Kodak Vision3 500t</option><option value="p:kodak_vision3_50d">Kodak Vision3 50d</option><option value="p:konica_centuria_100_dnp">Konica Centuria 100 Dnp</option><option value="p:konica_impresa_50_exp_2006">Konica Impresa 50 Exp 2006</option><option value="p:konica_minolta_vx400_super">Konica Minolta Vx400 Super</option><option value="p:lomochrome_metropolis_xr_100_400">Lomochrome Metropolis Xr 100 400</option><option value="p:lomochrome_purple_xr_100_400_iso100">Lomochrome Purple Xr 100 400 Iso100</option><option value="p:lomochrome_purple_xr_100_400_iso200">Lomochrome Purple Xr 100 400 Iso200</option><option value="p:lomochrome_purple_xr_100_400_iso400">Lomochrome Purple Xr 100 400 Iso400</option><option value="p:orwo_chrom_ut21_daylight_exp_1992">Orwo Chrom Ut21 Daylight Exp 1992</option><option value="p:polaroid_polachrome_35_mm_exp_1986">Polaroid Polachrome 35 Mm Exp 1986</option><option value="p:polaroid_type_100_sepia_exp_2009">Polaroid Type 100 Sepia Exp 2009</option><option value="p:prokudin_gorskiy_1906_experimental">Prokudin Gorskiy 1906 Experimental</option><option value="p:rollei_cn200">Rollei Cn200</option></optgroup></select>
+        <div class="fx-row" id="row-lut-mix" style="display:none;margin-top:8px"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-lut-mix" title="Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original." aria-label="Strength" style="--fillA: 0%; --fillB: 100%;"><div class="fx-val" id="vl-lut-mix" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">100</div></div>
+        <!-- 3.4.9: matches the wireframe's .presetbox (Editor (Developer) View.dc.html:317-341)
+             — a dedicated collapse toggle for JUST the preset filter+grid, independent of the
+             panel-level section collapse every .fx-ctrl already gets (fxSecToggle, further down
+             this file). The wireframe's own .presetbox-body also wraps the Apply-LUT row, but
+             that row was already deliberately relocated out to its own section for 3.4.3 — not
+             re-nested here, since undoing an already-verified fix wasn't part of this item. -->
+        <div id="fx-looks-ctrl" style="display: block; margin-top: 10px;">
+          <div class="fx-label fx-preset-head" id="fx-preset-head" style="margin-bottom:4px;cursor:pointer;display:flex;align-items:center;justify-content:space-between" title="Collapse/expand presets">
+            <span>Preset</span>
+            <span class="fx-preset-chev" id="fx-preset-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+          </div>
+          <div id="fx-preset-body">
+            <input class="vinput" id="fx-looks-search" type="search" placeholder="Search looks…" autocomplete="off" style="width: 100%; margin-bottom: 6px;" title="Filter the looks by name — matches letters in order, so &quot;p800&quot; finds Portra 800.">
+            <div class="btn-row chip-tap" id="fx-looks-cats" style="margin-bottom:8px"><button class="btn bgh on">All</button><button class="btn bgh">User Looks</button><button class="btn bgh">C41 Still</button><button class="btn bgh">Cinema</button><button class="btn bgh">Reversal</button><button class="btn bgh">Instant</button><button class="btn bgh">Niche</button><button class="btn bgh">B&amp;W</button><button class="btn bgh">Film</button></div>
+            <div class="looks-grid" id="fx-looks" tabindex="0"><div class="look-cell sel"><canvas width="132" height="99"></canvas><div class="look-nm">Original</div></div><div class="look-cat-hdr">User Looks</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">A Beach Preset</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Astia</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Classic Chrome Composed</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Classic Neg</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Eterna Bleach Bypass Composed</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Eterna Cinema Composed</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Nostalgic Neg Composed</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Pro Neg Std Composed</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Provia Composed</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Reala Ace Composed</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Velvia</div></div><div class="look-cat-hdr">C41 Still</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Portra 160 Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Portra 400 Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Portra 800 Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Portra 400 Supra Endura</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Portra 400 Portra Endura</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Ektar 100 Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Gold 200 Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Ultramax 500 Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Vericolor Iii Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Pro 400h Ca Maxima</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Pro 160c Ca Maxima</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Pro 160s Ca Dpii</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji C200 Ca Dpii</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Superia Reala Ca Pro Pdii</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Superia Xtra 400 Ca Dpii</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Natura 1600 Ca Dpii</div></div><div class="look-cat-hdr">Cinema</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Vision3 50d 2383</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Vision3 200t 2383</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Vision3 250d 2383</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Vision3 250d 2393</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Vision3 500t 2383</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Vision3 500t 2393</div></div><div class="look-cat-hdr">Reversal</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Velvia 50 Ilfochrome M</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Provia 100f Ilfochrome M</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Ektachrome 100d Radiance Iii</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodachrome 64 Radiance Iii</div></div><div class="look-cat-hdr">Instant</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fp100c Fujiflex New</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Instax Color Fujiflex New</div></div><div class="look-cat-hdr">Niche</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Aerocolor Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Aerocolor High Endura Premier</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Agfa Vista 100 Ca Dpii</div></div><div class="look-cat-hdr">B&amp;W</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Trix 400 Polymax Grade 2</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Trix 400 Polymax Grade 3</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak 5222 Polymax Grade 2</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak 5222 2302 Dev 5</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Agfa Scala 200x</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujifilm Neopan Acros 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Ilford Hp5 Plus 400</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Ilford Xp2 Super 400</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Eastman Double X 5222</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Plus X Pan 125 Exp 1979</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Rollei Ortho 25</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Svema Type 42 Exp 1991</div></div><div class="look-cat-hdr">Film</div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Adox Color Implosion 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Agfa Agfacolor 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Agfa Agfacolor Portrait Xps 160</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Agfa Agfacolor Xrs 200 Exp 1991</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Agfa Chrome Rsx Ii 200 Exp 2006</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Ambrotype By Anatolee Green</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Astrum Color Negative 125</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Cinestill 50d</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Cinestill 800t</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Eterna Vivid 500 Exp 2013</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fuji Reala 500d Exp 2013</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujichrome Cdu Ii Cross</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujichrome Provia 100f</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujichrome Velvia 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujichrome Velvia 50</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor C200</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor Natura 1600</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor Print Industrial 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor Print Industrial 400</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor Pro 400h</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor Superia 1600</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujicolor Superia 200</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujifilm Fp 100c</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujifilm Fp 100c Digital Intermediate</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujifilm Instax</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Fujifilm Instax Digital Intermediate</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Ilford Hp5 Plus 400 Push 2</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Aerocolor Iv 125</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Color Plus 200</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Ektachrome E100 2017</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Ektar 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Ektar 25 Exp 1996</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Gold 200</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Kodachrome 64 Experimental</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Portra 160</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Portra 160nc</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Portra 160vc</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Portra 400</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Portra 800</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Pro Image 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Supra 100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Ultramax 400</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Vision3 200t</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Vision3 250d</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Vision3 500t</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Kodak Vision3 50d</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Konica Centuria 100 Dnp</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Konica Impresa 50 Exp 2006</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Konica Minolta Vx400 Super</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Lomochrome Metropolis Xr 100 400</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Lomochrome Purple Xr 100 400 Iso100</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Lomochrome Purple Xr 100 400 Iso200</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Lomochrome Purple Xr 100 400 Iso400</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Orwo Chrom Ut21 Daylight Exp 1992</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Polaroid Polachrome 35 Mm Exp 1986</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Polaroid Type 100 Sepia Exp 2009</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Prokudin Gorskiy 1906 Experimental</div></div><div class="look-cell"><canvas width="132" height="99"></canvas><div class="look-nm">Rollei Cn200</div></div></div>
+          </div>
+        </div>
+      </div>
+      <!-- BASIC ADJUSTMENTS -->
+      <div class="fx-ctrl" data-fxsec="adjust">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Basic Adjustments <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle on" id="tg-adjust" data-a11y="1" role="switch" aria-checked="true" tabindex="0" aria-label="Basic Adjustments"></div></span></div>
+        <div class="btn-row" id="adj-scope-row" style="display:none;margin-bottom:8px">
+          <button class="btn bgh" id="btn-adj-scope" title="By default Basic Adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
+        </div>
+        <div class="fx-fields" id="ff-adjust">
+          <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-exp" aria-label="Exposure" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-exp" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-temp" aria-label="Temp" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-temp" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-tint" aria-label="Tint" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-tint" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-con" aria-label="Contrast" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-con" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Highlights</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-hi" aria-label="Highlights" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-hi" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Shadows</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-sh" aria-label="Shadows" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-sh" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Whites</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-wh" aria-label="Whites" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-wh" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Blacks</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-bl" aria-label="Blacks" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-bl" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-vib" aria-label="Vibrance" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-vib" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-sat" aria-label="Saturation" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-sat" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" aria-label="Clarity" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-clarity" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a color-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-skin" aria-label="Skin Warmth" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-skin" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground color is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" aria-label="Dehaze" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-adj-dehaze" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn bgh" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
+            <button class="btn bgh" title="One-click levels and white balance from the image histogram">Auto-enhance</button>
+          </div>
+          <!-- Bare "Reset" — the card's own "Basic Adjustments" title already says what it
+               resets, so the qualifier only restated it (see CLAUDE.md's note on 13
+               near-synonymous reset/clear verbs). -->
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" id="btn-adj-reset" disabled="">Reset</button></div>
+        </div>
+      </div>
+      <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a
+           tacked-on sub-section (matches the Lens Correction card's pattern: a plain title, no
+           enable toggle — it's driven by the sliders being >0, same as Lens). -->
+      <div class="fx-ctrl" data-fxsec="nr">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Noise Reduction<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-row">
+          <div class="fx-label">RAW Noise Reduction <button class="fx-info-i" title="Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser, 25–90s at 24MP — never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.">i</button></div>
+          <select id="sel-raw-nr" style="display:none"><option value="off">Off</option><option value="fast" selected="">Fast</option><option value="high">High</option></select>
+          <div class="seg" id="seg-raw-nr" style="flex:1"><button class="">Off</button><button class="on">Fast</button><button class="">High</button></div>
+        </div>
+        <div class="fx-cond-block">
+          <div class="fx-row" id="row-nr-high-strength" style="display:none">
+            <div class="fx-label">High Strength <button class="fx-info-i" title="Real-photo review (5 ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands more than DxO does, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise now / re-applies at next export.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-nr-high-strength" aria-label="High Strength" style="--fillA: 0%; --fillB: 70%;"><div class="fx-val" id="vl-nr-high-strength" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">70</div>
+          </div>
+          <div class="fx-row" id="row-nr-high" style="display:none">
+            <button class="btn bgh" id="btn-denoise-now" style="flex:1" disabled="" title="High-tier noise reduction only applies to RAW files">Denoise now</button>
+            <button class="btn" id="btn-denoise-cancel" style="display:none;margin-left:6px">Cancel</button>
+          </div>
+          <div id="row-nr-high-progress" style="display:none;margin:2px 0 4px">
+            <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width .15s"></div></div>
+          </div>
+        </div>
+        <div class="fx-row">
+          <div class="fx-label">Sparkle-optimized RAW <button class="fx-info-i" title="Uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect. Desktop only.">i</button></div><div class="fx-toggle" id="tg-demosaic-ahd" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Sparkle-optimized RAW"></div>
+        </div>
+        <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" aria-label="Luminance" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-nr-lum" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" aria-label="Color" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-nr-col" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row nr-gated gate-off" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" aria-label="Detail" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-nr-det" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">50</div></div>
+        <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" aria-label="Sharpen" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-adj-sharp" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row nr-gated gate-off" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" aria-label="Highlight Desaturation" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-nr-hldesat" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Detail &amp; Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.</div>
+      </div>
+      <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
+           Gaussian PSF and inverts it with a few iterations of damped Richardson-Lucy, unlike
+           the unsharp-mask Sharpen above which only boosts existing edge contrast. Driven by
+           Amount>0, same pattern as the Lens/NR cards (no enable toggle). -->
+      <div class="fx-ctrl" data-fxsec="deconv">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Deconvolution<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-hint">Recovers real detail lost to lens/sensor blur (Richardson-Lucy),
+          instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll
+          see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</div>
+        <div class="fx-row" title="Blend between the original and the deconvolved result."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-deconv-amt" aria-label="Amount" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-deconv-amt" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Size of the assumed lens/sensor blur (Gaussian PSF) to invert."><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-deconv-rad" aria-label="Radius" style="--fillA: 0%; --fillB: 20%;"><div class="fx-val" id="vl-deconv-rad" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">20</div></div>
+      </div>
+      <!-- TONE CURVES -->
+      <div class="fx-ctrl" data-fxsec="curves">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Tone Curves <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-curves" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Tone Curves"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-curves">
+          <div class="btn-row" id="curve-mode-chips">
+            <button class="btn bgh crv-mode-chip on" data-mode="point">Point</button>
+            <button class="btn bgh crv-mode-chip" data-mode="param">Parametric</button>
+          </div>
+          <div id="curve-point-block">
+            <div class="btn-row" id="curve-chips" style="margin-top:6px">
+              <button class="btn bgh crv-chip on" data-ch="m">RGB</button>
+              <button class="btn bgh crv-chip" data-ch="r">R</button>
+              <button class="btn bgh crv-chip" data-ch="g">G</button>
+              <button class="btn bgh crv-chip" data-ch="b">B</button>
+            </div>
+            <div style="max-width:280px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px">
+              <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+            </div>
+            <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:2px" width="278" height="278"></canvas>
+            <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
+              <span>Blacks</span><span>Midtones</span><span>Whites</span>
+            </div>
+            <div class="btn-row" style="margin-top:6px">
+              <button class="btn bgh">Reset channel</button>
+              <button class="btn bgh">Reset all</button>
+            </div>
+          </div>
+          <div id="curve-param-block" style="display:none;margin-top:6px">
+            <div class="fx-row" title="Lifts/lowers the darkest tones."><div class="fx-label">Shadows</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-s" aria-label="Shadows" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-s" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the low-midtones."><div class="fx-label">Darks</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-d" aria-label="Darks" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-d" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the high-midtones."><div class="fx-label">Lights</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-l" aria-label="Lights" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-l" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the brightest tones."><div class="fx-label">Highlights</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-crv-h" aria-label="Highlights" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-crv-h" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="btn-row" style="margin-top:6px">
+              <button class="btn bgh">Reset all</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- HSL COLOR MIXER -->
+      <div class="fx-ctrl" data-fxsec="hsl">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Color Mixer <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-hsl" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Color Mixer"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-hsl">
+          <div id="hsl-hist" style="display:flex;align-items:flex-end;gap:3px;height:26px;margin-bottom:6px"><div class="hsl-hist-bar on" title="Red: 0.0%" style="height: 3px; background: rgb(255, 91, 91);"></div><div class="hsl-hist-bar" title="Orange: 0.0%" style="height: 3px; background: rgb(255, 159, 67);"></div><div class="hsl-hist-bar" title="Yellow: 0.0%" style="height: 3px; background: rgb(255, 212, 59);"></div><div class="hsl-hist-bar" title="Green: 0.0%" style="height: 3px; background: rgb(81, 207, 102);"></div><div class="hsl-hist-bar" title="Aqua: 0.0%" style="height: 3px; background: rgb(59, 201, 219);"></div><div class="hsl-hist-bar" title="Blue: 0.0%" style="height: 3px; background: rgb(77, 139, 255);"></div><div class="hsl-hist-bar" title="Purple: 0.0%" style="height: 3px; background: rgb(151, 117, 250);"></div><div class="hsl-hist-bar" title="Magenta: 0.0%" style="height: 3px; background: rgb(240, 101, 149);"></div></div>
+          <div class="btn-row" id="hsl-chips" style="flex-wrap:wrap;gap:4px"><button class="hsl-chip on" data-band="Red" title="Red" style="border-bottom-color: rgb(255, 91, 91);"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(0,65%,55%) 50%,hsl(0,65%,55%) 50%)"></span></button><button class="hsl-chip" data-band="Orange" title="Orange" style="border-bottom-color: transparent;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(30,65%,55%) 50%,hsl(30,65%,55%) 50%)"></span></button><button class="hsl-chip" data-band="Yellow" title="Yellow" style="border-bottom-color: transparent;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(60,65%,55%) 50%,hsl(60,65%,55%) 50%)"></span></button><button class="hsl-chip" data-band="Green" title="Green" style="border-bottom-color: transparent;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(120,65%,55%) 50%,hsl(120,65%,55%) 50%)"></span></button><button class="hsl-chip" data-band="Aqua" title="Aqua" style="border-bottom-color: transparent;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(190,65%,55%) 50%,hsl(190,65%,55%) 50%)"></span></button><button class="hsl-chip" data-band="Blue" title="Blue" style="border-bottom-color: transparent;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(230,65%,55%) 50%,hsl(230,65%,55%) 50%)"></span></button><button class="hsl-chip" data-band="Purple" title="Purple" style="border-bottom-color: transparent;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(275,65%,55%) 50%,hsl(275,65%,55%) 50%)"></span></button><button class="hsl-chip" data-band="Magenta" title="Magenta" style="border-bottom-color: transparent;"><span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:none;background:linear-gradient(90deg,hsl(320,65%,55%) 50%,hsl(320,65%,55%) 50%)"></span></button></div>
+          <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-hsl-h" aria-label="Hue" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-hsl-h" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-hsl-s" style="background: linear-gradient(to right, rgb(136, 136, 136), rgb(255, 91, 91)); --fillA: 50%; --fillB: 50%;" aria-label="Saturation"><div class="fx-val" id="vl-hsl-s" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-hsl-l" style="background: linear-gradient(to right, rgb(0, 0, 0), rgb(255, 91, 91), rgb(255, 255, 255)); --fillA: 50%; --fillB: 50%;" aria-label="Luminance"><div class="fx-val" id="vl-hsl-l" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn bgh">Reset band</button>
+            <button class="btn bgh">Reset all</button>
+          </div>
+        </div>
+      </div>
+      <!-- COLOUR WHEELS (ROADMAP R11) — 3-way lift/gamma/gain grading, ASC-CDL -->
+      <div class="fx-ctrl" data-fxsec="wheels">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Colour Wheels <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-wheels" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Colour Wheels"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-wheels">
+          <div class="fx-hint">Drag each wheel off-centre to tint that tonal region; the slider underneath is an independent brightness for the same region. Double-click a wheel to reset it.</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between;margin-top:6px">
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-lift" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Shadows (Lift)</div>
+              <input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-wheel-lift-l" style="width: 100%; margin-top: 4px; --fillA: 50%; --fillB: 50%;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-lift-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gamma" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Midtones (Gamma)</div>
+              <input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-wheel-gamma-l" style="width: 100%; margin-top: 4px; --fillA: 50%; --fillB: 50%;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gamma-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gain" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Highlights (Gain)</div>
+              <input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-wheel-gain-l" style="width: 100%; margin-top: 4px; --fillA: 50%; --fillB: 50%;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gain-l">0</div>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn bgh">Reset all</button>
+          </div>
+        </div>
+      </div>
+      <!-- POINT COLOR -->
+      <div class="fx-ctrl" data-fxsec="pointcolor">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Point Color <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-pointcolor" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Point Color"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-pointcolor">
+          <div class="btn-row" style="align-items:center;gap:6px">
+            <button class="btn bgh" id="btn-pc-eye" style="flex:1">Pick from photo</button>
+            <button class="fx-info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button>
+          </div>
+          <div class="btn-row" id="pc-list" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+          <div style="font-size: var(--fs-1); color: var(--mut); font-family: var(--sans); margin-top: 6px; display: block;" id="pc-empty-hint">Pick a color from the photo, then dial in Hue/Saturation/Luminance and how wide a Range around it is affected.</div>
+          <div id="pc-ctl" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
+            <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-pc-h" aria-label="Hue" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-pc-h" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-pc-s" aria-label="Saturation" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-pc-s" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-pc-l" aria-label="Luminance" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-pc-l" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+            <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" aria-label="Range" style="--fillA: 0%; --fillB: 35%;"><div class="fx-val" id="vl-pc-r" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">35</div></div>
+            <div class="btn-row" style="margin-top:4px">
+              <button class="btn bgh">Delete point</button>
+              <button class="btn bgh">Reset all</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- LOCAL ADJUSTMENTS -->
+      <div class="fx-ctrl" data-fxsec="local">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Masks <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-local" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Masks"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-local">
+          <!-- Was 8 peer buttons in one row ("+ Radial + Linear + Brush + Sky + Skin + Color
+               Range + Luminance Range + AI Select") — reads as a list, not a control, and the
+               row wrapped to 3 lines once Skin/AI Select showed on desktop. One trigger, one
+               grouped menu (mskAddMenu), built on the exact same .msk-more-menu/.msk-more-it
+               popover the mask row's own "⋯" menu already uses — no new component, no new CSS
+               beyond the group-header label. The #btn-msk-add-skin/#btn-msk-add-ai elements this
+               replaced are gone, along with the `body.deskx …!important` CSS rule that only
+               existed to show them — mskAddMenu checks `body.deskx` itself to decide whether the
+               Skin/AI Select ENTRIES belong in the menu, the same condition that rule used, so
+               they still appear in exactly the same contexts (including ?deskx=1 for testing). -->
+          <div class="btn-row">
+            <button class="btn bgh">+ Mask</button>
+          </div>
+          <div class="fx-row"><div class="fx-label">Show on photo</div>
+            <div class="seg lib-seg msk-prevmode-seg"><button data-v="overlay" class="on">Overlay</button><button data-v="isolate">Isolate</button><button data-v="select" title="Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.">Selection</button><button data-v="off">Off</button></div>
+          </div>
+          <!-- Overlay/Isolate are drawn in JS from the mask SHAPE only; Selection is rendered by
+               the shader and is the effective weight. For a gated mask those differ a lot, and
+               without saying so the three modes look like three contradictory answers. -->
+          <div id="msk-prevmode-hint" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px"></div>
+          <div class="fx-row" id="msk-selview-opacity-row" style="display:none">
+            <div class="fx-label">Overlay opacity</div>
+            <input class="fx-slider" type="range" min="10" max="100" step="1" value="75" id="sl-msk-selview-opacity" aria-label="Overlay opacity" style="--fillA: 0%; --fillB: 72.22222222222221%;">
+            <div class="fx-val" id="vl-msk-selview-opacity" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">75</div>
+          </div>
+          <div class="fx-row" id="msk-selview-outline-row" style="display:none">
+            <div class="fx-label">Edge only</div>
+            <input type="checkbox" id="ck-msk-selview-outline" style="">
+          </div>
+          <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
+          <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"><div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div></div>
+        </div>
+      </div>
+      <!-- LENS CORRECTION -->
+      <div class="fx-ctrl" data-fxsec="lens">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Lens Correction<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-row">
+          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div><div class="fx-toggle" id="tg-lens-auto" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Auto (lens profile)"></div>
+        </div>
+        <div id="lens-auto-status" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.5;margin:2px 0 8px"></div>
+        <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
+             EXIF at all, so auto-detection has nothing to recover — this lets you pick a lens
+             directly from the bundled lensfun database instead. Desktop only; hidden elsewhere.
+             Grouped in a dashed .fx-cond-block (matches the wireframe's disclosure grouping)
+             rather than the wireframe's literal <details> — visibility here is STATE-driven
+             (fxLensAutoToggled/fxLensManualChanged toggle each row's own display), not a manual
+             expand/collapse, so a <details> element would fight that existing logic. -->
+        <div class="fx-cond-block">
+          <div class="fx-row" id="row-lens-manual" style="display: flex;" title="Overrides EXIF auto-detection with a lens you pick directly — for manual/adapted lenses that write no lens EXIF at all. Picking one also turns Auto on.">
+            <div class="fx-label">Manual lens</div>
+            <select class="fx-select" id="sel-lens-manual" style="flex:1" aria-label="Manual lens"><option value="">None (auto-detect)</option></select>
+          </div>
+          <div class="fx-row" id="row-lens-manual-focal" style="display:none" title="Focal length in mm — required for distortion correction. Auto-filled for fixed (prime) lenses.">
+            <div class="fx-label">Focal length (mm)</div>
+            <input class="fx-slider" type="number" min="1" max="2000" step="0.1" id="in-lens-manual-focal" style="max-width: 80px; flex: 0 0 auto;" aria-label="Focal length (mm)">
+          </div>
+        </div>
+        <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-dist" aria-label="Distortion" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-dist" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-vig" aria-label="Vignette" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-vig" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Corrects red/blue fringing near high-contrast edges, worst in the corners."><div class="fx-label">Chromatic Aberration</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-ca" aria-label="Chromatic Aberration" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-ca" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Corrects converging verticals — the building-shot lean. A true perspective correction, so spacing stays right instead of just straightening the edges."><div class="fx-label">Vertical</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-pv" aria-label="Vertical" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-pv" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Same correction on the horizontal axis, for a wall or facade shot from one side."><div class="fx-label">Horizontal</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-ph" aria-label="Horizontal" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-ph" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Fine rotation, in tenths of a degree — for levelling a horizon without leaving the panel."><div class="fx-label">Rotate</div><input class="fx-slider fx-slider-bi" type="range" min="-100" max="100" value="0" id="sl-lens-rot" aria-label="Rotate" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-lens-rot" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Zooms in to hide the empty wedges a perspective correction leaves at the frame edge."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" aria-label="Scale" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-lens-scale" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+        <div class="fx-row" title="Removes purple/green color fringes on high-contrast edges — the local fringing that survives the geometric CA correction above, or that a fast lens makes wide open. Gated on edges, so flat purple or green subjects are left alone."><div class="fx-label">Defringe</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-lens-defr" aria-label="Defringe" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-lens-defr" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+      </div>
+      <!-- CROP & ROTATE -->
+      <div class="fx-ctrl" data-fxsec="crop">
+        <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Transform <div class="fx-toggle-lb" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--sans)" data-a11y="1" role="button" tabindex="0">Reset</div></div>
+        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Aspect ratio</div>
+        <div class="fx-row"><div class="fx-label">Aspect</div>
+          <!-- A list of tap chips, not a dropdown — same convention as the Input/Print profile
+               chips above (selectToChips) and the Canvas ratio chips (cvBuildChips): the <select>
+               stays the one source of truth (still dispatches its own onchange, still restorable
+               from a session/snapshot) and is just visually replaced. Panel redesign (FR1/R6
+               precedent): the proposal's checklist-style .rlist is a genuine picker-widget swap,
+               not a markup move, so it's deferred (tracked as R7) — this keeps the existing,
+               already-correct chip mechanism and only regroups it under an "Aspect ratio" heading. -->
+          <select class="fx-select" id="sel-crop-ar" style="display:none" aria-label="Aspect">
+            <option value="shot">As shot</option>
+            <option value="0">Free</option>
+            <option value="custom">Custom</option>
+            <option value="1">1:1 Square</option>
+            <option value="1.5">3:2</option>
+            <option value="1.3333">4:3</option>
+            <option value="1.25">5:4</option>
+            <option value="1.4">7:5</option>
+            <option value="1.7778">16:9 Widescreen</option>
+            <option value="0.7071">1.414:1 ISO A4</option>
+            <option value="1.2941">11:8.5 US Letter</option>
+          </select>
+        </div>
+        <div class="btn-row chip-tap" id="crop-ar-chips" style="margin-bottom:2px"><button class="btn bgh on">As shot</button><button class="btn bgh">Free</button><button class="btn bgh">Custom</button><button class="btn bgh">1:1 Square</button><button class="btn bgh">3:2</button><button class="btn bgh">4:3</button><button class="btn bgh">5:4</button><button class="btn bgh">7:5</button><button class="btn bgh">16:9 Widescreen</button><button class="btn bgh">1.414:1 ISO A4</button><button class="btn bgh">11:8.5 US Letter</button></div>
+        <div class="fx-row" title="Swap the picked aspect ratio between portrait and landscape (e.g. 3:2 ↔ 2:3) — the chip list above only lists one orientation each.">
+          <div class="fx-label">Orientation</div>
+          <button class="btn bgh" id="btn-crop-orient">Swap portrait/landscape</button>
+        </div>
+        <div class="fx-row" id="crop-custom-row" style="display:none">
+          <div class="fx-label">Custom</div>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-w" style="width: 56px;">
+          <span style="color:var(--mut)">:</span>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-h" style="width: 56px;">
+        </div>
+        <div class="fx-sub">Transform</div>
+        <div class="btn-row" style="justify-content:center;gap:14px">
+          <button class="btn-icon" title="Rotate left" data-ic="rotateLeft"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg></button>
+          <button class="btn-icon" title="Rotate right" data-ic="rotateRight"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 0-3 6.7"></path><path d="M21 21v-6h-6"></path></svg></button>
+          <button class="btn-icon" title="Flip horizontal" data-ic="flipH"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"></path><path d="M18 8l3 4-3 4M6 8l-3 4 3 4"></path></svg></button>
+          <button class="btn-icon" title="Flip vertical" data-ic="flipV"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"></path><path d="M8 18l4 3 4-3M8 6l4-3 4 3"></path></svg></button>
+        </div>
+        <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
+          <button class="btn bgh" id="btn-geom-apply-all" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
+        </div>
+        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider fx-slider-bi" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" aria-label="Straighten" style="--fillA: 50%; --fillB: 50%;"><div class="fx-val" id="vl-straighten" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0°</div></div>
+        <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
+        <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
+          <button class="btn" id="btn-ah-roi" style="flex:1">Set region…</button>
+          <button class="btn" id="btn-ah-roi-clear" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></span></button>
+        </div>
+        <div class="fx-row"><div class="fx-label">Grid</div>
+          <select class="fx-select" id="sel-crop-grid" aria-label="Grid">
+            <option value="3x3">3×3 (Rule of thirds)</option>
+            <option value="4x4">4×4</option>
+            <option value="golden">Golden ratio</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bsec" id="btn-crop">Crop</button>
+        </div>
+      </div>
+      <!-- GRAIN -->
+      <div class="fx-ctrl" data-fxsec="grain">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Film Grain <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-grain" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Film Grain"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-grain" style="display: none;">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" aria-label="Amount" style="--fillA: 0%; --fillB: 30%;"><div class="fx-val" id="vl-grain-a" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">30</div></div>
+          <div class="fx-row" title="Fine-tune the grain clump size on top of the film format (5 = format-accurate)."><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="3" id="sl-grain-sz" aria-label="Size" style="--fillA: 0%; --fillB: 10.526315789473683%;"><div class="fx-val" id="vl-grain-sz" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">3</div></div>
+          <div class="fx-row" title="Dehancer film-format grain: smaller formats are coarser/stronger, 65mm is the finest &amp; weakest."><div class="fx-label">Film format</div>
+            <select class="fx-select" id="sel-grain-fmt" aria-label="Film format">
+              <option value="8mm">8mm — coarse</option>
+              <option value="16mm">16mm</option>
+              <option value="35mm">35mm — standard</option>
+              <option value="65mm" selected="">65mm — fine</option>
+            </select>
+          </div>
+          <!-- VIDEO ONLY (fxSyncVideoUI shows/hides this row). 0 = grain frozen to the screen
+               (looks fake/stuck), 100 = every frame independently reseeded (looks like digital
+               boil at high Amount). See CLAUDE.md §12: real film grain differs frame to frame at
+               similar intensity — neither extreme is what real stock looks like. -->
+          <div class="fx-row" id="row-grain-motion" style="display:none" title="0 = grain frozen to the screen. 100 = fully independent every frame (can boil at high Amount). Real film sits in between.">
+            <div class="fx-label">Grain motion</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-grain-motion" aria-label="Grain motion" style="--fillA: 0%; --fillB: 75%;"><div class="fx-val" id="vl-grain-motion" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">75</div>
+          </div>
+          <!-- VIDEO ONLY, same row group. A projector gate never holds a frame perfectly still and
+               the lamp never repeats an exposure exactly; without these a clip reads as digital
+               however good the grain is. Both default OFF so nothing changes unless asked for. -->
+          <div class="fx-row" id="row-gate-weave" style="display:none" title="Sub-pixel frame-to-frame wobble, the way a projector gate holds film. A little goes a long way — past about 30 it reads as a shaky camera rather than a projector.">
+            <div class="fx-label">Gate weave</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-gate-weave" aria-label="Gate weave" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-gate-weave" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div>
+          </div>
+          <div class="fx-row" id="row-film-breath" style="display:none" title="Per-frame exposure flicker, the way a projector lamp and shutter never deliver exactly the same light twice.">
+            <div class="fx-label">Film breath</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-film-breath" aria-label="Film breath" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-film-breath" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div>
+          </div>
+        </div>
+      </div>
+      <!-- FILM ARTIFACTS -->
+      <div class="fx-ctrl" data-fxsec="art">
+        <div class="fx-ctrl-title" title="Placement is seeded — export matches preview; Reshuffle re-rolls it"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Film Artifacts <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-art" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Film Artifacts"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-art">
+          <div class="fx-row" title="Random dust specks and the odd hair — mostly light (dust on the negative prints white)."><div class="fx-label">Dust</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-art-du" aria-label="Dust" style="--fillA: 0%; --fillB: 30%;"><div class="fx-val" id="vl-art-du" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">30</div></div>
+          <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck color — Both is the real-film mix (mostly light specks); Black/White forces one color."><button class="btn bgh on">Both</button><button class="btn bgh">Black</button><button class="btn bgh">White</button></div>
+          <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" aria-label="Scratches" style="--fillA: 0%; --fillB: 20%;"><div class="fx-val" id="vl-art-sc" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">20</div></div>
+          <div class="fx-row" title="A warm light leak flooding in from one edge."><div class="fx-label">Light leak</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-art-lk" aria-label="Light leak" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-art-lk" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" title="Re-roll the random dust/scratch/leak placement">Re-roll</button></div>
+        </div>
+      </div>
+      <!-- HALATION -->
+      <div class="fx-ctrl" data-fxsec="hal">
+        <div class="fx-ctrl-title" title="Warm film glow — turn on White glow for B&amp;W photos"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Halation <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-hal" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Halation"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-hal" style="display: none;">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" aria-label="Amount" style="--fillA: 0%; --fillB: 70%;"><div class="fx-val" id="vl-hal-a" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">70</div></div>
+          <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" aria-label="Radius" style="--fillA: 0%; --fillB: 10.526315789473683%;"><div class="fx-val" id="vl-hal-r" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">6</div></div>
+          <div class="fx-row"><div class="fx-label">Shadow protect <button class="fx-info-i" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" aria-label="Shadow protect" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-hal-p" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
+          <div class="fx-row"><div class="fx-label">White glow <button class="fx-info-i" title="Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded).">i</button></div><div class="fx-toggle" id="tg-hal-white" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="White glow"></div></div>
+          <div class="fx-row"><div class="fx-label">No remjet <button class="fx-info-i" title="Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look.">i</button></div><div class="fx-toggle" id="tg-hal-noremjet" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="No remjet"></div></div>
+          <div class="fx-row"><div class="fx-label">Extreme <button class="fx-info-i" title="Extreme halation — the no-remjet glow pushed ≈5–6× stronger for a heavy, stylised bloom. Implies No remjet.">i</button></div><div class="fx-toggle" id="tg-hal-extreme" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Extreme"></div></div>
+        </div>
+      </div>
+      <!-- BLOOM -->
+      <div class="fx-ctrl" data-fxsec="bloom">
+        <div class="fx-ctrl-title" title="Color derived from source light"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Bloom <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-bloom" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Bloom"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-bloom" style="display: none;">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" aria-label="Amount" style="--fillA: 0%; --fillB: 40%;"><div class="fx-val" id="vl-bloom-a" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">40</div></div>
+          <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="2" max="60" value="10" id="sl-bloom-th" aria-label="Threshold" style="--fillA: 0%; --fillB: 13.793103448275861%;"><div class="fx-val" id="vl-bloom-th" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">10</div></div>
+          <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="50" value="12" id="sl-bloom-r" aria-label="Radius" style="--fillA: 0%; --fillB: 20.833333333333336%;"><div class="fx-val" id="vl-bloom-r" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">12</div></div>
+        </div>
+      </div>
+      <!-- VIGNETTE -->
+      <div class="fx-ctrl" data-fxsec="vig">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Vignette <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-vig" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Vignette"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-vig">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" aria-label="Amount" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-vig" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">50</div></div>
+        </div>
+      </div>
+      <!-- BORDERS -->
+      <div class="fx-ctrl" data-fxsec="borders">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Border <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-borders" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Border"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-borders" style="display: none;">
+        <div class="fx-row"><div class="fx-label">Inner colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" aria-label="Inner colour" style=""></div>
+        <div class="fx-row"><div class="fx-label">Inner thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" aria-label="Inner thickness" style="--fillA: 0%; --fillB: 10%;"><div class="fx-val" id="vl-b1-t" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">1%</div></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Outer colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" aria-label="Outer colour" style=""></div>
+        <div class="fx-row"><div class="fx-label">Outer thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" aria-label="Outer thickness" style="--fillA: 0%; --fillB: 20%;"><div class="fx-val" id="vl-b2-t" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">2%</div></div>
+        <div class="fx-row"><div class="fx-label">Style <button class="fx-info-i" title="The sprocket styles are drawn to the real 35mm standard, so they stay correct at any aspect ratio. Load frame… takes any scanned rebate PNG you have a licence to use.">i</button></div>
+          <select class="fx-select" id="sel-film-frame" style="flex:1" aria-label="Style">
+            <option value="none">None</option>
+            <option value="sprocket35">35mm sprockets</option>
+            <option value="sprocket35-wide">35mm sprocket bleed</option>
+            <option value="rollfilm">120 roll film</option>
+            <option value="halfframe35">Half-frame 35mm</option>
+            <option value="instantborder">Instant border</option>
+            <option value="carrier">Ragged carrier</option>
+            <option value="custom">Load frame…</option>
+          </select>
+        </div>
+        <div class="fx-row" id="row-frame-edge"><div class="fx-label">Edge text</div>
+          <input class="fx-select" type="text" id="in-frame-edge" placeholder="e.g. KODAK PORTRA 400   12A" style="flex: 1 1 0%; min-width: 0px;">
+        </div>
+        </div>
+      </div>
+      <!-- RETOUCH (heal / clone) -->
+      <div class="fx-ctrl" data-fxsec="retouch">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Retouch <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-retouch" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Retouch"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-retouch">
+        <div class="fx-row" style="align-items:flex-start"><div class="fx-label">Mode <button class="fx-info-i" type="button" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></div>
+          <select class="fx-select" id="sel-heal-mode" style="display:none" aria-label="Mode"><option value="heal" data-short="Heal">Heal (blend color)</option><option value="clone" data-short="Clone">Clone (copy exactly)</option></select>
+          <div class="seg" id="seg-heal-mode" style="flex:1"><button class="on">Heal</button><button class="">Clone</button></div>
+        </div>
+        <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" aria-label="Size" style="--fillA: 0%; --fillB: 15.789473684210526%;"><div class="fx-val" id="vl-heal-size" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">4%</div></div>
+        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" aria-label="Feather" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-heal-feather" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">50</div></div>
+        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" aria-label="Opacity" style="--fillA: 0%; --fillB: 100%;"><div class="fx-val" id="vl-heal-opacity" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">100</div></div>
+        <!-- "Retouch" is the tool's actual primary action (arms paint mode), so it gets the
+             filled/primary treatment and its own full-width row — panel redesign, feedback
+             "kept" note in test/panel_proposals.mjs on why an earlier draft that dropped this
+             button was wrong. Undo spot is cut per that same review (RT1): tracked separately
+             as R1 (editor_ux_spec.json) since a real per-spot delete needs new interaction
+             design, not a layout change — ⌘Z still undoes a spot in the meantime. -->
+        <div class="btn-row" style="margin-top:2px">
+          <button class="btn fx-btn-primary" id="btn-heal-paint" style="flex:1">Retouch</button>
+        </div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1">Clear all spots</button></div>
+        </div>
+      </div>
+      <!-- CANVAS (aspect-ratio matte around image + borders) -->
+      <div class="fx-ctrl" data-fxsec="canvas">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Canvas <span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button><div class="fx-toggle" id="tg-canvas" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Canvas"></div></span></div>
+        <div class="fx-fields ff-off" id="ff-canvas">
+          <div class="btn-row" id="cv-ar-chips" style="flex-wrap:wrap;gap:4px"><button class="btn bsec" style="padding: 6px 9px; min-width: 0px;">Fit</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">1:1</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">4:5</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">3:4</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">4:3</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">9:16</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">16:9</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">3:2</button><button class="btn bgh" style="padding: 6px 9px; min-width: 0px;">2:3</button></div>
+          <div class="fx-row" title="1 = photo fits the canvas exactly; smaller = more matte around it; bigger = crops into the frame."><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="50" max="150" value="100" id="sl-canvas-z" aria-label="Zoom" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-canvas-z" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">100%</div></div>
+          <div class="fx-row" style="margin-top:6px"><div class="fx-label">Background</div>
+            <div class="btn-row" id="cv-bg-swatches" style="gap:4px;flex-wrap:wrap;margin-top:0"><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--acc); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgb(0, 0, 0);"></button><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bdr); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgb(255, 255, 255);"></button><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bdr); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgb(20, 20, 20);"></button><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bdr); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgb(245, 240, 232);"></button><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bdr); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgb(212, 144, 58);"></button><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bdr); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgb(74, 93, 115);"></button><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bdr); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: rgb(122, 59, 59);"></button><button class="pc-chip" style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bdr); cursor: pointer; padding: 0px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgb(138, 138, 138), rgb(51, 51, 51)); color: rgb(255, 255, 255);" title="Blurred photo as the background"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c4 5 7 8.5 7 12a7 7 0 1 1-14 0c0-3.5 3-7 7-12z"></path></svg></button></div>
+          </div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Custom</div><input type="color" class="fx-color" id="cl-canvas-bg" value="#000000" aria-label="Custom" style=""></div>
+        </div>
+      </div>
+      <!-- DIAGNOSTICS -->
+      <div class="fx-ctrl fx-diag" data-fxsec="diag">
+        <div class="fx-ctrl-title" title="Isolate a single shader pass to debug the match"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Diagnostics<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-row"><div class="fx-label">View</div>
+          <select class="fx-select" id="sel-debug" aria-label="View">
+            <option value="0">Final image</option>
+            <option value="1">Halation glow (raw)</option>
+            <option value="3">Halation glow (gained)</option>
+            <option value="2">Bloom glow (raw)</option>
+          </select>
+        </div>
+      </div>
+      <!-- EXPORT -->
+      <div class="fx-ctrl" data-fxsec="export">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Export<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Output</div>
+        <div class="vrow">
+          <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width: 140px;">
+          <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
+          <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
+        </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" aria-label="Quality" style="--fillA: 0%; --fillB: 95%;"><div class="fx-val" id="vl-exp-q" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">99</div></div>
+        <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
+          <select class="fx-select" id="sel-exp-fmt" aria-label="Format">
+            <option value="auto">Auto (match source)</option>
+            <option value="jpg">JPG</option>
+            <option value="png">PNG (lossless)</option>
+            <option value="webp">WebP</option>
+          </select>
+        </div>
+        <!-- Resize + output sharpening. These belong together: any downscale throws away the
+             detail the sharpening was judged on, so resampling without re-sharpening always
+             looks soft. Full size + Off is the default and leaves the export byte-identical. -->
+        <div class="fx-row" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
+          <select class="fx-select" id="sel-exp-size" aria-label="Resize (long edge)">
+            <option value="0">Full size</option>
+            <option value="4096">4096 px</option>
+            <option value="2560">2560 px</option>
+            <option value="2048">2048 px</option>
+            <option value="1600">1600 px</option>
+            <option value="1080">1080 px (social)</option>
+          </select>
+        </div>
+        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
+          <select class="fx-select" id="sel-exp-sharp" aria-label="Output sharpening">
+            <option value="0">Off</option>
+            <option value="1">Low</option>
+            <option value="2">Standard</option>
+            <option value="3">High</option>
+          </select>
+        </div>
+        <!-- HDR (gain map). Hidden unless the ORIGINAL file actually carries HDR headroom — a gain
+             map over an SDR source encodes nothing, so offering it there would be a lie. Shown by
+             fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
+        <div class="fx-row" id="fx-hdr-row" style="display:none" title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
+          <div class="fx-label">HDR (gain map)</div>
+          <input type="checkbox" id="tg-exp-hdr" style="">
+        </div>
+        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
+        <div class="fx-sub">Watermark</div>
+        <div class="fx-row" style="margin-top:0" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
+          <div class="fx-label">Watermark</div>
+          <div class="fx-toggle" id="tg-exp-wm" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Watermark"></div>
+        </div>
+        <div id="exp-wm-row" style="display:none">
+          <div class="vrow" style="margin-top:4px">
+            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex: 1 1 0%;">
+          </div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" aria-label="Opacity" style="--fillA: 0%; --fillB: 50%;"><div class="fx-val" id="vl-exp-wm-op" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">55</div></div>
+        </div>
+        <!-- Named export presets: just the four controls above (format/quality/resize/sharpen),
+             saved/recalled by name — distinct from Styles (the full edit recipe) and from Save
+             session (one auto-restored slot). The common case this exists for: "small JPG for
+             the web" vs "full-res PNG for print" as one click instead of four each time. -->
+        <div class="fx-sub">Preset</div>
+        <div style="margin-top:0">
+          <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
+            <select class="fx-select" id="sel-exp-preset" aria-label="Export preset"><option value="">— none —</option></select>
+          </div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn bgh" title="Save the current Quality/Format/Resize/Sharpening as a named preset">Save preset…</button>
+            <button class="btn bgh" id="btn-exp-preset-del" disabled="" title="Delete the selected preset">Delete</button>
+          </div>
+        </div>
+        <div id="fx-match-series-row" style="margin-top:8px;display:none">
+          <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn bgh">Match to this photo</button>
+            <button class="btn bgh">Clear</button>
+          </div>
+        </div>
+        <div class="fx-sub">Export</div>
+        <div id="fx-export-scope-row" style="margin-top:0;display:none">
+          <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope (1 photos loaded)</div>
+          <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
+            <button class="btn bsec" id="btn-scope-all" style="flex:1;padding-left:6px;padding-right:6px">All photos</button>
+            <button class="btn bgh" id="btn-scope-cur" style="flex:1;padding-left:6px;padding-right:6px">Current photo</button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn bpri" id="btn-fx-export">Export</button>
+          <button class="btn bgh" id="btn-fx-cancel" style="display:none">Cancel</button>
+        </div>
+        <div id="fx-export-prog" style="display:none;margin-top:8px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:4px" id="fx-export-prog-txt"></div>
+          <div style="height:4px;background:var(--bdr);border-radius:2px;overflow:hidden"><div id="fx-export-prog-bar" style="height:100%;width:0;background:var(--acc);transition:width .15s"></div></div>
+          <!-- Per-photo status list — only populated (see setExportPhotoStatus) for a >1-photo
+               export, so a partial/mixed-result batch is visible at a glance instead of a single
+               bar that just reads "done" whether 1 or all-but-one photos actually saved. -->
+          <div id="fx-export-photolist" style="display:none;margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mono);font-size:10px"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" title="Save all slider settings to localStorage">Save session</button>
+          <button class="btn bgh" title="Restore saved slider settings">Load session</button>
+        </div>
+        <!-- STYLES: named, reusable, re-editable recipes (curves/HSL/masks/grain/halation/bloom/
+             adjust/etc — everything a LUT preset does NOT capture, since a LUT is a baked 3D
+             lookup table). Distinct from "Save session" above (session is one slot, auto-
+             restored on relaunch); a Style is a permanent, named, list entry you apply on demand
+             to ANY photo, and can export/import as a .json to share between devices. Modelled on
+             darktable's Styles (a saved history-stack, separate from per-module presets). -->
+        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
+          <div class="fx-label" style="width:auto;margin-bottom:6px">Styles</div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn bgh" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
+            <button class="btn bgh" title="Import a Style .json exported from Chromasmith">Import…</button>
+          </div>
+          <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"><div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No styles saved yet.</div></div>
+          <input type="file" id="style-import-input" accept="application/json,.json" style="display: none;">
+        </div>
+        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
+          <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>
+          <!-- Was a button reading "Upload exports: Off" — the state was baked into its own
+               label rather than shown the way every other on/off control in the app is. Real
+               .fx-toggle switch instead, matching e.g. "Sparkle-optimized RAW". -->
+          <div class="fx-row" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><div class="fx-label">Upload exports to Google Photos</div><div class="fx-toggle" id="tg-gp-save" data-a11y="1" role="switch" aria-checked="false" tabindex="0" aria-label="Upload exports to Google Photos"></div></div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn bgh" id="btn-gp-connect" title="Sign in to Google Photos (lasts ~1 hour)">Connect</button>
+            <button class="btn bgh" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px">ID…</button>
+          </div>
+        </div>
+        <!-- Lightroom cloud browsing moved into the desktop LIBRARY sidebar (see library-ui.js's
+             Cloud section + window.lrCloud below) — the old cramped Export-panel widget
+             (#lr-section: Connect button + album dropdown + 72px grid) is gone. -->
+
+      </div>
+      <!-- INFO / METADATA -->
+      <div class="fx-ctrl" data-fxsec="info">
+        <div class="fx-ctrl-title"><span class="fx-ctrl-chev"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>Preview Info &amp; Metadata<span class="fx-title-right"><button type="button" class="fx-ctrl-title-reset" title="Reset this section"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-6h6"></path></svg><span class="fx-ctrl-title-reset-lb">Reset</span></button></span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6" id="fx-info">Preview 390×292 — export will be at full 512×384</div>
+        <!-- People & Pets (people-pets wireframes screen I) — deliberately lives HERE, not as
+             its own rail section: it's a fact about the photo, not a grading control, same
+             reasoning as EXIF sitting right below it. `fx-people` is populated by
+             fxRenderPeoplePanel(), called from showExif()'s one choke point. -->
+        <div id="fx-people"></div>
+        <div id="fx-exif"></div>
+      </div>
+    
+</div>

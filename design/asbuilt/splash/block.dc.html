@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Chromasmith — Splash Screen</title>
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --slate-dark: #0f1c24;
+  --slate-deep: #162832;
+  --slate-surface: #1d333e;
+  --primary-accent: #61a0af;
+  --amber-accent: #ff9b42;
+  --ink-light: #f5f5f7;
+  --ink-muted: #8d9da7;
+  --ink-faint: #566872;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background: #090e11;
+  font-family: var(--font-text);
+  color: var(--ink-light);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Background Desktop Environment */
+.desktop-canvas {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, #15222b 0%, #0a1116 75%, #05080a 100%);
+}
+
+.desktop-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* Simulated macOS Menu Bar */
+.macos-menubar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: rgba(15, 23, 29, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  z-index: 50;
+}
+
+.macos-menu-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.apple-mark {
+  opacity: 0.9;
+  cursor: default;
+}
+
+.menu-app-name {
+  font-weight: 600;
+  color: #fff;
+}
+
+.menu-item {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.macos-menu-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Dimmed Modal Backdrop Overlay (Click to dismiss/minimize) */
+.splash-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 90;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s ease;
+  cursor: pointer;
+}
+
+.splash-backdrop.minimized {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Launch transition: fired once loading reaches 100%, not by a user dismiss —
+   same end state as .minimized (fully hidden, non-interactive) but its own
+   slower 400ms ease-out so the reveal of the desktop behind it reads as an
+   intentional "boot complete" moment rather than a snappy UI dismiss. */
+.splash-backdrop.launched {
+  transition: opacity 0.4s ease-out, visibility 0.4s ease-out;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.splash-backdrop.launched .splash-container {
+  transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+  transform: scale(0.97);
+  opacity: 0;
+}
+
+/* Floating Splash Container */
+.splash-container {
+  position: relative;
+  width: 1020px;
+  height: 480px;
+  max-width: 95vw;
+  background: var(--slate-dark);
+  border-radius: 12px;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.85),
+    0 8px 24px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.12);
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  overflow: hidden;
+  cursor: default;
+  transform: scale(1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.splash-backdrop.minimized .splash-container {
+  transform: scale(0.95) translateY(12px);
+}
+
+/* Left Pane */
+.splash-left {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  background: linear-gradient(165deg, rgb(30, 13, 7) 0%, rgb(21, 8, 4) 100%);
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 155, 66, 0.2);
+}
+
+/* Top Hero Graphic in Left Pane */
+.hero-wrapper {
+  width: 100%;
+  height: 230px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.hero-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 60%, rgba(21, 8, 4, 0.85) 100%);
+}
+
+/* Loading Section */
+.loading-section {
+  padding: 0 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.status-text {
+  color: #fff1e5;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(255, 155, 66, 0.3);
+  border-top-color: #ff9b42;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.status-pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #ff9b42;
+  font-weight: 700;
+}
+
+.progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 68%;
+  background: linear-gradient(90deg, #e55319 0%, #ff8c2b 50%, #ffc43d 100%);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.version-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.version-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: rgba(255, 185, 140, 0.8);
+  letter-spacing: 0.02em;
+}
+
+.copyright-text {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Right Pane */
+.splash-right {
+  position: relative;
+  background: #0b1114;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-wrapper {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.photo-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 46%;
+  transform: scale(1.15);
+  transform-origin: center 46%;
+  display: block;
+}
+
+.photo-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, rgba(15, 28, 36, 0.85) 0%, rgba(15, 28, 36, 0.1) 40%, transparent 70%),
+    radial-gradient(circle at 50% 50%, transparent 60%, rgba(0,0,0,0.4) 100%);
+  pointer-events: none;
+}
+
+.artwork-meta {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.artwork-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.artwork-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(255, 255, 255);
+  text-shadow: rgba(0, 0, 0, 0.9) 0px 1px 6px, rgba(0, 0, 0, 0.7) 0px 2px 12px;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.artwork-author {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: rgba(0, 0, 0, 0.9) 0px 1px 4px;
+}
+
+/* Floating Restore Button (Shown when splash is minimized) */
+.restore-btn {
+  position: absolute;
+  top: 40px;
+  right: 20px;
+  z-index: 80;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background: rgba(22, 40, 50, 0.85);
+  border: 1px solid rgba(255, 155, 66, 0.4);
+  backdrop-filter: blur(16px);
+  color: #ff9b42;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  transition: all 0.15s ease;
+}
+
+.restore-btn.is-visible {
+  display: inline-flex;
+}
+
+.restore-btn:hover {
+  background: #ff9b42;
+  color: #0b1215;
+  border-color: #ff9b42;
+}
+
+/* Dev Controls */
+.dev-controls {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(22, 40, 50, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  padding: 8px 16px;
+  border-radius: 9999px;
+  z-index: 200;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.dev-controls button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dev-controls button:hover {
+  background: var(--primary-accent);
+  color: #0b1215;
+  border-color: var(--primary-accent);
+}
+
+.dev-controls .divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.dev-hint {
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+</style>
+</head>
+<body>
+<div class="desktop-canvas">
+  <!-- macOS Top Navigation Bar -->
+  <div class="macos-menubar">
+    <div class="macos-menu-left">
+      <span class="apple-mark"></span>
+      <span class="menu-app-name">Chromasmith</span>
+      <span class="menu-item">File</span>
+      <span class="menu-item">Edit</span>
+      <span class="menu-item">Photo</span>
+      <span class="menu-item">Develop</span>
+      <span class="menu-item">View</span>
+      <span class="menu-item">Window</span>
+      <span class="menu-item">Help</span>
+    </div>
+    <div class="macos-menu-right">
+      <span>100%</span>
+      <span>Wi-Fi</span>
+      <span>Tue Mar 24 10:42 AM</span>
+    </div>
+  </div>
+
+  <!-- Floating Restore Button (Visible when splash is hidden) -->
+  <button type="button" id="restore-btn" class="restore-btn" aria-hidden="true" tabindex="-1">
+    <span>⤢ Show Splash Screen</span>
+  </button>
+
+  <!-- Dimmed Modal Backdrop (Click to Hide Splash) -->
+  <div class="splash-backdrop" id="splash-backdrop">
+    <div class="splash-container" id="splash-container" role="dialog" aria-modal="true" aria-label="Chromasmith loading">
+      <!-- Left Pane: Info, Branding, Loading Progress -->
+      <div class="splash-left">
+        <div class="hero-wrapper">
+          <img alt="Chromasmith" src="https://lh3.googleusercontent.com/aida-public/AB6AXuALbbvu6IPRyIxnD1UbCEnPpudrMuS2UAMifn9R1M1N4Cmk5vhHngnG7P1U9t1kMIgejGghyjxC3aQsUwAiLNi1qgXML_HkcKhcBWa_A1WYIDwi6HsHdJgO4qBl8394DDfIU7dK06fDzbOuJCtu9P6oHEehhOJRdub7J_Ty06-eHdu_O9RzAYd4bbiwPSw9C7Lh5Psl0hIVscKWz4fAQiFX5qsqHU-K7qT4EULaieoCV3t5EXQ11LMGDgNoB9J8ZpUElQ"/>
+          <div class="hero-scrim"></div>
+        </div>
+
+        <!-- Loading Section -->
+        <div class="loading-section">
+          <div class="status-label-row">
+            <div class="status-text" id="status-text">
+              <div class="status-spinner"></div>
+              <span id="step-label">Reading preferences &amp; catalog SQLite index...</span>
+            </div>
+            <div class="status-pct" id="status-pct">68%</div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-bar" id="progress-fill"></div>
+          </div>
+          <div class="version-row">
+            <span class="version-tag">Version 1.4.2 (Build 2026.03)</span>
+            <span class="copyright-text">Chromasmith Inc.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Pane: User's Dog Photography -->
+      <div class="splash-right">
+        <div class="photo-wrapper">
+          <img alt="Cover Photo — Dog portrait in front of red gate" src="assets/splash-cover.png"/>
+        </div>
+        <div class="photo-scrim"></div>
+        <!-- Photographic Attribution Overlay -->
+        <div class="artwork-meta">
+          <div class="artwork-info">
+            <div class="artwork-title">Lucifer by the fire station</div>
+            <div class="artwork-author">by Tareq M</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Test Controls -->
+  <div class="dev-controls">
+    <span class="dev-hint">Wireframe Preview:</span>
+    <button type="button" id="btn-replay">Replay Loading</button>
+    <button type="button" id="btn-step-pref">Init Preferences</button>
+    <button type="button" id="btn-step-lut">Load LUT Shaders</button>
+    <button type="button" id="btn-step-ready">Complete (100%)</button>
+    <div class="divider"></div>
+    <button type="button" id="btn-theme-toggle">Toggle Stage Backdrop</button>
+  </div>
+</div>
+
+<script>
+const backdrop = document.getElementById('splash-backdrop');
+const splashContainer = document.getElementById('splash-container');
+const restoreBtn = document.getElementById('restore-btn');
+
+// Track where the mouse/touch press started so a drag that begins inside the
+// modal and is released over the scrim never counts as a backdrop click.
+let pressStartedOnBackdrop = false;
+
+backdrop.addEventListener('pointerdown', (e) => {
+  pressStartedOnBackdrop = (e.target === backdrop);
+});
+
+// Click on dimmed backdrop to minimize/hide the splash — only when BOTH the
+// press and the release landed on the backdrop itself, never on the modal.
+backdrop.addEventListener('click', (e) => {
+  if (e.target === backdrop && pressStartedOnBackdrop) {
+    backdrop.classList.add('minimized');
+    restoreBtn.classList.add('is-visible');
+    restoreBtn.removeAttribute('aria-hidden');
+    restoreBtn.removeAttribute('tabindex');
+  }
+  pressStartedOnBackdrop = false;
+});
+
+// Prevent clicks INSIDE the modal from bubbling up and closing it
+splashContainer.addEventListener('click', (e) => {
+  e.stopPropagation();
+});
+splashContainer.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+});
+
+// Click floating button to restore the splash dialog
+restoreBtn.addEventListener('click', () => {
+  backdrop.classList.remove('minimized');
+  restoreBtn.classList.remove('is-visible');
+  restoreBtn.setAttribute('aria-hidden', 'true');
+  restoreBtn.setAttribute('tabindex', '-1');
+});
+
+// Loading state simulations
+const progressFill = document.getElementById('progress-fill');
+const statusPct = document.getElementById('status-pct');
+const stepLabel = document.getElementById('step-label');
+
+const steps = [
+  { pct: 15, text: "Initializing Core Graphics & Metal 3 context..." },
+  { pct: 35, text: "Reading preferences & color profile cache..." },
+  { pct: 60, text: "Loading 3D LUT tables (Portra 400, Tri-X, Ektar)..." },
+  { pct: 82, text: "Verifying SQLite raw catalog database..." },
+  { pct: 100, text: "Catalog ready. Launching Chromasmith Workspace..." }
+];
+
+// Reset the backdrop to its normal, fully-visible state — used before replaying
+// the loading sequence so a previous launch/minimize doesn't leave it hidden.
+function resetSplashVisibility() {
+  clearTimeout(launchTimer);
+  backdrop.classList.remove('launched', 'minimized');
+  restoreBtn.classList.remove('is-visible');
+  restoreBtn.setAttribute('aria-hidden', 'true');
+  restoreBtn.setAttribute('tabindex', '-1');
+}
+
+let launchTimer = null;
+
+function setProgress(idx) {
+  const step = steps[idx];
+  progressFill.style.width = step.pct + '%';
+  statusPct.textContent = step.pct + '%';
+  stepLabel.textContent = step.text;
+
+  // Reaching 100% is the real launch trigger — pause briefly on "Catalog ready"
+  // so it's readable, then fade the splash + backdrop out (400ms ease-out,
+  // see .splash-backdrop.launched) to reveal the desktop underneath, exactly
+  // like the current app's boot: the splash never shows a "workspace", it
+  // just steps aside for whatever screen (Library) the app opens to.
+  if (step.pct === 100) {
+    clearTimeout(launchTimer);
+    launchTimer = setTimeout(() => {
+      backdrop.classList.add('launched');
+    }, 550);
+  }
+}
+
+document.getElementById('btn-step-pref').onclick = () => { resetSplashVisibility(); setProgress(1); };
+document.getElementById('btn-step-lut').onclick = () => { resetSplashVisibility(); setProgress(2); };
+document.getElementById('btn-step-ready').onclick = () => setProgress(4);
+
+document.getElementById('btn-replay').onclick = () => {
+  resetSplashVisibility();
+  let stepIdx = 0;
+  setProgress(stepIdx);
+  const interval = setInterval(() => {
+    stepIdx++;
+    if (stepIdx < steps.length) {
+      setProgress(stepIdx);
+    } else {
+      clearInterval(interval);
+    }
+  }, 700);
+};
+
+let backdropDark = true;
+document.getElementById('btn-theme-toggle').onclick = () => {
+  const canvas = document.querySelector('.desktop-canvas');
+  backdropDark = !backdropDark;
+  if (backdropDark) {
+    canvas.style.background = 'radial-gradient(circle at 50% 40%, #15222b 0%, #0a1116 75%, #05080a 100%)';
+  } else {
+    canvas.style.background = 'radial-gradient(circle at 50% 40%, #293844 0%, #1c262e 75%, #12191f 100%)';
+  }
+};
+</script>
+</body>
+</html>

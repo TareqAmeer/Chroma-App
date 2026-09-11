@@ -1,0 +1,71 @@
+<div class="tp-panel active" data-panel="collage">
+
+  <div class="cl-layout">
+    <div id="cl-secnav"></div>
+    <div class="cl-controls">
+      <div class="fx-ctrl" data-clsec="photos">
+        <div class="ctitle" style="margin-bottom:10px">Photos</div>
+        <div class="dz hot" id="cl-dz">
+          <input type="file" accept="image/*" multiple="" style="">
+          <div class="dz-ic">＋</div><div class="dz-lb">Add photos</div>
+        </div>
+        <div class="cl-tray" id="cl-tray"></div>
+        <div class="fx-hint" id="cl-tray-hint">Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</div>
+      </div>
+      <div class="fx-ctrl" data-clsec="canvas">
+        <div class="ctitle" style="margin-bottom:10px">Canvas size</div>
+        <div class="fx-row"><div class="fx-label">Aspect</div>
+          <select class="fx-select" id="cl-aspect" aria-label="Aspect"><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option><option value="3:4">3:4</option><option value="4:3">4:3</option><option value="2:3">2:3</option><option value="3:2">3:2</option><option value="9:16">9:16</option><option value="16:9">16:9</option></select>
+        </div>
+      </div>
+      <div class="fx-ctrl" data-clsec="layout">
+        <div class="ctitle" style="margin-bottom:10px">Layout</div>
+        <div class="cl-shapes" id="cl-shapes"></div>
+        <div class="fx-hint" id="cl-shape-hint">Add photos to see layout options.</div>
+      </div>
+      <div class="fx-ctrl" data-clsec="style">
+        <div class="ctitle" style="margin-bottom:10px">Borders &amp; background</div>
+        <div class="fx-row"><div class="fx-label">Background</div>
+          <input type="color" class="fx-color" id="cl-bg" value="#ffffff" aria-label="Background" style="">
+          <div class="cl-swatches" id="cl-swatches"><button title="#ffffff" style="background: rgb(255, 255, 255);"></button><button title="#000000" style="background: rgb(0, 0, 0);"></button><button title="#f4f1ea" style="background: rgb(244, 241, 234);"></button><button title="#e8d9c5" style="background: rgb(232, 217, 197);"></button><button title="#171717" style="background: rgb(23, 23, 23);"></button><button title="#c8553d" style="background: rgb(200, 85, 61);"></button><button title="#2e4756" style="background: rgb(46, 71, 86);"></button><button title="#a3b18a" style="background: rgb(163, 177, 138);"></button></div>
+        </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Spacing</div><input class="fx-slider" type="range" min="0" max="60" value="8" id="cl-inner" aria-label="Spacing" style="--fillA: 0%; --fillB: 13.333333333333334%;"><div class="fx-val" id="cl-inner-v">8</div></div>
+        <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" aria-label="Outer margin" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="cl-outer-v">0</div></div>
+        <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" aria-label="Corner round" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="cl-radius-v">0</div></div>
+      </div>
+      <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
+        <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
+        <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" aria-label="Zoom" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="cl-zoom-v">100</div></div>
+        <div class="fx-hint">Drag inside the photo to reposition it. Scroll over a photo to zoom.</div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bsec">Replace</button>
+          <button class="btn bgh">Reset</button>
+          <button class="btn bgh">Clear slot</button>
+        </div>
+      </div>
+      <div class="fx-ctrl" data-clsec="export">
+        <div class="ctitle" style="margin-bottom:10px">Export</div>
+        <div class="fx-row"><div class="fx-label">Long side</div>
+          <select class="fx-select" id="cl-res" aria-label="Long side">
+            <option value="1600">1600 px</option>
+            <option value="2400" selected="">2400 px</option>
+            <option value="3200">3200 px</option>
+            <option value="4000">4000 px (large)</option>
+          </select>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bpri" id="cl-export">Export collage</button>
+          <button class="btn bgh" title="Randomly redistribute photos into the slots">Shuffle</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn bgh">Start over</button>
+        </div>
+      </div>
+    </div>
+    <div class="cl-stage" id="cl-stage">
+      <div class="cl-empty" id="cl-empty">Add photos to begin your collage</div>
+      <div id="cl-frame" style="display: none;"></div>
+    </div>
+  </div>
+
+</div>

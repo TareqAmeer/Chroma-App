@@ -27,8 +27,34 @@ const ONLY_ID = (argv.find((a) => a.startsWith('--id=')) || '').split('=')[1] ||
 if (!GROUP) { console.error('usage: node test/surface_capture.mjs --group=A [--id=...]'); process.exit(1); }
 
 const surfacesDoc = JSON.parse(await readFile(path.join(ROOT, 'design/surfaces.json'), 'utf8'));
-const targets = surfacesDoc.surfaces.filter((s) => s.group === GROUP && (!ONLY_ID || s.id === ONLY_ID));
-if (!targets.length) { console.error(`no surfaces with group=${GROUP}`); process.exit(1); }
+const allSelected = surfacesDoc.surfaces.filter((s) => s.group === GROUP && (!ONLY_ID || s.id === ONLY_ID));
+if (!allSelected.length) { console.error(`no surfaces with group=${GROUP}`); process.exit(1); }
+
+// splash has no live DOM route (surfaces.json: `opened: null`, "no live DOM route — first-load
+// native splash") — per the user, use the existing wireframe as its as-built stand-in instead of
+// attempting to capture it live. Copy it verbatim rather than drive a page that doesn't exist.
+const splashEntry = allSelected.find((s) => s.id === 'splash');
+const targets = allSelected.filter((s) => s.id !== 'splash');
+if (splashEntry) {
+  const wireframeName = 'Splash Screen.html';
+  const wireframePath = path.join(ROOT, 'chromasmith-design/project', wireframeName);
+  const dir = path.join(ROOT, 'design/asbuilt/splash');
+  await mkdir(dir, { recursive: true });
+  try {
+    const html = await readFile(wireframePath, 'utf8');
+    await writeFile(path.join(dir, 'block.dc.html'), html);
+    await writeFile(path.join(dir, 'spec.json'), JSON.stringify({
+      id: 'splash', group: splashEntry.group, generatedAt: new Date().toISOString(),
+      note: `No live DOM route to capture — this surface is the "${wireframeName}" wireframe used verbatim as its as-built stand-in, per user instruction. No screenshots, no computed-value spec.`,
+      wireframeSource: `chromasmith-design/project/${wireframeName}`,
+    }, null, 2));
+    console.log(`[splash] copied ${wireframeName} as stand-in (no live capture)`);
+  } catch (e) {
+    console.log(`[splash] FAILED to copy stand-in: ${e.message}`);
+  }
+}
+if (!targets.length && !splashEntry) { console.error(`no surfaces with group=${GROUP}`); process.exit(1); }
+if (!targets.length) { console.log('no live-capturable surfaces in this group (splash-only); done.'); process.exit(0); }
 
 // ── token index (design/tokens.json, DTCG) ─────────────────────────────────────────────────────
 const tokensDoc = JSON.parse(await readFile(path.join(ROOT, 'design/tokens.json'), 'utf8'));
@@ -157,6 +183,36 @@ async function closeAnyOverlay() {
 // the SPECIFIC state named (not "run through all states once") so a capture call for "hover" is
 // independent of one for "disabled".
 async function enterState(entry, state) {
+  // mobile-sheet's surfaces.json openSteps is a human-readable description ("resize viewport to
+  // <=700px width, applyFxLayout()"), not runnable JS — surface_inventory.mjs drove it with
+  // dedicated code, not withSurface()/runStep(). Same special-case here instead of eval'ing text.
+  if (entry.id === 'mobile-sheet') {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { if (typeof applyFxLayout === 'function') applyFxLayout(); });
+    await page.waitForTimeout(150);
+    const sectionKeys = await page.evaluate(() =>
+      [...document.querySelectorAll('.fx-ctrl[data-fxsec]')].map((el) => el.dataset.fxsec).filter((k) => k && k !== '${cardOrName}'));
+    // fxSection(key) on the ALREADY-active section is a CLOSE, not an open — chromasmith-22.html's
+    // fxSection() returns early into a close branch (mobile sheet-close, or deskx panel-close)
+    // whenever the target section is already `sec-active`. Pick a key that ISN'T active so the
+    // call falls through to the open path instead.
+    const activeKey = await page.evaluate(() => document.querySelector('.fx-ctrl.sec-active')?.dataset.fxsec);
+    const openKey = sectionKeys.find((k) => k !== activeKey) || sectionKeys[0];
+    if (state === 'loaded' && openKey) {
+      await page.evaluate((k) => { if (typeof fxSection === 'function') fxSection(k); }, openKey);
+      await page.waitForTimeout(500); // .fx-panel's sheet-open height is a 280ms CSS transition
+    }
+    if (state === 'empty' && openKey) {
+      // open then tap the now-active tool again to close, landing on the closed (sheet-not-open) state
+      await page.evaluate((k) => { if (typeof fxSection === 'function') fxSection(k); }, openKey);
+      await page.waitForTimeout(400);
+      await page.evaluate((k) => { if (typeof fxSection === 'function') fxSection(k); }, openKey);
+      await page.waitForTimeout(300);
+    }
+    return;
+  }
+
   for (const step of entry.openSteps) await runStep(step);
   await page.waitForTimeout(150);
   const sel = entry.selector;
@@ -360,6 +416,14 @@ for (const entry of targets) {
 
   report.push({ id: entry.id, statesExpected: states, statesWritten: written, statesMissing: missing });
   console.log(`[capture] ${entry.id}: ${written.length}/${states.length} states (${written.join(',')})${missing.length ? '  MISSING: ' + missing.join(',') : ''}`);
+
+  if (entry.id === 'mobile-sheet') {
+    // restore desktop viewport so any later surface in this run (or the noPhoto pass, if this
+    // were re-ordered) isn't left mobile-sized.
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.waitForTimeout(150);
+    await page.evaluate(() => { if (typeof applyFxLayout === 'function') applyFxLayout(); });
+  }
 }
 
 await page.close();

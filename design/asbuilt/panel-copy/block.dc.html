@@ -1,0 +1,33 @@
+<div class="tp-panel active" data-panel="copy">
+
+  <div class="card">
+    <div class="ctitle">Color Copy — match tones from a reference image</div>
+    <div class="dg2">
+      <div class="dz" id="dz-cp-src">
+        <input type="file" accept="image/*" style="">
+        <div class="dz-ic" data-ic="image"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></div><div class="dz-lb">Source image</div>
+        <div class="dz-sb">Photo to apply the grade to</div><div class="dz-fn" id="fn-cp-src"></div>
+      </div>
+      <div class="dz" id="dz-cp-ref">
+        <input type="file" accept="image/*" style="">
+        <div class="dz-ic" data-ic="compare"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" opacity=".55"></path></svg></div><div class="dz-lb">Reference image</div>
+        <div class="dz-sb">Photo with the look you want to copy</div><div class="dz-fn" id="fn-cp-ref"></div>
+      </div>
+    </div>
+    <div class="vrow">
+      <div class="vlb">Name</div>
+      <input class="vinput" id="cp-name" value="colour_copy" placeholder="colour_copy" style="">
+      <div class="vlb" id="cp-ver" style="color:var(--acc)">v1.0</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn bpri" id="btn-cp" disabled="">Download .cube LUT</button>
+      <button class="btn bsec" id="btn-cp-xmp" disabled="">Download .xmp Preset</button>
+    </div>
+    <div class="pb" id="pb-cp"><div class="pf" id="pf-cp"></div></div>
+    <div class="sum-box" id="cp-sum" style="display:none">
+      <div class="sum-title">Grade characteristics copied</div>
+      <ul class="sum-list" id="cp-sum-list"></ul>
+    </div>
+  </div>
+
+</div>

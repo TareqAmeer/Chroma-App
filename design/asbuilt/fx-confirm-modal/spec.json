@@ -1,0 +1,1267 @@
+{
+  "id": "fx-confirm-modal",
+  "group": "B",
+  "generatedAt": "2026-09-11T16:38:22.523Z",
+  "hasToggle": false,
+  "tree": {
+    "tag": "dialog",
+    "id": "fx-confirm-modal",
+    "style": {
+      "color": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "backgroundColor": {
+        "value": "rgb(39, 39, 41)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "borderColor": {
+        "value": "rgba(255, 255, 255, 0.12)",
+        "token": null
+      },
+      "outlineColor": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "fontSize": {
+        "value": "16px",
+        "token": null
+      },
+      "fontWeight": {
+        "value": "400",
+        "token": null
+      },
+      "fontFamily": {
+        "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+        "token": null
+      },
+      "lineHeight": {
+        "value": "24px",
+        "token": null
+      },
+      "letterSpacing": {
+        "value": "normal",
+        "token": null
+      },
+      "paddingTop": {
+        "value": "16px",
+        "token": null
+      },
+      "paddingRight": {
+        "value": "16px",
+        "token": null
+      },
+      "paddingBottom": {
+        "value": "16px",
+        "token": null
+      },
+      "paddingLeft": {
+        "value": "16px",
+        "token": null
+      },
+      "gap": {
+        "value": "normal",
+        "token": null
+      },
+      "rowGap": {
+        "value": "normal",
+        "token": null
+      },
+      "columnGap": {
+        "value": "normal",
+        "token": null
+      },
+      "borderRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderTopLeftRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderTopRightRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderBottomLeftRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "borderBottomRightRadius": {
+        "value": "10px",
+        "token": null
+      },
+      "transitionDuration": {
+        "value": "0s",
+        "token": null
+      },
+      "transitionTimingFunction": {
+        "value": "ease",
+        "token": null
+      },
+      "boxShadow": {
+        "value": "rgba(255, 255, 255, 0.06) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.35) 0px 2px 4px 0px, rgba(0, 0, 0, 0.5) 0px 14px 32px -8px",
+        "token": null
+      }
+    },
+    "children": [
+      {
+        "tag": "div",
+        "id": "fx-confirm-msg",
+        "text": "Delete this?",
+        "style": {
+          "color": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "backgroundColor": {
+            "value": "rgba(0, 0, 0, 0)",
+            "token": null
+          },
+          "borderColor": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "outlineColor": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "fontSize": {
+            "value": "13px",
+            "token": null
+          },
+          "fontWeight": {
+            "value": "400",
+            "token": null
+          },
+          "fontFamily": {
+            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "token": null
+          },
+          "lineHeight": {
+            "value": "19.5px",
+            "token": null
+          },
+          "letterSpacing": {
+            "value": "normal",
+            "token": null
+          },
+          "paddingTop": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingRight": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingBottom": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingLeft": {
+            "value": "0px",
+            "token": null
+          },
+          "gap": {
+            "value": "normal",
+            "token": null
+          },
+          "rowGap": {
+            "value": "normal",
+            "token": null
+          },
+          "columnGap": {
+            "value": "normal",
+            "token": null
+          },
+          "borderRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "transitionDuration": {
+            "value": "0s",
+            "token": null
+          },
+          "transitionTimingFunction": {
+            "value": "ease",
+            "token": null
+          },
+          "boxShadow": {
+            "value": "none",
+            "token": null
+          }
+        },
+        "children": []
+      },
+      {
+        "tag": "div",
+        "style": {
+          "color": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "backgroundColor": {
+            "value": "rgba(0, 0, 0, 0)",
+            "token": null
+          },
+          "borderColor": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "outlineColor": {
+            "value": "rgb(255, 255, 255)",
+            "token": "/color/surface/page",
+            "appVar": "--bg",
+            "role": "surface.page"
+          },
+          "fontSize": {
+            "value": "16px",
+            "token": null
+          },
+          "fontWeight": {
+            "value": "400",
+            "token": null
+          },
+          "fontFamily": {
+            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "token": null
+          },
+          "lineHeight": {
+            "value": "24px",
+            "token": null
+          },
+          "letterSpacing": {
+            "value": "normal",
+            "token": null
+          },
+          "paddingTop": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingRight": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingBottom": {
+            "value": "0px",
+            "token": null
+          },
+          "paddingLeft": {
+            "value": "0px",
+            "token": null
+          },
+          "gap": {
+            "value": "8px",
+            "token": null
+          },
+          "rowGap": {
+            "value": "8px",
+            "token": null
+          },
+          "columnGap": {
+            "value": "8px",
+            "token": null
+          },
+          "borderRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderTopRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomLeftRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "borderBottomRightRadius": {
+            "value": "0px",
+            "token": "/designSystem/radius_none",
+            "appVar": "--radius-none",
+            "role": "radius.none"
+          },
+          "transitionDuration": {
+            "value": "0s",
+            "token": null
+          },
+          "transitionTimingFunction": {
+            "value": "ease",
+            "token": null
+          },
+          "boxShadow": {
+            "value": "none",
+            "token": null
+          }
+        },
+        "children": [
+          {
+            "tag": "button",
+            "id": "fx-confirm-cancel",
+            "classes": [
+              "btn",
+              "bgh"
+            ],
+            "text": "Cancel",
+            "style": {
+              "color": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "backgroundColor": {
+                "value": "rgb(42, 42, 44)",
+                "token": "/color/surface/panel",
+                "appVar": "--sur",
+                "role": "surface.panel"
+              },
+              "borderColor": {
+                "value": "rgb(255, 255, 255)",
+                "token": "/color/surface/page",
+                "appVar": "--bg",
+                "role": "surface.page"
+              },
+              "outlineColor": {
+                "value": "rgba(212, 144, 58, 0.55)",
+                "token": null
+              },
+              "fontSize": {
+                "value": "12px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "500",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "normal",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "normal",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "9px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "14px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "9px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "14px",
+                "token": null
+              },
+              "gap": {
+                "value": "6px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "6px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "6px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "4px",
+                "token": null
+              },
+              "borderTopLeftRadius": {
+                "value": "4px",
+                "token": null
+              },
+              "borderTopRightRadius": {
+                "value": "4px",
+                "token": null
+              },
+              "borderBottomLeftRadius": {
+                "value": "4px",
+                "token": null
+              },
+              "borderBottomRightRadius": {
+                "value": "4px",
+                "token": null
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease, ease, ease, ease, ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "none",
+                "token": null
+              }
+            },
+            "children": []
+          },
+          {
+            "tag": "button",
+            "id": "fx-confirm-ok",
+            "classes": [
+              "btn",
+              "bpri"
+            ],
+            "text": "Delete",
+            "style": {
+              "color": {
+                "value": "rgb(0, 0, 0)",
+                "token": "/designSystem/surface_black",
+                "appVar": "--surface-black",
+                "role": "surface.black"
+              },
+              "backgroundColor": {
+                "value": "rgba(0, 0, 0, 0)",
+                "token": null
+              },
+              "borderColor": {
+                "value": "rgb(97, 160, 175)",
+                "token": "/color/action/primary",
+                "appVar": "--acc",
+                "role": "action.primary"
+              },
+              "outlineColor": {
+                "value": "rgb(0, 0, 0)",
+                "token": "/designSystem/surface_black",
+                "appVar": "--surface-black",
+                "role": "surface.black"
+              },
+              "fontSize": {
+                "value": "12px",
+                "token": null
+              },
+              "fontWeight": {
+                "value": "600",
+                "token": null
+              },
+              "fontFamily": {
+                "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                "token": null
+              },
+              "lineHeight": {
+                "value": "normal",
+                "token": null
+              },
+              "letterSpacing": {
+                "value": "normal",
+                "token": null
+              },
+              "paddingTop": {
+                "value": "9px",
+                "token": null
+              },
+              "paddingRight": {
+                "value": "14px",
+                "token": null
+              },
+              "paddingBottom": {
+                "value": "9px",
+                "token": null
+              },
+              "paddingLeft": {
+                "value": "14px",
+                "token": null
+              },
+              "gap": {
+                "value": "6px",
+                "token": null
+              },
+              "rowGap": {
+                "value": "6px",
+                "token": null
+              },
+              "columnGap": {
+                "value": "6px",
+                "token": null
+              },
+              "borderRadius": {
+                "value": "5px",
+                "token": "/designSystem/radius_xs",
+                "appVar": "--radius-xs",
+                "role": "radius.xs"
+              },
+              "borderTopLeftRadius": {
+                "value": "5px",
+                "token": "/designSystem/radius_xs",
+                "appVar": "--radius-xs",
+                "role": "radius.xs"
+              },
+              "borderTopRightRadius": {
+                "value": "5px",
+                "token": "/designSystem/radius_xs",
+                "appVar": "--radius-xs",
+                "role": "radius.xs"
+              },
+              "borderBottomLeftRadius": {
+                "value": "5px",
+                "token": "/designSystem/radius_xs",
+                "appVar": "--radius-xs",
+                "role": "radius.xs"
+              },
+              "borderBottomRightRadius": {
+                "value": "5px",
+                "token": "/designSystem/radius_xs",
+                "appVar": "--radius-xs",
+                "role": "radius.xs"
+              },
+              "transitionDuration": {
+                "value": "0s",
+                "token": null
+              },
+              "transitionTimingFunction": {
+                "value": "ease, ease, ease, ease, ease",
+                "token": null
+              },
+              "boxShadow": {
+                "value": "rgba(255, 255, 255, 0.35) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.25) 0px 1px 2px 0px",
+                "token": null
+              }
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "unmapped": [
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "paddingTop",
+      "value": "16px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "paddingRight",
+      "value": "16px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "paddingBottom",
+      "value": "16px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "paddingLeft",
+      "value": "16px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "borderRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "borderTopLeftRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "borderTopRightRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "borderBottomLeftRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "borderBottomRightRadius",
+      "value": "10px"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "dialog",
+      "id": "fx-confirm-modal",
+      "prop": "boxShadow",
+      "value": "rgba(255, 255, 255, 0.06) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.35) 0px 2px 4px 0px, rgba(0, 0, 0, 0.5) 0px 14px 32px -8px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "fontSize",
+      "value": "13px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "lineHeight",
+      "value": "19.5px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "id": "fx-confirm-msg",
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "div",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "div",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "prop": "gap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "prop": "rowGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "prop": "columnGap",
+      "value": "8px"
+    },
+    {
+      "tag": "div",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "outlineColor",
+      "value": "rgba(212, 144, 58, 0.55)"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontWeight",
+      "value": "500"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingTop",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingRight",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingBottom",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "paddingLeft",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderTopLeftRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderTopRightRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderBottomLeftRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "borderBottomRightRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease, ease, ease, ease, ease"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-cancel",
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "fontWeight",
+      "value": "600"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "paddingTop",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "paddingRight",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "paddingBottom",
+      "value": "9px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "paddingLeft",
+      "value": "14px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "gap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "rowGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "columnGap",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease, ease, ease, ease, ease"
+    },
+    {
+      "tag": "button",
+      "id": "fx-confirm-ok",
+      "classes": [
+        "btn",
+        "bpri"
+      ],
+      "prop": "boxShadow",
+      "value": "rgba(255, 255, 255, 0.35) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.25) 0px 1px 2px 0px"
+    }
+  ]
+}

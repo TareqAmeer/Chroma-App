@@ -1,0 +1,34 @@
+<div class="tp-panel active" data-panel="match">
+
+  <div class="card" id="setup-card">
+    <div class="ctitle">Step 1 — drop images to start</div>
+    <div class="dg2">
+      <div class="dz" id="dz-before">
+        <input type="file" accept="image/*" style="">
+        <div class="dz-ic" data-ic="image"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></div><div class="dz-lb">Before / Original</div>
+        <div class="dz-sb">Ungraded flat image</div><div class="dz-fn" id="fn-before"></div>
+      </div>
+      <div class="dz" id="dz-target">
+        <input type="file" accept="image/*" style="">
+        <div class="dz-ic" data-ic="compare"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" opacity=".55"></path></svg></div><div class="dz-lb">After / Target</div>
+        <div class="dz-sb">Graded Lightroom result</div><div class="dz-fn" id="fn-target"></div>
+      </div>
+    </div>
+    <div class="div-sep">Optional starting point</div>
+    <div class="dz opt-dz" id="dz-start">
+      <input type="file" accept=".cube,.xmp" style="">
+      <div class="dz-ic" data-ic="looks"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v4M3 5h4"></path><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"></path></svg></div><div class="dz-lb">Starting LUT (.cube) or Preset (.xmp)</div>
+      <div class="dz-sb">Optional — helps bootstrap the look</div><div class="dz-fn" id="fn-start"></div>
+    </div>
+    <div class="vrow">
+      <div class="vlb">Name</div>
+      <input class="vinput" id="match-name" value="my_look" placeholder="my_look" style="">
+    </div>
+    <div class="btn-row">
+      <button class="btn bpri" id="btn-start" disabled="">Generate LUT &amp; XMP</button>
+    </div>
+    <div class="pb" id="pb-s"><div class="pf" id="pf-s"></div></div>
+  </div>
+  <div id="step-history"></div>
+
+</div>
