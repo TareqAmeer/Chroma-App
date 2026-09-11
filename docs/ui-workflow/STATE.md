@@ -183,3 +183,35 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 - Added contract rule 6: token values live in design/tokens.json, :root is generated (was undocumented after S4);
   docs/design-tokens.md updated to match; stale "§10.13" ref fixed.
 - Open: docs/app-tabs.md doesn't cover the Collage page.
+
+**Token generator gates — 2026-09-11 — done**
+- `scripts/build-tokens.mjs --check` and `design/verify_tokens.py` (S3/S4) existed but nothing
+  ran them — a direct edit to a colour/spacing literal in `chromasmith-22.html`'s `:root`/
+  `body.light` or `desktop/library-ui.js`'s DS block would sit unnoticed until the next
+  `build-tokens` run silently overwrote it back to `design/tokens.json`'s value. Added
+  `npm run tokens:check`/`tokens:verify`/`tokens:gates`; wired into `npm test`/`test:ui`,
+  `githooks/pre-commit` (fires on `chromasmith-22.html`/`desktop/library-ui.js`/
+  `design/tokens.json`/`scripts/build-tokens.mjs`/`scripts/token-layout.json`, blocking), and
+  `.github/workflows/editor-gates.yml` (new trigger paths + a dedicated step). Verified the
+  pre-commit gate actually blocks: edited `--bg` directly in the generated `:root` block, staged
+  it, hook failed with the drift message; reverted, re-ran clean.
+
+**Gate baseline — 2026-09-11 — pre-existing failures, not introduced by this session**
+Recorded so S8 ("done when gates pass") has a starting point — these predate this session's work
+and are unrelated to it (S3 already noted the `ui:test` one; confirmed unchanged here):
+- `npm run editor:gates` (`--advisory`): RESULT PASS with 7 advisory WARNs — `editor:inventory`,
+  `editor:token-check`, `editor:axe-check`, `editor:icon-check`, `editor:motion-token-check`,
+  `editor:hover-focus-matrix`, `editor:hidpi-check`. Advisory = printed, not blocking; the
+  underlying findings (e.g. `.fx-select` hover/focus visually identical to rest, several
+  `[MISSING]` selectors with no visible instance under the current fixture, hidpi canvas checks
+  that don't fire under CDP DPR emulation) are pre-existing backlog, not this session's changes.
+- `npm run ui:test`: RESULT FAIL — 2 findings, both on the same element: TAP
+  `button.fx-info-i "i"` 14×14 < the 28px minimum, FONT same element 9px < 11px minimum. This is
+  the tap-target gap S3 already flagged and confirmed unrelated to its own edits; still present,
+  still not this session's.
+Neither of these two commands is run by `githooks/pre-commit` on every commit today (only when
+`chromasmith-22.html`/`desktop/library-ui.js` is staged, via `editor:gates --advisory` — which
+is why the advisory 7 don't block locally either); `npm test`/CI run them non-advisory/strict via
+`editor:gates` and `ui:test` respectively — `editor:gates` still exits 0 since the 7 are advisory,
+but `npm run ui:test` on its own exits 1 (the fx-info-i gap), and `npm run test`/`test:ui` (which
+call `ui:test`) will currently fail on that until it's fixed.
