@@ -170,3 +170,16 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   overall — same expected causes as group A (no tokens yet for control heights/weights/pill radii/
   off-grid literals), nothing invented. `design/asbuilt/` is 26 MB total, committed as-is (not
   gitignored). All 5 groups (A–E) now complete.
+
+**S2 — 2026-09-11 — done (finished in a later review pass)**
+- First pass (e27afba): moved §3b→docs/design-tokens.md, §4→docs/app-tabs.md, §6→docs/process-lessons.md;
+  fixed fonts (SF Pro) + wireframe-transplant skill. T43–T53 deferral reverted (16e9f69) — they were already done.
+- Review pass: CLAUDE.md 320→233 lines. Moved iOS shell → docs/ios-shell.md, render pipeline → docs/render-pipeline.md,
+  calib venv commands → calib/CLAUDE.md; condensed the repo tree (kept every ⚠️ gotcha). Each move has a "load before
+  touching X" pointer so it still gets read at the right time.
+- Deleted-too-far line: §6 had become a bare pointer "read before tuning", so UI/test/flaky-bug lessons (#5,#8–17) would
+  never load for UI work. Restored as 10 one-liners + contract rule 7. Rule of thumb used: keep in CLAUDE.md anything that
+  prevents a SILENT costly failure or that has no other trigger (skill/hook/nested CLAUDE.md); move detail that has one.
+- Added contract rule 6: token values live in design/tokens.json, :root is generated (was undocumented after S4);
+  docs/design-tokens.md updated to match; stale "§10.13" ref fixed.
+- Open: docs/app-tabs.md doesn't cover the Collage page.

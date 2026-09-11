@@ -1,5 +1,15 @@
 # Halation/bloom calibration, grain model, Fujify, zone geometry
 
+## Quick start (moved from root CLAUDE.md)
+
+```bash
+python3 -m venv .calibvenv && source .calibvenv/bin/activate
+pip install -r calib/requirements.txt
+python calib/scorecard.py        # FAST halation PASS/FAIL table (run first/always)
+python calib/render_chart.py     # render a model + side-by-side vs the Dehancer reference
+python calib/optimize_hal.py     # autonomous dense-loss optimizer (background-able)
+```
+
 Deep-dive reference for `calib/` work — halation calibration science, calibration tooling, the grain model, Fujify preset recreation, and chart zone geometry. Not needed to run the app; load this when tuning FXR.CAL constants.
 
 ## 5. Halation calibration — the core science

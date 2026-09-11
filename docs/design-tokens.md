@@ -2,7 +2,10 @@
 
 (moved from CLAUDE.md §3b, 2026-09-11)
 
-All in the `:root` block at the top of the `<style>`. **Use the tokens; don't reintroduce literals.**
+Values live in `design/tokens.json` (W3C DTCG); the `:root`/`body.light` blocks are GENERATED from it by
+`node scripts/build-tokens.mjs` (`--check` to verify). Rationale comments are stored verbatim in
+tokens.json (`$extensions.chromasmith.emit.<block>.commentBefore`). `.claude/hooks/token-lint-on-edit.sh`
+flags new raw literals on edit. **Use the tokens; don't reintroduce literals.**
 
 - **`--sans` = SF Pro Display/Text, `--mono` for numerals/code/build stamp.** SF Pro is
   embedded as base64 `@font-face` data URIs (Apple system font, licensed for software built
@@ -29,5 +32,5 @@ All in the `:root` block at the top of the `<style>`. **Use the tokens; don't re
   each element's own min/max, so dynamically built rows need no wiring) and stay neutral grey
   until the value leaves its default.
 - **A section that is switched off is dimmed (`.fx-fields.ff-off`), not `display:none`** — and
-  touching any control inside it turns the section on. See §10.13 for why hiding it was actively
+  touching any control inside it turns the section on. See docs/process-lessons.md #13 for why hiding it was actively
   harmful.

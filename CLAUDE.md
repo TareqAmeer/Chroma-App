@@ -24,61 +24,32 @@ and the hard-won lessons from building it.
 4. Commit and push after every real edit (`auto-commit` memory) — the user checks the live GitHub
    Pages build, so unpushed work isn't testable.
 5. Bump `BUILD` in `chromasmith-22.html` — automatic via a hook, nothing to do here.
+6. **Design-token values live in `design/tokens.json`**, not in the `:root`/`body.light` blocks —
+   those (and library-ui.js's DS block) are generated between `/* TOKENS:*:START/END */` markers by
+   `node scripts/build-tokens.mjs`. Edit tokens.json, regenerate; a hand edit inside the markers is lost.
+7. **Read [docs/process-lessons.md](docs/process-lessons.md) before any UI/layout, test, or flaky-bug
+   work** — 17 lessons that each cost real time. The one-line versions are in §6 below.
 
 ---
 
 ## 1. Repository layout
 
 ```
-index.html                  THE PRODUCT PAGE (GitHub Pages root) — hand-written, self-contained,
-                            reuses chromasmith-22.html's own :root tokens. NOT the app.
-app/index.html              Clean /app/ URL → redirects to chromasmith-22.html (the old root
-                            redirect, moved). The editor's own path never changed: both build
-                            scripts still copy chromasmith-22.html, and the COI service worker
-                            still registers at the site root.
-site/                       Landing-page assets + the three scripts that generate them
-                            (shoot-screenshots.mjs drives the REAL app in Playwright — the old
-                            hand-taken ui-review-screenshots/ folder was untracked and got lost;
-                            build-assets.mjs optimises photos from the gitignored photos-src/;
-                            build-page.mjs injects them between markers in index.html).
-                            See site/README.md. ⚠️ Output is WebP because .gitignore excludes
-                            *.jpg globally, and the encoder is Chromium because cwebp is absent
-                            and macOS sips refuses -s format webp (exit 13).
-LICENSES-MODELS.md          Every bundled ONNX model and its licence — written because two of
-                            them (EdgeSAM, face-parsing/SegFormer) are non-commercial/research
-                            and a public .dmg now ships them.
-chromasmith-22.html         THE ENTIRE APP — HTML + CSS + JS + GLSL shaders in one file
-coi-serviceworker.min.js    Cross-origin-isolation shim so the RAW decoder works on
-                            GitHub Pages (gzuidhof, MIT)
-README.md                   User-facing intro + run instructions
-CLAUDE.md                   This file
-vendor/
-  libraw/                   LibRaw WebAssembly RW2/RAW decoder (index.js, worker.js, .wasm)
-  dcp/                      14 Panasonic DC-S9 Adobe DCP camera profiles (runtime copies)
-  mediabunny/               MP4 demux/mux for video grading (docs/video-grading.md) — MPL-2.0, kept as its own
-                            file and lazy-`import()`ed like libraw, NOT inlined like pako/utif2
-  luts/                     102 of the 113 built-in look presets, as RAW 33³ RGB bytes
-                            (107,811 B each). Fetched + cached on demand — see §2's payload note
-ios/ + package.json + capacitor.config.json + build-ios.sh + patches/ + .github/workflows/
-                            Capacitor iOS shell → unsigned IPA built by CI (see §2).
-                            .github/workflows/desktop-dmg.yml builds the macOS .dmg on a `v*` tag
-                            → GitHub Release. ⚠️ macos-13 (x86_64) is required by the Intel-only
-                            vendored libonnxruntime.dylib, and the dmg is packaged with hdiutil
-                            rather than by touching tauri.conf.json's deliberate targets:["app"].
-calib/                      Calibration & analysis tooling (Python). Not needed to RUN the
-                            app — only to re-derive/verify the film-effect constants.
-  *.py                      Models, optimizers, validators, chart generators
-  *.json                    Fitted parameter sets
-  requirements.txt          Python deps (numpy/Pillow/scipy)
-  README.md                 Tooling notes
-  IMG_5774_2x.PNG           Clean base test chart (4800×6400)
-  dehancer halation x2.png  Dehancer halation-only reference (the calibration ground truth)
-  LUT LIBRARY/              46 of the shipped looks as .cube files (sideload-ready); the other
-                            67 are in dehancer/cubes/. Together these are the source of truth
-                            for every LUT_PRESETS / vendor/luts entry
-  split_lut_presets.py      Moves the non-core presets out of the HTML into vendor/luts/ (§2)
-  DCP Camera Profiles/      Source Adobe DCPs for the DC-S9
-  fujify/                   Fujifilm-look recreation pipeline (scripts + notes)
+index.html              Product page (GitHub Pages root) — hand-written, NOT the app
+app/index.html          /app/ → redirects to chromasmith-22.html
+chromasmith-22.html     THE ENTIRE APP — HTML + CSS + JS + GLSL in one file
+design/                 tokens.json (token source of truth), surfaces.json, specs — docs/ui-workflow/
+site/                   Landing-page assets + generators (see site/README.md). ⚠️ WebP only:
+                        .gitignore excludes *.jpg; encoder is Chromium (no cwebp, sips refuses webp)
+LICENSES-MODELS.md      Bundled ONNX models + licences (EdgeSAM, SegFormer are non-commercial)
+coi-serviceworker.min.js  Cross-origin isolation shim so RAW decode works on Pages
+vendor/                 libraw (RW2 wasm), dcp (14 DC-S9 profiles), mediabunny (video, MPL-2.0,
+                        lazy import), luts (102 of 113 presets as raw 33³ bytes — §2)
+ios/, build-ios.sh, patches/   Capacitor iOS shell — docs/ios-shell.md
+.github/workflows/      ios-ipa.yml; desktop-dmg.yml on `v*` tag. ⚠️ macos-13 (x86_64) required by
+                        the Intel-only libonnxruntime.dylib; dmg via hdiutil, tauri targets:["app"]
+calib/                  Calibration tooling (Python) — calib/CLAUDE.md. Not needed to run the app.
+                        LUT LIBRARY/ (46) + dehancer/cubes/ (67) = source of every preset
 ```
 
 **Not bundled** (gitignored; supply your own): original RAW/JPEG/TIFF captures, the venv,
@@ -135,35 +106,12 @@ Deploy the folder as-is to GitHub Pages or any static host.
 - **Local preview gotcha (macOS):** sandboxed preview servers can't read `~/Documents` (TCC).
   Serve a copy from `/tmp/` instead.
 
-### iOS app shell (Capacitor → sideloadable IPA)
 
-`ios/` wraps the SAME single file in a WKWebView (Capacitor 8, CocoaPods). Pieces:
-- `build-ios.sh` stages `chromasmith-22.html → www/index.html` + `vendor/` (never point webDir
-  at the repo root — calib/ would ship). `www/`, `node_modules/` are gitignored; `ios/` is
-  committed (its own .gitignore covers Pods/build/public).
-- `.github/workflows/ios-ipa.yml` builds an **unsigned `Chromasmith.ipa`** on a macOS runner on
-  every push touching the app (this Mac has no Xcode — CI is the only build path). The user
-  downloads the artifact and signs via **Flarestore**.
-- `patches/@capacitor+ios*.patch` (applied by patch-package on `npm ci`) adds COOP/COEP headers
-  in `WebViewAssetHandler` so `crossOriginIsolated`/SharedArrayBuffer (RW2 decode) can work in
-  the shell. ⚠️ This is why the iOS platform uses **CocoaPods, not SPM** — SPM pulls Capacitor
-  from a remote package that can't be patched; CocoaPods builds from `node_modules`. Whether
-  WKWebView honors it is probed at startup (log line "SAB/RAW yes/no"); RW2 fails gracefully.
-- In-app native hooks are ALL gated on `window.Capacitor` (`capNative()`), so browser/Pages
-  behavior is untouched: `capShareFiles()` writes exports to the app cache (Filesystem plugin)
-  and opens the NATIVE share sheet (Share plugin) — no user-activation limits, so the
-  multi-photo "Tap to save" fallback never fires natively. `Info.plist` carries
-  `NSPhotoLibraryAddUsageDescription` (share-sheet "Save Image" runs in-process and needs it).
+### iOS app shell
+See [docs/ios-shell.md](docs/ios-shell.md) — load before touching `ios/`, `build-ios.sh`, `patches/` or `capNative()`.
 
 ### Calibration tooling
-
-```bash
-python3 -m venv .calibvenv && source .calibvenv/bin/activate
-pip install -r calib/requirements.txt
-python calib/scorecard.py        # FAST halation PASS/FAIL table (run first/always)
-python calib/render_chart.py     # render a model + side-by-side vs the Dehancer reference
-python calib/optimize_hal.py     # autonomous dense-loss optimizer (background-able)
-```
+Setup + commands in [calib/CLAUDE.md](calib/CLAUDE.md) (auto-loads inside `calib/`); skill `chromasmith-calib`.
 
 ### Export regression gate (`test/`) — the fast way to verify a shader edit
 
@@ -193,54 +141,10 @@ run means no Chromium-visible regression, not that the actual `.app` is unaffect
 
 ## 3. App architecture (`chromasmith-22.html`)
 
-Everything is in one file. Key pieces:
-
-- **`FXR` class** — the WebGL2 renderer. 5 shader programs: `lut`, `src`, `blur`,
-  `blur_hal`, `comp`. Pipeline per frame:
-  1. **lut pass** — full grading chain, in order: [optional **V-Log input transform**
-     (`useVlog`): analytic inverse V-Log EOTF + exact V-Gamut→Rec.709 matrix, before anything
-     else] → sharpen/clarity unsharp mask (on source pixels) → look LUT → [**HSL mixer**
-     (`useHsl`): a 2nd 33³ LUT re-baked on the CPU from `applyHSL()` whenever a band slider
-     moves] → `basicAdjust()` (exposure/contrast/WB/etc.) → [**local-adjust masks** (`mskN`):
-     up to 8 analytic radial/linear masks passed as vec4 uniform arrays (`MSK_MAX=8`), global-uv mapped via
-     `uvOffL/uvScaleL` so preview/loupe/export tiles place them identically; per mask
-     exp/con/temp/sat/**Texture** + luminance-range gate + **colour-range gate + skin-tone
-     uniformity** (docs/skin-tone.md) + **Amount** (`mskE.w`, one master scale over the finished selection;
-     muting rides this slot at 0) + invert. Mask **"type 2" is SHAPELESS** — weight 1 everywhere,
-     so the range gates alone select; that is the Colour Range / Luminance Range mask, and for it
-     `invert` flips the GATES rather than the shape (inverting a full-frame shape gives zero).
-     ⚠️ Texture reuses `srcHP`, the source high-pass hoisted to the top of `main()` and shared with
-     the global Sharpen/Clarity, gated on `mskAnyTex` so its 4 extra taps are never paid by
-     default] → [**tone curves** (`useCurve`):
-     256×1 table baked from monotone-cubic point curves, sampled at texel centers so identity
-     is byte-identical]. Each optional stage is gated off (and identity-gated in
-     `getFXParams`) by default. ⚠️ **Saturation & vibrance are NOT applied here** — they moved
-     to the comp pass (see below). ⚠️ GLSL functions must be DECLARED BEFORE USE — `maskAdjust`
-     once referenced `s2lp` above its definition and blacked the whole pipeline.
-  2. **emit pass** — computes the halation/bloom *emission* map from the graded image.
-  3. **blur passes** — per-channel Gaussian blur of the emission (σ_R ≫ σ_G ≫ σ_B).
-  4. **comp pass** — screen-blends bloom+halation, then **grain** (value-noise, see calib/CLAUDE.md’s grain model section), then
-     **film artifacts** (procedural dust/hairs + wobbling vertical scratches + warm light leak;
-     image-relative coords + a stable seed `fxState.artSeed`/Reshuffle so preview==export, and
-     tile renders are byte-identical), then (if a Print profile is selected) a 2nd 3D LUT
-     `printLut` via `usePrint`/`setPrintLUT`, then **saturation/vibrance** (`adjSat2`/`adjVib2`),
-     then vignette. Order mirrors Dehancer:
-     negative → halation → **grain** → **artifacts** → **print** → **grade (sat/vib)** → vignette.
-     - ⚠️ **Grain is BEFORE print** (it's in the negative; the print stock then modulates it).
-       Identity vs after-print when no print profile is selected.
-     - ⚠️ **Saturation/vibrance run AFTER print** on purpose: pulling saturation to 0 must
-       collapse the PRINTED pixel to its luma (neutral), not re-tint an already-grey pixel. If
-       they ran before print (the old order), a print profile re-tinted neutrals and
-       0-saturation no longer matched Dehancer (`calib/*lut print 0 sat*.png`: DH grey→neutral).
-- **`render(P,w,h,opts)`** — `opts.glowScale` downsamples the blur buffers (cheap preview);
-  `opts.scOverride` forces the sigma-scale (= fullWidth/REF) so a tile/crop blurs with the
-  *whole image's* radius; `opts.uvOff/uvScale/seed` keep grain continuous across tiles.
-- **Tiled export** (`renderTiled`) — processes huge images in overlapping tiles with a
-  halo ≥3σ so peak GPU memory stays tiny and seams are mathematically invisible. The 1:1
-  loupe reuses the same mechanism.
-- **Preview** renders at `devicePixelRatio` (capped 2×) into a ~1800px backing store, then
-  CSS-fits it. The **1:1 loupe** instead renders a native-resolution crop with
-  `scOverride=fullWidth/REF` so grain & halation appear at *true export* scale.
+Everything is in one file. The `FXR` WebGL2 renderer runs lut → emit → blur → comp passes;
+grain is before print, saturation/vibrance after print, tiled export and the 1:1 loupe share one
+mechanism. Full stage order and the reasons: [docs/render-pipeline.md](docs/render-pipeline.md) —
+load before touching any shader, `render()`, `renderTiled` or the loupe (skill `shader-edit` too).
 
 ### ⚠️ The single most dangerous bug class
 **Never put a backtick `` ` `` or `${` inside a GLSL `//` comment** — the GLSL lives inside
@@ -268,9 +172,9 @@ still loads".
 
 See [docs/design-tokens.md](docs/design-tokens.md) — `:root` token usage, typography, icons.
 
-## 4. The four tabs
+## 4. The app's pages
 
-See [docs/app-tabs.md](docs/app-tabs.md) — Effects & Export, Match & Refine, Colour Copy, Guide.
+See [docs/app-tabs.md](docs/app-tabs.md) — Effects & Export, Match & Refine, Colour Copy, Guide (Collage not yet documented there).
 
 ---
 
@@ -307,9 +211,18 @@ carrying it in every turn:
   — several gaps it describes as missing (structural inventory, responsive sweep, behaviour
   suite) now exist. Read it for the reasoning, not the current state.
 
-## 6. Process lessons
+## 6. Process lessons (one-liners — detail in [docs/process-lessons.md](docs/process-lessons.md))
 
-See [docs/process-lessons.md](docs/process-lessons.md) — 17 hard/expensive lessons, read before tuning.
+- Calibration: render-and-look first; a fast all-requirements scorecard beats blind optimisation; prove a mechanism on a few point computations first (#1–3).
+- CSS: `overflow-x:hidden` on html/body kills `position:sticky` (use `clip`); `column-count:1` still makes a multicol context (use `columns:initial`); every `.fx-row` child needs an `order` (#5, #8, #9).
+- A comment claiming a complexity class is not evidence — read the loop (#10).
+- Typed arrays don't survive `JSON.stringify` — masks go through `_mskToSnap`/`_mskFromSnap` (#11).
+- Seeded-random goldens are order-dependent — reseed right before the render; prove neutrality by byte-compare (#12).
+- `display:none` hides things from the UI audit too — dim, don't hide (#13).
+- Library is native-gated — verify its layout via `?libtest=1`; migrate persisted state, don't just change defaults (#14).
+- Before toggling a container's display/visibility, read ALL its children (#15).
+- Resizable/breakpoint UI needs a state-matrix test at min/threshold/max, with hand-written expectations (#16).
+- Never act on a written-up flaky-bug theory without reproducing it live first; rerun enough to see the rate move (#17).
 
 ---
 
