@@ -245,3 +245,67 @@ call `ui:test`) will currently fail on that until it's fixed.
   640px + 420px sidebar, T60 chrome missing from surfaces.json. Lesson #18 in docs/process-lessons.md.
 - responsive allowlist: 5 stale topbar-overlap entries removed (verified none fire), +1 for T58.
 
+**S6b — layout matrix + scenario states, all groups A-E — 2026-09-11 — done**
+- Extended `test/surface_capture.mjs` (phases 5-6): for every surface, a state x theme
+  (dark/light via `fxSetTheme()`, confirmed real — not `toggleTheme()`'s bare flip) x width
+  (`test/editor_responsive_qa.mjs`'s `VIEWPORTS` + 768 tablet + 390 phone, per instruction — no
+  invented sizes) x sidebar (Editor: expanded/collapsed via the `panel-closed` toggle,
+  `fxSection()`'s close-vs-open branch keyed off whether the target is already `sec-active`, same
+  mechanism S6 groups B-E found for mobile-sheet; Library: docked/full via `#lib-expand`; n/a
+  elsewhere) matrix, content-addressed by sha256 into `design/asbuilt-full/<id>/` (gitignored),
+  with a resumable `spec.json.matrix` index and a labelled contact-sheet grid per theme
+  (`design/asbuilt/<id>/contact-<theme>.webp`, built by rendering an HTML grid through the same
+  Playwright browser — no new image-composition dependency, this repo has no `sharp`). Plus fixed
+  scenario states (keyboard focus/pressed/`.fx-mod`, photo orientation, multi-photo, masks, export
+  progress, split/loupe/crop, Library states, mobile states, zoom/forced-colors/reduced-motion,
+  WebKit) at 1400x900 on `panel-fx`/`library`/`mobile-sheet` specifically — scoped to the surfaces
+  each is actually about, not every surface (would have multiplied the matrix further for no
+  benefit).
+- New fixtures: `test/fixtures/orientation_portrait.png` (384x512) and `orientation_panorama.png`
+  (1600x400) — every existing fixture (`portrait.png` included — its name is about CONTENT, a
+  face stand-in, not aspect) is 512x384 landscape-shaped, so none exercised a portrait- or
+  panorama-oriented photo. Generated via `test/fixtures/gen_fixtures.py` (PIL, `.calibvenv`), not
+  hand-drawn.
+- Real bugs found by running against the live app, not guessing (S5's own lesson, repeated
+  successfully this time): `mskAdd(type)` takes a `MASKS` key string (`'radial'` etc, line 10904),
+  not a number; the export trigger is `exportFX()`/`#btn-fx-export` (line 2424), not a guessed
+  `exportRunAll()`; Library's grid/list toggle is `#lib-viewmode-seg [data-v]`, which CSS hides
+  entirely while docked (`.lib-fullview-only`) — needs `#lib-expand` first; the local static
+  server had no `.mjs`/`.mp4` MIME types, breaking `mediabunny`'s module import for the
+  video-loaded scenario; `captureBuffer()` needed `settleForCapture()` + a longer screenshot
+  timeout to survive in-flight CSS transitions (export progress bar, panel-close animation) — 3
+  scenario timeouts before this fix, 0 after.
+- Two bugs found running the REAL (non-smoke) group runs, not caught by smoke tests: (1)
+  resumability's `doneKeys` included `failed` entries, so a re-run could never retry a transient
+  flake — fixed to drop `failed` entries before rebuilding the set (group C: `panel-guide`'s
+  `rest|dark|1024x768|n/a` hit a 10s font-load timeout once, retried clean). (2) `fx-toast`
+  (~1900ms lifetime) can disappear in the gap between `captureBuffer()`'s visibility check and its
+  element re-query, crashing with "Cannot read properties of null" instead of being recorded as
+  skipped — 11 combos in group B before the fix, 0 after (correctly recorded as skipped: toast
+  expired before capture, a real limitation of a transient/short-lived surface, not a bug).
+- Execution note: the 5 group runs were first dispatched to Haiku subagents (per the instruction's
+  rule 5), but each subagent's own `Bash` call returned after ~10s with a placeholder "still
+  running" message instead of actually waiting — the `node` processes kept running correctly as
+  orphaned OS processes regardless (confirmed via `ps`), so this session polled them directly
+  (`ps` + `spec.json` counts) via `ScheduleWakeup` every 15-20 min instead of relying on the
+  subagents' own completion signal. Total wall time ~90 min (group A, 24 surfaces, took the
+  longest at ~85 min; B/C/D/E each under 15 min).
+- Results, all 5 groups, 0 failures after retries: A 232 captured/744 dup/752 skipped (752 mostly
+  `collapsed` sidebar skipped at <=700px widths, correct per the applicability rule) + panel-fx
+  scenarios 35 captured/9 dup/2 skipped (raw-loaded, no fixture, T11). B 145+8(retry)/338/6+19(now
+  correctly skipped, was 11 failed)/0 fail. C 79+1(retry)/0/0/0 fail, splash stand-in unchanged.
+  D 8/52/0/0 fail + mobile-sheet scenarios 2/4/0/0 fail (fixed the same active-section trap as the
+  phase-1-4 driver). E 28/36/8 skipped (docked/full n/a at mobile widths, `full` sidebar skip)/0
+  fail + library scenarios 0 captured/10 duplicate/2 skipped (`library-large` — no `?libn=N` mock
+  wired into this pass, would need one like `test/library_dock_states.mjs` uses;
+  `library-lightroom-connected`, `library-grid-view`, `-list-view`, `-multi-select` all captured
+  but as DUPLICATES of already-existing matrix images — `?libtest=1` alone likely seeds a
+  near-empty grid, so toggling view mode or selecting items produces no visible pixel difference;
+  a real fidelity gap, documented rather than silently accepted as success).
+- NOT done this pass: S7's triage/review page does not exist yet (no earlier session has run S7),
+  so the instruction's item 6 ("update S7's page... keeping the total under 255 files") has
+  nothing to update — 80 contact-sheet files exist now (41 surfaces x up to 2 themes), noted here
+  for whoever builds S7 next.
+- `design/asbuilt-full/` (~7MB, content-addressed originals) is gitignored; `design/asbuilt/`
+  (~33MB: contact sheets + updated `spec.json`) is committed.
+
