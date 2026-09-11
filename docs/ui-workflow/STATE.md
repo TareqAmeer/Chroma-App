@@ -7,8 +7,11 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 ## Rules for every session
 1. Don't open the planning file or other sessions' prompts — this file + your prompt is everything.
 2. One session at a time (concurrent sessions collide in git).
-3. Scripts over reading: never Read `chromasmith-22.html` in full; delegate gate runs to a Haiku
-   subagent that reports only failures.
+3. Scripts over reading: never Read `chromasmith-22.html` in full. Any run whose output is long
+   (npm gates, export_harness, capture/inventory scripts, Playwright suites) goes to a Haiku
+   subagent — Agent tool with `model: "haiku"`, prompt: "run <cmd>; reply with PASS/FAIL counts and
+   only the failing lines, max 15 lines". Use it by default; run inline only for a single quick check.
+   Judgement work (reviewing, deciding, editing) stays in the main session.
 4. Stop after 2 failed attempts at the same thing — record it below instead of pushing on.
 5. On finish: append a ≤10-line entry to the Session log (what exists now, file paths, surprises,
    anything that changes later sessions), then commit + push.

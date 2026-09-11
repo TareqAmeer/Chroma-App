@@ -9,6 +9,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > (b) Can the `PAIRS` entries in `test/editor_wireframe_diff.mjs` for Retouch be generated from the wireframe DOM? Diff the generated entries against the hand-written ones.
 > (c) How long does a token-only lint (raw hex, px and ms values not in a `var()`) take on just the changed lines of `chromasmith-22.html`'s `<style>`?
 > (d) Do `.fx-row`, `.fx-ctrl`, `.fx-toggle` and the segmented control (`selectToSeg`) render correctly in a bare page, or does isolating them need a refactor?
+> Use Haiku subagents (`model: "haiku"`) to run the spike scripts and report numbers only; you interpret them.
 > Done when STATE.md has a verdict for each (works / works with caveat / fails), plus any edits needed to the later prompts in docs/ui-workflow/sessions.md. Make those edits.
 
 **S2: Cleanup** (Sonnet 5)
@@ -17,6 +18,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > (2) Fix stale guidance. CLAUDE.md §3b names the fonts as Inter/Instrument Serif, but `:root` uses SF Pro, so check it and correct it. `.claude/skills/wireframe-transplant/SKILL.md` still says to install to `/Applications`; remove that and add the Editor tools (`editor_wireframe_diff`, `editor_wireframe_inventory`, `editor:coverage`). Spec item D1 says 9 placeholders, but all 11 panels now have content.
 > (3) Shrink CLAUDE.md towards 200 lines. Move §3b and §4 into `docs/design-tokens.md` and `docs/app-tabs.md`, and leave a one-line pointer for each.
 > (4) Commit the currently uncommitted gate files (`editor_axe_check`, `editor_icon_check`, `editor_token_drift_report`, `token_drift_history.json`, and the `editor_gates.mjs` and `package.json` changes) as their own commit. Run `npm run editor:gates` first.
+> Run `npm run editor:gates` via a Haiku subagent that reports failures only.
 > Done when gates pass and CLAUDE.md is at or under about 250 lines.
 
 **S3: Token mapping** (Opus 5)
@@ -31,6 +33,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > (1) `scripts/build-tokens.mjs` generates the `:root` / `body.light` block in `chromasmith-22.html` and the token block in `desktop/library-ui.js` between marker comments. Reuse the marker-injection pattern in `site/build-page.mjs`.
 > (2) Extend `test/editor_token_check.mjs` to flag a token used in the wrong role (for example a legacy `.bpri` colour on a primary button).
 > (3) Add a PostToolUse hook, `.claude/hooks/token-lint-on-edit.sh`, registered in `.claude/settings.json`. It lints only the changed style lines, prints only violations, and uses the approach S1 (c) found to be fast enough.
+> Run the gates and export harness via a Haiku subagent that reports failures only.
 > Done when the first generator run is byte-identical to today's `:root` (the diff must be empty), and `npm run editor:gates` and `node test/export_harness.mjs` pass.
 
 **S5: Surface inventory** (Sonnet 5)
@@ -48,6 +51,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: capture the as-built wireframes for group **{GROUP}** from `design/surfaces.json`.
 > Write (or reuse, if it already exists) `test/surface_capture.mjs`. For each surface and state it saves `design/asbuilt/<id>/<state>.webp`, and a `spec.json` holding the element tree and computed values mapped to `design/tokens.json` names. Also generate a `.dc.html`-format block, the same structure as the `.tp-panel` blocks in `Editor (Developer) View.dc.html`.
 > Nothing is drawn by hand. Anything that doesn't map to a token goes in `spec.json` as `unmapped`.
+> You write/fix the script; a Haiku subagent runs it and reports only counts per surface, missing states and errors — never read the captures or spec files yourself beyond spot checks.
 > Done when every surface in the group has captures for all its states. Add a group row to STATE.md.
 
 **S7: Triage page** (Sonnet 5)
@@ -59,6 +63,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > (1) `test/wireframe_spec_extract.mjs` writes `design/specs/<panel>.json` from `Editor (Developer) View.dc.html` (the target design), in the same shape as the as-built specs.
 > (2) Generate the `PAIRS` entries for `test/editor_wireframe_diff.mjs`, the inventory expectations for `editor_wireframe_inventory.mjs`, and behaviour-test stubs from those specs.
 > (3) Point `editor:coverage` at `design/surfaces.json` instead of the 11 panels.
+> Run gates via a Haiku subagent that reports failures only.
 > Done when the generated `PAIRS` for the already-built panels (Retouch, Export) produce zero new mismatches compared with the hand-written ones, and `npm run editor:gates` passes.
 
 **S9: Build-time feedback loop** (Sonnet 5)
@@ -66,17 +71,20 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > (1) Add `--panel <id> --json` to `test/editor_wireframe_diff.mjs`, outputting only `[{selector, prop, expected, actual, expectedToken}]`.
 > (2) Change `.claude/hooks/stop-editor-gate-check.sh` so that, when `.claude/state/active-panel` exists, it runs that scoped diff and blocks the turn from ending while mismatches remain. Cap it at 3 blocks per panel (a counter in the state file), then let the turn end with a "stopped after 3 rounds" message.
 > (3) `test/panel_pair_shots.mjs` writes one side-by-side wireframe-vs-app image per panel and state.
+> Run test scripts via a Haiku subagent that reports failures only.
 > Done when a deliberate 4px padding mismatch on a scratch branch triggers the block with one typed defect, clears once fixed, and gives up after 3 rounds.
 
 **S10: Design-stage tooling** (Opus 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: stop hand-written design proposals from inventing values.
 > (1) `test/proposal_validate.mjs` rejects any control or value in a proposal (a `.dc.html` block or a `panels/*.compare.html` PROPOSED column) that isn't in `test/output/panel_inventory.json` or `design/tokens.json`. Run it against the old `test/panel_proposals.mjs` and confirm it catches the invented values fixed in commits `247110c`/`8eed9f0`.
 > (2) Write `docs/ui-workflow/design-stage.md`, a one-page how-to for redesigning a surface marked "Redesign". It covers how to start a Claude Design canvas (the `design` skill) from the surface's as-built capture and `tokens.json`, the required state artboards, running the validator, and merging into the wireframe.
+> Run the validator via a Haiku subagent that returns only the flagged items.
 > Done when the validator flags the historical fabrications and passes on the current wireframe.
 
 **S11: Component catalogue** (Opus 5)
 > Read docs/ui-workflow/STATE.md and follow its rules, including the S1 result (d). Task: add a `?catalog=1` mode to `chromasmith-22.html`, following the `?libtest=1` pattern. It renders each shared component (`.fx-ctrl`, `.fx-row`, `.fx-toggle`, `.fx-sub`, `.fx-btn-primary`, the segmented control, `.fx-info-i`) in the states rest, hover, focus, disabled, modified (`.fx-mod`) and long label, in both themes. It can also render any single Editor panel on its own.
 > Add Playwright `toHaveScreenshot()` baselines per component and state (`test/catalog_visual.mjs`), wired into `npm run editor:gates`.
+> Run gates and screenshot checks via a Haiku subagent that reports failures only.
 > Done when the catalogue renders without console errors, the baselines are committed, and a 1px change to `.fx-row` padding fails the check.
 
 **S12: Update the process docs** (Sonnet 5)
@@ -90,14 +98,14 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > 7. Commit the design, implementation and tests separately.
 >
 > Add the per-panel prompt template (S13) to `docs/ui-workflow/sessions.md`.
-> Done when both files describe only tools that exist. Verify each named script runs.
+> Done when both files describe only tools that exist. Verify each named script runs (one Haiku subagent runs them all and reports which fail).
 
 **S13: Per-panel build, repeat per panel; pilot = Masks** (Sonnet 5, high effort; switch to Opus 5 in a new chat after 2 failed rounds)
 > Read docs/ui-workflow/STATE.md and follow its rules. Build the **{PANEL}** panel.
 > (1) `echo {PANEL} > .claude/state/active-panel`.
 > (2) Read only `design/specs/{PANEL}.json` and the matching `chromasmith-22.html` section (use grep to find it; never read the whole file).
 > (3) Implement by moving the existing markup, not rewriting it.
-> (4) Let the Stop hook's diff drive the fixes.
+> (4) Let the Stop hook's diff drive the fixes. Full `npm run editor:gates` runs go to a Haiku subagent that reports failures only.
 > (5) Run `node test/panel_pair_shots.mjs --panel {PANEL}`, and have a fresh-context Opus reviewer subagent compare the images with the spec.
 > (6) Commit the implementation and tests separately, then delete `active-panel`.
 >
@@ -109,7 +117,7 @@ Pick the model when a session starts. Switching mid-session makes the whole conv
 
 | Phase | Main session | Helpers (subagents) | Session |
 |---|---|---|---|
-| Spike | Opus 5, high effort | Haiku to run scripts and summarise output | New; its findings go into this plan |
+| Spike | Opus 5, high effort | Haiku to run scripts and summarise output | New; its findings go into STATE.md |
 | Step 1: pause gates, fix stale docs | Sonnet 5 | none | New, short |
 | Step 2: token bridge | Opus 5 for the role mapping, then Sonnet 5 for the generator script | none | New |
 | Phase 0: inventory and capture | Sonnet 5 writes the scripts | Haiku runs the captures and reports counts | New; one session per surface group |
