@@ -38,7 +38,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 - (d) Bare page = app `<style>` + Retouch markup + `selectToSeg` matches 221/228 computed props (.fx-ctrl/.fx-row/.fx-toggle/seg buttons), no console errors, ~1.5s vs 5s app load. The 7 diffs are all `.fx-val`: `initEditableVals()` adds contenteditable at runtime. Copying the real ancestor chain HIDES the card — it needs `.sec-active` under `body.fx-single`. Inline handlers (toggleFX, healSyncUI…) need stubs.
 - Scripts were scratchpad-only (not kept). Prompts edited: S3, S4, S6, S8, S11.
 
-**S2 — 2026-09-11 — done, needs user decisions**
+**S3 — 2026-09-11 — done, decisions made (2026-09-11)**
 - `design/tokens.json` (DTCG): every var in chromasmith-22.html's `:root` (50–98, 39 vars),
   `body.light` override (1271–1301, 16 vars) and desktop/library-ui.js's DS block (695–776,
   63 DS pass-through + 10 remapped app vars + 1 new `--hover-tint`) — 107 total, each with
@@ -55,4 +55,13 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 - `design/verify_tokens.py` re-parses all three source blocks and asserts every declared var is
   in tokens.json or token-conflicts.md — passes (107/107). Re-run after any edit to the three
   source blocks or the two files.
-- Not done: no decisions made on the conflicts table — that's explicitly for the user.
+- Decisions made 2026-09-11 (user: "DS where DS has one, else your recommendation"): `--acc2`
+  now aliases `--acc` (DS has no second brand accent), `--ok`/`--err` adopt DS's green-pine/
+  red-oxide in light mode only (dark mode's DS literals measure ~1.3:1 on near-black, kept
+  app's brighter values), `--hov` unified with library-ui.js's `--hover-tint` value (also fixed
+  a real bug: light mode had no `--hov` override at all). Everything else kept as-is with
+  reasoning recorded in token-conflicts.md — mostly "different product context" (dense editor
+  vs DS's marketing scale). Proposed-only families (heights, weights, pill radius, on-primary
+  text, danger-subtle) left unwired — no app call site yet. Applied directly to
+  chromasmith-22.html's `:root`/`body.light`; verified pre-existing `ui:test` failure
+  (fx-info-i tap target) is unrelated by diffing against pre-edit tree. Pushed (68f194f).
