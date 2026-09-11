@@ -961,3 +961,43 @@ test.describe('quality (accessibility)', () => {
     expect(animated, 'transitions still running under prefers-reduced-motion').toEqual([]);
   });
 });
+
+// T12 (editor_ux_spec.json): every OTHER click-and-assert test in this file runs at the fixed
+// 1440x900 desktop viewport — none exercised the same interactions inside the <=700px phone
+// bottom-sheet shell (CLAUDE.md §4's "Mobile (<=700px) is app-shaped, not web-shaped"), even
+// though editor_responsive_qa.mjs/ui_audit.mjs already prove the sheet's STRUCTURE holds down to
+// 700px. "Does the header Reset button actually work once it's inside body.sheet-open" was
+// untested. Uses the same `editorWeb` fixture (390x844, real `_mqMobile` mobile-fx class) the
+// split/history popover tests below already rely on; opens sections via fxSection() directly
+// (same call the bottom action-bar's own onclick makes) rather than depending on exactly which
+// action-bar affordance is visible today, so this stays focused on the sheet's OWN behaviour.
+test.describe('phone bottom-sheet shell (T12)', () => {
+  test('opening a section opens the bottom sheet, and header Reset still works inside it', async ({ editorWeb: { page } }) => {
+    await expect(page.locator('body')).toHaveClass(/\bmobile-fx\b/);
+    // fxSection() only resolves a deskx-only GROUP key (e.g. 'detail') via FX_GROUPS on desktop —
+    // on mobile (not deskx) `members=[name]` literally, so this must be the real section key
+    // ('nr', not its group 'detail') or _fxSectionCard finds nothing and fxSection no-ops.
+    await page.evaluate(() => { if (typeof fxSection === 'function') fxSection('nr'); });
+    await expect(page.locator('body')).toHaveClass(/\bsheet-open\b/);
+    const reset = page.locator('.fx-ctrl[data-fxsec="nr"] .fx-ctrl-title-reset');
+    await expect(reset).toBeHidden();
+    const slider = page.locator('#sl-nr-lum');
+    await slider.scrollIntoViewIfNeeded();
+    await slider.fill('60');
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="nr"] .fx-row:has(#sl-nr-lum)');
+    await reset.click();
+    await expect(slider).toHaveValue('0');
+  });
+
+  test('a slider edit inside the sheet is still reachable and reflects in the row fx-mod state', async ({ editorWeb: { page } }) => {
+    await page.evaluate(() => { if (typeof fxSection === 'function') fxSection('adjust'); });
+    await expect(page.locator('body')).toHaveClass(/\bsheet-open\b/);
+    const row = page.locator('.fx-ctrl[data-fxsec="adjust"] .fx-row:has(#sl-adj-exp)');
+    await expect(row).not.toHaveClass(/\bfx-mod\b/);
+    const slider = page.locator('#sl-adj-exp');
+    await slider.scrollIntoViewIfNeeded();
+    await slider.fill('30');
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="adjust"] .fx-row:has(#sl-adj-exp)');
+    await expect(row).toHaveClass(/\bfx-mod\b/);
+  });
+});
