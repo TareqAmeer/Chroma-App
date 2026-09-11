@@ -583,6 +583,109 @@ async function main() {
             minFont: MIN_FONT, minContrast: MIN_CONTRAST });
         res.forEach(f => findings.push({ ...f, section: 'library-topbar', viewport: `${w}x820 (narrow)` }));
       }
+
+      // ── TOPBAR RIGHT-SIDE PARITY ───────────────────────────────────────────────────────
+      // 2026-09-11: the user reported the Editor (#fx-deskbar) and Library (#lib-top) right-
+      // hand clusters (zoom → flags → All FX → Export → gear) LOOK misaligned at ordinary
+      // window widths, despite prior wireframe/testing passes claiming they matched — those
+      // passes checked structure (grid columns, element order, overlap) but never compared the
+      // two bars' actual pixel gaps/icon sizes against each other. This asserts the specific
+      // numbers a human eye catches that OVERLAP/FRAGMENT/etc. cannot: the gear↔Export gap, the
+      // flag-icon size/shape, and the flag↔zoom gap, each read from BOTH pages at one ordinary
+      // (non-narrow, non-folded) width and diffed with a small tolerance for antialiasing.
+      // Only the RIGHT-hand cluster is compared — the left cluster legitimately differs between
+      // the two views (Date taken/Filters/grid-list vs. undo/redo/eye/monitor) per Tareq's own
+      // call on this, so this check must never grow to touch left-side selectors.
+      await page.setViewportSize({ width: 1400, height: 900 });
+      await page.waitForTimeout(150);
+      await libPage.setViewportSize({ width: 1400, height: 900 });
+      await libPage.waitForTimeout(150);
+      const PARITY_TOL = 1.5; // px — antialiasing/font-metric slop, not a real mismatch
+      const [edParity, libParity] = await Promise.all([
+        page.evaluate(() => {
+          // The flag buttons are hidden by default outside the desktop shell — fxUpdateFlagBtns()
+          // only un-hides them when window.chromasmithOpenedFlag exists (desktop-native.js), which
+          // this plain-browser harness never loads. Force them visible for measurement only; this
+          // is a throwaway page so mutating its DOM has no effect beyond this one evaluate() call.
+          const rb = document.getElementById('btn-flag-red');
+          const gb = document.getElementById('btn-flag-green');
+          const fb = document.getElementById('btn-favorite');
+          [rb, gb, fb].forEach((b) => { if (b) b.style.display = ''; });
+          const r = (sel) => document.querySelector(sel)?.getBoundingClientRect() || null;
+          const flagEl = document.getElementById('btn-flag-red');
+          const flagBtn = r('#btn-flag-red');
+          const flagSvg = document.querySelector('#btn-flag-red svg path');
+          // Reads the CSS gap/margin AT the flag cluster's own boundary directly via
+          // getComputedStyle, rather than a sibling's bounding rect: the Editor's cluster
+          // (#fx-zoom-ctrl) has several buttons between the slider and the flags (zoom in/out,
+          // %, 1:1, full-res) that only render once relocatePreviewTools() has moved the whole
+          // cluster into the deskbar — a step this plain-browser harness doesn't reliably trigger,
+          // which made a sibling-rect measurement read a stray, still-hidden element's rect (0,0)
+          // and report a 1000+px "gap" that was actually a broken selector, not a real mismatch.
+          // The cluster's own gap (1px) plus the flag's own margin-left (4px) — both literal
+          // values copied 1:1 into desktop/library-ui.js's #lib-zoomflag-cluster — is the number
+          // item 3 is actually about, and getComputedStyle reads it whether or not the cluster
+          // has been relocated/resized by other JS this harness didn't run.
+          const clusterGap = parseFloat(getComputedStyle(document.getElementById('fx-zoom-ctrl') || document.body).gap) || 0;
+          const flagMargin = flagEl ? parseFloat(getComputedStyle(flagEl).marginLeft) || 0 : NaN;
+          return {
+            gearExportGap: (r('#fx-settings')?.left ?? NaN) - (r('#btn-export-db')?.right ?? NaN),
+            flagZoomGap: clusterGap + flagMargin,
+            flagW: flagBtn?.width ?? NaN, flagH: flagBtn?.height ?? NaN,
+            flagPathD: flagSvg?.getAttribute('d') || null,
+            titleCenter: (() => { const t = r('#fx-deskbar-title'); return t ? t.left + t.width / 2 : NaN; })(),
+            imgAreaCenter: (() => { const w = r('#fx-zoom-wrap'); return w ? w.left + w.width / 2 : NaN; })(),
+          };
+        }),
+        libPage.evaluate(() => {
+          const r = (sel) => document.querySelector(sel)?.getBoundingClientRect() || null;
+          const flagBtn = r('#lib-flag-reject');
+          const flagEl = document.getElementById('lib-flag-reject');
+          const flagSvg = document.querySelector('#lib-flag-reject svg path');
+          // Same getComputedStyle approach as the Editor side — see its comment for why a
+          // sibling-rect measurement isn't reliable here.
+          const clusterGap = parseFloat(getComputedStyle(document.getElementById('lib-zoomflag-cluster') || document.body).gap) || 0;
+          const flagMargin = flagEl ? parseFloat(getComputedStyle(flagEl).marginLeft) || 0 : NaN;
+          return {
+            gearExportGap: (r('#lib-settings')?.left ?? NaN) - (r('#lib-export-btn')?.right ?? NaN),
+            flagZoomGap: clusterGap + flagMargin,
+            flagW: flagBtn?.width ?? NaN, flagH: flagBtn?.height ?? NaN,
+            flagPathD: flagSvg?.getAttribute('d') || null,
+          };
+        }),
+      ]);
+      const parityChecks = [
+        ['gearExportGap', edParity.gearExportGap, libParity.gearExportGap, 'px gap between the gear icon and the Export button'],
+        ['flagZoomGap', edParity.flagZoomGap, libParity.flagZoomGap, 'px gap between the flags and the zoom control'],
+        ['flagW', edParity.flagW, libParity.flagW, 'px flag-button width'],
+        ['flagH', edParity.flagH, libParity.flagH, 'px flag-button height'],
+      ];
+      for (const [key, edVal, libVal, desc] of parityChecks) {
+        if (Number.isNaN(edVal) || Number.isNaN(libVal)) {
+          findings.push({ kind: 'PARITY-MISSING', el: key, section: 'topbar-parity', viewport: '1400x900',
+            detail: `could not measure one or both bars (selector missing) — ${desc}` });
+          continue;
+        }
+        if (Math.abs(edVal - libVal) > PARITY_TOL) {
+          findings.push({ kind: 'PARITY', el: key, section: 'topbar-parity', viewport: '1400x900',
+            detail: `${desc}: Editor=${edVal.toFixed(1)}px vs Library=${libVal.toFixed(1)}px (diff ${(edVal - libVal).toFixed(1)}px, tol ${PARITY_TOL}px)` });
+        }
+      }
+      if (edParity.flagPathD && libParity.flagPathD && edParity.flagPathD !== libParity.flagPathD) {
+        findings.push({ kind: 'PARITY', el: 'flagPathD', section: 'topbar-parity', viewport: '1400x900',
+          detail: `reject-flag icon path differs between bars — Editor and Library must use the same icon key ('flagRed')` });
+      } else if (!edParity.flagPathD || !libParity.flagPathD) {
+        findings.push({ kind: 'PARITY-MISSING', el: 'flagPathD', section: 'topbar-parity', viewport: '1400x900',
+          detail: `reject-flag <svg><path> not found on one or both bars` });
+      }
+      // Title (item 4): must center over the actual image viewport (#fx-zoom-wrap), not over
+      // "whole bar minus the traffic-light gutter" — a wider tolerance here (8px) since this is
+      // font-driven text centering, not a fixed control gap.
+      if (!Number.isNaN(edParity.titleCenter) && !Number.isNaN(edParity.imgAreaCenter) &&
+          Math.abs(edParity.titleCenter - edParity.imgAreaCenter) > 8) {
+        findings.push({ kind: 'PARITY', el: 'titleCenter', section: 'topbar-parity', viewport: '1400x900',
+          detail: `Editor title center (${edParity.titleCenter.toFixed(1)}px) does not align with the image viewport center (${edParity.imgAreaCenter.toFixed(1)}px)` });
+      }
     } finally { await libPage.close(); }
 
     // ── MOBILE PASS ──────────────────────────────────────────────────────────────────────
@@ -618,7 +721,8 @@ async function main() {
   // ── report ──
   const byKind = {};
   findings.forEach(f => { (byKind[f.kind] ||= []).push(f); });
-  const KINDS = ['TOKEN', 'FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'MENU', 'TAP', 'FONT', 'CONTRAST', 'FOCUS'];
+  const KINDS = ['TOKEN', 'FRAGMENT', 'ORDER', 'SPILL', 'OVERLAP', 'MENU', 'TAP', 'FONT', 'CONTRAST', 'FOCUS',
+    'PARITY', 'PARITY-MISSING'];
   // The same defect is re-reported once per (section, viewport) it is visible in, so every count
   // — table, baseline and comparison alike — is over DISTINCT defects. Mixing raw and deduped
   // counts would make the "vs baseline" delta meaningless.

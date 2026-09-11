@@ -78,7 +78,10 @@ const FLAKE_RETRIES = 2; // reduced from 6 now that E7's real cause is fixed —
 // advisory-eligible: they're low-noise, each has caught a real, previously-invisible bug the
 // same day it was built (T2/T4/E7), and a clean tree is expected to pass all three right now.
 const ADVISORY_MODE = process.argv.includes('--advisory');
-const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage']);
+// editor:token-check (T5/T10) joins the advisory set: 225 pre-existing findings on a clean tree
+// the moment it started running (same shape as inventory/responsive/coverage's own 253) — a
+// human sees the noise every commit without being blocked by someone else's unrelated backlog.
+const ADVISORY_GATES = new Set(['editor:inventory', 'editor:responsive', 'editor:coverage', 'editor:token-check']);
 
 const GATES = [
   { name: 'editor:inventory', cmd: ['node', 'test/editor_wireframe_inventory.mjs'] },
@@ -101,6 +104,12 @@ const GATES = [
   // native-gate-check flags fxEnsureDepthMap()'s capNative()-instead-of-__TAURI__ mismatch.
   { name: 'editor:self-reschedule-check', cmd: ['node', 'test/editor_self_reschedule_check.mjs'] },
   { name: 'editor:native-gate-check', cmd: ['node', 'test/editor_native_gate_check.mjs'] },
+  // T14 (editor_ux_spec.json): asserts every onclick-bearing element inside a .fx-ctrl[data-fxsec]
+  // card is either a real interactive tag or has been made operable via a11yEnhanceToggles()'s
+  // role+tabindex+keydown pattern — catches a future `<div onclick>` control that would otherwise
+  // sail through every other check while being unusable by keyboard. Passes clean today.
+  { name: 'editor:keyboard-check', cmd: ['node', 'test/editor_keyboard_check.mjs'] },
+  { name: 'editor:token-check', cmd: ['node', 'test/editor_token_check.mjs', '--strict'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

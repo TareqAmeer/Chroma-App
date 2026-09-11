@@ -332,5 +332,120 @@
     "match": "MISSING 1x  text:\"Normal spacing\"",
     "zone": "gearmenu",
     "reason": "The app's equivalent is the \"No spacing between photos\" checkbox-turned-checkmark row (HANDOVER #12) — a single toggle, not the wireframe's separate Normal/Zero two-option pair. Functionally equivalent, different interaction shape; same judgment-call category as the sort menu's key set."
+  },
+  {
+    "match": "topbar: one icon renders at 15x15",
+    "zone": "selfconsist",
+    "reason": "2026-09-11: pre-existing, unrelated to the topbar parity pass — the odd-one-out is #lib-view-menu-btn's own gear icon, hardcoded width=15/height=15 in its inline <svg> since before this change (every other topbar icon goes through ic(name,14)). Confirmed present before the parity pass's edits; left as-is rather than folded into an unrelated commit."
+  },
+  {
+    "match": "dynamic-data row count: wireframe 1 vs app 0",
+    "zone": "gearmenu",
+    "reason": "2026-09-11: deliberate, per Tareq — Library gear menu rebuilt into the Editor's two-column category drill-down (Library/Thumbnails/Metadata/Panels/Appearance tabs — see #lib-view-menu's HTML comment in desktop/library-ui.js). All findings below with this same date/reason are downstream of that one structural redesign; the wireframe (Library View.html) reflects the OLD flat-list gear menu and has not been updated to match."
+  },
+  {
+    "match": "MISSING 1x  text:\"Thumbnails\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Thumbnails\" is now a category TAB (a button), not an inline group-label row."
+  },
+  {
+    "match": "MISSING 1x  text:\"Hide flag & type icons\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — this row now lives inside the Thumbnails category pane, hidden until that tab is selected, so the flat-list scan finds it MISSING at the menu's default (Library) tab."
+  },
+  {
+    "match": "MISSING 1x  text:\"Metadata overlay\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Metadata\" is now a category tab, not an inline group-label row (shortened from \"Metadata overlay\" to fit the tab list)."
+  },
+  {
+    "match": "MISSING 1x  text:\"Off\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — this option now lives inside the Metadata category pane, hidden until that tab is selected."
+  },
+  {
+    "match": "MISSING 1x  text:\"Always on\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — same Metadata-pane visibility as \"Off\" above."
+  },
+  {
+    "match": "MISSING 1x  text:\"On hover\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — same Metadata-pane visibility as \"Off\" above."
+  },
+  {
+    "match": "MISSING 1x  text:\"Panels\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Panels\" is now a category tab, not an inline group-label row."
+  },
+  {
+    "match": "MISSING 1x  text:\"Show sidebar\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — this row now lives inside the Panels category pane, hidden until that tab is selected."
+  },
+  {
+    "match": "MISSING 1x  text:\"Appearance\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"dynamic-data row count\" entry above. \"Appearance\" is now a category tab, not an inline group-label row."
+  },
+  {
+    "match": "MISSING 1x  text:\"Light\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — this row now lives inside the Appearance category pane, hidden until that tab is selected."
+  },
+  {
+    "match": "MISSING 1x  text:\"Dark\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — same Appearance-pane visibility as \"Light\" above."
+  },
+  {
+    "match": "EXTRA   1x  button:\"Library\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — the 5 category tab buttons (Library/Thumbnails/Metadata/Panels/Appearance) are new UI the flat-list wireframe has no equivalent for."
+  },
+  {
+    "match": "EXTRA   1x  button:\"Thumbnails\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+  },
+  {
+    "match": "EXTRA   1x  button:\"Metadata\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+  },
+  {
+    "match": "EXTRA   1x  button:\"Panels\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+  },
+  {
+    "match": "EXTRA   1x  button:\"Appearance\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — see \"EXTRA button:Library\" entry above."
+  },
+  {
+    "match": "EXTRA   6x  button",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — the 5 category tabs plus one net extra button from the restructure, none present in the flat-list wireframe."
+  },
+  {
+    "match": "EXTRA   1x  icon",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — one option row's icon shifted zones during the restructure."
+  },
+  {
+    "match": "font-size 12px: wireframe uses it on 0 text atom(s), app on 5",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — the 5 new category tab labels render at the app's existing 12px UI-text size, which the flat-list wireframe never had text at."
+  },
+  {
+    "match": "order@0: wireframe text:\"Thumbnails\" vs app button:\"Library\"",
+    "zone": "gearmenu",
+    "reason": "Downstream of the gear-menu drill-down redesign — the first atom is now the \"Library\" category tab instead of the flat list's first group-label."
+  },
+  {
+    "match": "[icons] gearmenu#",
+    "zone": "icons",
+    "reason": "Downstream of the gear-menu drill-down redesign above — the category tab buttons (Library/Thumbnails/Metadata/Panels/Appearance) have no icons and sit where the old flat list's leading option icons used to be, shifting every subsequent gearmenu icon's index against the pre-redesign baseline."
   }
 ]
