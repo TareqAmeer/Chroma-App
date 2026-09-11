@@ -863,6 +863,105 @@
       "wireframeRef": "Editor (Developer) View.dc.html: .tp-panel[data-panel=detail]",
       "check": "editor_wireframe_behaviour.mjs: detail-nr-segmented, detail-nr-conditional-block, detail-lens-cond-block",
       "note": "Detail groups three pre-existing app sections (nr, lens, deconv) with no real on/off toggle on any of them (secPlain in the proposal, not sec) — header Reset for nr/deconv already used their bespoke resetNR()/resetDeconv() via the existing _fxSectionResetOverride map (added for RT1), so no new override needed; lens has no bespoke reset and falls through to the generic fxResetSection() sliders/toggles walk. Implemented 2026-09-10: sel-raw-nr (Off/Fast/High) -> selectToSeg into a real .seg (same selectToSeg() helper RT1 introduced for sel-heal-mode), its old always-visible 419-char hint paragraph moved into a .fx-info-i tooltip on the field label (matching the proposal's info-i, not the old inline hint block); the conditional High-tier job UI (High strength slider, Denoise now/Cancel, progress bar) wrapped in a new .fx-cond-block (dashed top border, added to app CSS) matching the wireframe's .cond-block; Sparkle-optimized RAW's long hint also folded into a fx-info-i tooltip. Lens correction's manual-lens sub-rows (row-lens-manual, row-lens-manual-focal) are grouped in the same .fx-cond-block class rather than the wireframe's literal <details> disclosure, since their visibility is STATE-driven (fxLensAutoToggled/fxLensManualChanged toggle each row's own display) — a manual expand/collapse <details> would fight that. Deconvolution unchanged besides dropping its now-redundant bottom Reset button (header Reset covers it). All existing ids/onclick handlers preserved verbatim; only container markup and long inline hint text moved. Wireframe merge (Stage 4) tagged each of the three placeholder .grp blocks with data-fxsec=\"nr\"/\"lens\"/\"deconv\" so PAIRS can map them individually (no single app container spans the group, unlike Retouch's single-section panel)."
+    },
+    "T32": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11, researched against current WebGL testing practice] nothing measures GPU/texture memory across repeated LUT swaps, mask rebuilds, or tile-export runs — a slow leak (e.g. an uncleared WebGLBuffer/WebGLUniformLocation on every redraw, a documented WebGL failure pattern) would never show up in export_harness.mjs's one-shot renders.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Needs a stress loop (hundreds of LUT swaps / mask rebuilds / tiled exports in one page session) sampling performance.memory or a WebGL context-loss/texture-count probe between iterations, asserting no monotonic growth."
+    },
+    "T33": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] resizing an on-screen WebGL canvas is a documented WebKit/iOS Safari memory-leak trigger (Apple Developer Forums thread 668999) — directly relevant since the shipping desktop/iOS engine IS WebKit — and nothing here resizes the FXR canvas repeatedly and checks for growth.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A loop that resizes the preview canvas (window resize / panel open-close / loupe toggle, all of which resize the backing store) N times and checks performance.memory doesn't grow monotonically."
+    },
+    "T34": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] docs/testing.md already documents that every gate here drives Chromium via Playwright, never the real WKWebView engine the shipping desktop (Tauri) and iOS (Capacitor) apps render with — the single largest structural blind spot: a shader/CSS/JS bug specific to WebKit ships invisible to every gate.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Playwright's webkit browser channel is the closest automatable approximation (still not the exact WKWebView build, but far closer than Chromium) — running export_harness.mjs/editor_wireframe_behaviour.mjs against it too would catch a real class of engine-specific regression current gates cannot see at all."
+    },
+    "T35": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] coi-serviceworker.min.js is load-bearing for RAW decode (SharedArrayBuffer/COOP-COEP on GitHub Pages) but nothing verifies actual offline behaviour: cache-hit on repeat load, correct fallback on a stale cache, or a genuine offline reload after first visit — the standard failure signature ('repeat load as slow as first load') is exactly what's untested.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A Playwright test that loads the page once, goes into `context.setOffline(true)`, reloads, and asserts the app still boots and crossOriginIsolated stays true — plus a load-timing comparison between first and second load to catch a service worker that isn't actually intercepting."
+    },
+    "T36": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] one behavioural test exercises undo/redo functionally; none hammer it (hundreds of edits, undo-to-start, redo-to-end) and check the history array doesn't grow unbounded or that memory is reclaimed after a long session.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Needs a stress test: N slider edits -> N undos -> N redos, asserting final state matches, fxHistIdx/history-array length stays bounded, and no console error/hang."
+    },
+    "T37": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] loadSession()/_fxPristineDefault and the per-feature snapshot paths (masks, curves, HSL, wheels, point colors — CLAUDE.md's own lesson #11 on typed-array/snapshot pitfalls) are load-bearing but nothing round-trips a session with every feature touched, reloads it, and diffs restored state byte-for-byte against what was saved.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Set every graded feature (sliders, a mask, a curve point, HSL band, point colour) to a non-default value, save session, reload, and assert getUISnapshot() before/after are deep-equal."
+    },
+    "T38": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] no test feeds a corrupt .cube LUT, a truncated RW2, or an oversized/zero-byte image and asserts a clean user-facing error instead of a silent hang or crash — exactly the failure shape the hang-diagnose skill and editor_hang_diagnose.mjs (T28) exist to clean up AFTER the fact, with nothing catching it before ship.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A small corpus of deliberately malformed fixtures (truncated PNG, a .cube with a wrong LUT_3D_SIZE header, a 0-byte file) run through the real load paths, asserting a bounded time-to-error and a visible toast/log rather than a hang (reuse editor_hang_diagnose.mjs's Debugger.pause polling as the hang detector)."
+    },
+    "T39": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] library_perf.mjs checks virtualisation SPEED with a synthetic small fixture set, but nothing loads a genuinely large batch (50+ full-resolution photos) and watches for OOM/degraded frame time under real memory pressure — the failure mode an actual power user hits.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Needs a large synthetic fixture batch (or repeated real fixtures) loaded through the real Library/multi-photo path, sampling performance.memory and frame time across the load, not just measuring one virtualised scroll."
+    },
+    "T40": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] the app can be opened in two tabs against the same IndexedDB (lutcache, session store) — a realistic user mistake — and nothing tests concurrent-write behaviour between them; today's outcome is undefined.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Two Playwright pages against the same origin, one writing a LUT-cache entry / session save while the other reads, asserting no corruption and a defined (even if 'last write wins') outcome rather than an undefined one."
+    },
+    "T41": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] editor:keyboard-check (T14) only proves a control is tabbable; nothing asserts it announces sensibly to a screen reader — no axe-core/full ARIA-semantics audit across the Editor. A role=\"switch\" with no accessible name passes T14 today but is useless to VoiceOver.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Run @axe-core/playwright (or axe-core injected directly) against the Editor's main panels, asserting zero serious/critical violations — a broader pass than T14's tag/role/tabindex heuristic."
+    },
+    "T42": {
+      "category": "tooling-gap",
+      "status": "backlog",
+      "source": "[testing-tool gap audit, 2026-09-11] RAW decode correctness (LibRaw + Adobe DCP camera profile, docs/raw-dcp.md) has probes (probe_heic.mjs etc.) but no automated pixel-level check of decoded RW2+DCP output against a known-correct reference image.",
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Blocked on the same real-RAW-fixture gap as T11: no .RW2 capture exists in the repo (deliberately gitignored) to decode and diff against a reference. Needs the user to supply one before this can be built for real, same reasoning as T11 — do not fabricate a fake RW2, it wouldn't exercise the real decode path."
     }
   }
 }
