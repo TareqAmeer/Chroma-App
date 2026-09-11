@@ -182,7 +182,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   prevents a SILENT costly failure or that has no other trigger (skill/hook/nested CLAUDE.md); move detail that has one.
 - Added contract rule 6: token values live in design/tokens.json, :root is generated (was undocumented after S4);
   docs/design-tokens.md updated to match; stale "§10.13" ref fixed.
-- Open: docs/app-tabs.md doesn't cover the Collage page.
+- Collage page now documented in docs/app-tabs.md (2026-09-11). Found: collage export has no iOS share-sheet path (unverified).
 
 **Token generator gates — 2026-09-11 — done**
 - `scripts/build-tokens.mjs --check` and `design/verify_tokens.py` (S3/S4) existed but nothing

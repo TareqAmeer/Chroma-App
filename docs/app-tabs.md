@@ -47,4 +47,21 @@
 - **Match & Refine** — before/after pair → fits a `.cube` LUT empirically (no model
   assumptions). Optional starting `.cube`/`.xmp`. Emits a per-colour HSL summary.
 - **Colour Copy** — per-channel histogram match from a reference image → `.cube`/`.xmp`.
+- **Collage** (`#panel-collage`, all `cl*` functions, state in the `CL` object) — combine several
+  photos into one image. Sections (`data-clsec`, side nav built from `CL_SECTIONS`): **Photos** (drop/add
+  to a tray; drag onto a slot to place, between slots to swap) → **Canvas size** (`CL_ASPECTS`: 1:1,
+  4:5, 5:4, 3:4, 4:3, 2:3, 3:2, 9:16, 16:9) → **Layout** (`clTemplates(n)`: for n photos always a
+  horizontal strip + vertical stack, plus hand-built arrangements for 2–6 and an auto grid above 6;
+  layouts are trees of rows/columns, and the dividers between cells are draggable) → **Borders &
+  background** (colour + `CL_SWATCHES`, spacing, outer margin, corner radius — all stored as
+  thousandths of the short side so preview and export scale identically) → **Selected photo** (zoom
+  100–400%, drag to reframe, Replace / Reset / Clear slot) → **Export** (long side 1600–4000px,
+  Shuffle, Start over).
+  - ⚠️ Collage is **2D canvas only — photos are placed as loaded, with no look/grain/grade applied**.
+    It does not go through `FXR`. To collage graded photos, export them from Effects first.
+  - Preview and export share one geometry: `clLayoutRects()` + the same cover-scale/clamped-offset
+    maths, so what you frame is what exports.
+  - ⚠️ `clExport()` saves via a plain `<a download>` JPEG (q 0.95), **not** `capShareFiles()` — unlike
+    the Effects export it has no native share-sheet path, so it may not save inside the iOS shell.
+    Unverified; flagged, not fixed.
 - **Guide** — in-app how-to + FAQ (mirrors the README).

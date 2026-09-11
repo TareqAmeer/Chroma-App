@@ -174,7 +174,7 @@ See [docs/design-tokens.md](docs/design-tokens.md) — `:root` token usage, typo
 
 ## 4. The app's pages
 
-See [docs/app-tabs.md](docs/app-tabs.md) — Effects & Export, Match & Refine, Colour Copy, Guide (Collage not yet documented there).
+See [docs/app-tabs.md](docs/app-tabs.md) — Effects & Export, Match & Refine, Colour Copy, Collage, Guide.
 
 ---
 
