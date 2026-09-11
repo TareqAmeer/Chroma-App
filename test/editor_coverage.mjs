@@ -160,6 +160,28 @@ function hasSmokeTest(containerId) {
   return [...behavSrc.matchAll(re)].length >= 2;
 }
 
+// T24 (editor_ux_spec.json): "has a behaviour test" (coverageFor's hasBehaviour, above) only
+// proves the PANEL is mentioned somewhere in the file — it says nothing about whether the test(s)
+// actually exercise any GIVEN control inside it. Detail's Lens Correction alone shipped 9 sliders
+// with exactly 1 (the Auto toggle) ever referenced by a test, and the old boolean metric reported
+// "detail: behav yes" the whole time. Cross-reference every real sl-/cl-/tg- id inside a section's
+// own markup span against whether that id string appears anywhere in the behaviour-test source —
+// approximate (a test could reference an id in a comment, or via a non-literal selector this can't
+// see), but far more honest than a per-panel boolean.
+function controlIdsFor(sectionKey) {
+  const span = appSectionSpans.find((s) => s.key === sectionKey);
+  if (!span) return [];
+  const ids = new Set();
+  for (const m of span.body.matchAll(/\bid="((?:sl|cl|tg)-[a-z0-9-]+)"/g)) ids.add(m[1]);
+  return [...ids];
+}
+function controlCoverageFor(members) {
+  const ids = members.flatMap(controlIdsFor);
+  if (!ids.length) return null;
+  const tested = ids.filter((id) => behavSrc.includes(id));
+  return { total: ids.length, tested: tested.length, untested: ids.filter((id) => !tested.includes(id)) };
+}
+
 const rows = panels.map((p) => {
   const aliases = PANEL_ALIAS[p.key] || [];
   const members = appSections.filter((s) => (groupOf[s] || s) === p.key || aliases.includes(s));
@@ -173,6 +195,7 @@ const rows = panels.map((p) => {
     fullyDynamic,
     dynamicContainer,
     hasSmokeTest: fullyDynamic ? hasSmokeTest(dynamicContainer) : null,
+    controlCoverage: controlCoverageFor(members),
   };
 });
 
@@ -187,7 +210,7 @@ if (asJson) {
 } else {
   const pad = (s, n) => String(s).padEnd(n);
   console.log('\nEDITOR DESIGN COVERAGE\n' + '='.repeat(78));
-  console.log(pad('panel', 10) + pad('designed', 10) + pad('rail', 6) + pad('PAIRS', 7) + pad('spec', 12) + pad('behav', 7) + pad('dynamic', 9) + 'app sections');
+  console.log(pad('panel', 10) + pad('designed', 10) + pad('rail', 6) + pad('PAIRS', 7) + pad('spec', 12) + pad('behav', 7) + pad('dynamic', 9) + pad('ctrls', 10) + 'app sections');
   console.log('-'.repeat(78));
   for (const r of rows.sort((a, b) => Number(b.designed) - Number(a.designed) || a.key.localeCompare(b.key))) {
     console.log(pad(r.key, 10)
@@ -197,6 +220,7 @@ if (asJson) {
       + pad(r.specTotal ? `${r.specOpen}/${r.specTotal} open` : '-', 12)
       + pad(r.hasBehaviour ? 'yes' : 'no', 7)
       + pad(r.fullyDynamic ? (r.hasSmokeTest ? 'smoke-ok' : 'NO-SMOKE') : '-', 9)
+      + pad(r.controlCoverage ? `${r.controlCoverage.tested}/${r.controlCoverage.total}` : '-', 10)
       + (r.appSections.join(', ') || '(none)'));
   }
   console.log('-'.repeat(78));
@@ -223,6 +247,15 @@ if (asJson) {
     }
   }
   const dynamicUncovered = dynamicPanels.filter((r) => !r.hasSmokeTest);
+  // T24: per-control detail, informational — a panel-level "behav yes" can still hide most of a
+  // section's own sliders having zero behaviour coverage (that's the exact bug this replaces).
+  const thin = rows.filter((r) => r.controlCoverage && r.controlCoverage.tested < r.controlCoverage.total);
+  if (thin.length) {
+    console.log(`\n⚠ per-control behaviour coverage below 100% (T24 — panel-level "behav yes" can still hide this):`);
+    for (const r of thin) {
+      console.log(`  ${r.key}: ${r.controlCoverage.tested}/${r.controlCoverage.total} tested — untested: ${r.controlCoverage.untested.join(', ')}`);
+    }
+  }
   console.log('');
   if (strict && unchecked.length) {
     console.log('RESULT: FAIL (--strict: a designed panel must have a PAIRS entry and a behaviour test)');
