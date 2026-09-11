@@ -26,13 +26,14 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > Seed values from `chromasmith-design/project/_ds/.../_ds_manifest.json`. Give every token a `$extensions.chromasmith.appVar` (the app's CSS variable, e.g. `--acc`) and a `role` (e.g. `action.primary`, `surface.panel`, `text.muted`).
 > Cover every variable in the app's `:root` (lines 50–98), the `body.light` override (about line 1263), and the token block in `desktop/library-ui.js` (about lines 695–745).
 > Where the design system and the app disagree, don't decide; list each conflict in `design/token-conflicts.md` for the user.
+> Per S1 (a): match by computed value AND property role (font-size→`--fs-*`, padding/gap→`--sp-*`, radius→`--r*`) — value-only matching is ambiguous (8px = `--r`/`--sp-2`, 12px = `--fs-2`/`--sp-3`). Don't infer roles from `_ds` var names (under 10% of wireframe decls use them). Families the app has no tokens for — control heights, font weights, pill radius, on-primary text, danger-subtle, 0.15s — go in the conflicts file as "proposed new token" entries.
 > Done when every app variable maps to exactly one token or is listed as a conflict, and a script check proves it.
 
 **S4: Token generator + lint hook** (Sonnet 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. `design/tokens.json` exists (from S3). Task:
 > (1) `scripts/build-tokens.mjs` generates the `:root` / `body.light` block in `chromasmith-22.html` and the token block in `desktop/library-ui.js` between marker comments. Reuse the marker-injection pattern in `site/build-page.mjs`.
 > (2) Extend `test/editor_token_check.mjs` to flag a token used in the wrong role (for example a legacy `.bpri` colour on a primary button).
-> (3) Add a PostToolUse hook, `.claude/hooks/token-lint-on-edit.sh`, registered in `.claude/settings.json`. It lints only the changed style lines, prints only violations, and uses the approach S1 (c) found to be fast enough.
+> (3) Add a PostToolUse hook, `.claude/hooks/token-lint-on-edit.sh`, registered in `.claude/settings.json`. It lints only the literals the Edit ADDS (new_string minus old_string — `<style>` already has 940 raw literals, so whole-line linting reports old debt), skips `--x:` token definitions and comments, allows `1px`, confirms the edit is inside `<style>` with a string search (not a git diff; S1 (c): 0.12–0.26s vs 0.3–0.4s), and prints only violations.
 > Run the gates and export harness via a Haiku subagent that reports failures only.
 > Done when the first generator run is byte-identical to today's `:root` (the diff must be empty), and `npm run editor:gates` and `node test/export_harness.mjs` pass.
 
@@ -49,7 +50,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 
 **S6: As-built capture, repeat per group** (Sonnet 5 + Haiku helpers). Run once per group: Editor sections, Editor menus and overlays, the Match/Copy/Collage/Guide pages, mobile, Library.
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: capture the as-built wireframes for group **{GROUP}** from `design/surfaces.json`.
-> Write (or reuse, if it already exists) `test/surface_capture.mjs`. For each surface and state it saves `design/asbuilt/<id>/<state>.webp`, and a `spec.json` holding the element tree and computed values mapped to `design/tokens.json` names. Also generate a `.dc.html`-format block, the same structure as the `.tp-panel` blocks in `Editor (Developer) View.dc.html`.
+> Write (or reuse, if it already exists) `test/surface_capture.mjs`. For each surface and state it saves `design/asbuilt/<id>/<state>.webp`, and a `spec.json` holding the element tree and computed values mapped to `design/tokens.json` names (value + property role, as in S3). Also generate a `.dc.html`-format block, the same structure as the `.tp-panel` blocks in `Editor (Developer) View.dc.html`.
 > Nothing is drawn by hand. Anything that doesn't map to a token goes in `spec.json` as `unmapped`.
 > You write/fix the script; a Haiku subagent runs it and reports only counts per surface, missing states and errors — never read the captures or spec files yourself beyond spot checks.
 > Done when every surface in the group has captures for all its states. Add a group row to STATE.md.
@@ -61,7 +62,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 **S8: Spec extract + generated PAIRS** (Opus 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: make `design/asbuilt/<id>/spec.json` plus the wireframe the source for the Editor gates:
 > (1) `test/wireframe_spec_extract.mjs` writes `design/specs/<panel>.json` from `Editor (Developer) View.dc.html` (the target design), in the same shape as the as-built specs.
-> (2) Generate the `PAIRS` entries for `test/editor_wireframe_diff.mjs`, the inventory expectations for `editor_wireframe_inventory.mjs`, and behaviour-test stubs from those specs.
+> (2) Generate the `PAIRS` entries for `test/editor_wireframe_diff.mjs` (S1 (b) rule: one entry per `.grp[data-fxsec]`, else whole panel→`.fx-ctrl[data-fxsec=<key>]`, alias masks→local; keep hand-written labels; Info's info-meta/info-people groups need an explicit override). Per-control pairs need a link the wireframe doesn't have — add `data-app="#sl-heal-size"`-style attributes to wireframe controls (preferred) or match by label text; ask the user which before building. Also generate the inventory expectations for `editor_wireframe_inventory.mjs`, and behaviour-test stubs from those specs.
 > (3) Point `editor:coverage` at `design/surfaces.json` instead of the 11 panels.
 > Run gates via a Haiku subagent that reports failures only.
 > Done when the generated `PAIRS` for the already-built panels (Retouch, Export) produce zero new mismatches compared with the hand-written ones, and `npm run editor:gates` passes.
@@ -85,6 +86,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > Read docs/ui-workflow/STATE.md and follow its rules, including the S1 result (d). Task: add a `?catalog=1` mode to `chromasmith-22.html`, following the `?libtest=1` pattern. It renders each shared component (`.fx-ctrl`, `.fx-row`, `.fx-toggle`, `.fx-sub`, `.fx-btn-primary`, the segmented control, `.fx-info-i`) in the states rest, hover, focus, disabled, modified (`.fx-mod`) and long label, in both themes. It can also render any single Editor panel on its own.
 > Add Playwright `toHaveScreenshot()` baselines per component and state (`test/catalog_visual.mjs`), wired into `npm run editor:gates`.
 > Run gates and screenshot checks via a Haiku subagent that reports failures only.
+> Per S1 (d) no refactor is needed: inject the app `<style>` + real section markup, add `.sec-active` (cards are hidden without it under `body.fx-single`), call `initEditableVals()` and `selectToSeg()`, and stub inline handlers. Locate `<style>` by searching for the tag, not by line numbers.
 > Done when the catalogue renders without console errors, the baselines are committed, and a 1px change to `.fx-row` padding fails the check.
 
 **S12: Update the process docs** (Sonnet 5)
