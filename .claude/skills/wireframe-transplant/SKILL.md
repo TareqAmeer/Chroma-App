@@ -95,14 +95,20 @@ everything the wireframe specifies. If you find yourself checking a
 region/state these tools don't cover, extend the tool, don't just note it
 by hand and move on — that's exactly how the 3-zone version went stale.
 
-## Step 4 — verify against the real installed app, not just the harness
+## Step 4 — verify against the real app build, not just the harness
 
 `bash build-desktop.sh` stages `desktop/dist/` for the `?libtest=1`
 Playwright/browser harness (fast iteration). Before telling the user it's
-done, also `bash desktop/install-app.sh` (full rebuild, installs to
-`/Applications`) and screenshot the actual app — a harness pass doesn't
+done, rebuild the app in the repo (repo-only scope — no `/Applications`
+install/update) and screenshot the actual build — a harness pass doesn't
 prove the compiled app looks right, and two prior sessions on this project
 shipped visual regressions that only the real app render surfaces.
+
+For the Editor specifically, prefer the purpose-built gates over ad hoc
+checks: `node test/editor_wireframe_diff.mjs`, `node
+test/editor_wireframe_inventory.mjs`, and `npm run editor:coverage` (panel
+design/spec/behaviour coverage status). `npm run editor:gates` runs the
+full Editor gate suite together.
 
 ## Common failure signatures from the last pass (check for these specifically)
 
