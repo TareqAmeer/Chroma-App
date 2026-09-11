@@ -1042,8 +1042,20 @@ body.deskx #fx-deskbar-right{display:flex;align-items:center;gap:8px;grid-column
    the bar — correct for the older flex layout, but that's exactly the mechanism that could
    overlap its neighbours instead of being physically kept apart from them. Under the grid, it's
    just the middle column's content: back to normal flow, centered in its own track instead. */
-body.deskx #fx-deskbar-title{position:static;left:auto;top:auto;transform:none;pointer-events:auto;
+body.deskx #fx-deskbar-title{position:static;left:auto;top:auto;pointer-events:auto;
   grid-column:2;justify-self:center;
+  /* 2026-09-11 (topbar parity pass, item 4): the grid's 1fr/auto/1fr split centers the title on
+     the BAR's own geometric middle — it has no idea the actual photo sits further left or right,
+     pushed there by the tool panel/rail (and, when Library is docked, the filmstrip). A pure-CSS
+     constant offset was tried first (a calc() derived from --dock-w/--panel-w/--rail-w) and
+     reverted: it's blind to how much slack #fx-deskbar-left/-right's OWN content actually needs,
+     so it shifted the title straight into the zoom slider at ordinary widths — caught live by
+     editor:responsive (OVERLAP, #db-title-name vs #fx-zoom-slider, 1440x900 and below). Recentering
+     against the real image now happens in JS (fxSyncDeskbarTitleOffset(), near the deskbar-fold
+     ResizeObserver below), which measures the left/right groups' actual rendered edges and clamps
+     the shift so the title can NEVER overlap them — it only recenters as far as real slack allows,
+     rather than by a fixed formula. --db-title-off defaults to 0 (dead center) until that JS runs. */
+  transform:translateX(var(--db-title-off,0px));
   /* 2026-09-10: the base rule (above) lays the filename and dimensions out side-by-side on one
      line — the wireframe stacks them (Editor (Developer) View.dc.html .fn/.meta), filename bold
      on top, capture details smaller and muted underneath. Column instead of row, both lines
@@ -1073,8 +1085,13 @@ body.deskx .fx-db{padding:5px 10px}
    second px value anywhere that has to be kept in sync with it (the root cause of 4 previous
    "library covers the editor" regressions, which all stemmed from a SEPARATE body.paddingLeft
    value computed in JS). A reserved grid track can never visually overlap a sibling track. */
-body.deskx .fx-layout{--dock-w:0px;--panel-w:var(--panel-w-user,320px);--rail-w:72px;
-  grid-template-columns:var(--dock-w) 1fr var(--panel-w) var(--rail-w);position:relative;
+/* Declared on body.deskx too (not just .fx-layout) so #fx-deskbar — a SIBLING of .fx-layout,
+   not a descendant — can read the same live --dock-w/--panel-w/--rail-w values for its own
+   padding (see the #fx-deskbar title-centering comment below). Custom properties inherit down
+   the DOM regardless of which selector set them, so declaring the identical values on their
+   nearest common ancestor keeps this one source of truth instead of a second copy drifting. */
+body.deskx{--dock-w:0px;--panel-w:var(--panel-w-user,320px);--rail-w:72px}
+body.deskx .fx-layout{grid-template-columns:var(--dock-w) 1fr var(--panel-w) var(--rail-w);position:relative;
   gap:0;height:calc(100vh - var(--deskx-topbar-h));align-items:stretch;transition:grid-template-columns .2s ease}
 /* Mid-drag the .2s column transition lags the pointer by a visible fifth of a second, so every
    drag reads as sluggish and overshoots. Dropped for the duration of the drag only — the class
@@ -1087,8 +1104,8 @@ body.deskx .fx-layout.fx-nodrag-anim{transition:none}
    permanently break collapse-on-active-rail-click for this track the same way it would have for
    the others. State classes keep authority over the derived value; the user's own resize is only
    ever a fallback inside var(). */
-body.deskx.lib-docked:not(.lib-full) .fx-layout{--dock-w:var(--dock-w-user,120px)}
-body.deskx.panel-closed .fx-layout{--panel-w:0px}
+body.deskx.lib-docked:not(.lib-full){--dock-w:var(--dock-w-user,120px)}
+body.deskx.panel-closed{--panel-w:0px}
 body.deskx.panel-closed .fx-panel{display:none}
 /* ── Resizable tool panel + shrinkable tool rail (wireframe .tp-resizer / .rail icons-only).
    Both handles are absolutely-positioned children of .fx-layout rather than of the panel/rail
@@ -1111,10 +1128,10 @@ body.deskx .fx-edge:hover::after,body.deskx .fx-edge:focus-visible::after{backgr
 /* Icons-only rail: the labels go, the touch target does not — padding grows to keep each button
    at the same height, so switching modes never moves the tools under the pointer more than the
    width change itself. */
-body.deskx.rail-icons .fx-layout{--rail-w:44px}
+body.deskx.rail-icons{--rail-w:44px}
 body.deskx.rail-icons #fx-toolrail .fx-rail-lb{display:none}
 body.deskx.rail-icons #fx-toolrail .fx-rail-btn{padding:11px 3px}
-body.deskx.rail-hidden .fx-layout{--rail-w:0px}
+body.deskx.rail-hidden{--rail-w:0px}
 body.deskx.rail-hidden #fx-toolrail{display:none}
 /* Foot of the rail: one button that narrows it a step (labels -> icons) and puts them back.
    margin-top:auto pins it to the bottom however many tools are above it. */
@@ -1203,13 +1220,18 @@ body.deskx #fx-settings{display:inline-flex}
   background:var(--glass-bg);
   border:1px solid var(--bdr);border-radius:10px;box-shadow:var(--lift-2);overflow:hidden}
 #fx-settings-menu.on{display:flex;align-items:stretch}
-#fx-settings-cats{display:flex;flex-direction:column;gap:2px;width:150px;flex:0 0 auto;
+/* #fx-settings-cats/#fx-settings-page also match the .fx-settings-cats/.fx-settings-page
+   CLASSES (not just these ids) so Library's gear menu (desktop/library-ui.js, #lib-settings-cats/
+   #lib-settings-page) can share this exact drill-down look via class rather than a second
+   hand-copied ruleset that could drift from this one — see the "gear submenu parity" comment
+   on #lib-view-menu in library-ui.js. */
+#fx-settings-cats,.fx-settings-cats{display:flex;flex-direction:column;gap:2px;width:150px;flex:0 0 auto;
   border-right:1px solid var(--bdr);padding:5px;overflow-y:auto;max-height:70vh}
 .fx-settings-cat{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;
   color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;padding:9px 10px}
 .fx-settings-cat:hover{background:var(--sur2)}
 .fx-settings-cat.active{background:var(--sur2);color:var(--acc);font-weight:600}
-#fx-settings-page{width:260px;flex:0 0 auto;padding:5px;overflow-y:auto;max-height:70vh}
+#fx-settings-page,.fx-settings-page{width:260px;flex:0 0 auto;padding:5px;overflow-y:auto;max-height:70vh}
 .fx-settings-pane{display:none}
 .fx-settings-pane.active{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
@@ -4813,7 +4835,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-10f';
+const BUILD='2026-09-11a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -11027,6 +11049,62 @@ function appHSync(){
   window.addEventListener('resize',sync);
   sync();
 })();
+// 2026-09-11 (topbar parity pass, item 4): recenters #fx-deskbar-title on the actual image
+// viewport (#fx-zoom-wrap) instead of the bar's own geometric middle — see the CSS comment on
+// body.deskx #fx-deskbar-title (--db-title-off) for why this is measured live rather than
+// computed from --dock-w/--panel-w/--rail-w in a plain calc(): a formula blind to how much room
+// #fx-deskbar-left/-right actually need shifted the title straight into the zoom slider at
+// ordinary widths (caught by editor:responsive). This measures the real rendered edges of the
+// left/right button groups and the real image wrapper, then clamps the shift so the title can
+// never be pushed into either group — it recenters as far as genuine slack allows and no further.
+function fxSyncDeskbarTitleOffset(){
+  const bar=document.getElementById('fx-deskbar');
+  const title=document.getElementById('fx-deskbar-title');
+  const left=document.getElementById('fx-deskbar-left');
+  const right=document.getElementById('fx-deskbar-right');
+  const img=document.getElementById('fx-zoom-wrap');
+  if(!bar||!title||!left||!right||!img)return;
+  if(!document.body.classList.contains('deskx'))return;
+  const barR=bar.getBoundingClientRect();if(!barR.width)return;
+  const imgR=img.getBoundingClientRect();if(!imgR.width)return;
+  // Read the title's CURRENT on-screen center, then back out any existing transform so this is
+  // always computed against the untransformed (grid-centered) position — otherwise each call
+  // would compound onto the previous frame's shift instead of recomputing it from scratch.
+  const titleR=title.getBoundingClientRect();
+  const cs=getComputedStyle(title);
+  const m=new DOMMatrixReadOnly(cs.transform==='none'?undefined:cs.transform);
+  const curOffset=m.m41||0;
+  const naturalCenter=(titleR.left+titleR.width/2)-curOffset;
+  const desiredCenter=imgR.left+imgR.width/2;
+  let offset=desiredCenter-naturalCenter;
+  // Clamp so the shifted title box can never overlap the left/right button clusters — 12px
+  // breathing room on each side, same as the bar's own gap tokens.
+  const leftR=left.getBoundingClientRect(),rightR=right.getBoundingClientRect();
+  const halfTitle=titleR.width/2;
+  const minCenter=leftR.right+12+halfTitle;
+  const maxCenter=rightR.left-12-halfTitle;
+  let clampedCenter=desiredCenter;
+  if(maxCenter>=minCenter)clampedCenter=Math.min(Math.max(desiredCenter,minCenter),maxCenter);
+  else clampedCenter=naturalCenter; // no slack at all — stay at the grid's own center
+  offset=clampedCenter-naturalCenter;
+  document.documentElement.style.setProperty('--db-title-off',Math.round(offset)+'px');
+}
+(function(){
+  const bar=document.getElementById('fx-deskbar');
+  const img=document.getElementById('fx-zoom-wrap');
+  if(!bar)return;
+  const sync=()=>requestAnimationFrame(fxSyncDeskbarTitleOffset);
+  new ResizeObserver(sync).observe(bar);
+  // #fx-zoom-wrap is the flexible column in .fx-layout's grid (chromasmith-22.html's
+  // body.deskx .fx-layout rule) — its width changes whenever the tool panel/rail/library dock
+  // toggles (panel-closed, rail-icons, rail-hidden, lib-docked), none of which change #fx-deskbar's
+  // OWN width, so a ResizeObserver on the bar alone would miss exactly the events this exists to
+  // react to. .fx-layout's grid-template-columns transition (.2s) fires several resize entries
+  // as it animates; rAF-batching in sync() keeps that cheap.
+  if(img)new ResizeObserver(sync).observe(img);
+  window.addEventListener('resize',sync);
+  sync();
+})();
 // Log one measurement line (visible in More→Log) so on-device layout bugs are diagnosed from
 // data instead of screenshots: every number that decides whether the layout fits, + verdict.
 let _diagLast='';
@@ -16638,15 +16716,35 @@ let _fxModTimer=null;
 function fxMarkModifiedSliders(){
   clearTimeout(_fxModTimer);
   _fxModTimer=setTimeout(()=>{
-    if(!_fxPristineDefault||!_fxPristineDefault.sliders)return;
-    const base=_fxPristineDefault.sliders;
-    for(const id in base){
+    if(!_fxPristineDefault)return;
+    const baseS=_fxPristineDefault.sliders||{};
+    for(const id in baseS){
       // ⚠️ Snapshot slider keys are stored WITHOUT their "sl-" element prefix (getUISnapshot reads
       // getElementById('sl-'+id)), so looking the id up directly finds nothing and every dot
       // silently stays off — which is exactly how this first shipped.
       const sl=document.getElementById('sl-'+id)||document.getElementById(id);if(!sl)continue;
       const row=sl.closest('.fx-row');if(!row)continue;
-      row.classList.toggle('fx-mod',String(sl.value)!==String(base[id]));
+      row.classList.toggle('fx-mod',String(sl.value)!==String(baseS[id]));
+    }
+    // T3 (editor_ux_spec.json): the header Reset button is gated on `:has(.fx-row.fx-mod)`
+    // (§21530), but until this only sliders ever set .fx-mod — a colour-only or toggle-only edit
+    // (e.g. Split Tone's colour swatches, a section's own on/off) never marked its row, so the
+    // header Reset silently stayed hidden even though there was something real to reset (R5).
+    // Colour and toggle keys are stored WITH their "cl-"/element-id prefix already (see
+    // _FX_SNAP_COLORS/_FX_SNAP_TOGGLES above), unlike sliders, so no prefix juggling is needed.
+    const baseC=_fxPristineDefault.colors||{};
+    for(const id in baseC){
+      const cl=document.getElementById(id);if(!cl)continue;
+      const row=cl.closest('.fx-row');if(!row)continue;
+      row.classList.toggle('fx-mod',String(cl.value)!==String(baseC[id]));
+    }
+    const baseT=_fxPristineDefault.toggles||{};
+    for(const id in baseT){
+      // Toggle snapshot keys are ALSO stored without their "tg-" prefix (same shape as sliders,
+      // unlike colours which keep "cl-") — getUISnapshot reads getElementById('tg-'+id).
+      const tg=document.getElementById('tg-'+id);if(!tg)continue;
+      const row=tg.closest('.fx-row');if(!row)continue;
+      row.classList.toggle('fx-mod',tg.classList.contains('on')!==!!baseT[id]);
     }
     fxPaintAllSliders();   // fill colour follows .fx-mod, so repaint once the flags settle
   },120);
@@ -16732,7 +16830,16 @@ function initSliderErgonomics(){
     e.preventDefault();
     if(_fxSliderSet(sl,parseFloat(base[key])))_fxFireInput(sl);
   });
-  document.addEventListener('input',e=>{if(e.target&&e.target.type==='range'){fxMarkModifiedSliders();if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();}},true);
+  // T3 (editor_ux_spec.json): originally gated on type==='range' only, so a colour-swatch edit
+  // (type='color') never called fxMarkModifiedSliders at all — the function's own .fx-mod logic
+  // could be extended to know about colours/toggles (done above) and it would still never run.
+  document.addEventListener('input',e=>{if(e.target&&(e.target.type==='range'||e.target.type==='color')){fxMarkModifiedSliders();if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();}},true);
+  // Row-level toggles (e.g. Halation's White glow/No remjet/Extreme) flip their own '.on' class
+  // from an inline onclick, which fires before this bubble-phase listener sees the click — so by
+  // the time fxMarkModifiedSliders reads tg.classList.contains('on') here, it already reflects
+  // the new state. Section-master toggles (tg-adjust, tg-curves, ...) live outside any .fx-row
+  // and are still correctly ignored by fxMarkModifiedSliders's own .closest('.fx-row') check.
+  document.addEventListener('click',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('fx-toggle')){fxMarkModifiedSliders();if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();}});
   fxMarkModifiedSliders();
   if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
 }

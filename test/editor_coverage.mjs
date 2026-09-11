@@ -50,17 +50,18 @@ const behavSrc = readFileSync(BEHAV, 'utf8');
 // (`data-fxsec="${cardOrName}"`, the dynamically built card) — excluded by the [a-z] class.
 const appSections = [...new Set([...app.matchAll(/data-fxsec="([a-z]+)"/g)].map((m) => m[1]))].sort();
 
-// FX_GROUPS folds several sections behind one deskx rail button. Parsed from the real source
-// rather than restated here: a hand-copied second list is the "drifting second source of truth"
-// class this repo keeps getting bitten by (CLAUDE.md §2's worker note, §10.10's complexity note).
-const groupsBlock = app.slice(app.indexOf('const FX_GROUPS='), app.indexOf('const FX_GROUP_OF='));
-const groupOf = {};
+// FX_GROUPS folds several sections behind one deskx rail button. EVALUATED from the real source
+// (not regex-parsed) so this can never drift from FX_GROUPS's actual shape the way a hand-copied
+// second list, or a regex tuned to today's formatting, silently could (T27, editor_ux_spec.json —
+// a regex here is itself "a separate copy of that logic" if FX_GROUPS's literal syntax ever
+// changes in a way the pattern doesn't anticipate; `new Function` on the real statement can't).
+const groupsStmtStart = app.indexOf('const FX_GROUPS=');
+const groupOfStmtEnd = app.indexOf(';', app.indexOf('const FX_GROUP_OF=', groupsStmtStart)) + 1;
+const groupsSrc = app.slice(groupsStmtStart, groupOfStmtEnd);
+const { FX_GROUPS, FX_GROUP_OF } = new Function(`${groupsSrc}\nreturn { FX_GROUPS, FX_GROUP_OF };`)();
+const groupOf = FX_GROUP_OF;
 const groupLabel = {};
-for (const m of groupsBlock.matchAll(/(\w+):\{label:'([^']+)',icon:'[^']+',members:\[([^\]]+)\]\}/g)) {
-  const [, key, label, members] = m;
-  groupLabel[key] = label;
-  for (const raw of members.split(',')) groupOf[raw.trim().replace(/'/g, '')] = key;
-}
+for (const [key, def] of Object.entries(FX_GROUPS)) groupLabel[key] = def.label;
 
 // ── Wireframe side ──────────────────────────────────────────────────────────────────────────
 const wfRailTabs = [...wf.matchAll(/class="rail-btn[^"]*"[^>]*data-tab="([a-z]+)"/g)].map((m) => m[1]);

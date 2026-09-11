@@ -50,6 +50,17 @@ if (build.status !== 0) {
 }
 
 const FLAKE_RETRIES = 2; // reduced from 6 now that E7's real cause is fixed — see the comment above
+// T21 (editor_ux_spec.json): retries are a targeted workaround for E7's specific, documented
+// timing flake in editor:wireframe-diff — NOT a default reliability blanket. Every other gate
+// below runs with implicit `retries: 1` (no retry) on purpose, including editor:snap-check/
+// editor:html-check/editor:self-reschedule-check/editor:native-gate-check, which are pure
+// static/DOM-structure scans with no known timing flake. Adding `retries` to a new gate should
+// require its OWN documented, understood flake (like E7's), not be a reflexive copy-paste.
+// T13 (editor_ux_spec.json): theme (light/dark) is exercised only by editor:wireframe-diff's own
+// loop. editor:inventory/snap-check/html-check never vary by theme, which is fine today — theme
+// is style-only and doesn't change DOM structure — but would stop being fine if a future change
+// made something theme-conditional in the DOM itself (not just CSS), so this is a known,
+// accepted gap rather than a silent assumption.
 
 // ⚠️ ADVISORY MODE (added 2026-09-10): editor:inventory/responsive/coverage stayed unenforced by
 // any pre-commit hook for so long (see WHY THIS EXISTS above) that a large, pre-existing backlog

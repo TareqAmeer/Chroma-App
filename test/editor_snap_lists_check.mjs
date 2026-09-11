@@ -32,6 +32,12 @@ const port = server.address().port;
 // id (WITHOUT its sl-/cl-/tg- prefix, matching how the real lists store sliders/toggles — see
 // chromasmith-22.html's own comment on _FX_SNAP_COLORS being the one exception that keeps its
 // prefix) -> reason it is deliberately not snapshot-tracked.
+// T17 (editor_ux_spec.json): this object is itself hand-maintained with no automated check that
+// its entries stay current — same class of risk this whole script exists to catch elsewhere. The
+// realistic mitigation is process, not another check-on-a-check: a PR that removes the mechanism
+// an exclusion's reason describes (e.g. deletes healSyncUI's separate brush-settings path) must
+// also remove that entry here, not leave it as dead justification for an id that may have started
+// mattering again.
 const KNOWN_EXCLUSIONS = {
   sliders: {
     'nr-high-strength': 'desktop-native High-tier NR job parameter, not a graded/undoable value — travels via window.chromasmithRawNrHighStrength + localStorage instead',
