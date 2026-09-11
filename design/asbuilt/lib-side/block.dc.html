@@ -1,0 +1,97 @@
+<div class="tp-panel active" data-panel="lib-side">
+
+      <div class="lib-side-resizer" id="lib-side-resizer"></div>
+      <div class="lib-side-tabs">
+        <!-- "on" was a static class here, always Library, even while docked next to an open
+             photo (i.e. actually in Develop) — the active tab now genuinely tracks which view
+             you're in (syncSideTabs(), called on every toggleExpandedView + photo open). Icons
+             kept for visual consistency with the full-view tabs. The dock CAN be resized down to
+             LIB_DOCK_MIN (90px), where the label genuinely has no room — syncSideTabsCompact()
+             hides the <span> at that point (see its own comment). aria-label is set explicitly
+             to the plain tab name (not the title's "Switch to X" phrasing) so hiding the span
+             doesn't change what a screen reader announces this button as. -->
+        <button class="lib-side-tab on" id="lib-side-tab-library" title="Switch to Library" aria-label="Library"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span>Library</span></button>
+        <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
+             performs a real navigation (closes the Library, same as the header button / L key).
+             The wiring is correct — Develop simply IS the editor you land back in — so the
+             stale "not yet available" title was the lie, not the handler. -->
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop" aria-label="Develop"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"></path></svg><span>Develop</span></button>
+      </div>
+      <div id="lib-collections" class="lib-fullview-only"><div class="lib-coll-row" data-catalog="all" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></span><span class="lib-coll-lb">All Photos</span>
+        <span class="lib-coll-count">0</span>
+      </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="collections" role="button" tabindex="0" aria-expanded="true">
+        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Collections</span>
+      </div>
+      <div class="lib-coll-row" data-coll="recents" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg></span><span class="lib-coll-lb">Recents</span>
+        <span class="lib-coll-count">4</span>
+      </div>
+      <div class="lib-coll-row" data-coll="favorites" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span><span class="lib-coll-lb">Favorites</span>
+        <span class="lib-coll-count">2</span>
+      </div>
+      <div class="lib-coll-row" data-coll="edited" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4.5l5 5L8 21H3v-5L14.5 4.5z"></path></svg></span><span class="lib-coll-lb">Edited</span>
+        <span class="lib-coll-count">3</span>
+      </div>
+      <div class="lib-coll-row" data-coll="exported" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"></path><path d="M5 21h14"></path></svg></span><span class="lib-coll-lb">Exported</span>
+        <span class="lib-coll-count">1</span>
+      </div>
+      <div class="lib-coll-row" data-coll="flagged" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-coll-lb">Flagged</span>
+        <span class="lib-coll-count">0</span>
+      </div>
+      <div class="lib-coll-row" data-coll="rejected" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-coll-lb">Rejected</span>
+        <span class="lib-coll-count">0</span>
+      </div>
+      <div class="lib-coll-row" data-coll="duplicates" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="12" height="12" rx="2"></rect><path d="M8 7V5a2 2 0 0 1 2-2h10v10a2 2 0 0 1-2 2h-2"></path></svg></span><span class="lib-coll-lb">Duplicates</span>
+        <span class="lib-coll-count">2</span>
+      </div>
+      <div class="lib-coll-row" data-coll="gphotos" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 19a4 4 0 1 1 .4-7.98A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H6z"></path></svg></span><span class="lib-coll-lb">Synced</span>
+        <span class="lib-coll-count">1</span>
+      </div>
+      <div class="lib-coll-row" data-type-shortcut="raw" title="All RAW files">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></span><span class="lib-coll-lb">Raw</span>
+        <span class="lib-coll-count">0</span>
+      </div>
+      <div class="lib-coll-row" data-type-shortcut="video" title="All video clips">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2"></rect><path d="M15.5 10.5l6-3v9l-6-3z"></path></svg></span><span class="lib-coll-lb">Videos</span>
+        <span class="lib-coll-count">0</span>
+      </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="people" role="button" tabindex="0" aria-expanded="false">
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>People &amp; Pets<span id="lib-people-scan" title="Analyze photos — find faces and enable AI search" style="float:right;cursor:pointer;padding:0 4px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg></span></span>
+      </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="albums" role="button" tabindex="0" aria-expanded="false">
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Albums<span id="lib-album-new" title="New album" style="float:right;cursor:pointer;padding:0 4px">+</span></span>
+      </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="drives" role="button" tabindex="0" aria-expanded="true">
+        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Drives</span>
+      </div><div class="lib-coll-row" style="cursor:default" title="Offline thumbnails: 0.0 GB (never auto-cleared) · Decode cache: 0.0 GB (auto-managed) · Working thumbnails: 0.0 GB (auto-managed)">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><circle cx="6.5" cy="16.5" r=".8" fill="currentColor" stroke="none"></circle><circle cx="10.5" cy="16.5" r=".8" fill="currentColor" stroke="none"></circle></svg></span>
+        <span class="lib-coll-lb" style="color:var(--mut)">Using 0.0 of 20.0 GB</span>
+      </div>
+      <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
+        <div style="height:100%;width:0%;background:var(--acc)"></div>
+      </div></div>
+      <div class="lib-coll-row" data-cache-free="1" style="cursor:pointer">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
+      </div>
+      <div class="lib-coll-row" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify library…</span>
+      </div>
+      <div class="lib-coll-row" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Find duplicates…</span>
+      </div>
+      <div class="lib-coll-row" data-rescan-flags="1" style="cursor:pointer" title="The Flagged/Favorites/Edited/Rejected smart collections only see .xmp sidecars in folders you've opened or that are in Recents — a sidecar changed elsewhere (by this app in a subfolder you've never browsed, or by an external tool) can be invisible to them even though a plain folder browse shows it correctly. This walks the WHOLE library once to catch up.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Rescan flags…</span>
+      </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="devices" role="button" tabindex="0" aria-expanded="false">
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Devices</span>
+      </div></div><div id="lib-folders-header" class="lib-fullview-only"><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="folders" role="button" tabindex="0" aria-expanded="true">
+        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Folders</span>
+      </div></div><div id="lib-tree" class="lib-fullview-only"><div class="lib-tree-node"><div class="lib-tree-row"><span class="lib-tree-chev" data-chev-toggle="1"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"></path></svg></span><span>Photos</span></div></div></div><div id="lib-collections-post" class="lib-fullview-only"><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="cloud" role="button" tabindex="0" aria-expanded="false">
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Cloud</span>
+      </div></div>
+    
+</div>

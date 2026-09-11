@@ -309,3 +309,39 @@ call `ui:test`) will currently fail on that until it's fixed.
 - `design/asbuilt-full/` (~7MB, content-addressed originals) is gitignored; `design/asbuilt/`
   (~33MB: contact sheets + updated `spec.json`) is committed.
 - surface_coverage_check.mjs gained a static source pass (hidden-at-load containers): 82 uncovered, incl. crop/mask/guides overlays, histogram, history, export progress, multi-photo filmstrip, video thumbstrip, Collage cell panel/empty state, Library info panel, compare view, review grid, batch/import/offline bars, sort menu, 5 Library modals, Library empty state. S6b prompt updated to use `covers` for sub-parts.
+
+**Coverage gap-fill — 2026-09-11 — done, `editor:surface-coverage` now blocking**
+- Classified all 82 ids from `surface_coverage_check.mjs --json`'s `missing` list (only to-do list
+  used, per instruction): **10 new real surfaces** (`fx-hist`, `fx-more-menu`, `lib-compare`,
+  `lib-info`, `lib-astro-modal`, `lib-collage-modal`, `hq-offline-quit-modal`,
+  `lib-blocking-wait-modal`, `lib-offq-modal`, `imp-bar`), **72 folded into an existing surface's
+  `covers`** (metadata-only, no re-capture — e.g. `fx-deskbar-left/title/right/tools` → `fx-deskbar`,
+  `hsl-hist` → `fxsec-hsl`, `lib-empty*` variants → `library`, `boot-splash-*` → `splash`), **0 "not
+  UI"**. `node test/surface_coverage_check.mjs` now passes with 0 missing, 0 ignore-list entries
+  added. Removed `editor:surface-coverage` from `ADVISORY_GATES` in `test/editor_gates.mjs` — now
+  blocking, per instruction's done-condition.
+- Of the 10 new surfaces, **4 are genuinely reachable** and captured with the full matrix:
+  `fx-hist` (histogram overlay, `toggleHist()`), `fx-more-menu` (mobile-only "More tools" sheet,
+  `fxMoreMenu()` — real function, found by reading the source, not guessed), plus the two chrome
+  regions from the earlier `S6b` pass that had only smoke-test captures until now
+  (`lib-grid`/`fx-rail-foot`/`fx-actionbar`/`fx-secnav`, run for real this session). **6 are
+  unreachable this pass**, each with a real function found and a concrete reason recorded in
+  `surfaces.json`: `lib-astro-modal`/`lib-collage-modal`/`imp-bar` are closure-local functions
+  needing real astro-stack detection / N selected photos + the real collage-UI click / a real
+  inserted card path; `hq-offline-quit-modal`/`lib-blocking-wait-modal`/`lib-offq-modal` fire only
+  from native Tauri IPC events (`main.rs`), unreachable in a browser-only Playwright harness;
+  `lib-compare` needs `enterCompareMode()` (closure-local, needs selected photos) with no direct
+  call path found this pass. `lib-info` is a 7th: `window.__libInfo(true)` after clicking a real
+  `.lib-card` (not the guessed `[data-id]`/`.lib-thumb` this file already had elsewhere) worked in
+  an isolated debug script, but times out in this task's actual boot sequence (editor already has
+  a photo loaded first) — stopped after 3 attempts per the 2-attempt rule and recorded unreachable
+  rather than pushed further.
+- Added `--only <id,id,...>` to `test/surface_capture.mjs` (works without `--group`, for capturing
+  a handful of surfaces spanning multiple groups without re-touching the rest). Confirmed via
+  `git status` that no existing `design/asbuilt/<id>/` folder from S6/S6b changed — only the 13
+  new surfaces' folders were created.
+- S7's Surface Triage artifact (`https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61`,
+  built by a concurrent session — exists, contrary to this session's earlier mistaken claim that it
+  didn't) updated: uploaded hero + contact-sheet images for all 13 new surfaces (26 assets) and
+  spliced 13 new cards into its `SURFACES` array, leaving the existing 41 untouched. Total 54 cards,
+  well under the 255-file instruction.

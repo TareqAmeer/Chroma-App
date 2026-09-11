@@ -1,0 +1,152 @@
+<div class="tp-panel active" data-panel="lib-top">
+
+      <div class="lib-logo-gap"></div>
+      <div id="lib-top-left">
+      <div style="position:relative">
+        <button class="lib-btn lib-pill" id="lib-sort-btn" title="Sort by"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15V3M4 6l3-3 3 3"></path><path d="M13 11h7M13 16h4M13 6h9"></path></svg><span class="lbl" id="lib-sort-label">Date taken</span></button>
+        <div class="lib-menu" id="lib-sort-menu">
+          <div class="grp-label">Sort by</div>
+          <select id="lib-sort" style="display:none">
+            <option value="name">Name</option>
+            <option value="mtime">Date modified</option>
+            <option value="date">Date taken</option>
+            <option value="iso">ISO</option>
+            <option value="shutter">Shutter speed</option>
+            <option value="aperture">Aperture</option>
+            <option value="focal">Focal length</option>
+            <option value="camera">Camera</option>
+            <option value="edited">Edit status</option>
+            
+            <option value="editedts">Date edited</option>
+          </select>
+          <!-- #13: matches the wireframe's own 3 keys (Library View.html:238-241) exactly —
+               Name/Rating/Camera stay reachable via the list-view's own column headers
+               (data-sort on .lib-lh-cell), a separate real feature the wireframe's mock has no
+               equivalent surface for, so removing them from just this menu keeps the feature
+               without keeping the menu's own divergence from the wireframe. "Date added" reuses
+               the existing 'mtime' sort key (file mtime) — the closest available proxy; there is
+               no distinct added-to-catalog timestamp anywhere in this app. -->
+          <div class="opt sel" data-sortval="date"><span>Date taken</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div><div class="opt" data-sortval="mtime"><span>Date added</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div><div class="opt" data-sortval="editedts"><span>Date edited</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+          <hr>
+          <!-- Newest first / Oldest first radio pair, replacing the old single "Reverse order"
+               toggle — Library View.html:244-245, copied literally. -->
+          <div class="opt" data-sortdir="desc"><span>Newest first</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+          <div class="opt sel" data-sortdir="asc"><span>Oldest first</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+        </div>
+      </div>
+      <div id="lib-filters-btn-wrap">
+        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2" fill="var(--bg)"></circle><circle cx="15" cy="12" r="2" fill="var(--bg)"></circle><circle cx="9" cy="18" r="2" fill="var(--bg)"></circle></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
+      </div>
+      <!-- Grid/List only, matching Library View.html's 2-button toggle — Compare moved into the
+           gear's View menu (below) per explicit decision: it's a real feature but not common
+           enough to earn a permanent topbar slot next to the two everyday view modes. -->
+      <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg">
+        <button data-v="grid" title="Grid view" class="on"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg></button>
+        <button data-v="list" title="List view (unavailable while docked — expand the Library first)" disabled=""><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+      </div>
+      </div>
+      <div class="lib-spacer"></div>
+      <!-- Single search feature, one icon: plain filename/keyword search and AI/CLIP semantic
+           search (e.g. "a dog on a beach") both live in this one box — typing filters live
+           (plain match), and Enter with non-empty text ALWAYS also runs the AI/CLIP semantic
+           search (runClipTextSearch, wired below), not only when the plain match is empty.
+           HANDOVER §3.11 — this comment previously claimed the empty-match condition. Per
+           explicit decision, there is no separate AI-search button/icon: two search icons read
+           as two features when there's really only one. Under deskx this sits centred in
+           #lib-top-center, same slot as the Editor's filename/status title. -->
+      <div id="lib-top-center">
+      <div class="lib-search-wrap">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg>
+        <input id="lib-search" placeholder="Search name, keyword, or filter" style="">
+      </div>
+      </div>
+      <div id="lib-top-right">
+      <!-- 2026-09-11 (topbar parity pass): zoom + flags merged into ONE cluster
+           (#lib-zoomflag-cluster), mirroring the Editor's own #fx-zoom-ctrl (chromasmith-22.html)
+           which holds its zoom slider AND flag buttons as one group carrying a single divider.
+           Previously these were two independent flex children of #lib-top-right, each getting
+           the row's own 8px gap on both sides — that read as "zoom  flags" evenly spaced same as
+           "flags  All FX", when the Editor treats zoom+flags as one visual unit and only dividers
+           its OUTER edges. See body.deskx #lib-overlay #lib-zoomflag-cluster below for the exact
+           divider/gap values, copied literally from #fx-deskbar-tools .fx-zoom-ctrl /
+           body.deskx .fx-zoom-ctrl. -->
+      <div id="lib-zoomflag-cluster">
+      <div class="lib-zoomrow">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size" style="">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </div>
+      <!-- Flag row: rates state.openedPath — whichever single photo is open in the Editor —
+           same window.chromasmithToggle*() bridge the Editor's own top-bar flag buttons already
+           use, so the two stay in sync automatically. HANDOVER §3.11 — this comment previously
+           claimed a multi-selection fallback; chromasmithToggleFlag/Favorite (below) read
+           state.openedPath only and ignore state.selected entirely.
+           Reject icon is 'flagRed' (not the generic 'close' this used to render) — the Editor's
+           own reject button (#btn-flag-red, chromasmith-22.html) uses 'flagRed' specifically so
+           the two bars show the literal same glyph, not two different X shapes at two different
+           stroke weights. -->
+      <div class="lib-flagrow" id="lib-flagrow">
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-reject" title="Reject"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" fill="none"></path></svg></button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-pick" title="Pick"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4" fill="none"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="currentColor" stroke="none"></path></svg></button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z" fill="currentColor" stroke="none"></path></svg></button>
+      </div>
+      </div>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v4M3 5h4"></path><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"></path></svg><span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4"></path><path d="M5 21h14"></path></svg><span class="lbl">Export</span></button>
+      <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
+           padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
+           row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
+      <div style="position:relative" id="lib-settings">
+        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+        <!-- 2026-09-11 (gear submenu parity): two-column category drill-down, matching the
+             Editor's #fx-settings-menu (chromasmith-22.html) exactly — reuses ITS CSS classes
+             (.fx-settings-cat / .fx-settings-pane, and the #fx-settings-cats/#fx-settings-page
+             selectors extended to also match .fx-settings-cats/.fx-settings-page below) rather
+             than a parallel copy, so a future tweak to the Editor's drill-down styling (padth,
+             active-state color, pane width) can't silently drift out of sync here again. The
+             flat single-list #lib-view-menu this replaces bundled 5 unrelated groups (Library
+             actions / Thumbnails / Metadata overlay / Panels / Appearance) into one long scroll
+             with no equivalent to the Editor's own Transform/View/Compare/History/More tabs. -->
+        <div class="lib-menu fx-settings-menu-drill" id="lib-view-menu">
+          <div class="fx-settings-cats" id="lib-settings-cats"><button type="button" class="fx-settings-cat active" data-cat="library">Library</button><button type="button" class="fx-settings-cat" data-cat="thumbnails">Thumbnails</button><button type="button" class="fx-settings-cat" data-cat="metadata">Metadata</button><button type="button" class="fx-settings-cat" data-cat="panels">Panels</button><button type="button" class="fx-settings-cat" data-cat="appearance">Appearance</button></div>
+          <div class="fx-settings-page" id="lib-settings-page">
+            <div class="fx-settings-pane active" id="lib-cat-library">
+              <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span>Choose folder…</span></button>
+              <button class="lib-btn opt-action" id="lib-gphotos" title="Import from Google Photos"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 11.2 3.9 3.9 0 0 0 6.5 19z"></path></svg><span>Import from Google Photos…</span></button>
+              <button class="lib-btn opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg><span>Recent folders…</span></button>
+              <button class="lib-btn opt-action" id="lib-info-btn" title="Get Info for the selected photo — I"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg><span>Get Info</span></button>
+              <button class="lib-btn opt-action" id="lib-expand" title="Full-window view — G"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"></path></svg><span>Full-window view</span></button>
+              <button class="lib-btn opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" opacity=".55"></path></svg><span>Compare view</span></button>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-thumbnails">
+              <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" id="lib-zerogap"><span>No spacing between photos</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" id="lib-showtitle"><span>Show title</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <!-- #10/#11: no leading icon — every other option row in this menu (metadata/theme/
+                   panels) is icon-less; this one's <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg> was its own inconsistency,
+                   confirmed by wireframe_inventory.mjs's self-consistency check. -->
+              <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-metadata">
+              <select id="lib-metadisp" style="display:none">
+                <option value="off">Off</option>
+                <option value="hover">On hover</option>
+                <option value="always">Always on</option>
+              </select>
+              <div class="opt sel" data-metaval="off"><span>Off</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" data-metaval="always"><span>Always on</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" data-metaval="hover"><span>On hover</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-panels">
+              <button class="lib-btn opt-action opt-toggle on" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-appearance">
+              <div class="opt sel" data-theme="dark"><span>Dark</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" data-theme="light"><span>Light</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    
+</div>

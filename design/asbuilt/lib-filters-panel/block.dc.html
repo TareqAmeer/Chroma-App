@@ -1,0 +1,78 @@
+<div class="tp-panel active" data-panel="lib-filters-panel">
+
+      <div id="lib-filters-panel-head">
+        <span>Filters</span>
+        <span id="lib-filters-panel-close" title="Close"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></span>
+      </div>
+      <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
+        <input type="checkbox" id="lib-subfolders" style="">Subfolders</label>
+      <select id="lib-source" title="Photo source">
+        <option value="folder">This folder</option>
+        <option value="edited">All Edited</option>
+      </select>
+      <select id="lib-type-filter" title="Filter by file type">
+        <option value="all">All types</option>
+        <option value="raw">RAW</option><option value="jpeg">JPEG</option>
+        <option value="png">PNG</option><option value="tiff">TIFF</option>
+        <!-- heic/webp/hdr/other added alongside the format-widening work: kind_of() (Rust,
+             library.rs → formats::media_kind) has always emitted "heic" for iPhone photos —
+             there was no option here to reach it, so HEIC files were listable but never
+             filterable. "other" covers the desktop-only decode_image_v1 formats
+             (TGA/DDS/QOI/FF/PNM*/JXL) plus GIF/BMP/ICO/AVIF, none of which had a bucket of
+             their own. -->
+        <option value="heic">HEIC</option><option value="webp">WebP</option>
+        <option value="hdr">HDR/EXR</option><option value="other">Other</option>
+        <option value="video">Video</option>
+      </select>
+      <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option><option value="DC-S9">DC-S9</option></select>
+      <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option><option value="LUMIX S 18-40">LUMIX S 18-40</option></select>
+      <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option><option value="200">ISO 200</option></select>
+      <select id="lib-dupe-filter" title="Filter by duplicate status">
+        <option value="all">All photos</option>
+        <option value="dupes">Duplicates only</option>
+      </select>
+      <select id="lib-synced-filter" title="Filter by Google Photos sync status">
+        <option value="all">All photos</option>
+        <option value="synced">Synced to Google Photos</option>
+        <option value="notsynced">Not synced</option>
+      </select>
+      <select id="lib-faces-filter" title="Filter by face-indexing status">
+        <option value="all">All photos</option>
+        <option value="indexed">Face-scanned</option>
+        <option value="pending">Not face-scanned</option>
+      </select>
+      <!-- Own wrapper, deliberately: syncFilterUI() hides _rf.closest('label') || _rf.parentElement
+           when STARS_ENABLED is false (it is, unconditionally, in production today), so this
+           select's PARENT must be a dedicated element it alone owns — otherwise that hide call
+           takes out whatever else shares the parent. It used to share #lib-filters-pop with
+           seven other filters and #lib-filters-panel now, either of which this would have
+           hidden in full; this wrapper is what makes STARS_ENABLED=false actually mean "hide
+           just the rating filter" rather than "hide whichever container it happens to sit in". -->
+      <div id="lib-rating-filter-wrap" style="display: none;">
+        <select id="lib-rating-filter" title="Filter by star rating">
+          <option value="all">Any rating</option>
+          <option value="0">Unrated</option>
+          <option value="1">★1+</option>
+          <option value="2">★2+</option>
+          <option value="3">★3+</option>
+          <option value="4">★4+</option>
+          <option value="5">★5</option>
+        </select>
+      </div>
+      <select id="lib-tag-filter" title="Filter by tag">
+        <option value="all">All tags</option>
+        <option value="red">Rejected (X)</option>
+        <option value="green">Picked (flag)</option>
+        <option value="edited">Edited</option>
+        <option value="noedited">Not edited</option>
+        <option value="favorite">Favorites</option>
+        <option value="none">Unflagged</option>
+      </select>
+      <button class="lib-btn" id="lib-filters-clear">Clear all</button>
+      <div class="lib-fp-label">Display</div>
+      <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option><option value="__save">+ Save current…</option></select>
+      <!-- lib-thumbsize (zoom), lib-showtitle/lib-hideicons/lib-zerogap and lib-metadisp all
+           relocated to the top bar / gear View menu above — kept as the single live copy of
+           each id there, not duplicated here. -->
+    
+</div>

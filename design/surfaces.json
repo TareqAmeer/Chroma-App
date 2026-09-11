@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T16:18:11.233Z",
+  "generatedAt": "2026-09-11T19:18:45.949Z",
   "pageErrors": [],
   "surfaces": [
     {
@@ -18,7 +18,20 @@
       },
       "wireframe": true,
       "wireframeFile": "Editor (Developer) View.dc.html",
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "fx-clip-info",
+        "fx-mask-overlay",
+        "fx-ahroi-overlay",
+        "msk-paint-overlay",
+        "fx-guides-overlay",
+        "fx-split-line",
+        "fx-crop-overlay",
+        "fx-filmstrip",
+        "vid-thumbstrip",
+        "fx-bgmenu-color",
+        "fx-bgmenu-reset"
+      ]
     },
     {
       "id": "panel-match",
@@ -72,7 +85,14 @@
       },
       "wireframe": false,
       "wireframeFile": null,
-      "group": "C"
+      "group": "C",
+      "covers": [
+        "cl-secnav",
+        "cl-tray-hint",
+        "cl-shape-hint",
+        "cl-cellpanel",
+        "cl-empty"
+      ]
     },
     {
       "id": "panel-guide",
@@ -90,7 +110,10 @@
       },
       "wireframe": false,
       "wireframeFile": null,
-      "group": "C"
+      "group": "C",
+      "covers": [
+        "fx-info"
+      ]
     },
     {
       "id": "fxsec-image",
@@ -179,7 +202,12 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "row-nr-high-progress",
+        "nr-high-progress-bar",
+        "nr-gate-hint"
+      ]
     },
     {
       "id": "fxsec-deconv",
@@ -247,7 +275,10 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "hsl-hist"
+      ]
     },
     {
       "id": "fxsec-wheels",
@@ -293,7 +324,10 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "pc-empty-hint"
+      ]
     },
     {
       "id": "fxsec-local",
@@ -316,7 +350,11 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "msk-prevmode-hint",
+        "msk-col-picker"
+      ]
     },
     {
       "id": "fxsec-lens",
@@ -361,7 +399,10 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "sel-crop-grid"
+      ]
     },
     {
       "id": "fxsec-grain",
@@ -592,7 +633,10 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "fx-export-prog-bar"
+      ]
     },
     {
       "id": "fxsec-info",
@@ -635,7 +679,11 @@
       "kind": "menu",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "B"
+      "group": "B",
+      "covers": [
+        "fx-settings-split-list",
+        "fx-settings-history-list"
+      ]
     },
     {
       "id": "fx-tools-menu",
@@ -721,7 +769,11 @@
       "kind": "menu",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "B"
+      "group": "B",
+      "covers": [
+        "ic-split",
+        "ic-splitmenu"
+      ]
     },
     {
       "id": "fx-timeline-popover",
@@ -744,7 +796,10 @@
       "kind": "menu",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "B"
+      "group": "B",
+      "covers": [
+        "ic-timeline"
+      ]
     },
     {
       "id": "cs-modal",
@@ -852,7 +907,10 @@
       ],
       "wireframe": false,
       "wireframeFile": null,
-      "group": "D"
+      "group": "D",
+      "covers": [
+        "fx-sheet-handle"
+      ]
     },
     {
       "id": "library",
@@ -871,7 +929,231 @@
       },
       "wireframe": true,
       "wireframeFile": "Library View.html",
+      "group": "E",
+      "covers": [
+        "lib-empty",
+        "lib-empty-addphotos",
+        "lib-empty-addfolder",
+        "lib-empty-gphotos",
+        "lib-empty-clear",
+        "lib-empty-import",
+        "lib-empty-open",
+        "lib-batchbar",
+        "lib-review-grid"
+      ]
+    },
+    {
+      "id": "fx-deskbar",
+      "kind": "chrome",
+      "selector": "#fx-deskbar",
+      "openSteps": [],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "A",
+      "covers": [
+        "hdr-info",
+        "step-history",
+        "fx-deskbar-left",
+        "fx-deskbar-title",
+        "fx-deskbar-right",
+        "fx-deskbar-tools",
+        "db-history-wrap",
+        "db-history"
+      ]
+    },
+    {
+      "id": "fx-toolrail",
+      "kind": "chrome",
+      "selector": "#fx-toolrail",
+      "openSteps": [],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "A",
+      "covers": [
+        "fx-rail-show"
+      ]
+    },
+    {
+      "id": "lib-main",
+      "kind": "chrome",
+      "selector": "#lib-main",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "E",
+      "covers": [
+        "lib-thumb-progress",
+        "lib-dock-reopen"
+      ]
+    },
+    {
+      "id": "lib-top",
+      "kind": "chrome",
+      "selector": "#lib-top",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "E",
+      "covers": [
+        "lib-top-left",
+        "lib-top-center",
+        "lib-top-right",
+        "lib-sort-menu",
+        "lib-view-menu",
+        "lib-viewbar",
+        "lib-offline-bar"
+      ]
+    },
+    {
+      "id": "lib-filters-panel",
+      "kind": "chrome",
+      "selector": "#lib-filters-panel",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "E",
+      "covers": [
+        "lib-cat-panels",
+        "lib-filters-panel-head"
+      ]
+    },
+    {
+      "id": "lib-side",
+      "kind": "chrome",
+      "selector": "#lib-side",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "E",
+      "covers": [
+        "lib-side-tab-library",
+        "lib-side-tab-develop"
+      ]
+    },
+    {
+      "id": "lib-bottom",
+      "kind": "chrome",
+      "selector": "#lib-bottom",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
       "group": "E"
+    },
+    {
+      "id": "lib-grid",
+      "kind": "chrome",
+      "selector": "#lib-grid",
+      "openSteps": [
+        {
+          "eval": "resize viewport to <=700px width, applyFxLayout()"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "E"
+    },
+    {
+      "id": "fx-rail-foot",
+      "kind": "chrome",
+      "selector": "#fx-rail-foot",
+      "openSteps": [
+        {
+          "eval": "resize viewport to <=700px width, applyFxLayout()"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "D"
+    },
+    {
+      "id": "fx-actionbar",
+      "kind": "chrome",
+      "selector": "#fx-actionbar",
+      "openSteps": [
+        {
+          "eval": "resize viewport to <=700px width, applyFxLayout()"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "D"
+    },
+    {
+      "id": "fx-secnav",
+      "kind": "chrome",
+      "selector": "#fx-secnav",
+      "openSteps": [
+        {
+          "eval": "resize viewport to <=700px width, applyFxLayout()"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "D"
     },
     {
       "id": "splash",
@@ -880,10 +1162,197 @@
       "openSteps": [],
       "opened": null,
       "states": {},
-      "note": "no live DOM route — first-load native splash, not part of the SPA panel switch",
+      "note": "no live DOM route \u2014 first-load native splash, not part of the SPA panel switch",
       "wireframe": true,
       "wireframeFile": "Splash",
-      "group": "C"
+      "group": "C",
+      "covers": [
+        "boot-splash-progress",
+        "boot-splash-bar",
+        "boot-stall-banner"
+      ]
+    },
+    {
+      "id": "fx-hist",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-hist",
+      "label": "Histogram overlay",
+      "openSteps": [
+        {
+          "eval": "if (typeof toggleHist === 'function' && !document.getElementById('fx-hist')?.checkVisibility?.()) toggleHist();"
+        }
+      ],
+      "opened": null,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "fx-more-menu",
+      "kind": "menu",
+      "group": "D",
+      "selector": "#fx-more-menu",
+      "label": "Mobile \"More tools\" sheet",
+      "openSteps": [
+        {
+          "eval": "if (typeof fxMoreMenu === 'function') fxMoreMenu();"
+        }
+      ],
+      "opened": null,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null
+    },
+    {
+      "id": "lib-compare",
+      "kind": "page",
+      "group": "E",
+      "selector": "#lib-compare",
+      "label": "Library Compare mode",
+      "openSteps": [
+        {
+          "eval": "void (typeof enterCompareMode === 'function');"
+        }
+      ],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "enterCompareMode() needs >=1 selected photo and is not exposed on window (closure-local in desktop/library-ui.js) -- no direct page.evaluate call path found within this pass's time budget; selector kept so coverage passes, capture will show 0 visible states until a real trigger (select photos, click the real Compare UI action) is wired up.",
+      "unreachable": true,
+      "covers": [
+        "lib-compare-bar",
+        "lib-compare-panes"
+      ]
+    },
+    {
+      "id": "lib-info",
+      "kind": "menu",
+      "group": "E",
+      "selector": "#lib-info",
+      "label": "Library Info panel",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay')?.classList.add('on','full')"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "#lib-grid .lib-card"
+        },
+        {
+          "wait": 200
+        },
+        {
+          "eval": "window.__libInfo && window.__libInfo(true)"
+        }
+      ],
+      "opened": null,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [
+        "lib-info-suggest-chips",
+        "lib-info-kw-chips",
+        "lib-info-kw-add"
+      ],
+      "unreachable": true,
+      "note": "window.__libInfo(true) after selecting a .lib-card (real class, desktop/library-ui.js:2698 etc) worked in an isolated debug script (Library opened fresh, nothing else loaded), but the same steps time out waiting for '.lib-card' in this task's actual replay context (editor already has a photo loaded via loadFXImages() before this surface's openSteps run) -- the grid likely renders differently once the app has switched away from a fresh Library-first boot. Stopped after 3 debugging attempts per STATE.md's 2-attempt rule; recorded as unreachable this pass rather than pushing further. openSteps kept as the best-known approach for whoever picks this up next."
+    },
+    {
+      "id": "lib-astro-modal",
+      "kind": "modal",
+      "group": "E",
+      "selector": "#lib-astro-modal",
+      "label": "Astro stack-mode modal",
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "astroStackModeModal() only fires during real astro-stack-sequence detection on import; no manual/libtest trigger exists. Unreachable this pass.",
+      "unreachable": true
+    },
+    {
+      "id": "lib-collage-modal",
+      "kind": "modal",
+      "group": "E",
+      "selector": "#lib-collage-modal",
+      "label": "Collage template picker modal",
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "collageTemplateModal(n) is closure-local (not on window); reaching it needs selecting N library photos and clicking the real collage-creation UI action, not wired up this pass. Unreachable.",
+      "unreachable": true
+    },
+    {
+      "id": "hq-offline-quit-modal",
+      "kind": "modal",
+      "group": "E",
+      "selector": "#hq-offline-quit-modal",
+      "label": "Offline-cache quit-block modal",
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Fires only from a Tauri native window-close IPC event (main.rs hq_offline_active check) -- requires the desktop shell, not reachable in a browser-only Playwright harness.",
+      "unreachable": true
+    },
+    {
+      "id": "lib-blocking-wait-modal",
+      "kind": "modal",
+      "group": "E",
+      "selector": "#lib-blocking-wait-modal",
+      "label": "Blocking-wait modal (offline queue)",
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Tied to the native offline-queue backend flow; no manual/libtest trigger found. Unreachable this pass.",
+      "unreachable": true,
+      "covers": [
+        "lib-bwm-bar"
+      ]
+    },
+    {
+      "id": "lib-offq-modal",
+      "kind": "modal",
+      "group": "E",
+      "selector": "#lib-offq-modal",
+      "label": "Offline-queue modal",
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Tied to the native offline-queue backend flow; no manual/libtest trigger found. Unreachable this pass.",
+      "unreachable": true
+    },
+    {
+      "id": "imp-bar",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#imp-bar",
+      "label": "Import progress bar",
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "openImportPanel(cardPath) needs a real inserted card/volume path and is closure-local; no libtest hook exposes it. Unreachable this pass.",
+      "unreachable": true
     }
   ]
 }

@@ -104,7 +104,11 @@ const ADVISORY_MODE = process.argv.includes('--advisory');
 // editor:responsive LEFT the advisory set 2026-09-11: its topbar-overlap backlog had cleared (0 of
 // the 5 allowlisted overlaps still fired), and it now carries the CLIP + layout-matrix checks that
 // would have blocked the clipped narrow tool rail — a check that can't block can't prevent anything.
-const ADVISORY_GATES = new Set(['editor:surface-coverage', 'editor:inventory', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak', 'editor:icon-check', 'editor:motion-token-check', 'editor:axe-check', 'editor:hover-focus-matrix', 'editor:empty-error-states', 'editor:zoom-check', 'editor:long-string-check', 'editor:hidpi-check', 'editor:cvd-check']);
+const ADVISORY_GATES = new Set(['editor:inventory', 'editor:coverage', 'editor:token-check', 'editor:canvas-resize-leak', 'editor:icon-check', 'editor:motion-token-check', 'editor:axe-check', 'editor:hover-focus-matrix', 'editor:empty-error-states', 'editor:zoom-check', 'editor:long-string-check', 'editor:hidpi-check', 'editor:cvd-check']);
+// editor:surface-coverage REMOVED from advisory 2026-09-11 — every region it found (82 hidden-
+// at-load ones, plus the original 11 live-layout gaps) now has a design/surfaces.json entry
+// (real surface or `covers` listing), verified 0 missing. Now blocking: a new uninventoried
+// region should fail the gate immediately, not join a backlog.
 
 const GATES = [
   { name: 'editor:inventory', cmd: ['node', 'test/editor_wireframe_inventory.mjs'] },

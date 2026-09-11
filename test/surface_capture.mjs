@@ -43,13 +43,24 @@ const ROOT = process.cwd();
 const argv = process.argv.slice(2);
 const GROUP = (argv.find((a) => a.startsWith('--group=')) || '').split('=')[1];
 const ONLY_ID = (argv.find((a) => a.startsWith('--id=')) || '').split('=')[1] || null;
+// --only takes a comma-separated id list and works WITHOUT --group — for capturing a handful of
+// newly-added surfaces (e.g. surface_coverage_check.mjs gap-fills) that span multiple groups,
+// without re-running (and re-touching) a whole group.
+const ONLY_LIST = (argv.find((a) => a.startsWith('--only=')) || '').split('=')[1];
+const ONLY_IDS = ONLY_LIST ? ONLY_LIST.split(',').map((s) => s.trim()).filter(Boolean) : null;
 const NO_MATRIX = argv.includes('--no-matrix');
 const SMOKE = argv.includes('--smoke');
-if (!GROUP) { console.error('usage: node test/surface_capture.mjs --group=A [--id=...] [--no-matrix] [--smoke]'); process.exit(1); }
+if (!GROUP && !ONLY_IDS) { console.error('usage: node test/surface_capture.mjs --group=A [--id=...] [--no-matrix] [--smoke]\n   or: node test/surface_capture.mjs --only=id1,id2,...'); process.exit(1); }
 
 const surfacesDoc = JSON.parse(await readFile(path.join(ROOT, 'design/surfaces.json'), 'utf8'));
-const allSelected = surfacesDoc.surfaces.filter((s) => s.group === GROUP && (!ONLY_ID || s.id === ONLY_ID));
-if (!allSelected.length) { console.error(`no surfaces with group=${GROUP}`); process.exit(1); }
+const allSelected = ONLY_IDS
+  ? surfacesDoc.surfaces.filter((s) => ONLY_IDS.includes(s.id))
+  : surfacesDoc.surfaces.filter((s) => s.group === GROUP && (!ONLY_ID || s.id === ONLY_ID));
+if (!allSelected.length) { console.error(ONLY_IDS ? `no surfaces matching --only=${ONLY_LIST}` : `no surfaces with group=${GROUP}`); process.exit(1); }
+if (ONLY_IDS) {
+  const foundIds = new Set(allSelected.map((s) => s.id));
+  for (const id of ONLY_IDS) if (!foundIds.has(id)) console.error(`[--only] WARNING: no surfaces.json entry for "${id}" — skipped`);
+}
 
 // splash has no live DOM route (surfaces.json: `opened: null`, "no live DOM route — first-load
 // native splash") — per the user, use the existing wireframe as its as-built stand-in instead of
@@ -231,6 +242,17 @@ async function enterState(entry, state) {
       await page.evaluate((k) => { if (typeof fxSection === 'function') fxSection(k); }, openKey);
       await page.waitForTimeout(300);
     }
+    return;
+  }
+
+  // Phone-only chrome regions (test/surface_coverage_check.mjs additions) share mobile-sheet's
+  // non-runnable-text openSteps — same fix, just a plain viewport resize (rest state only, no
+  // section-toggle logic these three don't need).
+  if (['fx-rail-foot', 'fx-actionbar', 'fx-secnav', 'lib-grid'].includes(entry.id) && entry.openSteps.some((s) => s.eval && s.eval.includes('resize viewport'))) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { if (typeof applyFxLayout === 'function') applyFxLayout(); });
+    await page.waitForTimeout(150);
     return;
   }
 

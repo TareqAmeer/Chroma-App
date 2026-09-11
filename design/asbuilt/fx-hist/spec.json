@@ -1,0 +1,479 @@
+{
+  "id": "fx-hist",
+  "group": "A",
+  "generatedAt": "2026-09-11T19:39:11.286Z",
+  "hasToggle": false,
+  "tree": {
+    "tag": "canvas",
+    "id": "fx-hist",
+    "style": {
+      "color": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "backgroundColor": {
+        "value": "rgba(0, 0, 0, 0.45)",
+        "token": null
+      },
+      "borderColor": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "outlineColor": {
+        "value": "rgb(255, 255, 255)",
+        "token": "/color/surface/page",
+        "appVar": "--bg",
+        "role": "surface.page"
+      },
+      "fontSize": {
+        "value": "16px",
+        "token": null
+      },
+      "fontWeight": {
+        "value": "400",
+        "token": null
+      },
+      "fontFamily": {
+        "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+        "token": null
+      },
+      "lineHeight": {
+        "value": "24px",
+        "token": null
+      },
+      "letterSpacing": {
+        "value": "normal",
+        "token": null
+      },
+      "paddingTop": {
+        "value": "0px",
+        "token": null
+      },
+      "paddingRight": {
+        "value": "0px",
+        "token": null
+      },
+      "paddingBottom": {
+        "value": "0px",
+        "token": null
+      },
+      "paddingLeft": {
+        "value": "0px",
+        "token": null
+      },
+      "gap": {
+        "value": "normal",
+        "token": null
+      },
+      "rowGap": {
+        "value": "normal",
+        "token": null
+      },
+      "columnGap": {
+        "value": "normal",
+        "token": null
+      },
+      "borderRadius": {
+        "value": "4px",
+        "token": null
+      },
+      "borderTopLeftRadius": {
+        "value": "4px",
+        "token": null
+      },
+      "borderTopRightRadius": {
+        "value": "4px",
+        "token": null
+      },
+      "borderBottomLeftRadius": {
+        "value": "4px",
+        "token": null
+      },
+      "borderBottomRightRadius": {
+        "value": "4px",
+        "token": null
+      },
+      "transitionDuration": {
+        "value": "0s",
+        "token": null
+      },
+      "transitionTimingFunction": {
+        "value": "ease",
+        "token": null
+      },
+      "boxShadow": {
+        "value": "none",
+        "token": null
+      }
+    },
+    "children": []
+  },
+  "unmapped": [
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0.45)"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "fontSize",
+      "value": "16px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "lineHeight",
+      "value": "24px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "borderRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "borderTopLeftRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "borderTopRightRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "borderBottomLeftRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "borderBottomRightRadius",
+      "value": "4px"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "canvas",
+      "id": "fx-hist",
+      "prop": "boxShadow",
+      "value": "none"
+    }
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "n/a"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "f8de75c70ce47049",
+        "path": "design/asbuilt-full/fx-hist/f8de75c70ce47049.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "f8de75c70ce47049",
+        "path": "design/asbuilt-full/fx-hist/f8de75c70ce47049.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "b7fb24103ca38b4c",
+        "path": "design/asbuilt-full/fx-hist/b7fb24103ca38b4c.webp"
+      },
+      {
+        "key": "rest|dark|960x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "1885265bcb99fa85",
+        "path": "design/asbuilt-full/fx-hist/1885265bcb99fa85.webp"
+      },
+      {
+        "key": "rest|dark|900x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "3571ef93dfd61f15",
+        "path": "design/asbuilt-full/fx-hist/3571ef93dfd61f15.webp"
+      },
+      {
+        "key": "rest|dark|820x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "63f701edc61d6451",
+        "path": "design/asbuilt-full/fx-hist/63f701edc61d6451.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "a584628c7d079bfd",
+        "path": "design/asbuilt-full/fx-hist/a584628c7d079bfd.webp"
+      },
+      {
+        "key": "rest|dark|760x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "f8de75c70ce47049",
+        "path": "design/asbuilt-full/fx-hist/f8de75c70ce47049.webp"
+      },
+      {
+        "key": "rest|dark|700x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "4ed5c4570a2af748",
+        "path": "design/asbuilt-full/fx-hist/4ed5c4570a2af748.webp"
+      },
+      {
+        "key": "rest|dark|390x844|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "4ed5c4570a2af748",
+        "path": "design/asbuilt-full/fx-hist/4ed5c4570a2af748.webp"
+      },
+      {
+        "key": "rest|light|1440x900|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "2141a1281d7937bf",
+        "path": "design/asbuilt-full/fx-hist/2141a1281d7937bf.webp"
+      },
+      {
+        "key": "rest|light|1200x800|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "2141a1281d7937bf",
+        "path": "design/asbuilt-full/fx-hist/2141a1281d7937bf.webp"
+      },
+      {
+        "key": "rest|light|1024x768|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "c9c8853f31fe4bcb",
+        "path": "design/asbuilt-full/fx-hist/c9c8853f31fe4bcb.webp"
+      },
+      {
+        "key": "rest|light|960x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "3566cc8516fdc25c",
+        "path": "design/asbuilt-full/fx-hist/3566cc8516fdc25c.webp"
+      },
+      {
+        "key": "rest|light|900x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "212c8edf8c29665b",
+        "path": "design/asbuilt-full/fx-hist/212c8edf8c29665b.webp"
+      },
+      {
+        "key": "rest|light|820x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "0fa9394131b7ef40",
+        "path": "design/asbuilt-full/fx-hist/0fa9394131b7ef40.webp"
+      },
+      {
+        "key": "rest|light|768x1024|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "e37b06aa45811a30",
+        "path": "design/asbuilt-full/fx-hist/e37b06aa45811a30.webp"
+      },
+      {
+        "key": "rest|light|760x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "2141a1281d7937bf",
+        "path": "design/asbuilt-full/fx-hist/2141a1281d7937bf.webp"
+      },
+      {
+        "key": "rest|light|700x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "1864b39ba18ba811",
+        "path": "design/asbuilt-full/fx-hist/1864b39ba18ba811.webp"
+      },
+      {
+        "key": "rest|light|390x844|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "1864b39ba18ba811",
+        "path": "design/asbuilt-full/fx-hist/1864b39ba18ba811.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
+}

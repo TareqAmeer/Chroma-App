@@ -135,11 +135,11 @@ async function closeAnyOverlay() {
 // Capture groups per docs/ui-workflow/sessions.md S6 (A→E, one per session). Assigned here so
 // design/surfaces.json stays the single source of truth instead of a second lookup file.
 const GROUPS = {
-  A: (id, kind) => id === 'panel-fx' || kind === 'fxsec',
+  A: (id, kind) => id === 'panel-fx' || kind === 'fxsec' || id === 'fx-deskbar' || id === 'fx-toolrail',
   B: (id, kind) => ['menu', 'modal', 'confirm', 'toast'].includes(kind),
   C: (id) => ['panel-match', 'panel-copy', 'panel-collage', 'panel-guide', 'splash'].includes(id),
-  D: (id) => id === 'mobile-sheet',
-  E: (id) => id === 'library',
+  D: (id) => id === 'mobile-sheet' || ['fx-rail-foot', 'fx-actionbar', 'fx-secnav'].includes(id),
+  E: (id) => id === 'library' || (id.startsWith('lib-') && id !== 'library'),
 };
 function groupFor(id, kind) {
   for (const [g, test] of Object.entries(GROUPS)) if (test(id, kind)) return g;
@@ -387,6 +387,59 @@ if (!ONLY_ID || ONLY_ID === 'library') {
     opened: states.rest, states,
     wireframe: true, wireframeFile: WIREFRAME_COVERAGE.library,
   });
+}
+
+// ── 6. Structural chrome regions (test/surface_coverage_check.mjs gap, 2026-09-11) ─────────────
+// The S5 walk covered pages/sections/menus/dialogs but not the app's persistent CHROME — top
+// bars, tool rail, docked filmstrip, Library sidebar/status bar. `surface_coverage_check.mjs`
+// scans the real DOM in 3 layouts (editor-with-photo, library-full, phone-width) for any id'd
+// region a bigger surface's `selector` doesn't resolve to EXACTLY (containment by panel-fx don't
+// count — that was the hole: everything "inside" panel-fx read as covered). Each entry below adds
+// exactly the id the checker reported missing, nothing invented, with the same boot/open pattern
+// already used above for editor/library/phone contexts.
+if (!ONLY_ID || ['fx-deskbar', 'fx-toolrail', 'lib-main', 'lib-top', 'lib-filters-panel', 'lib-side', 'lib-bottom', 'lib-grid', 'fx-rail-foot', 'fx-actionbar', 'fx-secnav'].includes(ONLY_ID)) {
+  // Editor-context chrome: visible right now (still on panel-fx with the photo loaded earlier).
+  await page.evaluate(() => { if (typeof applyFxLayout === 'function') applyFxLayout(); });
+  for (const id of ['fx-deskbar', 'fx-toolrail']) {
+    if (ONLY_ID && ONLY_ID !== id) continue;
+    const sel = '#' + id;
+    add({ id, kind: 'chrome', selector: sel, openSteps: [], opened: await visibleNow(sel), states: { rest: await visibleNow(sel) }, wireframe: false, wireframeFile: null });
+  }
+  // Library-context chrome: needs the full (not docked) overlay, same toggle 'library' already uses.
+  if (!ONLY_ID || ['lib-main', 'lib-top', 'lib-filters-panel', 'lib-side', 'lib-bottom'].includes(ONLY_ID)) {
+    await page.evaluate(() => { document.getElementById('lib-overlay')?.classList.add('on', 'full'); });
+    await page.waitForTimeout(300);
+    for (const id of ['lib-main', 'lib-top', 'lib-filters-panel', 'lib-side', 'lib-bottom']) {
+      if (ONLY_ID && ONLY_ID !== id) continue;
+      const sel = '#' + id;
+      add({
+        id, kind: 'chrome', selector: sel,
+        openSteps: [{ eval: "document.getElementById('lib-overlay').classList.add('on','full')" }],
+        opened: await visibleNow(sel), states: { rest: await visibleNow(sel) }, wireframe: false, wireframeFile: null,
+      });
+    }
+    await page.evaluate(() => { document.getElementById('lib-overlay')?.classList.remove('full'); });
+  }
+  // Phone-width chrome: matches surface_coverage_check.mjs's own phone scan (390px, no library
+  // full-view toggle — same viewport mobile-sheet above already resets afterward).
+  if (!ONLY_ID || ['lib-grid', 'fx-rail-foot', 'fx-actionbar', 'fx-secnav'].includes(ONLY_ID)) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { if (typeof applyFxLayout === 'function') applyFxLayout(); });
+    await page.waitForTimeout(200);
+    for (const id of ['lib-grid', 'fx-rail-foot', 'fx-actionbar', 'fx-secnav']) {
+      if (ONLY_ID && ONLY_ID !== id) continue;
+      const sel = '#' + id;
+      add({
+        id, kind: 'chrome', selector: sel,
+        openSteps: [{ eval: 'resize viewport to <=700px width, applyFxLayout()' }],
+        opened: await visibleNow(sel), states: { rest: await visibleNow(sel) }, wireframe: false, wireframeFile: null,
+      });
+    }
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { if (typeof applyFxLayout === 'function') applyFxLayout(); });
+  }
 }
 
 // Splash — no live surface in this SPA (single-file app has no separate splash route to
