@@ -116,6 +116,9 @@ const GATES = [
   // environment gap, not an app regression, and CI should install it rather than this gate faking
   // a pass/fail either way.
   { name: 'editor:webkit-smoke', cmd: ['node', 'test/editor_webkit_smoke.mjs'] },
+  // T36 (editor_ux_spec.json): hammers undo/redo (30 edits, past the 20-entry cap) and verifies
+  // the cap actually holds plus an exact round-trip, not just a single-click smoke test.
+  { name: 'editor:undo-stress', cmd: ['node', 'test/editor_undo_stress.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');

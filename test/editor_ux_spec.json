@@ -902,12 +902,12 @@
     },
     "T36": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] one behavioural test exercises undo/redo functionally; none hammer it (hundreds of edits, undo-to-start, redo-to-end) and check the history array doesn't grow unbounded or that memory is reclaimed after a long session.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_undo_stress.mjs",
       "panel": null,
-      "note": "Needs a stress test: N slider edits -> N undos -> N redos, asserting final state matches, fxHistIdx/history-array length stays bounded, and no console error/hang."
+      "note": "Needs a stress test: N slider edits -> N undos -> N redos, asserting final state matches, fxHistIdx/history-array length stays bounded, and no console error/hang. CLOSED 2026-09-11: test/editor_undo_stress.mjs pushes 30 slider edits (past the 20-entry cap), confirms fxHistory.length actually stays <=20, then undoes to the oldest SURVIVING entry (not the pre-edit start, which the cap correctly evicts) and redoes back to the last edit, asserting exact values both ways. Found and worked around a real timing subtlety along the way: fxHistoryPush's ~400ms debounce can take noticeably longer under main-thread/GPU load, so the test polls for the actual history-length change instead of a fixed sleep. Wired as `npm run editor:undo-stress` and into editor:gates. Verified live: passes clean."
     },
     "T37": {
       "category": "tooling-gap",

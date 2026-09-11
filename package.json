@@ -41,6 +41,7 @@
     "editor:native-gate-check": "node test/editor_native_gate_check.mjs",
     "editor:keyboard-check": "node test/editor_keyboard_check.mjs",
     "editor:webkit-smoke": "node test/editor_webkit_smoke.mjs",
+    "editor:undo-stress": "node test/editor_undo_stress.mjs",
     "editor:fast-check": "node test/editor_snap_lists_check.mjs && node test/editor_html_validity_check.mjs",
     "editor:token-check": "node test/editor_token_check.mjs",
     "editor:gates": "node test/editor_gates.mjs"
