@@ -75,6 +75,11 @@ In this order, and none of it is optional:
 5. **Run `npm run editor:gates`** and iterate until green.
 6. **Screenshot the result and look at it.** Not to measure — to catch the class of defect no
    check has an opinion about (something ugly, something in a nonsensical place).
+   ⚠️ T25 (editor_ux_spec.json, 2026-09-10): this step was done for Retouch and then skipped for
+   every panel implemented after it (Detail/Film/Frame/Crop/Color) — every automated check here
+   explicitly disclaims it cannot see "something ugly or in a nonsensical place", and that
+   disclaimer is only honored if this step actually happens, per panel, not once at the end.
+   Do it before moving to the next panel, not batched later.
 
 ---
 

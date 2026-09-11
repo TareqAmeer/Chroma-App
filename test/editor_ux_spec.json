@@ -1,5 +1,5 @@
 {
-  "_readme": "Stable-ID spec for the Editor UX/wireframe alignment pass. Each item: category (bug|topbar|context-menu|library-sidebar|looks-panel), status (open|fixed|backlog), source (verbatim ask), wireframeRef (source line in the .dc.html when the wireframe governs this item, else null), check (the test/check name that will assert it once written, else null). Update status in place as work lands \u2014 do not delete entries. See HANDOVER_EDITOR.md and the approved plan for the process this file is part of.",
+  "_readme": "Stable-ID spec for the Editor UX/wireframe alignment pass. Each item: category (bug|topbar|context-menu|library-sidebar|looks-panel), status (open|fixed|backlog), source (verbatim ask), wireframeRef (source line in the .dc.html when the wireframe governs this item, else null), check (the test/check name that will assert it once written, else null). Update status in place as work lands — do not delete entries. See HANDOVER_EDITOR.md and the approved plan for the process this file is part of.",
   "items": {
     "E1": {
       "category": "bug",
@@ -15,7 +15,7 @@
       "source": "reset sometimes doesn't reset the photo",
       "wireframeRef": null,
       "check": "editor_wireframe_behaviour.mjs: reset-restores-defaults",
-      "note": "COULD NOT REPRODUCE 2026-09-09 via the real UI path (gear menu > Reset all edits > confirm dialog > OK) \u2014 the behaviour test for this (editor_wireframe_behaviour.mjs) PASSES: an Exposure change correctly reverts to 0. Found one thing while investigating that COULD explain an intermittent no-op: fxResetAll() (chromasmith-22.html) has an early guard `if(!fxHistory.length)return;` \u2014 if fxHistory were ever empty when this fires, reset would silently do nothing with no error. fxHistory is seeded to length 1 on every photo load (line ~9568), so this shouldn't normally be reachable, but not fully ruled out as the 'sometimes' trigger (e.g. a race during a slow photo load). Also worth checking: does the confirm dialog ever get dismissed/cancelled by an accidental Escape or outside click that a user might not notice, reading as 'reset did nothing'? Needs a real repro from the user (which action sequence, which photo state) before chasing further \u2014 left open, not closed."
+      "note": "COULD NOT REPRODUCE 2026-09-09 via the real UI path (gear menu > Reset all edits > confirm dialog > OK) — the behaviour test for this (editor_wireframe_behaviour.mjs) PASSES: an Exposure change correctly reverts to 0. Found one thing while investigating that COULD explain an intermittent no-op: fxResetAll() (chromasmith-22.html) has an early guard `if(!fxHistory.length)return;` — if fxHistory were ever empty when this fires, reset would silently do nothing with no error. fxHistory is seeded to length 1 on every photo load (line ~9568), so this shouldn't normally be reachable, but not fully ruled out as the 'sometimes' trigger (e.g. a race during a slow photo load). Also worth checking: does the confirm dialog ever get dismissed/cancelled by an accidental Escape or outside click that a user might not notice, reading as 'reset did nothing'? Needs a real repro from the user (which action sequence, which photo state) before chasing further — left open, not closed."
     },
     "E3": {
       "category": "bug",
@@ -30,7 +30,7 @@
       "source": "when you decrease the size of the app, the photos get squeezed instead of shrinking in size",
       "wireframeRef": null,
       "check": "editor_responsive_qa.mjs: ASPECT (checkAspectRatioInvariant, wireframe_checks_lib.mjs)",
-      "note": "Check now wired and running (2026-09-09) across 8 viewports 700-1440px, no ASPECT finding yet at those widths \u2014 the reported squeeze may need narrower widths or a specific interaction (e.g. dragging the OS window, not the swept viewport sizes) to reproduce; re-check with a live manual resize before considering this not reproducible."
+      "note": "Check now wired and running (2026-09-09) across 8 viewports 700-1440px, no ASPECT finding yet at those widths — the reported squeeze may need narrower widths or a specific interaction (e.g. dragging the OS window, not the swept viewport sizes) to reproduce; re-check with a live manual resize before considering this not reproducible."
     },
     "E5": {
       "category": "bug",
@@ -43,10 +43,10 @@
     "E6": {
       "category": "bug",
       "status": "fixed",
-      "source": "[found by tooling, not user-reported, 2026-09-08] the docked Library filmstrip (#lib-overlay, left column in deskx) does not re-theme at all \u2014 toggleTheme()/body.light never changes its background/text/border colours, which stay on dark tokens regardless of theme.",
+      "source": "[found by tooling, not user-reported, 2026-09-08] the docked Library filmstrip (#lib-overlay, left column in deskx) does not re-theme at all — toggleTheme()/body.light never changes its background/text/border colours, which stay on dark tokens regardless of theme.",
       "wireframeRef": null,
       "check": "editor_wireframe_diff.mjs: filmstrip zone borderColor/backgroundColor/color",
-      "note": "2026-09-09: ROOT CAUSE FIXED. #lib-overlay keeps its OWN theme class (.lib-light) separate from body.light, only synced from its own boot/click handlers, never when the Editor's toggleTheme()/fxSetTheme() ran (they share the 'csTheme' localStorage KEY but were never wired to react to each other live). Added window.chromasmithSyncLibTheme (desktop/library-ui.js) called from both chromasmith-22.html theme functions, and made the Library's own opt.onclick set body.light in the reverse direction too \u2014 now genuinely two-way. Verified live in the Browser pane, both directions, both themes (confirmed via a hard cache-bust after an unrelated Browser-pane script-caching artifact briefly made the fix look broken). backgroundColor/color findings now clear. RESIDUAL, still open: a borderColor finding remains \u2014 the dock's border mixes light/dark per-side colours in light theme (a narrower, separate CSS gap from the theme-sync bug just fixed), left as a visible failing finding rather than allowlisted. 2026-09-09 (follow-up): border-colour residual re-checked live in the Browser pane (docked, light theme, .lib-light applied, tab active/inactive, photo loaded) across every bordered element in the filmstrip (#lib-overlay, #lib-side, .lib-side-tabs, both tab buttons, #lib-top, .lib-dock-resizer) via getComputedStyle per side \u2014 every visible (non-zero-width) border resolved to the same theme-correct hairline token, no mismatch found. User independently confirmed the docked filmstrip's border looks consistent in light theme on the real app. Marking FIXED (not reproducible); the only mismatches found were 0px-width sides falling back to currentColor, invisible and already noted as a known non-issue in the code's own comment (library-ui.js ~line 785)."
+      "note": "2026-09-09: ROOT CAUSE FIXED. #lib-overlay keeps its OWN theme class (.lib-light) separate from body.light, only synced from its own boot/click handlers, never when the Editor's toggleTheme()/fxSetTheme() ran (they share the 'csTheme' localStorage KEY but were never wired to react to each other live). Added window.chromasmithSyncLibTheme (desktop/library-ui.js) called from both chromasmith-22.html theme functions, and made the Library's own opt.onclick set body.light in the reverse direction too — now genuinely two-way. Verified live in the Browser pane, both directions, both themes (confirmed via a hard cache-bust after an unrelated Browser-pane script-caching artifact briefly made the fix look broken). backgroundColor/color findings now clear. RESIDUAL, still open: a borderColor finding remains — the dock's border mixes light/dark per-side colours in light theme (a narrower, separate CSS gap from the theme-sync bug just fixed), left as a visible failing finding rather than allowlisted. 2026-09-09 (follow-up): border-colour residual re-checked live in the Browser pane (docked, light theme, .lib-light applied, tab active/inactive, photo loaded) across every bordered element in the filmstrip (#lib-overlay, #lib-side, .lib-side-tabs, both tab buttons, #lib-top, .lib-dock-resizer) via getComputedStyle per side — every visible (non-zero-width) border resolved to the same theme-correct hairline token, no mismatch found. User independently confirmed the docked filmstrip's border looks consistent in light theme on the real app. Marking FIXED (not reproducible); the only mismatches found were 0px-width sides falling back to currentColor, invisible and already noted as a known non-issue in the code's own comment (library-ui.js ~line 785)."
     },
     "E7": {
       "category": "bug",
@@ -54,7 +54,7 @@
       "source": "[found by tooling, not user-reported, 2026-09-08] intermittent (roughly half of runs observed): in light theme, once a photo is loaded, the topbar/undo-cluster/rail/tool-panel text colour reverts to the DARK-theme colour (white) even though body.light is set. Same inputs, different result across runs.",
       "wireframeRef": null,
       "check": "editor_wireframe_diff.mjs: topbar/rail/panel color, [light/photo] state",
-      "note": "Scoped into this pass per user 2026-09-08. RESOLVED 2026-09-10: root cause was NOT a CSS/theme bug \u2014 --txt/body.light were always correct. The real cause is chromasmithForceLibraryReady() (desktop/library-ui.js, boot watchdog) winning a timing race against the harness's own load/settle window and force-flipping the Library into full-view takeover (body.lib-full, hides #fx-deskbar) mid-run; whatever remained visible then read different computed styles across the board, with color being the property most often reported. Confirmed by 4x clean reruns of editor_wireframe_diff.mjs against an unmodified tree: 16 findings \u2192 0 \u2192 0 \u2192 0. Mitigated by widening the watchdog's initial grace period 10000ms\u219216000ms (chromasmith-22.html, window.bumpBootSplashWatchdog) so real boot has more room before the safety valve fires, cutting the race window with the harness."
+      "note": "Scoped into this pass per user 2026-09-08. RESOLVED 2026-09-10: root cause was NOT a CSS/theme bug — --txt/body.light were always correct. The real cause is chromasmithForceLibraryReady() (desktop/library-ui.js, boot watchdog) winning a timing race against the harness's own load/settle window and force-flipping the Library into full-view takeover (body.lib-full, hides #fx-deskbar) mid-run; whatever remained visible then read different computed styles across the board, with color being the property most often reported. Confirmed by 4x clean reruns of editor_wireframe_diff.mjs against an unmodified tree: 16 findings → 0 → 0 → 0. Mitigated by widening the watchdog's initial grace period 10000ms→16000ms (chromasmith-22.html, window.bumpBootSplashWatchdog) so real boot has more room before the safety valve fires, cutting the race window with the harness."
     },
     "E8": {
       "category": "topbar",
@@ -62,7 +62,7 @@
       "source": "[found by tooling, not user-reported, 2026-09-09] the wireframe's View menu has an Appearance (Dark/Light) section that didn't exist in the app at all.",
       "wireframeRef": "Editor (Developer) View.dc.html:1684-1686",
       "check": "editor_wireframe_inventory.mjs: viewmenu zone",
-      "note": "User decision 2026-09-09: add it, under the system gear (#fx-overflow/#fx-overflow-menu), matching Library's own gear/View menu Appearance group exactly (desktop/library-ui.js #lib-view-menu). Both already shared the same 'csTheme' localStorage key. Added fxSetTheme(mode) (chromasmith-22.html, near toggleTheme()) and rebuilt ovfBuild()'s theme row into a grp-label + two checkmarked .opt rows. Found and fixed a real bug in the same change: rebuilding the menu (ovfBuild()) from inside the click handler detached the clicked button mid-event, breaking the document-level click-outside-closes listener's closest() check and incorrectly closing the menu on every theme click \u2014 fixed by toggling the .on class directly instead of rebuilding, matching Library's own syncViewMenuChecks() approach. Verified live (Browser pane): menu stays open, checkmark moves, body.light toggles correctly."
+      "note": "User decision 2026-09-09: add it, under the system gear (#fx-overflow/#fx-overflow-menu), matching Library's own gear/View menu Appearance group exactly (desktop/library-ui.js #lib-view-menu). Both already shared the same 'csTheme' localStorage key. Added fxSetTheme(mode) (chromasmith-22.html, near toggleTheme()) and rebuilt ovfBuild()'s theme row into a grp-label + two checkmarked .opt rows. Found and fixed a real bug in the same change: rebuilding the menu (ovfBuild()) from inside the click handler detached the clicked button mid-event, breaking the document-level click-outside-closes listener's closest() check and incorrectly closing the menu on every theme click — fixed by toggling the .on class directly instead of rebuilding, matching Library's own syncViewMenuChecks() approach. Verified live (Browser pane): menu stays open, checkmark moves, body.light toggles correctly."
     },
     "B1": {
       "category": "backlog",
@@ -78,7 +78,7 @@
       "source": "undo/redo buttons feel not aligned to the rest of the buttons",
       "wireframeRef": ".dc.html:41-43 .undogrp wrapper",
       "check": "editor_wireframe_diff.mjs: undogrp pair",
-      "note": "Fixed 2026-09-09: undo/redo wrapped in a new .fx-undogrp div matching the wireframe .undogrp (Editor (Developer) View.dc.html:41-43) \u2014 outer border (8px radius, var(--bdr)), square inner button corners, hairline divider between the two. editor_wireframe_diff.mjs's undo/redo cluster pair was pointed at #fx-deskbar as a stand-in (no real wrapper existed); repointed at .fx-undogrp for a genuine comparison. Resolved borderColor/borderRadius findings across both themes."
+      "note": "Fixed 2026-09-09: undo/redo wrapped in a new .fx-undogrp div matching the wireframe .undogrp (Editor (Developer) View.dc.html:41-43) — outer border (8px radius, var(--bdr)), square inner button corners, hairline divider between the two. editor_wireframe_diff.mjs's undo/redo cluster pair was pointed at #fx-deskbar as a stand-in (no real wrapper existed); repointed at .fx-undogrp for a genuine comparison. Resolved borderColor/borderRadius findings across both themes."
     },
     "3.1.2": {
       "category": "topbar",
@@ -86,7 +86,7 @@
       "source": "undo/redo/export/show original should be greyed out and not clickable when they cannot be used",
       "wireframeRef": null,
       "check": "disabled-state audit (wireframe_checks_lib.mjs)",
-      "note": "Fixed 2026-09-09, deskbar only (Show original \u2014 3.1.11 \u2014 is not yet in the deskbar, tracked separately): Undo/Redo now use the real disabled attribute, synced by fxSyncTopbarDisabled() from fxHistoryPush/fxUndo/fxRedo and at boot (undo<=0/redo>=length-1). Export mirrors the existing #btn-fx-export disabled state via a MutationObserver, same pattern already used for #fx-fab-export. New CSS: .fx-db:disabled{opacity:.35;pointer-events:none} matches the wireframe .ibtn.disabled. Verified live via a Playwright probe: boot (no photo) all 3 disabled; after photo load export enables, undo/redo stay disabled (fresh history); after one slider edit undo enables, redo stays disabled."
+      "note": "Fixed 2026-09-09, deskbar only (Show original — 3.1.11 — is not yet in the deskbar, tracked separately): Undo/Redo now use the real disabled attribute, synced by fxSyncTopbarDisabled() from fxHistoryPush/fxUndo/fxRedo and at boot (undo<=0/redo>=length-1). Export mirrors the existing #btn-fx-export disabled state via a MutationObserver, same pattern already used for #fx-fab-export. New CSS: .fx-db:disabled{opacity:.35;pointer-events:none} matches the wireframe .ibtn.disabled. Verified live via a Playwright probe: boot (no photo) all 3 disabled; after photo load export enables, undo/redo stay disabled (fresh history); after one slider edit undo enables, redo stays disabled."
     },
     "3.1.3": {
       "category": "topbar",
@@ -94,7 +94,7 @@
       "source": "edit history timeline doesn't work",
       "wireframeRef": ".dc.html #history-menu",
       "check": "dead-control probe (checkDeadControls)",
-      "note": "FIXED 2026-09-09 together with 3.1.4 \u2014 DIAGNOSED (subagent): it wasn't dead, it was the WRONG popover. #btn-export-history (fxToggleHistoryPopover) only ever showed Library export versions, never the in-session edit stack (fxHistory) \u2014 a user clicking it expecting edit history saw only exports or nothing. Fixed by the 3.1.4 merge below."
+      "note": "FIXED 2026-09-09 together with 3.1.4 — DIAGNOSED (subagent): it wasn't dead, it was the WRONG popover. #btn-export-history (fxToggleHistoryPopover) only ever showed Library export versions, never the in-session edit stack (fxHistory) — a user clicking it expecting edit history saw only exports or nothing. Fixed by the 3.1.4 merge below."
     },
     "3.1.4": {
       "category": "topbar",
@@ -102,7 +102,7 @@
       "source": "edit history timeline should be combined with export timeline",
       "wireframeRef": ".dc.html #history-menu",
       "check": "editor_wireframe_behaviour.mjs: combined history menu",
-      "note": "FIXED 2026-09-09: fxToggleTimelinePopover() (chromasmith-22.html) now fetches export history (if the Library backend exposes chromasmithGetExportHistory) and merges it with the in-session fxHistory undo stack into ONE list sorted newest-first (export ts\u00d71000 to match fxHistory's ms timestamps), each row tagged 'Edit' or an export-version chip. #btn-export-history's onclick was retargeted to the same fxToggleTimelinePopover(), and the now-dead fxToggleHistoryPopover()/#fx-history-popover were retired. Verified live: real edit-history rows render sorted correctly with the current entry highlighted; both buttons open the identical combined popover."
+      "note": "FIXED 2026-09-09: fxToggleTimelinePopover() (chromasmith-22.html) now fetches export history (if the Library backend exposes chromasmithGetExportHistory) and merges it with the in-session fxHistory undo stack into ONE list sorted newest-first (export ts×1000 to match fxHistory's ms timestamps), each row tagged 'Edit' or an export-version chip. #btn-export-history's onclick was retargeted to the same fxToggleTimelinePopover(), and the now-dead fxToggleHistoryPopover()/#fx-history-popover were retired. Verified live: real edit-history rows render sorted correctly with the current entry highlighted; both buttons open the identical combined popover."
     },
     "3.1.5": {
       "category": "topbar",
@@ -110,7 +110,7 @@
       "source": "gamut warning button doesn't work",
       "wireframeRef": null,
       "check": "dead-control probe (checkDeadControls)",
-      "note": "DIAGNOSED LIVE 2026-09-09, NOT a dead-control bug \u2014 the toggle, uniform plumbing, and shader branch are all correctly wired (confirmed: fxGamutWarn flips, .on class updates, render() receives gamutWarn). The shader's OWN comment (chromasmith-22.html ~6360, 'KNOWN SCOPE LIMIT') explains why nothing visibly changes for a normal edit: the 'lut' FBO is an 8-bit RGBA texture, so basicAdjust/curves/masks clipping (a big Exposure push, confirmed tested at slider=100 \u2014 canvas hash genuinely didn't change) is already hard-clamped by the GPU texture write BEFORE the gamut check ever runs. Only clipping introduced AFTER that point (grain's unclamped addition, print-LUT output) is currently catchable \u2014 not tested live yet. This makes the feature effectively invisible for the most common trigger (exposure/highlight recovery), which is very likely why the user experiences it as 'doesn't work' even though it isn't dead code. The code already names its own fix: force hdrIntermediate (RGBA16F) whenever the toggle is on, to extend coverage upstream of the 8-bit clamp. NOT implemented \u2014 real shader/perf tradeoff, needs a decision before touching it (see plan)."
+      "note": "DIAGNOSED LIVE 2026-09-09, NOT a dead-control bug — the toggle, uniform plumbing, and shader branch are all correctly wired (confirmed: fxGamutWarn flips, .on class updates, render() receives gamutWarn). The shader's OWN comment (chromasmith-22.html ~6360, 'KNOWN SCOPE LIMIT') explains why nothing visibly changes for a normal edit: the 'lut' FBO is an 8-bit RGBA texture, so basicAdjust/curves/masks clipping (a big Exposure push, confirmed tested at slider=100 — canvas hash genuinely didn't change) is already hard-clamped by the GPU texture write BEFORE the gamut check ever runs. Only clipping introduced AFTER that point (grain's unclamped addition, print-LUT output) is currently catchable — not tested live yet. This makes the feature effectively invisible for the most common trigger (exposure/highlight recovery), which is very likely why the user experiences it as 'doesn't work' even though it isn't dead code. The code already names its own fix: force hdrIntermediate (RGBA16F) whenever the toggle is on, to extend coverage upstream of the 8-bit clamp. NOT implemented — real shader/perf tradeoff, needs a decision before touching it (see plan)."
     },
     "3.1.6": {
       "category": "topbar",
@@ -118,7 +118,7 @@
       "source": "gamut button should be removed but can be enabled from the View menu bar",
       "wireframeRef": ".dc.html #view-menu",
       "check": "editor_wireframe_inventory.mjs: topbar zone",
-      "note": "Fixed 2026-09-09: standalone #btn-gamut-warn button removed from the canvas overlay (#fx-preview-tools). New View menu (#fx-view/#fx-view-menu, viewMenuBuild() in chromasmith-22.html) holds Show gamut warning + Appearance, matching Editor (Developer) View.dc.html:215 (#btn-view-menu). Gamut toggle also removed from the Tools menu (was duplicated there); Appearance also removed from the overflow (...) menu (was duplicated there) \u2014 single source now."
+      "note": "Fixed 2026-09-09: standalone #btn-gamut-warn button removed from the canvas overlay (#fx-preview-tools). New View menu (#fx-view/#fx-view-menu, viewMenuBuild() in chromasmith-22.html) holds Show gamut warning + Appearance, matching Editor (Developer) View.dc.html:215 (#btn-view-menu). Gamut toggle also removed from the Tools menu (was duplicated there); Appearance also removed from the overflow (...) menu (was duplicated there) — single source now."
     },
     "3.1.7": {
       "category": "topbar",
@@ -126,7 +126,7 @@
       "source": "zoom: remove +/-, keep the bar; double-click resets to 100%; don't show zoom size unless hovering/clicking",
       "wireframeRef": ".dc.html .zoomctl .zpct",
       "check": "editor_wireframe_behaviour.mjs: zoom hover/dblclick",
-      "note": "Fixed 2026-09-09: removed the +/- zoom-step buttons; slider double-click calls zoomFit() (app semantic: fit whole image, not reset-to-100% like the wireframe literal \u2014 matches the plan decision \"double-click fits\"); % readout is hover/drag-only (opacity 0 by default, shown via :hover or a new .active class the slider toggles on mousedown, cleared on any window mouseup \u2014 mirrors the wireframe zoomctl JS at Editor (Developer) View.dc.html:454-458). No keyboard shortcut added yet for jump-to-100% (deferred \u2014 needs a free key picked without live testing of every existing binding)."
+      "note": "Fixed 2026-09-09: removed the +/- zoom-step buttons; slider double-click calls zoomFit() (app semantic: fit whole image, not reset-to-100% like the wireframe literal — matches the plan decision \"double-click fits\"); % readout is hover/drag-only (opacity 0 by default, shown via :hover or a new .active class the slider toggles on mousedown, cleared on any window mouseup — mirrors the wireframe zoomctl JS at Editor (Developer) View.dc.html:454-458). No keyboard shortcut added yet for jump-to-100% (deferred — needs a free key picked without live testing of every existing binding)."
     },
     "3.1.8": {
       "category": "topbar",
@@ -149,7 +149,7 @@
       "source": "make sure the title is centered",
       "wireframeRef": ".dc.html .tb-title",
       "check": "editor_wireframe_diff.mjs: topbar pair; editor_responsive_qa.mjs OVERLAP",
-      "note": "Same overlap evidence as 3.1.9 \u2014 the title isn't centered/isolated in its own grid track yet, so it collides with neighbouring controls instead of just sitting off-center."
+      "note": "Same overlap evidence as 3.1.9 — the title isn't centered/isolated in its own grid track yet, so it collides with neighbouring controls instead of just sitting off-center."
     },
     "3.1.11": {
       "category": "topbar",
@@ -181,7 +181,7 @@
       "source": "clicking and holding the undo button should reset the photo",
       "wireframeRef": ".dc.html #btn-undo hold->history",
       "check": "editor_wireframe_behaviour.mjs: hold-undo / shift-click-undo",
-      "note": "Fixed 2026-09-09: holding Undo (450ms, fxUndoMousedown/fxUndoMouseup) opens the merged edit+export history popover instead of undoing; shift-click calls fxResetAll() (fxUndoBtnClick). A Reset all edits row was also added to the bottom of the history popover itself. Hover title on the button reads \"Undo (\u2318Z) \u00b7 hold for edit history \u00b7 shift-click to reset\". Fixed a real bug found while wiring this up: the popovers own outside-click-closes listener treated the SAME click that ends a long-press (mouseup fires click on btn-undo-db) as an outside click and immediately re-closed what the hold just opened \u2014 exempted btn-undo-db the same way btn-history/btn-export-history already were. Verified live via a Playwright probe: a 600ms hold opens the popover (with the new Reset row present) and does NOT undo; a quick click does not open the popover. Reset itself still confirms (E3, tracked separately, not touched here)."
+      "note": "Fixed 2026-09-09: holding Undo (450ms, fxUndoMousedown/fxUndoMouseup) opens the merged edit+export history popover instead of undoing; shift-click calls fxResetAll() (fxUndoBtnClick). A Reset all edits row was also added to the bottom of the history popover itself. Hover title on the button reads \"Undo (⌘Z) · hold for edit history · shift-click to reset\". Fixed a real bug found while wiring this up: the popovers own outside-click-closes listener treated the SAME click that ends a long-press (mouseup fires click on btn-undo-db) as an outside click and immediately re-closed what the hold just opened — exempted btn-undo-db the same way btn-history/btn-export-history already were. Verified live via a Playwright probe: a 600ms hold opens the popover (with the new Reset row present) and does NOT undo; a quick click does not open the popover. Reset itself still confirms (E3, tracked separately, not touched here)."
     },
     "3.2.1": {
       "category": "context-menu",
@@ -189,7 +189,7 @@
       "source": "right click rate and flag renamed to Rate should also include hearting",
       "wireframeRef": ".dc.html #ctx-rate",
       "check": null,
-      "note": "Fixed 2026-09-09: submenu renamed \"Rate & flag\" -> \"Rate\"; added a hearting row (\u2661/\u2665 Add/Remove favorites, toggles setFavorite() for the selection) below Reject/Pick/Clear flag. Verified live via a Playwright probe: right-click menu text includes \"Rate\", \"\u2661 Add to favorites\", no leftover \"Rate & flag\"."
+      "note": "Fixed 2026-09-09: submenu renamed \"Rate & flag\" -> \"Rate\"; added a hearting row (♡/♥ Add/Remove favorites, toggles setFavorite() for the selection) below Reject/Pick/Clear flag. Verified live via a Playwright probe: right-click menu text includes \"Rate\", \"♡ Add to favorites\", no leftover \"Rate & flag\"."
     },
     "3.2.2": {
       "category": "context-menu",
@@ -197,7 +197,7 @@
       "source": "right click version & edit changed to Edit and doesn't need undo option",
       "wireframeRef": ".dc.html .ctx-menu",
       "check": null,
-      "note": "Fixed 2026-09-09 (rename only): submenu renamed \"Versions & edit\" -> \"Edit\". Did NOT remove \"Undo last reset\" \u2014 the code carries an explicit, reasoned justification (a misclick on a multi-photo selection could otherwise wipe edits with no recovery) that a literal reading of this item would contradict; left for the user to confirm before removing a deliberate safety net."
+      "note": "Fixed 2026-09-09 (rename only): submenu renamed \"Versions & edit\" -> \"Edit\". Did NOT remove \"Undo last reset\" — the code carries an explicit, reasoned justification (a misclick on a multi-photo selection could otherwise wipe edits with no recovery) that a literal reading of this item would contradict; left for the user to confirm before removing a deliberate safety net."
     },
     "3.2.3": {
       "category": "context-menu",
@@ -213,7 +213,7 @@
       "source": "right click Find Faces renamed to Scan Photos, greyed out if already scanned",
       "wireframeRef": null,
       "check": null,
-      "note": "Fixed 2026-09-09 (rename only, per the plan's Backlog section): context-menu item renamed \"Find faces in selection\" -> \"Scan photos\". Greying out already-scanned photos needs persisted per-photo scan state \u2014 still backlogged, not done here."
+      "note": "Fixed 2026-09-09 (rename only, per the plan's Backlog section): context-menu item renamed \"Find faces in selection\" -> \"Scan photos\". Greying out already-scanned photos needs persisted per-photo scan state — still backlogged, not done here."
     },
     "3.2.5": {
       "category": "context-menu",
@@ -221,7 +221,7 @@
       "source": "right click Export should have Quick export and Export custom (opens export sidebar)",
       "wireframeRef": ".dc.html #ctx-export .sub",
       "check": null,
-      "note": "Fixed 2026-09-09: context-menu Export is now a submenu \u2014 Quick export (unchanged libExportPaths, fires exportFX() immediately with whatever settings are already configured) and Export custom\u2026 (opens the photo(s) in the editor via openInEditor/openPathsInEditor and reveals the Export section, .fx-ctrl[data-fxsec=export], instead of firing right away). Verified live via a Playwright probe: clicking Export custom\u2026 leaves #panel-fx active and the export section un-collapsed."
+      "note": "Fixed 2026-09-09: context-menu Export is now a submenu — Quick export (unchanged libExportPaths, fires exportFX() immediately with whatever settings are already configured) and Export custom… (opens the photo(s) in the editor via openInEditor/openPathsInEditor and reveals the Export section, .fx-ctrl[data-fxsec=export], instead of firing right away). Verified live via a Playwright probe: clicking Export custom… leaves #panel-fx active and the export section un-collapsed."
     },
     "3.2.6": {
       "category": "context-menu",
@@ -245,7 +245,7 @@
       "source": "BUG: get info popup is always in the top right corner even when scrolling; should move with scroll and be draggable",
       "wireframeRef": null,
       "check": "popover anchoring (checkPopoverAnchoring)",
-      "note": "FIXED 2026-09-09. Diagnosed (subagent) then implemented: #lib-info was position:absolute anchored to #lib-main, its own scroll container \u2014 offsets resolve against #lib-main's box regardless of scrollTop, which is what made it look pinned to a fixed corner. Switched to position:fixed, appended to document.body (not #lib-main), with a viewport-clamped left/top restored from localStorage ('chromasmith_lib_info_pos'). Added drag: a mousedown listener on the stable `el` container itself (not on any child inside the innerHTML block, which is rebuilt on every meta/sidecar/clip-tag fetch \u2014 a listener there would be silently lost on the next re-render, same class of bug fixed earlier in ovfBuild()), gated to a data-drag-handle title row so text selection inside the panel still works. Verified live: renders fixed+viewport-positioned, drag moves and persists it, position survives re-render."
+      "note": "FIXED 2026-09-09. Diagnosed (subagent) then implemented: #lib-info was position:absolute anchored to #lib-main, its own scroll container — offsets resolve against #lib-main's box regardless of scrollTop, which is what made it look pinned to a fixed corner. Switched to position:fixed, appended to document.body (not #lib-main), with a viewport-clamped left/top restored from localStorage ('chromasmith_lib_info_pos'). Added drag: a mousedown listener on the stable `el` container itself (not on any child inside the innerHTML block, which is rebuilt on every meta/sidecar/clip-tag fetch — a listener there would be silently lost on the next re-render, same class of bug fixed earlier in ovfBuild()), gated to a data-drag-handle title row so text selection inside the panel still works. Verified live: renders fixed+viewport-positioned, drag moves and persists it, position survives re-render."
     },
     "3.3.1": {
       "category": "library-sidebar",
@@ -253,7 +253,7 @@
       "source": "clicking the info button opens it in the sidebar which is mostly hidden outside the screen",
       "wireframeRef": null,
       "check": null,
-      "note": "FIXED 2026-09-09, same root cause and same fix as 3.2.8 (subagent diagnosis confirmed it): #lib-overlay is overflow:hidden and, in the docked deskx filmstrip mode, only 120-150px wide \u2014 a 232px panel that was a child of #lib-main (inside that overlay) got clipped to a sliver. Moving #lib-info to document.body with position:fixed (3.2.8's fix) makes it structurally immune to #lib-overlay's clipping regardless of dock width \u2014 verified live that el.parentElement === document.body."
+      "note": "FIXED 2026-09-09, same root cause and same fix as 3.2.8 (subagent diagnosis confirmed it): #lib-overlay is overflow:hidden and, in the docked deskx filmstrip mode, only 120-150px wide — a 232px panel that was a child of #lib-main (inside that overlay) got clipped to a sliver. Moving #lib-info to document.body with position:fixed (3.2.8's fix) makes it structurally immune to #lib-overlay's clipping regardless of dock width — verified live that el.parentElement === document.body."
     },
     "3.3.2": {
       "category": "library-sidebar",
@@ -261,7 +261,7 @@
       "source": "sidebar size can be readjusted",
       "wireframeRef": ".dc.html .filmstrip resizer",
       "check": "editor_wireframe_behaviour.mjs: filmstrip resizer",
-      "note": "Fixed 2026-09-09: docked filmstrip (was hardcoded 120px) now has a drag handle (#lib-dock-resizer) widening it up to 420px, persisted to localStorage. Also fixed a related consistency bug: the Library/Develop tab pair was hardcoded to always show Library active (even while docked/actually in Develop) and was hidden entirely while docked \u2014 now shown (icon-only 150-220px, full text above) with a real active-state sync (syncSideTabs()). Verified live via screenshots at three widths."
+      "note": "Fixed 2026-09-09: docked filmstrip (was hardcoded 120px) now has a drag handle (#lib-dock-resizer) widening it up to 420px, persisted to localStorage. Also fixed a related consistency bug: the Library/Develop tab pair was hardcoded to always show Library active (even while docked/actually in Develop) and was hidden entirely while docked — now shown (icon-only 150-220px, full text above) with a real active-state sync (syncSideTabs()). Verified live via screenshots at three widths."
     },
     "3.3.3": {
       "category": "library-sidebar",
@@ -277,7 +277,7 @@
       "source": "BUG: Raw Profile should update based on photo type, greyed out if non-RAW",
       "wireframeRef": null,
       "check": "disabled-state audit (checkDisabledState)",
-      "note": "FIXED 2026-09-09: #sel-dcp was populated once at boot (initDcpSelect) and never touched again regardless of the current photo. Added fxSyncDcpProfileUI() (chromasmith-22.html, near updateWork()), called from updateWork() \u2014 the one function every photo-load/switch path already calls (27 sites) \u2014 disabling the select + setting an explanatory title when the current item has no rawFile. Verified live: loading a non-RAW PNG correctly disables it."
+      "note": "FIXED 2026-09-09: #sel-dcp was populated once at boot (initDcpSelect) and never touched again regardless of the current photo. Added fxSyncDcpProfileUI() (chromasmith-22.html, near updateWork()), called from updateWork() — the one function every photo-load/switch path already calls (27 sites) — disabling the select + setting an explanatory title when the current item has no rawFile. Verified live: loading a non-RAW PNG correctly disables it."
     },
     "3.4.2": {
       "category": "looks-panel",
@@ -301,7 +301,7 @@
       "source": "remove Google Photos button",
       "wireframeRef": null,
       "check": "editor_wireframe_inventory.mjs: panel zone (Looks)",
-      "note": "Fixed 2026-09-09: Google Photos import button (#btn-gp-import, in the Image Input card that fxDesktopFoldImageIntoLooks() folds into the Looks panel on desktop) is now hidden by that same function when window.__TAURI__ is true. Untouched on web/mobile \u2014 still a real import path there, and the Guide FAQ still documents it. Photos come from the OS Library on desktop anyway, making the button redundant clutter there specifically."
+      "note": "Fixed 2026-09-09: Google Photos import button (#btn-gp-import, in the Image Input card that fxDesktopFoldImageIntoLooks() folds into the Looks panel on desktop) is now hidden by that same function when window.__TAURI__ is true. Untouched on web/mobile — still a real import path there, and the Guide FAQ still documents it. Photos come from the OS Library on desktop anyway, making the button redundant clutter there specifically."
     },
     "3.4.5": {
       "category": "looks-panel",
@@ -309,7 +309,7 @@
       "source": "Input moved right under Raw Profile as a dropdown",
       "wireframeRef": ".dc.html .presetbox",
       "check": "editor_wireframe_inventory.mjs: panel zone (Looks)",
-      "note": "Fixed 2026-09-09 (code review only, NOT screenshot-verified \u2014 see caveat below): fxDesktopReorderLooksPanel() (chromasmith-22.html, called from fxDesktopFoldImageIntoLooks right after the existing fold) moves Input (label+select+chips) to directly after the RAW profile row. Re-verified 2026-09-09 with a SAFE window.__TAURI__ stub (core.invoke rejects with a clear error instead of throwing TypeError, event.listen no-ops) -- zero page errors, and a real screenshot confirms the visible order matches exactly: RAW profile -> Input -> Print -> Highlight response -> Apply-LUT row, with the Preset section (empty/hidden pending real photo data in this stub, not a bug) correctly positioned between Input and Print, and Strength genuinely nested between the category chips and the tile grid inside it. Google Photos button confirmed absent from the Looks panel (still visible only in the unrelated canvas-empty-state hint link, which was explicitly out of scope). Not the literal native Tauri binary, but the real HTML/CSS/JS with only the IPC boundary stubbed -- a meaningfully stronger check than code review alone."
+      "note": "Fixed 2026-09-09 (code review only, NOT screenshot-verified — see caveat below): fxDesktopReorderLooksPanel() (chromasmith-22.html, called from fxDesktopFoldImageIntoLooks right after the existing fold) moves Input (label+select+chips) to directly after the RAW profile row. Re-verified 2026-09-09 with a SAFE window.__TAURI__ stub (core.invoke rejects with a clear error instead of throwing TypeError, event.listen no-ops) -- zero page errors, and a real screenshot confirms the visible order matches exactly: RAW profile -> Input -> Print -> Highlight response -> Apply-LUT row, with the Preset section (empty/hidden pending real photo data in this stub, not a bug) correctly positioned between Input and Print, and Strength genuinely nested between the category chips and the tile grid inside it. Google Photos button confirmed absent from the Looks panel (still visible only in the unrelated canvas-empty-state hint link, which was explicitly out of scope). Not the literal native Tauri binary, but the real HTML/CSS/JS with only the IPC boundary stubbed -- a meaningfully stronger check than code review alone."
     },
     "3.4.6": {
       "category": "looks-panel",
@@ -317,7 +317,7 @@
       "source": "BUG: Highlight Response doesn't seem to do anything to the photo",
       "wireframeRef": null,
       "check": "dead-control probe (checkDeadControls)",
-      "note": "DIAGNOSED LIVE 2026-09-09, same shape as 3.1.5 (not a dead-control bug): confirmed live that switching sel-tonemap to 'agx' produces zero canvas change with the test fixture (portrait.png, an 8-bit non-RAW PNG). Traced the shader (chromasmith-22.html useTonemap uniform, ~line 6266): the whole point of the AgX/BT.2390 rolloff is to preserve values ABOVE 1.0 (real highlight headroom) instead of hard-clamping \u2014 an 8-bit source with no values above 1.0 has nothing to roll off, so AgX/Standard/clamp all converge to the same output BY DESIGN. The control's own tooltip already says this ('Only visible once real RAW highlight headroom survives to the render'). Untested: whether it actually differs on a genuine blown-highlight RAW capture \u2014 that's the real thing to verify before concluding this is fully working, but the shader logic itself looks sound and matches its documentation. Likely a discoverability/UX problem (nothing tells the user why nothing happened on their photo), not dead code \u2014 separate from 3.4.7's 'should be moved' (a layout ask, independent of this)."
+      "note": "DIAGNOSED LIVE 2026-09-09, same shape as 3.1.5 (not a dead-control bug): confirmed live that switching sel-tonemap to 'agx' produces zero canvas change with the test fixture (portrait.png, an 8-bit non-RAW PNG). Traced the shader (chromasmith-22.html useTonemap uniform, ~line 6266): the whole point of the AgX/BT.2390 rolloff is to preserve values ABOVE 1.0 (real highlight headroom) instead of hard-clamping — an 8-bit source with no values above 1.0 has nothing to roll off, so AgX/Standard/clamp all converge to the same output BY DESIGN. The control's own tooltip already says this ('Only visible once real RAW highlight headroom survives to the render'). Untested: whether it actually differs on a genuine blown-highlight RAW capture — that's the real thing to verify before concluding this is fully working, but the shader logic itself looks sound and matches its documentation. Likely a discoverability/UX problem (nothing tells the user why nothing happened on their photo), not dead code — separate from 3.4.7's 'should be moved' (a layout ask, independent of this)."
     },
     "3.4.7": {
       "category": "looks-panel",
@@ -357,7 +357,7 @@
       "source": "user: the docked Library filmstrip (left column in the Editor tab) shows a full toolbar (search, grid/list, rate/flag/favorite, sort, filters, view-menu) that isn't in the wireframe; the filmstrip should be treated as a genuinely different surface from the full Library view, not the full view with pieces conditionally hidden.",
       "wireframeRef": "Editor (Developer) View.dc.html:71-84,227-248 (.filmstrip: fs-tabs + fs-head + fs-list only, no toolbar, at any width 90-280px)",
       "check": "test/library_dock_states.mjs (state-matrix ARIA snapshot, 90/150/280px) + editor_wireframe_behaviour.mjs (theme-sync E6 tests)",
-      "note": "2026-09-09: Root cause was #lib-top (the full Library toolbar) staying display:flex while docked (body.deskx #lib-overlay:not(.full) never hid it) \u2014 confirmed live via a real screenshot from the user, and reproduced/measured in the Browser pane (199px of chrome above the tabs at every dock width). Architecture changed per user request: instead of a growing per-element CSS selector allowlist (previously 9 separate selectors across two rules, one miss \u2014 #lib-top \u2014 being exactly this bug), every full-view-only element now carries a single shared class, .lib-fullview-only, at its own definition site (#lib-top/#lib-filters/#lib-viewbar/#lib-bottom/#lib-filters-panel/#lib-collections/#lib-folders-header/#lib-tree/#lib-collections-post), and the docked-mode CSS collapses to ONE rule: body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none}. A future full-view-only feature is excluded by construction the moment it's tagged, instead of needing a matching CSS selector added elsewhere. Full-view (#lib-overlay.full) is untouched \u2014 the rule only fires under :not(.full) \u2014 verified live (toggled into full view, all elements still display:flex/block as before). One real regression found and fixed during verification: hiding #lib-top also hid #lib-view-menu-btn, the Library's own theme toggle, which broke editor_wireframe_behaviour.mjs's 'reverse direction' E6 test (confirmed via A/B against clean main \u2014 passes on main, failed with this change). User confirmed the theme toggle is meant to be a single system-wide control (already synced two-way with the Editor's own gear menu), so no replacement toggle was added to the dock; the test was updated to open full Library view first (where #lib-view-menu-btn still exists) rather than testing a docked-only trigger surface that no longer exists \u2014 verified the updated test can still fail (temporarily broke the real sync handler, confirmed RED, restored, confirmed GREEN). Single-column thumbnails at all three widths were already correct (#lib-grid's minmax(var(--lib-thumb),1fr) is inherently single-column at dock widths) \u2014 not a bug, no change made. Verification: test/library_dock_states.mjs 3/3 pass at 90/150/280px; full editor_wireframe_behaviour.mjs + wireframe_behaviour.mjs suite 90 passed / 1 failed (the pre-existing, documented E3 'not yet built' gap, unrelated); test/verify.py --editor shows the same 2 pre-existing failures confirmed via A/B against clean main (editor:inventory, editor:responsive-test \u2014 unrelated topbar/panel findings) plus E7's own-documented ~50% flakiness, none caused by this change."
+      "note": "2026-09-09: Root cause was #lib-top (the full Library toolbar) staying display:flex while docked (body.deskx #lib-overlay:not(.full) never hid it) — confirmed live via a real screenshot from the user, and reproduced/measured in the Browser pane (199px of chrome above the tabs at every dock width). Architecture changed per user request: instead of a growing per-element CSS selector allowlist (previously 9 separate selectors across two rules, one miss — #lib-top — being exactly this bug), every full-view-only element now carries a single shared class, .lib-fullview-only, at its own definition site (#lib-top/#lib-filters/#lib-viewbar/#lib-bottom/#lib-filters-panel/#lib-collections/#lib-folders-header/#lib-tree/#lib-collections-post), and the docked-mode CSS collapses to ONE rule: body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none}. A future full-view-only feature is excluded by construction the moment it's tagged, instead of needing a matching CSS selector added elsewhere. Full-view (#lib-overlay.full) is untouched — the rule only fires under :not(.full) — verified live (toggled into full view, all elements still display:flex/block as before). One real regression found and fixed during verification: hiding #lib-top also hid #lib-view-menu-btn, the Library's own theme toggle, which broke editor_wireframe_behaviour.mjs's 'reverse direction' E6 test (confirmed via A/B against clean main — passes on main, failed with this change). User confirmed the theme toggle is meant to be a single system-wide control (already synced two-way with the Editor's own gear menu), so no replacement toggle was added to the dock; the test was updated to open full Library view first (where #lib-view-menu-btn still exists) rather than testing a docked-only trigger surface that no longer exists — verified the updated test can still fail (temporarily broke the real sync handler, confirmed RED, restored, confirmed GREEN). Single-column thumbnails at all three widths were already correct (#lib-grid's minmax(var(--lib-thumb),1fr) is inherently single-column at dock widths) — not a bug, no change made. Verification: test/library_dock_states.mjs 3/3 pass at 90/150/280px; full editor_wireframe_behaviour.mjs + wireframe_behaviour.mjs suite 90 passed / 1 failed (the pre-existing, documented E3 'not yet built' gap, unrelated); test/verify.py --editor shows the same 2 pre-existing failures confirmed via A/B against clean main (editor:inventory, editor:responsive-test — unrelated topbar/panel findings) plus E7's own-documented ~50% flakiness, none caused by this change."
     },
     "3.4.11": {
       "category": "looks-panel",
@@ -373,15 +373,15 @@
       "source": "[found by tooling, 2026-09-09] tool panel atom count: wireframe 24 vs app 25",
       "wireframeRef": "Editor (Developer) View.dc.html: .toolpanel",
       "check": "editor:inventory ([panel] atom count)",
-      "note": "One extra atom in the app. 2026-09-10: confirmed NOT the same root cause as 3.4.11 \u2014 it's independent of the missing-icons gap (fixing 3.4.11 by moving/iconifying the LUT row would change this count again, so re-diff after, don't assume it clears automatically). Current extra-atom candidates from the live report (test/output/editor_wireframe_inventory_report.json): app's \"Presets & Looks\" fx-ctrl-title text has no wireframe counterpart, and the panel's Input/Print rows render as custom chip-row buttons (chips-input/chips-tonemap/chips-print, each option a real <button>) where the wireframe has plain <select> dropdowns \u2014 that's a deliberate, already-shipped UX choice (chips > native select for touch), not a bug, so the fix is narrowing which atoms the comparison counts for that row rather than changing the UI."
+      "note": "One extra atom in the app. 2026-09-10: confirmed NOT the same root cause as 3.4.11 — it's independent of the missing-icons gap (fixing 3.4.11 by moving/iconifying the LUT row would change this count again, so re-diff after, don't assume it clears automatically). Current extra-atom candidates from the live report (test/output/editor_wireframe_inventory_report.json): app's \"Presets & Looks\" fx-ctrl-title text has no wireframe counterpart, and the panel's Input/Print rows render as custom chip-row buttons (chips-input/chips-tonemap/chips-print, each option a real <button>) where the wireframe has plain <select> dropdowns — that's a deliberate, already-shipped UX choice (chips > native select for touch), not a bug, so the fix is narrowing which atoms the comparison counts for that row rather than changing the UI."
     },
     "D1": {
       "category": "panel-design",
       "status": "backlog",
-      "source": "9 of the wireframe's 11 tool panels are placeholders ('<X> tools live here') \u2014 color, crop, detail, export, film, frame, info, masks, retouch have no design yet",
+      "source": "9 of the wireframe's 11 tool panels are placeholders ('<X> tools live here') — color, crop, detail, export, film, frame, info, masks, retouch have no design yet",
       "wireframeRef": "Editor (Developer) View.dc.html:374-382",
       "check": "editor:coverage (designed column)",
-      "note": "This is DESIGN work, not implementation work \u2014 nothing can be coded against a placeholder. Only `looks` and `adjust` are designed. Each panel becomes its own item as it is designed; see docs/editor-redesign-plan.md for the per-panel loop (design -> PAIRS entry -> spec item -> behaviour test -> implement)."
+      "note": "This is DESIGN work, not implementation work — nothing can be coded against a placeholder. Only `looks` and `adjust` are designed. Each panel becomes its own item as it is designed; see docs/editor-redesign-plan.md for the per-panel loop (design -> PAIRS entry -> spec item -> behaviour test -> implement)."
     },
     "D2": {
       "category": "panel-design",
@@ -389,15 +389,15 @@
       "source": "4 app tool sections have no wireframe panel to live in: deconv, diag, image, wheels",
       "wireframeRef": null,
       "check": "editor:coverage (orphan list)",
-      "note": "DECIDED 2026-09-09 by the user: `wheels` (colour wheels) joins Color alongside curves/hsl/pointcolor; `deconv` (deconvolution sharpening) joins Detail alongside nr/lens. `image` needs no home \u2014 the app already folds Image Input into Looks on desktop (fxDesktopFoldImageIntoLooks), so the wireframe having no Image tab is correct; it stays its own tab on web/mobile where drag-drop is how a photo gets in. `diag` is a developer panel and stays out of the wireframe. IMPLEMENTATION: add 'wheels' to FX_GROUPS.color.members and 'deconv' to FX_GROUPS.detail.members (chromasmith-22.html) as part of designing/building those two panels \u2014 not as a standalone edit, since both panels are still placeholders in the wireframe (D1)."
+      "note": "DECIDED 2026-09-09 by the user: `wheels` (colour wheels) joins Color alongside curves/hsl/pointcolor; `deconv` (deconvolution sharpening) joins Detail alongside nr/lens. `image` needs no home — the app already folds Image Input into Looks on desktop (fxDesktopFoldImageIntoLooks), so the wireframe having no Image tab is correct; it stays its own tab on web/mobile where drag-drop is how a photo gets in. `diag` is a developer panel and stays out of the wireframe. IMPLEMENTATION: add 'wheels' to FX_GROUPS.color.members and 'deconv' to FX_GROUPS.detail.members (chromasmith-22.html) as part of designing/building those two panels — not as a standalone edit, since both panels are still placeholders in the wireframe (D1)."
     },
     "D3": {
       "category": "panel-design",
       "status": "fixed",
-      "source": "[found by tooling, 2026-09-09] wireframe has 11 tool panels but only 10 rail buttons \u2014 `crop` has a panel and no way to open it",
+      "source": "[found by tooling, 2026-09-09] wireframe has 11 tool panels but only 10 rail buttons — `crop` has a panel and no way to open it",
       "wireframeRef": "Editor (Developer) View.dc.html:374 (tp-panel crop) vs the .rail button list",
       "check": "editor:coverage (rail column)",
-      "note": "DECIDED 2026-09-09 by the user: the APP is right \u2014 crop keeps its own rail entry and the WIREFRAME was missing the button. Fixed in the wireframe (Editor (Developer) View.dc.html, .rail), inserted between Retouch and Masks to match the app's own rail order (see the RAIL_GROUP_BREAK comment in chromasmith-22.html: [Image Looks] [Adjust] [Color] [Detail Retouch] [Crop] [Masks] [Film] [Frame] [Export Info]). Icon is the Lucide crop glyph at the same 24x24 / stroke-width 2 / round-cap spec as the rail's other icons. No app change."
+      "note": "DECIDED 2026-09-09 by the user: the APP is right — crop keeps its own rail entry and the WIREFRAME was missing the button. Fixed in the wireframe (Editor (Developer) View.dc.html, .rail), inserted between Retouch and Masks to match the app's own rail order (see the RAIL_GROUP_BREAK comment in chromasmith-22.html: [Image Looks] [Adjust] [Color] [Detail Retouch] [Crop] [Masks] [Film] [Frame] [Export Info]). Icon is the Lucide crop glyph at the same 24x24 / stroke-width 2 / round-cap spec as the rail's other icons. No app change."
     },
     "R1": {
       "category": "retouch-panel",
@@ -406,7 +406,7 @@
       "wireframeRef": null,
       "check": null,
       "panel": "retouch",
-      "note": "Interaction change, not a layout one \u2014 deferred out of the Retouch panel redesign (test/panel_proposals.mjs) for exactly this reason: proposal removed the old \"Undo spot\" button rather than restyling it, since replacing it with a real delete-a-specific-spot flow needs new interaction design (select a placed spot on the photo, then remove just that one) that a compare-page mockup cannot decide. Until this lands, undo is still \u2318Z / the gear-menu undo, same as every other tool."
+      "note": "Interaction change, not a layout one — deferred out of the Retouch panel redesign (test/panel_proposals.mjs) for exactly this reason: proposal removed the old \"Undo spot\" button rather than restyling it, since replacing it with a real delete-a-specific-spot flow needs new interaction design (select a placed spot on the photo, then remove just that one) that a compare-page mockup cannot decide. Until this lands, undo is still ⌘Z / the gear-menu undo, same as every other tool."
     },
     "R2": {
       "category": "export-panel",
@@ -415,7 +415,7 @@
       "wireframeRef": null,
       "check": null,
       "panel": "export",
-      "note": "The proposal (test/panel_proposals.mjs) removes these from Export but does not say where they land instead beyond \"belongs in the gear menu with the other session commands, which is where 'Save the current recipe' already half-lives.\" That relocation is undecided and unimplemented \u2014 flagging so it does not get lost between \"cut from Export\" and \"actually placed somewhere\". Needs a decision on which existing gear/overflow menu these join and in what grouping before implementation."
+      "note": "The proposal (test/panel_proposals.mjs) removes these from Export but does not say where they land instead beyond \"belongs in the gear menu with the other session commands, which is where 'Save the current recipe' already half-lives.\" That relocation is undecided and unimplemented — flagging so it does not get lost between \"cut from Export\" and \"actually placed somewhere\". Needs a decision on which existing gear/overflow menu these join and in what grouping before implementation."
     },
     "R3": {
       "category": "panel-design",
@@ -424,16 +424,16 @@
       "wireframeRef": null,
       "check": null,
       "panel": "info",
-      "note": "runFindFaces(photoIds) exists (desktop/library-ui.js:6762) and drives the Library's right-click \"Scan photos\" (renamed from \"Find Faces\" per an earlier item, see the item at source \"right click Find Faces renamed to Scan Photos\") \u2014 it is batch-oriented over Library selection state, not wired to fxImages[fxCurIdx] from the Editor. Needs a single-photo call path before the Info panel button can do anything."
+      "note": "runFindFaces(photoIds) exists (desktop/library-ui.js:6762) and drives the Library's right-click \"Scan photos\" (renamed from \"Find Faces\" per an earlier item, see the item at source \"right click Find Faces renamed to Scan Photos\") — it is batch-oriented over Library selection state, not wired to fxImages[fxCurIdx] from the Editor. Needs a single-photo call path before the Info panel button can do anything."
     },
     "R4": {
       "category": "bug",
       "status": "backlog",
-      "source": "[found while proposing the Info panel redesign, 2026-09-10] the People section (fxRenderPeoplePanel) renders nothing \u2014 not even an empty state \u2014 for a photo with no it.path (e.g. drag-dropped rather than opened from the Library), or for a Library photo where face detection has not run yet",
+      "source": "[found while proposing the Info panel redesign, 2026-09-10] the People section (fxRenderPeoplePanel) renders nothing — not even an empty state — for a photo with no it.path (e.g. drag-dropped rather than opened from the Library), or for a Library photo where face detection has not run yet",
       "wireframeRef": null,
       "check": null,
       "panel": "info",
-      "note": "chromasmith-22.html: fxRenderPeoplePanel() returns early to el.innerHTML='' in both cases. Nobody reported this as a bug because the feature is invisible either way, which is exactly the problem \u2014 the redesigned Info panel (test/panel_proposals.mjs) adds a \"Scan this photo for faces\" affordance for the no-detection-yet case (see R3 for wiring it up), but the no-path case (drag-dropped photo) has no proposed treatment yet \u2014 worth deciding whether that state gets an explanation (\"open from your Library to use faces\") or stays silent."
+      "note": "chromasmith-22.html: fxRenderPeoplePanel() returns early to el.innerHTML='' in both cases. Nobody reported this as a bug because the feature is invisible either way, which is exactly the problem — the redesigned Info panel (test/panel_proposals.mjs) adds a \"Scan this photo for faces\" affordance for the no-detection-yet case (see R3 for wiring it up), but the no-path case (drag-dropped photo) has no proposed treatment yet — worth deciding whether that state gets an explanation (\"open from your Library to use faces\") or stays silent."
     },
     "R5": {
       "category": "bug",
@@ -473,170 +473,215 @@
     },
     "T8": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools themselves, 2026-09-10] editor_wireframe_inventory.mjs's INVENTORY_FN classifies every button/input/select/textarea/a as an atom to compare, but has no concept of DISABLED state — a button that's disabled=true (e.g. #btn-denoise-now before a RAW photo loads) reads identically to an enabled one",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "A control that's visually present but silently non-interactive (wrong disabled state, e.g. always-disabled or never-disabled when it should gate) is invisible to every current check. Add `disabled: !!child.disabled` to each atom and diff it the same way font-size is diffed."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A control that's visually present but silently non-interactive (wrong disabled state, e.g. always-disabled or never-disabled when it should gate) is invisible to every current check. Add `disabled: !!child.disabled` to each atom and diff it the same way font-size is diffed. CLOSED (by a concurrent session, 2026-09-10/11): editor_wireframe_inventory.mjs's atom extraction now records `disabled: !!child.disabled` per control and diffs it via disabledSignatures()."
     },
     "T9": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_diff.mjs's PROPS list (fontFamily/fontSize/fontWeight/letterSpacing/lineHeight/backgroundColor/color/borderRadius/borderColor/borderWidth/boxShadow/height) never checks `width`, `padding`, or `gap`",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "A row could match on every checked property yet still be visibly cramped or oversized because its padding/gap drifted from the token scale — that class of regression has no gate at all right now."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A row could match on every checked property yet still be visibly cramped or oversized because its padding/gap drifted from the token scale — that class of regression has no gate at all right now. CLOSED (by a concurrent session): editor_wireframe_diff.mjs's PROPS list now includes 'width' (and the concurrent session's own comment records that 'padding'/'gap' were tried and reverted — see that file's own note on the repo-wide container-padding-vs-gap convention difference this immediately found)."
     },
     "T10": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] no check asserts that a NEW colour or spacing value introduced anywhere in chromasmith-22.html actually resolves to one of :root's own custom properties",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Same root problem as T5 (no automated 'never invent a colour' enforcement) but broader — spacing/radius/shadow tokens are just as easy to invent as colours and nothing catches an invented `border-radius:7px` next to a design system that defines `--radius-sm`. A single static-analysis pass covering all of :root's token categories, not just colour, would be more efficient to build than doing colour alone first."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Same root problem as T5 (no automated 'never invent a colour' enforcement) but broader — spacing/radius/shadow tokens are just as easy to invent as colours and nothing catches an invented `border-radius:7px` next to a design system that defines `--radius-sm`. A single static-analysis pass covering all of :root's token categories, not just colour, would be more efficient to build than doing colour alone first. CLOSED 2026-09-11 (combined with T5): test/editor_token_check.mjs's static scan covers spacing (border-radius/gap/padding/margin) literals against :root tokens in the same pass as colour, per this ticket's own suggestion that one combined pass is more efficient than colour alone first."
     },
     "T11": {
       "category": "tooling-gap",
       "status": "backlog",
       "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_behaviour.mjs's fixture is a single PNG (test/fixtures/portrait.png) — every behaviour test in the file runs against exactly one photo shape/type",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Several panels this session are RAW-only or format-gated (Detail's High-tier NR/Denoise-now only meaningfully differ for a RAW file per `it.rawFile`; Frame's sprocket styles care about aspect ratio) but no test ever loads a RAW fixture or a non-square-ish image, so a RAW-specific regression (e.g. Denoise-now staying disabled for a real RAW photo) cannot be caught by this suite at all. Needs at least one small real or synthetic .RW2/.DNG fixture."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Several panels this session are RAW-only or format-gated (Detail's High-tier NR/Denoise-now only meaningfully differ for a RAW file per `it.rawFile`; Frame's sprocket styles care about aspect ratio) but no test ever loads a RAW fixture or a non-square-ish image, so a RAW-specific regression (e.g. Denoise-now staying disabled for a real RAW photo) cannot be caught by this suite at all. Needs at least one small real or synthetic .RW2/.DNG fixture. STILL OPEN 2026-09-11: no real .RW2/.DNG capture exists anywhere in this repo (CLAUDE.md deliberately gitignores original RAW/JPEG/TIFF captures — 'supply your own'), and a synthetically fabricated RW2 wouldn't actually exercise the real LibRaw decode path (it would just fail to decode, giving false confidence rather than real coverage) — so this can't be responsibly closed without the user supplying a real small RAW capture to commit as a fixture. Left open with this blocker recorded rather than faked."
     },
     "T12": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] every behaviour test in editor_wireframe_behaviour.mjs runs at the fixed 1440x900 deskx viewport — none run the same interactions at the <=700px phone shell (CLAUDE.md section 4)",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "editor_responsive_qa.mjs checks STRUCTURE (overlap/wrap) down to 700px and ui_audit.mjs has a separate phone PASS, but neither one clicks anything — 'does the segmented control / info-i tooltip / header Reset actually work in the bottom-sheet shell' is untested for every panel built this session. A parametrized version of editor_wireframe_behaviour.mjs's fixture (desktop + phone) for at least the click-and-assert tests (not the ones inherently deskx-only, like the rail) would close this."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "editor_responsive_qa.mjs checks STRUCTURE (overlap/wrap) down to 700px and ui_audit.mjs has a separate phone PASS, but neither one clicks anything — 'does the segmented control / info-i tooltip / header Reset actually work in the bottom-sheet shell' is untested for every panel built this session. A parametrized version of editor_wireframe_behaviour.mjs's fixture (desktop + phone) for at least the click-and-assert tests (not the ones inherently deskx-only, like the rail) would close this. CLOSED 2026-09-11: added two editor_wireframe_behaviour.mjs tests at the 390x844 phone viewport (editorWeb fixture) exercising the bottom-sheet shell. The first immediately found a real bug (see T12 fix note in the same commit): the mobile .fx-ctrl-title-reset CSS rule showed the header Reset button unconditionally whenever the sheet was open, with no :has(.fx-row.fx-mod) gate at all, unlike the desktop rule. Fixed to mirror desktop. This closes the concrete part of the gap (representative click-and-assert coverage in the phone shell); NOT every desktop behaviour test has a phone-viewport twin — that remains a larger, ongoing lift, but the specific untested claim this ticket made (header Reset in the sheet) is now tested and was found broken."
     },
     "T13": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] editor:gates has no dark-mode pass distinct from editor:wireframe-diff's own theme loop — light/dark is exercised there, but editor:inventory (structural atom counts) and the new editor:snap-check/editor:html-check never vary by theme at all",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Not a real gap for snap-check/html-check (theme is style-only, doesn't change DOM structure), but editor:inventory's disabled-state and atom-count logic COULD theoretically differ if a future change made something theme-conditional in the DOM (not just CSS) — worth a one-line note in that script rather than silent assumption. Low priority; listed for completeness of the audit."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Not a real gap for snap-check/html-check (theme is style-only, doesn't change DOM structure), but editor:inventory's disabled-state and atom-count logic COULD theoretically differ if a future change made something theme-conditional in the DOM (not just CSS) — worth a one-line note in that script rather than silent assumption. Low priority; listed for completeness of the audit. CLOSED (documented, not code-fixed — matches the ticket's own 'low priority... worth a one-line note' framing): editor_gates.mjs now carries an explicit comment on the theme-coverage gap and why it's accepted for inventory/snap-check/html-check today."
     },
     "T14": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] none of the Editor gates assert anything about KEYBOARD accessibility — tab order, focus rings, or that a control built as a <button> (e.g. every fx-info-i, chip, seg button) is reachable and operable without a mouse",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "ui_audit.mjs checks pointer-target size and contrast but not keyboard operability. Every info-i/chip/seg control introduced this session is a real <button>, which is a reasonable default, but nothing confirms it, and a future control built as a styled <div onclick> would sail through every current check while being unusable by keyboard."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "ui_audit.mjs checks pointer-target size and contrast but not keyboard operability. Every info-i/chip/seg control introduced this session is a real <button>, which is a reasonable default, but nothing confirms it, and a future control built as a styled <div onclick> would sail through every current check while being unusable by keyboard. CLOSED 2026-09-11: new test/editor_keyboard_check.mjs (`npm run editor:keyboard-check`), wired into editor:gates as a blocking (non-advisory) gate — passes clean today because a concurrent session's a11yEnhanceToggles() (chromasmith-22.html) already made every .fx-toggle/.fx-toggle-lb keyboard-operable (role+tabindex+keydown); this gate makes that fact enforced going forward instead of incidental."
     },
     "T15": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_behaviour.mjs has no test asserting that a section's Reset button (RT1/DT1/F1/FR1's header-reset pattern) is INVISIBLE by default on a freshly loaded photo — every existing reset test starts by making a change and checks the button becomes visible, never checks the negative/resting case first",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "A regression that made the Reset button permanently visible (e.g. a CSS selector typo broadening :has()) would pass every current test, since none of them assert 'hidden at rest' before making a change. Retouch's own test (RT1) does check this ('Reset is hidden until a spot exists') — the pattern should be copied to DT1/F1/FR1's reset tests too, which currently jump straight to 'make a change, then check visible'."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "A regression that made the Reset button permanently visible (e.g. a CSS selector typo broadening :has()) would pass every current test, since none of them assert 'hidden at rest' before making a change. Retouch's own test (RT1) does check this ('Reset is hidden until a spot exists') — the pattern should be copied to DT1/F1/FR1's reset tests too, which currently jump straight to 'make a change, then check visible'. CLOSED (by a concurrent session): RT1 already checked the resting/hidden state; DT1 (NR + Deconv resets), F1 (bloom + vig resets) and FR1 (border reset) now all assert `.toBeHidden()` before making any change, per this ticket's own request to copy RT1's pattern."
     },
     "T16": {
       "category": "tooling-gap",
       "status": "backlog",
       "source": "[audit of the testing tools, 2026-09-10] test/editor_html_validity_check.mjs's tokenizer strips <script> blocks entirely before scanning, so a nested-button defect INSIDE an inline script's HTML-string template (the exact panel_proposals.mjs shape, just embedded in the app instead of a separate file) would not be caught if it ever existed there",
-      "wireframeRef": null, "check": null, "panel": null,
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
       "note": "Not urgent (no known instance of this in chromasmith-22.html's own inline scripts today), but it's a real blind spot the check's own comment only partially acknowledges. A future pass could extract JS template-literal string contents that look like HTML (a heuristic: contains multiple `<tag`) and run the same tokenizer over them."
     },
     "T17": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] test/editor_snap_lists_check.mjs's KNOWN_EXCLUSIONS is a hand-maintained object with no test of its own — an exclusion reason could go stale (the referenced mechanism removed) and nothing would notice",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Lower priority meta-gap: the exclusions list is itself exactly the kind of hand-maintained id list T2 was built to stop trusting blindly elsewhere. A periodic manual re-verification (or a comment requiring the PR that removes an excluded mechanism to also remove its KNOWN_EXCLUSIONS entry) is the realistic mitigation, not another automated check on top of a check."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Lower priority meta-gap: the exclusions list is itself exactly the kind of hand-maintained id list T2 was built to stop trusting blindly elsewhere. A periodic manual re-verification (or a comment requiring the PR that removes an excluded mechanism to also remove its KNOWN_EXCLUSIONS entry) is the realistic mitigation, not another automated check on top of a check. CLOSED (documented, not automated — matches the ticket's own conclusion that process is the realistic mitigation): test/editor_snap_lists_check.mjs now carries an explicit comment above KNOWN_EXCLUSIONS stating the removal-must-update-this-list convention."
     },
     "T18": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] no gate verifies that _fxSectionResetOverride (chromasmith-22.html) stays in sync with which sections actually HAVE a bespoke reset function — an override entry pointing at a renamed/deleted function would silently fall through to `typeof window[override]==='function'` being false and use the generic reset instead, with no warning",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Concretely exploitable: rename resetNR to something else without updating the override map, and Noise Reduction's header Reset silently starts using the generic slider/toggle walk instead of the RAW-aware bespoke one — visually indistinguishable in a quick check, wrong in a way only a careful diff of behavior would catch. A one-line startup assertion (`Object.values(_fxSectionResetOverride).forEach(fn => console.assert(typeof window[fn]==='function', ...))`) would catch this for free at load time."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Concretely exploitable: rename resetNR to something else without updating the override map, and Noise Reduction's header Reset silently starts using the generic slider/toggle walk instead of the RAW-aware bespoke one — visually indistinguishable in a quick check, wrong in a way only a careful diff of behavior would catch. A one-line startup assertion (`Object.values(_fxSectionResetOverride).forEach(fn => console.assert(typeof window[fn]==='function', ...))`) would catch this for free at load time. CLOSED (by a concurrent session, 2026-09-10/11): chromasmith-22.html now runs a startup assertion right after _fxSectionResetOverride's declaration, console.error-ing if any override entry names something that isn't a function. Confirmed present and the app still boots clean (export_harness.mjs run with no GLSL/console errors)."
     },
     "T19": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_behaviour.mjs's per-test error collection (page.on('pageerror', ...)) is declared FRESH inside almost every individual test rather than once in the shared `editor` fixture, and the fixture's own `errors` array (asserted empty in its teardown) is a SEPARATE array from each test's local one",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "This means a pageerror thrown BEFORE a test's own local `page.on('pageerror', ...)` line executes (e.g. during the click that immediately precedes it) is only caught by the fixture's teardown assertion, not the test's own explicit `expect(errors).toEqual([])` — usually harmless since the fixture still fails the test, but the failure then reports as a generic teardown error rather than pointing at the specific action that threw. Consolidating to always read the fixture's own `errors` array (already provided) instead of redeclaring a local one per test would remove the duplication and the double bookkeeping is doing right now."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "This means a pageerror thrown BEFORE a test's own local `page.on('pageerror', ...)` line executes (e.g. during the click that immediately precedes it) is only caught by the fixture's teardown assertion, not the test's own explicit `expect(errors).toEqual([])` — usually harmless since the fixture still fails the test, but the failure then reports as a generic teardown error rather than pointing at the specific action that threw. Consolidating to always read the fixture's own `errors` array (already provided) instead of redeclaring a local one per test would remove the duplication and the double bookkeeping is doing right now. CLOSED (by a concurrent session): editor_wireframe_behaviour.mjs's tests now destructure `errors` from the shared `editor`/`editorWeb` fixture instead of redeclaring a local page.on('pageerror',...) per test."
     },
     "T20": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] the debounce-race problem T7 already flags (fx-mod's 120ms timer) has a sibling nobody's checked for: fxRawNrSyncUI's _chipsRender-on-external-write pattern (selectToSeg/selectToChips) has no test asserting a PROGRAMMATIC value change (session restore, undo, copy-paste) re-renders the seg/chip UI, only that a USER click on a chip updates the underlying select",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Concretely: if a future change restored sel-raw-nr.value via s.rawNr without going through fxRawNrSyncUI (which explicitly calls sel._chipsRender()), the seg control would silently show the WRONG selection while the real underlying state was correct — a visible bug an undo/redo or session-restore test would catch immediately, but nothing currently exercises that path for any of the three selectToSeg/selectToChips-converted controls (heal-mode, raw-nr, crop-ar/input/tonemap chips)."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Concretely: if a future change restored sel-raw-nr.value via s.rawNr without going through fxRawNrSyncUI (which explicitly calls sel._chipsRender()), the seg control would silently show the WRONG selection while the real underlying state was correct — a visible bug an undo/redo or session-restore test would catch immediately, but nothing currently exercises that path for any of the three selectToSeg/selectToChips-converted controls (heal-mode, raw-nr, crop-ar/input/tonemap chips). CLOSED (by a concurrent session): editor_wireframe_behaviour.mjs now has a dedicated test (search 'T20' in that file) asserting a PROGRAMMATIC value change re-renders the seg/chip UI, not just a user click."
     },
     "T21": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] editor_gates.mjs's FLAKE_RETRIES=6 applies only to editor:wireframe-diff — the new editor:snap-check and editor:html-check gates run once with no retry, which is correct for them (they're pure static/DOM-structure checks with no known timing flake) but nothing DOCUMENTS that distinction, so a future contributor might reflexively add retries to a check that should never need them",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Trivial fix: a one-line comment on the GATES array noting that only wireframe-diff carries the documented E7 flake, and a new gate should default to zero retries unless it has its OWN documented, understood flake — retries are a targeted workaround for one known issue, not a default reliability blanket."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Trivial fix: a one-line comment on the GATES array noting that only wireframe-diff carries the documented E7 flake, and a new gate should default to zero retries unless it has its OWN documented, understood flake — retries are a targeted workaround for one known issue, not a default reliability blanket. CLOSED (documented, not code-changed — this was the ticket's own ask, 'a one-line comment'): editor_gates.mjs's FLAKE_RETRIES now carries an explicit comment that retries are E7-specific, not a default reliability blanket, and lists every other gate's implicit zero-retry convention."
     },
     "T22": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] test/panel_compare_build.mjs's generated comparison pages (chromasmith-design/project/panels/*.compare.html) have not been regenerated since the Retouch/Detail/Film/Frame/Crop/Color proposals were corrected and then implemented this session — they still show the ORIGINAL (some since-fixed-for-fabrication) proposal content, not what actually shipped",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Not a test gate exactly, but a documentation-drift risk with the same shape as every other item here: a reviewer opening a .compare.html page today sees stale content and could waste time reviewing something already superseded, or worse, use the stale version as a reference while implementing Export/Info/Masks. Regenerating (or at least stamping each page with 'implemented — see chromasmith-22.html' once its panel ships) would prevent that."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Not a test gate exactly, but a documentation-drift risk with the same shape as every other item here: a reviewer opening a .compare.html page today sees stale content and could waste time reviewing something already superseded, or worse, use the stale version as a reference while implementing Export/Info/Masks. Regenerating (or at least stamping each page with 'implemented — see chromasmith-22.html' once its panel ships) would prevent that. CLOSED 2026-09-11: regenerated every chromasmith-design/project/panels/*.compare.html via `node test/panel_compare_build.mjs --force`, so they reflect the actually-shipped Retouch/Detail/Film/Frame/Crop/Color/Masks/Export/Info implementations instead of stale pre-correction proposal content."
     },
     "T23": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] npm test (package.json) does not include editor:snap-check or editor:html-check directly — they only run via editor:gates, which npm test DOES call, so they're covered transitively, but there's no STANDALONE fast-path for a contributor who only wants the two new cheap checks without also paying for the slower inventory/responsive/wireframe-diff runs",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Minor ergonomics gap, not a coverage gap (npm test already reaches both checks via editor:gates). A combined `editor:fast-check` script running just snap-check + html-check (both sub-second, no Playwright page navigation needed for snap-check... actually both need Playwright/a page load, so 'fast' is relative — still faster than the full inventory/responsive/diff trio) would make iterating on either check itself quicker."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Minor ergonomics gap, not a coverage gap (npm test already reaches both checks via editor:gates). A combined `editor:fast-check` script running just snap-check + html-check (both sub-second, no Playwright page navigation needed for snap-check... actually both need Playwright/a page load, so 'fast' is relative — still faster than the full inventory/responsive/diff trio) would make iterating on either check itself quicker. CLOSED 2026-09-11: added `npm run editor:fast-check` (snap-check + html-check only) to package.json."
     },
     "T24": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] editor_coverage.mjs's report treats a panel as fully checked once it has a PAIRS entry + spec item + at least one behaviour test — it has no notion of whether the behaviour tests actually exercise EVERY control in the panel, only that at least one test exists for the panel at all",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Concretely: Detail's behaviour suite (DT1) has 5 tests but Lens Correction alone has 9 sliders (Distortion/Vignette/CA/Vertical/Horizontal/Rotate/Scale/Defringe + the Auto toggle already tested) with zero behaviour coverage on the 8 untested sliders — editor:coverage reports 'detail: behav yes' regardless. A per-control coverage metric (cross-referencing the Stage-1 extraction's control inventory against which ids appear in behaviour-test source) would be far more honest than a boolean."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Concretely: Detail's behaviour suite (DT1) has 5 tests but Lens Correction alone has 9 sliders (Distortion/Vignette/CA/Vertical/Horizontal/Rotate/Scale/Defringe + the Auto toggle already tested) with zero behaviour coverage on the 8 untested sliders — editor:coverage reports 'detail: behav yes' regardless. A per-control coverage metric (cross-referencing the Stage-1 extraction's control inventory against which ids appear in behaviour-test source) would be far more honest than a boolean. CLOSED 2026-09-11: editor_coverage.mjs now cross-references every sl-/cl-/tg- id in a section's markup against the behaviour-test source and reports a per-panel tested/total count plus the untested id list, instead of the old panel-level boolean. Informational only (no --strict gate), same report-by-default posture as the rest of that script. Immediately surfaced real gaps (e.g. adjust: 1/14, info: 0/23) confirming the exact problem this ticket described."
     },
     "T25": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] none of the new panel PAIRS entries in editor_wireframe_diff.mjs were EVER visually screenshotted and looked at by a human this session for the panels compared via the new multi-root zones (detail/film/frame/color's grouped .grp entries) — the plan's own step 6 ('screenshot the result and look at it — not to measure, to catch the class of defect no check has an opinion about') was done for Retouch alone",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "This is a PROCESS gap, not strictly a tooling gap, but it belongs on this list: every automated check in this project explicitly disclaims that it cannot see 'something ugly or in a nonsensical place' — that disclaimer is only honored if a human screenshot step actually happens per panel. It didn't, consistently, after Retouch. Cheap to fix going forward: screenshot each panel at the end of its own implementation pass, before moving to the next."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "This is a PROCESS gap, not strictly a tooling gap, but it belongs on this list: every automated check in this project explicitly disclaims that it cannot see 'something ugly or in a nonsensical place' — that disclaimer is only honored if a human screenshot step actually happens per panel. It didn't, consistently, after Retouch. Cheap to fix going forward: screenshot each panel at the end of its own implementation pass, before moving to the next. CLOSED 2026-09-11 (process reinforcement, not a new tool — matches the ticket's own framing that this is a process gap): docs/editor-redesign-plan.md's step 6 now explicitly calls out that this step was skipped for every panel after Retouch and must happen per-panel, not batched at the end."
     },
     "T26": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] editor_wireframe_inventory.mjs's new appToggleOn mechanism (added for T1) clicks a toggle ON for measurement but never clicks it back OFF — state leaks across zones within the same script run",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Verified harmless for the current zone ORDER (grain/hal/bloom/borders are only ever toggled on by their OWN zone, and no later zone depends on them being off), but it's fragile: reordering ZONES, or adding a new zone that (for example) measures overall panel height/scroll position, could silently pick up bleed-over state from an earlier zone's toggle-on. Resetting each appToggleOn id back to its prior state after diffZone() finishes would remove the fragility instead of relying on today's zone order staying accidentally safe."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Verified harmless for the current zone ORDER (grain/hal/bloom/borders are only ever toggled on by their OWN zone, and no later zone depends on them being off), but it's fragile: reordering ZONES, or adding a new zone that (for example) measures overall panel height/scroll position, could silently pick up bleed-over state from an earlier zone's toggle-on. Resetting each appToggleOn id back to its prior state after diffZone() finishes would remove the fragility instead of relying on today's zone order staying accidentally safe. CLOSED (by a concurrent session, 2026-09-10/11): editor_wireframe_inventory.mjs's diffZone() now tracks which appToggleOn ids it turned on and clicks them back off at the end of the zone, so state no longer leaks across zones regardless of ZONES order."
     },
     "T27": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10] there is no test asserting that FX_GROUPS/FX_GROUP_OF (chromasmith-22.html) and editor_coverage.mjs's own panel-to-app-section mapping stay in sync — editor:coverage's 'app sections' column is built by re-deriving group membership from a SEPARATE copy of that logic in test/editor_coverage.mjs, not by reading FX_GROUPS off the live app",
-      "wireframeRef": null, "check": null, "panel": null,
-      "note": "Same class of risk T2 fixed for _FX_SNAP_*: two lists meant to describe the same thing, maintained by hand in two files, can silently drift. Confirmed this session in miniature — when 'wheels' was added to FX_GROUPS.color.members, editor_coverage.mjs's own report picked it up correctly, which is reassuring, but only because someone (this session) remembered to check both places; nothing would have flagged a drift if editor_coverage.mjs's copy had been forgotten."
+      "wireframeRef": null,
+      "check": null,
+      "panel": null,
+      "note": "Same class of risk T2 fixed for _FX_SNAP_*: two lists meant to describe the same thing, maintained by hand in two files, can silently drift. Confirmed this session in miniature — when 'wheels' was added to FX_GROUPS.color.members, editor_coverage.mjs's own report picked it up correctly, which is reassuring, but only because someone (this session) remembered to check both places; nothing would have flagged a drift if editor_coverage.mjs's copy had been forgotten. CLOSED 2026-09-11: editor_coverage.mjs now evaluates the real FX_GROUPS/FX_GROUP_OF statements via `new Function(...)` instead of regex-parsing them, so its 'app sections' column can no longer silently drift from a formatting change in the real object literal. Verified: coverage report output unchanged after the switch."
     },
     "T28": {
       "category": "tooling-gap",
       "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10, from the mskRebuild()/fxEnsureDepthMap() infinite-loop hang] every existing Editor gate assumes an action either succeeds or fails within its own timeout — nothing distinguishes 'genuinely slow' from 'looping forever', and once the renderer is wedged like that it also stops responding to CDP, so Playwright's own failure screenshot/trace capture can hang too, leaving a bare timeout with no diagnostic artifact",
-      "wireframeRef": null, "check": "test/editor_hang_diagnose.mjs",
+      "wireframeRef": null,
+      "check": "test/editor_hang_diagnose.mjs",
       "note": "Diagnosing the mskRebuild() loop this session took a sequence of hand-written throwaway Node+Playwright+CDP scripts (fire the suspect action un-awaited, poll Debugger.pause every second, print the call-stack sample) before the actual loop (fxEnsureDepthMap().then(()=>mskRebuild()) re-entering its own dead branch forever) was visible. Built as a reusable tool (test/editor_hang_diagnose.mjs) instead of leaving that process to be reinvented by hand next time: point it at any exported function name, it fires it un-awaited against the live app and polls Debugger.pause on a timer, printing the call stack each tick so a real loop (stack keeps returning to the same few frames) is visually distinct from real, if slow, progress (stack keeps changing / eventually settles)."
     },
     "T29": {
       "category": "tooling-gap",
       "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10, from the Masks/MA1 baseline pass] Masks (mskRebuild()) is the ONLY Editor panel built entirely dynamically from JS with no static markup, and it was also the first panel anyone actually clicked through end-to-end (add/edit/delete a mask) in this whole redesign — which is exactly why the mskRebuild() infinite-loop bug (T28) survived undetected until this session",
-      "wireframeRef": null, "check": "test/editor_coverage.mjs", "panel": null,
+      "wireframeRef": null,
+      "check": "test/editor_coverage.mjs",
+      "panel": null,
       "note": "T24 already flags that per-control behaviour coverage is a boolean (a panel counts as 'covered' once ANY test exists for it), but this is a sharper, narrower case worth its own item: a panel with NO static markup at all cannot be structurally inventoried by editor_wireframe_inventory.mjs the normal way (there is nothing to walk until JS builds it), so behaviour tests are its ONLY coverage mechanism, full stop — there is no structural-diff safety net underneath it the way every other panel has. Implemented 2026-09-10: editor_coverage.mjs now derives 'fully dynamic' structurally (no hand-maintained panel list) — it finds an empty `id=\"*-list\"`/`id=\"*-ctl\"` container in a section's static markup, then confirms some function actually repopulates it via getElementById(id)+.innerHTML=/.appendChild( within the following ~2000 chars, so a real rebuild function is required, not just a matching id. A fully-dynamic panel gets its own 'dynamic' table column and requires an add/edit/delete-shaped smoke test — the container's item count going up AND down (`#id...toHaveCount` at least twice) in editor_wireframe_behaviour.mjs — before it counts as covered; --strict fails on a fully-dynamic panel with no such test. First run correctly flagged masks (#local-list) as smoke-ok (the existing MA1 baseline add/mute/delete test) and additionally caught two panels nobody had named for this: color's point-color list (#pc-list) and export's style-list (#style-list), both fully dynamic with zero smoke coverage — filled the same day with the same add+delete shape (editor_wireframe_behaviour.mjs: 'point color panel — dynamic #pc-list (T29)', 'export panel — dynamic #style-list (T29)'). All three fully-dynamic panels now report smoke-ok."
     },
     "T30": {
       "category": "tooling-gap",
       "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10, from the mskRebuild()/fxEnsureDepthMap() infinite-loop hang] the actual bug shape — a rebuild function chaining `somePromise().then(()=>rebuildSameThing())` with no attempt/memoization guard, where the promise's own failure condition is a STABLE condition the rebuild re-observes on every call — is a generic footgun, not specific to Depth Range, and nothing in the testing tools looks for this pattern anywhere else in chromasmith-22.html",
-      "wireframeRef": null, "check": "test/editor_self_reschedule_check.mjs",
+      "wireframeRef": null,
+      "check": "test/editor_self_reschedule_check.mjs",
       "note": "Same class of two-things-drift risk as T2/T27 but for a CONTROL-FLOW shape instead of a data list: a function that calls itself again (directly or by name) inside a `.then()` off its own return value, with no local guard variable checked before the call, will loop forever the instant that promise's resolution doesn't change the condition that triggered it — exactly what fxEnsureDepthMap()/mskRebuild() did. Built a static source-text check (test/editor_self_reschedule_check.mjs) that flags `X(...)` calls inside `.then(()=>{...})` bodies where `X` matches the name of the function the `.then()` chain's own call sits inside AND no identifier containing 'attempt'/'running'/'pending' appears anywhere in that function's body — a heuristic, not a proof, but it would have flagged this exact function on sight."
     },
     "T31": {
       "category": "tooling-gap",
       "status": "fixed",
       "source": "[audit of the testing tools, 2026-09-10, from the mskRebuild()/fxEnsureDepthMap() infinite-loop hang] fxEnsureDepthMap() gated its one native `_samFramedInvoke('depth_run',...)` call on capNative() (the CAPACITOR/iOS flag) instead of window.__TAURI__ (the desktop flag depth_run actually requires) — every OTHER _samFramedInvoke/`.core.invoke` call site in the file gates on window.__TAURI__, so this was a copy-paste-able mistake with no check catching the mismatch",
-      "wireframeRef": null, "check": "test/editor_native_gate_check.mjs",
+      "wireframeRef": null,
+      "check": "test/editor_native_gate_check.mjs",
       "note": "A grep-based consistency check: every function whose body calls _samFramedInvoke(...) or window.__TAURI__.core.invoke(...) must also reference window.__TAURI__ somewhere in that same function (directly, or via a caller already known to gate on it) and must NOT gate its own native-availability check on capNative() instead — capNative() is Capacitor/iOS-only and every one of these commands is a Tauri/main.rs desktop command. Built as test/editor_native_gate_check.mjs; it would have caught fxEnsureDepthMap() on sight."
     },
     "R12": {
@@ -713,12 +758,12 @@
     },
     "T3": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[found while implementing the Detail/Film/Frame panels, 2026-09-10] fxMarkModifiedSliders()/.fx-mod (chromasmith-22.html), which gates every header Reset button's visibility, only ever tracks _FX_SNAP_SLIDERS — no colour inputs, no toggles-as-content",
       "wireframeRef": null,
       "check": null,
       "panel": null,
-      "note": "Concretely: R5 (Borders header Reset never becomes visible from a colour-only edit, since cl-b1/cl-b2 aren't tracked). No tool asserts the general invariant 'every control type that can appear in a resettable .fx-ctrl participates in its own changed-state signal' — it can only be checked per-section by hand, the way R5 was found. Worth its own gate once a second colour-bearing section exists."
+      "note": "Concretely: R5 (Borders header Reset never becomes visible from a colour-only edit, since cl-b1/cl-b2 aren't tracked). No tool asserts the general invariant 'every control type that can appear in a resettable .fx-ctrl participates in its own changed-state signal' — it can only be checked per-section by hand, the way R5 was found. Worth its own gate once a second colour-bearing section exists. CLOSED 2026-09-11: fxMarkModifiedSliders() (chromasmith-22.html) now also marks colour swatches and row-level toggles as .fx-mod, and the input/click listeners that call it were widened to type='color' and .fx-toggle clicks. Verified live (colour swatch + Halation White-glow toggle both correctly flip/revert .fx-mod)."
     },
     "T4": {
       "category": "tooling-gap",
@@ -731,30 +776,30 @@
     },
     "T5": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[found while implementing 6 panels in one session, 2026-09-10] the 'never invent a colour' rule (docs/editor-redesign-plan.md §3) is enforced entirely by manual re-reading of DESIGN 2.md before every colour choice, not by any script",
       "wireframeRef": null,
       "check": null,
       "panel": null,
-      "note": "editor:wireframe-diff only diffs computed style on the specific elements named in PAIRS, so a hard-coded hex anywhere ELSE in chromasmith-22.html has no gate at all — every invented-colour bug this project has hit (HSL bands, curve-channel dots, danger-button tint, Retouch's .bpri, Frame Border's invented #101014) was caught by a human re-audit, never a tool. A static-analysis pass over chromasmith-22.html's inline style/CSS for hex/rgb literals not present in :root's token list (or an explicit verbatim-copy allowlist) would catch a future violation automatically instead of depending on the next reviewer's diligence."
+      "note": "editor:wireframe-diff only diffs computed style on the specific elements named in PAIRS, so a hard-coded hex anywhere ELSE in chromasmith-22.html has no gate at all — every invented-colour bug this project has hit (HSL bands, curve-channel dots, danger-button tint, Retouch's .bpri, Frame Border's invented #101014) was caught by a human re-audit, never a tool. A static-analysis pass over chromasmith-22.html's inline style/CSS for hex/rgb literals not present in :root's token list (or an explicit verbatim-copy allowlist) would catch a future violation automatically instead of depending on the next reviewer's diligence. PARTIALLY CLOSED 2026-09-11 (combined with T10, per T10's own suggestion): test/editor_token_check.mjs added, wired as `npm run editor:token-check` and into editor:gates (advisory — 225 pre-existing findings to triage over time, same posture as inventory/responsive/coverage)."
     },
     "T6": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[re-confirmed while running the full behaviour suite after this session's 6-panel pass, 2026-09-10] editor:wireframe-diff's documented E7 flake (light-theme colour reads intermittently returning dark-theme values) is worked around by a 6x retry, but the plan doc itself says the CSS-transition-race root cause is 'not proven live'",
       "wireframeRef": null,
       "check": null,
       "panel": null,
-      "note": "This is a live blind spot, not a tolerated flake: a real light-theme colour regression that happens to fail all 6 retries would be caught, but the mechanism causing the FALSE positives has never been confirmed with a dedicated non-headless run, so nobody actually knows how close a real regression could get to looking like this flake before being missed. Needs the non-headless confirmation pass the plan already calls for."
+      "note": "This is a live blind spot, not a tolerated flake: a real light-theme colour regression that happens to fail all 6 retries would be caught, but the mechanism causing the FALSE positives has never been confirmed with a dedicated non-headless run, so nobody actually knows how close a real regression could get to looking like this flake before being missed. Needs the non-headless confirmation pass the plan already calls for. CLOSED — editor_gates.mjs's own E7 comment documents the live confirmation this ticket asked for: root-caused via live instrumentation (document.getAnimations()), fixed in settleForCapture(), and verified across 17 consecutive real (non-retry-loop) runs with 0 recurrences."
     },
     "T7": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[found while writing/debugging this session's header-Reset behaviour tests, 2026-09-10] no shared test helper encapsulates fxMarkModifiedSliders()'s 120ms debounce before a header Reset button becomes clickable — several tests raced it and flaked (F1's vig/bloom test, DT1's nr/deconv tests, FR1's border-colour test), each fixed individually with an ad-hoc page.waitForTimeout(200)",
       "wireframeRef": null,
       "check": null,
       "panel": null,
-      "note": "A reusable waitForFxMod(page, rowSelector) helper in test/wireframe_diff_lib.mjs (or a new shared test-utils file) that polls the row's classList instead of a fixed timeout would be both faster and immune to future debounce-duration changes — the ad-hoc fixed waits are a stopgap, not a real fix for the underlying test-authoring gap."
+      "note": "A reusable waitForFxMod(page, rowSelector) helper in test/wireframe_diff_lib.mjs (or a new shared test-utils file) that polls the row's classList instead of a fixed timeout would be both faster and immune to future debounce-duration changes — the ad-hoc fixed waits are a stopgap, not a real fix for the underlying test-authoring gap. CLOSED 2026-09-11: added waitForFxMod(page, rowSelector) to test/wireframe_diff_lib.mjs (polls the real .fx-mod class instead of a flat sleep); applied to the 5 tests in editor_wireframe_behaviour.mjs that had each independently re-derived the same 200ms magic number. Re-ran all 5; pass."
     },
     "CO1": {
       "category": "panel-design",
