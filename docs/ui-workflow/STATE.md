@@ -308,4 +308,4 @@ call `ui:test`) will currently fail on that until it's fixed.
   for whoever builds S7 next.
 - `design/asbuilt-full/` (~7MB, content-addressed originals) is gitignored; `design/asbuilt/`
   (~33MB: contact sheets + updated `spec.json`) is committed.
-
+- surface_coverage_check.mjs gained a static source pass (hidden-at-load containers): 82 uncovered, incl. crop/mask/guides overlays, histogram, history, export progress, multi-photo filmstrip, video thumbstrip, Collage cell panel/empty state, Library info panel, compare view, review grid, batch/import/offline bars, sort menu, 5 Library modals, Library empty state. S6b prompt updated to use `covers` for sub-parts.

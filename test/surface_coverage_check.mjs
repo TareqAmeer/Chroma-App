@@ -105,6 +105,30 @@ await scan('phone');
 await b.close();
 server.close();
 
+// ── Static pass: containers that are HIDDEN at load (dialogs, overlays, menus, progress bars,
+// empty states) never show up in the live scan above, so also read every container-like id out of
+// the source. Added 2026-09-11: the live pass alone reported 11 gaps while ~40 openable surfaces
+// (crop/mask overlays, histogram, history, export progress, Library info panel, compare view,
+// every Library modal and empty state) had no entry either. A sub-part of a covered surface
+// (e.g. #fx-deskbar-left inside the top bar) is covered by listing it in that surface's `covers`.
+{
+  const KW = /(overlay|modal|menu|popover|dialog|sheet|tooltip|panel|pane|bar|rail|strip|drawer|loupe|hist|compare|split|toast|banner|empty|hint|picker|timeline|progress|info|side|top|bottom|dock|nav|grid|history)/i;
+  const SKIP = /(btn|-v$|-val$|slider|resizer|-ic$|-lb$|input|chk|-sel$|-label|-x$|-close$|-text$)/i;
+  const covered = new Set();
+  for (const s of surfaces) {
+    covered.add(s.id);
+    for (const m of String(s.selector || '').matchAll(/#([\w-]+)/g)) covered.add(m[1]);
+    for (const c of s.covers || []) covered.add(c);
+  }
+  for (const [file, label] of [['chromasmith-22.html', 'app source'], ['desktop/library-ui.js', 'library source']]) {
+    const src = await readFile(path.join(ROOT, file), 'utf8');
+    for (const m of src.matchAll(/id=["'`]([\w-]+)["'`]|\.id\s*=\s*["']([\w-]+)["']/g)) {
+      const id = m[1] || m[2];
+      if (!KW.test(id) || SKIP.test(id) || covered.has(id) || regions.has(id)) continue;
+      regions.set(id, { id, w: 0, h: 0, covered: false, layouts: [label + ' (hidden at load)'] });
+    }
+  }
+}
 const all = [...regions.values()];
 const missing = all.filter((r) => !r.covered);
 if (process.argv.includes('--json')) console.log(JSON.stringify({ regions: all, missing }, null, 2));
@@ -114,3 +138,4 @@ else {
   console.log(missing.length ? '\nAdd each as its own surface (selector = the region itself, or list its id in a surface\'s "covers").\nRESULT: FAIL' : '\nRESULT: PASS');
 }
 process.exit(missing.length ? 1 : 0);
+
